@@ -13,7 +13,8 @@
 - Avoid hydration mismatches — never use `useState(() => loadFromLocalStorage())`; use `useEffect` with a "ready" state flag instead
 - Prefer margin-positioned layout (e.g. TOC in left margin) so main content stays centered
 - Match existing design system tokens (`--tt-*`) when adding new UI components
-- Disable overzealous lint rules at config level rather than scattering `eslint-disable` comments across files — keep files clean
+- Disable overzealous lint rules at config level rather than scattering `eslint-disable` or `biome-ignore` comments across files — keep files clean
+- Extract complex inline casts or nested ternaries into named helper functions for readability
 - Keep `.cursor/skills/` and `.cursor/rules/` tracked in git — never ignore them
 
 ## Learned Workspace Facts
@@ -21,8 +22,8 @@
 - TinyDocy is a lightweight collaborative document editor built on Tiptap 3, Yjs, and Next.js 16 (App Router)
 - Runtime is Bun (version pinned in `.tool-versions` and `package.json` via `packageManager` + `engines`)
 - Formatting and linting are handled by Biome; ESLint is scoped to Next.js-specific rules only (React 19 experimental hooks rules `set-state-in-effect`, `refs`, `immutability` are disabled)
-- Git hooks via Husky: pre-commit runs lint-staged (Biome), commit-msg runs commitlint
-- TypeScript strict mode is enabled; `noExplicitAny` and `noNonNullAssertion` are set to warn in Biome
+- Git hooks via Husky: pre-commit runs lint-staged (Biome), commit-msg runs commitlint (config is `.commitlintrc.json` — the dot prefix is required)
+- TypeScript strict mode is enabled; `noExplicitAny` and `noNonNullAssertion` are set to warn in Biome; `a11y/useSemanticElements` is off (false positive for toolbar `role="group"`)
 - Path alias `@/*` maps to the project root
 - localStorage keys follow the pattern `tinydocy-theme`, `tinydocy-tabs`, `tinydocy-doc-{id}`
 - Custom code lives in `app/`, `hooks/`, `components/tab-bar`, `components/toc-sidebar`
