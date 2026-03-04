@@ -50,10 +50,23 @@ body {
   font-family: var(--font-dm-sans), "DM Sans", sans-serif;
 }
 
-.simple-editor-wrapper {
+.app-shell {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100vh;
+}
+
+.simple-editor-wrapper {
+  width: 100%;
+  flex: 1;
   overflow: auto;
+}
+
+.editor-with-toc {
+  display: flex;
+  flex: 1;
+  min-height: 100%;
 }
 
 .simple-editor-content {
@@ -74,5 +87,60 @@ body {
 @media screen and (max-width: 480px) {
   .simple-editor-content .tiptap.ProseMirror.simple-editor {
     padding: 1rem 1.5rem 30vh;
+  }
+}
+
+.editor-skeleton {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-skeleton-toolbar {
+  height: var(--tt-toolbar-height);
+  background-color: var(--tt-sidebar-bg-color);
+  border-bottom: 1px solid var(--tt-border-color);
+}
+
+.editor-skeleton-content {
+  max-width: 648px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.editor-skeleton-line {
+  height: 1rem;
+  border-radius: var(--tt-radius-xs);
+  background-color: var(--tt-gray-light-a-100);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  .dark & {
+    background-color: var(--tt-gray-dark-a-100);
+  }
+
+  &--wide {
+    width: 80%;
+  }
+
+  &--medium {
+    width: 55%;
+  }
+
+  &--narrow {
+    width: 35%;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
   }
 }

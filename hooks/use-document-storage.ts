@@ -1,64 +1,50 @@
-"use client";
+import type { JSONContent } from "@tiptap/react";
 
-import { useEffect, useMemo } from "react";
-import type { Editor, JSONContent } from "@tiptap/react";
-import throttle from "lodash.throttle";
+const LEGACY_KEY = "tinydocy-document";
+const PER_TAB_PREFIX = "tinydocy-doc-";
 
-const STORAGE_KEY = "tinydocy-document";
-const THROTTLE_MS = 1000;
+/**
+ * Migrates the legacy single-document localStorage key to a per-tab key.
+ * Called once during tab initialization (before Y.js existed).
+ */
+export function migrateLegacyDocument(targetDocId: string): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = localStorage.getItem(LEGACY_KEY);
+  if (!raw) return false;
 
-export type StorageAdapter = {
-  load: () => JSONContent | null;
-  save: (content: JSONContent) => void;
-};
-
-export const localStorageAdapter: StorageAdapter = {
-  load: () => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as JSONContent) : null;
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-  },
-  save: (content) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(content));
-    } catch {
-      // quota exceeded
-    }
-  },
-};
-
-export function getStoredContent(
-  adapter: StorageAdapter = localStorageAdapter,
-): JSONContent | null {
-  return adapter.load();
+  try {
+    localStorage.setItem(`${PER_TAB_PREFIX}${targetDocId}`, raw);
+    localStorage.removeItem(LEGACY_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function useDocumentStorage(
-  editor: Editor | null,
-  adapter: StorageAdapter = localStorageAdapter,
-) {
-  const persist = useMemo(
-    () =>
-      throttle((e: Editor) => {
-        adapter.save(e.getJSON());
-      }, THROTTLE_MS),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [adapter],
-  );
+/**
+ * Checks localStorage for content from before the Y.js migration.
+ * Returns the content if found and removes the localStorage key.
+ * Returns null if nothing to migrate.
+ */
+export function migrateLegacyLocalStorage(
+  documentId: string,
+): JSONContent | null {
+  if (typeof window === "undefined") return null;
 
-  useEffect(() => {
-    if (!editor) return;
+  const perTabKey = `${PER_TAB_PREFIX}${documentId}`;
 
-    const handler = () => persist(editor);
-    editor.on("update", handler);
-    return () => {
-      editor.off("update", handler);
-      persist.flush();
-    };
-  }, [editor, persist]);
+  for (const key of [perTabKey, LEGACY_KEY]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as JSONContent;
+        localStorage.removeItem(key);
+        return parsed;
+      }
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }
+
+  return null;
 }
