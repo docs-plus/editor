@@ -60,13 +60,19 @@ export function TabBar({
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           return (
-            <button
-              type="button"
+            <div
               key={tab.id}
               role="tab"
+              tabIndex={isActive ? 0 : -1}
               aria-selected={isActive}
               className={`tab-bar-tab ${isActive ? "tab-bar-tab--active" : ""}`}
               onClick={() => onSwitch(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSwitch(tab.id);
+                }
+              }}
               onAuxClick={(e) => {
                 if (e.button === 1 && tabs.length > 1) {
                   e.preventDefault();
@@ -92,7 +98,7 @@ export function TabBar({
                   <CloseIcon size={12} />
                 </button>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
