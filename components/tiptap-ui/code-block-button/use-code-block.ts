@@ -1,10 +1,11 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
-import { type Editor } from "@tiptap/react";
+// --- Icons ---
+import { CodeBlockIcon } from "@/components/tiptap-icons";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
 // --- Lib ---
 import {
   isNodeInSchema,
@@ -13,9 +14,6 @@ import {
   selectionWithinConvertibleTypes,
   shouldShowEditorButton,
 } from "@/lib/tiptap-utils";
-
-// --- Icons ---
-import { CodeBlockIcon } from "@/components/tiptap-icons";
 
 export const CODE_BLOCK_SHORTCUT_KEY = "mod+alt+c";
 
@@ -113,7 +111,7 @@ export function shouldShowButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("codeBlock", editor)) return false;
-    if (!editor!.isActive("code")) return canToggle(editor);
+    if (!editor?.isActive("code")) return canToggle(editor);
     return true;
   });
 }

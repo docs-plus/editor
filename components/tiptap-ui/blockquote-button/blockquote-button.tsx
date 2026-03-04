@@ -1,30 +1,29 @@
-"use client"
+"use client";
 
-import { forwardRef, useCallback } from "react"
+import { forwardRef, useCallback } from "react";
 
 // --- Tiptap UI ---
-import type { UseBlockquoteConfig } from "@/components/tiptap-ui/blockquote-button"
-import { useBlockquote } from "@/components/tiptap-ui/blockquote-button"
-import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge"
-
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
-
+import type { UseBlockquoteConfig } from "@/components/tiptap-ui/blockquote-button";
+import { useBlockquote } from "@/components/tiptap-ui/blockquote-button";
+import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
+import { Button } from "@/components/tiptap-ui-primitive/button";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 export interface BlockquoteButtonProps
-  extends Omit<ButtonProps, "type">, UseBlockquoteConfig {
+  extends Omit<ButtonProps, "type">,
+    UseBlockquoteConfig {
   /**
    * Optional text to display alongside the icon.
    */
-  text?: string
+  text?: string;
   /**
    * Optional show shortcut keys in the button.
    * @default false
    */
-  showShortcut?: boolean
+  showShortcut?: boolean;
 }
 
 /**
@@ -47,9 +46,9 @@ export const BlockquoteButton = forwardRef<
       children,
       ...buttonProps
     },
-    ref
+    ref,
   ) => {
-    const { editor } = useTiptapEditor(providedEditor)
+    const { editor } = useTiptapEditor(providedEditor);
     const {
       isVisible,
       canToggle,
@@ -62,19 +61,19 @@ export const BlockquoteButton = forwardRef<
       editor,
       hideWhenUnavailable,
       onToggled,
-    })
+    });
 
     const handleClick = useCallback(
       (event: React.MouseEvent<HTMLButtonElement>) => {
-        onClick?.(event)
-        if (event.defaultPrevented) return
-        handleToggle()
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        handleToggle();
       },
-      [handleToggle, onClick]
-    )
+      [handleToggle, onClick],
+    );
 
     if (!isVisible) {
-      return null
+      return null;
     }
 
     return (
@@ -97,14 +96,12 @@ export const BlockquoteButton = forwardRef<
           <>
             <Icon className="tiptap-button-icon" />
             {text && <span className="tiptap-button-text">{text}</span>}
-            {showShortcut && (
-              <ShortcutBadge shortcutKeys={shortcutKeys} />
-            )}
+            {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
       </Button>
-    )
-  }
-)
+    );
+  },
+);
 
-BlockquoteButton.displayName = "BlockquoteButton"
+BlockquoteButton.displayName = "BlockquoteButton";

@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
+import { useCallback, useEffect, useState } from "react";
 // --- Icons ---
 import { BlockquoteIcon } from "@/components/tiptap-icons";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 // --- UI Utils ---
 import {
@@ -110,7 +109,7 @@ export function shouldShowButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("blockquote", editor)) return false;
-    if (!editor!.isActive("code")) return canToggleBlockquote(editor);
+    if (!editor?.isActive("code")) return canToggleBlockquote(editor);
     return true;
   });
 }

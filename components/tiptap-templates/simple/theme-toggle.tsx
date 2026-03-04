@@ -1,11 +1,9 @@
 "use client";
 
-// --- UI Primitives ---
-import { Button } from "@/components/tiptap-ui-primitive/button";
-
-// --- Icons ---
-import { MoonStarIcon, SunIcon } from "@/components/tiptap-icons";
 import { useEffect, useState } from "react";
+
+import { MoonStarIcon, SunIcon } from "@/components/tiptap-icons";
+import { Button } from "@/components/tiptap-ui-primitive/button";
 
 const THEME_KEY = "tinydocy-theme";
 

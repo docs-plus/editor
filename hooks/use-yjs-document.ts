@@ -1,35 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import * as Y from "yjs";
+import { useEffect, useState } from "react";
 import { IndexeddbPersistence } from "y-indexeddb";
+import * as Y from "yjs";
 
 const DB_PREFIX = "tinydocy-doc-";
 
 export function useYjsDocument(documentId: string) {
+  const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
   const [synced, setSynced] = useState(false);
-  const ydocRef = useRef<Y.Doc | null>(null);
 
   useEffect(() => {
-    const ydoc = new Y.Doc();
-    const provider = new IndexeddbPersistence(
-      `${DB_PREFIX}${documentId}`,
-      ydoc,
-    );
-    ydocRef.current = ydoc;
+    const doc = new Y.Doc();
+    const provider = new IndexeddbPersistence(`${DB_PREFIX}${documentId}`, doc);
 
-    const onSynced = () => setSynced(true);
+    const onSynced = () => {
+      setYdoc(doc);
+      setSynced(true);
+    };
     provider.on("synced", onSynced);
 
     return () => {
       provider.destroy();
-      ydoc.destroy();
-      ydocRef.current = null;
+      doc.destroy();
+      setYdoc(null);
       setSynced(false);
     };
   }, [documentId]);
 
-  return { ydoc: ydocRef.current, synced };
+  return { ydoc, synced };
 }
 
 export function deleteDocumentDatabase(documentId: string) {

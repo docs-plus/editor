@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { CloseIcon, FileTextIcon, PlusIcon } from "@/components/tiptap-icons";
 import type { Tab } from "@/hooks/use-tabs";
-import { FileTextIcon, CloseIcon, PlusIcon } from "@/components/tiptap-icons";
 import "@/components/tab-bar.scss";
 
 interface TabBarProps {
@@ -61,6 +61,7 @@ export function TabBar({
           const isActive = tab.id === activeTabId;
           return (
             <button
+              type="button"
               key={tab.id}
               role="tab"
               aria-selected={isActive}
@@ -78,8 +79,8 @@ export function TabBar({
                 {tab.title || "Untitled"}
               </span>
               {tabs.length > 1 && (
-                <span
-                  role="button"
+                <button
+                  type="button"
                   tabIndex={-1}
                   aria-label={`Close ${tab.title || "Untitled"}`}
                   className="tab-bar-tab-close"
@@ -89,13 +90,14 @@ export function TabBar({
                   }}
                 >
                   <CloseIcon size={12} />
-                </span>
+                </button>
               )}
             </button>
           );
         })}
       </div>
       <button
+        type="button"
         className="tab-bar-new"
         onClick={onCreate}
         aria-label="New tab (⌘T)"

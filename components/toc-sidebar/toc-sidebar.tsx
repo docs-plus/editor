@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
 import type { Editor } from "@tiptap/core";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
+import { useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/tiptap-utils";
 
 import "./toc-sidebar.scss";
@@ -17,7 +17,7 @@ export function TOCSidebar({ items, editor }: TOCSidebarProps) {
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
-  }, [items]);
+  }, []);
 
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {
@@ -38,6 +38,7 @@ export function TOCSidebar({ items, editor }: TOCSidebarProps) {
         <div className="toc-sidebar-items">
           {items.map((item) => (
             <button
+              type="button"
               key={item.id}
               ref={item.isActive ? activeRef : undefined}
               className={cn(

@@ -1,16 +1,15 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
-import { type Editor } from "@tiptap/react";
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
 // --- Icons ---
 import {
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
 } from "@/components/tiptap-icons";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 // --- Lib ---
 import {
@@ -190,7 +189,7 @@ export function shouldShowButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema(type, editor)) return false;
-    if (!editor!.isActive("code")) return canToggleList(editor, type);
+    if (!editor?.isActive("code")) return canToggleList(editor, type);
     return true;
   });
 }

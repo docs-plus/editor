@@ -1,10 +1,18 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
-import { type Editor } from "@tiptap/react";
+// --- Icons ---
+import {
+  HeadingFiveIcon,
+  HeadingFourIcon,
+  HeadingOneIcon,
+  HeadingSixIcon,
+  HeadingThreeIcon,
+  HeadingTwoIcon,
+} from "@/components/tiptap-icons";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
 // --- Lib ---
 import {
   isNodeInSchema,
@@ -12,16 +20,6 @@ import {
   prepareBlockToggle,
   selectionWithinConvertibleTypes,
 } from "@/lib/tiptap-utils";
-
-// --- Icons ---
-import {
-  HeadingOneIcon,
-  HeadingTwoIcon,
-  HeadingThreeIcon,
-  HeadingFourIcon,
-  HeadingFiveIcon,
-  HeadingSixIcon,
-} from "@/components/tiptap-icons";
 
 export type Level = 1 | 2 | 3 | 4 | 5 | 6;
 

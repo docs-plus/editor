@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import type { NodeViewProps } from "@tiptap/react";
 import { NodeViewWrapper } from "@tiptap/react";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import { useEffect, useRef, useState } from "react";
 import { CloseIcon, CloudUploadIcon } from "@/components/tiptap-icons";
+import { Button } from "@/components/tiptap-ui-primitive/button";
 import "@/components/tiptap-node/image-upload-node/image-upload-node.scss";
 import { focusNextNode, isValidPosition } from "@/lib/tiptap-utils";
 
@@ -92,6 +92,7 @@ function useFileUpload(options: UploadOptions) {
 
   useEffect(() => {
     return () => {
+      // biome-ignore lint/suspicious/useIterableCallbackReturn: abort() returns void, false positive
       fileItemsRef.current.forEach((item) => item.abortController?.abort());
     };
   }, []);
@@ -219,6 +220,7 @@ function useFileUpload(options: UploadOptions) {
 }
 
 const FileIcon: React.FC = () => (
+  // biome-ignore lint/a11y/noSvgWithoutTitle: decorative icon
   <svg
     width="43"
     height="57"
@@ -238,6 +240,7 @@ const FileIcon: React.FC = () => (
 );
 
 const FileCornerIcon: React.FC = () => (
+  // biome-ignore lint/a11y/noSvgWithoutTitle: decorative icon
   <svg
     width="10"
     height="10"
@@ -325,6 +328,7 @@ const ImageUploadDragArea: React.FC<ImageUploadDragAreaProps> = ({
   };
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop area, no keyboard equivalent needed
     <div
       className={`tiptap-image-upload-drag-area ${isDragActive ? "drag-active" : ""} ${isDragOver ? "drag-over" : ""}`}
       onDragEnter={handleDragEnter}
@@ -360,7 +364,7 @@ const ImageUploadPreview: React.FC<ImageUploadPreviewProps> = ({
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
   };
 
   return (

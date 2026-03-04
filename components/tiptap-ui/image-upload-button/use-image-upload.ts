@@ -1,18 +1,15 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { type Editor } from "@tiptap/react";
-
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
-
-// --- Lib ---
-import { isExtensionAvailable } from "@/lib/tiptap-utils";
-
 // --- Icons ---
 import { ImagePlusIcon } from "@/components/tiptap-icons";
+import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import { isExtensionAvailable } from "@/lib/tiptap-utils";
 
 export const IMAGE_UPLOAD_SHORTCUT_KEY = "mod+shift+i";
 

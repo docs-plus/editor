@@ -6,10 +6,10 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
-import { cellAround, CellSelection } from "@tiptap/pm/tables";
+import { CellSelection, cellAround } from "@tiptap/pm/tables";
 import {
-  findParentNodeClosestToPos,
   type Editor,
+  findParentNodeClosestToPos,
   type NodeWithPos,
 } from "@tiptap/react";
 
@@ -56,7 +56,10 @@ export function cn(
 export function isMac(): boolean {
   if (typeof navigator === "undefined") return false;
   if ("userAgentData" in navigator) {
-    return (navigator as any).userAgentData.platform === "macOS";
+    return (
+      (navigator as { userAgentData: { platform: string } }).userAgentData
+        .platform === "macOS"
+    );
   }
   return /mac/i.test(navigator.userAgent);
 }
@@ -268,10 +271,10 @@ export function findNodePosition(props: {
   }
 
   // If we have a valid position, use findNodeAtPosition
-  if (hasValidPos) {
-    const nodeAtPos = findNodeAtPosition(editor, nodePos!);
+  if (nodePos != null && hasValidPos) {
+    const nodeAtPos = findNodeAtPosition(editor, nodePos);
     if (nodeAtPos) {
-      return { pos: nodePos!, node: nodeAtPos };
+      return { pos: nodePos, node: nodeAtPos };
     }
   }
 
@@ -430,7 +433,7 @@ type ProtocolOptions = {
 type ProtocolConfig = Array<ProtocolOptions | string>;
 
 const ATTR_WHITESPACE =
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — matches all Unicode whitespace for URL sanitization
   /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
 
 export function isAllowedUri(
@@ -463,13 +466,14 @@ export function isAllowedUri(
 
   return (
     !uri ||
-    uri.replace(ATTR_WHITESPACE, "").match(
-      new RegExp(
-        // eslint-disable-next-line no-useless-escape
-        `^(?:(?:${allowedProtocols.join("|")}):|[^a-z]|[a-z0-9+.\-]+(?:[^a-z+.\-:]|$))`,
-        "i",
-      ),
-    )
+    uri
+      .replace(ATTR_WHITESPACE, "")
+      .match(
+        new RegExp(
+          `^(?:(?:${allowedProtocols.join("|")}):|[^a-z]|[a-z0-9+.-]+(?:[^a-z+.-:]|$))`,
+          "i",
+        ),
+      )
   );
 }
 

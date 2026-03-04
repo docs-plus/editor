@@ -1,7 +1,7 @@
 "use client";
 
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { TabBar } from "@/components/tab-bar";
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { useTabs } from "@/hooks/use-tabs";
 
 export default function Home() {

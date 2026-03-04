@@ -1,18 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
-
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
-// --- Lib ---
-import {
-  isMarkInSchema,
-  isNodeTypeSelected,
-  shouldShowEditorButton,
-} from "@/lib/tiptap-utils";
-
+import { useCallback, useEffect, useState } from "react";
 // --- Icons ---
 import {
   BoldIcon,
@@ -23,6 +12,14 @@ import {
   SuperscriptIcon,
   UnderlineIcon,
 } from "@/components/tiptap-icons";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import {
+  isMarkInSchema,
+  isNodeTypeSelected,
+  shouldShowEditorButton,
+} from "@/lib/tiptap-utils";
 
 export type Mark =
   | "bold"
@@ -117,7 +114,7 @@ export function shouldShowButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isMarkInSchema(type, editor)) return false;
-    if (!editor!.isActive("code")) return canToggleMark(editor, type);
+    if (!editor?.isActive("code")) return canToggleMark(editor, type);
     return true;
   });
 }

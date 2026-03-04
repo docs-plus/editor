@@ -1,22 +1,15 @@
 "use client";
 
+import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
-import { type Editor } from "@tiptap/react";
 import { useHotkeys } from "react-hotkeys-hook";
-
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
-
-// --- Lib ---
-import {
-  isMarkInSchema,
-  isNodeTypeSelected,
-  isExtensionAvailable,
-} from "@/lib/tiptap-utils";
-
 // --- Icons ---
 import { HighlighterIcon } from "@/components/tiptap-icons";
+import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import { isMarkInSchema, isNodeTypeSelected } from "@/lib/tiptap-utils";
 
 export const COLOR_HIGHLIGHT_SHORTCUT_KEY = "mod+shift+h";
 export const HIGHLIGHT_COLORS = [

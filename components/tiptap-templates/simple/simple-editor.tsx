@@ -1,31 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Collaboration } from "@tiptap/extension-collaboration";
+import { Highlight } from "@tiptap/extension-highlight";
+import { Image } from "@tiptap/extension-image";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Subscript } from "@tiptap/extension-subscript";
+import { Superscript } from "@tiptap/extension-superscript";
+import {
+  type TableOfContentData,
+  TableOfContents,
+} from "@tiptap/extension-table-of-contents";
+import { TextAlign } from "@tiptap/extension-text-align";
+import { Typography } from "@tiptap/extension-typography";
+import { UniqueID } from "@tiptap/extension-unique-id";
+import { Selection } from "@tiptap/extensions";
 import {
   EditorContent,
   EditorContext,
-  useEditor,
   type JSONContent,
+  useEditor,
 } from "@tiptap/react";
-import type * as Y from "yjs";
-
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit";
-import { Image } from "@tiptap/extension-image";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
-import { TextAlign } from "@tiptap/extension-text-align";
-import { Typography } from "@tiptap/extension-typography";
-import { Highlight } from "@tiptap/extension-highlight";
-import { Subscript } from "@tiptap/extension-subscript";
-import { Superscript } from "@tiptap/extension-superscript";
-import { Selection } from "@tiptap/extensions";
-import { Collaboration } from "@tiptap/extension-collaboration";
-import { UniqueID } from "@tiptap/extension-unique-id";
-import {
-  TableOfContents,
-  type TableOfContentData,
-} from "@tiptap/extension-table-of-contents";
-
+import { useEffect, useMemo, useRef, useState } from "react";
+import type * as Y from "yjs";
+import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
+// --- Tiptap Node ---
+import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button";
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer";
@@ -34,10 +35,6 @@ import {
   ToolbarGroup,
   ToolbarSeparator,
 } from "@/components/tiptap-ui-primitive/toolbar";
-
-// --- Tiptap Node ---
-import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
-import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
@@ -46,26 +43,6 @@ import "@/components/tiptap-node/image-node/image-node.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
-// --- Tiptap UI ---
-import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
-import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
-import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
-import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
-import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
-import {
-  ColorHighlightPopover,
-  ColorHighlightPopoverContent,
-  ColorHighlightPopoverButton,
-} from "@/components/tiptap-ui/color-highlight-popover";
-import {
-  LinkPopover,
-  LinkContent,
-  LinkButton,
-} from "@/components/tiptap-ui/link-popover";
-import { MarkButton } from "@/components/tiptap-ui/mark-button";
-import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
-import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
-
 // --- Icons ---
 import {
   ArrowLeftIcon,
@@ -73,17 +50,34 @@ import {
   LinkIcon,
   PanelLeftIcon,
 } from "@/components/tiptap-icons";
-
+// --- Components ---
+import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
+import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
+import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
+import {
+  ColorHighlightPopover,
+  ColorHighlightPopoverButton,
+  ColorHighlightPopoverContent,
+} from "@/components/tiptap-ui/color-highlight-popover";
+// --- Tiptap UI ---
+import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
+import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
+import {
+  LinkButton,
+  LinkContent,
+  LinkPopover,
+} from "@/components/tiptap-ui/link-popover";
+import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
+import { MarkButton } from "@/components/tiptap-ui/mark-button";
+import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
+import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
+import { TOCSidebar } from "@/components/toc-sidebar/toc-sidebar";
+import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
+import { migrateLegacyLocalStorage } from "@/hooks/use-document-storage";
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
-import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
-import { migrateLegacyLocalStorage } from "@/hooks/use-document-storage";
-
-// --- Components ---
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
-import { TOCSidebar } from "@/components/toc-sidebar/toc-sidebar";
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils";
@@ -337,11 +331,7 @@ function SimpleEditorContent({
     overlayHeight: toolbarHeight,
   });
 
-  useEffect(() => {
-    if (!isMobile && mobileView !== "main") {
-      setMobileView("main");
-    }
-  }, [isMobile, mobileView]);
+  const effectiveMobileView = isMobile ? mobileView : "main";
 
   return (
     <div className="simple-editor-wrapper">
@@ -356,7 +346,7 @@ function SimpleEditorContent({
               : {}),
           }}
         >
-          {mobileView === "main" ? (
+          {effectiveMobileView === "main" ? (
             <MainToolbarContent
               onHighlighterClick={() => setMobileView("highlighter")}
               onLinkClick={() => setMobileView("link")}
@@ -366,7 +356,9 @@ function SimpleEditorContent({
             />
           ) : (
             <MobileToolbarContent
-              type={mobileView === "highlighter" ? "highlighter" : "link"}
+              type={
+                effectiveMobileView === "highlighter" ? "highlighter" : "link"
+              }
               onBack={() => setMobileView("main")}
             />
           )}
@@ -394,23 +386,22 @@ export function SimpleEditor({
 }: SimpleEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, synced } = useYjsDocument(docId);
-  const migrationChecked = useRef(false);
-  const migrationRef = useRef<JSONContent | null>(null);
 
-  if (synced && ydoc && !migrationChecked.current) {
-    migrationChecked.current = true;
+  const migrationContent = useMemo(() => {
+    if (!synced || !ydoc) return null;
     const fragment = ydoc.getXmlFragment("default");
     if (fragment.length === 0) {
-      migrationRef.current = migrateLegacyLocalStorage(docId);
+      return migrateLegacyLocalStorage(docId);
     }
-  }
+    return null;
+  }, [synced, ydoc, docId]);
 
   if (!synced || !ydoc) return <EditorSkeleton />;
 
   return (
     <SimpleEditorContent
       ydoc={ydoc}
-      migrationContent={migrationRef.current}
+      migrationContent={migrationContent}
       onTitleChange={onTitleChange}
     />
   );

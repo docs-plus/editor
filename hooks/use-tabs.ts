@@ -31,6 +31,19 @@ function loadTabsFromStorage(): TabsState | null {
   return null;
 }
 
+function getInitialState(): TabsState {
+  if (typeof window === "undefined") return { tabs: [], activeTabId: "" };
+  const stored = loadTabsFromStorage();
+  if (stored) return stored;
+
+  const id = generateId();
+  migrateLegacyDocument(id);
+  return {
+    tabs: [{ id, title: "Untitled", createdAt: Date.now() }],
+    activeTabId: id,
+  };
+}
+
 function persistTabs(tabs: Tab[], activeTabId: string) {
   try {
     localStorage.setItem(TABS_KEY, JSON.stringify({ tabs, activeTabId }));
@@ -42,20 +55,9 @@ function persistTabs(tabs: Tab[], activeTabId: string) {
 export function useTabs() {
   const [state, setState] = useState<TabsState>({ tabs: [], activeTabId: "" });
   const [ready, setReady] = useState(false);
-
   useEffect(() => {
-    const stored = loadTabsFromStorage();
-    if (stored) {
-      setState(stored);
-    } else {
-      const id = generateId();
-      migrateLegacyDocument(id);
-      const fresh: TabsState = {
-        tabs: [{ id, title: "Untitled", createdAt: Date.now() }],
-        activeTabId: id,
-      };
-      setState(fresh);
-    }
+    const initial = getInitialState();
+    setState(initial);
     setReady(true);
   }, []);
 

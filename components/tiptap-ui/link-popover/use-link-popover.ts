@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
-
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-
+import { useCallback, useEffect, useState } from "react";
 // --- Icons ---
 import { LinkIcon } from "@/components/tiptap-icons";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 // --- Lib ---
 import {
@@ -114,22 +112,12 @@ export function useLinkHandler(props: LinkHandlerProps) {
   useEffect(() => {
     if (!editor) return;
 
-    // Get URL immediately on mount
-    const { href } = editor.getAttributes("link");
-
-    if (isLinkActive(editor) && url === null) {
-      setUrl(href || "");
-    }
-  }, [editor, url]);
-
-  useEffect(() => {
-    if (!editor) return;
-
     const updateLinkState = () => {
       const { href } = editor.getAttributes("link");
-      setUrl(href || "");
+      setUrl(isLinkActive(editor) ? href || "" : null);
     };
 
+    updateLinkState();
     editor.on("selectionUpdate", updateLinkState);
     return () => {
       editor.off("selectionUpdate", updateLinkState);
