@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TinyDocy
+
+A collaborative document editor built with Next.js, TipTap, and Yjs.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) >= 1.3.10
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+# Install dependencies
+bun install
+
+# Start the development server
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script             | Description                                |
+| ------------------ | ------------------------------------------ |
+| `bun dev`          | Start the development server               |
+| `bun run build`    | Build for production                       |
+| `bun start`        | Start the production server                |
+| `bun run lint`     | Run ESLint (Next.js rules)                 |
+| `bun run format`   | Format all files with Biome                |
+| `bun run check`    | Run Biome lint + format check              |
+| `bun run check:fix`| Run Biome lint + format with auto-fix      |
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/              Next.js App Router (pages, layout, global styles)
+components/       React components
+  tiptap-ui/      TipTap editor UI components
+  tiptap-node/    Custom TipTap node extensions
+  tiptap-templates/ Editor templates
+  toc-sidebar/    Table of contents sidebar
+hooks/            Custom React hooks
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Framework** — Next.js 16 (App Router)
+- **Editor** — TipTap 3 + Yjs (real-time collaboration)
+- **Styling** — Tailwind CSS 4, Sass
+- **UI** — Radix UI primitives
+- **Language** — TypeScript 5.9
 
-## Deploy on Vercel
+## Conventions
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Commits
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project uses [Conventional Commits](https://www.conventionalcommits.org/). Commit messages are enforced via commitlint.
+
+```
+feat: add collaborative cursor support
+fix: resolve sidebar scroll issue
+chore: update dependencies
+docs: improve README
+refactor: extract editor toolbar
+```
+
+### Code Quality
+
+- **Formatting** — [Biome](https://biomejs.dev/) (auto-runs on commit via lint-staged)
+- **Linting** — Biome (recommended rules) + ESLint (Next.js-specific rules)
+- **Editor** — Settings defined in `.editorconfig`
+
+## License
+
+Private
