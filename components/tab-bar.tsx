@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { CloseIcon, FileTextIcon, PlusIcon } from "@/components/tiptap-icons";
-import type { Tab } from "@/hooks/use-tabs";
+import {
+  CloseIcon,
+  FileTextIcon,
+  FlaskConicalIcon,
+  PlusIcon,
+} from "@/components/tiptap-icons";
+import { PLAYGROUND_ID, type Tab } from "@/hooks/use-tabs";
 import "@/components/tab-bar.scss";
 
 interface TabBarProps {
@@ -31,7 +36,8 @@ export function TabBar({
 
       if (mod && e.key === "w") {
         e.preventDefault();
-        if (tabs.length > 1) onClose(activeTabId);
+        if (tabs.length > 1 && activeTabId !== PLAYGROUND_ID)
+          onClose(activeTabId);
       }
 
       if (mod && e.shiftKey && (e.key === "[" || e.key === "{")) {
@@ -57,47 +63,59 @@ export function TabBar({
   return (
     <div className="tab-bar" role="tablist" aria-label="Document tabs">
       <div className="tab-bar-tabs">
-        {tabs.map((tab) => {
+        {tabs.map((tab, i) => {
           const isActive = tab.id === activeTabId;
+          const isPlayground = tab.id === PLAYGROUND_ID;
+          const nextIsUserTab =
+            isPlayground &&
+            i + 1 < tabs.length &&
+            tabs[i + 1].id !== PLAYGROUND_ID;
+
           return (
-            <div
-              key={tab.id}
-              role="tab"
-              tabIndex={isActive ? 0 : -1}
-              aria-selected={isActive}
-              className={`tab-bar-tab ${isActive ? "tab-bar-tab--active" : ""}`}
-              onClick={() => onSwitch(tab.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSwitch(tab.id);
-                }
-              }}
-              onAuxClick={(e) => {
-                if (e.button === 1 && tabs.length > 1) {
-                  e.preventDefault();
-                  onClose(tab.id);
-                }
-              }}
-            >
-              <FileTextIcon size={14} className="tab-bar-tab-icon" />
-              <span className="tab-bar-tab-title">
-                {tab.title || "Untitled"}
-              </span>
-              {tabs.length > 1 && (
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={`Close ${tab.title || "Untitled"}`}
-                  className="tab-bar-tab-close"
-                  onClick={(e) => {
-                    e.stopPropagation();
+            <div key={tab.id} className="tab-bar-tab-wrapper">
+              <div
+                role="tab"
+                tabIndex={isActive ? 0 : -1}
+                aria-selected={isActive}
+                className={`tab-bar-tab ${isActive ? "tab-bar-tab--active" : ""} ${isPlayground ? "tab-bar-tab--playground" : ""}`}
+                onClick={() => onSwitch(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSwitch(tab.id);
+                  }
+                }}
+                onAuxClick={(e) => {
+                  if (e.button === 1 && tabs.length > 1 && !isPlayground) {
+                    e.preventDefault();
                     onClose(tab.id);
-                  }}
-                >
-                  <CloseIcon size={12} />
-                </button>
-              )}
+                  }
+                }}
+              >
+                {isPlayground ? (
+                  <FlaskConicalIcon size={14} className="tab-bar-tab-icon" />
+                ) : (
+                  <FileTextIcon size={14} className="tab-bar-tab-icon" />
+                )}
+                <span className="tab-bar-tab-title">
+                  {tab.title || "Untitled"}
+                </span>
+                {tabs.length > 1 && !isPlayground && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={`Close ${tab.title || "Untitled"}`}
+                    className="tab-bar-tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose(tab.id);
+                    }}
+                  >
+                    <CloseIcon size={12} />
+                  </button>
+                )}
+              </div>
+              {nextIsUserTab && <div className="tab-bar-divider" />}
             </div>
           );
         })}
