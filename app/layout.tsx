@@ -23,7 +23,7 @@ export default function RootLayout({
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("tinydocy-theme");if(t==="dark"||(t===null&&matchMedia("(prefers-color-scheme:dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})()`,
+            __html: `(function(){try{if(localStorage.getItem("tinydocy-theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}})()`,
           }}
         />
         {children}

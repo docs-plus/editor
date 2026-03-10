@@ -30,5 +30,11 @@ next-env.d.ts
 !.cursor/skills/
 !.cursor/rules/
 
+# hocuspocus
+db.sqlite
+
+# test results
+/test-results/
+
 # project docs (local only)
 .docs/

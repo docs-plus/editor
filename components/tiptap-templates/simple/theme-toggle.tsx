@@ -12,22 +12,7 @@ export function ThemeToggle() {
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_KEY);
-    if (stored !== null) {
-      setIsDarkMode(stored === "dark");
-    } else {
-      setIsDarkMode(window.matchMedia("(prefers-color-scheme: dark)").matches);
-    }
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      if (localStorage.getItem(THEME_KEY) === null) {
-        setIsDarkMode(mediaQuery.matches);
-      }
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    setIsDarkMode(stored === "dark");
   }, []);
 
   useEffect(() => {

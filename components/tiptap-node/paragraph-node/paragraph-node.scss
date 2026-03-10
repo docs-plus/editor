@@ -1,6 +1,6 @@
 .tiptap.ProseMirror {
   --tt-collaboration-carets-label: var(--tt-gray-light-900);
-  --link-text-color: var(--tt-brand-color-500);
+  --link-text-color: #1155cc;
   --thread-text: var(--tt-gray-light-900);
   --placeholder-color: var(--tt-gray-light-a-400);
   --thread-bg-color: var(--tt-color-yellow-inc-2);
@@ -10,7 +10,7 @@
 
   .dark & {
     --tt-collaboration-carets-label: var(--tt-gray-dark-100);
-    --link-text-color: var(--tt-brand-color-400);
+    --link-text-color: #1a73e8;
     --thread-text: var(--tt-gray-dark-900);
     --placeholder-color: var(--tt-gray-dark-a-400);
     --thread-bg-color: var(--tt-color-yellow-dec-2);
@@ -19,7 +19,7 @@
   }
 }
 
-/* Ensure each top-level node has relative positioning 
+/* Ensure each top-level node has relative positioning
    so absolutely positioned placeholders work correctly */
 .tiptap.ProseMirror > * {
   position: relative;
@@ -35,10 +35,10 @@
 
   // Paragraph spacing
   p:not(:first-child):not(td p):not(th p) {
-    font-size: 1rem;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.15;
     font-weight: normal;
-    margin-top: 20px;
+    margin-top: 12px;
   }
 
   // Selection styles

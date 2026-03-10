@@ -13,17 +13,15 @@ import {
 import { TextAlign } from "@tiptap/extension-text-align";
 import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
-import { Selection } from "@tiptap/extensions";
-import {
-  EditorContent,
-  EditorContext,
-  type JSONContent,
-  useEditor,
-} from "@tiptap/react";
+import { Placeholder, Selection } from "@tiptap/extensions";
+import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
+import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
+import { HeadingDrag } from "@/components/tiptap-node/heading-node/heading-drag-extension";
+import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
 // --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
@@ -40,6 +38,7 @@ import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
 import "@/components/tiptap-node/list-node/list-node.scss";
 import "@/components/tiptap-node/image-node/image-node.scss";
+import "@/components/tiptap-node/heading-node/heading-drag.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
@@ -73,7 +72,6 @@ import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
 import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
 import { TOCSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
-import { migrateLegacyLocalStorage } from "@/hooks/use-document-storage";
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
@@ -85,11 +83,34 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils";
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss";
 
+import type { JSONContent } from "@tiptap/core";
 import defaultContent from "@/components/tiptap-templates/simple/data/content.json";
+
+/**
+ * Placeholder text per empty text-block node type. Container nodes (blockquote,
+ * listItem, taskItem) can't be empty due to schema constraints — their inner
+ * paragraphs receive context-aware placeholders via PARENT_PLACEHOLDER instead.
+ * Leaf/atom nodes (image, horizontalRule) have no text content. Title heading
+ * (pos 0) is handled separately in the Placeholder callback.
+ */
+const PLACEHOLDER_TEXT: Record<string, string> = {
+  heading: "Heading",
+  paragraph: "Type something...",
+  codeBlock: "Write code...",
+};
+
+/** Overrides paragraph placeholder when nested inside a container node. */
+const PARENT_PLACEHOLDER: Record<string, string> = {
+  listItem: "List",
+  taskItem: "To-do",
+  blockquote: "Quote",
+};
 
 interface SimpleEditorProps {
   documentId?: string;
   onTitleChange?: (title: string) => void;
+  initialContent?: JSONContent;
+  toolbar?: React.ReactNode;
 }
 
 const MainToolbarContent = ({
@@ -234,12 +255,14 @@ function EditorSkeleton() {
 
 function SimpleEditorContent({
   ydoc,
-  migrationContent,
   onTitleChange,
+  initialContent,
+  toolbar: extraToolbar,
 }: {
   ydoc: Y.Doc;
-  migrationContent: JSONContent | null;
   onTitleChange?: (title: string) => void;
+  initialContent?: JSONContent;
+  toolbar?: React.ReactNode;
 }) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
@@ -275,6 +298,7 @@ function SimpleEditorContent({
     },
     extensions: [
       StarterKit.configure({
+        document: false,
         horizontalRule: false,
         undoRedo: false,
         link: {
@@ -282,6 +306,9 @@ function SimpleEditorContent({
           enableClickSelection: true,
         },
       }),
+      TitleDocument,
+      HeadingScale,
+      HeadingDrag,
       Collaboration.configure({
         document: ydoc,
       }),
@@ -295,6 +322,21 @@ function SimpleEditorContent({
       Superscript,
       Subscript,
       Selection,
+      Placeholder.configure({
+        showOnlyCurrent: false,
+        includeChildren: true,
+        placeholder: ({ editor, node, pos, hasAnchor }) => {
+          if (node.type.name === "heading" && pos === 0) {
+            return "Enter document name";
+          }
+          if (!hasAnchor) return "";
+          if (node.type.name === "paragraph") {
+            const parent = editor.state.doc.resolve(pos).parent.type.name;
+            if (parent in PARENT_PLACEHOLDER) return PARENT_PLACEHOLDER[parent];
+          }
+          return PLACEHOLDER_TEXT[node.type.name] ?? "";
+        },
+      }),
       UniqueID.configure({
         types: ["heading"],
       }),
@@ -312,17 +354,10 @@ function SimpleEditorContent({
         onError: (error) => console.error("Upload failed:", error),
       }),
     ],
-    content: migrationContent ?? defaultContent,
+    content: initialContent ?? defaultContent,
     onUpdate: ({ editor: e }) => {
       if (!onTitleChange) return;
-      const firstHeading = e
-        .getJSON()
-        .content?.find((node) => node.type === "heading");
-      const title =
-        firstHeading?.content
-          ?.map((c) => ("text" in c ? (c.text as string) : ""))
-          .join("") || "Untitled";
-      onTitleChange(title);
+      onTitleChange(e.state.doc.firstChild?.textContent || "Untitled");
     },
   });
 
@@ -364,6 +399,8 @@ function SimpleEditorContent({
           )}
         </Toolbar>
 
+        {extraToolbar}
+
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
             <TOCSidebar items={tocItems} editor={editor} />
@@ -383,26 +420,20 @@ function SimpleEditorContent({
 export function SimpleEditor({
   documentId,
   onTitleChange,
+  initialContent,
+  toolbar,
 }: SimpleEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, synced } = useYjsDocument(docId);
-
-  const migrationContent = useMemo(() => {
-    if (!synced || !ydoc) return null;
-    const fragment = ydoc.getXmlFragment("default");
-    if (fragment.length === 0) {
-      return migrateLegacyLocalStorage(docId);
-    }
-    return null;
-  }, [synced, ydoc, docId]);
 
   if (!synced || !ydoc) return <EditorSkeleton />;
 
   return (
     <SimpleEditorContent
       ydoc={ydoc}
-      migrationContent={migrationContent}
       onTitleChange={onTitleChange}
+      initialContent={initialContent}
+      toolbar={toolbar}
     />
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { migrateLegacyDocument } from "@/hooks/use-document-storage";
-import { deleteDocumentDatabase } from "@/hooks/use-yjs-document";
 
 const TABS_KEY = "tinydocy-tabs";
+
+export const PLAYGROUND_ID = "playground";
 
 export type Tab = {
   id: string;
@@ -18,12 +18,25 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
+const PLAYGROUND_TAB: Tab = {
+  id: PLAYGROUND_ID,
+  title: "Playground",
+  createdAt: 0,
+};
+
+function ensurePlaygroundTab(tabs: Tab[]): Tab[] {
+  if (tabs.some((t) => t.id === PLAYGROUND_ID)) return tabs;
+  return [PLAYGROUND_TAB, ...tabs];
+}
+
 function loadTabsFromStorage(): TabsState | null {
   try {
     const raw = localStorage.getItem(TABS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as TabsState;
-      if (parsed.tabs.length > 0) return parsed;
+      if (parsed.tabs.length > 0) {
+        return { ...parsed, tabs: ensurePlaygroundTab(parsed.tabs) };
+      }
     }
   } catch {
     localStorage.removeItem(TABS_KEY);
@@ -37,9 +50,8 @@ function getInitialState(): TabsState {
   if (stored) return stored;
 
   const id = generateId();
-  migrateLegacyDocument(id);
   return {
-    tabs: [{ id, title: "Untitled", createdAt: Date.now() }],
+    tabs: [PLAYGROUND_TAB, { id, title: "Untitled", createdAt: Date.now() }],
     activeTabId: id,
   };
 }
@@ -76,7 +88,7 @@ export function useTabs() {
 
   const closeTab = useCallback((id: string) => {
     setState((prev) => {
-      if (prev.tabs.length <= 1) return prev;
+      if (id === PLAYGROUND_ID || prev.tabs.length <= 1) return prev;
 
       const idx = prev.tabs.findIndex((t) => t.id === id);
       const next = prev.tabs.filter((t) => t.id !== id);
@@ -85,7 +97,6 @@ export function useTabs() {
           ? next[Math.min(idx, next.length - 1)].id
           : prev.activeTabId;
 
-      deleteDocumentDatabase(id);
       return { tabs: next, activeTabId: newActive };
     });
   }, []);

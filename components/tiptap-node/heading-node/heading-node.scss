@@ -2,44 +2,62 @@
   h1,
   h2,
   h3,
-  h4 {
+  h4,
+  h5,
+  h6 {
     position: relative;
     color: inherit;
     font-style: inherit;
+    font-weight: 700;
+    line-height: 1.15;
   }
 
   > h1:first-child,
   > h2:first-child,
   > h3:first-child,
   > h4:first-child,
+  > h5:first-child,
+  > h6:first-child,
   > .ProseMirror-widget + h1,
   > .ProseMirror-widget + h2,
   > .ProseMirror-widget + h3,
-  > .ProseMirror-widget + h4 {
+  > .ProseMirror-widget + h4,
+  > .ProseMirror-widget + h5,
+  > .ProseMirror-widget + h6 {
     margin-top: 0;
   }
 
   h1 {
-    font-size: 1.5em;
-    font-weight: 700;
-    margin-top: 3em;
+    font-size: var(--hd-size, 20pt);
+    margin-top: 1.33em;
+  }
+
+  > h1:first-of-type {
+    margin-bottom: 0.5em;
   }
 
   h2 {
-    font-size: 1.25em;
-    font-weight: 700;
-    margin-top: 2.5em;
+    font-size: var(--hd-size, 16pt);
+    margin-top: 1.15em;
   }
 
   h3 {
-    font-size: 1.125em;
-    font-weight: 600;
-    margin-top: 2em;
+    font-size: var(--hd-size, 14pt);
+    margin-top: 1em;
   }
 
   h4 {
-    font-size: 1em;
-    font-weight: 600;
-    margin-top: 2em;
+    font-size: var(--hd-size, 12pt);
+    margin-top: 1em;
+  }
+
+  h5 {
+    font-size: var(--hd-size, 11pt);
+    margin-top: 1em;
+  }
+
+  h6 {
+    font-size: var(--hd-size, 10pt);
+    margin-top: 1em;
   }
 }
