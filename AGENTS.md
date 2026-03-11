@@ -4,9 +4,11 @@
 
 - Use Bun exclusively — `bun`, `bunx`, never `npm`, `npx`, `yarn`, or `pnpm`
 - Follow Conventional Commits — atomic commits, imperative mood, no AI/tool/agent references or trailers (`Made-with: Cursor`, `Co-authored-by: AI`); always show a commit review report and wait for explicit approval before committing
-- Apply DRY, KISS, and SOLID principles — prefer simple `useState` + `useEffect` over `useSyncExternalStore`, simpler state over nullable + guards; do not over-merge Tiptap scaffold code for "DRY" — keep custom and scaffold code separated; disable overzealous lint rules at config level rather than scattering `eslint-disable` or `biome-ignore` comments
+- Apply DRY, KISS, and SOLID principles — prefer simple `useState` + `useEffect` over `useSyncExternalStore`, simpler state over nullable + guards; disable overzealous lint rules at config level rather than scattering `eslint-disable` or `biome-ignore` comments
 - Review from a senior staff engineer / head-of-engineering perspective when asked
-- Prefer `react-icons/lu` (Lucide) via a barrel file, not local SVG wrapper components
+- Prefer `react-icons/lu` (Lucide) via `lib/icons.ts` barrel file, not local SVG wrapper components
+- Use named exports only — no `export default` except where required by framework (Next.js pages/layouts, config files)
+- Title-case acronyms in PascalCase names — `TocSidebar` not `TOCSidebar` (Google/Airbnb convention)
 - Avoid hydration mismatches — never use `useState(() => loadFromLocalStorage())`; use `useEffect` with a "ready" state flag instead; never nest `<button>` inside `<button>` (use `<div role="tab">` with `tabIndex` and `onKeyDown` for interactive containers that hold child buttons)
 - Prefer margin-positioned layout (e.g. TOC in left margin) so main content stays centered
 - Match existing design system tokens (`--tt-*`) when adding new UI components
@@ -23,8 +25,10 @@
 - TypeScript strict mode is enabled; `noExplicitAny` and `noNonNullAssertion` are set to warn in Biome; `a11y/useSemanticElements` is off (false positive for toolbar `role="group"`)
 - Path alias `@/*` maps to the project root
 - localStorage keys follow the pattern `tinydocy-theme`, `tinydocy-tabs`, `tinydocy-folds-{documentId}`; default theme is light (dark mode opt-in, no OS `prefers-color-scheme` fallback)
-- Custom code lives in `app/`, `hooks/`, `components/tab-bar`, `components/toc-sidebar`, `components/playground`; Tiptap scaffold code lives in `components/tiptap-*` — keep it mostly as-is for easier upstream updates
-- Naming: kebab-case for directories and files, PascalCase for React component exports, camelCase for hooks and utils
+- All code is fully owned (no upstream scaffold boundary) — `app/`, `hooks/`, `lib/`, `components/` (including `tiptap-*` directories) can be freely refactored
+- Naming: kebab-case for directories and files, PascalCase with title-case acronyms for React component exports, camelCase for hooks and utils
+- Utilities split by domain in `lib/`: `cn.ts` (class names), `shortcuts.ts` (keyboard), `editor-utils.ts` (ProseMirror/Tiptap), `url-utils.ts` (sanitization), `icons.ts` (Lucide barrel)
+- `types/` directory holds TypeScript declaration files (e.g. `scss.d.ts`) — application types stay colocated with their code
 - Document persistence uses Hocuspocus (WebSocket) + SQLite via `@hocuspocus/cli`; dev servers run via `make dev` (Makefile with `make -j2`)
 - Document model: first node is always an H1 title (enforced by TitleDocument extension with schema `heading block*`); each body H1 starts a new section/chapter; heading levels 1-6 only (HTML standard)
 - Editor content area targets Google Docs appearance — Arial font, 15px body text, 1.15 line-height, Google blue selection and link colors

@@ -39,6 +39,10 @@ TypeScript `strict` mode is enabled. This is non-negotiable.
 | Unused imports | **Remove them.** Biome warns on `noUnusedImports`. |
 | `as` type assertions | Prefer type guards or generics. Only use `as` when you can prove the assertion is safe. |
 
+### Exports
+
+Use **named exports only**. Do not use `export default` except where required by the framework (Next.js pages/layouts, config files). Named exports are tree-shakeable and provide explicit imports.
+
 ### Path aliases
 
 Use `@/*` for imports from the project root (configured in `tsconfig.json`):
@@ -54,8 +58,8 @@ import { useTabs } from "@/hooks/use-tabs";
 | Directories | kebab-case | `toc-sidebar/`, `tiptap-ui/` |
 | Files (components) | kebab-case | `tab-bar.tsx`, `simple-editor.tsx` |
 | Files (hooks) | kebab-case, `use-` prefix | `use-tabs.ts`, `use-document-storage.ts` |
-| Files (utilities) | kebab-case | `tiptap-utils.ts` |
-| React components | PascalCase export | `export function TabBar()` |
+| Files (utilities) | kebab-case | `editor-utils.ts`, `cn.ts` |
+| React components | PascalCase export, title-case acronyms | `export function TocSidebar()` |
 | Hooks | camelCase, `use` prefix | `export function useTabs()` |
 | Constants | UPPER_SNAKE_CASE | `const MAX_RETRIES = 3` |
 | Types/Interfaces | PascalCase | `interface EditorProps` |
@@ -69,7 +73,7 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 ┌─────────────────────────────────────────┐
 │  app/              Pages & layout       │  ← top: composes everything
 ├─────────────────────────────────────────┤
-│  components/       App-level components │  ← tab-bar, toc-sidebar, icons
+│  components/       App-level components │  ← tab-bar, toc-sidebar
 ├─────────────────────────────────────────┤
 │  tiptap-templates/ Composed editors     │  ← simple-editor
 ├─────────────────────────────────────────┤
@@ -81,7 +85,7 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 ├─────────────────────────────────────────┤
 │  hooks/            Shared React hooks   │  ← no UI, just logic
 ├─────────────────────────────────────────┤
-│  lib/              Pure utilities       │  ← no React, no DOM (except cn)
+│  lib/              Pure utilities       │  ← cn, shortcuts, editor-utils, url-utils, icons
 ├─────────────────────────────────────────┤
 │  styles/           Design tokens        │  ← variables, keyframes
 └─────────────────────────────────────────┘
@@ -119,21 +123,16 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 These are hard rules, not suggestions:
 
 1. **No premature abstraction.** Do not extract a shared component, hook, or utility until there are 3+ concrete use cases. Duplication is cheaper than the wrong abstraction.
-2. **No new layers.** Do not create new directories like `services/`, `providers/`, `contexts/`, `stores/`, `models/`, or `types/` at the project root. If it's a hook, it goes in `hooks/`. If it's a utility, it goes in `lib/`. If it's a type, it lives next to the code that uses it.
+2. **No new layers.** Do not create new directories like `services/`, `providers/`, `contexts/`, `stores/`, or `models/` at the project root. If it's a hook, it goes in `hooks/`. If it's a utility, it goes in `lib/`. If it's a type, it lives next to the code that uses it. Exception: `types/` exists for TypeScript declaration files (e.g., `scss.d.ts`) — not for application types.
 3. **No barrel files at directory roots.** Do not create `components/index.ts` or `hooks/index.ts`. Barrel files are only for individual component folders (e.g. `tiptap-ui/mark-button/index.tsx`).
 4. **No dedicated types files.** Types and interfaces live in the file that defines or primarily uses them. `Tab` lives in `use-tabs.ts`, not in `types/tab.ts`.
 5. **No wrapper components for the sake of wrapping.** If a component just passes props through to another component, delete it. Direct imports are better than indirection.
-6. **No "utils" dumping ground.** If `lib/tiptap-utils.ts` grows too large, split by domain (e.g. `lib/shortcuts.ts`, `lib/tiptap-helpers.ts`), not by creating a `utils/` folder.
+6. **No "utils" dumping ground.** Split utilities by domain (e.g. `lib/cn.ts`, `lib/shortcuts.ts`, `lib/editor-utils.ts`, `lib/url-utils.ts`), not by creating a `utils/` folder.
 7. **Co-locate everything.** Styles, hooks, tests, and types for a component live in its folder, not in separate top-level directories.
 
-### Tiptap scaffold boundary
+### Tiptap code ownership
 
-The `tiptap-ui-primitive/`, `tiptap-ui/`, `tiptap-node/`, and `tiptap-templates/` directories are Tiptap scaffold code. Treat them as semi-upstream:
-
-- Fix lint errors and accessibility issues directly
-- Add biome-ignore comments for intentional patterns
-- Do NOT reorganize, rename, or "improve" the scaffold structure for DRY
-- Custom app code stays outside the scaffold directories
+All code in `tiptap-ui-primitive/`, `tiptap-ui/`, `tiptap-node/`, and `tiptap-templates/` is fully owned — refactor, rename, and restructure freely. There is no upstream scaffold boundary.
 
 ## Code Formatting & Linting
 
