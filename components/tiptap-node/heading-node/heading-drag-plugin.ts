@@ -1,158 +1,24 @@
-import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
 import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
+import {
+  AUTO_SCROLL_SPEED,
+  AUTO_SCROLL_ZONE,
+  applySectionFeedback,
+  buildHandleDecos,
+  cleanupDrag,
+  DRAG_THRESHOLD,
+  type DragInfo,
+  dragStates,
+  findDropTarget,
+  getScrollParent,
+} from "@/components/tiptap-node/heading-node/helpers/drag-helpers";
 import { findHeadingFromCursor } from "@/components/tiptap-node/heading-node/helpers/find-heading-from-cursor";
 import { repositionHandle } from "@/components/tiptap-node/heading-node/helpers/reposition-handle";
 
-const DRAG_THRESHOLD = 4;
-const AUTO_SCROLL_ZONE = 50;
-const AUTO_SCROLL_SPEED = 15;
-
-interface DragInfo {
-  headingPos: number;
-  headingLevel: number;
-  sectionFrom: number;
-  sectionTo: number;
-  ghostEl: HTMLElement | null;
-  indicatorEl: HTMLElement | null;
-  scrollInterval: ReturnType<typeof setInterval> | null;
-  onDocMouseMove: ((e: MouseEvent) => void) | null;
-  onDocMouseUp: ((e: MouseEvent) => void) | null;
-  onBlur: (() => void) | null;
-  rafId: number;
-}
-
-const dragStates = new WeakMap<EditorView, DragInfo>();
-
 const headingDragPluginKey = new PluginKey<DecorationSet>("headingDrag");
-
-function buildHandleDecos(doc: PMNode): DecorationSet {
-  const decos: Decoration[] = [];
-  doc.forEach((node, pos) => {
-    if (node.type.name === "heading" && pos > 0) {
-      decos.push(
-        Decoration.node(pos, pos + node.nodeSize, {
-          class: "has-drag-handle",
-        }),
-      );
-    }
-  });
-  return decos.length > 0
-    ? DecorationSet.create(doc, decos)
-    : DecorationSet.empty;
-}
-
-function getScrollParent(el: HTMLElement): HTMLElement {
-  let current = el.parentElement;
-  while (current) {
-    const { overflowY } = getComputedStyle(current);
-    if (overflowY === "auto" || overflowY === "scroll") {
-      return current;
-    }
-    current = current.parentElement;
-  }
-  return document.documentElement;
-}
-
-function findDropTarget(
-  view: EditorView,
-  clientY: number,
-  sectionFrom: number,
-  sectionTo: number,
-): { pos: number; y: number } | null {
-  const { doc } = view.state;
-  const domChildren = view.dom.children;
-  let result: { pos: number; y: number } | null = null;
-  let offset = 0;
-
-  for (let i = 0; i < doc.content.childCount; i++) {
-    const child = doc.content.child(i);
-    const nodePos = offset;
-    offset += child.nodeSize;
-
-    if (i === 0) continue;
-    if (nodePos >= sectionFrom && nodePos < sectionTo) continue;
-
-    const dom = domChildren[i];
-    if (!(dom instanceof HTMLElement)) continue;
-
-    const rect = dom.getBoundingClientRect();
-
-    if (result && clientY < rect.top) {
-      const gapMid = (result.y + rect.top) / 2;
-      return clientY < gapMid ? result : { pos: nodePos, y: rect.top };
-    }
-
-    if (clientY < rect.top + rect.height / 2) {
-      return { pos: nodePos, y: rect.top };
-    }
-
-    result = { pos: offset, y: rect.bottom };
-  }
-
-  return result;
-}
-
-type ViewWithObserver = { domObserver?: { stop(): void; start(): void } };
-
-function applySectionFeedback(
-  view: EditorView,
-  from: number,
-  to: number,
-): void {
-  const { doc } = view.state;
-  const domChildren = view.dom.children;
-  (view as unknown as ViewWithObserver).domObserver?.stop();
-  let offset = 0;
-  for (let i = 0; i < doc.content.childCount; i++) {
-    const child = doc.content.child(i);
-    const nodePos = offset;
-    offset += child.nodeSize;
-    if (nodePos >= from && nodePos < to) {
-      const dom = domChildren[i];
-      if (dom instanceof HTMLElement) {
-        dom.classList.add("heading-section-dragging");
-      }
-    }
-  }
-  (view as unknown as ViewWithObserver).domObserver?.start();
-}
-
-function cleanupDrag(view: EditorView): void {
-  const info = dragStates.get(view);
-  if (!info) return;
-
-  info.ghostEl?.remove();
-  info.indicatorEl?.remove();
-  cancelAnimationFrame(info.rafId);
-
-  if (info.scrollInterval != null) {
-    clearInterval(info.scrollInterval);
-  }
-
-  if (info.onDocMouseMove) {
-    document.removeEventListener("mousemove", info.onDocMouseMove);
-  }
-  if (info.onDocMouseUp) {
-    document.removeEventListener("mouseup", info.onDocMouseUp);
-  }
-  if (info.onBlur) {
-    view.dom.removeEventListener("blur", info.onBlur);
-  }
-
-  document.documentElement.classList.remove("heading-dragging");
-
-  (view as unknown as ViewWithObserver).domObserver?.stop();
-  for (const el of view.dom.querySelectorAll(".heading-section-dragging")) {
-    el.classList.remove("heading-section-dragging");
-  }
-  (view as unknown as ViewWithObserver).domObserver?.start();
-
-  dragStates.delete(view);
-}
 
 export function createHeadingDragPlugin(): Plugin<DecorationSet> {
   return new Plugin<DecorationSet>({
@@ -397,9 +263,6 @@ export function createHeadingDragPlugin(): Plugin<DecorationSet> {
         e.preventDefault();
       }
 
-      /**
-       * Detach event listeners and wrapper from the current parent.
-       */
       function unmountParent(): void {
         if (!mountedParent) return;
         mountedParent.removeEventListener("mousemove", onParentMouseMove);
@@ -416,8 +279,6 @@ export function createHeadingDragPlugin(): Plugin<DecorationSet> {
        * 2. EditorContent.mount() — moves view.dom to a new parent after
        *    initial construction, orphaning any elements appended to the
        *    temporary internal parent
-       *
-       * Returns true when successfully mounted to the current parent.
        */
       function mount(): boolean {
         const parentEl = editorView.dom.parentElement;
