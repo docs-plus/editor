@@ -7,6 +7,7 @@ export {
   LuBan as BanIcon,
   LuBold as BoldIcon,
   LuChevronDown as ChevronDownIcon,
+  LuChevronRight as ChevronRightIcon,
   LuCloudUpload as CloudUploadIcon,
   LuCode as Code2Icon,
   LuCornerDownLeft as CornerDownLeftIcon,

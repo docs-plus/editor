@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
 import { HeadingDrag } from "@/components/tiptap-node/heading-node/heading-drag-extension";
+import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";
 import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
 // --- Tiptap Node ---
@@ -39,6 +40,7 @@ import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
 import "@/components/tiptap-node/list-node/list-node.scss";
 import "@/components/tiptap-node/image-node/image-node.scss";
 import "@/components/tiptap-node/heading-node/heading-drag.scss";
+import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
@@ -255,11 +257,13 @@ function EditorSkeleton() {
 
 function SimpleEditorContent({
   ydoc,
+  documentId,
   onTitleChange,
   initialContent,
   toolbar: extraToolbar,
 }: {
   ydoc: Y.Doc;
+  documentId: string;
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
   toolbar?: React.ReactNode;
@@ -273,6 +277,7 @@ function SimpleEditorContent({
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const [tocItems, setTocItems] = useState<TableOfContentData>([]);
   const [tocVisible, setTocVisible] = useState(true);
+  const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!toolbarRef.current) return;
@@ -309,6 +314,10 @@ function SimpleEditorContent({
       TitleDocument,
       HeadingScale,
       HeadingDrag,
+      HeadingFold.configure({
+        documentId,
+        onFoldChange: setFoldedIds,
+      }),
       Collaboration.configure({
         document: ydoc,
       }),
@@ -403,7 +412,12 @@ function SimpleEditorContent({
 
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
-            <TOCSidebar items={tocItems} editor={editor} />
+            <TOCSidebar
+              items={tocItems}
+              editor={editor}
+              foldedIds={foldedIds}
+              onToggleFold={(id) => editor?.commands.toggleFold(id)}
+            />
           )}
           <EditorContent
             editor={editor}
@@ -431,6 +445,7 @@ export function SimpleEditor({
   return (
     <SimpleEditorContent
       ydoc={ydoc}
+      documentId={docId}
       onTitleChange={onTitleChange}
       initialContent={initialContent}
       toolbar={toolbar}
