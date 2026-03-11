@@ -38,9 +38,8 @@ export function canMapDecorations(tr: Transaction, oldDoc: PMNode): boolean {
     if (!$from.sameParent($to)) return false;
   }
 
-  let containsHeading = false;
-  slice.content.forEach((node) => {
-    if (node.type.name === "heading") containsHeading = true;
-  });
-  return !containsHeading;
+  for (let i = 0; i < slice.content.childCount; i++) {
+    if (slice.content.child(i).type.name === "heading") return false;
+  }
+  return true;
 }

@@ -6,14 +6,29 @@ import type { Node as PMNode } from "@tiptap/pm/model";
  *
  * Section = heading + everything until next same-or-higher level.
  * Standard outliner behavior (Notion, Logseq, Roam).
+ *
+ * When the caller already knows the child index of the heading, pass
+ * `startChildIndex` to skip the leading walk — the function will begin
+ * scanning from child `startChildIndex + 1` at offset `headingPos + nodeSize`.
  */
 export function computeSection(
   doc: PMNode,
   headingPos: number,
   headingLevel: number,
+  startChildIndex?: number,
 ): { from: number; to: number } {
-  let offset = 0;
-  for (let i = 0; i < doc.content.childCount; i++) {
+  let startIdx: number;
+  let offset: number;
+
+  if (startChildIndex !== undefined) {
+    startIdx = startChildIndex + 1;
+    offset = headingPos + doc.content.child(startChildIndex).nodeSize;
+  } else {
+    startIdx = 0;
+    offset = 0;
+  }
+
+  for (let i = startIdx; i < doc.content.childCount; i++) {
     const node = doc.content.child(i);
     const pos = offset;
     offset += node.nodeSize;

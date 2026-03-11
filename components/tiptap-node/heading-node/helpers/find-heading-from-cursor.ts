@@ -48,6 +48,10 @@ export function findHeadingFromCursor(
     if (!bestMatch || distance < bestMatch.distance) {
       bestMatch = { element: dom, pos: nodePos, distance };
     }
+
+    if (coords.y < rect.top && bestMatch) {
+      break;
+    }
   }
 
   if (bestMatch && bestMatch.distance < 20) {
