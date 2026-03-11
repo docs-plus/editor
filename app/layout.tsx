@@ -4,7 +4,7 @@ import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 
 export const metadata: Metadata = {
