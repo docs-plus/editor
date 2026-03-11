@@ -5,7 +5,7 @@ import { Separator } from "@/components/tiptap-ui-primitive/separator";
 import "@/components/tiptap-ui-primitive/toolbar/toolbar.scss";
 import { useComposedRef } from "@/hooks/use-composed-ref";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
-import { cn } from "@/lib/tiptap-utils";
+import { cn } from "@/lib/cn";
 
 type BaseProps = React.HTMLAttributes<HTMLDivElement>;
 

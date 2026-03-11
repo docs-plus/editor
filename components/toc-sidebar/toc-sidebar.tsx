@@ -3,8 +3,8 @@
 import type { Editor } from "@tiptap/core";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { cn } from "@/lib/cn";
 import { ChevronRightIcon } from "@/lib/icons";
-import { cn } from "@/lib/tiptap-utils";
 
 import "./toc-sidebar.scss";
 

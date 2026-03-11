@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/tiptap-ui-primitive/button";
 import { CloseIcon, CloudUploadIcon } from "@/lib/icons";
 import "@/components/tiptap-node/image-upload-node/image-upload-node.scss";
-import { focusNextNode, isValidPosition } from "@/lib/tiptap-utils";
+import { focusNextNode, isValidPosition } from "@/lib/editor-utils";
 
 export interface FileItem {
   /**

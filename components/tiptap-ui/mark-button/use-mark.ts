@@ -4,6 +4,12 @@ import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import {
+  isMarkInSchema,
+  isNodeTypeSelected,
+  shouldShowEditorButton,
+} from "@/lib/editor-utils";
 // --- Icons ---
 import {
   BoldIcon,
@@ -14,12 +20,6 @@ import {
   SuperscriptIcon,
   UnderlineIcon,
 } from "@/lib/icons";
-// --- Lib ---
-import {
-  isMarkInSchema,
-  isNodeTypeSelected,
-  shouldShowEditorButton,
-} from "@/lib/tiptap-utils";
 
 export type Mark =
   | "bold"

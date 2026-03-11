@@ -44,6 +44,11 @@ import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
+// --- Lib ---
+import {
+  handleImageUpload,
+  MAX_FILE_SIZE,
+} from "@/components/tiptap-node/image-upload-node/upload-utils";
 // --- Components ---
 import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
@@ -78,9 +83,6 @@ import {
   LinkIcon,
   PanelLeftIcon,
 } from "@/lib/icons";
-
-// --- Lib ---
-import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils";
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss";

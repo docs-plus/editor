@@ -4,6 +4,13 @@ import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import {
+  isNodeInSchema,
+  isNodeTypeSelected,
+  prepareBlockToggle,
+  selectionWithinConvertibleTypes,
+} from "@/lib/editor-utils";
 // --- Icons ---
 import {
   HeadingFiveIcon,
@@ -13,13 +20,6 @@ import {
   HeadingThreeIcon,
   HeadingTwoIcon,
 } from "@/lib/icons";
-// --- Lib ---
-import {
-  isNodeInSchema,
-  isNodeTypeSelected,
-  prepareBlockToggle,
-  selectionWithinConvertibleTypes,
-} from "@/lib/tiptap-utils";
 
 export type Level = 1 | 2 | 3 | 4 | 5 | 6;
 

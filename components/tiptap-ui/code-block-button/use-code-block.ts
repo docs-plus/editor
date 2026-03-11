@@ -4,8 +4,6 @@ import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-// --- Icons ---
-import { CodeBlockIcon } from "@/lib/icons";
 // --- Lib ---
 import {
   isNodeInSchema,
@@ -13,7 +11,9 @@ import {
   prepareBlockToggle,
   selectionWithinConvertibleTypes,
   shouldShowEditorButton,
-} from "@/lib/tiptap-utils";
+} from "@/lib/editor-utils";
+// --- Icons ---
+import { CodeBlockIcon } from "@/lib/icons";
 
 export const CODE_BLOCK_SHORTCUT_KEY = "mod+alt+c";
 

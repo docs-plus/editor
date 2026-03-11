@@ -1,5 +1,5 @@
 import { Badge } from "@/components/tiptap-ui-primitive/badge";
-import { parseShortcutKeys } from "@/lib/tiptap-utils";
+import { parseShortcutKeys } from "@/lib/shortcuts";
 
 export function ShortcutBadge({ shortcutKeys }: { shortcutKeys?: string }) {
   if (!shortcutKeys) return null;

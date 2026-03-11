@@ -6,10 +6,10 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Lib ---
+import { isExtensionAvailable } from "@/lib/editor-utils";
 // --- Icons ---
 import { ImagePlusIcon } from "@/lib/icons";
-// --- Lib ---
-import { isExtensionAvailable } from "@/lib/tiptap-utils";
 
 export const IMAGE_UPLOAD_SHORTCUT_KEY = "mod+shift+i";
 
