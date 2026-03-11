@@ -22,10 +22,11 @@
 - Git hooks via Husky: pre-commit runs lint-staged (Biome), commit-msg runs commitlint (config is `.commitlintrc.json` — the dot prefix is required)
 - TypeScript strict mode is enabled; `noExplicitAny` and `noNonNullAssertion` are set to warn in Biome; `a11y/useSemanticElements` is off (false positive for toolbar `role="group"`)
 - Path alias `@/*` maps to the project root
-- localStorage keys follow the pattern `tinydocy-theme`, `tinydocy-tabs`; default theme is light (dark mode opt-in, no OS `prefers-color-scheme` fallback)
+- localStorage keys follow the pattern `tinydocy-theme`, `tinydocy-tabs`, `tinydocy-folds-{documentId}`; default theme is light (dark mode opt-in, no OS `prefers-color-scheme` fallback)
 - Custom code lives in `app/`, `hooks/`, `components/tab-bar`, `components/toc-sidebar`, `components/playground`; Tiptap scaffold code lives in `components/tiptap-*` — keep it mostly as-is for easier upstream updates
 - Naming: kebab-case for directories and files, PascalCase for React component exports, camelCase for hooks and utils
 - Document persistence uses Hocuspocus (WebSocket) + SQLite via `@hocuspocus/cli`; dev servers run via `make dev` (Makefile with `make -j2`)
 - Document model: first node is always an H1 title (enforced by TitleDocument extension with schema `heading block*`); each body H1 starts a new section/chapter; heading levels 1-6 only (HTML standard)
 - Editor content area targets Google Docs appearance — Arial font, 15px body text, 1.15 line-height, Google blue selection and link colors
 - Heading drag-and-drop uses a forked `@tiptap/extension-drag-handle` architecture — handle outside contenteditable via `@floating-ui/dom`, custom mouse events (no HTML5 DnD), section-level dragging; ProseMirror view quirks: `view.nodeDOM(pos)` returns null under Yjs (use `view.dom.children[i]`), Tiptap React v3 re-parents `view.dom` after construction (plugins must detect parent change in `update()` and re-mount)
+- Heading fold/unfold uses `Decoration.node()` for heading classes and content hiding, plus `Decoration.widget()` for a 3D CSS crinkle accordion (4–8 strips with `perspective` + `rotateX`); animations via CSS `@keyframes`; nested folds suppressed by `outerFoldEnd` tracking in `buildFoldDecorations`; fold state keyed by `data-toc-id` and persisted per-user per-document in localStorage; `canMapDecorations` helper shared with HeadingScale for typing-path O(1) decoration updates
