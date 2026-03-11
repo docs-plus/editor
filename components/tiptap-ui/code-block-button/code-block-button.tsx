@@ -6,13 +6,13 @@ import type { UseCodeBlockConfig } from "@/components/tiptap-ui/code-block-butto
 import { useCodeBlock } from "@/components/tiptap-ui/code-block-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 export interface CodeBlockButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseCodeBlockConfig {
   /**
    * Optional text to display alongside the icon.
@@ -76,13 +76,10 @@ export const CodeBlockButton = forwardRef<
     }
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        role="button"
+        isActive={isActive}
         disabled={!canToggleCodeBlock}
-        data-disabled={!canToggleCodeBlock}
         tabIndex={-1}
         aria-label={label}
         aria-pressed={isActive}
@@ -93,12 +90,12 @@ export const CodeBlockButton = forwardRef<
       >
         {children ?? (
           <>
-            <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            <Icon />
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );

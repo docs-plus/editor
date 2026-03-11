@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Inter } from "next/font/google";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
@@ -26,7 +27,7 @@ export default function RootLayout({
             __html: `(function(){try{if(localStorage.getItem("tinydocy-theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}})()`,
           }}
         />
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
   );

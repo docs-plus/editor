@@ -5,22 +5,21 @@ import { useCallback, useState } from "react";
 // --- Tiptap UI ---
 import { ListButton, type ListType } from "@/components/tiptap-ui/list-button";
 import { useListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
-// --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button";
-import { Card, CardBody } from "@/components/tiptap-ui-primitive/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/tiptap-ui-primitive/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
+// --- UI ---
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import { ChevronDownIcon } from "@/lib/icons";
 
-export interface ListDropdownMenuProps extends Omit<ButtonProps, "type"> {
+export interface ListDropdownMenuProps
+  extends Omit<ToolbarButtonProps, "type"> {
   /**
    * The Tiptap editor instance.
    */
@@ -38,11 +37,6 @@ export interface ListDropdownMenuProps extends Omit<ButtonProps, "type"> {
    * Callback for when the dropdown opens or closes
    */
   onOpenChange?: (isOpen: boolean) => void;
-  /**
-   * Whether to render the dropdown menu in a portal
-   * @default false
-   */
-  portal?: boolean;
 }
 
 export function ListDropdownMenu({
@@ -50,8 +44,7 @@ export function ListDropdownMenu({
   types = ["bulletList", "orderedList", "taskList"],
   hideWhenUnavailable = false,
   onOpenChange,
-  portal = false,
-  ...props
+  ...buttonProps
 }: ListDropdownMenuProps) {
   const { editor } = useTiptapEditor(providedEditor);
   const [isOpen, setIsOpen] = useState(false);
@@ -77,41 +70,38 @@ export function ListDropdownMenu({
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={handleOnOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          data-active-state={isActive ? "on" : "off"}
-          role="button"
-          tabIndex={-1}
-          disabled={!canToggle}
-          data-disabled={!canToggle}
-          aria-label="List options"
-          tooltip="List"
-          {...props}
-        >
-          <Icon className="tiptap-button-icon" />
-          <ChevronDownIcon className="tiptap-button-dropdown-small" />
-        </Button>
+      <DropdownMenuTrigger
+        render={
+          <ToolbarButton
+            type="button"
+            isActive={isActive}
+            tabIndex={-1}
+            disabled={!canToggle}
+            aria-label="List options"
+            tooltip="List"
+            size="sm"
+            {...buttonProps}
+          />
+        }
+      >
+        <Icon />
+        <ChevronDownIcon className="size-3 opacity-60" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" portal={portal}>
-        <Card>
-          <CardBody>
-            <ButtonGroup>
-              {filteredLists.map((option) => (
-                <DropdownMenuItem key={option.type} asChild>
-                  <ListButton
-                    editor={editor}
-                    type={option.type}
-                    text={option.label}
-                    showTooltip={false}
-                  />
-                </DropdownMenuItem>
-              ))}
-            </ButtonGroup>
-          </CardBody>
-        </Card>
+      <DropdownMenuContent align="start">
+        <div className="flex flex-col gap-0.5 p-1">
+          {filteredLists.map((option) => (
+            <ListButton
+              key={option.type}
+              editor={editor}
+              type={option.type}
+              text={option.label}
+              showTooltip={false}
+              size="sm"
+              className="w-full justify-start"
+            />
+          ))}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

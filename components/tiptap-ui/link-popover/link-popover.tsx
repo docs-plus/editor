@@ -5,21 +5,18 @@ import { forwardRef, useCallback, useEffect, useState } from "react";
 // --- Tiptap UI ---
 import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover";
 import { useLinkPopover } from "@/components/tiptap-ui/link-popover";
-// --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button";
-import {
-  Card,
-  CardBody,
-  CardItemGroup,
-} from "@/components/tiptap-ui-primitive/card";
-import { Input, InputGroup } from "@/components/tiptap-ui-primitive/input";
+// --- UI ---
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/tiptap-ui-primitive/popover";
-import { Separator } from "@/components/tiptap-ui-primitive/separator";
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -59,7 +56,7 @@ export interface LinkMainProps {
 }
 
 export interface LinkPopoverProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseLinkPopoverConfig {
   /**
    * Callback for when the popover opens or closes.
@@ -75,22 +72,19 @@ export interface LinkPopoverProps
 /**
  * Link button component for triggering the link popover
  */
-export const LinkButton = forwardRef<HTMLButtonElement, ButtonProps>(
+export const LinkButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <Button
+      <ToolbarButton
         type="button"
         className={className}
-        variant="ghost"
-        role="button"
-        tabIndex={-1}
         aria-label="Link"
         tooltip="Link"
         ref={ref}
         {...props}
       >
-        {children || <LinkIcon className="tiptap-button-icon" />}
-      </Button>
+        {children || <LinkIcon />}
+      </ToolbarButton>
     );
   },
 );
@@ -123,50 +117,50 @@ const LinkMain: React.FC<LinkMainProps> = ({
         ...(isMobile ? { boxShadow: "none", border: 0 } : {}),
       }}
     >
-      <CardBody
+      <CardContent
         style={{
           ...(isMobile ? { padding: 0 } : {}),
         }}
       >
-        <CardItemGroup orientation="horizontal">
-          <InputGroup>
-            <Input
-              type="url"
-              placeholder="Paste a link..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              aria-label="Link URL"
-            />
-          </InputGroup>
+        <div className="flex items-center gap-1">
+          <Input
+            type="url"
+            placeholder="Paste a link..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            aria-label="Link URL"
+          />
 
-          <ButtonGroup orientation="horizontal">
+          <div className="flex items-center gap-0.5">
             <Button
               type="button"
               onClick={setLink}
               aria-label="Apply link"
               disabled={!url && !isActive}
               variant="ghost"
+              size="icon-sm"
             >
-              <CornerDownLeftIcon className="tiptap-button-icon" />
+              <CornerDownLeftIcon />
             </Button>
-          </ButtonGroup>
+          </div>
 
-          <Separator />
+          <Separator orientation="vertical" className="h-5" />
 
-          <ButtonGroup orientation="horizontal">
+          <div className="flex items-center gap-0.5">
             <Button
               type="button"
               onClick={openLink}
               aria-label="Open in new window"
               disabled={!url && !isActive}
               variant="ghost"
+              size="icon-sm"
             >
-              <ExternalLinkIcon className="tiptap-button-icon" />
+              <ExternalLinkIcon />
             </Button>
 
             <Button
@@ -175,12 +169,13 @@ const LinkMain: React.FC<LinkMainProps> = ({
               aria-label="Remove link"
               disabled={!url && !isActive}
               variant="ghost"
+              size="icon-sm"
             >
-              <TrashIcon className="tiptap-button-icon" />
+              <TrashIcon />
             </Button>
-          </ButtonGroup>
-        </CardItemGroup>
-      </CardBody>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 };
@@ -271,19 +266,20 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
 
     return (
       <Popover open={isOpen} onOpenChange={handleOnOpenChange}>
-        <PopoverTrigger asChild>
-          <LinkButton
-            disabled={!canSet}
-            data-active-state={isActive ? "on" : "off"}
-            data-disabled={!canSet}
-            aria-label={label}
-            aria-pressed={isActive}
-            onClick={handleClick}
-            {...buttonProps}
-            ref={ref}
-          >
-            {children ?? <Icon className="tiptap-button-icon" />}
-          </LinkButton>
+        <PopoverTrigger
+          render={
+            <LinkButton
+              disabled={!canSet}
+              isActive={isActive}
+              aria-label={label}
+              aria-pressed={isActive}
+              onClick={handleClick}
+              {...buttonProps}
+              ref={ref}
+            />
+          }
+        >
+          {children ?? <Icon />}
         </PopoverTrigger>
 
         <PopoverContent>

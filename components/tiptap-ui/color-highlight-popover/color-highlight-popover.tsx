@@ -12,22 +12,19 @@ import {
   pickHighlightColorsByValue,
   useColorHighlight,
 } from "@/components/tiptap-ui/color-highlight-button";
-// --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button";
-import {
-  Card,
-  CardBody,
-  CardItemGroup,
-} from "@/components/tiptap-ui-primitive/card";
+// --- UI ---
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/tiptap-ui-primitive/popover";
-import { Separator } from "@/components/tiptap-ui-primitive/separator";
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
+import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
@@ -51,7 +48,7 @@ export interface ColorHighlightPopoverContentProps {
 }
 
 export interface ColorHighlightPopoverProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     Pick<
       UseColorHighlightConfig,
       "editor" | "hideWhenUnavailable" | "onApplied"
@@ -70,22 +67,18 @@ export interface ColorHighlightPopoverProps
 
 export const ColorHighlightPopoverButton = forwardRef<
   HTMLButtonElement,
-  ButtonProps
+  ToolbarButtonProps
 >(({ className, children, ...props }, ref) => (
-  <Button
+  <ToolbarButton
     type="button"
     className={className}
-    variant="ghost"
-    data-appearance="default"
-    role="button"
-    tabIndex={-1}
     aria-label="Highlight text"
     tooltip="Highlight"
     ref={ref}
     {...props}
   >
-    {children ?? <HighlighterIcon className="tiptap-button-icon" />}
-  </Button>
+    {children ?? <HighlighterIcon />}
+  </ToolbarButton>
 ));
 
 ColorHighlightPopoverButton.displayName = "ColorHighlightPopoverButton";
@@ -131,9 +124,9 @@ export function ColorHighlightPopoverContent({
       tabIndex={0}
       style={isMobile ? { boxShadow: "none", border: 0 } : {}}
     >
-      <CardBody style={isMobile ? { padding: 0 } : {}}>
-        <CardItemGroup orientation="horizontal">
-          <ButtonGroup orientation="horizontal">
+      <CardContent style={isMobile ? { padding: 0 } : {}}>
+        <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {colors.map((color, index) => (
               <ColorHighlightButton
                 key={color.value}
@@ -146,24 +139,24 @@ export function ColorHighlightPopoverContent({
                 useColorValue={useColorValue}
               />
             ))}
-          </ButtonGroup>
+          </div>
           <Separator />
-          <ButtonGroup orientation="horizontal">
+          <div className="flex items-center gap-0.5">
             <Button
               onClick={handleRemoveHighlight}
               aria-label="Remove highlight"
-              tooltip="Remove highlight"
               tabIndex={selectedIndex === colors.length ? 0 : -1}
               type="button"
               role="menuitem"
               variant="ghost"
+              size="icon-sm"
               data-highlighted={selectedIndex === colors.length}
             >
-              <BanIcon className="tiptap-button-icon" />
+              <BanIcon />
             </Button>
-          </ButtonGroup>
-        </CardItemGroup>
-      </CardBody>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -195,18 +188,19 @@ export function ColorHighlightPopover({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <ColorHighlightPopoverButton
-          disabled={!canColorHighlight}
-          data-active-state={isActive ? "on" : "off"}
-          data-disabled={!canColorHighlight}
-          aria-pressed={isActive}
-          aria-label={label}
-          tooltip={label}
-          {...props}
-        >
-          <Icon className="tiptap-button-icon" />
-        </ColorHighlightPopoverButton>
+      <PopoverTrigger
+        render={
+          <ColorHighlightPopoverButton
+            disabled={!canColorHighlight}
+            isActive={isActive}
+            aria-pressed={isActive}
+            aria-label={label}
+            tooltip={label}
+            {...props}
+          />
+        }
+      >
+        <Icon />
       </PopoverTrigger>
       <PopoverContent aria-label="Highlight colors">
         <ColorHighlightPopoverContent

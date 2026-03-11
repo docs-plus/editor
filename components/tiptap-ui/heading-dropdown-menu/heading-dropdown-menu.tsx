@@ -5,29 +5,22 @@ import { forwardRef, useCallback, useState } from "react";
 import { HeadingButton } from "@/components/tiptap-ui/heading-button";
 import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu";
 import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
-// --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button";
-import { Card, CardBody } from "@/components/tiptap-ui-primitive/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/tiptap-ui-primitive/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
+// --- UI ---
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import { ChevronDownIcon } from "@/lib/icons";
 
 export interface HeadingDropdownMenuProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseHeadingDropdownMenuConfig {
-  /**
-   * Whether to render the dropdown menu in a portal
-   * @default false
-   */
-  portal?: boolean;
   /**
    * Callback for when the dropdown opens or closes
    */
@@ -48,7 +41,6 @@ export const HeadingDropdownMenu = forwardRef<
       editor: providedEditor,
       levels = [1, 2, 3, 4, 5, 6],
       hideWhenUnavailable = false,
-      portal = false,
       onOpenChange,
       children,
       ...buttonProps
@@ -78,50 +70,47 @@ export const HeadingDropdownMenu = forwardRef<
     }
 
     return (
-      <DropdownMenu modal open={isOpen} onOpenChange={handleOpenChange}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            data-active-state={isActive ? "on" : "off"}
-            role="button"
-            tabIndex={-1}
-            disabled={!canToggleHeading}
-            data-disabled={!canToggleHeading}
-            aria-label="Format text as heading"
-            aria-pressed={isActive}
-            tooltip="Heading"
-            {...buttonProps}
-            ref={ref}
-          >
-            {children ? (
-              children
-            ) : (
-              <>
-                <Icon className="tiptap-button-icon" />
-                <ChevronDownIcon className="tiptap-button-dropdown-small" />
-              </>
-            )}
-          </Button>
+      <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
+        <DropdownMenuTrigger
+          render={
+            <ToolbarButton
+              type="button"
+              isActive={isActive}
+              tabIndex={-1}
+              disabled={!canToggleHeading}
+              aria-label="Format text as heading"
+              aria-pressed={isActive}
+              tooltip="Heading"
+              size="sm"
+              {...buttonProps}
+              ref={ref}
+            />
+          }
+        >
+          {children ? (
+            children
+          ) : (
+            <>
+              <Icon />
+              <ChevronDownIcon className="size-3 opacity-60" />
+            </>
+          )}
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" portal={portal}>
-          <Card>
-            <CardBody>
-              <ButtonGroup>
-                {levels.map((level) => (
-                  <DropdownMenuItem key={`heading-${level}`} asChild>
-                    <HeadingButton
-                      editor={editor}
-                      level={level}
-                      text={`Heading ${level}`}
-                      showTooltip={false}
-                    />
-                  </DropdownMenuItem>
-                ))}
-              </ButtonGroup>
-            </CardBody>
-          </Card>
+        <DropdownMenuContent align="start">
+          <div className="flex flex-col gap-0.5 p-1">
+            {levels.map((level) => (
+              <HeadingButton
+                key={`heading-${level}`}
+                editor={editor}
+                level={level}
+                text={`Heading ${level}`}
+                showTooltip={false}
+                size="sm"
+                className="w-full justify-start"
+              />
+            ))}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
     );

@@ -9,8 +9,8 @@ import {
 } from "@/components/tiptap-ui/color-highlight-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
@@ -18,7 +18,7 @@ import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 import "@/components/tiptap-ui/color-highlight-button/color-highlight-button.scss";
 
 export interface ColorHighlightButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseColorHighlightConfig {
   /**
    * Optional text to display alongside the icon.
@@ -126,14 +126,11 @@ export const ColorHighlightButton = forwardRef<
     }
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        role="button"
+        isActive={isActive}
         tabIndex={-1}
         disabled={!canColorHighlight}
-        data-disabled={!canColorHighlight}
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
@@ -150,11 +147,11 @@ export const ColorHighlightButton = forwardRef<
                 { "--highlight-color": highlightColor } as React.CSSProperties
               }
             />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );

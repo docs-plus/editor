@@ -27,13 +27,13 @@ import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/ho
 // --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
 // --- UI Primitives ---
-import { Button } from "@/components/tiptap-ui-primitive/button";
-import { Spacer } from "@/components/tiptap-ui-primitive/spacer";
+import { Button } from "@/components/ui/button";
+import { Spacer } from "@/components/ui/spacer";
 import {
   Toolbar,
   ToolbarGroup,
   ToolbarSeparator,
-} from "@/components/tiptap-ui-primitive/toolbar";
+} from "@/components/ui/toolbar";
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
@@ -140,7 +140,7 @@ const MainToolbarContent = ({
             aria-label="Toggle outline"
             data-active-state={tocVisible ? "on" : "off"}
           >
-            <PanelLeftIcon className="tiptap-button-icon" />
+            <PanelLeftIcon />
           </Button>
         </ToolbarGroup>
       )}
@@ -155,11 +155,8 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
-        <ListDropdownMenu
-          types={["bulletList", "orderedList", "taskList"]}
-          portal={isMobile}
-        />
+        <HeadingDropdownMenu levels={[1, 2, 3, 4]} />
+        <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} />
         <BlockquoteButton />
         <CodeBlockButton />
       </ToolbarGroup>
@@ -223,12 +220,8 @@ const MobileToolbarContent = ({
   <>
     <ToolbarGroup>
       <Button variant="ghost" onClick={onBack}>
-        <ArrowLeftIcon className="tiptap-button-icon" />
-        {type === "highlighter" ? (
-          <HighlighterIcon className="tiptap-button-icon" />
-        ) : (
-          <LinkIcon className="tiptap-button-icon" />
-        )}
+        <ArrowLeftIcon />
+        {type === "highlighter" ? <HighlighterIcon /> : <LinkIcon />}
       </Button>
     </ToolbarGroup>
 

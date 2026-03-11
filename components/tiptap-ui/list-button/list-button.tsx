@@ -6,13 +6,13 @@ import type { UseListConfig } from "@/components/tiptap-ui/list-button";
 import { useList } from "@/components/tiptap-ui/list-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 export interface ListButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseListConfig {
   /**
    * Optional text to display alongside the icon.
@@ -75,14 +75,11 @@ export const ListButton = forwardRef<HTMLButtonElement, ListButtonProps>(
     }
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        role="button"
+        isActive={isActive}
         tabIndex={-1}
         disabled={!canToggle}
-        data-disabled={!canToggle}
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
@@ -92,12 +89,12 @@ export const ListButton = forwardRef<HTMLButtonElement, ListButtonProps>(
       >
         {children ?? (
           <>
-            <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            <Icon />
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );

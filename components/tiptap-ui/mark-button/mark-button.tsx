@@ -6,13 +6,13 @@ import type { UseMarkConfig } from "@/components/tiptap-ui/mark-button";
 import { useMark } from "@/components/tiptap-ui/mark-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 export interface MarkButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseMarkConfig {
   /**
    * Optional text to display alongside the icon.
@@ -75,13 +75,10 @@ export const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(
     }
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
         disabled={!canToggle}
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        data-disabled={!canToggle}
-        role="button"
+        isActive={isActive}
         tabIndex={-1}
         aria-label={label}
         aria-pressed={isActive}
@@ -92,12 +89,12 @@ export const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(
       >
         {children ?? (
           <>
-            <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            <Icon />
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );

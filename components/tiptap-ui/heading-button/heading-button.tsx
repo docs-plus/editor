@@ -6,13 +6,13 @@ import type { UseHeadingConfig } from "@/components/tiptap-ui/heading-button";
 import { useHeading } from "@/components/tiptap-ui/heading-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 export interface HeadingButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseHeadingConfig {
   /**
    * Optional text to display alongside the icon.
@@ -75,14 +75,11 @@ export const HeadingButton = forwardRef<HTMLButtonElement, HeadingButtonProps>(
     }
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        role="button"
+        isActive={isActive}
         tabIndex={-1}
         disabled={!canToggleHeading}
-        data-disabled={!canToggleHeading}
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
@@ -92,12 +89,12 @@ export const HeadingButton = forwardRef<HTMLButtonElement, HeadingButtonProps>(
       >
         {children ?? (
           <>
-            <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            <Icon />
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );

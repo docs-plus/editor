@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import { Button } from "@/components/ui/button";
 import { MoonStarIcon, SunIcon } from "@/lib/icons";
 
 const THEME_KEY = "tinydocy-theme";
@@ -31,11 +31,7 @@ export function ThemeToggle() {
       aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
       variant="ghost"
     >
-      {isDarkMode ? (
-        <MoonStarIcon className="tiptap-button-icon" />
-      ) : (
-        <SunIcon className="tiptap-button-icon" />
-      )}
+      {isDarkMode ? <MoonStarIcon /> : <SunIcon />}
     </Button>
   );
 }

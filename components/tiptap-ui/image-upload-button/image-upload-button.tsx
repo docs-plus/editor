@@ -6,8 +6,8 @@ import type { UseImageUploadConfig } from "@/components/tiptap-ui/image-upload-b
 import { useImageUpload } from "@/components/tiptap-ui/image-upload-button";
 import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button";
-import { Button } from "@/components/tiptap-ui-primitive/button";
+import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
@@ -15,7 +15,7 @@ type IconProps = React.SVGProps<SVGSVGElement>;
 type IconComponent = ({ className, ...props }: IconProps) => React.ReactElement;
 
 export interface ImageUploadButtonProps
-  extends Omit<ButtonProps, "type">,
+  extends Omit<ToolbarButtonProps, "type">,
     UseImageUploadConfig {
   /**
    * Optional text to display alongside the icon.
@@ -86,14 +86,11 @@ export const ImageUploadButton = forwardRef<
     const RenderIcon = CustomIcon ?? Icon;
 
     return (
-      <Button
+      <ToolbarButton
         type="button"
-        variant="ghost"
-        data-active-state={isActive ? "on" : "off"}
-        role="button"
+        isActive={isActive}
         tabIndex={-1}
         disabled={!canInsert}
-        data-disabled={!canInsert}
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
@@ -103,12 +100,12 @@ export const ImageUploadButton = forwardRef<
       >
         {children ?? (
           <>
-            <RenderIcon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            <RenderIcon />
+            {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>
         )}
-      </Button>
+      </ToolbarButton>
     );
   },
 );
