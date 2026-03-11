@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { PLAYGROUND_ID, type Tab } from "@/hooks/use-tabs";
 import {
   CloseIcon,
   FileTextIcon,
   FlaskConicalIcon,
   PlusIcon,
-} from "@/components/tiptap-icons";
-import { PLAYGROUND_ID, type Tab } from "@/hooks/use-tabs";
-import "@/components/tab-bar.scss";
+} from "@/lib/icons";
+import "./tab-bar.scss";
 
 interface TabBarProps {
   tabs: Tab[];

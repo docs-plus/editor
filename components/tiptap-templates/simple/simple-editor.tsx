@@ -44,13 +44,6 @@ import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
-// --- Icons ---
-import {
-  ArrowLeftIcon,
-  HighlighterIcon,
-  LinkIcon,
-  PanelLeftIcon,
-} from "@/components/tiptap-icons";
 // --- Components ---
 import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
@@ -78,6 +71,13 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
+// --- Icons ---
+import {
+  ArrowLeftIcon,
+  HighlighterIcon,
+  LinkIcon,
+  PanelLeftIcon,
+} from "@/lib/icons";
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils";

@@ -3,11 +3,7 @@
 import { useCurrentEditor } from "@tiptap/react";
 import { useState } from "react";
 import { scenarios } from "@/components/playground/playground-scenarios";
-import {
-  ChevronDownIcon,
-  FlaskConicalIcon,
-  RefreshCwIcon,
-} from "@/components/tiptap-icons";
+import { ChevronDownIcon, FlaskConicalIcon, RefreshCwIcon } from "@/lib/icons";
 import "@/components/playground/playground-toolbar.scss";
 
 export function PlaygroundToolbar() {

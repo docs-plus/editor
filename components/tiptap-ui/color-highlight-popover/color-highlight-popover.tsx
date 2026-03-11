@@ -2,8 +2,6 @@
 
 import type { Editor } from "@tiptap/react";
 import { forwardRef, useMemo, useRef, useState } from "react";
-// --- Icons ---
-import { BanIcon, HighlighterIcon } from "@/components/tiptap-icons";
 // --- Tiptap UI ---
 import type {
   HighlightColor,
@@ -32,6 +30,8 @@ import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 // --- Hooks ---
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Icons ---
+import { BanIcon, HighlighterIcon } from "@/lib/icons";
 
 export interface ColorHighlightPopoverContentProps {
   /**

@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ChevronRightIcon } from "@/components/tiptap-icons";
+import { ChevronRightIcon } from "@/lib/icons";
 import { cn } from "@/lib/tiptap-utils";
 
 import "./toc-sidebar.scss";

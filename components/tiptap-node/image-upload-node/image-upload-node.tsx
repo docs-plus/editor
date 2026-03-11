@@ -3,8 +3,8 @@
 import type { NodeViewProps } from "@tiptap/react";
 import { NodeViewWrapper } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { CloseIcon, CloudUploadIcon } from "@/components/tiptap-icons";
 import { Button } from "@/components/tiptap-ui-primitive/button";
+import { CloseIcon, CloudUploadIcon } from "@/lib/icons";
 import "@/components/tiptap-node/image-upload-node/image-upload-node.scss";
 import { focusNextNode, isValidPosition } from "@/lib/tiptap-utils";
 

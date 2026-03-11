@@ -2,6 +2,8 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import {
   HeadingFiveIcon,
@@ -10,9 +12,7 @@ import {
   HeadingSixIcon,
   HeadingThreeIcon,
   HeadingTwoIcon,
-} from "@/components/tiptap-icons";
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+} from "@/lib/icons";
 // --- Lib ---
 import {
   isNodeInSchema,

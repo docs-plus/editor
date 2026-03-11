@@ -2,6 +2,8 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
+// --- Hooks ---
+import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import {
   BoldIcon,
@@ -11,9 +13,7 @@ import {
   SubscriptIcon,
   SuperscriptIcon,
   UnderlineIcon,
-} from "@/components/tiptap-icons";
-// --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+} from "@/lib/icons";
 // --- Lib ---
 import {
   isMarkInSchema,

@@ -1,9 +1,6 @@
 "use client";
 
 import { forwardRef, useCallback, useState } from "react";
-
-// --- Icons ---
-import { ChevronDownIcon } from "@/components/tiptap-icons";
 // --- Tiptap UI ---
 import { HeadingButton } from "@/components/tiptap-ui/heading-button";
 import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu";
@@ -20,6 +17,8 @@ import {
 } from "@/components/tiptap-ui-primitive/dropdown-menu";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Icons ---
+import { ChevronDownIcon } from "@/lib/icons";
 
 export interface HeadingDropdownMenuProps
   extends Omit<ButtonProps, "type">,

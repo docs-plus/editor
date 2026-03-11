@@ -2,12 +2,6 @@
 
 import type { Editor } from "@tiptap/react";
 import { useEffect, useMemo, useState } from "react";
-// --- Icons ---
-import {
-  ListIcon,
-  ListOrderedIcon,
-  ListTodoIcon,
-} from "@/components/tiptap-icons";
 // --- Tiptap UI ---
 import {
   canToggleList,
@@ -17,6 +11,8 @@ import {
 } from "@/components/tiptap-ui/list-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Icons ---
+import { ListIcon, ListOrderedIcon, ListTodoIcon } from "@/lib/icons";
 // --- Lib ---
 import { isNodeInSchema } from "@/lib/tiptap-utils";
 
