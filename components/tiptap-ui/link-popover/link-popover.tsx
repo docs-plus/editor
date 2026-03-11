@@ -302,5 +302,3 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
 );
 
 LinkPopover.displayName = "LinkPopover";
-
-export default LinkPopover;

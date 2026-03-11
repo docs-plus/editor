@@ -14,5 +14,3 @@ export const useUnmount = (callback: () => void) => {
     [],
   );
 };
-
-export default useUnmount;
