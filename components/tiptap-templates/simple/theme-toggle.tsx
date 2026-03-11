@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { MoonStarIcon, SunIcon } from "@/lib/icons";
 
 const THEME_KEY = "tinydocy-theme";
@@ -26,12 +26,12 @@ export function ThemeToggle() {
     });
 
   return (
-    <Button
+    <ToolbarButton
       onClick={toggleDarkMode}
       aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
-      variant="ghost"
+      tooltip={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
     >
       {isDarkMode ? <MoonStarIcon /> : <SunIcon />}
-    </Button>
+    </ToolbarButton>
   );
 }
