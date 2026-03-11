@@ -96,6 +96,8 @@ function findDropTarget(
   return result;
 }
 
+type ViewWithObserver = { domObserver?: { stop(): void; start(): void } };
+
 function applySectionFeedback(
   view: EditorView,
   from: number,
@@ -103,6 +105,7 @@ function applySectionFeedback(
 ): void {
   const { doc } = view.state;
   const domChildren = view.dom.children;
+  (view as unknown as ViewWithObserver).domObserver?.stop();
   let offset = 0;
   for (let i = 0; i < doc.content.childCount; i++) {
     const child = doc.content.child(i);
@@ -115,6 +118,7 @@ function applySectionFeedback(
       }
     }
   }
+  (view as unknown as ViewWithObserver).domObserver?.start();
 }
 
 function cleanupDrag(view: EditorView): void {
@@ -141,9 +145,11 @@ function cleanupDrag(view: EditorView): void {
 
   document.documentElement.classList.remove("heading-dragging");
 
+  (view as unknown as ViewWithObserver).domObserver?.stop();
   for (const el of view.dom.querySelectorAll(".heading-section-dragging")) {
     el.classList.remove("heading-section-dragging");
   }
+  (view as unknown as ViewWithObserver).domObserver?.start();
 
   dragStates.delete(view);
 }
