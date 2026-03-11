@@ -8,7 +8,7 @@ import { cn } from "@/lib/tiptap-utils";
 
 import "./toc-sidebar.scss";
 
-interface TOCSidebarProps {
+interface TocSidebarProps {
   items: TableOfContentData;
   editor: Editor | null;
   foldedIds: Set<string>;
@@ -52,12 +52,12 @@ function filterItemsByFoldState(
   return { visible, foldableIds };
 }
 
-export function TOCSidebar({
+export function TocSidebar({
   items,
   editor,
   foldedIds,
   onToggleFold,
-}: TOCSidebarProps) {
+}: TocSidebarProps) {
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {

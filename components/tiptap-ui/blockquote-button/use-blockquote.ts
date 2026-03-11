@@ -101,7 +101,7 @@ export function toggleBlockquote(editor: Editor | null): boolean {
 /**
  * Determines if the blockquote button should be shown
  */
-export function shouldShowButton(props: {
+export function shouldShowBlockquoteButton(props: {
   editor: Editor | null;
   hideWhenUnavailable: boolean;
 }): boolean {
@@ -166,7 +166,7 @@ export function useBlockquote(config?: UseBlockquoteConfig) {
     if (!editor) return;
 
     const handleSelectionUpdate = () => {
-      setIsVisible(shouldShowButton({ editor, hideWhenUnavailable }));
+      setIsVisible(shouldShowBlockquoteButton({ editor, hideWhenUnavailable }));
     };
 
     handleSelectionUpdate();

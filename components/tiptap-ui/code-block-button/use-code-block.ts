@@ -39,7 +39,7 @@ export interface UseCodeBlockConfig {
 /**
  * Checks if code block can be toggled in the current editor state
  */
-export function canToggle(
+export function canToggleCodeBlock(
   editor: Editor | null,
   turnInto: boolean = true,
 ): boolean {
@@ -81,7 +81,7 @@ export function canToggle(
  */
 export function toggleCodeBlock(editor: Editor | null): boolean {
   if (!editor || !editor.isEditable) return false;
-  if (!canToggle(editor)) return false;
+  if (!canToggleCodeBlock(editor)) return false;
 
   try {
     const chain = prepareBlockToggle(editor);
@@ -103,7 +103,7 @@ export function toggleCodeBlock(editor: Editor | null): boolean {
 /**
  * Determines if the code block button should be shown
  */
-export function shouldShowButton(props: {
+export function shouldShowCodeBlockButton(props: {
   editor: Editor | null;
   hideWhenUnavailable: boolean;
 }): boolean {
@@ -111,7 +111,7 @@ export function shouldShowButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("codeBlock", editor)) return false;
-    if (!editor?.isActive("code")) return canToggle(editor);
+    if (!editor?.isActive("code")) return canToggleCodeBlock(editor);
     return true;
   });
 }
@@ -168,14 +168,14 @@ export function useCodeBlock(config?: UseCodeBlockConfig) {
 
   const { editor } = useTiptapEditor(providedEditor);
   const [isVisible, setIsVisible] = useState<boolean>(true);
-  const canToggleState = canToggle(editor);
+  const canToggleCodeBlockState = canToggleCodeBlock(editor);
   const isActive = editor?.isActive("codeBlock") || false;
 
   useEffect(() => {
     if (!editor) return;
 
     const handleSelectionUpdate = () => {
-      setIsVisible(shouldShowButton({ editor, hideWhenUnavailable }));
+      setIsVisible(shouldShowCodeBlockButton({ editor, hideWhenUnavailable }));
     };
 
     handleSelectionUpdate();
@@ -201,7 +201,7 @@ export function useCodeBlock(config?: UseCodeBlockConfig) {
     isVisible,
     isActive,
     handleToggle,
-    canToggle: canToggleState,
+    canToggleCodeBlock: canToggleCodeBlockState,
     label: "Code Block",
     shortcutKeys: CODE_BLOCK_SHORTCUT_KEY,
     Icon: CodeBlockIcon,

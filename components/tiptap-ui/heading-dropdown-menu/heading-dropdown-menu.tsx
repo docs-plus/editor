@@ -58,19 +58,20 @@ export const HeadingDropdownMenu = forwardRef<
   ) => {
     const { editor } = useTiptapEditor(providedEditor);
     const [isOpen, setIsOpen] = useState<boolean>(false);
-    const { isVisible, isActive, canToggle, Icon } = useHeadingDropdownMenu({
-      editor,
-      levels,
-      hideWhenUnavailable,
-    });
+    const { isVisible, isActive, canToggleHeading, Icon } =
+      useHeadingDropdownMenu({
+        editor,
+        levels,
+        hideWhenUnavailable,
+      });
 
     const handleOpenChange = useCallback(
       (open: boolean) => {
-        if (!editor || !canToggle) return;
+        if (!editor || !canToggleHeading) return;
         setIsOpen(open);
         onOpenChange?.(open);
       },
-      [canToggle, editor, onOpenChange],
+      [canToggleHeading, editor, onOpenChange],
     );
 
     if (!isVisible) {
@@ -86,8 +87,8 @@ export const HeadingDropdownMenu = forwardRef<
             data-active-state={isActive ? "on" : "off"}
             role="button"
             tabIndex={-1}
-            disabled={!canToggle}
-            data-disabled={!canToggle}
+            disabled={!canToggleHeading}
+            data-disabled={!canToggleHeading}
             aria-label="Format text as heading"
             aria-pressed={isActive}
             tooltip="Heading"

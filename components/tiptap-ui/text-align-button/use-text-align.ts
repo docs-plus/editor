@@ -114,7 +114,7 @@ export function setTextAlign(editor: Editor | null, align: TextAlign): boolean {
 /**
  * Determines if the text align button should be shown
  */
-export function shouldShowButton(props: {
+export function shouldShowTextAlignButton(props: {
   editor: Editor | null;
   hideWhenUnavailable: boolean;
   align: TextAlign;
@@ -190,7 +190,9 @@ export function useTextAlign(config: UseTextAlignConfig) {
     if (!editor) return;
 
     const handleSelectionUpdate = () => {
-      setIsVisible(shouldShowButton({ editor, align, hideWhenUnavailable }));
+      setIsVisible(
+        shouldShowTextAlignButton({ editor, align, hideWhenUnavailable }),
+      );
     };
 
     handleSelectionUpdate();

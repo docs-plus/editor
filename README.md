@@ -1,6 +1,6 @@
 # TinyDocy
 
-A collaborative document editor built with Next.js, TipTap, and Yjs.
+A collaborative document editor built with Next.js, Tiptap, and Yjs.
 
 ## Prerequisites
 
@@ -35,8 +35,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ```
 app/              Next.js App Router (pages, layout, global styles)
 components/       React components
-  tiptap-ui/      TipTap editor UI components
-  tiptap-node/    Custom TipTap node extensions
+  tiptap-ui/      Tiptap editor UI components
+  tiptap-node/    Custom Tiptap node extensions
   tiptap-templates/ Editor templates
   toc-sidebar/    Table of contents sidebar
 hooks/            Custom React hooks
@@ -45,7 +45,7 @@ hooks/            Custom React hooks
 ## Tech Stack
 
 - **Framework** — Next.js 16 (App Router)
-- **Editor** — TipTap 3 + Yjs (real-time collaboration)
+- **Editor** — Tiptap 3 + Yjs (real-time collaboration)
 - **Styling** — Tailwind CSS 4, Sass
 - **UI** — Radix UI primitives
 - **Language** — TypeScript 5.9

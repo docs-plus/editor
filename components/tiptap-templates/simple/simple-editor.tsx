@@ -72,7 +72,7 @@ import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
 import { MarkButton } from "@/components/tiptap-ui/mark-button";
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
 import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
-import { TOCSidebar } from "@/components/toc-sidebar/toc-sidebar";
+import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
@@ -412,7 +412,7 @@ function SimpleEditorContent({
 
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
-            <TOCSidebar
+            <TocSidebar
               items={tocItems}
               editor={editor}
               foldedIds={foldedIds}

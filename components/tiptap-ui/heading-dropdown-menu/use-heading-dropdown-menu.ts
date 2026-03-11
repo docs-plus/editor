@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 import { HeadingIcon } from "@/components/tiptap-icons";
 // --- Tiptap UI ---
 import {
-  canToggle,
+  canToggleHeading,
   headingIcons,
   isHeadingActive,
   type Level,
-  shouldShowButton,
+  shouldShowHeadingButton,
 } from "@/components/tiptap-ui/heading-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -57,7 +57,7 @@ export function getActiveHeadingLevel(
  *     isVisible,
  *     activeLevel,
  *     isAnyHeadingActive,
- *     canToggle,
+ *     canToggleHeading,
  *     levels,
  *   } = useHeadingDropdownMenu()
  *
@@ -97,14 +97,14 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
 
   const activeLevel = getActiveHeadingLevel(editor, levels);
   const isActive = isHeadingActive(editor);
-  const canToggleState = canToggle(editor);
+  const canToggleHeadingState = canToggleHeading(editor);
 
   useEffect(() => {
     if (!editor) return;
 
     const handleSelectionUpdate = () => {
       setIsVisible(
-        shouldShowButton({ editor, hideWhenUnavailable, level: levels }),
+        shouldShowHeadingButton({ editor, hideWhenUnavailable, level: levels }),
       );
     };
 
@@ -121,7 +121,7 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
     isVisible,
     activeLevel,
     isActive,
-    canToggle: canToggleState,
+    canToggleHeading: canToggleHeadingState,
     levels,
     label: "Heading",
     Icon: activeLevel ? headingIcons[activeLevel] : HeadingIcon,

@@ -48,7 +48,7 @@ export const HeadingButton = forwardRef<HTMLButtonElement, HeadingButtonProps>(
     const { editor } = useTiptapEditor(providedEditor);
     const {
       isVisible,
-      canToggle,
+      canToggleHeading,
       isActive,
       handleToggle,
       label,
@@ -81,8 +81,8 @@ export const HeadingButton = forwardRef<HTMLButtonElement, HeadingButtonProps>(
         data-active-state={isActive ? "on" : "off"}
         role="button"
         tabIndex={-1}
-        disabled={!canToggle}
-        data-disabled={!canToggle}
+        disabled={!canToggleHeading}
+        data-disabled={!canToggleHeading}
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}

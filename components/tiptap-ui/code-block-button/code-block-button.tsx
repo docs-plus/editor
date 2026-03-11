@@ -50,7 +50,7 @@ export const CodeBlockButton = forwardRef<
     const { editor } = useTiptapEditor(providedEditor);
     const {
       isVisible,
-      canToggle,
+      canToggleCodeBlock,
       isActive,
       handleToggle,
       label,
@@ -81,8 +81,8 @@ export const CodeBlockButton = forwardRef<
         variant="ghost"
         data-active-state={isActive ? "on" : "off"}
         role="button"
-        disabled={!canToggle}
-        data-disabled={!canToggle}
+        disabled={!canToggleCodeBlock}
+        data-disabled={!canToggleCodeBlock}
         tabIndex={-1}
         aria-label={label}
         aria-pressed={isActive}
