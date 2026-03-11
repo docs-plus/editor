@@ -19,7 +19,8 @@
         "useImportType": "warn"
       },
       "a11y": {
-        "useSemanticElements": "off"
+        "useSemanticElements": "off",
+        "noNoninteractiveTabindex": "off"
       },
       "suspicious": {
         "noExplicitAny": "warn"

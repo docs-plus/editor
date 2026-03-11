@@ -7,18 +7,15 @@ import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover";
 import { useLinkPopover } from "@/components/tiptap-ui/link-popover";
 // --- UI ---
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import {
@@ -102,8 +99,6 @@ const LinkMain: React.FC<LinkMainProps> = ({
   openLink,
   isActive,
 }) => {
-  const isMobile = useIsBreakpoint();
-
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -112,71 +107,60 @@ const LinkMain: React.FC<LinkMainProps> = ({
   };
 
   return (
-    <Card
-      style={{
-        ...(isMobile ? { boxShadow: "none", border: 0 } : {}),
-      }}
-    >
-      <CardContent
-        style={{
-          ...(isMobile ? { padding: 0 } : {}),
-        }}
+    <div className="flex items-center gap-1">
+      <Input
+        type="url"
+        placeholder="Paste a link..."
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={handleKeyDown}
+        autoFocus
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        aria-label="Link URL"
+      />
+
+      <Button
+        type="button"
+        onClick={setLink}
+        aria-label="Apply link"
+        disabled={!url && !isActive}
+        variant="ghost"
+        size="icon-sm"
       >
-        <div className="flex items-center gap-1">
-          <Input
-            type="url"
-            placeholder="Paste a link..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={handleKeyDown}
-            autoFocus
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            aria-label="Link URL"
-          />
+        <CornerDownLeftIcon />
+      </Button>
 
-          <div className="flex items-center gap-0.5">
-            <Button
-              type="button"
-              onClick={setLink}
-              aria-label="Apply link"
-              disabled={!url && !isActive}
-              variant="ghost"
-              size="icon-sm"
-            >
-              <CornerDownLeftIcon />
-            </Button>
-          </div>
+      <div
+        aria-hidden="true"
+        className="h-5 w-px self-center bg-foreground/20"
+      />
 
-          <Separator orientation="vertical" className="h-5" />
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          onClick={openLink}
+          aria-label="Open in new window"
+          disabled={!url && !isActive}
+          variant="ghost"
+          size="icon-sm"
+        >
+          <ExternalLinkIcon />
+        </Button>
 
-          <div className="flex items-center gap-0.5">
-            <Button
-              type="button"
-              onClick={openLink}
-              aria-label="Open in new window"
-              disabled={!url && !isActive}
-              variant="ghost"
-              size="icon-sm"
-            >
-              <ExternalLinkIcon />
-            </Button>
-
-            <Button
-              type="button"
-              onClick={removeLink}
-              aria-label="Remove link"
-              disabled={!url && !isActive}
-              variant="ghost"
-              size="icon-sm"
-            >
-              <TrashIcon />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        <Button
+          type="button"
+          onClick={removeLink}
+          aria-label="Remove link"
+          disabled={!url && !isActive}
+          variant="ghost"
+          size="icon-sm"
+        >
+          <TrashIcon />
+        </Button>
+      </div>
+    </div>
   );
 };
 

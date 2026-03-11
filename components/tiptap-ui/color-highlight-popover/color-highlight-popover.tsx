@@ -14,17 +14,14 @@ import {
 } from "@/components/tiptap-ui/color-highlight-button";
 // --- UI ---
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
@@ -95,7 +92,6 @@ export function ColorHighlightPopoverContent({
   useColorValue = false,
 }: ColorHighlightPopoverContentProps) {
   const { handleRemoveHighlight } = useColorHighlight({ editor });
-  const isMobile = useIsBreakpoint();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const menuItems = useMemo(
@@ -119,45 +115,38 @@ export function ColorHighlightPopoverContent({
   });
 
   return (
-    <Card
-      ref={containerRef}
-      tabIndex={0}
-      style={isMobile ? { boxShadow: "none", border: 0 } : {}}
-    >
-      <CardContent style={isMobile ? { padding: 0 } : {}}>
-        <div className="flex items-center gap-1">
-          <div className="flex items-center gap-0.5">
-            {colors.map((color, index) => (
-              <ColorHighlightButton
-                key={color.value}
-                editor={editor}
-                highlightColor={useColorValue ? color.colorValue : color.value}
-                tooltip={color.label}
-                aria-label={`${color.label} highlight color`}
-                tabIndex={index === selectedIndex ? 0 : -1}
-                data-highlighted={selectedIndex === index}
-                useColorValue={useColorValue}
-              />
-            ))}
-          </div>
-          <Separator />
-          <div className="flex items-center gap-0.5">
-            <Button
-              onClick={handleRemoveHighlight}
-              aria-label="Remove highlight"
-              tabIndex={selectedIndex === colors.length ? 0 : -1}
-              type="button"
-              role="menuitem"
-              variant="ghost"
-              size="icon-sm"
-              data-highlighted={selectedIndex === colors.length}
-            >
-              <BanIcon />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div ref={containerRef} tabIndex={0} className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
+        {colors.map((color, index) => (
+          <ColorHighlightButton
+            key={color.value}
+            editor={editor}
+            highlightColor={useColorValue ? color.colorValue : color.value}
+            tooltip={color.label}
+            aria-label={`${color.label} highlight color`}
+            tabIndex={index === selectedIndex ? 0 : -1}
+            data-highlighted={selectedIndex === index}
+            useColorValue={useColorValue}
+          />
+        ))}
+      </div>
+      <div
+        aria-hidden="true"
+        className="h-5 w-px self-center bg-foreground/20"
+      />
+      <Button
+        onClick={handleRemoveHighlight}
+        aria-label="Remove highlight"
+        tabIndex={selectedIndex === colors.length ? 0 : -1}
+        type="button"
+        role="menuitem"
+        variant="ghost"
+        size="icon-sm"
+        data-highlighted={selectedIndex === colors.length}
+      >
+        <BanIcon />
+      </Button>
+    </div>
   );
 }
 
