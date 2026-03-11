@@ -60,7 +60,7 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
     );
 
     const buttonClasses = cn(
-      isActive && "bg-accent text-accent-foreground",
+      isActive && "bg-foreground/10 text-foreground",
       className,
     );
 

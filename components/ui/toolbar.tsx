@@ -1,7 +1,6 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { Separator } from "@/components/ui/separator";
 import { useComposedRef } from "@/hooks/use-composed-ref";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { cn } from "@/lib/utils";
@@ -125,8 +124,14 @@ const ToolbarGroup = forwardRef<HTMLDivElement, BaseProps>(
 ToolbarGroup.displayName = "ToolbarGroup";
 
 const ToolbarSeparator = forwardRef<HTMLDivElement, BaseProps>(
-  ({ ...props }, ref) => (
-    <Separator ref={ref} orientation="vertical" className="h-5" {...props} />
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      data-slot="toolbar-separator"
+      className={cn("mx-1 h-5 w-px self-center bg-foreground/20", className)}
+      {...props}
+    />
   ),
 );
 ToolbarSeparator.displayName = "ToolbarSeparator";
