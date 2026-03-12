@@ -13,6 +13,8 @@ interface TocSidebarProps {
   editor: Editor | null;
   foldedIds: Set<string>;
   onToggleFold: (id: string) => void;
+  filteredIds?: Set<string>;
+  previewMatchIds?: Set<string>;
 }
 
 function filterItemsByFoldState(
@@ -57,7 +59,12 @@ export function TocSidebar({
   editor,
   foldedIds,
   onToggleFold,
+  filteredIds,
+  previewMatchIds,
 }: TocSidebarProps) {
+  const isFiltering = filteredIds !== undefined && filteredIds.size > 0;
+  const isPreviewing =
+    previewMatchIds !== undefined && previewMatchIds.size > 0;
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -119,6 +126,12 @@ export function TocSidebar({
                     "toc-sidebar-item",
                     item.isActive && "toc-sidebar-item--active",
                     item.isScrolledOver && "toc-sidebar-item--scrolled",
+                    isFiltering &&
+                      !filteredIds.has(item.id) &&
+                      "toc-sidebar-item--dimmed",
+                    isPreviewing &&
+                      previewMatchIds.has(item.id) &&
+                      "toc-sidebar-item--preview-match",
                   )}
                   style={{ paddingLeft: `${(item.level - 1) * 12}px` }}
                   onClick={() => handleClick(item)}

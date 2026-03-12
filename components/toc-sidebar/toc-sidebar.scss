@@ -154,4 +154,18 @@
       color: var(--tt-gray-dark-a-400);
     }
   }
+
+  &--dimmed {
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+  }
+
+  &--preview-match {
+    color: var(--tt-gray-light-900);
+    font-weight: 500;
+
+    .dark & {
+      color: var(--tt-gray-dark-900);
+    }
+  }
 }

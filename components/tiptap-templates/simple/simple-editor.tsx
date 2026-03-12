@@ -21,6 +21,8 @@ import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
 import { HeadingDrag } from "@/components/tiptap-node/heading-node/heading-drag-extension";
+import { HeadingFilter } from "@/components/tiptap-node/heading-node/heading-filter-extension";
+import type { HeadingFilterCallbackState } from "@/components/tiptap-node/heading-node/heading-filter-plugin";
 import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";
 import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
@@ -40,10 +42,13 @@ import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
 import "@/components/tiptap-node/list-node/list-node.scss";
 import "@/components/tiptap-node/image-node/image-node.scss";
 import "@/components/tiptap-node/heading-node/heading-drag.scss";
+import "@/components/tiptap-node/heading-node/heading-filter.scss";
 import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
+// --- Icons ---
+import { readFilterUrl } from "@/components/tiptap-node/heading-node/helpers/filter-url";
 // --- Lib ---
 import {
   handleImageUpload,
@@ -60,6 +65,11 @@ import {
 } from "@/components/tiptap-ui/color-highlight-popover";
 // --- Tiptap UI ---
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
+import {
+  FilterBar,
+  FilterToolbarButton,
+  useHeadingFilter,
+} from "@/components/tiptap-ui/heading-filter";
 import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
 import {
   LinkButton,
@@ -76,7 +86,6 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
-// --- Icons ---
 import {
   ArrowLeftIcon,
   HighlighterIcon,
@@ -121,14 +130,18 @@ const MainToolbarContent = ({
   onHighlighterClick,
   onLinkClick,
   onTocToggle,
+  onFilterToggle,
   isMobile,
   tocVisible,
+  filterActive,
 }: {
   onHighlighterClick: () => void;
   onLinkClick: () => void;
   onTocToggle: () => void;
+  onFilterToggle: () => void;
   isMobile: boolean;
   tocVisible: boolean;
+  filterActive: boolean;
 }) => {
   return (
     <>
@@ -142,6 +155,10 @@ const MainToolbarContent = ({
           >
             <PanelLeftIcon />
           </ToolbarButton>
+          <FilterToolbarButton
+            onClick={onFilterToggle}
+            isActive={filterActive}
+          />
         </ToolbarGroup>
       )}
 
@@ -269,10 +286,17 @@ function SimpleEditorContent({
     "main",
   );
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const prevTitleRef = useRef("");
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const [tocItems, setTocItems] = useState<TableOfContentData>([]);
   const [tocVisible, setTocVisible] = useState(true);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
+  const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
+    matchedSectionIds: new Set(),
+    totalSections: 0,
+    slugs: [],
+    mode: "or",
+  });
 
   useEffect(() => {
     if (!toolbarRef.current) return;
@@ -312,6 +336,9 @@ function SimpleEditorContent({
       HeadingFold.configure({
         documentId,
         onFoldChange: setFoldedIds,
+      }),
+      HeadingFilter.configure({
+        onFilterChange: setFilterState,
       }),
       Collaboration.configure({
         document: ydoc,
@@ -361,9 +388,34 @@ function SimpleEditorContent({
     content: initialContent ?? defaultContent,
     onUpdate: ({ editor: e }) => {
       if (!onTitleChange) return;
-      onTitleChange(e.state.doc.firstChild?.textContent || "Untitled");
+      const title = e.state.doc.firstChild?.textContent || "Untitled";
+      if (title === prevTitleRef.current) return;
+      prevTitleRef.current = title;
+      onTitleChange(title);
     },
   });
+
+  const headingFilter = useHeadingFilter({ editor, filterState });
+
+  useEffect(() => {
+    if (!editor) return;
+    const initial = readFilterUrl();
+    if (initial && initial.slugs.length > 0) {
+      editor.commands.applyFilter(initial.slugs, initial.mode);
+      headingFilter.openBar();
+    }
+  }, [editor, headingFilter.openBar]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
+        e.preventDefault();
+        headingFilter.toggleBar();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [headingFilter.toggleBar]);
 
   const rect = useCursorVisibility({
     editor,
@@ -390,8 +442,12 @@ function SimpleEditorContent({
               onHighlighterClick={() => setMobileView("highlighter")}
               onLinkClick={() => setMobileView("link")}
               onTocToggle={() => setTocVisible((v) => !v)}
+              onFilterToggle={headingFilter.toggleBar}
               isMobile={isMobile}
               tocVisible={tocVisible}
+              filterActive={
+                headingFilter.isBarOpen || headingFilter.hasActiveFilters
+              }
             />
           ) : (
             <MobileToolbarContent
@@ -405,6 +461,8 @@ function SimpleEditorContent({
 
         {extraToolbar}
 
+        <FilterBar {...headingFilter} />
+
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
             <TocSidebar
@@ -412,6 +470,16 @@ function SimpleEditorContent({
               editor={editor}
               foldedIds={foldedIds}
               onToggleFold={(id) => editor?.commands.toggleFold(id)}
+              filteredIds={
+                headingFilter.hasActiveFilters
+                  ? filterState.matchedSectionIds
+                  : undefined
+              }
+              previewMatchIds={
+                headingFilter.query.trim().length > 0
+                  ? filterState.matchedSectionIds
+                  : undefined
+              }
             />
           )}
           <EditorContent
@@ -420,6 +488,19 @@ function SimpleEditorContent({
             aria-label="Document editor"
             className="simple-editor-content"
           />
+          {headingFilter.hasActiveFilters &&
+            filterState.matchedSectionIds.size === 0 && (
+              <div className="filter-empty-state">
+                <p>No sections match your filter.</p>
+                <button
+                  type="button"
+                  className="filter-empty-state-clear"
+                  onClick={headingFilter.clearAllFilters}
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
         </div>
       </EditorContext.Provider>
     </div>

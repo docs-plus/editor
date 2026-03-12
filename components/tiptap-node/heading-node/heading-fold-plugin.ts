@@ -7,7 +7,7 @@ import { saveFoldedIds } from "@/components/tiptap-node/heading-node/helpers/fol
 
 type HeadingFoldMeta =
   | { type: "toggle"; id: string; contentHeight?: number }
-  | { type: "set"; ids: Set<string> }
+  | { type: "set"; ids: Set<string>; persist?: boolean }
   | { type: "endAnimation"; id: string };
 
 interface HeadingFoldState {
@@ -15,6 +15,7 @@ interface HeadingFoldState {
   contentHeights: Map<string, number>;
   animating: Map<string, "folding" | "unfolding">;
   decos: DecorationSet;
+  skipPersist: boolean;
 }
 
 export interface HeadingFoldPluginOptions {
@@ -144,7 +145,7 @@ function createFoldWidget(
 
 function buildFoldDecorations(
   doc: PMNode,
-  state: Omit<HeadingFoldState, "decos">,
+  state: Omit<HeadingFoldState, "decos" | "skipPersist">,
 ): DecorationSet {
   const { foldedIds, contentHeights, animating } = state;
   if (foldedIds.size === 0) return DecorationSet.empty;
@@ -221,9 +222,9 @@ function buildFoldDecorations(
 }
 
 function pruneStaleIds(
-  state: Omit<HeadingFoldState, "decos">,
+  state: Omit<HeadingFoldState, "decos" | "skipPersist">,
   doc: PMNode,
-): Omit<HeadingFoldState, "decos"> {
+): Omit<HeadingFoldState, "decos" | "skipPersist"> {
   if (state.foldedIds.size === 0) return state;
 
   const liveIds = new Set<string>();
@@ -305,7 +306,11 @@ export function createHeadingFoldPlugin(
         const contentHeights = new Map<string, number>();
         const animating = new Map<string, "folding" | "unfolding">();
         const base = { foldedIds, contentHeights, animating };
-        return { ...base, decos: buildFoldDecorations(doc, base) };
+        return {
+          ...base,
+          decos: buildFoldDecorations(doc, base),
+          skipPersist: false,
+        };
       },
 
       apply(tr, prev): HeadingFoldState {
@@ -333,7 +338,11 @@ export function createHeadingFoldPlugin(
             }
 
             const base = { foldedIds, contentHeights, animating };
-            return { ...base, decos: buildFoldDecorations(tr.doc, base) };
+            return {
+              ...base,
+              decos: buildFoldDecorations(tr.doc, base),
+              skipPersist: prev.skipPersist,
+            };
           }
 
           if (meta.type === "endAnimation" && meta.id) {
@@ -351,7 +360,11 @@ export function createHeadingFoldPlugin(
             }
 
             const base = { foldedIds, contentHeights, animating };
-            return { ...base, decos: buildFoldDecorations(tr.doc, base) };
+            return {
+              ...base,
+              decos: buildFoldDecorations(tr.doc, base),
+              skipPersist: prev.skipPersist,
+            };
           }
 
           if (meta.type === "set" && meta.ids) {
@@ -360,7 +373,11 @@ export function createHeadingFoldPlugin(
               contentHeights: new Map<string, number>(),
               animating: new Map<string, "folding" | "unfolding">(),
             };
-            return { ...base, decos: buildFoldDecorations(tr.doc, base) };
+            return {
+              ...base,
+              decos: buildFoldDecorations(tr.doc, base),
+              skipPersist: meta.persist === false,
+            };
           }
         }
 
@@ -372,7 +389,11 @@ export function createHeadingFoldPlugin(
         }
 
         const pruned = pruneStaleIds(prev, tr.doc);
-        return { ...pruned, decos: buildFoldDecorations(tr.doc, pruned) };
+        return {
+          ...pruned,
+          decos: buildFoldDecorations(tr.doc, pruned),
+          skipPersist: prev.skipPersist,
+        };
       },
     },
 
@@ -452,8 +473,10 @@ export function createHeadingFoldPlugin(
             return;
           }
 
+          let animChanged = animating.size !== prevAnimating.size;
           for (const id of animating.keys()) {
             if (!prevAnimating.has(id)) {
+              animChanged = true;
               if (pendingTimers.has(id)) clearTimeout(pendingTimers.get(id));
               const timer = setTimeout(() => {
                 if (destroyed) return;
@@ -481,11 +504,13 @@ export function createHeadingFoldPlugin(
 
           if (foldChanged) {
             options.onFoldChange?.(foldedIds);
-            saveFoldedIds(options.documentId, foldedIds);
+            if (!currentState.skipPersist) {
+              saveFoldedIds(options.documentId, foldedIds);
+            }
+            prevFoldedIds = new Set(foldedIds);
           }
 
-          prevFoldedIds = new Set(foldedIds);
-          prevAnimating = new Map(animating);
+          if (animChanged) prevAnimating = new Map(animating);
         },
 
         destroy() {
