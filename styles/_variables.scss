@@ -178,6 +178,7 @@
 
   /* Global colors - Light mode */
   --tt-bg-color: var(--white);
+  --tt-canvas-color: #f8f9fa;
   --tt-border-color: var(--tt-gray-light-a-200);
   --tt-border-color-tint: var(--tt-gray-light-a-100);
   --tt-sidebar-bg-color: var(--tt-gray-light-100);
@@ -186,11 +187,13 @@
   --tt-selection-color: rgba(66, 133, 244, 0.3);
   --tt-card-bg-color: var(--white);
   --tt-card-border-color: var(--tt-gray-light-a-100);
+  --tt-page-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 /* Global colors - Dark mode */
 .dark {
   --tt-bg-color: var(--black);
+  --tt-canvas-color: #0c0c0e;
   --tt-border-color: var(--tt-gray-dark-a-200);
   --tt-border-color-tint: var(--tt-gray-dark-a-100);
   --tt-sidebar-bg-color: var(--tt-gray-dark-100);
@@ -199,6 +202,7 @@
   --tt-selection-color: rgba(66, 133, 244, 0.4);
   --tt-card-bg-color: var(--tt-gray-dark-50);
   --tt-card-border-color: var(--tt-gray-dark-a-50);
+  --tt-page-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 0, 0, 0.4);
 
   --tt-shadow-elevated-md:
     0px 16px 48px 0px rgba(0, 0, 0, 0.5), 0px 12px 24px 0px rgba(0, 0, 0, 0.24),
