@@ -2,6 +2,8 @@
 
 TinyDocy uses a multi-layer testing strategy covering schema correctness, feature behavior, performance, long-running stability, and real-time collaboration at scale.
 
+**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below.
+
 **Prerequisites:** Dev servers must be running for Playwright tests.
 
 ```bash
@@ -16,6 +18,8 @@ make dev
 | `make test-fuzz` | Chaos and structured fuzz tests | ~1s |
 | `make test-stress` | Headless stress probe (binary search for heading ceiling) | ~30s |
 | `make test-e2e` | Playwright chromium E2E suite (features, performance, collaboration) | ~90s |
+| `make test-perf` | Typing latency tests only (default 10, 50 headings; `PERF_HEADINGS=200` for custom) | ~15s |
+| `make test-perf-collab` | Multi-user typing latency on shared doc (default 2 users, 50 headings) | ~30s |
 | `make test-load` | Yjs load harness (100 headless clients, convergence) | ~40s |
 | `make test-soak-quick` | Single-user soak (5 min, 50 headings, rich content) | ~6 min |
 | `make test-soak-collab-quick` | Multi-user soak (30s, 3 users, 10 headings) | ~50s |
@@ -51,6 +55,7 @@ tests/
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
+│   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)
@@ -107,7 +112,37 @@ make test-e2e
 
 ### Performance Tests
 
-Measure keystroke-to-paint latency at two document sizes (10 and 50 headings) using the Event Timing API via `PerformanceObserver`. Reports p50/p95/mean/max.
+Measure keystroke-to-paint latency using the Event Timing API via `PerformanceObserver`. Reports p50/p95/mean/max.
+
+```bash
+make test-perf                                    # default: 10, 50 headings, flat shape
+make test-perf PERF_HEADINGS=200                  # single size
+make test-perf PERF_HEADINGS=10,50,200           # multiple sizes
+make test-perf PERF_SHAPE=mixed                   # random heading hierarchy (H2–H6)
+make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PERF_HEADINGS` | `10,50` | Comma-separated heading counts to test |
+| `PERF_SHAPE` | `flat` | Document hierarchy: `flat` (all H2), `deep` (cycling H2–H6), `mixed` (random H2–H6) |
+
+### Multi-User Performance Tests (`performance-collab.spec.ts`)
+
+Measures keystroke-to-paint latency when **multiple users type concurrently** in the same document. Each user types in a different paragraph to avoid conflicts. Reports per-user p50/p95 and aggregate stats.
+
+```bash
+make test-perf-collab                              # default: 2 users, 50 headings
+make test-perf-collab PERF_COLLAB_USERS=3          # 3 concurrent users
+make test-perf-collab PERF_COLLAB_HEADINGS=100      # larger document
+make test-perf-collab PERF_COLLAB_SHAPE=mixed       # random heading hierarchy
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PERF_COLLAB_USERS` | `2` | Number of concurrent users typing |
+| `PERF_COLLAB_HEADINGS` | `50` | Document heading count |
+| `PERF_COLLAB_SHAPE` | `flat` | Document hierarchy: `flat`, `deep`, `mixed` |
 
 ### Collaboration Tests
 

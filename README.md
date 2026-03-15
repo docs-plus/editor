@@ -89,6 +89,10 @@ make test
 # E2E tests (features, performance, collaboration) — needs make dev
 make test-e2e
 
+# Performance tests (configurable via env vars)
+make test-perf          # Single-user typing latency (PERF_HEADINGS, PERF_SHAPE)
+make test-perf-collab   # Multi-user typing latency (PERF_COLLAB_USERS, PERF_COLLAB_HEADINGS, PERF_COLLAB_SHAPE)
+
 # Quick multi-user collaboration soak (30s, 3 users)
 make test-soak-collab-quick
 
@@ -104,7 +108,7 @@ make test-soak          # Full 30-minute soak suite
 
 **Layer 1 — Unit tests (Vitest):** Schema invariants, plugin state, fuzz testing (10,000 random operations), and a stress probe that binary-searches for the heading count ceiling where transaction time exceeds one frame budget.
 
-**Layer 2 — E2E tests (Playwright):** Feature verification (drag, fold, filter, TOC), keystroke-to-paint latency at 10 and 50 headings, and collaboration sync between multiple browser contexts with unique user identities.
+**Layer 2 — E2E tests (Playwright):** Feature verification (drag, fold, filter, TOC), keystroke-to-paint latency (single-user and multi-user), and collaboration sync between multiple browser contexts with unique user identities. Performance tests are configurable: `make test-perf` (single-user, `PERF_HEADINGS`, `PERF_SHAPE`), `make test-perf-collab` (multi-user concurrent typing, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`).
 
 **Layer 3 — Soak tests (Playwright):** Sustained editing sessions with stochastic bots, memory leak detection, and N-user collaboration with full document convergence verification. Documents use realistic content (paragraphs, lists, task lists, code blocks per section). Configurable via environment variables:
 
