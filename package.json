@@ -21,6 +21,8 @@
     "test:watch": "vitest",
     "test:fuzz": "vitest run tests/unit/fuzz/",
     "test:e2e": "bunx playwright test --project=chromium",
+    "test:perf": "bunx playwright test tests/e2e/performance.spec.ts --project=chromium",
+    "test:perf-collab": "bunx playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
     "test:stress": "vitest run tests/unit/stress/",
     "test:soak": "bunx playwright test --project=soak",
