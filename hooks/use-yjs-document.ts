@@ -4,7 +4,16 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 
-const WS_URL = "ws://127.0.0.1:1234";
+declare global {
+  interface Window {
+    __HOCUS_URL?: string;
+  }
+}
+
+const WS_URL =
+  typeof window !== "undefined" && window.__HOCUS_URL
+    ? window.__HOCUS_URL
+    : "ws://127.0.0.1:1234";
 
 export function useYjsDocument(documentId: string) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
