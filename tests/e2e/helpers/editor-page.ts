@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import type { JSONContent } from "@tiptap/core";
 
 function getModifierKey(): "Meta" | "Control" {
   return process.platform === "darwin" ? "Meta" : "Control";
@@ -50,11 +51,7 @@ export class EditorPage {
   }
 
   async getEditorJSON(): Promise<unknown> {
-    return this.page.evaluate(() =>
-      (
-        window as Window & { __tiptap_editor?: { getJSON: () => unknown } }
-      ).__tiptap_editor?.getJSON(),
-    );
+    return this.page.evaluate(() => window.__tiptap_editor?.getJSON());
   }
 
   /** Get heading nodes with toc IDs (data-toc-id or id attr). */
@@ -177,12 +174,7 @@ export class EditorPage {
 
   async setContent(json: unknown): Promise<void> {
     await this.page.evaluate((content: unknown) => {
-      const editor = (
-        window as Window & {
-          __tiptap_editor?: { commands: { setContent: (c: unknown) => void } };
-        }
-      ).__tiptap_editor;
-      editor?.commands.setContent(content);
+      window.__tiptap_editor?.commands.setContent(content as JSONContent);
     }, json);
     await this.page.waitForTimeout(200);
   }
@@ -200,14 +192,7 @@ export class EditorPage {
   /** Inserts text at cursor via editor API (not clipboard paste — does not exercise paste handlers). */
   async insertTextAtCursor(text: string): Promise<void> {
     await this.page.evaluate((t: string) => {
-      const editor = (
-        window as Window & {
-          __tiptap_editor?: {
-            commands: { insertContent: (c: string) => void };
-          };
-        }
-      ).__tiptap_editor;
-      editor?.commands.insertContent(t);
+      window.__tiptap_editor?.commands.insertContent(t);
     }, text);
   }
 
@@ -239,17 +224,8 @@ export class EditorPage {
 
   async getDocumentHeadingCount(): Promise<number> {
     return this.page.evaluate(() => {
-      const editor = (
-        window as Window & {
-          __tiptap_editor?: {
-            getJSON: () => { content?: Array<{ type?: string }> };
-          };
-        }
-      ).__tiptap_editor;
-      return (
-        editor?.getJSON().content?.filter((n) => n.type === "heading").length ??
-        0
-      );
+      const content = window.__tiptap_editor?.getJSON().content;
+      return content?.filter((n) => n.type === "heading").length ?? 0;
     });
   }
 }

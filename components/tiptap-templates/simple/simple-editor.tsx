@@ -399,7 +399,10 @@ function SimpleEditorContent({
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" && editor) {
-      (window as unknown as Record<string, unknown>).__tiptap_editor = editor;
+      window.__tiptap_editor = editor;
+      return () => {
+        delete window.__tiptap_editor;
+      };
     }
   }, [editor]);
 

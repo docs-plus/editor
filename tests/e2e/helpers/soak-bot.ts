@@ -139,14 +139,7 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
     execute: async (_ep, page) => {
       const text = randomSentence();
       await page.evaluate((t: string) => {
-        const editor = (
-          window as Window & {
-            __tiptap_editor?: {
-              commands: { insertContent: (c: string) => void };
-            };
-          }
-        ).__tiptap_editor;
-        editor?.commands.insertContent(t);
+        window.__tiptap_editor?.commands.insertContent(t);
       }, text);
     },
   },
