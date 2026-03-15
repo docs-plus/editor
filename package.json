@@ -24,6 +24,8 @@
     "test:stress": "vitest run tests/unit/stress/",
     "test:soak": "bunx playwright test --project=soak",
     "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 bunx playwright test --project=soak soak.spec.ts",
+    "test:soak:collab": "bunx playwright test --project=soak soak-collab.spec.ts",
+    "test:soak:collab:quick": "SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 bunx playwright test --project=soak soak-collab.spec.ts",
     "test:yjs-soak": "bunx playwright test --project=yjs-soak"
   },
   "lint-staged": {

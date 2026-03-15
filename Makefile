@@ -1,4 +1,4 @@
-.PHONY: dev dev-next dev-hocus build start lint check test test-watch test-fuzz test-e2e test-load test-stress test-soak test-soak-quick test-yjs-soak
+.PHONY: dev dev-next dev-hocus build start lint check test test-watch test-fuzz test-e2e test-load test-stress test-soak test-soak-quick test-soak-collab test-soak-collab-quick test-yjs-soak
 
 dev: ## Start Next.js and Hocuspocus dev servers in parallel
 	@$(MAKE) -j2 dev-next dev-hocus
@@ -44,6 +44,12 @@ test-soak: ## Run full soak test suite (default 30 min)
 
 test-soak-quick: ## Run 5-minute quick soak
 	bun run test:soak:quick
+
+test-soak-collab: ## Run multi-user collaboration soak (default 30 min, 3 users)
+	bun run test:soak:collab
+
+test-soak-collab-quick: ## Run quick multi-user collaboration soak (30s, 3 users, 10 headings)
+	bun run test:soak:collab:quick
 
 test-yjs-soak: ## Run Yjs soak scenarios (TDD)
 	bun run test:yjs-soak
