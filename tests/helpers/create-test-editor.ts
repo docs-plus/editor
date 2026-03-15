@@ -3,6 +3,7 @@ import { Editor } from "@tiptap/core";
 import { Highlight } from "@tiptap/extension-highlight";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import { Image } from "@tiptap/extension-image";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { UniqueID } from "@tiptap/extension-unique-id";
@@ -23,6 +24,8 @@ export const DEFAULT_EXTENSIONS: Extension[] = [
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Highlight.configure({ multicolor: true }),
   Image,
+  TaskList,
+  TaskItem.configure({ nested: true }),
   UniqueID.configure({ types: ["heading"] }),
 ];
 

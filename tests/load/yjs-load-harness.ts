@@ -99,23 +99,91 @@ function parseArgs(): Config {
 // Document seeding — builds a realistic TitleDocument-schema doc
 // ---------------------------------------------------------------------------
 
+const SEED_SENTENCES = [
+  "The architecture relies on a shared document model enforced at the schema level.",
+  "Each section can be folded independently, preserving context across sessions.",
+  "Collaboration is powered by Yjs CRDTs, enabling conflict-free concurrent editing.",
+  "Performance remains stable even in documents exceeding two hundred headings.",
+  "Users can filter sections by keyword, hiding unmatched content in real time.",
+  "Task lists allow teams to track progress directly within the document body.",
+  "Code blocks support syntax highlighting for common programming languages.",
+];
+
+const SEED_TASKS = [
+  "Review the pull request for edge cases",
+  "Update the deployment documentation",
+  "Add integration tests for the new endpoint",
+  "Verify performance benchmarks pass the threshold",
+];
+
+const SEED_LIST_ITEMS = [
+  "Configure the development environment",
+  "Install required dependencies and verify versions",
+  "Run the test suite to confirm baseline",
+  "Review the coding standards document",
+  "Set up branch protection rules",
+];
+
+function pushParagraph(parent: Y.XmlFragment | Y.XmlElement, text: string) {
+  const p = new Y.XmlElement("paragraph");
+  parent.push([p]);
+  p.insert(0, [new Y.XmlText(text)]);
+}
+
+function pushBulletList(parent: Y.XmlFragment | Y.XmlElement, items: string[]) {
+  const list = new Y.XmlElement("bulletList");
+  parent.push([list]);
+  for (const item of items) {
+    const li = new Y.XmlElement("listItem");
+    list.push([li]);
+    pushParagraph(li, item);
+  }
+}
+
+function pushTaskList(
+  parent: Y.XmlFragment | Y.XmlElement,
+  items: { text: string; checked: boolean }[],
+) {
+  const list = new Y.XmlElement("taskList");
+  parent.push([list]);
+  for (const item of items) {
+    const ti = new Y.XmlElement("taskItem");
+    list.push([ti]);
+    ti.setAttribute("checked", item.checked ? "true" : "false");
+    pushParagraph(ti, item.text);
+  }
+}
+
 function seedDocument(fragment: Y.XmlFragment): void {
   const title = new Y.XmlElement("heading");
+  fragment.insert(0, [title]);
   title.setAttribute("level", "1");
   title.setAttribute("data-toc-id", "title");
   title.insert(0, [new Y.XmlText("Load Test Document")]);
-  fragment.insert(0, [title]);
 
   for (let s = 0; s < 10; s++) {
     const h2 = new Y.XmlElement("heading");
+    fragment.push([h2]);
     h2.setAttribute("level", "2");
     h2.setAttribute("data-toc-id", `section-${s}`);
     h2.insert(0, [new Y.XmlText(`Section ${s + 1}`)]);
 
-    const para = new Y.XmlElement("paragraph");
-    para.insert(0, [new Y.XmlText(`Initial content for section ${s + 1}. `)]);
+    for (let p = 0; p < 5; p++) {
+      pushParagraph(fragment, SEED_SENTENCES[p % SEED_SENTENCES.length]);
+    }
 
-    fragment.push([h2, para]);
+    if (s % 3 === 0) {
+      pushBulletList(fragment, SEED_LIST_ITEMS.slice(0, 4));
+    }
+
+    if (s % 4 === 1) {
+      pushTaskList(
+        fragment,
+        SEED_TASKS.map((text, i) => ({ text, checked: i % 2 === 0 })),
+      );
+    }
+
+    pushParagraph(fragment, SEED_SENTENCES[(s + 3) % SEED_SENTENCES.length]);
   }
 }
 
@@ -123,14 +191,25 @@ function seedDocument(fragment: Y.XmlFragment): void {
 // Edit operations — mirror realistic user typing behavior
 // ---------------------------------------------------------------------------
 
+function findParagraphIndices(fragment: Y.XmlFragment): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < fragment.length; i++) {
+    const node = fragment.get(i);
+    if (node instanceof Y.XmlElement && node.nodeName === "paragraph") {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
 function getTargetParagraphIndex(
   clientIndex: number,
   scenario: "distributed" | "conflict",
+  paraIndices: number[],
 ): number {
-  // fragment layout: [title, h2, para, h2, para, ...] → paragraph at index 2, 4, 6, ...
-  if (scenario === "conflict") return 2; // all clients hit the first paragraph
-  const section = clientIndex % 10;
-  return 2 + section * 2;
+  if (paraIndices.length === 0) return -1;
+  if (scenario === "conflict") return paraIndices[0];
+  return paraIndices[clientIndex % paraIndices.length];
 }
 
 function performEdit(
@@ -138,7 +217,7 @@ function performEdit(
   paraIndex: number,
   editId: number,
 ): boolean {
-  if (paraIndex >= fragment.length) return false;
+  if (paraIndex < 0 || paraIndex >= fragment.length) return false;
   const para = fragment.get(paraIndex);
   if (!(para instanceof Y.XmlElement) || para.nodeName !== "paragraph")
     return false;
@@ -232,6 +311,7 @@ function createClients(config: Config): {
         url: config.url,
         name: config.doc,
         document: doc,
+        token: `load-client-${i}-${config.doc}`,
         WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket,
         onSynced() {
           syncedSet.add(i);
@@ -283,9 +363,10 @@ async function run(config: Config): Promise<void> {
   console.log(`[connect] All ${config.clients} clients synced`);
 
   // Phase 2: Seed
-  const fragment0 = clients[0].doc.getXmlFragment(FRAGMENT_NAME);
+  const doc0 = clients[0].doc;
+  const fragment0 = doc0.getXmlFragment(FRAGMENT_NAME);
   if (fragment0.length === 0) {
-    seedDocument(fragment0);
+    doc0.transact(() => seedDocument(fragment0));
     console.log(`[seed] Document seeded: ${fragment0.length} top-level nodes`);
   } else {
     console.log(`[seed] Document already populated: ${fragment0.length} nodes`);
@@ -309,7 +390,12 @@ async function run(config: Config): Promise<void> {
   const editTasks = clients.map(({ doc }, clientIndex) => {
     return (async () => {
       const fragment = doc.getXmlFragment(FRAGMENT_NAME);
-      const paraIndex = getTargetParagraphIndex(clientIndex, config.scenario);
+      const paraIndices = findParagraphIndices(fragment);
+      const paraIndex = getTargetParagraphIndex(
+        clientIndex,
+        config.scenario,
+        paraIndices,
+      );
 
       while (Date.now() < loadEndMs) {
         try {
