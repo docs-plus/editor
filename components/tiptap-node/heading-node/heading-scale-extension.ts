@@ -42,7 +42,9 @@ import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers
 const MAX_SIZE = 20;
 const MIN_SIZE = 12;
 
-const pluginKey = new PluginKey("headingScale");
+export const headingScalePluginKey = new PluginKey<DecorationSet>(
+  "headingScale",
+);
 
 type HeadingEntry = { pos: number; level: number; nodeSize: number };
 
@@ -111,7 +113,7 @@ export const HeadingScale = Extension.create({
   addProseMirrorPlugins() {
     return [
       new Plugin<DecorationSet>({
-        key: pluginKey,
+        key: headingScalePluginKey,
 
         state: {
           init(_, state) {
@@ -129,7 +131,7 @@ export const HeadingScale = Extension.create({
 
         props: {
           decorations(state) {
-            return pluginKey.getState(state) ?? DecorationSet.empty;
+            return headingScalePluginKey.getState(state) ?? DecorationSet.empty;
           },
         },
       }),
