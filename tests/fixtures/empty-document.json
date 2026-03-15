@@ -1,0 +1,12 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "title"
+      }
+    }
+  ]
+}

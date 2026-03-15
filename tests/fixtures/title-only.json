@@ -1,0 +1,18 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "title"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "My Document"
+        }
+      ]
+    }
+  ]
+}

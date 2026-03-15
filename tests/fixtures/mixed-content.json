@@ -1,0 +1,225 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "mixed-title"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Mixed Content Document"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-paragraphs"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Paragraphs Section"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "This section contains normal paragraphs."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Second paragraph with some text."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-list"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bullet List Section"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "First item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Second item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Third item"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-blockquote"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Blockquote Section"
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "To be or not to be, that is the question."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-code"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Code Block Section"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "typescript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "function greet(name: string) {\n  return `Hello, ${name}!`;\n}"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-hr"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Horizontal Rule Section"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Content before the horizontal rule."
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Content after the horizontal rule."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "mixed-image"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Image Section"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "An image below:"
+        }
+      ]
+    },
+    {
+      "type": "image",
+      "attrs": {
+        "src": "https://example.com/placeholder.png",
+        "alt": "Placeholder image",
+        "title": null
+      }
+    }
+  ]
+}

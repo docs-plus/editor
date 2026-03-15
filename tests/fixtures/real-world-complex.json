@@ -1,0 +1,595 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "title"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "TinyDocy Developer Guide"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "A comprehensive guide to building and extending the TinyDocy collaborative document editor."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "chapter-1"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Introduction"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch1-overview"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Overview"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "TinyDocy is built on Tiptap 3, Yjs, and Next.js 16. It provides a lightweight collaborative editing experience with real-time sync."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch1-features"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Key Features"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The editor supports headings, fold/unfold, drag-and-drop sections, and a filter sidebar."
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Real-time collaboration via Hocuspocus"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Table of contents with active heading highlight"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Heading filter with OR/AND modes"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch1-prereqs"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Prerequisites"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Ensure you have Bun installed and Node 20+ or compatible runtime."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "chapter-2"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Getting Started"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch2-install"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Installation"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Clone the repository and run make dev to start both the Next.js app and Hocuspocus server."
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "bash"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "git clone https://github.com/example/tinydocy.git\ncd tinydocy\nbun install\nmake dev"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch2-first-doc"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Your First Document"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Create a new document from the playground. The first node is always an H1 title."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch2-schema"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Document Schema"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The TitleDocument extension enforces heading block* schema. Each body H1 starts a new section/chapter."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3,
+        "data-toc-id": "ch2-schema-headings"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Heading Levels"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Headings support levels 1 through 6. Each heading has a unique data-toc-id for TOC and fold state."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "chapter-3"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Configuration"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch3-theme"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Theme"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Default theme is light. Dark mode is opt-in via localStorage key tinydocy-theme."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch3-fold"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Fold State"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Fold state is keyed by data-toc-id in localStorage under tinydocy-folds-{documentId}."
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Filter-driven folds use persist: false to skip localStorage save."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch3-extensions"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Editor Extensions"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Custom plugins include HeadingScale, HeadingDrag, HeadingFold, and HeadingFilter."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3,
+        "data-toc-id": "ch3-extensions-perf"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Performance"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "All plugins use canMapDecorations fast-path for O(1) or O(log N) on content-only edits."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "chapter-4"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "API Reference"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch4-toc"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "TocSidebar"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The TOC sidebar renders heading hierarchy with fold awareness. H1 sections are separated by border-top."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch4-filter"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "HeadingFilter"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Filter state lives in URL search params: ?filter=...&mode=or|and. Shortcut: CMD/CTRL+SHIFT+F."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch4-drag"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "HeadingDrag"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Section-level drag uses @floating-ui/dom and custom mouse events. No HTML5 DnD API."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch4-fold-api"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "HeadingFoldMeta"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "HeadingFoldMeta.set supports persist?: boolean. Filter-driven folds use persist: false."
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "typescript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "HeadingFoldMeta.set(tr, { foldedIds: new Set(['id1']), persist: true });"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1,
+        "data-toc-id": "chapter-5"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Architecture"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch5-structure"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Project Structure"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "app/ for routes, components/ for UI, lib/ for utilities, hooks/ for React hooks."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch5-storage"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Persistence"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hocuspocus WebSocket server with SQLite backend. Documents sync in real time."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2,
+        "data-toc-id": "ch5-styling"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Styling"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "shadcn/ui in components/ui/. Editor uses --tt-* tokens for node-specific styles."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3,
+        "data-toc-id": "ch5-styling-page"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Page Boundary"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": ".simple-editor-content has border, rounded corners, box-shadow, and overflow: hidden."
+        }
+      ]
+    }
+  ]
+}
