@@ -17,9 +17,13 @@
  * Usage: bun tests/load/yjs-load-harness.ts [options]
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import WebSocket from "ws";
 import * as Y from "yjs";
+import { formatBytes } from "@/lib/utils";
+import { parseEnvFloat, parseEnvNumber } from "@/tests/helpers/env-parsers";
 
 const FRAGMENT_NAME = "default";
 const WARMUP_MS = 2_000;
@@ -40,13 +44,13 @@ function printUsage(): void {
 
 Usage: bun tests/load/yjs-load-harness.ts [options]
 
-Options:
-  --clients <n>       Concurrent clients           (default: 100)
-  --duration <ms>     Steady-state duration in ms   (default: 30000)
-  --rate <ops/s>      Operations/second per client  (default: 2)
-  --scenario <name>   "distributed" or "conflict"   (default: distributed)
-  --url <ws-url>      Hocuspocus WebSocket URL      (default: ws://127.0.0.1:1234)
-  --doc <name>        Document name                 (default: load-test-{timestamp})
+Options (CLI overrides env):
+  --clients <n>       Concurrent clients           (env: LOAD_CLIENTS, default: 100)
+  --duration <ms>     Steady-state duration in ms   (env: LOAD_DURATION, default: 30000)
+  --rate <ops/s>      Operations/second per client  (env: LOAD_RATE, default: 2)
+  --scenario <name>   "distributed" or "conflict"   (env: LOAD_SCENARIO)
+  --url <ws-url>      Hocuspocus WebSocket URL      (env: LOAD_URL)
+  --doc <name>        Document name                 (env: LOAD_DOC)
   -h, --help          Show this message
 `);
 }
@@ -59,12 +63,15 @@ function parseArgs(): Config {
   }
 
   const config: Config = {
-    clients: 100,
-    duration: 30_000,
-    rate: 2,
-    scenario: "distributed",
-    url: "ws://127.0.0.1:1234",
-    doc: `load-test-${Date.now()}`,
+    clients: parseEnvNumber(process.env.LOAD_CLIENTS, 100),
+    duration: parseEnvNumber(process.env.LOAD_DURATION, 30_000),
+    rate: parseEnvFloat(process.env.LOAD_RATE, 2),
+    scenario:
+      process.env.LOAD_SCENARIO?.trim() === "conflict"
+        ? "conflict"
+        : "distributed",
+    url: process.env.LOAD_URL?.trim() || "ws://127.0.0.1:1234",
+    doc: process.env.LOAD_DOC?.trim() || `load-test-${Date.now()}`,
   };
 
   for (let i = 0; i < args.length; i += 2) {
@@ -73,13 +80,13 @@ function parseArgs(): Config {
     if (!val) continue;
     switch (key) {
       case "clients":
-        config.clients = Number.parseInt(val, 10);
+        config.clients = parseEnvNumber(val, config.clients);
         break;
       case "duration":
-        config.duration = Number.parseInt(val, 10);
+        config.duration = parseEnvNumber(val, config.duration);
         break;
       case "rate":
-        config.rate = Number.parseFloat(val);
+        config.rate = parseEnvFloat(val, config.rate);
         break;
       case "scenario":
         config.scenario = val === "conflict" ? "conflict" : "distributed";
@@ -444,10 +451,7 @@ async function run(config: Config): Promise<void> {
   const memEnd = process.memoryUsage();
   const firstState = Y.encodeStateAsUpdate(docs[0]);
   const docSizeBytes = firstState.length;
-  const docSizeStr =
-    docSizeBytes >= 1024 * 1024
-      ? `${(docSizeBytes / (1024 * 1024)).toFixed(2)} MB`
-      : `${(docSizeBytes / 1024).toFixed(2)} KB`;
+  const docSizeStr = formatBytes(docSizeBytes);
   const memDeltaMB = (memEnd.rss - memStart.rss) / (1024 * 1024);
   const throughput = totalEdits / (loadElapsedMs / 1000);
 
@@ -469,6 +473,28 @@ async function run(config: Config): Promise<void> {
 ║ Doc size      ${docSizeStr.padEnd(22)}║
 ╚══════════════════════════════════════╝
 `);
+
+  const report = {
+    timestamp: new Date().toISOString(),
+    scenario: config.scenario,
+    clients: config.clients,
+    duration: config.duration,
+    rate: config.rate,
+    totalEdits: totalEdits,
+    editErrors: totalErrors,
+    throughput,
+    convergence: convergence.pass,
+    byteLevelMatch: convergence.byteLevelMatch,
+    memDeltaMB,
+    docSizeBytes,
+    docSizeStr,
+  };
+  const outDir = path.join(process.cwd(), "test-reports");
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(outDir, `load-report-${Date.now()}.json`),
+    JSON.stringify(report, null, 2),
+  );
 
   destroyClients(clients);
   process.exit(convergence.pass ? 0 : 1);

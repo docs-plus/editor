@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CloseIcon, CloudUploadIcon } from "@/lib/icons";
 import "@/components/tiptap-node/image-upload-node/image-upload-node.scss";
 import { focusNextNode, isValidPosition } from "@/lib/editor-utils";
+import { formatBytes } from "@/lib/utils";
 
 export interface FileItem {
   /**
@@ -358,59 +359,47 @@ interface ImageUploadPreviewProps {
 const ImageUploadPreview: React.FC<ImageUploadPreviewProps> = ({
   fileItem,
   onRemove,
-}) => {
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-  };
+}) => (
+  <div className="tiptap-image-upload-preview">
+    {fileItem.status === "uploading" && (
+      <div
+        className="tiptap-image-upload-progress"
+        style={{ width: `${fileItem.progress}%` }}
+      />
+    )}
 
-  return (
-    <div className="tiptap-image-upload-preview">
-      {fileItem.status === "uploading" && (
-        <div
-          className="tiptap-image-upload-progress"
-          style={{ width: `${fileItem.progress}%` }}
-        />
-      )}
-
-      <div className="tiptap-image-upload-preview-content">
-        <div className="tiptap-image-upload-file-info">
-          <div className="tiptap-image-upload-file-icon">
-            <CloudUploadIcon size={24} className="tiptap-image-upload-icon" />
-          </div>
-          <div className="tiptap-image-upload-details">
-            <span className="tiptap-image-upload-text">
-              {fileItem.file.name}
-            </span>
-            <span className="tiptap-image-upload-subtext">
-              {formatFileSize(fileItem.file.size)}
-            </span>
-          </div>
+    <div className="tiptap-image-upload-preview-content">
+      <div className="tiptap-image-upload-file-info">
+        <div className="tiptap-image-upload-file-icon">
+          <CloudUploadIcon size={24} className="tiptap-image-upload-icon" />
         </div>
-        <div className="tiptap-image-upload-actions">
-          {fileItem.status === "uploading" && (
-            <span className="tiptap-image-upload-progress-text">
-              {fileItem.progress}%
-            </span>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <CloseIcon />
-          </Button>
+        <div className="tiptap-image-upload-details">
+          <span className="tiptap-image-upload-text">{fileItem.file.name}</span>
+          <span className="tiptap-image-upload-subtext">
+            {formatBytes(fileItem.file.size)}
+          </span>
         </div>
       </div>
+      <div className="tiptap-image-upload-actions">
+        {fileItem.status === "uploading" && (
+          <span className="tiptap-image-upload-progress-text">
+            {fileItem.progress}%
+          </span>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <CloseIcon />
+        </Button>
+      </div>
     </div>
-  );
-};
+  </div>
+);
 
 const DropZoneContent: React.FC<{ maxSize: number; limit: number }> = ({
   maxSize,
