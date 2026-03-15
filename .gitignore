@@ -38,3 +38,9 @@ db.sqlite
 
 # project docs (local only)
 .docs/
+
+# Soak test reports (local-only, hardware-specific)
+soak-report-*.json
+
+# Soak test SQLite database
+db-soak-test.sqlite

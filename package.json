@@ -15,7 +15,16 @@
     "format:check": "biome format .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:fuzz": "vitest run tests/unit/fuzz/",
+    "test:e2e": "bunx playwright test --project chromium",
+    "test:load": "bun tests/load/yjs-load-harness.ts",
+    "test:stress": "vitest run tests/unit/stress/",
+    "test:soak": "bunx playwright test --project soak",
+    "test:soak:quick": "SOAK_DURATION=300000 bunx playwright test --project soak tests/e2e/soak.spec.ts",
+    "test:yjs-soak": "bunx playwright test --project yjs-soak"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css}": [
@@ -61,20 +70,27 @@
     "@commitlint/cli": "^20.4.3",
     "@commitlint/config-conventional": "^20.4.3",
     "@hocuspocus/cli": "^3.4.4",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/lodash.throttle": "^4.1.9",
     "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.0.2",
     "eslint-config-next": "16.1.6",
     "eslint-plugin-react": "^7.37.5",
     "husky": "^9.1.7",
+    "jsdom": "^28.1.0",
     "lint-staged": "^16.3.2",
+    "prosemirror-test-builder": "^1.1.1",
     "sass": "^1.97.3",
     "shadcn": "^4.0.5",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "ws": "^8.19.0"
   },
   "trustedDependencies": [
     "sharp",
