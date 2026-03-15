@@ -2,7 +2,7 @@
 
 TinyDocy uses a multi-layer testing strategy covering schema correctness, feature behavior, performance, long-running stability, and real-time collaboration at scale.
 
-**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets.
+**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets. Collaboration tests use `retries: 2` and extended waits to reduce flakiness. Load harness uses `WebSocketPolyfill` (type assertion) for Node.js compatibility.
 
 **Prerequisites:** Dev servers must be running for Playwright tests.
 
@@ -36,7 +36,7 @@ tests/
 │   ├── document-builders.ts              # ProseMirror node builders (via prosemirror-test-builder)
 │   ├── document-generators.ts            # Random and large document generators
 │   ├── env-parsers.ts                    # Generic parseEnvNumber (?? semantics)
-│   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings, parsePerfNumber)
+│   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings)
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
 │   ├── assert-invariants.ts              # Schema invariant assertions (Vitest)
@@ -170,8 +170,8 @@ make test-perf-collab PERF_COLLAB_SHAPE=mixed       # random heading hierarchy
 
 Two tests with distinct strategies:
 
-1. **"user B sees content created by user A"** — User A types first, waits for Hocuspocus persistence, then User B joins. Deterministic (5/5 reliability).
-2. **"real-time sync between two connected users"** — Both users connected simultaneously. Inherently timing-sensitive (`retries: 1`).
+1. **"user B sees content created by user A"** — User A types first, waits 4s for Hocuspocus persistence, then User B joins. Uses precondition `expect(.tiptap).not.toHaveText("")` before main assertion. May be flaky; `retries: 2`.
+2. **"real-time sync between two connected users"** — Both users connected simultaneously. User A types; 2s wait before asserting on User B. Inherently timing-sensitive; `retries: 2`.
 
 Each user gets a unique identity via `window.__HOCUS_TOKEN` injected through `page.addInitScript()`.
 
@@ -229,7 +229,7 @@ Creates multiple tabs via the tab bar UI, switches between them 20 times, types 
 
 ## Layer 5: Load Harness (standalone Bun script)
 
-Headless N-client Yjs convergence test — no browser required. CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
+Headless N-client Yjs convergence test — no browser required. Uses Node.js `ws` package via `WebSocketPolyfill` (type assertion required; Hocuspocus runtime supports it when passing `url` directly, but TypeScript types omit it). CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
 
 ```bash
 make test-load                                              # 100 clients, 30s, distributed
