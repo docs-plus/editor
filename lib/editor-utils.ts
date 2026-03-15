@@ -368,6 +368,17 @@ export function shouldShowEditorButton(
   return schemaCheck();
 }
 
+/** Block node types that can be converted via block toggle (heading, list, blockquote, code block). */
+export const BLOCK_CONVERTIBLE_TYPES = [
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "taskList",
+  "blockquote",
+  "codeBlock",
+] as const;
+
 export function prepareBlockToggle(
   editor: Editor,
 ): ReturnType<typeof editor.chain> {
@@ -377,18 +388,8 @@ export function prepareBlockToggle(
 
   const blocks = getSelectedBlockNodes(editor);
 
-  const convertibleTypes = [
-    "paragraph",
-    "heading",
-    "bulletList",
-    "orderedList",
-    "taskList",
-    "blockquote",
-    "codeBlock",
-  ];
-
   const isPossibleToTurnInto =
-    selectionWithinConvertibleTypes(editor, convertibleTypes) &&
+    selectionWithinConvertibleTypes(editor, [...BLOCK_CONVERTIBLE_TYPES]) &&
     blocks.length === 1;
 
   if (

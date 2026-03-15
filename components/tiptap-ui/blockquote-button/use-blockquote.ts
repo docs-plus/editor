@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- UI Utils ---
 import {
+  BLOCK_CONVERTIBLE_TYPES,
   isNodeInSchema,
   isNodeTypeSelected,
   prepareBlockToggle,
@@ -55,17 +56,7 @@ export function canToggleBlockquote(
   }
 
   // Ensure selection is in nodes we're allowed to convert
-  if (
-    !selectionWithinConvertibleTypes(editor, [
-      "paragraph",
-      "heading",
-      "bulletList",
-      "orderedList",
-      "taskList",
-      "blockquote",
-      "codeBlock",
-    ])
-  )
+  if (!selectionWithinConvertibleTypes(editor, [...BLOCK_CONVERTIBLE_TYPES]))
     return false;
 
   // Either we can wrap in blockquote directly on the selection,

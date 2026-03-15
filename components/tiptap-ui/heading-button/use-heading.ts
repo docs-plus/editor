@@ -6,10 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Lib ---
 import {
+  BLOCK_CONVERTIBLE_TYPES,
   isNodeInSchema,
   isNodeTypeSelected,
   prepareBlockToggle,
   selectionWithinConvertibleTypes,
+  shouldShowEditorButton,
 } from "@/lib/editor-utils";
 // --- Icons ---
 import {
@@ -86,17 +88,7 @@ export function canToggleHeading(
   }
 
   // Ensure selection is in nodes we're allowed to convert
-  if (
-    !selectionWithinConvertibleTypes(editor, [
-      "paragraph",
-      "heading",
-      "bulletList",
-      "orderedList",
-      "taskList",
-      "blockquote",
-      "codeBlock",
-    ])
-  )
+  if (!selectionWithinConvertibleTypes(editor, [...BLOCK_CONVERTIBLE_TYPES]))
     return false;
 
   // Either we can set heading directly on the selection,
@@ -169,22 +161,16 @@ export function shouldShowHeadingButton(props: {
 }): boolean {
   const { editor, level, hideWhenUnavailable } = props;
 
-  if (!editor || !editor.isEditable) return false;
-
-  if (!hideWhenUnavailable) {
-    return true;
-  }
-
-  if (!isNodeInSchema("heading", editor)) return false;
-
-  if (!editor.isActive("code")) {
-    if (Array.isArray(level)) {
-      return level.some((l) => canToggleHeading(editor, l));
+  return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
+    if (!editor || !isNodeInSchema("heading", editor)) return false;
+    if (!editor.isActive("code")) {
+      if (Array.isArray(level)) {
+        return level.some((l) => canToggleHeading(editor, l));
+      }
+      return canToggleHeading(editor, level);
     }
-    return canToggleHeading(editor, level);
-  }
-
-  return true;
+    return true;
+  });
 }
 
 /**

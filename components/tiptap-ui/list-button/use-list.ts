@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Lib ---
 import {
+  BLOCK_CONVERTIBLE_TYPES,
   isNodeInSchema,
   isNodeTypeSelected,
   prepareBlockToggle,
@@ -84,17 +85,7 @@ export function canToggleList(
   }
 
   // Ensure selection is in nodes we're allowed to convert
-  if (
-    !selectionWithinConvertibleTypes(editor, [
-      "paragraph",
-      "heading",
-      "bulletList",
-      "orderedList",
-      "taskList",
-      "blockquote",
-      "codeBlock",
-    ])
-  )
+  if (!selectionWithinConvertibleTypes(editor, [...BLOCK_CONVERTIBLE_TYPES]))
     return false;
 
   // Either we can set list directly on the selection,
