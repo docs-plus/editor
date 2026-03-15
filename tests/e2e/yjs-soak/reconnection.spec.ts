@@ -76,8 +76,9 @@ test.describe("yjs reconnection recovery", () => {
     await ep.goto();
     await ep.waitForSync();
 
+    await page.click(".tiptap");
     await ep.typeText("Hello before crash");
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
 
     await killProcess(hocus);
     await page.waitForTimeout(2000);
