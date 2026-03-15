@@ -104,8 +104,11 @@ test("single-user soak — sustained editing with memory tracking", async ({
   console.log(`Verdict:    ${report.verdict}`);
 
   const fs = await import("node:fs");
+  const path = await import("node:path");
+  const outDir = path.join(process.cwd(), "test-reports");
+  fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(
-    `soak-report-${Date.now()}.json`,
+    path.join(outDir, `soak-report-${Date.now()}.json`),
     JSON.stringify(report, null, 2),
   );
 
