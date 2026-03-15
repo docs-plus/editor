@@ -398,6 +398,12 @@ function SimpleEditorContent({
   const headingFilter = useHeadingFilter({ editor, filterState });
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && editor) {
+      (window as Record<string, unknown>).__tiptap_editor = editor;
+    }
+  }, [editor]);
+
+  useEffect(() => {
     if (!editor) return;
     const initial = readFilterUrl();
     if (initial && initial.slugs.length > 0) {
