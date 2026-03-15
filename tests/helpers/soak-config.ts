@@ -22,12 +22,8 @@ export function parseSoakWarmup(
   env: string | undefined,
   durationMs: number,
 ): number {
-  const explicit = env?.trim();
-  if (explicit !== undefined && explicit !== "") {
-    const n = Number.parseInt(explicit, 10);
-    if (!Number.isNaN(n)) return n;
-  }
-  return durationMs < 600_000 ? 30_000 : 120_000;
+  const fallback = durationMs < 600_000 ? 30_000 : 120_000;
+  return parseEnvNumber(env, fallback);
 }
 
 export function parseSoakMemoryGrowthLimit(env: string | undefined): number {

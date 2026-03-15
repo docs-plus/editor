@@ -2,9 +2,8 @@
  * Shared configuration for performance tests.
  * Env vars: PERF_HEADINGS, PERF_SHAPE, PERF_COLLAB_USERS, PERF_COLLAB_HEADINGS, PERF_COLLAB_SHAPE.
  * Use Makefile as CLI: make test-perf PERF_HEADINGS=200 PERF_SHAPE=mixed
+ * For numeric env vars (PERF_COLLAB_*), use parseEnvNumber from env-parsers.
  */
-
-import { parseEnvNumber } from "./env-parsers";
 
 export const VALID_SHAPES = ["flat", "deep", "mixed"] as const;
 export type PerfShape = (typeof VALID_SHAPES)[number];
@@ -25,5 +24,3 @@ export function parsePerfHeadings(
   const valid = parsed.filter((n) => !Number.isNaN(n));
   return valid.length > 0 ? valid : defaultValue;
 }
-
-export const parsePerfNumber = parseEnvNumber;
