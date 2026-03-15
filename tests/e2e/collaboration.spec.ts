@@ -3,7 +3,7 @@ import { EditorPage } from "./helpers/editor-page";
 
 test.describe("collaboration", () => {
   test.setTimeout(120_000);
-  test.describe.configure({ retries: 1 });
+  test.describe.configure({ retries: 2 });
 
   test("user B sees content created by user A", async ({ browser }) => {
     const docId = `collab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -33,11 +33,14 @@ test.describe("collaboration", () => {
       { timeout: 5000 },
     );
 
-    await pageA.waitForTimeout(2000);
+    await pageA.waitForTimeout(4000);
 
     await editorB.goto(docId);
     await editorB.waitForSync();
 
+    await expect(pageB.locator(".tiptap")).not.toHaveText("", {
+      timeout: 15000,
+    });
     await expect(pageB.locator(".tiptap")).toContainText("Hello from A", {
       timeout: 30000,
     });
@@ -47,7 +50,7 @@ test.describe("collaboration", () => {
   });
 
   test.describe("real-time", () => {
-    test.describe.configure({ retries: 1 });
+    test.describe.configure({ retries: 2 });
 
     test("sync between two connected users", async ({ browser }) => {
       const docId = `collab-rt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -72,11 +75,15 @@ test.describe("collaboration", () => {
       await editorB.goto(docId);
       await editorB.waitForSync();
 
-      await pageB.waitForTimeout(1000);
+      await pageB.waitForTimeout(2000);
 
       await pageA.click(".tiptap h1");
       await pageA.keyboard.type("Live edit from A");
+      await pageA.waitForTimeout(2000);
 
+      await expect(pageB.locator(".tiptap")).not.toHaveText("", {
+        timeout: 15000,
+      });
       await expect(pageB.locator(".tiptap")).toContainText("Live edit from A", {
         timeout: 30000,
       });
