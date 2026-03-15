@@ -82,6 +82,7 @@ body {
   border: 1px solid var(--tt-border-color-tint);
   border-radius: var(--tt-radius-sm);
   box-shadow: var(--tt-page-shadow);
+  overflow: hidden;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor {

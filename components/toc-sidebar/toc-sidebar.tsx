@@ -93,12 +93,19 @@ export function TocSidebar({
         <p className="toc-sidebar-empty">Add headings to see an outline</p>
       ) : (
         <div className="toc-sidebar-items">
-          {visible.map((item) => {
+          {visible.map((item, idx) => {
             const isFoldable = foldableIds.has(item.id);
             const isFolded = foldedIds.has(item.id);
 
             return (
-              <div key={item.id} className="toc-sidebar-item-row">
+              <div
+                key={item.id}
+                className={cn(
+                  "toc-sidebar-item-row",
+                  item.level === 1 && idx > 0 && "toc-sidebar-item-row--h1",
+                )}
+                data-level={item.level}
+              >
                 {isFoldable ? (
                   <button
                     type="button"
