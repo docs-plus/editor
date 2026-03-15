@@ -154,13 +154,3 @@ export function useBodyRect(
     element: isClientSide() ? document.body : null,
   });
 }
-
-/**
- * Convenience hook for tracking a ref element's rect
- */
-export function useRefRect<T extends Element>(
-  ref: React.RefObject<T>,
-  options: Omit<ElementRectOptions, "element"> = {},
-): RectState {
-  return useElementRect({ ...options, element: ref });
-}
