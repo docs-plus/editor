@@ -33,8 +33,9 @@ next-env.d.ts
 # hocuspocus
 db.sqlite
 
-# test results
+# test results and reports (local-only)
 /test-results/
+/test-reports/
 
 # project docs (local only)
 .docs/
