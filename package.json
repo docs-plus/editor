@@ -19,12 +19,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fuzz": "vitest run tests/unit/fuzz/",
-    "test:e2e": "bunx playwright test --project chromium",
+    "test:e2e": "bunx playwright test --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
     "test:stress": "vitest run tests/unit/stress/",
-    "test:soak": "bunx playwright test --project soak",
-    "test:soak:quick": "SOAK_DURATION=300000 bunx playwright test --project soak tests/e2e/soak.spec.ts",
-    "test:yjs-soak": "bunx playwright test --project yjs-soak"
+    "test:soak": "bunx playwright test --project=soak",
+    "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 bunx playwright test --project=soak soak.spec.ts",
+    "test:yjs-soak": "bunx playwright test --project=yjs-soak"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css}": [

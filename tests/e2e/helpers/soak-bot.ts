@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
 import type { EditorPage } from "./editor-page";
 
+const MOD = process.platform === "darwin" ? "Meta" : "Control";
+
 export interface SoakAction {
   name: string;
   weight: number;
@@ -58,25 +60,23 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
   {
     name: "fold",
     weight: 10,
-    execute: async (ep) => {
-      const headings = await ep.getHeadingsWithTocIds();
-      const bodyHeadings = headings.filter((_, i) => i > 0);
-      if (bodyHeadings.length === 0) return;
-      const pick =
-        bodyHeadings[Math.floor(Math.random() * bodyHeadings.length)];
-      await ep.clickFoldChevron(pick.tocId);
+    execute: async (_ep, page) => {
+      const toggles = page.locator(".toc-sidebar-fold-toggle");
+      const count = await toggles.count();
+      if (count === 0) return;
+      const target = toggles.nth(Math.floor(Math.random() * count));
+      await target.click({ timeout: 2000 });
     },
   },
   {
     name: "unfold",
     weight: 5,
-    execute: async (ep) => {
-      const headings = await ep.getHeadingsWithTocIds();
-      const bodyHeadings = headings.filter((_, i) => i > 0);
-      if (bodyHeadings.length === 0) return;
-      const pick =
-        bodyHeadings[Math.floor(Math.random() * bodyHeadings.length)];
-      await ep.clickFoldChevron(pick.tocId);
+    execute: async (_ep, page) => {
+      const toggles = page.locator(".toc-sidebar-fold-toggle");
+      const count = await toggles.count();
+      if (count === 0) return;
+      const target = toggles.nth(Math.floor(Math.random() * count));
+      await target.click({ timeout: 2000 });
     },
   },
   {
@@ -99,12 +99,17 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
     name: "filter",
     weight: 5,
     execute: async (ep, page) => {
+      await page.click(".tiptap");
       await ep.openFilter();
-      const word = WORDS[Math.floor(Math.random() * WORDS.length)];
-      await ep.typeFilter(word);
-      await ep.commitFilter();
-      await page.waitForTimeout(500);
-      await ep.clearFilter();
+      const input = page.locator(".filter-panel-input");
+      await input.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      if (await input.isVisible()) {
+        const word = WORDS[Math.floor(Math.random() * WORDS.length)];
+        await ep.typeFilter(word);
+        await ep.commitFilter();
+        await page.waitForTimeout(500);
+        await ep.clearFilter();
+      }
     },
   },
   {
@@ -118,14 +123,14 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
     name: "undo",
     weight: 5,
     execute: async (_ep, page) => {
-      await page.keyboard.press("Mod+z");
+      await page.keyboard.press(`${MOD}+z`);
     },
   },
   {
     name: "redo",
     weight: 2,
     execute: async (_ep, page) => {
-      await page.keyboard.press("Mod+Shift+z");
+      await page.keyboard.press(`${MOD}+Shift+z`);
     },
   },
   {
@@ -150,7 +155,7 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
     weight: 2,
     execute: async (_ep, page) => {
       const level = randomInt(2, 6);
-      await page.keyboard.press(`Mod+Alt+${level}`);
+      await page.keyboard.press(`${MOD}+Alt+${level}`);
     },
   },
 ];

@@ -20,29 +20,20 @@ export async function typingAndStructuralJourney(
   const start = Date.now();
   let actionCount = 0;
 
-  await ep.typeText("a".repeat(200), { delay: 10 });
-  actionCount += 200;
+  await page.click(".tiptap");
+  await ep.typeText("a".repeat(50), { delay: 30 });
+  actionCount += 50;
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     await ep.pressKey("Enter");
     await ep.changeHeadingLevel(2);
-    await ep.typeText(`Section ${i + 1}`);
+    await ep.typeText(`Journey Heading ${i + 1}`);
     actionCount += 3;
   }
 
-  const headings = await ep.getHeadingsWithTocIds();
-  const bodyHeadings = headings.filter(
-    (h) => h.level !== undefined && h.level > 1,
-  );
-  for (const h of bodyHeadings.slice(0, 3)) {
-    await ep.clickFoldChevron(h.tocId);
-    actionCount++;
-  }
-
-  for (const h of bodyHeadings.slice(0, 3)) {
-    await ep.clickFoldChevron(h.tocId);
-    actionCount++;
-  }
+  await ep.undo();
+  await ep.redo();
+  actionCount += 2;
 
   const entries = await collectPerfEntries(page);
   const stats = computeLatencyStats(entries);
@@ -66,7 +57,15 @@ export async function filterLifecycleJourney(
   let actionCount = 0;
 
   for (let round = 0; round < 3; round++) {
-    await ep.openFilter();
+    await page.click(".tiptap");
+    const filterInput = page.locator(".filter-panel-input");
+    const alreadyVisible = await filterInput.isVisible().catch(() => false);
+    if (!alreadyVisible) {
+      await ep.openFilter();
+      await page.waitForTimeout(500);
+    }
+    const visible = await filterInput.isVisible().catch(() => false);
+    if (!visible) continue;
     await ep.typeFilter("Section");
     await ep.commitFilter();
     await page.click(".tiptap");

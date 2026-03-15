@@ -12,7 +12,9 @@ import { runAllJourneys } from "./helpers/soak-journeys";
 const SOAK_DURATION = Number(process.env.SOAK_DURATION ?? 1_800_000);
 const SOAK_HEADINGS = Number(process.env.SOAK_HEADINGS ?? 200);
 const MEMORY_GROWTH_LIMIT = 50;
-const WARMUP_DURATION = 120_000;
+const WARMUP_DURATION = Number(
+  process.env.SOAK_WARMUP ?? (SOAK_DURATION < 600_000 ? 30_000 : 120_000),
+);
 
 test.setTimeout(SOAK_DURATION + 300_000);
 
