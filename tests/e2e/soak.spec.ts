@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
+import {
+  parseSoakDuration,
+  parseSoakHeadings,
+  parseSoakMemoryGrowthLimit,
+  parseSoakWarmup,
+} from "@/tests/helpers/soak-config";
 import { EditorPage } from "./helpers/editor-page";
 import {
   collectPerfEntries,
@@ -9,12 +15,12 @@ import {
 import { SoakBot } from "./helpers/soak-bot";
 import { runAllJourneys } from "./helpers/soak-journeys";
 
-const SOAK_DURATION = Number(process.env.SOAK_DURATION ?? 1_800_000);
-const SOAK_HEADINGS = Number(process.env.SOAK_HEADINGS ?? 200);
-const MEMORY_GROWTH_LIMIT = 50;
-const WARMUP_DURATION = Number(
-  process.env.SOAK_WARMUP ?? (SOAK_DURATION < 600_000 ? 30_000 : 120_000),
+const SOAK_DURATION = parseSoakDuration(process.env.SOAK_DURATION);
+const SOAK_HEADINGS = parseSoakHeadings(process.env.SOAK_HEADINGS);
+const MEMORY_GROWTH_LIMIT = parseSoakMemoryGrowthLimit(
+  process.env.SOAK_MEMORY_GROWTH_LIMIT,
 );
+const WARMUP_DURATION = parseSoakWarmup(process.env.SOAK_WARMUP, SOAK_DURATION);
 
 test.setTimeout(SOAK_DURATION + 300_000);
 
