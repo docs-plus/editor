@@ -66,7 +66,7 @@ tests/
 | Soak Bot | `tests/e2e/helpers/soak-bot.ts` | Weighted-random action generator |
 | Soak Journeys | `tests/e2e/helpers/soak-journeys.ts` | 2 scripted critical-path sequences |
 | Single-User Soak | `tests/e2e/soak.spec.ts` | Configurable-duration browser soak + memory tracking |
-| Multi-User Soak | `tests/e2e/soak-collab.spec.ts` | 2 contexts editing same doc + schema integrity |
+| Multi-User Soak | `tests/e2e/soak-collab.spec.ts` | N dynamic users (env `SOAK_USERS`, default 3) editing same doc + schema integrity |
 | Yjs Reconnection | `tests/e2e/yjs-soak/reconnection.spec.ts` | TDD: kill/restart Hocuspocus mid-session |
 | Yjs Rapid Tab Switch | `tests/e2e/yjs-soak/rapid-tab-switch.spec.ts` | TDD: mount/unmount 20x |
 
@@ -80,7 +80,7 @@ Decisions driven by YAGNI and the simplicity review:
 - **2 document shapes, not 3** — flat + deep are sufficient for ceiling detection. Mixed (random) adds variance without benefit.
 - **No median-of-3** — single measurement per binary-search step. Add median-of-3 only if flakiness is observed.
 - **2 Yjs soak files, not 4** — memory tracking folded into `soak.spec.ts`; schema integrity folded into `soak-collab.spec.ts`. Only reconnection and rapid-tab-switch need separate files.
-- **2-user soak, not 3** — 2 browser contexts exercises collaboration + memory. The load harness already tests 100-client convergence.
+- **N-user soak via env var** — `SOAK_USERS` (default 3) dynamically creates browser contexts. Originally 2; expanded post-implementation to test collaboration at scale. The load harness complements this with 100-client headless convergence.
 
 ---
 
@@ -1121,13 +1121,62 @@ export default defineConfig({
 
 ---
 
+## Post-Implementation Addendum
+
+Changes applied after initial plan completion to address real-world usage gaps.
+
+### Dynamic N-User Collaboration (soak-collab.spec.ts)
+
+The original plan specified a hardcoded 2-user soak. This was expanded to support N dynamic users:
+
+- **`SOAK_USERS` env var** (default: 3) — controls how many browser contexts are spawned
+- **Sequential join** — User 0 seeds the document and waits for content to render, then Users 1..N-1 join sequentially (each verifies initial sync before proceeding), avoiding the unreliable parallel-join race condition
+- **Per-user convergence** — final assertion compares all N replicas against User 0's document (not just pairwise A/B)
+- **Tested at 5 users** with zero errors and full byte-level convergence
+
+### Explicit User Identity (window.__HOCUS_TOKEN)
+
+Each simulated user now presents a distinct identity to Hocuspocus, mirroring real-world multi-browser behavior:
+
+- **`hooks/use-yjs-document.ts`** — reads `window.__HOCUS_TOKEN` and passes it as `token` to `HocuspocusProvider`
+- **Playwright tests** — each `browser.newContext()` injects a unique token via `page.addInitScript()` (e.g., `soak-user-0-{docId}`, `soak-user-1-{docId}`)
+- **Load harness** — each of the N headless clients passes `load-client-{i}-{docId}` as its token
+- **Future-proof** — when authentication is added, the plumbing is already in place; currently `@hocuspocus/cli` accepts all tokens
+
+### Realistic Document Content (document-generators.ts)
+
+The original plan generated a single paragraph per heading section. Documents now include:
+
+- **3-5 prose paragraphs** per section with multi-sentence, domain-relevant text
+- **Structured blocks** randomly interleaved: bullet lists (3-6 items), ordered lists (3-5 items), task lists (3-5 items with checked/unchecked state), code blocks (multi-line TypeScript samples), blockquotes (2 paragraphs)
+- **Realistic section titles** drawn from a pool of 20 professional heading names
+- **`richContent` option** — defaults to `true`; pass `{ richContent: false }` for lightweight documents in performance-sensitive tests
+- **Load harness seeding** — `seedDocument()` now builds 78 top-level nodes (10 sections with paragraphs, bullet lists, task lists, and trailing paragraphs) using push-first Y.XmlElement construction to avoid Yjs warnings
+- **Test editor parity** — `createTestEditor` now registers `TaskList`/`TaskItem`; `VALID_BLOCK_NAMES` includes `taskList`/`taskItem`
+- **Vitest/Playwright isolation** — `assertInvariantsFromJSON` extracted to `assert-invariants-json.ts` (no vitest import) to avoid CommonJS/ESM conflict in Playwright
+
+### Collaboration Test Restructuring (collaboration.spec.ts)
+
+The original single collaboration test was split into two focused tests:
+
+| Test | Strategy | Reliability |
+|------|----------|-------------|
+| "user B sees content created by user A" | User A types → waits 2s → User B joins and gets content on initial sync | Deterministic (5/5) |
+| "real-time sync between two connected users" | Both connected → User A types → User B polls for text | Inherently timing-sensitive; `retries: 1` |
+
+### Y.Doc Lifecycle (use-yjs-document.ts)
+
+Module-level `docCache` with reference counting ensures Y.Doc instances persist across React component unmounts during tab switches. `releaseDoc` decrements `refCount` without destroying the doc, preventing content loss on rapid tab switching. `onDisconnect` removed from `HocuspocusProvider` to keep the editor active during brief disconnections.
+
+---
+
 ## References
 
 ### Internal References
 
 - Prior plan: `docs/plans/2026-03-15-feat-e2e-testing-strategy-plan.md`
 - Brainstorm: `docs/brainstorms/2026-03-15-test-realism-and-soak-brainstorm.md`
-- Existing helpers: `tests/helpers/create-test-editor.ts`, `tests/helpers/document-generators.ts`, `tests/helpers/assert-invariants.ts`
+- Existing helpers: `tests/helpers/create-test-editor.ts`, `tests/helpers/document-generators.ts`, `tests/helpers/assert-invariants.ts`, `tests/helpers/assert-invariants-json.ts`
 - Existing POM: `tests/e2e/helpers/editor-page.ts`
 - Existing perf observer: `tests/e2e/helpers/perf-observer.ts`
 - Yjs integration: `hooks/use-yjs-document.ts`
