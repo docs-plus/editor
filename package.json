@@ -2,6 +2,7 @@
   "name": "tiny-docy",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "bun@1.3.10",
   "engines": {
     "bun": ">=1.3.10"
