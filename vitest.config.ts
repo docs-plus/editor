@@ -8,6 +8,9 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/unit/**/*.test.ts"],
     exclude: ["tests/e2e/**", "tests/load/**"],
+    reporters: process.env.VITEST_REPORT_FILE
+      ? ["default", ["json", { outputFile: process.env.VITEST_REPORT_FILE }]]
+      : ["default"],
   },
   resolve: {
     tsconfigPaths: true,

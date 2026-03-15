@@ -70,3 +70,14 @@ export function computeLatencyStats(entries: PerfEntry[]): {
 
   return { count, p50, p95, mean, max };
 }
+
+export type LatencyStats = ReturnType<typeof computeLatencyStats>;
+
+export function logLatencyStats(label: string, stats: LatencyStats): void {
+  console.log(`=== Performance: ${label} ===`);
+  console.log(`Samples: ${stats.count}`);
+  console.log(`p50: ${stats.p50.toFixed(1)}ms`);
+  console.log(`p95: ${stats.p95.toFixed(1)}ms`);
+  console.log(`Mean: ${stats.mean.toFixed(1)}ms`);
+  console.log(`Max: ${stats.max.toFixed(1)}ms`);
+}

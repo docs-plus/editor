@@ -2,12 +2,18 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { assertInvariantsFromJSON } from "@/tests/helpers/assert-invariants-json";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
+import { writeReport } from "@/tests/helpers/report-writer";
+import {
+  parseSoakDuration,
+  parseSoakHeadings,
+  parseSoakUsers,
+} from "@/tests/helpers/soak-config";
 import { EditorPage } from "./helpers/editor-page";
 import { SoakBot } from "./helpers/soak-bot";
 
-const SOAK_USERS = Number(process.env.SOAK_USERS ?? 3);
-const SOAK_DURATION = Number(process.env.SOAK_DURATION ?? 1_800_000);
-const SOAK_HEADINGS = Number(process.env.SOAK_HEADINGS ?? 20);
+const SOAK_USERS = parseSoakUsers(process.env.SOAK_USERS);
+const SOAK_DURATION = parseSoakDuration(process.env.SOAK_DURATION);
+const SOAK_HEADINGS = parseSoakHeadings(process.env.SOAK_HEADINGS);
 
 test.setTimeout(SOAK_DURATION + 300_000);
 
@@ -111,6 +117,24 @@ test(`multi-user soak — ${SOAK_USERS} users editing concurrently with schema c
       `[soak-collab] User ${i}: ${r.totalActions} actions, ${r.errors.length} errors`,
     );
   }
+
+  const totalActions = results.reduce((a, r) => a + r.totalActions, 0);
+  const totalErrors = results.reduce((a, r) => a + r.errors.length, 0);
+  const report = {
+    timestamp: new Date().toISOString(),
+    users: SOAK_USERS,
+    headings: SOAK_HEADINGS,
+    duration: SOAK_DURATION,
+    totalActions,
+    totalErrors,
+    perUser: results.map((r, i) => ({
+      user: i,
+      actions: r.totalActions,
+      errors: r.errors.length,
+    })),
+    verdict: totalErrors === 0 ? "PASS" : "FAIL",
+  };
+  writeReport(`soak-collab-report-${Date.now()}.json`, report);
 
   await Promise.all(contexts.map((ctx) => ctx.close()));
 });

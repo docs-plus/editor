@@ -2,7 +2,7 @@
 
 TinyDocy uses a multi-layer testing strategy covering schema correctness, feature behavior, performance, long-running stability, and real-time collaboration at scale.
 
-**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below.
+**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets.
 
 **Prerequisites:** Dev servers must be running for Playwright tests.
 
@@ -35,6 +35,10 @@ tests/
 │   ├── create-test-editor.ts             # Headless Tiptap Editor factory
 │   ├── document-builders.ts              # ProseMirror node builders (via prosemirror-test-builder)
 │   ├── document-generators.ts            # Random and large document generators
+│   ├── env-parsers.ts                    # Generic parseEnvNumber (?? semantics)
+│   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings, parsePerfNumber)
+│   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
+│   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
 │   ├── assert-invariants.ts              # Schema invariant assertions (Vitest)
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no vitest dep)
 ├── fixtures/                             # Static JSON document fixtures
@@ -65,6 +69,24 @@ tests/
 └── load/
     └── yjs-load-harness.ts               # Standalone Bun script: N-client Yjs convergence test
 ```
+
+## Test Reports (`test-reports/`)
+
+All test layers write JSON reports when run via Make targets:
+
+| Report file | Source | Contents |
+|-------------|--------|----------|
+| `unit-report.json` | `make test` | Vitest JSON (suites, tests, durations) |
+| `fuzz-report.json` | `make test-fuzz` | Vitest JSON |
+| `stress-report.json` | `make test-stress` | Vitest JSON |
+| `e2e-report.json` | `make test-e2e` | Playwright JSON (tests, outcomes) |
+| `perf-report-{ts}.json` | `make test-perf` | Latency stats per heading count |
+| `perf-collab-report-{ts}.json` | `make test-perf-collab` | Multi-user latency stats |
+| `load-report-{ts}.json` | `make test-load` | Clients, edits, throughput, convergence |
+| `soak-report-{ts}.json` | `make test-soak-quick` | Journeys, memory, latency, verdict |
+| `soak-collab-report-{ts}.json` | `make test-soak-collab-quick` | Users, actions, errors |
+| `*-playwright-report.json` | soak targets | Playwright JSON for soak runs |
+| `yjs-soak-report.json` | `make test-yjs-soak` | Playwright JSON for yjs-soak |
 
 ## Layer 1: Unit Tests (Vitest)
 
@@ -112,7 +134,7 @@ make test-e2e
 
 ### Performance Tests
 
-Measure keystroke-to-paint latency using the Event Timing API via `PerformanceObserver`. Reports p50/p95/mean/max.
+Measure keystroke-to-paint latency using the Event Timing API via `PerformanceObserver`. Reports p50/p95/mean/max. Config is via env vars; the Makefile serves as the CLI interface (e.g. `make test-perf PERF_HEADINGS=200`).
 
 ```bash
 make test-perf                                    # default: 10, 50 headings, flat shape
@@ -186,7 +208,8 @@ make test-soak                 # full suite (30 min)
 | `SOAK_DURATION` | `1800000` (30 min) | How long bots run |
 | `SOAK_HEADINGS` | `200` (single) / `20` (collab) | Document heading count |
 | `SOAK_USERS` | `3` | Number of concurrent browser users |
-| `SOAK_WARMUP` | auto | Warm-up duration before memory baseline |
+| `SOAK_WARMUP` | auto (30s if &lt;10 min, 120s otherwise) | Warm-up duration before memory baseline |
+| `SOAK_MEMORY_GROWTH_LIMIT` | `50` | Max heap growth % before fail (single-user soak) |
 
 ## Layer 4: Yjs Soak Scenarios
 
@@ -206,12 +229,21 @@ Creates multiple tabs via the tab bar UI, switches between them 20 times, types 
 
 ## Layer 5: Load Harness (standalone Bun script)
 
-Headless N-client Yjs convergence test — no browser required.
+Headless N-client Yjs convergence test — no browser required. CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
 
 ```bash
-make test-load                                         # 100 clients, 30s, distributed
+make test-load                                              # 100 clients, 30s, distributed
+make test-load LOAD_CLIENTS=50 LOAD_DURATION=10000          # env vars
 bun tests/load/yjs-load-harness.ts --clients 50 --duration 10000 --scenario conflict
 ```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOAD_CLIENTS` | `100` | Concurrent Yjs clients |
+| `LOAD_DURATION` | `30000` | Steady-state duration (ms) |
+| `LOAD_RATE` | `2` | Operations/second per client |
+| `LOAD_SCENARIO` | `distributed` | `distributed` or `conflict` |
+| `LOAD_URL` | `ws://127.0.0.1:1234` | Hocuspocus WebSocket URL |
 
 Phases: connect → seed (realistic document with paragraphs, lists, task lists) → warm-up → steady-state editing → drain → byte-level + JSON-level convergence verification → structured report.
 

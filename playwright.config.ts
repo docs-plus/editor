@@ -3,6 +3,9 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/e2e",
   workers: 3,
+  reporter: process.env.PLAYWRIGHT_REPORT_FILE
+    ? [["list"], ["json", { outputFile: process.env.PLAYWRIGHT_REPORT_FILE }]]
+    : "list",
   use: {
     baseURL: "http://localhost:3000",
     headless: true,

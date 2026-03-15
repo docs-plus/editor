@@ -1,43 +1,22 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import type { GenerateLargeDocumentOptions } from "@/tests/helpers/document-generators";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
+import { parsePerfNumber, parsePerfShape } from "@/tests/helpers/perf-config";
+import { writeReport } from "@/tests/helpers/report-writer";
 import { EditorPage } from "./helpers/editor-page";
 import {
   collectPerfEntries,
   computeLatencyStats,
   injectPerfObserver,
+  logLatencyStats,
 } from "./helpers/perf-observer";
 
-const DEFAULT_USERS = 2;
-const DEFAULT_HEADINGS = 50;
-const PERF_COLLAB_USERS = Number(
-  process.env.PERF_COLLAB_USERS?.trim() || DEFAULT_USERS,
+const PERF_COLLAB_USERS = parsePerfNumber(process.env.PERF_COLLAB_USERS, 2);
+const PERF_COLLAB_HEADINGS = parsePerfNumber(
+  process.env.PERF_COLLAB_HEADINGS,
+  50,
 );
-const PERF_COLLAB_HEADINGS = Number(
-  process.env.PERF_COLLAB_HEADINGS?.trim() || DEFAULT_HEADINGS,
-);
-
-const VALID_SHAPES = ["flat", "deep", "mixed"] as const;
-const PERF_COLLAB_SHAPE: GenerateLargeDocumentOptions["shape"] =
-  process.env.PERF_COLLAB_SHAPE?.trim() &&
-  VALID_SHAPES.includes(
-    process.env.PERF_COLLAB_SHAPE.trim() as (typeof VALID_SHAPES)[number],
-  )
-    ? (process.env.PERF_COLLAB_SHAPE.trim() as (typeof VALID_SHAPES)[number])
-    : "flat";
-
-function logStats(
-  label: string,
-  stats: ReturnType<typeof computeLatencyStats>,
-) {
-  console.log(`=== Performance: ${label} ===`);
-  console.log(`Samples: ${stats.count}`);
-  console.log(`p50: ${stats.p50.toFixed(1)}ms`);
-  console.log(`p95: ${stats.p95.toFixed(1)}ms`);
-  console.log(`Mean: ${stats.mean.toFixed(1)}ms`);
-  console.log(`Max: ${stats.max.toFixed(1)}ms`);
-}
+const PERF_COLLAB_SHAPE = parsePerfShape(process.env.PERF_COLLAB_SHAPE);
 
 test.setTimeout(120_000);
 test.describe.configure({ retries: 1 });
@@ -105,7 +84,7 @@ test(`typing latency with ${PERF_COLLAB_USERS} users on shared doc (${PERF_COLLA
   );
 
   for (let i = 0; i < PERF_COLLAB_USERS; i++) {
-    logStats(`user ${i}`, allStats[i]);
+    logLatencyStats(`user ${i}`, allStats[i]);
   }
 
   const combinedCount = allStats.reduce((a, s) => a + s.count, 0);
@@ -118,6 +97,20 @@ test(`typing latency with ${PERF_COLLAB_USERS} users on shared doc (${PERF_COLLA
   console.log(`Weighted mean: ${combinedMean.toFixed(1)}ms`);
   console.log(`Max p95 across users: ${maxP95.toFixed(1)}ms`);
   console.log(`Max latency: ${maxLatency.toFixed(1)}ms`);
+
+  writeReport(`perf-collab-report-${Date.now()}.json`, {
+    timestamp: new Date().toISOString(),
+    users: PERF_COLLAB_USERS,
+    headings: PERF_COLLAB_HEADINGS,
+    shape: PERF_COLLAB_SHAPE,
+    perUser: allStats.map((s, i) => ({ user: i, ...s })),
+    aggregate: {
+      totalSamples: combinedCount,
+      weightedMean: combinedMean,
+      maxP95: maxP95,
+      maxLatency: maxLatency,
+    },
+  });
 
   for (const ctx of contexts) {
     await ctx.close();

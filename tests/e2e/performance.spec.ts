@@ -1,33 +1,29 @@
 import { type Page, test } from "@playwright/test";
-import type { GenerateLargeDocumentOptions } from "@/tests/helpers/document-generators";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
+import { parsePerfHeadings, parsePerfShape } from "@/tests/helpers/perf-config";
+import { writeReport } from "@/tests/helpers/report-writer";
 import { EditorPage } from "./helpers/editor-page";
 import {
   collectPerfEntries,
   computeLatencyStats,
   injectPerfObserver,
+  logLatencyStats,
 } from "./helpers/perf-observer";
 
-const DEFAULT_HEADINGS = [10, 50];
-const PERF_HEADINGS = process.env.PERF_HEADINGS?.trim()
-  ? process.env.PERF_HEADINGS.split(",").map((s) =>
-      Number.parseInt(s.trim(), 10),
-    )
-  : DEFAULT_HEADINGS;
+const PERF_HEADINGS = parsePerfHeadings(process.env.PERF_HEADINGS, [10, 50]);
+const PERF_SHAPE = parsePerfShape(process.env.PERF_SHAPE);
 
-const VALID_SHAPES = ["flat", "deep", "mixed"] as const;
-const PERF_SHAPE: GenerateLargeDocumentOptions["shape"] =
-  process.env.PERF_SHAPE?.trim() &&
-  VALID_SHAPES.includes(
-    process.env.PERF_SHAPE.trim() as (typeof VALID_SHAPES)[number],
-  )
-    ? (process.env.PERF_SHAPE.trim() as (typeof VALID_SHAPES)[number])
-    : "flat";
+const perfResults: Array<{
+  label: string;
+  headingCount: number;
+  shape: string;
+  stats: ReturnType<typeof computeLatencyStats>;
+}> = [];
 
 async function measureTypingLatency(
   page: Page,
   headingCount: number,
-  shape: GenerateLargeDocumentOptions["shape"],
+  shape: "flat" | "deep" | "mixed",
 ) {
   await injectPerfObserver(page);
   const editorPage = new EditorPage(page);
@@ -40,23 +36,27 @@ async function measureTypingLatency(
   return computeLatencyStats(entries);
 }
 
-function logStats(
-  label: string,
-  stats: ReturnType<typeof computeLatencyStats>,
-) {
-  console.log(`=== Performance: ${label} ===`);
-  console.log(`Samples: ${stats.count}`);
-  console.log(`p50: ${stats.p50.toFixed(1)}ms`);
-  console.log(`p95: ${stats.p95.toFixed(1)}ms`);
-  console.log(`Mean: ${stats.mean.toFixed(1)}ms`);
-  console.log(`Max: ${stats.max.toFixed(1)}ms`);
-}
-
-for (const n of PERF_HEADINGS) {
-  test(`typing latency with ${n} headings (${PERF_SHAPE})`, async ({
-    page,
-  }) => {
-    const stats = await measureTypingLatency(page, n, PERF_SHAPE);
-    logStats(`${n} headings (${PERF_SHAPE})`, stats);
+test.describe("typing latency", () => {
+  test.afterAll(() => {
+    writeReport(`perf-report-${Date.now()}.json`, {
+      timestamp: new Date().toISOString(),
+      shape: PERF_SHAPE,
+      results: perfResults,
+    });
   });
-}
+
+  for (const n of PERF_HEADINGS) {
+    test(`typing latency with ${n} headings (${PERF_SHAPE})`, async ({
+      page,
+    }) => {
+      const stats = await measureTypingLatency(page, n, PERF_SHAPE);
+      logLatencyStats(`${n} headings (${PERF_SHAPE})`, stats);
+      perfResults.push({
+        label: `${n} headings (${PERF_SHAPE})`,
+        headingCount: n,
+        shape: PERF_SHAPE,
+        stats,
+      });
+    });
+  }
+});
