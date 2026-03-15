@@ -13,7 +13,7 @@ import { HeadingFilter } from "@/components/tiptap-node/heading-node/heading-fil
 import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";
 import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 
-export const DEFAULT_EXTENSIONS: Extension[] = [
+export const DEFAULT_EXTENSIONS = [
   StarterKit.configure({ document: false, horizontalRule: false }),
   TitleDocument,
   TableOfContents,
@@ -27,7 +27,7 @@ export const DEFAULT_EXTENSIONS: Extension[] = [
   TaskList,
   TaskItem.configure({ nested: true }),
   UniqueID.configure({ types: ["heading"] }),
-];
+] as Extension[];
 
 export interface CreateTestEditorOptions {
   content?: JSONContent;
@@ -49,6 +49,5 @@ export function createTestEditor(
     element,
     content,
     extensions,
-    immediatelyRender: false,
   });
 }

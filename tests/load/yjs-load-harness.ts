@@ -17,13 +17,12 @@
  * Usage: bun tests/load/yjs-load-harness.ts [options]
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import WebSocket from "ws";
 import * as Y from "yjs";
 import { formatBytes } from "@/lib/utils";
 import { parseEnvFloat, parseEnvNumber } from "@/tests/helpers/env-parsers";
+import { writeReport } from "@/tests/helpers/report-writer";
 
 const FRAGMENT_NAME = "default";
 const WARMUP_MS = 2_000;
@@ -327,7 +326,7 @@ function createClients(config: Config): {
             resolve();
           }
         },
-      });
+      } as ConstructorParameters<typeof HocuspocusProvider>[0]);
       clients.push({ doc, provider });
     }
   });
@@ -489,12 +488,7 @@ async function run(config: Config): Promise<void> {
     docSizeBytes,
     docSizeStr,
   };
-  const outDir = path.join(process.cwd(), "test-reports");
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(outDir, `load-report-${Date.now()}.json`),
-    JSON.stringify(report, null, 2),
-  );
+  writeReport(`load-report-${Date.now()}.json`, report);
 
   destroyClients(clients);
   process.exit(convergence.pass ? 0 : 1);

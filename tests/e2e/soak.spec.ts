@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
+import { writeReport } from "@/tests/helpers/report-writer";
 import {
   parseSoakDuration,
   parseSoakHeadings,
@@ -109,14 +110,7 @@ test("single-user soak — sustained editing with memory tracking", async ({
   );
   console.log(`Verdict:    ${report.verdict}`);
 
-  const fs = await import("node:fs");
-  const path = await import("node:path");
-  const outDir = path.join(process.cwd(), "test-reports");
-  fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(outDir, `soak-report-${Date.now()}.json`),
-    JSON.stringify(report, null, 2),
-  );
+  writeReport(`soak-report-${Date.now()}.json`, report);
 
   if (growthPercent !== null) {
     expect(growthPercent).toBeLessThan(MEMORY_GROWTH_LIMIT);
