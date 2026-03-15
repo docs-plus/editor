@@ -11,7 +11,7 @@
  *   - Notion-style visual feedback: drag ghost, drop indicator, section opacity
  *   - Node decorations for CSS hooks (mapped for typing, rebuilt for structural edits)
  *
- * See docs/brainstorms/2026-03-09-heading-drag-drop-brainstorm.md
+ * See docs/brainstorms/2-heading-drag-drop-brainstorm.md
  */
 
 import { Extension } from "@tiptap/core";

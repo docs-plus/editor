@@ -3,7 +3,7 @@ title: "refactor: Replace fold overlays with Decoration.node + Decoration.widget
 type: refactor
 status: implemented
 date: 2026-03-11
-brainstorm: docs/brainstorms/2026-03-11-fold-overlay-to-decoration-brainstorm.md
+brainstorm: docs/brainstorms/4-fold-overlay-to-decoration-brainstorm.md
 ---
 
 # Replace Fold Overlays with Decoration.node + CSS ::after
@@ -362,7 +362,7 @@ After implementation, verify:
 
 ## References
 
-- Brainstorm: [docs/brainstorms/2026-03-11-fold-overlay-to-decoration-brainstorm.md](docs/brainstorms/2026-03-11-fold-overlay-to-decoration-brainstorm.md)
+- Brainstorm: [docs/brainstorms/4-fold-overlay-to-decoration-brainstorm.md](docs/brainstorms/4-fold-overlay-to-decoration-brainstorm.md)
 - HeadingScale decoration pattern: [heading-scale-extension.ts](components/tiptap-node/heading-node/heading-scale-extension.ts)
 - HeadingDrag decoration pattern: [heading-drag-plugin.ts](components/tiptap-node/heading-node/heading-drag-plugin.ts)
 - Current fold plugin: [heading-fold-plugin.ts](components/tiptap-node/heading-node/heading-fold-plugin.ts)

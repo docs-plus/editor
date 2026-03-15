@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-12  
 **Topic:** ProseMirror/Tiptap document section filter implementation  
-**Related:** [2026-03-12-document-filter-brainstorm](../brainstorms/2026-03-12-document-filter-brainstorm.md)
+**Related:** [5-document-filter-brainstorm](../brainstorms/5-document-filter-brainstorm.md)
 
 ---
 
@@ -194,9 +194,11 @@ function updateFilterInUrl(slugs: string[], mode: "or" | "and") {
 
 1. React holds input state (e.g., `filterInput`, `committedTags`).
 2. When state changes, dispatch a transaction with metadata:
+
    ```ts
    view.dispatch(state.tr.setMeta(pluginKey, { type: "setFilter", slugs: [...], mode: "or" }));
    ```
+
 3. Plugin `apply()` reads `tr.getMeta(pluginKey)` and updates its state + decorations.
 
 **Direction: ProseMirror → React**

@@ -117,7 +117,7 @@ SOAK_USERS=5 SOAK_DURATION=600000 SOAK_HEADINGS=30 make test-soak-collab-quick
 
 **Layer 5 — Load harness:** Standalone Bun script simulating up to 100 headless Yjs clients editing the same document, with byte-level convergence verification.
 
-See [`tests/README.md`](tests/README.md) for the full testing guide, architecture diagram, and environment variable reference.
+See [`tests/TESTING.md`](tests/TESTING.md) for the full testing guide, architecture diagram, and environment variable reference.
 
 ## Tech Stack
 

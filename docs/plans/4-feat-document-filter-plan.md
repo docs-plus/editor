@@ -3,7 +3,7 @@ title: "feat: Document Filter (Heading & Content)"
 type: feat
 status: completed
 date: 2026-03-12
-brainstorm: docs/brainstorms/2026-03-12-document-filter-brainstorm.md
+brainstorm: docs/brainstorms/5-document-filter-brainstorm.md
 ---
 
 # feat: Document Filter (Heading & Content)
@@ -875,7 +875,7 @@ useEffect(() => {
 
 ## Alternative Approaches Considered
 
-See [brainstorm document](../brainstorms/2026-03-12-document-filter-brainstorm.md) for full evaluation of:
+See [brainstorm document](../brainstorms/5-document-filter-brainstorm.md) for full evaluation of:
 
 1. Dedicated Filter Plugin (chosen)
 2. Unified Fold+Filter Plugin (rejected: couples two features)
@@ -958,7 +958,7 @@ lib/icons.ts
 - Section computation: `components/tiptap-node/heading-node/helpers/compute-section.ts`
 - Decoration fast path: `components/tiptap-node/heading-node/helpers/can-map-decorations.ts`
 - TOC sidebar: `components/toc-sidebar/toc-sidebar.tsx`
-- Brainstorm: `docs/brainstorms/2026-03-12-document-filter-brainstorm.md`
+- Brainstorm: `docs/brainstorms/5-document-filter-brainstorm.md`
 
 ### External
 

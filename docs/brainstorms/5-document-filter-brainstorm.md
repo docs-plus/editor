@@ -189,4 +189,4 @@ None — all questions resolved.
 
 ## Implementation Status
 
-Feature fully implemented across all four phases. See [implementation plan](../plans/2026-03-12-feat-document-filter-plan.md) for phase details and acceptance criteria.
+Feature fully implemented across all four phases. See [implementation plan](../plans/4-feat-document-filter-plan.md) for phase details and acceptance criteria.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Tiptap 3, ProseMirror, `@floating-ui/dom`, TypeScript, SCSS
 
-**Brainstorm:** `docs/brainstorms/2026-03-09-heading-drag-drop-brainstorm.md`
+**Brainstorm:** `docs/brainstorms/2-heading-drag-drop-brainstorm.md`
 
 ---
 
@@ -861,7 +861,7 @@ The extension entry point becomes a thin wrapper around the plugin.
  *   - Notion-style visual feedback: drag ghost, drop indicator, section opacity
  *   - Fingerprint-optimized node decorations for CSS hooks
  *
- * See docs/brainstorms/2026-03-09-heading-drag-drop-brainstorm.md
+ * See docs/brainstorms/2-heading-drag-drop-brainstorm.md
  */
 
 import { Extension } from "@tiptap/core";

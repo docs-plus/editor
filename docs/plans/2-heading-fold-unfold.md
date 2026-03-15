@@ -1,6 +1,6 @@
 # Heading Fold/Unfold Implementation Plan
 
-> **Status:** SUPERSEDED — All 10 tasks were completed under this plan, then the architecture was fully re-designed on 2026-03-11. The overlay-based approach described here was replaced with a `Decoration.node()` + `Decoration.widget()` architecture. See the [refactor plan](2026-03-11-refactor-fold-overlay-to-decoration-plan.md) for the current implementation.
+> **Status:** SUPERSEDED — All 10 tasks were completed under this plan, then the architecture was fully re-designed on 2026-03-11. The overlay-based approach described here was replaced with a `Decoration.node()` + `Decoration.widget()` architecture. See the [refactor plan](3-refactor-fold-overlay-to-decoration-plan.md) for the current implementation.
 >
 > This document is retained as historical context. The Post-Implementation section at the bottom documents issues encountered under the original architecture that motivated the re-design.
 
@@ -10,7 +10,7 @@
 
 **Tech Stack (original, superseded):** ProseMirror plugin API, SVG for crinkle rendering, CSS transitions for fold/unfold animation, localStorage for persistence. Overlay positioned via manual absolute positioning (same container as HeadingDrag wrapper).
 
-**Brainstorm:** `docs/brainstorms/2026-03-10-heading-fold-unfold-brainstorm.md`
+**Brainstorm:** `docs/brainstorms/3-heading-fold-unfold-brainstorm.md`
 
 ---
 
@@ -1500,7 +1500,7 @@ Both margin-bottom and overlay height now animate from the same committed start 
 
 ### Final File Inventory (as of original overlay architecture)
 
-> **Note:** This inventory reflects the state after the original 10-task plan. The architecture was subsequently re-designed — see [refactor plan](2026-03-11-refactor-fold-overlay-to-decoration-plan.md) for the current file inventory.
+> **Note:** This inventory reflects the state after the original 10-task plan. The architecture was subsequently re-designed — see [refactor plan](3-refactor-fold-overlay-to-decoration-plan.md) for the current file inventory.
 
 | File | Lines | Role |
 |------|-------|------|

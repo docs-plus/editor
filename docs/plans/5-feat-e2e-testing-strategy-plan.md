@@ -11,7 +11,7 @@ date: 2026-03-15
 
 Establish a three-layer testing infrastructure for TinyDocy's collaborative document editor: **Vitest** for fast headless schema/model tests and fuzzing, **Playwright** for browser-based feature E2E and performance baselines, and a **custom Yjs load harness** for 100-user concurrency simulation. All tests run against the dev server (`make dev`). CI/CD integration is deferred.
 
-Brainstorm: `docs/brainstorms/2026-03-15-e2e-testing-strategy-brainstorm.md`
+Brainstorm: `docs/brainstorms/8-e2e-testing-strategy-brainstorm.md`
 
 ## Problem Statement
 
@@ -645,7 +645,7 @@ Create these as JSON files in `tests/fixtures/`:
 
 ### Internal References
 
-- Brainstorm: `docs/brainstorms/2026-03-15-e2e-testing-strategy-brainstorm.md`
+- Brainstorm: `docs/brainstorms/8-e2e-testing-strategy-brainstorm.md`
 - Document model: `components/tiptap-node/document-node/document-node-extension.ts`
 - Editor setup: `components/tiptap-templates/simple/simple-editor.tsx` (lines 318-381)
 - Fold plugin: `components/tiptap-node/heading-node/heading-fold-plugin.ts`

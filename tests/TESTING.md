@@ -134,7 +134,7 @@ make test-soak                 # full suite (30 min)
 2. Warm-up phase with stochastic bot
 3. Sustained editing with memory sampling every 30s
 4. Reports: JS heap growth, p50/p95 latency, action counts, error count
-5. Writes JSON report to `soak-report-{timestamp}.json`
+5. Writes JSON report to `test-reports/soak-report-{timestamp}.json`
 
 ### Multi-User Soak (`soak-collab.spec.ts`)
 
@@ -193,7 +193,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 ## Related Documentation
 
-- [E2E Testing Strategy Plan](../docs/plans/2026-03-15-feat-e2e-testing-strategy-plan.md) — original infrastructure plan (completed)
-- [Test Realism & Soak Plan](../docs/plans/2026-03-15-feat-test-realism-soak-and-stress-plan.md) — soak, stress, and collaboration layers (completed)
-- [E2E Testing Brainstorm](../docs/brainstorms/2026-03-15-e2e-testing-strategy-brainstorm.md) — initial requirements exploration
-- [Test Realism Brainstorm](../docs/brainstorms/2026-03-15-test-realism-and-soak-brainstorm.md) — soak and performance requirements
+- [E2E Testing Strategy Plan](../docs/plans/5-feat-e2e-testing-strategy-plan.md) — original infrastructure plan (completed)
+- [Test Realism & Soak Plan](../docs/plans/6-feat-test-realism-soak-and-stress-plan.md) — soak, stress, and collaboration layers (completed)
+- [E2E Testing Brainstorm](../docs/brainstorms/8-e2e-testing-strategy-brainstorm.md) — initial requirements exploration
+- [Test Realism Brainstorm](../docs/brainstorms/9-test-realism-and-soak-brainstorm.md) — soak and performance requirements

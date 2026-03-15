@@ -11,7 +11,7 @@ date: 2026-03-15
 
 Build two new testing layers on top of the existing test infrastructure: a **Headless Stress Probe** (Vitest) for fast algorithmic regression detection, and a **Playwright Soak Runner** for sustained browser-level realism testing. Also add **Yjs soak scenarios** (TDD) that expose known collaboration-layer gaps as failing tests before fixing them.
 
-Brainstorm: `docs/brainstorms/2026-03-15-test-realism-and-soak-brainstorm.md`
+Brainstorm: `docs/brainstorms/9-test-realism-and-soak-brainstorm.md`
 
 ## Problem Statement
 
@@ -689,7 +689,10 @@ test("single-user soak — sustained editing with memory tracking", async ({ pag
 
   // Write JSON for CI artifacts
   const fs = await import("node:fs");
-  fs.writeFileSync(`soak-report-${Date.now()}.json`, JSON.stringify(report, null, 2));
+  const path = await import("node:path");
+  const outDir = path.join(process.cwd(), "test-reports");
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, `soak-report-${Date.now()}.json`), JSON.stringify(report, null, 2));
 
   // Assertions
   if (growthPercent !== null) {
@@ -1174,8 +1177,8 @@ Module-level `docCache` with reference counting ensures Y.Doc instances persist 
 
 ### Internal References
 
-- Prior plan: `docs/plans/2026-03-15-feat-e2e-testing-strategy-plan.md`
-- Brainstorm: `docs/brainstorms/2026-03-15-test-realism-and-soak-brainstorm.md`
+- Prior plan: `docs/plans/5-feat-e2e-testing-strategy-plan.md`
+- Brainstorm: `docs/brainstorms/9-test-realism-and-soak-brainstorm.md`
 - Existing helpers: `tests/helpers/create-test-editor.ts`, `tests/helpers/document-generators.ts`, `tests/helpers/assert-invariants.ts`, `tests/helpers/assert-invariants-json.ts`
 - Existing POM: `tests/e2e/helpers/editor-page.ts`
 - Existing perf observer: `tests/e2e/helpers/perf-observer.ts`

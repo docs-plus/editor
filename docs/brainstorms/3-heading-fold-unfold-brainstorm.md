@@ -2,12 +2,12 @@
 date: 2026-03-10
 topic: heading-fold-unfold
 status: superseded
-superseded_by: docs/brainstorms/2026-03-11-fold-overlay-to-decoration-brainstorm.md
+superseded_by: docs/brainstorms/4-fold-overlay-to-decoration-brainstorm.md
 ---
 
 # Heading Fold/Unfold with Paper Crinkle Effect
 
-> **Superseded**: This brainstorm described the initial overlay-based architecture (absolutely-positioned divs + SVG crinkle). That approach was fully replaced on 2026-03-11 with a `Decoration.node()` + `Decoration.widget()` architecture that eliminated all overlay positioning code. See the [overlay-to-decoration brainstorm](../brainstorms/2026-03-11-fold-overlay-to-decoration-brainstorm.md) for the re-architecture rationale.
+> **Superseded**: This brainstorm described the initial overlay-based architecture (absolutely-positioned divs + SVG crinkle). That approach was fully replaced on 2026-03-11 with a `Decoration.node()` + `Decoration.widget()` architecture that eliminated all overlay positioning code. See the [overlay-to-decoration brainstorm](../brainstorms/4-fold-overlay-to-decoration-brainstorm.md) for the re-architecture rationale.
 
 ## What We're Building
 
