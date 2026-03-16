@@ -111,7 +111,7 @@ Four related improvements to the tab bar and document lifecycle:
 
 ## Tab Reorder (dnd-kit)
 
-**Description:** Add `@dnd-kit/core` and `@dnd-kit/sortable`. Wrap tab list in `DndContext` and `SortableContext`. Playground tab is not draggable (stays first); only user tabs use `useSortable`. On `onDragEnd`, update `tabs` order in the Y.Array (or shared state).
+**Description:** Add `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/modifiers`. Wrap tab list in `DndContext` and `SortableContext`; use `restrictToHorizontalAxis` so tabs reorder only horizontally. Playground tab is not draggable (stays first); only user tabs use `useSortable`. On `onDragEnd`, update `tabs` order in the Y.Array (or shared state).
 
 **Pros:**
 
@@ -164,7 +164,8 @@ Delete: `DELETE FROM documents WHERE name = ?`
 
 ### Reorder
 
-- **Library:** `@dnd-kit/core` + `@dnd-kit/sortable`
+- **Library:** `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/modifiers`
+- **Constraint:** Horizontal only (`restrictToHorizontalAxis`)
 - **Update:** On drag end, reorder Y.Array (move item to new index)
 
 ### Close All + Delete

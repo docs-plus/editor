@@ -18,7 +18,7 @@ implemented: 2026-03-16
 ### Key Improvements
 
 1. **Y.Array patterns** — Bootstrap in `onSynced` when empty; wrap reorder in `ydoc.transact()`; use `observe` not `observeDeep`; find by `id` not index to avoid race conditions.
-2. **dnd-kit** — Use `horizontalListSortingStrategy`, `activationConstraint: { distance: 8 }`, `KeyboardSensor` for accessibility; update only in `onDragEnd`; resolve dragged item by `id` at drop.
+2. **dnd-kit** — Use `horizontalListSortingStrategy`, `restrictToHorizontalAxis` modifier; `activationConstraint: { distance: 8 }`; `KeyboardSensor` for accessibility; update only in `onDragEnd`; resolve dragged item by `id` at drop.
 3. **DELETE API** — Parallel `Promise.allSettled` for close-all; sequential Y.Array removal by `id`; `serverExternalPackages: ['better-sqlite3']` in next.config; WAL mode; 10s per-request timeout.
 4. **Race conditions** — Derive `tabs` and `validActive` together in observe; never render SimpleEditor when `documentId` not in `tabs`; use ref for `activeTabId` in observe callback.
 5. **Simplifications** — Remove `use-tabs.ts` after migration; skip `lib/sqlite.ts`; merge Close Tab + Close All into one phase; seed in SimpleEditor only.
@@ -62,7 +62,7 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 |-----------|----------|
 | Tab list | Shared Y.Doc `"global-tabs"` via Hocuspocus; Y.Array of `{ id, title, createdAt }` |
 | Active tab | localStorage per user (not synced) |
-| Tab reorder | `@dnd-kit/core` + `@dnd-kit/sortable`; Playground stays first |
+| Tab reorder | `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/modifiers`; horizontal only; Playground stays first |
 | Document delete | `DELETE /api/documents/[id]` Next.js API route |
 | Empty doc seeding | Client seeds minimal Tiptap doc on tab creation |
 
@@ -114,6 +114,7 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 **dnd-kit:**
 
 - `horizontalListSortingStrategy` for tab bar; `sortableKeyboardCoordinates` with `KeyboardSensor`.
+- `restrictToHorizontalAxis` from `@dnd-kit/modifiers` so tabs reorder only horizontally.
 - `activationConstraint: { distance: 8 }` to avoid accidental drags on click.
 - Resolve dragged item by `id` at drop; re-find index in current array (dnd-kit indices can be stale).
 
@@ -164,7 +165,7 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 ## Dependencies & Risks
 
 - **better-sqlite3:** Add for API route; add `serverExternalPackages: ['better-sqlite3']` in next.config.
-- **@dnd-kit:** Add `@dnd-kit/core` and `@dnd-kit/sortable`.
+- **@dnd-kit:** Add `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/modifiers` (restrictToHorizontalAxis).
 - **E2E:** Tests may need updates for synced tabs (e.g. `EditorPage` helper).
 - **global-tabs auth:** Hocuspocus accepts all connections; `global-tabs` writable by anyone. Acceptable for MVP; add `onAuthenticate` before production.
 - **Deployment:** Confirm PM2 `cwd` same for both apps; `DB_PATH` env for explicit path; retry 2–3x on SQLITE_BUSY.
@@ -202,8 +203,8 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 
 ### Phase 4: Tab Reorder (dnd-kit)
 
-- [x] Add `@dnd-kit/core` and `@dnd-kit/sortable`.
-- [x] Wrap tab list in `DndContext` and `SortableContext`; use `horizontalListSortingStrategy`.
+- [x] Add `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/modifiers`.
+- [x] Wrap tab list in `DndContext` and `SortableContext`; use `horizontalListSortingStrategy`; `restrictToHorizontalAxis` modifier for horizontal-only drag.
 - [x] Sensors: `PointerSensor` with `activationConstraint: { distance: 8 }`, `KeyboardSensor` with `sortableKeyboardCoordinates`.
 - [x] Playground: not draggable; user tabs: `useSortable`.
 - [x] `onDragEnd`: resolve dragged item by `id`; `currentIndex = arr.toArray().findIndex(t => t.id === item.id)`; if -1 abort; compute target index from current array; wrap delete+insert in `ydoc.transact()`.
