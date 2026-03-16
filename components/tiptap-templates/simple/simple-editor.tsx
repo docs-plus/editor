@@ -86,6 +86,7 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
+import { PLAYGROUND_ID } from "@/lib/constants";
 import {
   ArrowLeftIcon,
   HighlighterIcon,
@@ -414,6 +415,13 @@ function SimpleEditorContent({
       headingFilter.openBar();
     }
   }, [editor, headingFilter.openBar]);
+
+  useEffect(() => {
+    if (!editor || !ydoc || documentId === PLAYGROUND_ID) return;
+    const fragment = ydoc.getXmlFragment("default");
+    if (fragment.length > 0) return;
+    editor.commands.setContent(defaultContent);
+  }, [editor, ydoc, documentId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
