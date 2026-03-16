@@ -48,7 +48,7 @@ Use **named exports only**. Do not use `export default` except where required by
 Use `@/*` for imports from the project root (configured in `tsconfig.json`):
 
 ```typescript
-import { useTabs } from "@/hooks/use-tabs";
+import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 ```
 
 ## Naming Conventions
@@ -57,10 +57,10 @@ import { useTabs } from "@/hooks/use-tabs";
 |-------|-----------|---------|
 | Directories | kebab-case | `toc-sidebar/`, `tiptap-ui/` |
 | Files (components) | kebab-case | `tab-bar.tsx`, `simple-editor.tsx` |
-| Files (hooks) | kebab-case, `use-` prefix | `use-tabs.ts`, `use-document-storage.ts` |
+| Files (hooks) | kebab-case, `use-` prefix | `use-synced-tabs.ts`, `use-document-storage.ts` |
 | Files (utilities) | kebab-case | `editor-utils.ts`, `cn.ts` |
 | React components | PascalCase export, title-case acronyms | `export function TocSidebar()` |
-| Hooks | camelCase, `use` prefix | `export function useTabs()` |
+| Hooks | camelCase, `use` prefix | `export function useSyncedTabs()` |
 | Constants | UPPER_SNAKE_CASE | `const MAX_RETRIES = 3` |
 | Types/Interfaces | PascalCase | `interface EditorProps` |
 | Boolean props/vars | `is`/`has`/`should` prefix | `isActive`, `hasUnsavedChanges` |
@@ -125,7 +125,7 @@ These are hard rules, not suggestions:
 1. **No premature abstraction.** Do not extract a shared component, hook, or utility until there are 3+ concrete use cases. Duplication is cheaper than the wrong abstraction.
 2. **No new layers.** Do not create new directories like `services/`, `providers/`, `contexts/`, `stores/`, or `models/` at the project root. If it's a hook, it goes in `hooks/`. If it's a utility, it goes in `lib/`. If it's a type, it lives next to the code that uses it. Exception: `types/` exists for TypeScript declaration files (e.g., `scss.d.ts`) — not for application types.
 3. **No barrel files at directory roots.** Do not create `components/index.ts` or `hooks/index.ts`. Barrel files are only for individual component folders (e.g. `tiptap-ui/mark-button/index.tsx`).
-4. **No dedicated types files.** Types and interfaces live in the file that defines or primarily uses them. `Tab` lives in `use-tabs.ts`, not in `types/tab.ts`.
+4. **No dedicated types files.** Types and interfaces live in the file that defines or primarily uses them. `Tab` lives in `use-synced-tabs.ts`, not in `types/tab.ts`.
 5. **No wrapper components for the sake of wrapping.** If a component just passes props through to another component, delete it. Direct imports are better than indirection.
 6. **No "utils" dumping ground.** Split utilities by domain (e.g. `lib/cn.ts`, `lib/shortcuts.ts`, `lib/editor-utils.ts`, `lib/url-utils.ts`), not by creating a `utils/` folder.
 7. **Co-locate everything.** Styles, hooks, tests, and types for a component live in its folder, not in separate top-level directories.
