@@ -153,4 +153,4 @@ TinyDocy is the prototyping environment for the [docs.plus](https://docs.plus) e
 
 ## License
 
-Private
+MIT — see [LICENSE](LICENSE) for details.
