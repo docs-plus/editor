@@ -28,5 +28,5 @@ function Spacer({
   );
 }
 
-export { Spacer };
 export type { SpacerProps };
+export { Spacer };

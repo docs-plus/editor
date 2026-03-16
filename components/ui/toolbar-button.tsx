@@ -104,5 +104,5 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
 
 ToolbarButton.displayName = "ToolbarButton";
 
-export { ToolbarButton, ShortcutDisplay };
 export type { ToolbarButtonProps };
+export { ShortcutDisplay, ToolbarButton };
