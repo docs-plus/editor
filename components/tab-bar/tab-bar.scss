@@ -37,6 +37,36 @@
 .tab-bar-tab-wrapper {
   display: flex;
   align-items: stretch;
+
+  &--dragging {
+    opacity: 0.5;
+  }
+}
+
+.tab-bar-tab-drag-handle {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  color: var(--tt-gray-light-a-400);
+  padding: 0 0.125rem;
+  margin-right: 0.125rem;
+  border-radius: var(--tt-radius-xs);
+
+  .dark & {
+    color: var(--tt-gray-dark-a-400);
+  }
+
+  &:hover {
+    color: var(--tt-gray-light-a-600);
+
+    .dark & {
+      color: var(--tt-gray-dark-a-600);
+    }
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .tab-bar-divider {
@@ -172,6 +202,7 @@
   }
 }
 
+.tab-bar-close-all,
 .tab-bar-new {
   display: flex;
   align-items: center;
@@ -191,7 +222,7 @@
     color: var(--tt-gray-dark-a-400);
   }
 
-  &:hover {
+  &:hover:not(:disabled) {
     background-color: var(--tt-gray-light-a-50);
     color: var(--tt-gray-light-900);
 
@@ -199,5 +230,10 @@
       background-color: var(--tt-gray-dark-a-50);
       color: var(--tt-gray-dark-900);
     }
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
   }
 }

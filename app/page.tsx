@@ -5,7 +5,8 @@ import { scenarios } from "@/components/playground/playground-scenarios";
 import { PlaygroundToolbar } from "@/components/playground/playground-toolbar";
 import { TabBar } from "@/components/tab-bar";
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
-import { PLAYGROUND_ID, useTabs } from "@/hooks/use-tabs";
+import { useSyncedTabs } from "@/hooks/use-synced-tabs";
+import { PLAYGROUND_ID } from "@/lib/constants";
 
 export default function Home() {
   const {
@@ -14,9 +15,11 @@ export default function Home() {
     activeTabId,
     createTab,
     closeTab,
+    closeAllTabs,
+    reorderTab,
     switchTab,
     updateTabTitle,
-  } = useTabs();
+  } = useSyncedTabs();
 
   const isPlayground = activeTabId === PLAYGROUND_ID;
 
@@ -35,6 +38,8 @@ export default function Home() {
         onSwitch={switchTab}
         onCreate={createTab}
         onClose={closeTab}
+        onCloseAll={closeAllTabs}
+        onReorder={reorderTab}
       />
       <SimpleEditor
         key={activeTabId}

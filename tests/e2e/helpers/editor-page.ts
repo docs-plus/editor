@@ -26,6 +26,13 @@ export class EditorPage {
 
     await this.page.reload();
 
+    // With synced tabs: migration from localStorage runs when global-tabs is empty.
+    // Wait for our tab to appear (migration applied). Requires clean Hocuspocus/DB for isolated runs.
+    await this.page.waitForSelector(`[data-tab-id="${id}"]`, {
+      state: "visible",
+      timeout: 15000,
+    });
+
     await this.page.waitForSelector(".tiptap", {
       state: "visible",
       timeout: 10000,

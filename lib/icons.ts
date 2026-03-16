@@ -32,6 +32,7 @@ export {
   LuListTodo as ListTodoIcon,
   LuMoonStar as MoonStarIcon,
   LuPanelLeft as PanelLeftIcon,
+  LuPanelLeftClose as PanelLeftCloseIcon,
   LuPlus as PlusIcon,
   LuRedo2 as Redo2Icon,
   LuRefreshCw as RefreshCwIcon,
