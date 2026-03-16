@@ -1,7 +1,9 @@
 "use client";
 
+import { arrayMove } from "@dnd-kit/sortable";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import * as Y from "yjs";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import { getHocuspocusToken, getHocuspocusWsUrl } from "@/lib/hocuspocus";
@@ -28,6 +30,16 @@ const PLAYGROUND_TAB: Tab = {
 function ensurePlaygroundTab(tabs: Tab[]): Tab[] {
   if (tabs.some((t) => t.id === PLAYGROUND_ID)) return tabs;
   return [PLAYGROUND_TAB, ...tabs];
+}
+
+/** Deduplicate by id, keeping first occurrence. Fixes duplicate key errors from sync. */
+function deduplicateTabs(tabs: Tab[]): Tab[] {
+  const seen = new Set<string>();
+  return tabs.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
 }
 
 function isTab(value: unknown): value is Tab {
@@ -78,7 +90,7 @@ function getMigrationTabs(): Tab[] | null {
       if (Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
         const valid = parsed.tabs.filter(isTab);
         if (valid.length === parsed.tabs.length) {
-          return ensurePlaygroundTab(valid);
+          return ensurePlaygroundTab(deduplicateTabs(valid));
         }
       }
     }
@@ -161,7 +173,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
         }
 
         const initialActive = loadActiveTabIdFromStorage();
-        const currentTabs = tabsArray.toArray();
+        const raw = tabsArray.toArray();
+        const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
         const validActive = currentTabs.some((t) => t.id === initialActive)
           ? initialActive
           : (currentTabs[0]?.id ?? PLAYGROUND_ID);
@@ -175,18 +188,21 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     });
 
     const applyUpdate = () => {
-      const currentTabs = tabsArray.toArray();
+      const raw = tabsArray.toArray();
+      const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
       const currentActive = activeTabIdRef.current;
       const validActive = currentTabs.some((t) => t.id === currentActive)
         ? currentActive
         : (currentTabs[0]?.id ?? PLAYGROUND_ID);
 
-      setTabs(currentTabs);
-      if (validActive !== currentActive) {
-        setActiveTabId(validActive);
-        activeTabIdRef.current = validActive;
-        persistActiveTabId(validActive);
-      }
+      flushSync(() => {
+        setTabs(currentTabs);
+        if (validActive !== currentActive) {
+          setActiveTabId(validActive);
+          activeTabIdRef.current = validActive;
+          persistActiveTabId(validActive);
+        }
+      });
     };
 
     tabsArray.observe(applyUpdate);
@@ -297,8 +313,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
 
     if (hasRejected || failedIds.length > 0) {
       const titles = hasRejected
-        ? userTabs.map((t) => t.title || "Untitled").join(", ")
-        : userTabs
+        ? current.map((t) => t.title || "Untitled").join(", ")
+        : current
             .filter((t) => failedIds.includes(t.id))
             .map((t) => t.title || "Untitled")
             .join(", ");
@@ -309,28 +325,40 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       const idx = arr.toArray().findIndex((t) => t.id === id);
       if (idx >= 0) arr.delete(idx, 1);
     }
-    setActiveTabId(PLAYGROUND_ID);
-    persistActiveTabId(PLAYGROUND_ID);
+    const remaining = arr.toArray();
+    if (remaining.length === 0) {
+      const newTab: Tab = {
+        id: generateId(),
+        title: "Untitled",
+        createdAt: Date.now(),
+      };
+      arr.push([newTab]);
+      setActiveTabId(newTab.id);
+      persistActiveTabId(newTab.id);
+    } else {
+      setActiveTabId(remaining[0].id);
+      persistActiveTabId(remaining[0].id);
+    }
   }, []);
 
   const reorderTab = useCallback((id: string, targetIndex: number) => {
     const arr = tabsArrayRef.current;
     if (!arr || id === PLAYGROUND_ID) return;
-    const current = arr.toArray();
+    const raw = arr.toArray();
+    const current = ensurePlaygroundTab(deduplicateTabs(raw));
     const oldIndex = current.findIndex((t) => t.id === id);
     if (oldIndex < 0) return;
     if (oldIndex === targetIndex) return;
-    const item = current[oldIndex];
-    const insertIndex = oldIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const reordered = arrayMove(current, oldIndex, targetIndex);
     const ydoc = arr.doc;
     if (ydoc) {
       ydoc.transact(() => {
-        arr.delete(oldIndex, 1);
-        arr.insert(insertIndex, [item]);
+        arr.delete(0, arr.length);
+        arr.insert(0, reordered);
       });
     } else {
-      arr.delete(oldIndex, 1);
-      arr.insert(insertIndex, [item]);
+      arr.delete(0, arr.length);
+      arr.insert(0, reordered);
     }
   }, []);
 
