@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import {
   horizontalListSortingStrategy,
   SortableContext,
@@ -26,6 +27,7 @@ import {
   GripVerticalIcon,
   PanelLeftCloseIcon,
   PlusIcon,
+  RefreshCwIcon,
 } from "@/lib/icons";
 import "./tab-bar.scss";
 
@@ -37,6 +39,7 @@ interface TabBarProps {
   onClose: (id: string) => void;
   onCloseAll: () => void;
   onReorder: (id: string, targetIndex: number) => void;
+  onPlaygroundRegenerate?: () => void;
 }
 
 function SortableTab({
@@ -129,6 +132,7 @@ export function TabBar({
   onClose,
   onCloseAll,
   onReorder,
+  onPlaygroundRegenerate,
 }: TabBarProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -144,7 +148,13 @@ export function TabBar({
       const current = tabs;
       const oldIndex = current.findIndex((t) => t.id === active.id);
       const newIndex = current.findIndex((t) => t.id === over.id);
-      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+      if (
+        oldIndex < 0 ||
+        newIndex < 0 ||
+        oldIndex === newIndex ||
+        active.id === PLAYGROUND_ID
+      )
+        return;
       onReorder(active.id as string, newIndex);
     },
     [tabs, onReorder],
@@ -165,6 +175,11 @@ export function TabBar({
           onClose(activeTabId);
       }
 
+      if (mod && e.shiftKey && e.key === "r") {
+        e.preventDefault();
+        if (activeTabId === PLAYGROUND_ID) onPlaygroundRegenerate?.();
+      }
+
       if (mod && e.shiftKey && (e.key === "[" || e.key === "{")) {
         e.preventDefault();
         const idx = tabs.findIndex((t) => t.id === activeTabId);
@@ -177,7 +192,7 @@ export function TabBar({
         if (idx < tabs.length - 1) onSwitch(tabs[idx + 1].id);
       }
     },
-    [tabs, activeTabId, onCreate, onClose, onSwitch],
+    [tabs, activeTabId, onCreate, onClose, onSwitch, onPlaygroundRegenerate],
   );
 
   useEffect(() => {
@@ -194,6 +209,7 @@ export function TabBar({
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        modifiers={[restrictToHorizontalAxis]}
         onDragEnd={handleDragEnd}
       >
         <div className="tab-bar-tabs">
@@ -217,6 +233,21 @@ export function TabBar({
                   <span className="tab-bar-tab-title">
                     {playgroundTab.title || "Playground"}
                   </span>
+                  {onPlaygroundRegenerate && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-label="Regenerate content (⌘⇧R)"
+                      title="Regenerate content (⌘⇧R)"
+                      className="tab-bar-tab-regenerate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPlaygroundRegenerate();
+                      }}
+                    >
+                      <RefreshCwIcon size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
               {userTabs.length > 0 && <div className="tab-bar-divider" />}
@@ -251,7 +282,7 @@ export function TabBar({
           type="button"
           className="tab-bar-close-all"
           onClick={onCloseAll}
-          disabled={tabs.length <= 1}
+          disabled={userTabs.length === 0}
           aria-label="Close all tabs"
           title="Close all tabs"
         >

@@ -1,12 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
-import { scenarios } from "@/components/playground/playground-scenarios";
-import { PlaygroundToolbar } from "@/components/playground/playground-toolbar";
+import { useCallback, useState } from "react";
 import { TabBar } from "@/components/tab-bar";
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";
-import { PLAYGROUND_ID } from "@/lib/constants";
 
 export default function Home() {
   const {
@@ -21,12 +18,12 @@ export default function Home() {
     updateTabTitle,
   } = useSyncedTabs();
 
-  const isPlayground = activeTabId === PLAYGROUND_ID;
+  const [playgroundRegenerateTrigger, setPlaygroundRegenerateTrigger] =
+    useState(0);
 
-  const playgroundContent = useMemo(
-    () => (isPlayground ? scenarios[0]?.generate() : undefined),
-    [isPlayground],
-  );
+  const handlePlaygroundRegenerate = useCallback(() => {
+    setPlaygroundRegenerateTrigger((t) => t + 1);
+  }, []);
 
   if (!ready) return null;
 
@@ -40,13 +37,13 @@ export default function Home() {
         onClose={closeTab}
         onCloseAll={closeAllTabs}
         onReorder={reorderTab}
+        onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
       <SimpleEditor
         key={activeTabId}
         documentId={activeTabId}
         onTitleChange={(title) => updateTabTitle(activeTabId, title)}
-        initialContent={playgroundContent}
-        toolbar={isPlayground ? <PlaygroundToolbar /> : undefined}
+        playgroundRegenerateTrigger={playgroundRegenerateTrigger}
       />
     </div>
   );

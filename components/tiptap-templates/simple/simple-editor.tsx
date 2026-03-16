@@ -47,6 +47,7 @@ import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
+import { generatePlaygroundContent } from "@/components/playground/playground-scenarios";
 // --- Icons ---
 import { readFilterUrl } from "@/components/tiptap-node/heading-node/helpers/filter-url";
 // --- Lib ---
@@ -124,7 +125,7 @@ interface SimpleEditorProps {
   documentId?: string;
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
-  toolbar?: React.ReactNode;
+  playgroundRegenerateTrigger?: number;
 }
 
 const MainToolbarContent = ({
@@ -273,13 +274,13 @@ function SimpleEditorContent({
   documentId,
   onTitleChange,
   initialContent,
-  toolbar: extraToolbar,
+  playgroundRegenerateTrigger,
 }: {
   ydoc: Y.Doc;
   documentId: string;
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
-  toolbar?: React.ReactNode;
+  playgroundRegenerateTrigger?: number;
 }) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
@@ -417,10 +418,25 @@ function SimpleEditorContent({
   }, [editor, headingFilter.openBar]);
 
   useEffect(() => {
-    if (!editor || !ydoc || documentId === PLAYGROUND_ID) return;
+    if (
+      !editor ||
+      documentId !== PLAYGROUND_ID ||
+      !playgroundRegenerateTrigger ||
+      playgroundRegenerateTrigger <= 0
+    )
+      return;
+    editor.commands.setContent(generatePlaygroundContent());
+  }, [editor, documentId, playgroundRegenerateTrigger]);
+
+  useEffect(() => {
+    if (!editor || !ydoc) return;
     const fragment = ydoc.getXmlFragment("default");
     if (fragment.length > 0) return;
-    editor.commands.setContent(defaultContent);
+    const content =
+      documentId === PLAYGROUND_ID
+        ? generatePlaygroundContent()
+        : defaultContent;
+    editor.commands.setContent(content);
   }, [editor, ydoc, documentId]);
 
   useEffect(() => {
@@ -476,8 +492,6 @@ function SimpleEditorContent({
           )}
         </Toolbar>
 
-        {extraToolbar}
-
         <FilterBar {...headingFilter} />
 
         <div className="editor-with-toc">
@@ -528,7 +542,7 @@ export function SimpleEditor({
   documentId,
   onTitleChange,
   initialContent,
-  toolbar,
+  playgroundRegenerateTrigger,
 }: SimpleEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, synced } = useYjsDocument(docId);
@@ -541,7 +555,7 @@ export function SimpleEditor({
       documentId={docId}
       onTitleChange={onTitleChange}
       initialContent={initialContent}
-      toolbar={toolbar}
+      playgroundRegenerateTrigger={playgroundRegenerateTrigger}
     />
   );
 }
