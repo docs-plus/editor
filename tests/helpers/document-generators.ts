@@ -1,3 +1,5 @@
+import { pick, randomInt, shuffle } from "@/lib/random";
+
 export interface GenerateRandomDocumentOptions {
   minSections?: number;
   maxSections?: number;
@@ -16,14 +18,6 @@ const DEFAULT_CONTENT_TYPES = [
 ];
 
 type ContentBlock = Record<string, unknown>;
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 const PROSE_SENTENCES = [
   "The architecture relies on a shared document model enforced at the schema level.",
@@ -98,7 +92,7 @@ function createBlockquote(): ContentBlock {
 
 function createBulletList(): ContentBlock {
   const items = randomInt(3, 6);
-  const pool = [...LIST_ITEMS].sort(() => Math.random() - 0.5);
+  const pool = shuffle([...LIST_ITEMS]);
   return {
     type: "bulletList",
     content: Array.from({ length: items }, (_, i) => ({
@@ -115,7 +109,7 @@ function createBulletList(): ContentBlock {
 
 function createOrderedList(): ContentBlock {
   const items = randomInt(3, 5);
-  const pool = [...LIST_ITEMS].sort(() => Math.random() - 0.5);
+  const pool = shuffle([...LIST_ITEMS]);
   return {
     type: "orderedList",
     content: Array.from({ length: items }, (_, i) => ({
@@ -134,7 +128,7 @@ function createOrderedList(): ContentBlock {
 
 function createTaskList(): ContentBlock {
   const items = randomInt(3, 5);
-  const pool = [...TASK_LABELS].sort(() => Math.random() - 0.5);
+  const pool = shuffle([...TASK_LABELS]);
   return {
     type: "taskList",
     content: Array.from({ length: items }, (_, i) => ({

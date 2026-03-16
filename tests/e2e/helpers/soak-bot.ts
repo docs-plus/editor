@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { pick, randomInt } from "@/lib/random";
 import type { EditorPage } from "./editor-page";
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
@@ -27,10 +28,6 @@ const WORDS = [
   "content",
 ];
 
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 function randomLowercase(len: number): string {
   const chars = "abcdefghijklmnopqrstuvwxyz";
   let s = "";
@@ -43,7 +40,7 @@ function randomSentence(): string {
   const n = randomInt(3, 8);
   const picked: string[] = [];
   for (let i = 0; i < n; i++) {
-    picked.push(WORDS[Math.floor(Math.random() * WORDS.length)]);
+    picked.push(pick(WORDS));
   }
   return `${picked.join(" ")}.`;
 }

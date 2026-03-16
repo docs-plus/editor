@@ -1,137 +1,423 @@
 import type { JSONContent } from "@tiptap/core";
+import { pick, randomInt, shuffle } from "@/lib/random";
 
-export type PlaygroundScenario = {
-  id: string;
-  label: string;
-  generate: () => JSONContent;
-};
+const DOC_TITLES = [
+  "Project Overview",
+  "Technical Specification",
+  "Design Document",
+  "Implementation Guide",
+  "Architecture Notes",
+  "Research Findings",
+  "Product Requirements",
+  "System Design",
+];
 
-function heading(level: number, text: string): JSONContent {
-  return {
-    type: "heading",
-    attrs: { level },
-    content: [{ type: "text", text }],
-  };
-}
+const SECTION_TITLES = [
+  "Getting Started",
+  "Installation",
+  "Configuration",
+  "Architecture",
+  "Authentication",
+  "Data Model",
+  "API Reference",
+  "Error Handling",
+  "Testing",
+  "Deployment",
+  "Performance",
+  "Security",
+  "Monitoring",
+  "Migration",
+  "Troubleshooting",
+  "Release Notes",
+  "Contributing",
+  "Accessibility",
+  "Internationalization",
+  "Plugin Development",
+  "Best Practices",
+  "Common Patterns",
+  "Advanced Usage",
+  "Limitations",
+  "Future Roadmap",
+];
 
-function paragraph(text: string): JSONContent {
+const PROSE = [
+  "The architecture relies on a shared document model enforced at the schema level.",
+  "Each section can be folded independently, preserving context across sessions.",
+  "Collaboration is powered by Yjs CRDTs, enabling conflict-free concurrent editing.",
+  "Users can filter sections by keyword, hiding unmatched content in real time.",
+  "The table of contents updates reactively as headings are added or removed.",
+  "Document persistence uses SQLite via Hocuspocus for offline-first reliability.",
+  "Task lists allow teams to track progress directly within the document body.",
+  "Code blocks support syntax highlighting for common programming languages.",
+  "Blockquotes visually distinguish editorial comments from primary content.",
+  "Nested heading structures support up to six levels of hierarchy.",
+  "Performance remains stable even in documents exceeding two hundred headings.",
+  "Drag-and-drop reordering moves entire sections including nested subsections.",
+  "Dark mode support follows user preference without requiring a page reload.",
+  "Heading scale dynamically adjusts font size based on section depth and position.",
+  "WebSocket connections automatically reconnect after transient network failures.",
+  "Keyboard shortcuts follow platform conventions for bold, italic, and lists.",
+  "Undo and redo history is preserved across collaboration sessions.",
+  "The editor enforces a single H1 title as the first node in every document.",
+  "Real-time sync ensures all collaborators see changes within milliseconds.",
+  "The filter sidebar highlights matching sections across the entire document.",
+];
+
+const CODE_SAMPLES = [
+  "function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet('World'));",
+  "const items = [1, 2, 3, 4, 5];\nconst doubled = items.map(n => n * 2);\nconsole.log(doubled);",
+  "interface Config {\n  port: number;\n  host: string;\n}\n\nconst defaults: Config = { port: 3000, host: 'localhost' };",
+];
+
+const TASK_LABELS = [
+  "Review the pull request",
+  "Update documentation",
+  "Add integration tests",
+  "Verify benchmarks",
+  "Fix flaky tests",
+  "Migrate configuration",
+];
+
+const LIST_ITEMS = [
+  "Configure development environment",
+  "Install dependencies",
+  "Run test suite",
+  "Review coding standards",
+  "Document API contract",
+  "Prepare changelog",
+];
+
+const IMAGE_URLS = [
+  "https://picsum.photos/seed/doc1/400/300",
+  "https://picsum.photos/seed/doc2/400/250",
+  "https://picsum.photos/seed/doc3/400/300",
+];
+
+type ContentBlockType =
+  | "paragraph"
+  | "paragraphMarks"
+  | "bulletList"
+  | "orderedList"
+  | "taskList"
+  | "blockquote"
+  | "codeBlock"
+  | "image";
+
+const CONTENT_TYPES: ContentBlockType[] = [
+  "paragraph",
+  "paragraph",
+  "paragraphMarks",
+  "bulletList",
+  "bulletList",
+  "orderedList",
+  "orderedList",
+  "taskList",
+  "taskList",
+  "blockquote",
+  "codeBlock",
+  "image",
+];
+
+function createParagraph(): JSONContent {
+  const count = randomInt(3, 6);
+  const sentences: string[] = [];
+  for (let i = 0; i < count; i++) {
+    sentences.push(pick(PROSE));
+  }
   return {
     type: "paragraph",
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: sentences.join(" ") }],
   };
 }
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
+function createParagraphWithMarks(): JSONContent {
+  const parts: NonNullable<JSONContent["content"]> = [];
+  const words = pick(PROSE).split(" ").filter(Boolean);
+  let i = 0;
+  while (i < words.length) {
+    const len = randomInt(1, Math.min(4, words.length - i));
+    const slice = words.slice(i, i + len).join(" ");
+    i += len;
+    if (!slice) continue;
+    const mark = pick([
+      "bold",
+      "italic",
+      "strike",
+      "code",
+      "underline",
+      "link",
+    ] as const);
+    if (mark === "link") {
+      parts.push({
+        type: "text",
+        text: slice,
+        marks: [
+          { type: "link", attrs: { href: "https://example.com", title: null } },
+        ],
+      });
+    } else {
+      parts.push({
+        type: "text",
+        text: slice,
+        marks: [{ type: mark }],
+      });
+    }
   }
-  return copy;
+  return {
+    type: "paragraph",
+    content: parts.length > 0 ? parts : [{ type: "text", text: pick(PROSE) }],
+  };
 }
 
-const FILLER = [
-  "This paragraph demonstrates body content between headings. The dynamic heading scale adjusts sizes based on how many distinct heading levels exist in each section.",
-  "Notice how headings within each section are sized relative to each other, regardless of their HTML level number. Two sections with different level combinations but the same count of distinct levels will look visually consistent.",
-  "The interpolation distributes sizes evenly between 20pt (largest) and 12pt (smallest). A section with three distinct levels gets sizes at 20pt, 16pt, and 12pt.",
-  "Content blocks like paragraphs, lists, and code blocks sit between headings and are unaffected by the dynamic scale. Only heading nodes receive the computed size.",
-  "Each section is independent. Adding or removing a heading in one section does not affect the sizing in another section.",
-  "Try editing these headings — change their levels, add new ones, or delete them. The sizes update instantly as the heading structure changes.",
-];
+function createBulletList(): JSONContent {
+  const items = randomInt(4, 8);
+  const pool = shuffle([...LIST_ITEMS]);
+  const listItems: JSONContent[] = [];
+  for (let i = 0; i < items; i++) {
+    const item: JSONContent = {
+      type: "listItem",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: pool[i % pool.length] }],
+        },
+      ],
+    };
+    if (Math.random() < 0.35 && i < items - 1) {
+      const nestedType = pick(["bulletList", "orderedList"] as const);
+      item.content?.push({
+        type: nestedType,
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: pick(LIST_ITEMS) }],
+              },
+            ],
+          },
+        ],
+      } as JSONContent);
+    }
+    listItems.push(item);
+  }
+  return { type: "bulletList", content: listItems };
+}
 
-type SectionTemplate = {
+function createOrderedList(): JSONContent {
+  const items = randomInt(4, 7);
+  const pool = shuffle([...LIST_ITEMS]);
+  const listItems: JSONContent[] = [];
+  for (let i = 0; i < items; i++) {
+    const item: JSONContent = {
+      type: "listItem",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: `Step ${i + 1}: ${pool[i % pool.length]}` },
+          ],
+        },
+      ],
+    };
+    if (Math.random() < 0.25 && i < items - 1) {
+      item.content?.push({
+        type: "orderedList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: pick(LIST_ITEMS) }],
+              },
+            ],
+          },
+        ],
+      } as JSONContent);
+    }
+    listItems.push(item);
+  }
+  return { type: "orderedList", content: listItems };
+}
+
+function createTaskList(): JSONContent {
+  const items = randomInt(4, 8);
+  const pool = shuffle([...TASK_LABELS]);
+  const taskItems: JSONContent[] = [];
+  for (let i = 0; i < items; i++) {
+    const item: JSONContent = {
+      type: "taskItem",
+      attrs: { checked: Math.random() < 0.4 },
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: pool[i % pool.length] }],
+        },
+      ],
+    };
+    if (Math.random() < 0.2 && i < items - 1) {
+      item.content?.push({
+        type: "taskList",
+        content: [
+          {
+            type: "taskItem",
+            attrs: { checked: Math.random() < 0.3 },
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: pick(TASK_LABELS) }],
+              },
+            ],
+          },
+        ],
+      } as JSONContent);
+    }
+    taskItems.push(item);
+  }
+  return { type: "taskList", content: taskItems };
+}
+
+function createBlockquote(): JSONContent {
+  const paraCount = randomInt(2, 4);
+  return {
+    type: "blockquote",
+    content: Array.from({ length: paraCount }, () => createParagraph()),
+  };
+}
+
+function createCodeBlock(): JSONContent {
+  return {
+    type: "codeBlock",
+    content: [{ type: "text", text: pick(CODE_SAMPLES) }],
+  };
+}
+
+function createImage(): JSONContent {
+  return {
+    type: "image",
+    attrs: {
+      src: pick(IMAGE_URLS),
+      alt: "Sample image",
+      title: null,
+    },
+  };
+}
+
+function createContentBlock(type: ContentBlockType): JSONContent {
+  switch (type) {
+    case "paragraph":
+      return createParagraph();
+    case "paragraphMarks":
+      return createParagraphWithMarks();
+    case "bulletList":
+      return createBulletList();
+    case "orderedList":
+      return createOrderedList();
+    case "taskList":
+      return createTaskList();
+    case "blockquote":
+      return createBlockquote();
+    case "codeBlock":
+      return createCodeBlock();
+    case "image":
+      return createImage();
+    default: {
+      const _exhaustive: never = type;
+      return createParagraph();
+    }
+  }
+}
+
+function createSectionBody(): JSONContent[] {
+  const blocks: JSONContent[] = [];
+  const paraCount = randomInt(5, 10);
+  for (let i = 0; i < paraCount; i++) {
+    blocks.push(createParagraph());
+  }
+  const structuredCount = randomInt(5, 12);
+  for (let i = 0; i < structuredCount; i++) {
+    const insertAt = randomInt(1, blocks.length);
+    blocks.splice(insertAt, 0, createContentBlock(pick(CONTENT_TYPES)));
+  }
+  return blocks;
+}
+
+type HeadingNode = {
+  level: number;
   title: string;
-  subLevels: number[];
-  description: string;
+  children: HeadingNode[];
 };
 
-const TEMPLATES: SectionTemplate[] = [
-  {
-    title: "Standard Hierarchy",
-    subLevels: [2, 3],
-    description: "A classic three-level section: H1, H2, H3.",
-  },
-  {
-    title: "Sparse Levels",
-    subLevels: [4, 6],
-    description:
-      "Skips levels entirely (H1, H4, H6) — the scale treats them as three evenly-spaced ranks.",
-  },
-  {
-    title: "Deep Nesting",
-    subLevels: [2, 3, 4],
-    description:
-      "Four distinct levels produce tighter size steps between each rank.",
-  },
-  {
-    title: "Single Heading",
-    subLevels: [],
-    description: "A section with only an H1 and body content. Gets max size.",
-  },
-  {
-    title: "Odd Levels Only",
-    subLevels: [3, 5],
-    description:
-      "Uses H1, H3, H5 — three ranks distributed the same as H1, H2, H3.",
-  },
-  {
-    title: "Full Spectrum",
-    subLevels: [2, 3, 4, 5, 6],
-    description:
-      "All six HTML heading levels in one section. Six ranks from 20pt down to 12pt.",
-  },
-  {
-    title: "Two Levels",
-    subLevels: [3],
-    description:
-      "Only H1 and H3 — two ranks means max size and min size, nothing between.",
-  },
-  {
-    title: "Even Levels",
-    subLevels: [2, 4, 6],
-    description:
-      "H1, H2, H4, H6 — four ranks evenly interpolated across the size range.",
-  },
-];
-
-function buildSection(template: SectionTemplate): JSONContent[] {
-  const nodes: JSONContent[] = [];
-
-  nodes.push(heading(1, template.title));
-  nodes.push(paragraph(template.description));
-
-  for (const level of template.subLevels) {
-    nodes.push(heading(level, `Level ${level} heading`));
-    nodes.push(paragraph(pick(FILLER)));
+function buildNestedHeadings(
+  minLevel: number,
+  maxLevel: number,
+  count: number,
+  usedTitles: Set<string>,
+): HeadingNode[] {
+  if (count <= 0 || minLevel > maxLevel) return [];
+  const nodes: HeadingNode[] = [];
+  let remaining = count;
+  while (remaining > 0) {
+    const canHaveChildren = minLevel < maxLevel && remaining > 1;
+    const preferDeep = canHaveChildren && remaining > 4 && Math.random() < 0.55;
+    const level = preferDeep
+      ? randomInt(minLevel, Math.min(minLevel + 1, maxLevel))
+      : randomInt(minLevel, Math.min(minLevel + 2, maxLevel));
+    let title = pick(SECTION_TITLES);
+    let attempts = 0;
+    while (usedTitles.has(title) && attempts < 20) {
+      title = `${pick(SECTION_TITLES)} ${randomInt(1, 99)}`;
+      attempts++;
+    }
+    usedTitles.add(title);
+    const maxChildren = Math.min(remaining - 1, 8);
+    const minChildren = preferDeep && maxChildren >= 2 ? randomInt(2, 4) : 0;
+    const childCount =
+      level < maxLevel && maxChildren > 0
+        ? randomInt(minChildren, Math.max(minChildren, maxChildren))
+        : 0;
+    const children = buildNestedHeadings(
+      level + 1,
+      maxLevel,
+      childCount,
+      usedTitles,
+    );
+    remaining -= 1 + children.length;
+    nodes.push({ level, title, children });
   }
-
-  if (template.subLevels.length === 0) {
-    nodes.push(paragraph(pick(FILLER)));
-  }
-
   return nodes;
 }
 
-function generateHeadingScaleContent(): JSONContent {
-  const count = 3 + Math.floor(Math.random() * 3); // 3-5 sections
-  const selected = shuffle(TEMPLATES).slice(0, count);
-
-  const content: JSONContent[] = [];
-  for (const template of selected) {
-    content.push(...buildSection(template));
+function headingNodesToContent(nodes: HeadingNode[]): JSONContent[] {
+  const result: JSONContent[] = [];
+  for (const node of nodes) {
+    result.push({
+      type: "heading",
+      attrs: { level: node.level },
+      content: [{ type: "text", text: node.title }],
+    });
+    result.push(...createSectionBody());
+    result.push(...headingNodesToContent(node.children));
   }
+  return result;
+}
+
+export function generatePlaygroundContent(): JSONContent {
+  const usedTitles = new Set<string>();
+  const sectionCount = randomInt(32, 56);
+  const nestedHeadings = buildNestedHeadings(1, 6, sectionCount, usedTitles);
+
+  const content: JSONContent["content"] = [
+    {
+      type: "heading",
+      attrs: { level: 1 },
+      content: [{ type: "text", text: pick(DOC_TITLES) }],
+    },
+    ...createSectionBody(),
+    ...headingNodesToContent(nestedHeadings),
+  ];
 
   return { type: "doc", content };
 }
-
-export const scenarios: PlaygroundScenario[] = [
-  {
-    id: "heading-scale",
-    label: "Dynamic Heading Scale",
-    generate: generateHeadingScaleContent,
-  },
-];

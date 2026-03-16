@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { afterEach, describe, it } from "vitest";
+import { randomInt } from "@/lib/random";
 import deeplyNested from "@/tests/fixtures/deeply-nested.json";
 import emptyDoc from "@/tests/fixtures/empty-document.json";
 import mixedContent from "@/tests/fixtures/mixed-content.json";
@@ -18,10 +19,6 @@ const FIXTURES: { name: string; content: JSONContent }[] = [
   { name: "wide-document", content: wideDocument as JSONContent },
   { name: "real-world-complex", content: realWorldComplex as JSONContent },
 ];
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
 describe("schema invariants", () => {
   afterEach(() => {
