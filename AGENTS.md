@@ -4,7 +4,7 @@
 
 - Use Bun exclusively — `bun`, `bunx`, never `npm`, `npx`, `yarn`, or `pnpm`
 - Follow Conventional Commits — atomic commits, imperative mood, no AI/tool/agent references or trailers (`Made-with: Cursor`, `Co-authored-by: AI`); always show a commit review report and wait for explicit approval before committing
-- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments
+- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; avoid overengineering (prefer simple fixed config over port-check scripts when complexity adds minimal value); extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments
 - Review from a senior staff engineer / head-of-engineering perspective when asked; for editor plugin code, review as ProseMirror/Tiptap core author checking for performance issues and memory leaks
 - Prefer `lucide-react` icons via `lib/icons.ts` barrel file, not local SVG wrapper components
 - Use named exports only (no `export default` except where required by framework); title-case acronyms in PascalCase names — `TocSidebar` not `TOCSidebar`
@@ -17,7 +17,7 @@
 
 ## Learned Workspace Facts
 
-- TinyDocy is a lightweight collaborative document editor and testbed/MVP for the docs.plus production editor; built on Tiptap 3, Yjs, and Next.js 16 (App Router) with Bun as runtime (version pinned in `.tool-versions` and `package.json`); persistence via Hocuspocus (WebSocket) + SQLite via `@hocuspocus/cli`; dev servers run via `make dev` (Makefile with `make -j2`); features are validated here for performance, reliability, and collaboration before integration into docs.plus; all code fully owned; README.md at root is the sole README (GitHub displays it; tests/ uses TESTING.md to avoid duplicate README conflict)
+- TinyDocy is a lightweight collaborative document editor and testbed/MVP for the docs.plus production editor; built on Tiptap 3, Yjs, and Next.js 16 (App Router) with Bun as runtime (version pinned in `.tool-versions` and `package.json`); persistence via Hocuspocus (WebSocket) + SQLite via `@hocuspocus/cli`; dev servers run via `make dev` (Makefile with `make -j2`); features are validated here for performance, reliability, and collaboration before integration into docs.plus; all code fully owned; README.md at root is the sole README (GitHub displays it; tests/ uses TESTING.md to avoid duplicate README conflict); no CHANGELOG.md — user does not want this file
 - Code quality: Biome for formatting/linting; ESLint scoped to Next.js rules only (React 19 experimental hooks rules disabled); TypeScript strict mode; `noExplicitAny` and `noNonNullAssertion` warn in Biome; `a11y/useSemanticElements` off
 - Git hooks via Husky: pre-commit runs lint-staged (Biome), commit-msg runs commitlint (config `.commitlintrc.json` — dot prefix required)
 - Naming: kebab-case files, PascalCase components with title-case acronyms, camelCase hooks/utils; path alias `@/*` maps to root; `types/` for TS declarations, app types colocated; localStorage keys follow pattern `tinydocy-theme`, `tinydocy-tabs`, `tinydocy-folds-{documentId}`; default theme light (dark mode opt-in)
