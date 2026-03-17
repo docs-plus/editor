@@ -12,121 +12,20 @@ import {
   getHocuspocusToken,
   getHocuspocusWsUrl,
 } from "@/lib/hocuspocus";
+import {
+  DELETE_TIMEOUT_MS,
+  deduplicateTabs,
+  deleteDocument,
+  ensurePlaygroundTab,
+  generateId,
+  getDefaultBootstrap,
+  getMigrationTabs,
+  loadActiveTabIdFromStorage,
+  persistActiveTabId,
+  type Tab,
+} from "@/lib/tab-api";
 
-const TABS_KEY = "tinydocy-tabs";
-
-export type Tab = {
-  id: string;
-  title: string;
-  createdAt: number;
-};
-
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
-const PLAYGROUND_TAB: Tab = {
-  id: PLAYGROUND_ID,
-  title: "Playground",
-  createdAt: 0,
-};
-
-function ensurePlaygroundTab(tabs: Tab[]): Tab[] {
-  if (tabs.some((t) => t.id === PLAYGROUND_ID)) return tabs;
-  return [PLAYGROUND_TAB, ...tabs];
-}
-
-/** Deduplicate by id, keeping first occurrence. Fixes duplicate key errors from sync. */
-function deduplicateTabs(tabs: Tab[]): Tab[] {
-  const seen = new Set<string>();
-  return tabs.filter((t) => {
-    if (seen.has(t.id)) return false;
-    seen.add(t.id);
-    return true;
-  });
-}
-
-function isTab(value: unknown): value is Tab {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "id" in value &&
-    typeof (value as Tab).id === "string" &&
-    "title" in value &&
-    typeof (value as Tab).title === "string" &&
-    "createdAt" in value &&
-    typeof (value as Tab).createdAt === "number"
-  );
-}
-
-function loadActiveTabIdFromStorage(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    const raw = localStorage.getItem(TABS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { tabs: Tab[]; activeTabId: string };
-      if (parsed.activeTabId && typeof parsed.activeTabId === "string") {
-        return parsed.activeTabId;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
-function persistActiveTabId(activeTabId: string): void {
-  try {
-    const raw = localStorage.getItem(TABS_KEY);
-    const parsed = raw ? (JSON.parse(raw) as { tabs: Tab[] }) : { tabs: [] };
-    localStorage.setItem(TABS_KEY, JSON.stringify({ ...parsed, activeTabId }));
-  } catch {
-    // quota exceeded
-  }
-}
-
-function getMigrationTabs(): Tab[] | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(TABS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { tabs: unknown[] };
-      if (Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
-        const valid = parsed.tabs.filter(isTab);
-        if (valid.length === parsed.tabs.length) {
-          return ensurePlaygroundTab(deduplicateTabs(valid));
-        }
-      }
-    }
-  } catch {
-    localStorage.removeItem(TABS_KEY);
-  }
-  return null;
-}
-
-function getDefaultBootstrap(): Tab[] {
-  return [
-    PLAYGROUND_TAB,
-    { id: generateId(), title: "Untitled", createdAt: Date.now() },
-  ];
-}
-
-const DELETE_TIMEOUT_MS = 10_000;
-
-async function deleteDocument(
-  id: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  try {
-    const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      signal,
-    });
-    return res.ok || res.status === 404;
-  } catch {
-    return false;
-  }
-}
+export type { Tab } from "@/lib/tab-api";
 
 export interface UseSyncedTabsReturn {
   ready: boolean;
@@ -172,7 +71,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
             tabsArray.insert(0, seed);
           });
           if (getMigrationTabs()) {
-            localStorage.removeItem(TABS_KEY);
+            localStorage.removeItem("tinydocy-tabs");
           }
         }
 
