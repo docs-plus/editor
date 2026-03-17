@@ -8,6 +8,10 @@ export type Tab = {
 
 const TABS_KEY = "tinydocy-tabs";
 
+export function clearMigrationStorage(): void {
+  localStorage.removeItem(TABS_KEY);
+}
+
 const PLAYGROUND_TAB: Tab = {
   id: PLAYGROUND_ID,
   title: "Playground",

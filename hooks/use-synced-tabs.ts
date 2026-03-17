@@ -13,6 +13,7 @@ import {
   getHocuspocusWsUrl,
 } from "@/lib/hocuspocus";
 import {
+  clearMigrationStorage,
   DELETE_TIMEOUT_MS,
   deduplicateTabs,
   deleteDocument,
@@ -71,7 +72,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
             tabsArray.insert(0, seed);
           });
           if (getMigrationTabs()) {
-            localStorage.removeItem("tinydocy-tabs");
+            clearMigrationStorage();
           }
         }
 
