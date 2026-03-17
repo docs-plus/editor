@@ -2,6 +2,8 @@
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
 export interface TabContentProps {
   isActive: boolean;
   title: string;
@@ -35,7 +37,11 @@ export function TabContent({
       role="tab"
       tabIndex={isActive ? 0 : -1}
       aria-selected={isActive}
-      className={`tab-bar-tab ${isActive ? "tab-bar-tab--active" : ""} ${tabClassName}`.trim()}
+      className={cn(
+        "tab-bar-tab",
+        isActive && "tab-bar-tab--active",
+        tabClassName,
+      )}
       onClick={onSwitch}
       onKeyDown={handleKeyDown}
       onAuxClick={onAuxClick}
