@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect } from "react";
 
-import type { Tab } from "@/hooks/use-synced-tabs";
+import { TabContent } from "@/components/tab-bar/tab-content";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
   CloseIcon,
@@ -30,6 +30,7 @@ import {
   PlusIcon,
   RefreshCwIcon,
 } from "@/lib/icons";
+import type { Tab } from "@/lib/tab-api";
 import "./tab-bar.scss";
 
 interface TabBarProps {
@@ -77,50 +78,44 @@ function SortableTab({
       className={`tab-bar-tab-wrapper ${isDragging ? "tab-bar-tab-wrapper--dragging" : ""}`}
       data-tab-id={tab.id}
     >
-      <div
-        role="tab"
-        tabIndex={isActive ? 0 : -1}
-        aria-selected={isActive}
-        className={`tab-bar-tab ${isActive ? "tab-bar-tab--active" : ""}`}
-        onClick={() => onSwitch(tab.id)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onSwitch(tab.id);
-          }
-        }}
+      <TabContent
+        isActive={isActive}
+        title={tab.title || "Untitled"}
+        onSwitch={() => onSwitch(tab.id)}
         onAuxClick={(e) => {
           if (e.button === 1 && tabsLength > 1) {
             e.preventDefault();
             onClose(tab.id);
           }
         }}
-      >
-        <span
-          className="tab-bar-tab-drag-handle"
-          {...attributes}
-          {...listeners}
-          aria-hidden
-        >
-          <GripVerticalIcon size={12} />
-        </span>
-        <FileTextIcon size={14} className="tab-bar-tab-icon" />
-        <span className="tab-bar-tab-title">{tab.title || "Untitled"}</span>
-        {tabsLength > 1 && (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={`Close ${tab.title || "Untitled"}`}
-            className="tab-bar-tab-close"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose(tab.id);
-            }}
+        leadingSlot={
+          <span
+            className="tab-bar-tab-drag-handle"
+            {...attributes}
+            {...listeners}
+            aria-hidden
           >
-            <CloseIcon size={12} />
-          </button>
-        )}
-      </div>
+            <GripVerticalIcon size={12} />
+          </span>
+        }
+        icon={<FileTextIcon size={14} />}
+        trailingSlot={
+          tabsLength > 1 ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`Close ${tab.title || "Untitled"}`}
+              className="tab-bar-tab-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(tab.id);
+              }}
+            >
+              <CloseIcon size={12} />
+            </button>
+          ) : undefined
+        }
+      />
     </div>
   );
 }
@@ -217,39 +212,30 @@ export function TabBar({
           {playgroundTab && (
             <>
               <div className="tab-bar-tab-wrapper" data-tab-id={PLAYGROUND_ID}>
-                <div
-                  role="tab"
-                  tabIndex={activeTabId === PLAYGROUND_ID ? 0 : -1}
-                  aria-selected={activeTabId === PLAYGROUND_ID}
-                  className={`tab-bar-tab ${activeTabId === PLAYGROUND_ID ? "tab-bar-tab--active" : ""} tab-bar-tab--playground`}
-                  onClick={() => onSwitch(PLAYGROUND_ID)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSwitch(PLAYGROUND_ID);
-                    }
-                  }}
-                >
-                  <FlaskConicalIcon size={14} className="tab-bar-tab-icon" />
-                  <span className="tab-bar-tab-title">
-                    {playgroundTab.title || "Playground"}
-                  </span>
-                  {onPlaygroundRegenerate && (
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      aria-label="Regenerate content (⌘⇧R)"
-                      title="Regenerate content (⌘⇧R)"
-                      className="tab-bar-tab-regenerate"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPlaygroundRegenerate();
-                      }}
-                    >
-                      <RefreshCwIcon size={12} />
-                    </button>
-                  )}
-                </div>
+                <TabContent
+                  isActive={activeTabId === PLAYGROUND_ID}
+                  title={playgroundTab.title || "Playground"}
+                  onSwitch={() => onSwitch(PLAYGROUND_ID)}
+                  tabClassName="tab-bar-tab--playground"
+                  icon={<FlaskConicalIcon size={14} />}
+                  trailingSlot={
+                    onPlaygroundRegenerate ? (
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-label="Regenerate content (⌘⇧R)"
+                        title="Regenerate content (⌘⇧R)"
+                        className="tab-bar-tab-regenerate"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPlaygroundRegenerate();
+                        }}
+                      >
+                        <RefreshCwIcon size={12} />
+                      </button>
+                    ) : undefined
+                  }
+                />
               </div>
               {userTabs.length > 0 && <div className="tab-bar-divider" />}
             </>
