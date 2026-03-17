@@ -61,6 +61,7 @@ tests/
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
+│   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)
 │   └── yjs-soak/
@@ -255,7 +256,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **User identity** — all multi-user tests inject unique `window.__HOCUS_TOKEN` per browser context. The `useYjsDocument` hook reads this and passes it to `HocuspocusProvider`.
 - **Y.Doc caching** — `useYjsDocument` uses a module-level `docCache` with reference counting. Y.Doc instances persist across component unmounts (tab switches) to prevent content loss.
 - **Platform-specific keys** — soak bot uses `Meta` (macOS) or `Control` (others) for keyboard shortcuts. Never use `Mod` — it is ProseMirror-only and unknown to Playwright.
-- **Test isolation** — each test generates a unique `docId` with timestamp + random suffix to prevent cross-test interference on the shared Hocuspocus server.
+- **Test isolation** — each test generates a unique `docId` with timestamp + random suffix to prevent cross-test interference on the shared Hocuspocus server. Tab state is isolated via `window.__GLOBAL_TABS_DOC` (set per test in `EditorPage.goto()`) so parallel tests use separate `global-tabs-{docId}` Yjs documents.
 - **Assertion split** — `assert-invariants.ts` (imports vitest `expect`) for unit tests; `assert-invariants-json.ts` (pure `throw`) for Playwright tests.
 
 ## Related Documentation
