@@ -1,6 +1,6 @@
 export function EditorSkeleton() {
   return (
-    <div className="simple-editor-wrapper">
+    <div className="simple-editor-wrapper" aria-busy="true">
       <div className="editor-skeleton">
         <div className="editor-skeleton-toolbar" />
         <div className="editor-skeleton-content">
