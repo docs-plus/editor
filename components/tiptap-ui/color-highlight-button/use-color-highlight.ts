@@ -16,9 +16,9 @@ export const COLOR_HIGHLIGHT_SHORTCUT_KEY = "mod+shift+h";
 export const HIGHLIGHT_COLORS = [
   {
     label: "Default background",
-    value: "var(--tt-bg-color)",
+    value: "var(--background)",
     colorValue: "#ffffff",
-    border: "var(--tt-bg-color-contrast)",
+    border: "var(--border)",
   },
   {
     label: "Gray background",

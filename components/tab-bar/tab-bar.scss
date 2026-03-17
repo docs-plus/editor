@@ -4,7 +4,7 @@
   align-items: stretch;
   height: var(--tab-bar-height);
   background-color: var(--tt-sidebar-bg-color);
-  border-bottom: 1px solid var(--tt-border-color);
+  border-bottom: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
   position: relative;
@@ -94,7 +94,7 @@
   max-width: 200px;
   min-width: 100px;
   position: relative;
-  border-radius: var(--tt-radius-sm) var(--tt-radius-sm) 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   margin-top: 4px;
   transition-property: background-color, color;
   transition-duration: var(--tt-transition-duration-default);
@@ -133,12 +133,12 @@
   }
 
   &--active {
-    background-color: var(--tt-bg-color);
+    background-color: var(--background);
     color: var(--tt-gray-light-900);
     font-weight: 500;
 
     .dark & {
-      background-color: var(--tt-bg-color);
+      background-color: var(--background);
       color: var(--tt-gray-dark-900);
     }
 
@@ -149,7 +149,7 @@
       left: 0;
       right: 0;
       height: 1px;
-      background-color: var(--tt-bg-color);
+      background-color: var(--background);
     }
 
     .tab-bar-tab-close {

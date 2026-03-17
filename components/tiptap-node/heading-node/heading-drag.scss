@@ -105,7 +105,7 @@ html.heading-dragging * {
   line-height: 1.4;
   color: var(--tt-gray-light-a-700, #333);
   background: var(--tt-bg-color, #fff);
-  border: 1px solid var(--tt-border-color, rgba(37, 39, 45, 0.1));
+  border: 1px solid var(--border, rgba(37, 39, 45, 0.1));
   border-radius: var(--tt-radius-sm, 6px);
   box-shadow: var(--tt-shadow-elevated-md, 0 4px 12px rgba(0, 0, 0, 0.08));
   pointer-events: none;
@@ -115,5 +115,5 @@ html.heading-dragging * {
 .dark .heading-drag-ghost {
   color: var(--tt-gray-dark-a-800, #ddd);
   background: var(--tt-bg-color, #0e0e11);
-  border-color: var(--tt-border-color, rgba(238, 238, 246, 0.11));
+  border-color: var(--border, rgba(238, 238, 246, 0.11));
 }

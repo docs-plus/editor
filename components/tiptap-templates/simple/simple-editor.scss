@@ -1,15 +1,10 @@
 body {
   --tt-toolbar-height: 44px;
-  --tt-theme-text: var(--tt-gray-light-900);
-
-  .dark & {
-    --tt-theme-text: var(--tt-gray-dark-900);
-  }
 }
 
 body {
   font-family: var(--font-sans), "Inter", sans-serif;
-  color: var(--tt-theme-text);
+  color: var(--foreground);
   font-optical-sizing: auto;
   font-weight: 400;
   font-style: normal;
@@ -25,7 +20,7 @@ body {
 html,
 body {
   height: 100%;
-  background-color: var(--tt-bg-color);
+  background-color: var(--background);
 }
 
 ::-webkit-scrollbar {
@@ -78,9 +73,9 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  background-color: var(--tt-bg-color);
+  background-color: var(--background);
   border: 1px solid var(--tt-border-color-tint);
-  border-radius: var(--tt-radius-sm);
+  border-radius: var(--radius-sm);
   box-shadow: var(--tt-page-shadow);
   overflow: hidden;
 }
@@ -113,7 +108,7 @@ body {
 .editor-skeleton-toolbar {
   height: var(--tt-toolbar-height);
   background-color: var(--tt-sidebar-bg-color);
-  border-bottom: 1px solid var(--tt-border-color);
+  border-bottom: 1px solid var(--border);
 }
 
 .editor-skeleton-content {

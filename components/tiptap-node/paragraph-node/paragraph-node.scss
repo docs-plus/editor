@@ -31,7 +31,7 @@
 .tiptap.ProseMirror {
   white-space: pre-wrap;
   outline: none;
-  caret-color: var(--tt-cursor-color);
+  caret-color: var(--foreground);
 
   // Paragraph spacing
   p:not(:first-child):not(td p):not(th p) {
@@ -59,7 +59,7 @@
 
   // Selected node styles
   .ProseMirror-selectednode:not(img):not(pre):not(.react-renderer) {
-    border-radius: var(--tt-radius-md);
+    border-radius: var(--radius-md);
     background-color: var(--tt-selection-color);
   }
 
