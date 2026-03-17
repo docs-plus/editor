@@ -225,24 +225,37 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       alert(`Could not close: ${titles}`);
     }
 
-    for (const id of succeeded) {
-      const idx = arr.toArray().findIndex((t) => t.id === id);
-      if (idx >= 0) arr.delete(idx, 1);
-    }
-    const remaining = arr.toArray();
-    if (remaining.length === 0) {
-      const newTab: Tab = {
-        id: generateId(),
-        title: "Untitled",
-        createdAt: Date.now(),
-      };
-      arr.push([newTab]);
-      setActiveTabId(newTab.id);
-      persistActiveTabId(newTab.id);
+    const succeededSet = new Set(succeeded);
+    const ydoc = arr.doc;
+    const indices = arr
+      .toArray()
+      .map((t, i) => (succeededSet.has(t.id) ? i : -1))
+      .filter((i) => i >= 0)
+      .sort((a, b) => b - a);
+
+    const doDelete = () => {
+      for (const idx of indices) arr.delete(idx, 1);
+    };
+    if (ydoc) {
+      ydoc.transact(doDelete);
     } else {
-      setActiveTabId(remaining[0].id);
-      persistActiveTabId(remaining[0].id);
+      doDelete();
     }
+
+    const remaining = arr.toArray();
+    const nextId =
+      remaining[0]?.id ??
+      (() => {
+        const newTab: Tab = {
+          id: generateId(),
+          title: "Untitled",
+          createdAt: Date.now(),
+        };
+        arr.push([newTab]);
+        return newTab.id;
+      })();
+    setActiveTabId(nextId);
+    persistActiveTabId(nextId);
   }, []);
 
   const reorderTab = useCallback((id: string, targetIndex: number) => {
