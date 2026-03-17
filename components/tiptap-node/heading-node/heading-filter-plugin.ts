@@ -336,6 +336,7 @@ export function createHeadingFilterPlugin(
 
         destroy() {
           prevSlugs = [];
+          prevMode = "or";
           prevMatchedIds = new Set();
           savedFoldIds = null;
         },
