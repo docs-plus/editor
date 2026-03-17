@@ -15,10 +15,10 @@ import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { Placeholder, Selection } from "@tiptap/extensions";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
-// --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit";
 import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
+
 import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
 import { HeadingDrag } from "@/components/tiptap-node/heading-node/heading-drag-extension";
 import { HeadingFilter } from "@/components/tiptap-node/heading-node/heading-filter-extension";
@@ -26,16 +26,9 @@ import type { HeadingFilterCallbackState } from "@/components/tiptap-node/headin
 import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";
 import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
-// --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
-// --- UI Primitives ---
-import { Spacer } from "@/components/ui/spacer";
-import {
-  Toolbar,
-  ToolbarGroup,
-  ToolbarSeparator,
-} from "@/components/ui/toolbar";
-import { ToolbarButton } from "@/components/ui/toolbar-button";
+import { Toolbar } from "@/components/ui/toolbar";
+/** biome-ignore-all assist/source/organizeImports: SCSS side-effect imports — order may affect cascade */
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
@@ -47,58 +40,29 @@ import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
 
-import { generatePlaygroundContent } from "@/components/playground/playground-scenarios";
-// --- Icons ---
 import { readFilterUrl } from "@/components/tiptap-node/heading-node/helpers/filter-url";
-// --- Lib ---
 import {
   handleImageUpload,
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
-// --- Components ---
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
-import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
-import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
-import {
-  ColorHighlightPopover,
-  ColorHighlightPopoverButton,
-  ColorHighlightPopoverContent,
-} from "@/components/tiptap-ui/color-highlight-popover";
-// --- Tiptap UI ---
-import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
+import { EditorSkeleton } from "@/components/tiptap-templates/simple/editor-skeleton";
+import { MainToolbarContent } from "@/components/tiptap-templates/simple/main-toolbar-content";
+import { MobileToolbarContent } from "@/components/tiptap-templates/simple/mobile-toolbar-content";
+import { generatePlaygroundContent } from "@/components/tiptap-templates/simple/playground-scenarios";
 import {
   FilterBar,
-  FilterToolbarButton,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
-import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
-import {
-  LinkButton,
-  LinkContent,
-  LinkPopover,
-} from "@/components/tiptap-ui/link-popover";
-import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
-import { MarkButton } from "@/components/tiptap-ui/mark-button";
-import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
-import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
-// --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { PLAYGROUND_ID } from "@/lib/constants";
-import {
-  ArrowLeftIcon,
-  HighlighterIcon,
-  LinkIcon,
-  PanelLeftIcon,
-} from "@/lib/icons";
-
-// --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss";
 
 import type { JSONContent } from "@tiptap/core";
+
 import defaultContent from "@/components/tiptap-templates/simple/data/content.json";
 
 /**
@@ -126,147 +90,6 @@ interface SimpleEditorProps {
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
   playgroundRegenerateTrigger?: number;
-}
-
-const MainToolbarContent = ({
-  onHighlighterClick,
-  onLinkClick,
-  onTocToggle,
-  onFilterToggle,
-  isMobile,
-  tocVisible,
-  filterActive,
-}: {
-  onHighlighterClick: () => void;
-  onLinkClick: () => void;
-  onTocToggle: () => void;
-  onFilterToggle: () => void;
-  isMobile: boolean;
-  tocVisible: boolean;
-  filterActive: boolean;
-}) => {
-  return (
-    <>
-      {!isMobile && (
-        <ToolbarGroup>
-          <ToolbarButton
-            onClick={onTocToggle}
-            aria-label="Toggle outline"
-            tooltip="Toggle outline"
-            isActive={tocVisible}
-          >
-            <PanelLeftIcon />
-          </ToolbarButton>
-          <FilterToolbarButton
-            onClick={onFilterToggle}
-            isActive={filterActive}
-          />
-        </ToolbarGroup>
-      )}
-
-      <Spacer />
-
-      <ToolbarGroup>
-        <UndoRedoButton action="undo" />
-        <UndoRedoButton action="redo" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <HeadingDropdownMenu levels={[1, 2, 3, 4, 5, 6]} />
-        <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} />
-        <BlockquoteButton />
-        <CodeBlockButton />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <MarkButton type="bold" />
-        <MarkButton type="italic" />
-        <MarkButton type="strike" />
-        <MarkButton type="code" />
-        <MarkButton type="underline" />
-        {!isMobile ? (
-          <ColorHighlightPopover />
-        ) : (
-          <ColorHighlightPopoverButton onClick={onHighlighterClick} />
-        )}
-        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <MarkButton type="superscript" />
-        <MarkButton type="subscript" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <TextAlignButton align="left" />
-        <TextAlignButton align="center" />
-        <TextAlignButton align="right" />
-        <TextAlignButton align="justify" />
-      </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <ImageUploadButton text="Add" size="sm" />
-      </ToolbarGroup>
-
-      <Spacer />
-
-      {isMobile && <ToolbarSeparator />}
-
-      <ToolbarGroup>
-        <ThemeToggle />
-      </ToolbarGroup>
-    </>
-  );
-};
-
-const MobileToolbarContent = ({
-  type,
-  onBack,
-}: {
-  type: "highlighter" | "link";
-  onBack: () => void;
-}) => (
-  <>
-    <ToolbarGroup>
-      <ToolbarButton onClick={onBack} size="sm">
-        <ArrowLeftIcon />
-        {type === "highlighter" ? <HighlighterIcon /> : <LinkIcon />}
-      </ToolbarButton>
-    </ToolbarGroup>
-
-    <ToolbarSeparator />
-
-    {type === "highlighter" ? (
-      <ColorHighlightPopoverContent />
-    ) : (
-      <LinkContent />
-    )}
-  </>
-);
-
-function EditorSkeleton() {
-  return (
-    <div className="simple-editor-wrapper">
-      <div className="editor-skeleton">
-        <div className="editor-skeleton-toolbar" />
-        <div className="editor-skeleton-content">
-          <div className="editor-skeleton-line editor-skeleton-line--wide" />
-          <div className="editor-skeleton-line editor-skeleton-line--medium" />
-          <div className="editor-skeleton-line editor-skeleton-line--narrow" />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function SimpleEditorContent({

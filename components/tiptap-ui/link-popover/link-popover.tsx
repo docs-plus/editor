@@ -2,10 +2,9 @@
 
 import type { Editor } from "@tiptap/react";
 import { forwardRef, useCallback, useEffect, useState } from "react";
-// --- Tiptap UI ---
+
 import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover";
 import { useLinkPopover } from "@/components/tiptap-ui/link-popover";
-// --- UI ---
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,9 +14,7 @@ import {
 } from "@/components/ui/popover";
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-// --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-// --- Icons ---
 import {
   CornerDownLeftIcon,
   ExternalLinkIcon,
@@ -216,7 +213,7 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
       onSetLink,
     });
 
-    const handleOnOpenChange = useCallback(
+    const handleOpenChange = useCallback(
       (nextIsOpen: boolean) => {
         setIsOpen(nextIsOpen);
         onOpenChange?.(nextIsOpen);
@@ -249,7 +246,7 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
     }
 
     return (
-      <Popover open={isOpen} onOpenChange={handleOnOpenChange}>
+      <Popover open={isOpen} onOpenChange={handleOpenChange}>
         <PopoverTrigger
           render={
             <LinkButton

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Yjs concurrency load harness — standalone Bun script.
  *
@@ -20,6 +21,7 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import WebSocket from "ws";
 import * as Y from "yjs";
+
 import { formatBytes } from "@/lib/utils";
 import { parseEnvFloat, parseEnvNumber } from "@/tests/helpers/env-parsers";
 import { writeReport } from "@/tests/helpers/report-writer";
@@ -29,7 +31,7 @@ const WARMUP_MS = 2_000;
 const DRAIN_MS = 5_000;
 const SYNC_TIMEOUT_MS = 30_000;
 
-interface Config {
+interface YjsLoadHarnessConfig {
   clients: number;
   duration: number;
   rate: number;
@@ -54,14 +56,14 @@ Options (CLI overrides env):
 `);
 }
 
-function parseArgs(): Config {
+function parseArgs(): YjsLoadHarnessConfig {
   const args = process.argv.slice(2);
   if (args.includes("--help") || args.includes("-h")) {
     printUsage();
     process.exit(0);
   }
 
-  const config: Config = {
+  const config: YjsLoadHarnessConfig = {
     clients: parseEnvNumber(process.env.LOAD_CLIENTS, 100),
     duration: parseEnvNumber(process.env.LOAD_DURATION, 30_000),
     rate: parseEnvFloat(process.env.LOAD_RATE, 2),
@@ -295,7 +297,7 @@ interface ClientSlot {
   provider: HocuspocusProvider;
 }
 
-function createClients(config: Config): {
+function createClients(config: YjsLoadHarnessConfig): {
   clients: ClientSlot[];
   allSynced: Promise<void>;
 } {
@@ -349,7 +351,7 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function run(config: Config): Promise<void> {
+async function run(config: YjsLoadHarnessConfig): Promise<void> {
   const memStart = process.memoryUsage();
 
   // Phase 1: Connect

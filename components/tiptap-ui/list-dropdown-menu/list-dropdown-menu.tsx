@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCallback, useState } from "react";
-// --- Tiptap UI ---
+
 import { ListButton, type ListType } from "@/components/tiptap-ui/list-button";
 import { useListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
 import {
@@ -10,12 +10,9 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// --- UI ---
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-// --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
-// --- Icons ---
 import { ChevronDownIcon } from "@/lib/icons";
 
 export interface ListDropdownMenuProps
@@ -56,7 +53,7 @@ export function ListDropdownMenu({
       hideWhenUnavailable,
     });
 
-  const handleOnOpenChange = useCallback(
+  const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
       onOpenChange?.(open);
@@ -69,7 +66,7 @@ export function ListDropdownMenu({
   }
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={handleOnOpenChange}>
+    <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger
         render={
           <ToolbarButton

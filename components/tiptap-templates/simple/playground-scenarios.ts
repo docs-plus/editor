@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
+
 import { pick, randomInt, shuffle } from "@/lib/random";
 
 const DOC_TITLES = [
