@@ -6,10 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import * as Y from "yjs";
 import { PLAYGROUND_ID } from "@/lib/constants";
-import { getHocuspocusToken, getHocuspocusWsUrl } from "@/lib/hocuspocus";
+import {
+  getGlobalTabsDoc,
+  getHocuspocusToken,
+  getHocuspocusWsUrl,
+} from "@/lib/hocuspocus";
 
 const TABS_KEY = "tinydocy-tabs";
-const GLOBAL_TABS_DOC = "global-tabs";
 
 export type Tab = {
   id: string;
@@ -156,7 +159,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     const token = getHocuspocusToken();
     const provider = new HocuspocusProvider({
       url: getHocuspocusWsUrl(),
-      name: GLOBAL_TABS_DOC,
+      name: getGlobalTabsDoc(),
       document: ydoc,
       ...(token ? { token } : {}),
       onSynced() {

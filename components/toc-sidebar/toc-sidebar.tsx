@@ -105,6 +105,7 @@ export function TocSidebar({
                   item.level === 1 && idx > 0 && "toc-sidebar-item-row--h1",
                 )}
                 data-level={item.level}
+                data-toc-id={item.id}
               >
                 {isFoldable ? (
                   <button

@@ -21,9 +21,19 @@ test.describe("TOC sidebar", () => {
   });
 
   test("clicking TOC item scrolls to heading", async ({ page }) => {
-    const items = await editorPage.getTocItems();
-    expect(items.length).toBeGreaterThanOrEqual(2);
-    await editorPage.clickTocItem("Second Section");
+    const headings = await editorPage.getHeadingsWithTocIds();
+    expect(headings.length).toBeGreaterThanOrEqual(2);
+    // headings[2] is Second Section (H2)
+    const secondSection =
+      headings[2] ?? headings.find((h) => h.text?.includes("Second"));
+    expect(secondSection).toBeTruthy();
+
+    await page.locator(".toc-sidebar").waitFor({ state: "visible" });
+    const row = page.locator(
+      `.toc-sidebar-item-row[data-toc-id="${secondSection!.tocId}"]`,
+    );
+    const item = row.locator(".toc-sidebar-item");
+    await item.click();
     await page.waitForTimeout(300);
   });
 });

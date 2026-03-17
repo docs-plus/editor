@@ -20,25 +20,40 @@ test.describe("heading fold", () => {
     const headings = await editorPage.getHeadingsWithTocIds();
     expect(headings.length).toBeGreaterThanOrEqual(2);
 
-    // headings[1] is Section A (H2 with child Section A content)
-    const tocId = headings[1].tocId;
-    await editorPage.clickFoldChevron(tocId);
+    await page.locator(".toc-sidebar").waitFor({ state: "visible" });
+    const toggle = page.locator(".toc-sidebar-fold-toggle").first();
+    await toggle.waitFor({ state: "visible", timeout: 10000 });
 
+    const row = toggle.locator(
+      "xpath=ancestor::div[contains(@class, 'toc-sidebar-item-row')]",
+    );
+    const tocId = await row.getAttribute("data-toc-id");
+    expect(tocId).toBeTruthy();
+
+    await toggle.click();
     await page.waitForTimeout(500);
 
-    const folded = await editorPage.isSectionFolded(tocId);
+    const folded = await editorPage.isSectionFolded(tocId!);
     expect(folded).toBe(true);
   });
 
   test("clicking crinkle unfolds section", async ({ page }) => {
     const headings = await editorPage.getHeadingsWithTocIds();
     expect(headings.length).toBeGreaterThanOrEqual(2);
-    // headings[1] is Section A (H2 with child Section A content)
-    const tocId = headings[1].tocId;
 
-    await editorPage.clickFoldChevron(tocId);
+    await page.locator(".toc-sidebar").waitFor({ state: "visible" });
+    const toggle = page.locator(".toc-sidebar-fold-toggle").first();
+    await toggle.waitFor({ state: "visible", timeout: 10000 });
+
+    const row = toggle.locator(
+      "xpath=ancestor::div[contains(@class, 'toc-sidebar-item-row')]",
+    );
+    const tocId = await row.getAttribute("data-toc-id");
+    expect(tocId).toBeTruthy();
+
+    await toggle.click();
     await page.waitForTimeout(500);
-    expect(await editorPage.isSectionFolded(tocId)).toBe(true);
+    expect(await editorPage.isSectionFolded(tocId!)).toBe(true);
 
     const crinkle = page.locator(".heading-fold-crinkle").first();
     if (await crinkle.isVisible()) {

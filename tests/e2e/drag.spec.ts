@@ -20,7 +20,7 @@ test.describe("heading drag", () => {
     expect(headings.length).toBeGreaterThanOrEqual(2);
     const tocId = headings[1].tocId;
 
-    const heading = page.locator(`[data-toc-id="${tocId}"]`);
+    const heading = page.locator(`.tiptap [data-toc-id="${tocId}"]`);
     await heading.hover();
 
     const handle = page.locator(".heading-drag-handle");

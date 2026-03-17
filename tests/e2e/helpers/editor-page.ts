@@ -19,6 +19,12 @@ export class EditorPage {
       activeTabId: id,
     };
 
+    // Per-test global-tabs doc for E2E isolation (avoids migration race when parallel)
+    await this.page.addInitScript((tabsDoc: string) => {
+      (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
+        tabsDoc;
+    }, `global-tabs-${id}`);
+
     await this.page.goto("/");
     await this.page.evaluate((state: typeof tabsState) => {
       localStorage.setItem("tinydocy-tabs", JSON.stringify(state));
@@ -84,41 +90,26 @@ export class EditorPage {
   }
 
   getHeadingByTocId(id: string) {
-    return this.page.locator(`[data-toc-id="${id}"]`);
+    return this.page.locator(`.tiptap [data-toc-id="${id}"]`);
   }
 
   async clickFoldChevron(tocId: string): Promise<void> {
-    const json = (await this.getEditorJSON()) as {
-      content?: Array<{
-        type?: string;
-        attrs?: Record<string, unknown>;
-        content?: Array<{ type?: string; text?: string }>;
-      }>;
-    };
-    const getTocId = (n: { attrs?: Record<string, unknown> }) =>
-      (n.attrs?.["data-toc-id"] ?? n.attrs?.id) as string | undefined;
-    const heading = json?.content?.find(
-      (n) => n.type === "heading" && getTocId(n) === tocId,
+    const row = this.page.locator(
+      `.toc-sidebar-item-row[data-toc-id="${tocId}"]`,
     );
-    const text =
-      (heading?.content?.[0] as { text?: string } | undefined)?.text ?? "";
-    const row = this.page
-      .locator(".toc-sidebar-item-row")
-      .filter({ hasText: text })
-      .first();
     const toggle = row.locator(".toc-sidebar-fold-toggle");
     await toggle.click();
   }
 
   async isSectionFolded(tocId: string): Promise<boolean> {
-    const heading = this.page.locator(`[data-toc-id="${tocId}"]`);
+    const heading = this.page.locator(`.tiptap [data-toc-id="${tocId}"]`);
     const classes = await heading.getAttribute("class");
     return classes?.includes("heading-section-folded") ?? false;
   }
 
   getCrinkleElement(tocId: string) {
     return this.page.locator(
-      `[data-toc-id="${tocId}"] + .heading-fold-crinkle`,
+      `.tiptap [data-toc-id="${tocId}"] + .heading-fold-crinkle`,
     );
   }
 
@@ -153,7 +144,10 @@ export class EditorPage {
   }
 
   async clickTocItem(text: string): Promise<void> {
-    const item = this.page.locator(".toc-sidebar-item", { hasText: text });
+    const item = this.page
+      .locator(".toc-sidebar")
+      .locator(".toc-sidebar-item", { hasText: text });
+    await item.scrollIntoViewIfNeeded();
     await item.click();
   }
 

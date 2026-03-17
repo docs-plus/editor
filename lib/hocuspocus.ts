@@ -2,7 +2,16 @@ declare global {
   interface Window {
     __HOCUS_URL?: string;
     __HOCUS_TOKEN?: string;
+    /** E2E: per-test global-tabs doc for isolation (e.g. global-tabs-{docId}) */
+    __GLOBAL_TABS_DOC?: string;
   }
+}
+
+export function getGlobalTabsDoc(): string {
+  if (typeof window !== "undefined" && window.__GLOBAL_TABS_DOC) {
+    return window.__GLOBAL_TABS_DOC;
+  }
+  return "global-tabs";
 }
 
 export function getHocuspocusWsUrl(): string {
