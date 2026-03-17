@@ -3,6 +3,7 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
+
 import { getHocuspocusToken, getHocuspocusWsUrl } from "@/lib/hocuspocus";
 
 const docCache = new Map<string, { doc: Y.Doc; refCount: number }>();

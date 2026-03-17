@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+
 import { assertInvariantsFromJSON } from "@/tests/helpers/assert-invariants-json";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
 import { writeReport } from "@/tests/helpers/report-writer";
@@ -8,6 +9,7 @@ import {
   parseSoakHeadings,
   parseSoakUsers,
 } from "@/tests/helpers/soak-config";
+
 import { EditorPage } from "./helpers/editor-page";
 import { SoakBot } from "./helpers/soak-bot";
 

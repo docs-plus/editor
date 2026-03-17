@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { afterEach, describe, it } from "vitest";
+
 import { randomInt } from "@/lib/random";
 import deeplyNested from "@/tests/fixtures/deeply-nested.json";
 import emptyDoc from "@/tests/fixtures/empty-document.json";

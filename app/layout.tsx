@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { DM_Sans, Inter } from "next/font/google";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+/** biome-ignore-all assist/source/organizeImports: CSS cascade — globals before variables before keyframes */
 import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";

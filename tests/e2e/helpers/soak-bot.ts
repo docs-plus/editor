@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
+
 import { pick, randomInt } from "@/lib/random";
+
 import type { EditorPage } from "./editor-page";
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";

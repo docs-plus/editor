@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+
 import { TabBar } from "@/components/tab-bar";
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";

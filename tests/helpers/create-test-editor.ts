@@ -8,6 +8,7 @@ import { TableOfContents } from "@tiptap/extension-table-of-contents";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { StarterKit } from "@tiptap/starter-kit";
+
 import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
 import { HeadingFilter } from "@/components/tiptap-node/heading-node/heading-filter-extension";
 import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";

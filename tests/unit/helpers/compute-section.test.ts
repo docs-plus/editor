@@ -1,5 +1,6 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
+
 import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 

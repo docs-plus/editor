@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+
 import type { EditorPage } from "./editor-page";
 import { collectPerfEntries, computeLatencyStats } from "./perf-observer";
 

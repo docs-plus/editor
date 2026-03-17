@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import net from "node:net";
+
 import { expect, test } from "@playwright/test";
+
 import { EditorPage } from "../helpers/editor-page";
 
 const HOCUS_PORT = 1235;

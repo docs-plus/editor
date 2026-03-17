@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
+
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- UI Utils ---

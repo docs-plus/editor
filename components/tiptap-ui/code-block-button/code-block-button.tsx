@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
+
 // --- Tiptap UI ---
 import type { UseCodeBlockConfig } from "@/components/tiptap-ui/code-block-button";
 import { useCodeBlock } from "@/components/tiptap-ui/code-block-button";

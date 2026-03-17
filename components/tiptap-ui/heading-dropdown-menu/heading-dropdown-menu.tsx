@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useState } from "react";
+
 // --- Tiptap UI ---
 import { HeadingButton } from "@/components/tiptap-ui/heading-button";
 import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu";

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { headingFilterPluginKey } from "@/components/tiptap-node/heading-node/heading-filter-plugin";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 

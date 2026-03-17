@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { DecorationSet } from "@tiptap/pm/view";
 import { describe, expect, it } from "vitest";
+
 import { headingScalePluginKey } from "@/components/tiptap-node/heading-node/heading-scale-extension";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 

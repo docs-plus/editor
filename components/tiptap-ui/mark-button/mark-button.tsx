@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
+
 // --- Tiptap UI ---
 import type { UseMarkConfig } from "@/components/tiptap-ui/mark-button";
 import { useMark } from "@/components/tiptap-ui/mark-button";

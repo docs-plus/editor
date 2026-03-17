@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 import { EditorPage } from "./helpers/editor-page";
 
 test.describe("collaboration", () => {

@@ -1,4 +1,5 @@
 import { Extension } from "@tiptap/core";
+
 import {
   createHeadingFilterPlugin,
   type HeadingFilterCallbackState,

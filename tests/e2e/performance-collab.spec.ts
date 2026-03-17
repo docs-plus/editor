@@ -1,9 +1,11 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
 import { parseEnvNumber } from "@/tests/helpers/env-parsers";
 import { parsePerfShape } from "@/tests/helpers/perf-config";
 import { writeReport } from "@/tests/helpers/report-writer";
+
 import { EditorPage } from "./helpers/editor-page";
 import {
   collectPerfEntries,

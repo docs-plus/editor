@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect } from "react";
+
 import type { Tab } from "@/hooks/use-synced-tabs";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {

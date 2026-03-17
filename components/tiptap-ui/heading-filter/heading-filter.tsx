@@ -1,6 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
+
 import type { UseHeadingFilterReturn } from "@/components/tiptap-ui/heading-filter/use-heading-filter";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { CloseIcon, FilterIcon, SearchIcon } from "@/lib/icons";

@@ -1,5 +1,6 @@
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { expect } from "vitest";
+
 import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
 
 const VALID_BLOCK_NAMES = new Set([

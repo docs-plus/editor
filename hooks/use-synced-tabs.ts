@@ -5,6 +5,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import * as Y from "yjs";
+
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
   getGlobalTabsDoc,

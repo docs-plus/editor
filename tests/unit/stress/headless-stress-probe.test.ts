@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
+
 import { headingFilterPluginKey } from "@/components/tiptap-node/heading-node/heading-filter-plugin";
 import { headingFoldPluginKey } from "@/components/tiptap-node/heading-node/heading-fold-plugin";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

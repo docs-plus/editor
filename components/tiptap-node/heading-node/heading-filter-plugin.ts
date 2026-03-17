@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+
 import { headingFoldPluginKey } from "@/components/tiptap-node/heading-node/heading-fold-plugin";
 import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
 import {

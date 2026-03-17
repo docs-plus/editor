@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
+
 // --- Tiptap UI ---
 import {
   canToggleHeading,

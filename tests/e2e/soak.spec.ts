@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
 import { writeReport } from "@/tests/helpers/report-writer";
 import {
@@ -7,6 +8,7 @@ import {
   parseSoakMemoryGrowthLimit,
   parseSoakWarmup,
 } from "@/tests/helpers/soak-config";
+
 import { EditorPage } from "./helpers/editor-page";
 import {
   collectPerfEntries,

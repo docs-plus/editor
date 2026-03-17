@@ -3,6 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+
 import { ChevronRightIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
@@ -74,9 +75,14 @@ export function TocSidebar({
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {
       if (!editor) return;
-      editor.commands.setTextSelection(item.pos + 1);
-      item.dom.scrollIntoView({ behavior: "smooth", block: "center" });
+      const node = editor.state.doc.nodeAt(item.pos);
+      const endPos = node ? item.pos + node.nodeSize - 1 : item.pos + 1;
+      editor.commands.setTextSelection(endPos);
       editor.commands.focus();
+      // Defer scroll to next frame so selection/focus layout has settled.
+      requestAnimationFrame(() => {
+        item.dom.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     },
     [editor],
   );

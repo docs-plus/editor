@@ -1,4 +1,5 @@
 import { builders as pmBuilders } from "prosemirror-test-builder";
+
 import { createTestEditor } from "./create-test-editor";
 
 const tempEditor = createTestEditor();

@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { forwardRef, useMemo, useRef, useState } from "react";
+
 // --- Tiptap UI ---
 import type {
   HighlightColor,

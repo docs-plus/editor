@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
+
 // --- Tiptap UI ---
 import type { UseImageUploadConfig } from "@/components/tiptap-ui/image-upload-button";
 import { useImageUpload } from "@/components/tiptap-ui/image-upload-button";

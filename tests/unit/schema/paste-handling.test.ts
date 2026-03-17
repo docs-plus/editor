@@ -1,6 +1,7 @@
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { Selection } from "@tiptap/pm/state";
 import { afterEach, describe, expect, it } from "vitest";
+
 import { assertFirstNodeIsH1 } from "@/tests/helpers/assert-invariants";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 

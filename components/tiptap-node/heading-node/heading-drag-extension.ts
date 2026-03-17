@@ -15,6 +15,7 @@
  */
 
 import { Extension } from "@tiptap/core";
+
 import { createHeadingDragPlugin } from "@/components/tiptap-node/heading-node/heading-drag-plugin";
 
 export const HeadingDrag = Extension.create({

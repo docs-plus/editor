@@ -1,8 +1,8 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
-import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 
+import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- Tiptap UI ---
 import type { UseTextAlignConfig } from "@/components/tiptap-ui/text-align-button";
 import { useTextAlign } from "@/components/tiptap-ui/text-align-button";

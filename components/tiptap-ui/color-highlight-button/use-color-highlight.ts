@@ -3,6 +3,7 @@
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";

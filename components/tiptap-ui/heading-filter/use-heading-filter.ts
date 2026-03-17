@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
 import type { HeadingFilterCallbackState } from "@/components/tiptap-node/heading-node/heading-filter-plugin";
 import { updateFilterUrl } from "@/components/tiptap-node/heading-node/helpers/filter-url";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";

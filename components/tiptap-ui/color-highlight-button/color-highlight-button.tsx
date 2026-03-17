@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useMemo } from "react";
+
 // --- Tiptap UI ---
 import type { UseColorHighlightConfig } from "@/components/tiptap-ui/color-highlight-button";
 import {

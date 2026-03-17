@@ -1,8 +1,8 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
-import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 
+import { ShortcutBadge } from "@/components/tiptap-ui/shortcut-badge";
 // --- Tiptap UI ---
 import type { UseUndoRedoConfig } from "@/components/tiptap-ui/undo-redo-button";
 import { useUndoRedo } from "@/components/tiptap-ui/undo-redo-button";
