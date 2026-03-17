@@ -15,7 +15,10 @@ export default defineConfig({
       name: "chromium",
       testMatch: ["**/*.spec.ts"],
       testIgnore: ["**/soak*.spec.ts", "**/yjs-soak/**"],
-      use: { browserName: "chromium" },
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 720 },
+      },
     },
     {
       name: "soak",
