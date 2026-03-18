@@ -114,7 +114,7 @@ export function TocSidebar({
       editor.commands.setTextSelection(endPos);
       editor.commands.focus();
       requestAnimationFrame(() => {
-        item.dom.scrollIntoView({ behavior: "smooth", block: "start" });
+        item.dom.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     },
     [editor],
