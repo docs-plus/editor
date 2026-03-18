@@ -50,5 +50,81 @@
       -webkit-text-fill-color: inherit;
       color: inherit;
     }
+
+    .hljs-comment,
+    .hljs-quote {
+      color: var(--tt-gray-light-a-400);
+      font-style: italic;
+    }
+
+    .hljs-keyword,
+    .hljs-selector-tag,
+    .hljs-built_in {
+      color: #8250df;
+    }
+
+    .hljs-string,
+    .hljs-attr {
+      color: #0a3069;
+    }
+
+    .hljs-number,
+    .hljs-literal {
+      color: #0550ae;
+    }
+
+    .hljs-title,
+    .hljs-section,
+    .hljs-type {
+      color: #953800;
+    }
+
+    .hljs-variable,
+    .hljs-template-variable {
+      color: #953800;
+    }
+
+    .hljs-meta {
+      color: #6e7781;
+    }
+  }
+
+  .dark & pre {
+    .hljs-keyword,
+    .hljs-selector-tag,
+    .hljs-built_in {
+      color: #d2a8ff;
+    }
+
+    .hljs-string,
+    .hljs-attr {
+      color: #a5d6ff;
+    }
+
+    .hljs-number,
+    .hljs-literal {
+      color: #79c0ff;
+    }
+
+    .hljs-title,
+    .hljs-section,
+    .hljs-type {
+      color: #ffa657;
+    }
+
+    .hljs-variable,
+    .hljs-template-variable {
+      color: #ffa657;
+    }
+
+    .hljs-comment,
+    .hljs-quote {
+      color: var(--tt-gray-dark-a-400);
+      font-style: italic;
+    }
+
+    .hljs-meta {
+      color: #8b949e;
+    }
   }
 }

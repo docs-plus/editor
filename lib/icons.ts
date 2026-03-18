@@ -33,6 +33,7 @@ export {
   MoonStar as MoonStarIcon,
   PanelLeft as PanelLeftIcon,
   PanelLeftClose as PanelLeftCloseIcon,
+  Pencil as PencilIcon,
   Plus as PlusIcon,
   Redo2 as Redo2Icon,
   RefreshCw as RefreshCwIcon,

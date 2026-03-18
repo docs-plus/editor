@@ -45,7 +45,7 @@ tests/
 ├── unit/
 │   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
-│   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url
+│   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
 ├── e2e/
@@ -61,6 +61,7 @@ tests/
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
+│   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)
@@ -105,7 +106,7 @@ Verify the `heading block*` schema (TitleDocument extension) — first node is a
 
 ### Plugin Tests
 
-Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDrag after dispatching specific transactions. Validates decoration rebuilds, fold toggling, filter matching, and `canMapDecorations` fast-path behavior.
+Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDrag after dispatching specific transactions. Validates decoration rebuilds, fold toggling, filter matching, `canMapDecorations` fast-path behavior, and `moveSection` atomicity (reorder, level change, combined, undo).
 
 ### Fuzz Tests
 
@@ -132,6 +133,7 @@ make test-e2e
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |
+| `toc-drag.spec.ts` | TOC drag handle visibility; title H1 not draggable; drag reorder moves editor sections; folded section drag handle |
 
 ### Performance Tests
 
@@ -252,7 +254,8 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 ## Key Conventions
 
-- **Rich document content** — `generateLargeDocument` produces 3-5 paragraphs + mixed structured blocks per heading section by default. Pass `{ richContent: false }` for lightweight documents.
+- **Rich document content** — `generateLargeDocument` produces 3-5 paragraphs + mixed structured blocks per heading section by default. Pass `{ richContent: false }` for lightweight documents. Playground content includes tables, syntax-highlighted code blocks (multi-language), and highlighted text.
+- **Test editor extensions** — `create-test-editor.ts` registers `TableKit`, `CodeBlockLowlight` (lowlight with common languages), `TaskList`/`TaskItem`, `Image`, `Highlight`, `TextAlign`, and `UniqueID` alongside schema enforcement extensions.
 - **User identity** — all multi-user tests inject unique `window.__HOCUS_TOKEN` per browser context. The `useYjsDocument` hook reads this and passes it to `HocuspocusProvider`.
 - **Y.Doc caching** — `useYjsDocument` uses a module-level `docCache` with reference counting. Y.Doc instances persist across component unmounts (tab switches) to prevent content loss.
 - **Platform-specific keys** — soak bot uses `Meta` (macOS) or `Control` (others) for keyboard shortcuts. Never use `Mod` — it is ProseMirror-only and unknown to Playwright.

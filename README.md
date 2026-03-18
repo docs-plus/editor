@@ -15,10 +15,10 @@ TinyDocy is a fully functional document editor with features that go beyond stan
 | **Section drag-and-drop** | Drag an entire heading section (including nested subsections) to reorder the document. Uses custom mouse events with `@floating-ui/dom` positioning — no HTML5 drag-and-drop. |
 | **Heading filter** | Filter the document by heading text. Sections that don't match are folded away. Supports OR/AND modes. State lives in URL params. Shortcut: `CMD+SHIFT+F`. |
 | **Dynamic heading scale** | Heading font size adjusts based on depth and position within the document hierarchy, producing a natural visual rhythm. |
-| **Real-time collaboration** | Multiple users edit the same document simultaneously via Yjs CRDTs and Hocuspocus WebSocket server. Changes merge automatically without conflicts. |
+| **Real-time collaboration** | Multiple users edit the same document simultaneously via Yjs CRDTs and Hocuspocus WebSocket server. Changes merge automatically without conflicts. Collaboration carets show each user's cursor position with name and color, editable via a toolbar dialog. Live online user count displayed in the toolbar. |
 | **Multi-tab documents** | Open multiple documents in tabs. Playground tab is always available. Keyboard shortcuts for new tab (`CMD+T`), close (`CMD+W`), and switch (`CMD+SHIFT+[/]`). |
-| **Table of contents** | A sidebar outline that updates reactively. Click to scroll. Fold toggles per section. Integrates with the heading filter to dim non-matching entries. |
-| **Rich content blocks** | Headings (1-6), paragraphs, bullet lists, ordered lists, task lists, blockquotes, code blocks, horizontal rules, images with upload, and inline marks (bold, italic, strike, code, underline, superscript, subscript, multicolor highlight, links). |
+| **Table of contents** | A sidebar outline that updates reactively. Click to scroll. Fold toggles per section. Drag-and-drop reorder with two-axis interaction — vertical to move sections, horizontal to change heading level — all in a single undo step. Integrates with the heading filter to dim non-matching entries. |
+| **Rich content blocks** | Headings (1-6), paragraphs, bullet lists, ordered lists, task lists, blockquotes, syntax-highlighted code blocks (via lowlight), resizable tables, horizontal rules, images with upload, and inline marks (bold, italic, strike, code, underline, superscript, subscript, multicolor highlight, links). Markdown import/export supported. |
 | **Dark mode** | Toggle between light and dark themes. Persisted in localStorage. No flash on page load. |
 
 ## Prerequisites
@@ -51,6 +51,8 @@ components/
   tiptap-node/          Custom Tiptap/ProseMirror extensions
     document-node/        TitleDocument — enforced H1-first schema
     heading-node/         HeadingFold, HeadingDrag, HeadingFilter, HeadingScale
+    code-block-node/      Syntax-highlighted code blocks (lowlight theme)
+    table-node/           Resizable table styles
     image-upload-node/    Image upload with progress
     horizontal-rule-node/ Custom horizontal rule
   tiptap-ui/            Editor toolbar components (buttons, dropdowns, popovers)

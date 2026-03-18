@@ -1,11 +1,14 @@
 "use client";
 
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { Collaboration } from "@tiptap/extension-collaboration";
+import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
 import { Highlight } from "@tiptap/extension-highlight";
 import { Image } from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
+import { TableKit } from "@tiptap/extension-table";
 import {
   type TableOfContentData,
   TableOfContents,
@@ -14,9 +17,10 @@ import { TextAlign } from "@tiptap/extension-text-align";
 import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { Placeholder, Selection } from "@tiptap/extensions";
+import { Markdown } from "@tiptap/markdown";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
@@ -28,6 +32,7 @@ import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scal
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
 import { Toolbar } from "@/components/ui/toolbar";
+import { lowlight } from "@/lib/lowlight";
 /** biome-ignore-all assist/source/organizeImports: SCSS side-effect imports — order may affect cascade */
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
@@ -39,6 +44,7 @@ import "@/components/tiptap-node/heading-node/heading-filter.scss";
 import "@/components/tiptap-node/heading-node/heading-fold.scss";
 import "@/components/tiptap-node/heading-node/heading-node.scss";
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss";
+import "@/components/tiptap-node/table-node/table-node.scss";
 
 import { readFilterUrl } from "@/components/tiptap-node/heading-node/helpers/filter-url";
 import {
@@ -53,17 +59,23 @@ import {
   FilterBar,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
+import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { PLAYGROUND_ID } from "@/lib/constants";
+import { getUserIdentity } from "@/lib/user-identity";
 import "@/components/tiptap-templates/simple/simple-editor.scss";
 
 import type { JSONContent } from "@tiptap/core";
 
-import defaultContent from "@/components/tiptap-templates/simple/data/content.json";
+/** Minimal valid doc per TitleDocument schema (H1 + body). */
+const DEFAULT_EDITOR_CONTENT = {
+  type: "doc",
+  content: [{ type: "heading", attrs: { level: 1 } }, { type: "paragraph" }],
+} satisfies JSONContent;
 
 /**
  * Placeholder text per empty text-block node type. Container nodes (blockquote,
@@ -94,12 +106,14 @@ interface SimpleEditorProps {
 
 function SimpleEditorContent({
   ydoc,
+  provider,
   documentId,
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
 }: {
   ydoc: Y.Doc;
+  provider: import("@hocuspocus/provider").HocuspocusProvider;
   documentId: string;
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
@@ -114,6 +128,18 @@ function SimpleEditorContent({
   const prevTitleRef = useRef("");
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const [tocItems, setTocItems] = useState<TableOfContentData>([]);
+  const tocPendingRef = useRef(false);
+  const tocLatestRef = useRef<TableOfContentData>([]);
+  const debouncedSetTocItems = useCallback((items: TableOfContentData) => {
+    tocLatestRef.current = items;
+    if (tocPendingRef.current) return;
+    tocPendingRef.current = true;
+    queueMicrotask(() => {
+      tocPendingRef.current = false;
+      setTocItems(tocLatestRef.current);
+    });
+  }, []);
+
   const [tocVisible, setTocVisible] = useState(true);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
@@ -150,11 +176,13 @@ function SimpleEditorContent({
         document: false,
         horizontalRule: false,
         undoRedo: false,
+        codeBlock: false,
         link: {
           openOnClick: false,
           enableClickSelection: true,
         },
       }),
+      CodeBlockLowlight.configure({ lowlight }),
       TitleDocument,
       HeadingScale,
       HeadingDrag,
@@ -168,6 +196,9 @@ function SimpleEditorContent({
       Collaboration.configure({
         document: ydoc,
       }),
+      CollaborationCaret.configure({
+        provider,
+      }),
       HorizontalRule,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TaskList,
@@ -179,13 +210,12 @@ function SimpleEditorContent({
       Subscript,
       Selection,
       Placeholder.configure({
-        showOnlyCurrent: false,
+        showOnlyCurrent: true,
         includeChildren: true,
-        placeholder: ({ editor, node, pos, hasAnchor }) => {
+        placeholder: ({ editor, node, pos }) => {
           if (node.type.name === "heading" && pos === 0) {
             return "Enter document name";
           }
-          if (!hasAnchor) return "";
           if (node.type.name === "paragraph") {
             const parent = editor.state.doc.resolve(pos).parent.type.name;
             if (parent in PARENT_PLACEHOLDER) return PARENT_PLACEHOLDER[parent];
@@ -197,7 +227,7 @@ function SimpleEditorContent({
         types: ["heading"],
       }),
       TableOfContents.configure({
-        onUpdate: (anchors) => setTocItems(anchors),
+        onUpdate: (anchors) => debouncedSetTocItems(anchors),
         scrollParent: () =>
           (document.querySelector(".simple-editor-wrapper") as HTMLElement) ??
           window,
@@ -209,8 +239,10 @@ function SimpleEditorContent({
         upload: handleImageUpload,
         onError: (error) => console.error("Upload failed:", error),
       }),
+      TableKit.configure({ table: { resizable: true } }),
+      Markdown,
     ],
-    content: initialContent ?? defaultContent,
+    content: initialContent ?? DEFAULT_EDITOR_CONTENT,
     onUpdate: ({ editor: e }) => {
       if (!onTitleChange) return;
       const title = e.state.doc.firstChild?.textContent || "Untitled";
@@ -230,6 +262,16 @@ function SimpleEditorContent({
       };
     }
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.commands.updateUser(getUserIdentity());
+  }, [editor]);
+
+  const handleToggleFold = useCallback(
+    (id: string) => editor?.commands.toggleFold(id),
+    [editor],
+  );
 
   useEffect(() => {
     if (!editor) return;
@@ -258,7 +300,7 @@ function SimpleEditorContent({
     const content =
       documentId === PLAYGROUND_ID
         ? generatePlaygroundContent()
-        : defaultContent;
+        : DEFAULT_EDITOR_CONTENT;
     editor.commands.setContent(content);
   }, [editor, ydoc, documentId]);
 
@@ -307,9 +349,7 @@ function SimpleEditorContent({
             />
           ) : (
             <MobileToolbarContent
-              type={
-                effectiveMobileView === "highlighter" ? "highlighter" : "link"
-              }
+              type={effectiveMobileView}
               onBack={() => setMobileView("main")}
             />
           )}
@@ -323,7 +363,7 @@ function SimpleEditorContent({
               items={tocItems}
               editor={editor}
               foldedIds={foldedIds}
-              onToggleFold={(id) => editor?.commands.toggleFold(id)}
+              onToggleFold={handleToggleFold}
               filteredIds={
                 headingFilter.hasActiveFilters
                   ? filterState.matchedSectionIds
@@ -344,11 +384,11 @@ function SimpleEditorContent({
           />
           {headingFilter.hasActiveFilters &&
             filterState.matchedSectionIds.size === 0 && (
-              <div className="filter-empty-state">
-                <p>No sections match your filter.</p>
+              <div className="flex flex-col items-center justify-center gap-3 py-12 px-4 text-muted-foreground text-sm text-center">
+                <p className="m-0">No sections match your filter.</p>
                 <button
                   type="button"
-                  className="filter-empty-state-clear"
+                  className="px-3 py-1.5 border border-border rounded-md bg-transparent text-foreground text-[0.8125rem] cursor-pointer transition-colors hover:bg-muted"
                   onClick={headingFilter.clearAllFilters}
                 >
                   Clear filters
@@ -356,6 +396,8 @@ function SimpleEditorContent({
               </div>
             )}
         </div>
+
+        <CollabStatusGroup provider={provider} />
       </EditorContext.Provider>
     </div>
   );
@@ -368,13 +410,14 @@ export function SimpleEditor({
   playgroundRegenerateTrigger,
 }: SimpleEditorProps = {}) {
   const docId = documentId ?? "default";
-  const { ydoc, synced } = useYjsDocument(docId);
+  const { ydoc, provider, synced } = useYjsDocument(docId);
 
-  if (!synced || !ydoc) return <EditorSkeleton />;
+  if (!synced || !ydoc || !provider) return <EditorSkeleton />;
 
   return (
     <SimpleEditorContent
       ydoc={ydoc}
+      provider={provider}
       documentId={docId}
       onTitleChange={onTitleChange}
       initialContent={initialContent}

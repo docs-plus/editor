@@ -5,6 +5,7 @@ import {
   Selection,
   TextSelection,
 } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import type { Editor } from "@tiptap/react";
 
 /**
@@ -231,6 +232,63 @@ export function shouldShowEditorButton(
   if (!editor || !editor.isEditable) return false;
   if (!hideWhenUnavailable) return true;
   return schemaCheck();
+}
+
+/**
+ * Moves a document section to a new position, optionally changing the heading level.
+ * Section = heading node + all content until the next heading of equal/higher level.
+ * Both reorder and level change happen in a single atomic transaction (one undo step).
+ */
+export function moveSection(
+  view: EditorView,
+  sectionFrom: number,
+  sectionTo: number,
+  targetPos: number,
+  newLevel?: number,
+): void {
+  const headingNode = view.state.doc.nodeAt(sectionFrom);
+  if (!headingNode || headingNode.type.name !== "heading") return;
+
+  const positionChanged = targetPos !== sectionFrom && targetPos !== sectionTo;
+  const levelChanged = newLevel != null && newLevel !== headingNode.attrs.level;
+
+  if (!positionChanged && !levelChanged) return;
+  if (targetPos > sectionFrom && targetPos < sectionTo) return;
+
+  const { state } = view;
+  const { tr, doc } = state;
+
+  if (!positionChanged && levelChanged) {
+    const heading = doc.nodeAt(sectionFrom);
+    if (heading) {
+      tr.setNodeMarkup(sectionFrom, null, {
+        ...heading.attrs,
+        level: newLevel,
+      });
+      view.dispatch(tr);
+    }
+    return;
+  }
+
+  const slice = doc.slice(sectionFrom, sectionTo);
+  let content = slice.content;
+  const heading = content.firstChild;
+  if (heading && levelChanged) {
+    content = content.replaceChild(
+      0,
+      heading.type.create(
+        { ...heading.attrs, level: newLevel },
+        heading.content,
+        heading.marks,
+      ),
+    );
+  }
+
+  tr.delete(sectionFrom, sectionTo);
+  const mappedTarget = tr.mapping.map(targetPos);
+  tr.insert(mappedTarget, content);
+  tr.setSelection(TextSelection.create(tr.doc, mappedTarget + 1));
+  view.dispatch(tr.scrollIntoView());
 }
 
 /** Block node types that can be converted via block toggle (heading, list, blockquote, code block). */

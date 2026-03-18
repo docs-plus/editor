@@ -30,6 +30,9 @@ function releaseDoc(documentId: string): void {
 
 export function useYjsDocument(documentId: string) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
+  const [providerRef, setProviderRef] = useState<HocuspocusProvider | null>(
+    null,
+  );
   const [synced, setSynced] = useState(false);
 
   useEffect(() => {
@@ -46,14 +49,16 @@ export function useYjsDocument(documentId: string) {
     });
 
     setYdoc(doc);
+    setProviderRef(provider);
 
     return () => {
       provider.destroy();
       releaseDoc(documentId);
       setYdoc(null);
+      setProviderRef(null);
       setSynced(false);
     };
   }, [documentId]);
 
-  return { ydoc, synced };
+  return { ydoc, provider: providerRef, synced };
 }

@@ -64,10 +64,31 @@ const PROSE = [
   "The filter sidebar highlights matching sections across the entire document.",
 ];
 
-const CODE_SAMPLES = [
-  "function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet('World'));",
-  "const items = [1, 2, 3, 4, 5];\nconst doubled = items.map(n => n * 2);\nconsole.log(doubled);",
-  "interface Config {\n  port: number;\n  host: string;\n}\n\nconst defaults: Config = { port: 3000, host: 'localhost' };",
+const CODE_SAMPLES: { code: string; language: string }[] = [
+  {
+    language: "typescript",
+    code: "function greet(name: string): string {\n  return `Hello, \\${name}!`;\n}\n\nconsole.log(greet('World'));",
+  },
+  {
+    language: "typescript",
+    code: "const items = [1, 2, 3, 4, 5];\nconst doubled = items.map(n => n * 2);\nconsole.log(doubled);",
+  },
+  {
+    language: "typescript",
+    code: "interface Config {\n  port: number;\n  host: string;\n}\n\nconst defaults: Config = { port: 3000, host: 'localhost' };",
+  },
+  {
+    language: "python",
+    code: "def fibonacci(n: int) -> list[int]:\n    a, b = 0, 1\n    result = []\n    for _ in range(n):\n        result.append(a)\n        a, b = b, a + b\n    return result\n\nprint(fibonacci(10))",
+  },
+  {
+    language: "css",
+    code: ".container {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));\n  gap: 1rem;\n  padding: 2rem;\n}",
+  },
+  {
+    language: "sql",
+    code: "SELECT u.name, COUNT(o.id) AS order_count\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE u.active = true\nGROUP BY u.name\nORDER BY order_count DESC\nLIMIT 10;",
+  },
 ];
 
 const TASK_LABELS = [
@@ -88,6 +109,15 @@ const LIST_ITEMS = [
   "Prepare changelog",
 ];
 
+const HIGHLIGHT_COLORS = [
+  "#f1c40f",
+  "#2ecc71",
+  "#e74c3c",
+  "#3498db",
+  "#9b59b6",
+  "#e67e22",
+];
+
 const IMAGE_URLS = [
   "https://picsum.photos/seed/doc1/400/300",
   "https://picsum.photos/seed/doc2/400/250",
@@ -102,7 +132,8 @@ type ContentBlockType =
   | "taskList"
   | "blockquote"
   | "codeBlock"
-  | "image";
+  | "image"
+  | "table";
 
 const CONTENT_TYPES: ContentBlockType[] = [
   "paragraph",
@@ -117,6 +148,7 @@ const CONTENT_TYPES: ContentBlockType[] = [
   "blockquote",
   "codeBlock",
   "image",
+  "table",
 ];
 
 function createParagraph(): JSONContent {
@@ -147,6 +179,8 @@ function createParagraphWithMarks(): JSONContent {
       "code",
       "underline",
       "link",
+      "highlight",
+      "highlight",
     ] as const);
     if (mark === "link") {
       parts.push({
@@ -154,6 +188,17 @@ function createParagraphWithMarks(): JSONContent {
         text: slice,
         marks: [
           { type: "link", attrs: { href: "https://example.com", title: null } },
+        ],
+      });
+    } else if (mark === "highlight") {
+      parts.push({
+        type: "text",
+        text: slice,
+        marks: [
+          {
+            type: "highlight",
+            attrs: { color: pick(HIGHLIGHT_COLORS) },
+          },
         ],
       });
     } else {
@@ -289,9 +334,11 @@ function createBlockquote(): JSONContent {
 }
 
 function createCodeBlock(): JSONContent {
+  const sample = pick(CODE_SAMPLES);
   return {
     type: "codeBlock",
-    content: [{ type: "text", text: pick(CODE_SAMPLES) }],
+    attrs: { language: sample.language },
+    content: [{ type: "text", text: sample.code }],
   };
 }
 
@@ -303,6 +350,54 @@ function createImage(): JSONContent {
       alt: "Sample image",
       title: null,
     },
+  };
+}
+
+const TABLE_DATA: { headers: string[]; rows: string[][] }[] = [
+  {
+    headers: ["Feature", "Status", "Priority"],
+    rows: [
+      ["Authentication", "Complete", "High"],
+      ["Dashboard", "In Progress", "High"],
+      ["Notifications", "Planned", "Medium"],
+      ["Analytics", "Not Started", "Low"],
+    ],
+  },
+  {
+    headers: ["Endpoint", "Method", "Description"],
+    rows: [
+      ["/api/users", "GET", "List all users"],
+      ["/api/users/:id", "GET", "Get user by ID"],
+      ["/api/documents", "POST", "Create document"],
+      ["/api/documents/:id", "DELETE", "Delete document"],
+    ],
+  },
+  {
+    headers: ["Metric", "Target", "Current"],
+    rows: [
+      ["p95 Latency", "< 16ms", "12ms"],
+      ["Memory Growth", "< 50%", "23%"],
+      ["Test Coverage", "> 80%", "87%"],
+    ],
+  },
+];
+
+function createTable(): JSONContent {
+  const data = pick(TABLE_DATA);
+  const headerCells: JSONContent[] = data.headers.map((text) => ({
+    type: "tableHeader",
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  }));
+  const bodyRows: JSONContent[] = data.rows.map((row) => ({
+    type: "tableRow",
+    content: row.map((text) => ({
+      type: "tableCell",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    })),
+  }));
+  return {
+    type: "table",
+    content: [{ type: "tableRow", content: headerCells }, ...bodyRows],
   };
 }
 
@@ -324,6 +419,8 @@ function createContentBlock(type: ContentBlockType): JSONContent {
       return createCodeBlock();
     case "image":
       return createImage();
+    case "table":
+      return createTable();
     default: {
       const _exhaustive: never = type;
       return createParagraph();
@@ -391,12 +488,17 @@ function buildNestedHeadings(
   return nodes;
 }
 
+function headingAttrs(level: number): Record<string, unknown> {
+  const id = crypto.randomUUID();
+  return { level, id, "data-toc-id": id };
+}
+
 function headingNodesToContent(nodes: HeadingNode[]): JSONContent[] {
   const result: JSONContent[] = [];
   for (const node of nodes) {
     result.push({
       type: "heading",
-      attrs: { level: node.level },
+      attrs: headingAttrs(node.level),
       content: [{ type: "text", text: node.title }],
     });
     result.push(...createSectionBody());
@@ -413,7 +515,7 @@ export function generatePlaygroundContent(): JSONContent {
   const content: JSONContent["content"] = [
     {
       type: "heading",
-      attrs: { level: 1 },
+      attrs: headingAttrs(1),
       content: [{ type: "text", text: pick(DOC_TITLES) }],
     },
     ...createSectionBody(),

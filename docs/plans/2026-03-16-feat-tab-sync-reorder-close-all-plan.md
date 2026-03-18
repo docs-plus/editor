@@ -79,7 +79,7 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 
 - **When:** Client seeds only when `ydoc` is empty after first sync.
 - **Where:** Client-side in `SimpleEditor` — when synced and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(defaultContent)`.
-- **What:** Use existing `content.json` (H1 + paragraph) — minimal valid doc per schema.
+- **What:** Use `DEFAULT_EDITOR_CONTENT` in `simple-editor.tsx` (H1 + paragraph) — minimal valid doc per schema.
 - **Idempotency:** Only seed when doc is truly empty; Collaboration extension handles merge.
 
 ### API Guards
@@ -211,7 +211,7 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 
 ### Phase 5: Empty Doc Seeding
 
-- [x] In `SimpleEditor`: when `synced && editor && !isPlayground` and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(defaultContent)` (uses existing `content.json`; Collaboration syncs to Y.Doc). Fragment name `'default'` matches Collaboration extension default; verify in implementation.
+- [x] In `SimpleEditor`: when `synced && editor && !isPlayground` and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(DEFAULT_EDITOR_CONTENT)` (Collaboration syncs to Y.Doc). Fragment name `'default'` matches Collaboration extension default; verify in implementation.
 - [x] No new hooks; keep logic in SimpleEditor.
 
 ## File Structure
@@ -281,7 +281,7 @@ lib/
 
 - **Brainstorm:** [docs/brainstorms/10-tab-sync-reorder-close-all-brainstorm.md](../brainstorms/10-tab-sync-reorder-close-all-brainstorm.md)
 - **Existing patterns:** `hooks/use-synced-tabs.ts`, `hooks/use-yjs-document.ts`, `components/tab-bar/tab-bar.tsx`
-- **Minimal doc:** `components/tiptap-templates/simple/data/content.json`
+- **Minimal doc:** `DEFAULT_EDITOR_CONTENT` in `simple-editor.tsx` (H1 + paragraph)
 - **Hocuspocus SQLite schema:** `documents` table `(name, data)`; delete with `DELETE FROM documents WHERE name = ?`
 - **Y.Array API:** <https://docs.yjs.dev/api/shared-types/y.array>
 - **dnd-kit Sortable:** <https://docs.dndkit.com/presets/sortable>

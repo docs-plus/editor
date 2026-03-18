@@ -233,6 +233,14 @@ export function createHeadingFilterPlugin(
           const current = headingFilterPluginKey.getState(view.state);
           if (!current) return;
 
+          if (
+            current.slugs.length === 0 &&
+            prevSlugs.length === 0 &&
+            !current.previewQuery
+          ) {
+            return;
+          }
+
           const slugsChanged =
             current.slugs.length !== prevSlugs.length ||
             current.slugs.some((s, i) => s !== prevSlugs[i]);

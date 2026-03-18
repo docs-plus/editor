@@ -1,0 +1,74 @@
+.tiptap.ProseMirror {
+  --tt-table-border: var(--tt-gray-light-a-200);
+  --tt-table-header-bg: var(--tt-gray-light-a-50);
+  --tt-table-cell-bg: transparent;
+  --tt-table-selected-bg: color-mix(
+    in srgb,
+    var(--tt-brand-color-500) 12%,
+    transparent
+  );
+
+  .dark & {
+    --tt-table-border: var(--tt-gray-dark-a-200);
+    --tt-table-header-bg: var(--tt-gray-dark-a-50);
+    --tt-table-selected-bg: color-mix(
+      in srgb,
+      var(--tt-brand-color-400) 15%,
+      transparent
+    );
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.5em 0;
+    overflow: hidden;
+    table-layout: fixed;
+
+    td,
+    th {
+      border: 1px solid var(--tt-table-border);
+      padding: 0.5em 0.75em;
+      vertical-align: top;
+      position: relative;
+      min-width: 80px;
+
+      > * + * {
+        margin-top: 0.25em;
+      }
+
+      p {
+        margin: 0;
+      }
+    }
+
+    th {
+      background-color: var(--tt-table-header-bg);
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .selectedCell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--tt-table-selected-bg);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .column-resize-handle {
+      position: absolute;
+      top: 0;
+      right: -2px;
+      bottom: -2px;
+      width: 4px;
+      background-color: var(--tt-brand-color-500);
+      pointer-events: none;
+    }
+  }
+
+  &.resize-cursor {
+    cursor: col-resize;
+  }
+}

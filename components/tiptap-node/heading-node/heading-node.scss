@@ -36,6 +36,14 @@
     margin-bottom: 0.5em;
   }
 
+  > h1:first-child:has(> br:only-child):not(.has-focus)::before {
+    content: "Enter document name";
+    color: var(--muted-foreground);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
   h2 {
     font-size: var(--hd-size, 16pt);
     margin-top: 1.15em;

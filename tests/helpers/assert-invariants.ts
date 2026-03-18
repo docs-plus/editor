@@ -15,6 +15,7 @@ const VALID_BLOCK_NAMES = new Set([
   "taskItem",
   "horizontalRule",
   "image",
+  "table",
 ]);
 
 /** Asserts the first child is a heading with level 1. */
