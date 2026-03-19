@@ -30,8 +30,10 @@ next-env.d.ts
 !.cursor/skills/
 !.cursor/rules/
 
-# hocuspocus
+# hocuspocus (SQLite main + WAL mode sidecar files)
 db.sqlite
+db.sqlite-wal
+db.sqlite-shm
 
 # test results and reports (local-only)
 /test-results/
@@ -43,5 +45,7 @@ db.sqlite
 # Soak test reports (local-only, hardware-specific)
 soak-report-*.json
 
-# Soak test SQLite database
+# Soak test SQLite database (+ WAL sidecars)
 db-soak-test.sqlite
+db-soak-test.sqlite-wal
+db-soak-test.sqlite-shm
