@@ -1,8 +1,6 @@
 import throttle from "lodash.throttle";
 import { useEffect, useMemo } from "react";
 
-import { useUnmount } from "@/hooks/use-unmount";
-
 interface ThrottleSettings {
   leading?: boolean | undefined;
   trailing?: boolean | undefined;
@@ -13,6 +11,8 @@ const defaultOptions: ThrottleSettings = {
   trailing: true,
 };
 
+type AnyProcedure = (...args: never[]) => unknown;
+
 /**
  * A hook that returns a throttled callback function.
  *
@@ -21,8 +21,7 @@ const defaultOptions: ThrottleSettings = {
  * @param dependencies The dependencies to watch for changes
  * @param options The throttle options
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useThrottledCallback<T extends (...args: any[]) => any>(
+export function useThrottledCallback<T extends AnyProcedure>(
   fn: T,
   wait = 250,
   dependencies: React.DependencyList = [],
@@ -34,7 +33,7 @@ export function useThrottledCallback<T extends (...args: any[]) => any>(
 } {
   const handler = useMemo(
     () => throttle<T>(fn, wait, options),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- same contract as useCallback(fn, deps)
     dependencies,
   );
 
@@ -43,10 +42,6 @@ export function useThrottledCallback<T extends (...args: any[]) => any>(
       handler.cancel();
     };
   }, [handler]);
-
-  useUnmount(() => {
-    handler.cancel();
-  });
 
   return handler;
 }

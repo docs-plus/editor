@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { DecorationSet } from "@tiptap/pm/view";
 
 import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
 import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";

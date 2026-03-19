@@ -64,5 +64,32 @@
   },
   "files": {
     "includes": ["**", "!.next", "!out", "!build", "!*.min.js", "!*.min.css"]
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "app/layout.tsx",
+        "components/tiptap-templates/simple/simple-editor.tsx"
+      ],
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": {
+              "level": "off"
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["hooks/use-throttled-callback.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          }
+        }
+      }
+    }
+  ]
 }

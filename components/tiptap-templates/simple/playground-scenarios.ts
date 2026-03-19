@@ -67,7 +67,11 @@ const PROSE = [
 const CODE_SAMPLES: { code: string; language: string }[] = [
   {
     language: "typescript",
-    code: "function greet(name: string): string {\n  return `Hello, \\${name}!`;\n}\n\nconsole.log(greet('World'));",
+    code: `function greet(name: string): string {
+  return \`Hello, \${name}!\`;
+}
+
+console.log(greet('World'));`,
   },
   {
     language: "typescript",

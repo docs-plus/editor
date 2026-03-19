@@ -33,7 +33,6 @@ import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/ho
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
 import { Toolbar } from "@/components/ui/toolbar";
 import { lowlight } from "@/lib/lowlight";
-/** biome-ignore-all assist/source/organizeImports: SCSS side-effect imports — order may affect cascade */
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
@@ -104,6 +103,12 @@ interface SimpleEditorProps {
   playgroundRegenerateTrigger?: number;
 }
 
+type SimpleEditorContentProps = SimpleEditorProps & {
+  ydoc: Y.Doc;
+  provider: import("@hocuspocus/provider").HocuspocusProvider;
+  documentId: string;
+};
+
 function SimpleEditorContent({
   ydoc,
   provider,
@@ -111,14 +116,7 @@ function SimpleEditorContent({
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
-}: {
-  ydoc: Y.Doc;
-  provider: import("@hocuspocus/provider").HocuspocusProvider;
-  documentId: string;
-  onTitleChange?: (title: string) => void;
-  initialContent?: JSONContent;
-  playgroundRegenerateTrigger?: number;
-}) {
+}: SimpleEditorContentProps) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(

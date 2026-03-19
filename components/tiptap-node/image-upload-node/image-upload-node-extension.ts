@@ -47,8 +47,7 @@ export interface ImageUploadNodeOptions {
    * @default {}
    * @example { class: 'foo' }
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  HTMLAttributes: Record<string, any>;
+  HTMLAttributes: Record<string, string | number | boolean | null | undefined>;
 }
 
 declare module "@tiptap/react" {
