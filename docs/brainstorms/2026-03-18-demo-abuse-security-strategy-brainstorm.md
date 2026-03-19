@@ -76,4 +76,4 @@ Guardrails-first was chosen because it gives the highest risk reduction per impl
 
 ## Next Steps
 
--> `/workflows:plan` to convert this strategy into implementation steps and rollout phases.
+-> Implementation plan: `docs/plans/2026-03-18-feat-demo-abuse-owasp-guardrails-plan.md`

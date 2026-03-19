@@ -4,8 +4,8 @@
 
 - Use Bun exclusively — `bun`, `bunx`, never `npm`, `npx`, `yarn`, or `pnpm`
 - Follow Conventional Commits — atomic commits, imperative mood, no AI/tool/agent references or trailers (`Made-with: Cursor`, `Co-authored-by: AI`); always show a commit review report and wait for explicit approval before committing
-- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; avoid overengineering (prefer simple fixed config over port-check scripts when complexity adds minimal value); extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments
-- Review from a senior staff engineer / head-of-engineering perspective when asked; for editor plugin code, review as ProseMirror/Tiptap core author checking for performance issues and memory leaks; when review delegation is requested, use the `code-reviewer` subagent
+- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; avoid overengineering (prefer simple fixed config over port-check scripts when complexity adds minimal value); extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments; prefer discoverable upper_snake env flags for operational toggles (limits, logging, throttle) instead of hiding behavior in code
+- Review from a senior staff engineer / head-of-engineering perspective when asked, including OWASP-oriented gaps when changes touch transport, persistence, or abuse surfaces; for editor plugin code, review as ProseMirror/Tiptap core author checking for performance issues and memory leaks; when review delegation is requested, use the `code-reviewer` subagent
 - Prefer `lucide-react` icons via `lib/icons.ts` barrel file, not local SVG wrapper components
 - Use named exports only (no `export default` except where required by framework); title-case acronyms in PascalCase names — `TocSidebar` not `TOCSidebar`
 - Avoid hydration mismatches — never use `useState(() => loadFromLocalStorage())`; use `useEffect` with a "ready" state flag; never nest `<button>` inside `<button>`
@@ -17,15 +17,15 @@
 
 ## Learned Workspace Facts
 
-- TinyDocy is a lightweight collaborative editor testbed for docs.plus; stack is Next.js 16 App Router + Tiptap 3 + Yjs + Hocuspocus + SQLite, with Bun runtime
-- Persistence is Hocuspocus WebSocket + SQLite (`@hocuspocus/cli` currently); local dev starts both services with `make dev` (`make -j2`)
+- TinyDocy is a lightweight collaborative editor testbed for docs.plus, positioned as an online-capable demo where abuse and OWASP-minded guardrails matter; stack is Next.js 16 App Router + Tiptap 3 + Yjs + Hocuspocus + SQLite, with Bun runtime
+- Persistence is Hocuspocus WebSocket + SQLite via custom `bun run hocus` (`scripts/hocus-server.ts`) using `@hocuspocus/extension-sqlite`, custom WS guardrails in `lib/security/*`, and optional official `extension-logger` / `extension-throttle` toggled by `HOCUS_*` env; local dev starts both services with `make dev` (`make -j2`)
 - Root `README.md` is the only README; tests docs live in `tests/TESTING.md`; avoid adding `CHANGELOG.md` or deployment PM2/Traefik guides
 - Code quality/tooling: Biome for formatting/linting, ESLint scoped to Next.js rules, strict TypeScript; Husky runs lint-staged pre-commit and commitlint on commit-msg
 - Naming and exports: kebab-case files, PascalCase components with title-case acronyms, camelCase hooks/utils, named exports by default
 - shadcn/ui components in `components/ui/` are the default for new UI; old `tiptap-ui-primitive` is fully replaced
 - Utilities are domain-split in `lib/`: `utils.ts`, `shortcuts.ts`, `editor-utils.ts`, `url-utils.ts`, `icons.ts`, and `user-identity.ts`
-- Tabs are synced through Y.Doc `global-tabs` (`useSyncedTabs`) with Playground fixed at index 0; `activeTabId` is local per user; close operations call `DELETE /api/documents/[id]`
+- Tabs are synced through Y.Doc `global-tabs` (`useSyncedTabs`) with Playground fixed at index 0; `activeTabId` is local per user; close operations call `DELETE /api/documents/[id]`, which is HTTP rate-limited separately from WS throttles on Hocuspocus
 - TOC supports dnd-kit drag-and-drop and section move semantics via `moveSection()`; heading-level and fold behavior are plugin-driven and optimized for large docs
 - Collaboration carets use `@tiptap/extension-collaboration-caret` with `HocuspocusProvider`; user identity is persisted in localStorage (`tinydocy-user`)
 - Document schema enforces title-first (`heading block*`), heading levels 1-6, and title-scoped paste handling; empty docs are seeded when Yjs fragment is empty
-- Testing stack is Vitest + Playwright (+ Yjs load/soak harness); use `bun run test` (not `bun test`), run Playwright with `CI=` against existing dev servers, and use `window.__HOCUS_URL`/`window.__HOCUS_TOKEN`/`window.__GLOBAL_TABS_DOC` hooks for test isolation
+- Testing stack is Vitest + Playwright (+ Yjs load/soak harness); use `bun run test` (not `bun test`), run Playwright with `CI=` against existing dev servers, and use `window.__HOCUS_URL`/`window.__HOCUS_TOKEN`/`window.__GLOBAL_TABS_DOC` hooks for test isolation; subprocesses that spawn `bun run hocus` for reconnect-heavy flows should set `HOCUS_THROTTLE=0` so official throttle does not false-positive ban clients

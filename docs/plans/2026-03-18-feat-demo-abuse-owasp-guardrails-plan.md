@@ -231,8 +231,8 @@ erDiagram
 
 1. Implement `@hocuspocus/server` bootstrap with SQLite extension.
 2. Preserve current DB path/port behavior using env defaults (`DB_PATH` -> `db.sqlite`, `HOCUS_PORT` -> existing dev/prod values) and WAL-friendly access patterns.
-3. Add rollout toggle for runtime selection (`HOCUS_USE_CUSTOM_SERVER=1|0`) so rollback does not require code edits.
-4. Replace CLI startup commands in dev/prod scripts (toggle-aware).
+3. ~~Add rollout toggle~~ **Done path:** custom server only (`bun run hocus`); Makefile + PM2 call it directly.
+4. ~~Replace CLI startup~~ **Done:** no `@hocuspocus/cli` in dev/PM2.
 5. Keep runtime cutover disabled until Task 6 guardrails are complete.
 6. Ensure direct runtime dependencies include `@hocuspocus/server` and `@hocuspocus/extension-sqlite`.
 7. Validate local start and PM2 command paths.
@@ -309,16 +309,16 @@ erDiagram
 
 ### Functional Requirements
 
-- [ ] DELETE endpoint enforces per-IP throttling and returns `429` + `Retry-After` on exceed.
-- [ ] Security headers are present on app responses and CSP allows required WS connectivity.
-- [ ] Creating tabs is blocked at 50 with explicit UI feedback.
+- [x] DELETE endpoint enforces per-IP throttling and returns `429` + `Retry-After` on exceed.
+- [x] Security headers are present on app responses and CSP allows required WS connectivity.
+- [x] Creating tabs is blocked at 50 with explicit UI feedback.
 - [ ] Hocuspocus server (custom bootstrap) enforces:
   - [ ] 10 concurrent WS connections/IP
   - [ ] 10 new-doc creations/hour/IP
   - [ ] total non-system docs cap at 2,000
   - [ ] max persisted doc payload size 1 MB
 - [ ] Invalid document names are rejected at websocket boundary with explicit close reason.
-- [ ] Cmd/Ctrl+T does not create a tab when max-tab limit is reached.
+- [x] Cmd/Ctrl+T does not create a tab when max-tab limit is reached.
 - [ ] Production configuration enforces `wss://` for Hocuspocus endpoint.
 - [ ] Retention purge removes stale non-system docs older than 30 days.
 
@@ -356,20 +356,20 @@ erDiagram
 
 - **Shared-IP throttling false positives:** acceptable for demo; document and tune thresholds.
 - **CSP breakage:** start with conservative policy and verify app/editor WS behavior.
-- **Migration risk from CLI:** mitigate with phased release and quick rollback to CLI command.
+- **Migration risk from CLI:** mitigated by custom-only runtime; rollback is process restart + env tuning (`HOCUS_THROTTLE=0`, higher limits), not CLI swap.
 - **Retention data races:** batch deletes and avoid deleting recently active docs.
 
 ## Rollout Plan
 
 1. Deploy Phase 1 + 2 first (HTTP hardening + tab cap).
 2. Observe logs for one cycle (throttles, errors, user friction).
-3. Deploy Phase 3 with runtime toggle (`HOCUS_USE_CUSTOM_SERVER=0` => CLI, `1` => custom server) and switch to custom only after Task 6 tests pass.
+3. Deploy Phase 3 with `bun run hocus` everywhere after Task 6 tests pass.
 4. Enable retention purge in dry-run mode first, then enforce.
 5. Finalize monitoring thresholds and runbook.
 
 ## Rollback Plan
 
-- Set `HOCUS_USE_CUSTOM_SERVER=0` and restart Hocuspocus process to return to CLI runtime immediately.
+- Restart Hocuspocus process; relax or disable `HOCUS_THROTTLE` / numeric guardrail envs if false positives dominate.
 - Disable strict limits via env values if false positives are severe.
 - Keep security headers enabled unless they break critical app functionality.
 

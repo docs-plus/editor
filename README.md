@@ -12,12 +12,13 @@ TinyDocy is a fully functional document editor with features that go beyond stan
 |---------|-------------|
 | **Enforced document model** | Every document starts with an H1 title. The schema (`heading block*`) is enforced at the ProseMirror level — paste, drag, and programmatic edits all respect it. |
 | **Section fold/unfold** | Collapse any heading section to hide its content. Nested folds are supported. State persists in localStorage across sessions. A 3D CSS crinkle animation marks folded regions. |
-| **Section drag-and-drop** | Drag an entire heading section (including nested subsections) to reorder the document. Uses custom mouse events with `@floating-ui/dom` positioning — no HTML5 drag-and-drop. |
+| **Section drag (editor)** | Reorder a heading **and everything under it until the next peer-or-higher heading** from the **editor gutter** (floating handle). Custom pointer + `@floating-ui/dom` — not the browser’s HTML5 drag-and-drop API. |
 | **Heading filter** | Filter the document by heading text. Sections that don't match are folded away. Supports OR/AND modes. State lives in URL params. Shortcut: `CMD+SHIFT+F`. |
 | **Dynamic heading scale** | Heading font size adjusts based on depth and position within the document hierarchy, producing a natural visual rhythm. |
 | **Real-time collaboration** | Multiple users edit the same document simultaneously via Yjs CRDTs and Hocuspocus WebSocket server. Changes merge automatically without conflicts. Collaboration carets show each user's cursor position with name and color, editable via a toolbar dialog. Live online user count displayed in the toolbar. |
 | **Multi-tab documents** | Open multiple documents in tabs. Playground tab is always available. Keyboard shortcuts for new tab (`CMD+T`), close (`CMD+W`), and switch (`CMD+SHIFT+[/]`). |
-| **Table of contents** | A sidebar outline that updates reactively. Click to scroll. Fold toggles per section. Drag-and-drop reorder with two-axis interaction — vertical to move sections, horizontal to change heading level — all in a single undo step. Integrates with the heading filter to dim non-matching entries. |
+| **Table of contents** | Margin **outline** that tracks headings: click to focus, place the caret at the end of the heading, and scroll it to the **top** of the viewport. Per-row fold toggles; **filter** dims non-matching rows and highlights preview matches while typing. |
+| **TOC drag-and-drop** | **dnd-kit** outline reorder: **vertical** drag moves the whole section (same slice semantics as editor section drag); **horizontal** drag changes **only** that heading’s level (H1–H6). **Drag handle** on row hover; **document title (first H1) is not draggable**; **folded** sections still move as a unit; **DragOverlay** shows target level; one **ProseMirror** transaction on drop → **single undo** step. |
 | **Rich content blocks** | Headings (1-6), paragraphs, bullet lists, ordered lists, task lists, blockquotes, syntax-highlighted code blocks (via lowlight), resizable tables, horizontal rules, images with upload, and inline marks (bold, italic, strike, code, underline, superscript, subscript, multicolor highlight, links). Markdown import/export supported. |
 | **Dark mode** | Toggle between light and dark themes. Persisted in localStorage. No flash on page load. |
 
@@ -42,6 +43,12 @@ This starts two servers:
 
 - **Next.js** on port 3000 — the editor UI
 - **Hocuspocus** on port 1234 — WebSocket server for real-time collaboration, backed by SQLite
+
+### Hocuspocus server (`bun run hocus`)
+
+`make dev` runs `scripts/hocus-server.ts` (SQLite + guardrails); production PM2 uses the same `bun run hocus`.
+
+**Env knobs:** defaults and parsing live in `lib/security/guardrail-config.ts` (HTTP/WS/doc limits, tabs, retention, `TRUSTED_PROXY`) and `lib/security/hocus-server-extensions.ts` (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, and related). Ops-oriented notes: [`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md).
 
 ## Project Structure
 
@@ -78,52 +85,19 @@ docs/                   Design documents, brainstorms, and implementation plans
 
 ## Testing
 
-TinyDocy has a comprehensive multi-layer testing infrastructure. Tests are a first-class concern — the editor is built to be tested, and the tests validate that features work under real-world conditions.
-
-**All Playwright tests require `make dev` to be running.**
-
-### Quick Start
+Vitest (unit/fuzz/stress), Playwright (E2E, perf, soak, Yjs scenarios), and a Bun Yjs load harness. **Playwright needs `make dev` running** (or point tests at your stack; see guide).
 
 ```bash
-# Unit tests (schema, plugins, fuzz) — no server needed
-make test
-
-# E2E tests (features, performance, collaboration) — needs make dev
-make test-e2e
-
-# Performance tests (configurable via env vars)
-make test-perf          # Single-user typing latency (PERF_HEADINGS, PERF_SHAPE)
-make test-perf-collab   # Multi-user typing latency (PERF_COLLAB_USERS, PERF_COLLAB_HEADINGS, PERF_COLLAB_SHAPE)
-
-# Quick multi-user collaboration soak (30s, 3 users)
-make test-soak-collab-quick
-
-# Full test suite overview
-make test-stress        # Headless stress probe (~30s)
-make test-load          # 100-client Yjs convergence (~40s)
-make test-yjs-soak      # Reconnection + tab switch (~20s)
-make test-soak-quick    # 5-minute single-user soak
-make test-soak          # Full 30-minute soak suite
+make test              # unit — no servers
+make test-e2e          # Playwright — needs dev stack
+make test-perf         # typing latency (env-tunable)
+make test-perf-collab  # multi-user latency
+make test-yjs-soak     # reconnect / tab churn
+make test-load         # N-client convergence harness
+# …soak variants: Makefile is the menu of targets
 ```
 
-### Test Layers
-
-**Layer 1 — Unit tests (Vitest):** Schema invariants, plugin state, fuzz testing (10,000 random operations), and a stress probe that binary-searches for the heading count ceiling where transaction time exceeds one frame budget.
-
-**Layer 2 — E2E tests (Playwright):** Feature verification (drag, fold, filter, TOC), keystroke-to-paint latency (single-user and multi-user), and collaboration sync between multiple browser contexts with unique user identities. Performance tests are configurable: `make test-perf` (single-user, `PERF_HEADINGS`, `PERF_SHAPE`), `make test-perf-collab` (multi-user concurrent typing, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`).
-
-**Layer 3 — Soak tests (Playwright):** Sustained editing sessions with stochastic bots, memory leak detection, and N-user collaboration with full document convergence verification. Documents use realistic content (paragraphs, lists, task lists, code blocks per section). Configurable via environment variables:
-
-```bash
-# 5 users editing for 10 minutes on a 30-heading document
-SOAK_USERS=5 SOAK_DURATION=600000 SOAK_HEADINGS=30 make test-soak-collab-quick
-```
-
-**Layer 4 — Yjs scenarios:** Reconnection recovery (kill/restart Hocuspocus mid-session) and rapid tab switching (Y.Doc lifecycle under mount/unmount stress).
-
-**Layer 5 — Load harness:** Standalone Bun script simulating up to 100 headless Yjs clients editing the same document, with byte-level convergence verification.
-
-See [`tests/TESTING.md`](tests/TESTING.md) for the full testing guide, architecture diagram, and environment variable reference.
+Full layers, env reference, and CI notes: **[`tests/TESTING.md`](tests/TESTING.md)**.
 
 ## Tech Stack
 

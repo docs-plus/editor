@@ -51,6 +51,7 @@ tests/
 ├── e2e/
 │   ├── helpers/
 │   │   ├── editor-page.ts                # Playwright Page Object Model for the editor
+│   │   ├── playwright-modifier-key.ts    # Meta vs Control for keyboard shortcuts
 │   │   ├── perf-observer.ts              # PerformanceObserver injection + latency stats
 │   │   ├── soak-bot.ts                   # Weighted-random action generator (10 action types)
 │   │   └── soak-journeys.ts              # 2 scripted critical-path sequences
@@ -224,7 +225,7 @@ make test-yjs-soak
 
 ### Reconnection Recovery (`reconnection.spec.ts`)
 
-Spawns a dedicated Hocuspocus instance on port 1235, types content, kills the server, restarts it with SQLite persistence, and verifies no data loss. Uses `window.__HOCUS_URL` to redirect the editor's WebSocket.
+Spawns a dedicated Hocuspocus instance on port 1235 (`bun run hocus`), types content, kills the server, restarts it with SQLite persistence, and verifies no data loss. Uses `window.__HOCUS_URL` to redirect the editor's WebSocket.
 
 ### Rapid Tab Switch (`rapid-tab-switch.spec.ts`)
 
