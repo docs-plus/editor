@@ -1,42 +1,20 @@
-import path from "node:path";
-
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { NextResponse } from "next/server";
 
 import { PLAYGROUND_ID } from "@/lib/constants";
+import { logAbuseEvent } from "@/lib/security/abuse-log";
+import { getClientIpFromHeaders } from "@/lib/security/client-ip";
+import { isValidUserDocumentId } from "@/lib/security/doc-id-validator";
+import { HTTP_MUTATION_RATE_LIMIT_PER_MINUTE } from "@/lib/security/guardrail-config";
+import { createSlidingWindowLimiter } from "@/lib/security/rate-limit";
+import { openBetterSqlite, SQLITE_BUSY } from "@/lib/sqlite-open";
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_ID_LENGTH = 64;
-
-function hasControlChars(s: string): boolean {
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c <= 0x1f || c === 0x7f) return true;
-  }
-  return false;
-}
-
-function isValidDocumentId(id: string): boolean {
-  if (!id || id.length > MAX_ID_LENGTH) return false;
-  if (hasControlChars(id)) return false;
-  if (id.includes("../") || id.includes("..\\")) return false;
-  return UUID_REGEX.test(id);
-}
-
-function getDbPath(): string {
-  return process.env.DB_PATH ?? path.join(process.cwd(), "db.sqlite");
-}
-
-function openDb(): Database.Database {
-  const dbPath = getDbPath();
-  const db = new Database(dbPath, { timeout: 5000 });
-  db.pragma("journal_mode = WAL");
-  return db;
-}
-
-const SQLITE_BUSY = 5;
 const MAX_RETRIES = 3;
+const ONE_MINUTE_MS = 60_000;
+const deleteLimiter = createSlidingWindowLimiter({
+  limit: HTTP_MUTATION_RATE_LIMIT_PER_MINUTE,
+  windowMs: ONE_MINUTE_MS,
+});
 
 function deleteWithRetry(db: Database.Database, id: string): boolean {
   const stmt = db.prepare("DELETE FROM documents WHERE name = ?");
@@ -54,24 +32,42 @@ function deleteWithRetry(db: Database.Database, id: string): boolean {
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const ip = getClientIpFromHeaders(request.headers);
+  const decision = deleteLimiter.check(ip);
+  if (!decision.allowed) {
+    logAbuseEvent("documents_delete_throttled", {
+      ip,
+      route: "/api/documents/[id]",
+      retry_after_s: decision.retryAfterSeconds,
+    });
+    return NextResponse.json(
+      { error: "Rate limit exceeded", retryAfter: decision.retryAfterSeconds },
+      {
+        status: 429,
+        headers: { "Retry-After": String(decision.retryAfterSeconds) },
+      },
+    );
+  }
 
   if (id === PLAYGROUND_ID) {
+    logAbuseEvent("documents_delete_playground_rejected", { ip, id });
     return NextResponse.json(
       { error: "Cannot delete playground document" },
       { status: 400 },
     );
   }
 
-  if (!isValidDocumentId(id)) {
+  if (!isValidUserDocumentId(id)) {
+    logAbuseEvent("documents_delete_invalid_id", { ip, id });
     return NextResponse.json({ error: "Invalid document id" }, { status: 400 });
   }
 
   try {
-    const db = openDb();
+    const db = openBetterSqlite({ timeoutMs: 5000 });
     try {
       const deleted = deleteWithRetry(db, id);
       return NextResponse.json({ deleted }, { status: deleted ? 200 : 404 });
@@ -79,6 +75,11 @@ export async function DELETE(
       db.close();
     }
   } catch (err) {
+    logAbuseEvent("documents_delete_failed", {
+      ip,
+      id,
+      error: err instanceof Error ? err.message : "unknown_error",
+    });
     console.error("[DELETE /api/documents]", err);
     return NextResponse.json(
       { error: "Failed to delete document" },

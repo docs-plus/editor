@@ -26,11 +26,16 @@ async function waitForPort(port: number, timeoutMs = 10_000): Promise<void> {
 }
 
 function spawnHocuspocus(): ChildProcess {
-  return spawn(
-    "bunx",
-    ["@hocuspocus/cli", "--port", String(HOCUS_PORT), "--sqlite", HOCUS_DB],
-    { stdio: "pipe" },
-  );
+  return spawn("bun", ["run", "hocus"], {
+    stdio: "pipe",
+    env: {
+      ...process.env,
+      HOCUS_PORT: String(HOCUS_PORT),
+      DB_PATH: HOCUS_DB,
+      // Soak kills/restarts WS; client reconnect spam must not trip Throttle bans.
+      HOCUS_THROTTLE: "0",
+    },
+  });
 }
 
 async function killProcess(proc: ChildProcess): Promise<void> {

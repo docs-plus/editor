@@ -1,6 +1,10 @@
 /**
  * PM2 ecosystem config for production.
  * Next.js on 3847, Hocuspocus on 3848 (avoids common 3000/1234 conflicts).
+ *
+ * Optional env for editor-hocus (inherit from host or set here): TRUSTED_PROXY,
+ * WS_CONNECTION_LIMIT, DOC_CREATION_RATE_LIMIT, HOCUS_THROTTLE*, HOCUS_LOGGER, etc.
+ * See README "Guardrail env vars" + "Hocuspocus server".
  */
 module.exports = {
   apps: [
@@ -19,9 +23,13 @@ module.exports = {
     {
       name: "editor-hocus",
       cwd: __dirname,
-      script: "bunx",
-      args: "@hocuspocus/cli --port 3848 --sqlite db.sqlite",
-      env: { NODE_ENV: "production" },
+      script: "bun",
+      args: "run hocus",
+      env: {
+        NODE_ENV: "production",
+        HOCUS_PORT: "3848",
+        DB_PATH: "db.sqlite",
+      },
       instances: 1,
       exec_mode: "fork",
       autorestart: true,

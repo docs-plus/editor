@@ -6,8 +6,8 @@ dev: ## Start Next.js and Hocuspocus dev servers in parallel
 dev-next: ## Start Next.js dev server
 	bun next dev
 
-dev-hocus: ## Start Hocuspocus WebSocket + SQLite server
-	bunx @hocuspocus/cli --port 1234 --sqlite db.sqlite
+dev-hocus: ## Start Hocuspocus WebSocket + SQLite server (custom bootstrap)
+	HOCUS_PORT=1234 DB_PATH=db.sqlite bun run hocus
 
 build: ## Build for production
 	bun next build
