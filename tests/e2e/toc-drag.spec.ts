@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { assertTruthy } from "./helpers/assert-truthy";
 import { EditorPage } from "./helpers/editor-page";
 
 const DOC_CONTENT = {
@@ -80,12 +81,15 @@ test.describe("TOC drag and drop", () => {
     const sectionB = headings.find((h) => h.text === "Section B");
     expect(sectionA).toBeTruthy();
     expect(sectionB).toBeTruthy();
+    if (!sectionA || !sectionB) {
+      throw new Error("expected Section A and Section B");
+    }
 
     const rowB = page.locator(
-      `.toc-sidebar-item-row[data-toc-id="${sectionB!.tocId}"]`,
+      `.toc-sidebar-item-row[data-toc-id="${sectionB.tocId}"]`,
     );
     const rowA = page.locator(
-      `.toc-sidebar-item-row[data-toc-id="${sectionA!.tocId}"]`,
+      `.toc-sidebar-item-row[data-toc-id="${sectionA.tocId}"]`,
     );
 
     const handleB = rowB.locator(".toc-sidebar-drag-handle");
@@ -115,11 +119,13 @@ test.describe("TOC drag and drop", () => {
 
   test("folded section drag handle is visible on hover", async ({ page }) => {
     const headings = await editorPage.getHeadingsWithTocIds();
-    const sectionA = headings.find((h) => h.text === "Section A");
-    expect(sectionA).toBeTruthy();
+    const sectionA = assertTruthy(
+      headings.find((h) => h.text === "Section A"),
+      "Section A heading",
+    );
 
     const row = page.locator(
-      `.toc-sidebar-item-row[data-toc-id="${sectionA!.tocId}"]`,
+      `.toc-sidebar-item-row[data-toc-id="${sectionA.tocId}"]`,
     );
     const foldToggle = row.locator(".toc-sidebar-fold-toggle");
 

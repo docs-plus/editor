@@ -367,7 +367,6 @@ async function run(config: YjsLoadHarnessConfig): Promise<void> {
     destroyClients(clients);
     process.exit(1);
   }
-  const connectMs = Date.now();
   console.log(`[connect] All ${config.clients} clients synced`);
 
   // Phase 2: Seed

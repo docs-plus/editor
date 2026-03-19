@@ -1,9 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { JSONContent } from "@tiptap/core";
 
-function getModifierKey(): "Meta" | "Control" {
-  return process.platform === "darwin" ? "Meta" : "Control";
-}
+import { getPlaywrightModifierKey } from "./playwright-modifier-key";
 
 export class EditorPage {
   constructor(private page: Page) {}
@@ -82,11 +80,17 @@ export class EditorPage {
       (n.attrs?.["data-toc-id"] ?? n.attrs?.id) as string | undefined;
     return (
       json?.content?.filter((n) => n.type === "heading" && getTocId(n)) ?? []
-    ).map((n) => ({
-      tocId: getTocId(n)!,
-      level: n.attrs?.level as number | undefined,
-      text: (n.content?.[0] as { text?: string } | undefined)?.text,
-    }));
+    ).map((n) => {
+      const tocId = getTocId(n);
+      if (!tocId) {
+        throw new Error("Invariant: filtered headings must have toc id");
+      }
+      return {
+        tocId,
+        level: n.attrs?.level as number | undefined,
+        text: (n.content?.[0] as { text?: string } | undefined)?.text,
+      };
+    });
   }
 
   getHeadingByTocId(id: string) {
@@ -114,7 +118,7 @@ export class EditorPage {
   }
 
   async openFilter(): Promise<void> {
-    const modifier = getModifierKey();
+    const modifier = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${modifier}+Shift+f`);
   }
 
@@ -163,7 +167,7 @@ export class EditorPage {
         await this.pressKey("Enter");
       } else {
         // Heading shortcut is Mod+Alt+level (Meta on Mac, Control on Windows)
-        const mod = getModifierKey();
+        const mod = getPlaywrightModifierKey();
         await this.page.keyboard.press(`${mod}+Alt+${level}`);
         await this.typeText(text);
         await this.pressKey("Enter");
@@ -181,12 +185,12 @@ export class EditorPage {
   }
 
   async undo(): Promise<void> {
-    const mod = getModifierKey();
+    const mod = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${mod}+z`);
   }
 
   async redo(): Promise<void> {
-    const mod = getModifierKey();
+    const mod = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${mod}+Shift+z`);
   }
 
@@ -198,7 +202,7 @@ export class EditorPage {
   }
 
   async changeHeadingLevel(level: number): Promise<void> {
-    const mod = getModifierKey();
+    const mod = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${mod}+Alt+${level}`);
   }
 

@@ -26,7 +26,11 @@ describe("canMapDecorations", () => {
     });
     editor.commands.insertContent("hello");
     expect(lastTr).toBeDefined();
-    expect(canMapDecorations(lastTr!, oldDoc)).toBe(true);
+    const tr = lastTr;
+    if (!tr) {
+      throw new Error("expected transaction");
+    }
+    expect(canMapDecorations(tr, oldDoc)).toBe(true);
     editor.destroy();
   });
 
@@ -55,7 +59,11 @@ describe("canMapDecorations", () => {
       content: [{ type: "text", text: "New Section" }],
     });
     expect(lastTr).toBeDefined();
-    expect(canMapDecorations(lastTr!, oldDoc)).toBe(false);
+    const trInsert = lastTr;
+    if (!trInsert) {
+      throw new Error("expected transaction");
+    }
+    expect(canMapDecorations(trInsert, oldDoc)).toBe(false);
     editor.destroy();
   });
 
@@ -85,7 +93,11 @@ describe("canMapDecorations", () => {
     });
     editor.chain().focus().setTextSelection(1).deleteSelection().run();
     expect(lastTr).toBeDefined();
-    expect(canMapDecorations(lastTr!, oldDoc)).toBe(false);
+    const trDelete = lastTr;
+    if (!trDelete) {
+      throw new Error("expected transaction");
+    }
+    expect(canMapDecorations(trDelete, oldDoc)).toBe(false);
     editor.destroy();
   });
 

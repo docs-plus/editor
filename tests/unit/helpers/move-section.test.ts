@@ -50,6 +50,16 @@ function getHeadings(editor: ReturnType<typeof createTestEditor>) {
   return headings;
 }
 
+type HeadingRow = ReturnType<typeof getHeadings>[number];
+
+function requireHeading(headings: HeadingRow[], title: string): HeadingRow {
+  const h = headings.find((x) => x.text === title);
+  if (!h) {
+    throw new Error(`Expected heading "${title}"`);
+  }
+  return h;
+}
+
 describe("moveSection", () => {
   it("moves a section down (H2 past another H2)", () => {
     const editor = createTestEditor({
@@ -61,8 +71,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     const sectionAEnd = sectionB.pos;
 
@@ -89,8 +99,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     moveSection(
       editor.view,
@@ -114,7 +124,7 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const section = headings.find((h) => h.text === "Section A")!;
+    const section = requireHeading(headings, "Section A");
     const sectionEnd = editor.state.doc.content.size;
 
     moveSection(editor.view, section.pos, sectionEnd, section.pos, 3);
@@ -135,8 +145,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     moveSection(
       editor.view,
@@ -162,7 +172,7 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const section = headings.find((h) => h.text === "Section A")!;
+    const section = requireHeading(headings, "Section A");
     const docBefore = editor.state.doc.toJSON();
 
     moveSection(
@@ -186,8 +196,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
     const docBefore = editor.state.doc.toJSON();
 
     moveSection(editor.view, sectionA.pos, sectionB.pos, sectionA.pos + 2);
@@ -206,8 +216,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     moveSection(
       editor.view,
@@ -244,8 +254,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     moveSection(
       editor.view,
@@ -303,8 +313,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const sectionA = headings.find((h) => h.text === "Section A")!;
-    const sectionB = headings.find((h) => h.text === "Section B")!;
+    const sectionA = requireHeading(headings, "Section A");
+    const sectionB = requireHeading(headings, "Section B");
 
     moveSection(
       editor.view,
@@ -342,8 +352,8 @@ describe("moveSection", () => {
     });
 
     const headings = getHeadings(editor);
-    const title = headings.find((h) => h.text === "Title")!;
-    const sectionC = headings.find((h) => h.text === "Section C")!;
+    const title = requireHeading(headings, "Title");
+    const sectionC = requireHeading(headings, "Section C");
     const titleEnd = title.pos + editor.state.doc.child(0).nodeSize;
 
     moveSection(

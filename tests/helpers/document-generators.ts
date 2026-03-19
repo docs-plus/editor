@@ -41,7 +41,11 @@ const PROSE_SENTENCES = [
 ];
 
 const CODE_SAMPLES = [
-  "function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet('World'));",
+  `function greet(name: string): string {
+  return \`Hello, \${name}!\`;
+}
+
+console.log(greet('World'));`,
   "const items = [1, 2, 3, 4, 5];\nconst doubled = items.map(n => n * 2);\nconsole.log(doubled);",
   "interface Config {\n  port: number;\n  host: string;\n  debug: boolean;\n}\n\nconst defaults: Config = {\n  port: 3000,\n  host: 'localhost',\n  debug: false,\n};",
   "async function fetchData(url: string) {\n  const res = await fetch(url);\n  if (!res.ok) throw new Error(res.statusText);\n  return res.json();\n}",

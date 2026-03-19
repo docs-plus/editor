@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { assertTruthy } from "./helpers/assert-truthy";
 import { EditorPage } from "./helpers/editor-page";
 
 test.describe("heading fold", () => {
@@ -28,13 +29,15 @@ test.describe("heading fold", () => {
     const row = toggle.locator(
       "xpath=ancestor::div[contains(@class, 'toc-sidebar-item-row')]",
     );
-    const tocId = await row.getAttribute("data-toc-id");
-    expect(tocId).toBeTruthy();
+    const tocId = assertTruthy(
+      await row.getAttribute("data-toc-id"),
+      "data-toc-id",
+    );
 
     await toggle.click();
     await page.waitForTimeout(500);
 
-    const folded = await editorPage.isSectionFolded(tocId!);
+    const folded = await editorPage.isSectionFolded(tocId);
     expect(folded).toBe(true);
   });
 
@@ -49,12 +52,14 @@ test.describe("heading fold", () => {
     const row = toggle.locator(
       "xpath=ancestor::div[contains(@class, 'toc-sidebar-item-row')]",
     );
-    const tocId = await row.getAttribute("data-toc-id");
-    expect(tocId).toBeTruthy();
+    const tocId = assertTruthy(
+      await row.getAttribute("data-toc-id"),
+      "data-toc-id",
+    );
 
     await toggle.click();
     await page.waitForTimeout(500);
-    expect(await editorPage.isSectionFolded(tocId!)).toBe(true);
+    expect(await editorPage.isSectionFolded(tocId)).toBe(true);
 
     const crinkle = page.locator(".heading-fold-crinkle").first();
     if (await crinkle.isVisible()) {

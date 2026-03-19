@@ -116,9 +116,9 @@ describe("getMigrationTabs", () => {
     localStorage.setItem("tinydocy-tabs", JSON.stringify({ tabs }));
     const result = getMigrationTabs();
     expect(result).not.toBeNull();
-    expect(result!.some((t) => t.id === PLAYGROUND_ID)).toBe(true);
-    expect(result!.some((t) => t.id === "a")).toBe(true);
-    expect(result!.some((t) => t.id === "b")).toBe(true);
+    expect(result?.some((t) => t.id === PLAYGROUND_ID)).toBe(true);
+    expect(result?.some((t) => t.id === "a")).toBe(true);
+    expect(result?.some((t) => t.id === "b")).toBe(true);
   });
 
   it("returns null for invalid tab shapes", () => {

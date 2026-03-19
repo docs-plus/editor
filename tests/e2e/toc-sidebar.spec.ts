@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { assertTruthy } from "./helpers/assert-truthy";
 import { EditorPage } from "./helpers/editor-page";
 
 test.describe("TOC sidebar", () => {
@@ -25,13 +26,14 @@ test.describe("TOC sidebar", () => {
     const headings = await editorPage.getHeadingsWithTocIds();
     expect(headings.length).toBeGreaterThanOrEqual(2);
     // headings[2] is Second Section (H2)
-    const secondSection =
-      headings[2] ?? headings.find((h) => h.text?.includes("Second"));
-    expect(secondSection).toBeTruthy();
+    const secondSection = assertTruthy(
+      headings[2] ?? headings.find((h) => h.text?.includes("Second")),
+      "Second Section heading",
+    );
 
     await page.locator(".toc-sidebar").waitFor({ state: "visible" });
     const row = page.locator(
-      `.toc-sidebar-item-row[data-toc-id="${secondSection!.tocId}"]`,
+      `.toc-sidebar-item-row[data-toc-id="${secondSection.tocId}"]`,
     );
     const item = row.locator(".toc-sidebar-item");
     await item.click();

@@ -3,8 +3,9 @@ import type { Page } from "@playwright/test";
 import { pick, randomInt } from "@/lib/random";
 
 import type { EditorPage } from "./editor-page";
+import { getPlaywrightModifierKey } from "./playwright-modifier-key";
 
-const MOD = process.platform === "darwin" ? "Meta" : "Control";
+const MOD = getPlaywrightModifierKey();
 
 export interface SoakAction {
   name: string;
