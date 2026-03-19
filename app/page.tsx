@@ -11,6 +11,8 @@ export default function Home() {
     ready,
     tabs,
     activeTabId,
+    canCreateTab,
+    createTabLimitMessage,
     createTab,
     closeTab,
     closeAllTabs,
@@ -33,6 +35,8 @@ export default function Home() {
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
+        canCreateTab={canCreateTab}
+        createTabLimitMessage={createTabLimitMessage}
         onSwitch={switchTab}
         onCreate={createTab}
         onClose={closeTab}

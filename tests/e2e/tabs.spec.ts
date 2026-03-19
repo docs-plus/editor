@@ -50,4 +50,28 @@ test.describe("tabs", () => {
     const tabsAfter = page.locator(".tab-bar-tab");
     await expect(tabsAfter).toHaveCount(countBefore + 1);
   });
+
+  test("create tab is blocked when cap is reached", async ({ page }) => {
+    const ep = new EditorPage(page);
+    await ep.goto();
+    await ep.waitForSync();
+
+    const newTabBtn = page.locator(".tab-bar-new");
+    for (let i = 0; i < 60; i++) {
+      if (await newTabBtn.isDisabled()) break;
+      const beforeCount = await page.locator(".tab-bar-tab").count();
+      await newTabBtn.click();
+      await page.waitForTimeout(120);
+      const afterCount = await page.locator(".tab-bar-tab").count();
+      if (afterCount === beforeCount) break;
+    }
+
+    await expect(newTabBtn).toBeDisabled();
+    await expect(newTabBtn).toHaveAttribute("title", /Maximum tabs reached/);
+
+    const cappedCount = await page.locator(".tab-bar-tab").count();
+    await page.keyboard.press("Control+t");
+    await page.waitForTimeout(300);
+    await expect(page.locator(".tab-bar-tab")).toHaveCount(cappedCount);
+  });
 });

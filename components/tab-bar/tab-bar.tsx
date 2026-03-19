@@ -36,6 +36,8 @@ import "./tab-bar.scss";
 interface TabBarProps {
   tabs: Tab[];
   activeTabId: string;
+  canCreateTab?: boolean;
+  createTabLimitMessage?: string;
   onSwitch: (id: string) => void;
   onCreate: () => void;
   onClose: (id: string) => void;
@@ -123,6 +125,8 @@ function SortableTab({
 export function TabBar({
   tabs,
   activeTabId,
+  canCreateTab = true,
+  createTabLimitMessage = "Maximum tabs reached",
   onSwitch,
   onCreate,
   onClose,
@@ -162,6 +166,7 @@ export function TabBar({
 
       if (mod && e.key === "t") {
         e.preventDefault();
+        if (!canCreateTab) return;
         onCreate();
       }
 
@@ -188,7 +193,15 @@ export function TabBar({
         if (idx < tabs.length - 1) onSwitch(tabs[idx + 1].id);
       }
     },
-    [tabs, activeTabId, onCreate, onClose, onSwitch, onPlaygroundRegenerate],
+    [
+      tabs,
+      activeTabId,
+      canCreateTab,
+      onCreate,
+      onClose,
+      onSwitch,
+      onPlaygroundRegenerate,
+    ],
   );
 
   useEffect(() => {
@@ -260,8 +273,9 @@ export function TabBar({
           type="button"
           className="tab-bar-new"
           onClick={onCreate}
-          aria-label="New tab (⌘T)"
-          title="New tab (⌘T)"
+          disabled={!canCreateTab}
+          aria-label={canCreateTab ? "New tab (⌘T)" : "New tab (limit reached)"}
+          title={canCreateTab ? "New tab (⌘T)" : createTabLimitMessage}
         >
           <PlusIcon size={14} />
         </button>

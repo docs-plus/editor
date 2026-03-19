@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import * as Y from "yjs";
 
-import { PLAYGROUND_ID } from "@/lib/constants";
+import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import {
   getGlobalTabsDoc,
   getHocuspocusToken,
@@ -32,6 +32,8 @@ export interface UseSyncedTabsReturn {
   ready: boolean;
   tabs: Tab[];
   activeTabId: string;
+  canCreateTab: boolean;
+  createTabLimitMessage: string;
   createTab: () => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
@@ -128,9 +130,13 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
 
+  const createTabLimitMessage = `Maximum tabs reached (${MAX_TABS_PER_CLIENT})`;
+
   const createTab = useCallback(() => {
     const arr = tabsArrayRef.current;
     if (!arr) return;
+    const current = ensurePlaygroundTab(deduplicateTabs(arr.toArray()));
+    if (current.length >= MAX_TABS_PER_CLIENT) return;
     const tab: Tab = {
       id: generateId(),
       title: "Untitled",
@@ -315,6 +321,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     ready,
     tabs,
     activeTabId,
+    canCreateTab: tabs.length < MAX_TABS_PER_CLIENT,
+    createTabLimitMessage,
     createTab,
     closeTab,
     closeAllTabs,
