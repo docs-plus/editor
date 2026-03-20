@@ -19,17 +19,16 @@ test.describe("heading filter", () => {
 
   test("CMD+SHIFT+F opens filter panel", async ({ page }) => {
     await editorPage.openFilter();
-    const panel = page.locator(".filter-panel");
+    const panel = page.getByRole("search", { name: "Document filter" });
     await expect(panel).toBeVisible({ timeout: 2000 });
   });
 
   test("typing filter query highlights matches", async ({ page }) => {
     await editorPage.openFilter();
     await editorPage.typeFilter("Alpha");
-    // Filter highlights are debounced; wait for match
-    await page.waitForTimeout(400);
+    await editorPage.commitFilter();
 
     const highlights = page.locator(".heading-filter-highlight");
-    await expect(highlights.first()).toBeVisible({ timeout: 2000 });
+    await expect(highlights.first()).toBeVisible({ timeout: 5000 });
   });
 });

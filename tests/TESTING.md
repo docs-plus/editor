@@ -269,3 +269,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - [Test Realism & Soak Plan](../docs/plans/6-feat-test-realism-soak-and-stress-plan.md) — soak, stress, and collaboration layers (completed)
 - [E2E Testing Brainstorm](../docs/brainstorms/8-e2e-testing-strategy-brainstorm.md) — initial requirements exploration
 - [Test Realism Brainstorm](../docs/brainstorms/9-test-realism-and-soak-brainstorm.md) — soak and performance requirements
+
+Historical-doc note: some completed plans/brainstorms predate the `extensions/`
+refactor and may reference legacy paths under
+`components/tiptap-node/{heading-node,document-node}`.

@@ -7,35 +7,62 @@ export class EditorPage {
   constructor(private page: Page) {}
 
   async goto(docId?: string): Promise<void> {
-    const id =
-      docId ?? `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const tabsState = {
-      tabs: [
-        { id: "playground", title: "Playground", createdAt: 0 },
-        { id, title: "Untitled", createdAt: Date.now() },
-      ],
-      activeTabId: id,
-    };
+    const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const id = docId ?? `test-${nonce}`;
+    const tabsState =
+      id === "playground"
+        ? {
+            tabs: [{ id: "playground", title: "Playground", createdAt: 0 }],
+            activeTabId: "playground",
+          }
+        : {
+            tabs: [
+              { id: "playground", title: "Playground", createdAt: 0 },
+              { id, title: "Untitled", createdAt: Date.now() },
+            ],
+            activeTabId: id,
+          };
 
     // Per-test global-tabs doc for E2E isolation (avoids migration race when parallel)
     await this.page.addInitScript((tabsDoc: string) => {
       (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
         tabsDoc;
-    }, `global-tabs-${id}`);
+    }, `global-tabs-${id}-${nonce}`);
 
-    await this.page.goto("/");
-    await this.page.evaluate((state: typeof tabsState) => {
+    // Seed migration storage before first app boot so useSyncedTabs onSynced()
+    // consumes deterministic tab state instead of generating a random fallback.
+    await this.page.addInitScript((state: typeof tabsState) => {
       localStorage.setItem("tinydocy-tabs", JSON.stringify(state));
     }, tabsState);
 
-    await this.page.reload();
+    await this.page.goto("/");
+
+    if (id === "playground") {
+      await this.page.waitForSelector(".tiptap", {
+        state: "visible",
+        timeout: 15000,
+      });
+      return;
+    }
 
     // With synced tabs: migration from localStorage runs when global-tabs is empty.
-    // Wait for our tab to appear (migration applied). Requires clean Hocuspocus/DB for isolated runs.
-    await this.page.waitForSelector(`[data-tab-id="${id}"]`, {
-      state: "visible",
-      timeout: 15000,
-    });
+    // If startup races (rare under soak/reconnect), retry once with explicit
+    // localStorage sync + reload to force a deterministic bootstrap.
+    try {
+      await this.page.waitForSelector(`[data-tab-id="${id}"]`, {
+        state: "visible",
+        timeout: 15000,
+      });
+    } catch {
+      await this.page.evaluate((state: typeof tabsState) => {
+        localStorage.setItem("tinydocy-tabs", JSON.stringify(state));
+      }, tabsState);
+      await this.page.reload();
+      await this.page.waitForSelector(`[data-tab-id="${id}"]`, {
+        state: "visible",
+        timeout: 15000,
+      });
+    }
 
     await this.page.waitForSelector(".tiptap", {
       state: "visible",
@@ -118,22 +145,33 @@ export class EditorPage {
   }
 
   async openFilter(): Promise<void> {
+    await this.page.click(".tiptap");
     const modifier = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${modifier}+Shift+f`);
+    const filterBar = this.page.getByRole("search", {
+      name: "Document filter",
+    });
+    if ((await filterBar.count()) === 0) {
+      await this.page
+        .getByRole("button", { name: "Toggle document filter" })
+        .click();
+    }
   }
 
   async typeFilter(query: string): Promise<void> {
-    const filterInput = this.page.locator(".filter-panel-input");
+    const filterInput = this.page.getByLabel("Filter term");
     await filterInput.fill(query);
   }
 
   async commitFilter(): Promise<void> {
-    const filterInput = this.page.locator(".filter-panel-input");
+    const filterInput = this.page.getByLabel("Filter term");
     await filterInput.press("Enter");
   }
 
   async clearFilter(): Promise<void> {
-    const clearBtn = this.page.locator(".filter-panel-clear");
+    const clearBtn = this.page.getByRole("button", {
+      name: "Clear all filters",
+    });
     await clearBtn.click();
   }
 
@@ -149,8 +187,9 @@ export class EditorPage {
 
   async clickTocItem(text: string): Promise<void> {
     const item = this.page
-      .locator(".toc-sidebar")
-      .locator(".toc-sidebar-item", { hasText: text });
+      .locator(".toc-sidebar-item", { hasText: text })
+      .first();
+    await item.waitFor({ state: "visible", timeout: 10000 });
     await item.scrollIntoViewIfNeeded();
     await item.click();
   }

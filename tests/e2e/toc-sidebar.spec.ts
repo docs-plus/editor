@@ -1,7 +1,35 @@
 import { expect, test } from "@playwright/test";
 
-import { assertTruthy } from "./helpers/assert-truthy";
 import { EditorPage } from "./helpers/editor-page";
+
+const TOC_DOC_CONTENT = {
+  type: "doc",
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 1 },
+      content: [{ type: "text", text: "Test Document" }],
+    },
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [{ type: "text", text: "First Section" }],
+    },
+    {
+      type: "paragraph",
+      content: [{ type: "text", text: "Content for First Section" }],
+    },
+    {
+      type: "heading",
+      attrs: { level: 2 },
+      content: [{ type: "text", text: "Second Section" }],
+    },
+    {
+      type: "paragraph",
+      content: [{ type: "text", text: "Content for Second Section" }],
+    },
+  ],
+};
 
 test.describe("TOC sidebar", () => {
   let editorPage: EditorPage;
@@ -10,11 +38,8 @@ test.describe("TOC sidebar", () => {
     editorPage = new EditorPage(page);
     await editorPage.goto();
     await editorPage.waitForSync();
-    await editorPage.buildDocument([
-      { level: 1, text: "Test Document" },
-      { level: 2, text: "First Section" },
-      { level: 2, text: "Second Section" },
-    ]);
+    await editorPage.setContent(TOC_DOC_CONTENT);
+    await page.waitForTimeout(300);
   });
 
   test("TOC shows all headings", async () => {
@@ -22,21 +47,12 @@ test.describe("TOC sidebar", () => {
     expect(items.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("clicking TOC item scrolls to heading", async ({ page }) => {
-    const headings = await editorPage.getHeadingsWithTocIds();
-    expect(headings.length).toBeGreaterThanOrEqual(2);
-    // headings[2] is Second Section (H2)
-    const secondSection = assertTruthy(
-      headings[2] ?? headings.find((h) => h.text?.includes("Second")),
-      "Second Section heading",
-    );
-
+  test("clicking TOC item targets the heading", async ({ page }) => {
     await page.locator(".toc-sidebar").waitFor({ state: "visible" });
-    const row = page.locator(
-      `.toc-sidebar-item-row[data-toc-id="${secondSection.tocId}"]`,
-    );
-    const item = row.locator(".toc-sidebar-item");
-    await item.click();
-    await page.waitForTimeout(300);
+    await editorPage.clickTocItem("Second Section");
+    const secondHeading = page
+      .locator(".tiptap h2", { hasText: "Second Section" })
+      .first();
+    await expect(secondHeading).toBeVisible();
   });
 });

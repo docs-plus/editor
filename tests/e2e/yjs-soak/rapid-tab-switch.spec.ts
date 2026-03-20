@@ -20,7 +20,8 @@ test("rapid tab switching preserves document content", async ({ page }) => {
 
   const newTabBtn = page.locator(".tab-bar-new");
 
-  for (let i = 0; i < 10; i++) {
+  // Keep this under default doc-creation guardrails while still exercising rapid switching.
+  for (let i = 0; i < 8; i++) {
     await newTabBtn.click();
     await page.waitForTimeout(200);
   }
