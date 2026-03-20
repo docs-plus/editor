@@ -68,12 +68,12 @@ async function documentExists(
   db: sqlite3.Database,
   name: string,
 ): Promise<boolean> {
-  const row = await getSql<{ exists: number }>(
+  const row = await getSql<{ present: number }>(
     db,
-    "SELECT 1 AS exists FROM documents WHERE name = ? LIMIT 1",
+    "SELECT 1 AS present FROM documents WHERE name = ? LIMIT 1",
     [name],
   );
-  return Boolean(row?.exists);
+  return Boolean(row?.present);
 }
 
 async function countNonSystemDocuments(db: sqlite3.Database): Promise<number> {
@@ -150,6 +150,7 @@ if (
 
 const guardrails = createWsGuardrails();
 const metadataDb = createMetadataDb(getSqliteDbPath());
+const pendingDocuments = new Set<string>();
 
 await bootstrapMetadataTable(metadataDb);
 
@@ -157,7 +158,7 @@ const server = new Server({
   extensions: buildHocusServerExtensions(getSqliteDbPath()),
   async onConnect(data) {
     const headers = headersFromUnknown(
-      (data as Record<string, unknown>).requestHeaders,
+      (data as unknown as Record<string, unknown>).requestHeaders,
     );
     const ip = getClientIpFromHeaders(headers);
     const decision = guardrails.onConnect(ip);
@@ -167,7 +168,7 @@ const server = new Server({
   },
   async onDisconnect(data) {
     const headers = headersFromUnknown(
-      (data as Record<string, unknown>).requestHeaders,
+      (data as unknown as Record<string, unknown>).requestHeaders,
     );
     const ip = getClientIpFromHeaders(headers);
     guardrails.onDisconnect(ip);
@@ -180,10 +181,14 @@ const server = new Server({
 
     if (isSystemDocumentId(name)) return;
 
-    const exists = await documentExists(metadataDb, name);
-    if (!exists) {
+    // Allow concurrent joiners for a single in-flight doc creation.
+    if (pendingDocuments.has(name)) return;
+    pendingDocuments.add(name);
+    try {
+      const exists = await documentExists(metadataDb, name);
+      if (exists) return;
       const headers = headersFromUnknown(
-        (data as Record<string, unknown>).requestHeaders,
+        (data as unknown as Record<string, unknown>).requestHeaders,
       );
       const ip = getClientIpFromHeaders(headers);
       const total = await countNonSystemDocuments(metadataDb);
@@ -191,6 +196,8 @@ const server = new Server({
       if (!decision.allowed) {
         throw new Error(decision.reason);
       }
+    } finally {
+      pendingDocuments.delete(name);
     }
   },
   async onStoreDocument(data) {
