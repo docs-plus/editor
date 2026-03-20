@@ -1,10 +1,14 @@
 import { Logger } from "@hocuspocus/extension-logger";
+import { Redis } from "@hocuspocus/extension-redis";
 import { SQLite } from "@hocuspocus/extension-sqlite";
 import { Throttle } from "@hocuspocus/extension-throttle";
 import type { Extension } from "@hocuspocus/server";
 
 import {
   HOCUS_LOGGER_ENABLED,
+  HOCUS_REDIS_ENABLED,
+  HOCUS_REDIS_HOST,
+  HOCUS_REDIS_PORT,
   HOCUS_THROTTLE_BAN_MINUTES,
   HOCUS_THROTTLE_ENABLED,
   HOCUS_THROTTLE_MAX_ATTEMPTS,
@@ -31,6 +35,15 @@ export function buildHocusServerExtensions(databasePath: string): Extension[] {
     extensions.push(
       new Logger({
         onChange: false,
+      }),
+    );
+  }
+
+  if (HOCUS_REDIS_ENABLED) {
+    extensions.push(
+      new Redis({
+        host: HOCUS_REDIS_HOST,
+        port: HOCUS_REDIS_PORT,
       }),
     );
   }

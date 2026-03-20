@@ -11,6 +11,11 @@ function parseEnvInt(
   return parsed;
 }
 
+function parseEnvString(value: string | undefined, fallback: string): string {
+  const raw = value?.trim();
+  return raw && raw.length > 0 ? raw : fallback;
+}
+
 export const HTTP_MUTATION_RATE_LIMIT_PER_MINUTE = parseEnvInt(
   process.env.HTTP_MUTATION_RATE_LIMIT,
   30,
@@ -74,6 +79,22 @@ export const HOCUS_THROTTLE_WINDOW_SECONDS = parseEnvInt(
   process.env.HOCUS_THROTTLE_WINDOW_SECONDS,
   60,
   10,
+);
+
+/** `1` enables `@hocuspocus/extension-redis` for multi-instance pub/sub. */
+export const HOCUS_REDIS_ENABLED = process.env.HOCUS_REDIS?.trim() === "1";
+
+/** Redis host used by Hocuspocus Redis extension. */
+export const HOCUS_REDIS_HOST = parseEnvString(
+  process.env.HOCUS_REDIS_HOST,
+  "127.0.0.1",
+);
+
+/** Redis port used by Hocuspocus Redis extension (non-default to avoid host conflicts). */
+export const HOCUS_REDIS_PORT = parseEnvInt(
+  process.env.HOCUS_REDIS_PORT,
+  6380,
+  1,
 );
 
 export function parseClientMaxTabsFromEnv(

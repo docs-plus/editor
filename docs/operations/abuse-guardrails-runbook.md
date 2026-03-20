@@ -25,6 +25,15 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `HOCUS_LOGGER=0` to disable Hocuspocus Logger extension
 - `HOCUS_THROTTLE=0` to disable Hocuspocus Throttle extension
 - `HOCUS_THROTTLE_MAX_ATTEMPTS`, `HOCUS_THROTTLE_WINDOW_SECONDS`, `HOCUS_THROTTLE_BAN_MINUTES`
+- `HOCUS_REDIS=1` to enable Hocuspocus Redis pub/sub extension (opt-in)
+- `HOCUS_REDIS_HOST` (default: `127.0.0.1`)
+- `HOCUS_REDIS_PORT` (default: `6380`, non-default to avoid host Redis conflicts)
+
+Redis deployment notes:
+
+- `ecosystem.config.cjs` starts Redis via `editor-redis`, which requires a host-installed `redis-server` binary.
+- Redis extension supports cross-instance signaling, but SQLite remains the persistence layer.
+- Keep Hocuspocus to one instance per SQLite file unless persistence is moved to shared storage.
 
 ## Severity Levels
 

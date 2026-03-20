@@ -14,6 +14,9 @@ const ENV_KEYS = [
   "HOCUS_THROTTLE_MAX_ATTEMPTS",
   "HOCUS_THROTTLE_BAN_MINUTES",
   "HOCUS_THROTTLE_WINDOW_SECONDS",
+  "HOCUS_REDIS",
+  "HOCUS_REDIS_HOST",
+  "HOCUS_REDIS_PORT",
 ] as const;
 
 type GuardrailConfigModule = typeof import("@/lib/security/guardrail-config");
@@ -52,6 +55,9 @@ describe("guardrail-config", () => {
     expect(config.HOCUS_THROTTLE_MAX_ATTEMPTS).toBe(15);
     expect(config.HOCUS_THROTTLE_BAN_MINUTES).toBe(5);
     expect(config.HOCUS_THROTTLE_WINDOW_SECONDS).toBe(60);
+    expect(config.HOCUS_REDIS_ENABLED).toBe(false);
+    expect(config.HOCUS_REDIS_HOST).toBe("127.0.0.1");
+    expect(config.HOCUS_REDIS_PORT).toBe(6380);
   });
 
   it("parses valid env values", async () => {
@@ -104,5 +110,17 @@ describe("guardrail-config", () => {
 
     expect(config.HOCUS_LOGGER_ENABLED).toBe(false);
     expect(config.HOCUS_THROTTLE_ENABLED).toBe(false);
+  });
+
+  it("enables and parses Hocus Redis env when configured", async () => {
+    process.env.HOCUS_REDIS = "1";
+    process.env.HOCUS_REDIS_HOST = "redis.internal";
+    process.env.HOCUS_REDIS_PORT = "6391";
+
+    const config = await loadConfigModule();
+
+    expect(config.HOCUS_REDIS_ENABLED).toBe(true);
+    expect(config.HOCUS_REDIS_HOST).toBe("redis.internal");
+    expect(config.HOCUS_REDIS_PORT).toBe(6391);
   });
 });

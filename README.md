@@ -39,9 +39,19 @@ Local dev runs two services:
 Primary runtime knobs are environment-driven:
 
 - Guardrails and limits: `lib/security/guardrail-config.ts`
-- Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, ...):
+- Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
 - Hocus entrypoint: `scripts/hocus-server.ts`
+
+Redis scaling notes:
+
+- Redis extension is opt-in via `HOCUS_REDIS=1`.
+- Default Redis endpoint is `127.0.0.1:6380` (non-default port to avoid server
+  conflicts with other Redis instances).
+- `ecosystem.config.cjs` can run a local `editor-redis` process, but this
+  requires a host-installed `redis-server` binary.
+- Redis does not replace SQLite persistence; keep Hocuspocus at one instance per
+  SQLite file unless you move persistence to shared storage.
 
 Operational guidance:
 [`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md)

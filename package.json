@@ -45,6 +45,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@floating-ui/dom": "^1.7.6",
     "@hocuspocus/extension-logger": "^3.4.4",
+    "@hocuspocus/extension-redis": "^3.4.4",
     "@hocuspocus/extension-sqlite": "^3.4.4",
     "@hocuspocus/extension-throttle": "^3.4.4",
     "@hocuspocus/provider": "^3.4.4",
