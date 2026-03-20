@@ -42,6 +42,9 @@ Primary runtime knobs are environment-driven:
 - Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
 - Hocus entrypoint: `scripts/hocus-server.ts`
+- Discord / GitHub buttons (bottom status strip): optional
+  `NEXT_PUBLIC_DISCORD_INVITE_URL`, `NEXT_PUBLIC_GITHUB_REPO_URL` — defaults in
+  `lib/constants.ts`
 
 Redis scaling notes:
 
@@ -121,6 +124,16 @@ Detailed test layers, envs, and CI notes:
 - Named exports by default
 - Bun-only workflow (`bun`, `bunx`)
 - Kebab-case files, PascalCase components, camelCase hooks/utilities
+
+## Community & Upstream
+
+TinyDocy is the validation testbed for **docs.plus** — features are proven here
+before landing in the production editor.
+
+- [docs.plus](https://www.docs.plus) — live platform
+- [docs-plus/docs.plus](https://github.com/docs-plus/docs.plus) — production
+  repo
+- [Discord](https://discord.com/invite/25JPG38J59) — join the community
 
 ## License
 
