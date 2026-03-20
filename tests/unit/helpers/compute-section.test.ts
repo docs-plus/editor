@@ -1,7 +1,7 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
 
-import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
+import { computeSection } from "@/extensions/shared";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 /** Returns 0-based position of child start (matches computeSection coordinate system). */

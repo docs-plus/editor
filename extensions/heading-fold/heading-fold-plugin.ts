@@ -2,9 +2,9 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
-import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
-import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
-import { saveFoldedIds } from "@/components/tiptap-node/heading-node/helpers/fold-storage";
+import { canMapDecorations, computeSection } from "@/extensions/shared";
+
+import { saveFoldedIds } from "./helpers/fold-storage";
 
 type HeadingFoldMeta =
   | { type: "toggle"; id: string; contentHeight?: number }

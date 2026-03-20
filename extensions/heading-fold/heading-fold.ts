@@ -5,8 +5,8 @@ import {
   findSectionDom,
   headingFoldPluginKey,
   measureContentHeight,
-} from "@/components/tiptap-node/heading-node/heading-fold-plugin";
-import { loadFoldedIds } from "@/components/tiptap-node/heading-node/helpers/fold-storage";
+} from "./heading-fold-plugin";
+import { loadFoldedIds } from "./helpers/fold-storage";
 
 export interface HeadingFoldOptions {
   documentId: string;

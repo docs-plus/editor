@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   loadFoldedIds,
   saveFoldedIds,
-} from "@/components/tiptap-node/heading-node/helpers/fold-storage";
+} from "@/extensions/heading-fold/helpers/fold-storage";
 
 describe("fold-storage", () => {
   it("saveFoldedIds + loadFoldedIds → roundtrip Set<string>", () => {

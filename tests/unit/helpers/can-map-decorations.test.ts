@@ -1,7 +1,7 @@
 import type { Transaction } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
-import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
+import { canMapDecorations } from "@/extensions/shared";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 describe("canMapDecorations", () => {

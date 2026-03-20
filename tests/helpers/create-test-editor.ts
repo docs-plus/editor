@@ -11,10 +11,10 @@ import { TextAlign } from "@tiptap/extension-text-align";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { StarterKit } from "@tiptap/starter-kit";
 
-import { TitleDocument } from "@/components/tiptap-node/document-node/document-node-extension";
-import { HeadingFilter } from "@/components/tiptap-node/heading-node/heading-filter-extension";
-import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-extension";
-import { HeadingScale } from "@/components/tiptap-node/heading-node/heading-scale-extension";
+import { HeadingFilter } from "@/extensions/heading-filter";
+import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
+import { HeadingScale } from "@/extensions/heading-scale";
+import { TitleDocument } from "@/extensions/title-document";
 import { lowlight } from "@/lib/lowlight";
 
 export const DEFAULT_EXTENSIONS = [
@@ -28,7 +28,24 @@ export const DEFAULT_EXTENSIONS = [
   TableOfContents,
   HeadingScale,
   HeadingFold.configure({ documentId: "test" }),
-  HeadingFilter,
+  HeadingFilter.configure({
+    foldAdapter: {
+      getFoldedIds: (state) =>
+        headingFoldPluginKey.getState(state)?.foldedIds ?? new Set(),
+      setTemporaryFolds: (tr, ids) =>
+        tr.setMeta(headingFoldPluginKey, {
+          type: "set",
+          ids,
+          persist: false,
+        }),
+      restoreFolds: (tr, savedIds) =>
+        tr.setMeta(headingFoldPluginKey, {
+          type: "set",
+          ids: savedIds,
+          persist: true,
+        }),
+    },
+  }),
   HorizontalRule,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Highlight.configure({ multicolor: true }),

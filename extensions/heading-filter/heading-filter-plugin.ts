@@ -2,13 +2,14 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-import { headingFoldPluginKey } from "@/components/tiptap-node/heading-node/heading-fold-plugin";
-import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
 import {
+  canMapDecorations,
   filterSections,
   findAllSections,
   matchSections,
-} from "@/components/tiptap-node/heading-node/helpers/match-section";
+} from "@/extensions/shared";
+
+import type { HeadingFilterFoldAdapter } from "./heading-filter";
 
 export type HeadingFilterMeta =
   | { type: "preview"; query: string }
@@ -36,6 +37,7 @@ export interface HeadingFilterCallbackState {
 
 export interface HeadingFilterPluginOptions {
   onFilterChange?: (state: HeadingFilterCallbackState) => void;
+  foldAdapter?: HeadingFilterFoldAdapter;
 }
 
 export const headingFilterPluginKey = new PluginKey<HeadingFilterState>(
@@ -274,41 +276,43 @@ export function createHeadingFilterPlugin(
           if (modeChanged) prevMode = current.mode;
           if (matchedIdsChanged) prevMatchedIds = current.matchedSectionIds;
 
-          if (slugsChanged || modeChanged) {
-            if (!hadFilters && hasFilters) {
-              const foldState = headingFoldPluginKey.getState(view.state);
-              savedFoldIds = new Set(foldState?.foldedIds ?? []);
-            }
-
-            if (hasFilters) {
-              const allSections = findAllSections(view.state.doc);
-              const sectionsToFold = new Set<string>();
-              for (const s of allSections) {
-                if (!current.matchedSectionIds.has(s.id)) {
-                  sectionsToFold.add(s.id);
-                }
+          if (options.foldAdapter && (slugsChanged || modeChanged)) {
+            try {
+              if (!hadFilters && hasFilters) {
+                savedFoldIds = new Set(
+                  options.foldAdapter.getFoldedIds(view.state),
+                );
               }
 
-              const { tr } = view.state;
-              tr.setMeta(headingFoldPluginKey, {
-                type: "set",
-                ids: sectionsToFold,
-                persist: false,
-              });
-              view.dispatch(tr);
-            } else if (hadFilters && !hasFilters) {
-              const { tr } = view.state;
-              tr.setMeta(headingFoldPluginKey, {
-                type: "set",
-                ids: savedFoldIds ?? new Set<string>(),
-                persist: true,
-              });
-              view.dispatch(tr);
-              savedFoldIds = null;
+              if (hasFilters) {
+                const allSections = findAllSections(view.state.doc);
+                const sectionsToFold = new Set<string>();
+                for (const s of allSections) {
+                  if (!current.matchedSectionIds.has(s.id)) {
+                    sectionsToFold.add(s.id);
+                  }
+                }
+
+                const tr = options.foldAdapter.setTemporaryFolds(
+                  view.state.tr,
+                  sectionsToFold,
+                );
+                view.dispatch(tr);
+              } else if (hadFilters && !hasFilters) {
+                const tr = options.foldAdapter.restoreFolds(
+                  view.state.tr,
+                  savedFoldIds ?? new Set<string>(),
+                );
+                view.dispatch(tr);
+                savedFoldIds = null;
+              }
+            } catch {
+              /* adapter error — degrade gracefully */
             }
           }
 
           if (
+            options.foldAdapter &&
             slugsChanged &&
             hasFilters &&
             current.matchedSectionIds.size > 0

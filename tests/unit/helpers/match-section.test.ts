@@ -5,7 +5,7 @@ import {
   filterSections,
   findAllSections,
   matchSections,
-} from "@/components/tiptap-node/heading-node/helpers/match-section";
+} from "@/extensions/shared";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 const DOC_WITH_SECTIONS = {

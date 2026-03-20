@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHandleDecos } from "@/components/tiptap-node/heading-node/helpers/drag-helpers";
+import { buildHandleDecos } from "@/extensions/heading-drag/helpers/drag-helpers";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 describe("buildHandleDecos (HeadingDrag)", () => {

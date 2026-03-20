@@ -24,11 +24,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { SortableTocItem } from "@/components/toc-sidebar/sortable-toc-item";
+import { computeSection, findAllSections } from "@/extensions/shared";
 import { moveSection } from "@/lib/editor-utils";
 import { cn } from "@/lib/utils";
-
-import { computeSection } from "../tiptap-node/heading-node/helpers/compute-section";
-import { findAllSections } from "../tiptap-node/heading-node/helpers/match-section";
 
 import "./toc-sidebar.scss";
 

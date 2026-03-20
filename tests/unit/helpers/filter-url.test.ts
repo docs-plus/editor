@@ -4,7 +4,7 @@ import {
   decodeFilterParams,
   readFilterUrl,
   updateFilterUrl,
-} from "@/components/tiptap-node/heading-node/helpers/filter-url";
+} from "@/extensions/heading-filter";
 
 describe("decodeFilterParams", () => {
   it("valid params → correct { slugs, mode }", () => {

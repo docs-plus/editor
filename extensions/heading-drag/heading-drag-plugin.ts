@@ -1,8 +1,8 @@
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { DecorationSet } from "@tiptap/pm/view";
 
-import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
-import { computeSection } from "@/components/tiptap-node/heading-node/helpers/compute-section";
+import { canMapDecorations, computeSection } from "@/extensions/shared";
+
 import {
   AUTO_SCROLL_SPEED,
   AUTO_SCROLL_ZONE,
@@ -14,9 +14,9 @@ import {
   dragStates,
   findDropTarget,
   getScrollParent,
-} from "@/components/tiptap-node/heading-node/helpers/drag-helpers";
-import { findHeadingFromCursor } from "@/components/tiptap-node/heading-node/helpers/find-heading-from-cursor";
-import { repositionHandle } from "@/components/tiptap-node/heading-node/helpers/reposition-handle";
+} from "./helpers/drag-helpers";
+import { findHeadingFromCursor } from "./helpers/find-heading-from-cursor";
+import { repositionHandle } from "./helpers/reposition-handle";
 
 const headingDragPluginKey = new PluginKey<DecorationSet>("headingDrag");
 

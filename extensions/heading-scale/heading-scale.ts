@@ -36,7 +36,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-import { canMapDecorations } from "@/components/tiptap-node/heading-node/helpers/can-map-decorations";
+import { canMapDecorations } from "@/extensions/shared";
 
 /** Interpolation bounds (in pt) for the largest and smallest heading rank. */
 const MAX_SIZE = 20;

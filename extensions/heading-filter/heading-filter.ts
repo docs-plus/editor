@@ -1,13 +1,21 @@
 import { Extension } from "@tiptap/core";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
 
 import {
   createHeadingFilterPlugin,
   type HeadingFilterCallbackState,
   headingFilterPluginKey,
-} from "@/components/tiptap-node/heading-node/heading-filter-plugin";
+} from "./heading-filter-plugin";
+
+export interface HeadingFilterFoldAdapter {
+  getFoldedIds: (state: EditorState) => Set<string>;
+  setTemporaryFolds: (tr: Transaction, ids: Set<string>) => Transaction;
+  restoreFolds: (tr: Transaction, savedIds: Set<string>) => Transaction;
+}
 
 export interface HeadingFilterOptions {
   onFilterChange?: (state: HeadingFilterCallbackState) => void;
+  foldAdapter?: HeadingFilterFoldAdapter;
 }
 
 declare module "@tiptap/core" {
@@ -29,6 +37,7 @@ export const HeadingFilter = Extension.create<HeadingFilterOptions>({
   addOptions() {
     return {
       onFilterChange: undefined,
+      foldAdapter: undefined,
     };
   },
 
@@ -114,6 +123,7 @@ export const HeadingFilter = Extension.create<HeadingFilterOptions>({
     return [
       createHeadingFilterPlugin({
         onFilterChange: this.options.onFilterChange,
+        foldAdapter: this.options.foldAdapter,
       }),
     ];
   },

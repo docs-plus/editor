@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { DecorationSet } from "@tiptap/pm/view";
 import { describe, expect, it } from "vitest";
 
-import { headingScalePluginKey } from "@/components/tiptap-node/heading-node/heading-scale-extension";
+import { headingScalePluginKey } from "@/extensions/heading-scale";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 function getScaleDecos(editor: Editor): DecorationSet {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { headingFoldPluginKey } from "@/components/tiptap-node/heading-node/heading-fold-plugin";
+import { headingFoldPluginKey } from "@/extensions/heading-fold";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 
 const FOLD_CONTENT = {
