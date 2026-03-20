@@ -4,16 +4,67 @@ import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { WebSocketStatus } from "@hocuspocus/provider";
 import { useCurrentEditor } from "@tiptap/react";
 import throttle from "lodash.throttle";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
-import { PencilIcon } from "@/lib/icons";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { DISCORD_INVITE_URL, GITHUB_REPO_URL } from "@/lib/constants";
+import { DiscordIcon, GithubIcon, PencilIcon } from "@/lib/icons";
 import {
   getUserIdentity,
   saveUserIdentity,
   type UserIdentity,
 } from "@/lib/user-identity";
 import { cn } from "@/lib/utils";
+
+const statusCardClass = cn(
+  "rounded-md border border-border bg-background/95 shadow-sm backdrop-blur-md",
+  "transition-all hover:shadow-md",
+);
+
+const communityIconLinkClass = cn(
+  buttonVariants({ variant: "ghost", size: "icon-sm" }),
+  "text-muted-foreground",
+);
+
+function CommunityIconLink({
+  href,
+  ariaLabel,
+  tooltip,
+  children,
+}: {
+  href: string;
+  ariaLabel: string;
+  tooltip: string;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={communityIconLinkClass}
+            aria-label={ariaLabel}
+          >
+            {children}
+          </a>
+        }
+      />
+      <TooltipContent side="top" sideOffset={6}>
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function useConnectionStatus(provider: HocuspocusProvider) {
   const [status, setStatus] = useState<WebSocketStatus>(() =>
@@ -97,51 +148,78 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
       <div
         className={cn(
           "fixed bottom-4 right-4 z-50",
-          "flex items-center gap-2 rounded-md px-3 py-1.5 pr-1 text-xs",
-          "border border-border bg-background shadow-sm backdrop-blur-md",
-          "transition-all hover:shadow-md",
+          "flex items-center gap-4 p-1 text-xs",
         )}
         data-state={connected ? "online" : "offline"}
       >
-        <div className="flex items-center gap-1.5 text-muted-foreground select-none">
-          <span
-            className={cn(
-              "size-1.5 rounded-md shrink-0",
-              connected ? "bg-emerald-500 animate-pulse" : "bg-destructive",
-            )}
-            aria-hidden="true"
-          />
-          <span className="tabular-nums whitespace-nowrap">
-            {connected
-              ? `${count} user${count === 1 ? "" : "s"} online`
-              : "offline"}
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2 px-2 py-2",
+            statusCardClass,
+          )}
+        >
+          <div className="flex items-center gap-1.5 text-muted-foreground select-none">
+            <span
+              className={cn(
+                "size-1.5 rounded-md shrink-0",
+                connected ? "bg-emerald-500 animate-pulse" : "bg-destructive",
+              )}
+              aria-hidden="true"
+            />
+            <span className="tabular-nums whitespace-nowrap">
+              {connected
+                ? `${count} user${count === 1 ? "" : "s"} online`
+                : "offline"}
+            </span>
+          </div>
+
+          <span className="text-border/60" aria-hidden="true">
+            ·
           </span>
+
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className={cn(
+              "group flex items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
+              "hover:bg-foreground/5 active:bg-foreground/10",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            )}
+            aria-label={`Edit identity: ${identity.name}`}
+          >
+            <span
+              className="size-2.5 rounded-full shrink-0 ring-1 ring-foreground/10"
+              style={{ backgroundColor: identity.color }}
+              aria-hidden="true"
+            />
+            <span className="max-w-40 truncate font-medium text-foreground/80">
+              {identity.name}
+            </span>
+            <PencilIcon className="size-2.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
+          </button>
         </div>
 
-        <span className="text-border/60" aria-hidden="true">
-          ·
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setDialogOpen(true)}
+        <div
           className={cn(
-            "group flex items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
-            "hover:bg-foreground/5 active:bg-foreground/10",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "flex shrink-0 items-center gap-1 px-1 py-0.5",
+            statusCardClass,
           )}
-          aria-label={`Edit identity: ${identity.name}`}
         >
-          <span
-            className="size-2.5 rounded-full shrink-0 ring-1 ring-foreground/10"
-            style={{ backgroundColor: identity.color }}
-            aria-hidden="true"
-          />
-          <span className="max-w-40 truncate font-medium text-foreground/80">
-            {identity.name}
-          </span>
-          <PencilIcon className="size-2.5 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
-        </button>
+          <CommunityIconLink
+            href={DISCORD_INVITE_URL}
+            ariaLabel="Discord community"
+            tooltip="Join the Discord community"
+          >
+            <DiscordIcon />
+          </CommunityIconLink>
+          <CommunityIconLink
+            href={GITHUB_REPO_URL}
+            ariaLabel="Source on GitHub"
+            tooltip="View source on GitHub"
+          >
+            <GithubIcon />
+          </CommunityIconLink>
+        </div>
       </div>
 
       <UserIdentityDialog
@@ -154,4 +232,4 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
   );
 }
 
-export const CollabStatusGroup = UserIdentityButton;
+export { UserIdentityButton as CollabStatusGroup };
