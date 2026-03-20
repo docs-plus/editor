@@ -69,7 +69,7 @@
     {
       "includes": [
         "app/layout.tsx",
-        "components/tiptap-templates/simple/simple-editor.tsx"
+        "components/document-editor/document-editor.tsx"
       ],
       "assist": {
         "actions": {

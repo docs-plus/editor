@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from "react";
 
+import { DocumentEditor } from "@/components/document-editor";
 import { TabBar } from "@/components/tab-bar";
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 
 export default function Home() {
@@ -44,7 +44,7 @@ export default function Home() {
         onReorder={reorderTab}
         onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
-      <SimpleEditor
+      <DocumentEditor
         key={activeTabId}
         documentId={activeTabId}
         onTitleChange={(title) => updateTabTitle(activeTabId, title)}

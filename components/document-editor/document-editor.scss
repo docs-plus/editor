@@ -52,7 +52,7 @@ body {
   height: 100vh;
 }
 
-.simple-editor-wrapper {
+.document-editor-wrapper {
   width: 100%;
   flex: 1;
   overflow: auto;
@@ -65,7 +65,7 @@ body {
   background-color: var(--tt-canvas-color);
 }
 
-.simple-editor-content {
+.document-editor-content {
   max-width: 648px;
   width: 100%;
   margin: 0.75rem auto;
@@ -80,13 +80,13 @@ body {
   overflow: hidden;
 }
 
-.simple-editor-content .tiptap.ProseMirror.simple-editor {
+.document-editor-content .tiptap.ProseMirror.document-editor {
   flex: 1;
   padding: 3rem 3rem 30vh;
 }
 
 @media screen and (max-width: 480px) {
-  .simple-editor-content {
+  .document-editor-content {
     margin: 0 auto;
     min-height: 100%;
     border: none;
@@ -94,7 +94,7 @@ body {
     box-shadow: none;
   }
 
-  .simple-editor-content .tiptap.ProseMirror.simple-editor {
+  .document-editor-content .tiptap.ProseMirror.document-editor {
     padding: 1rem 1.5rem 30vh;
   }
 }

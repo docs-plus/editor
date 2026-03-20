@@ -1,6 +1,6 @@
 "use client";
 
-import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle";
+import { ThemeToggle } from "@/components/document-editor/theme-toggle";
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
 import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
 import {
