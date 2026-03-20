@@ -49,7 +49,7 @@ deepening with 9 research agents, the consensus is:
 - Most proposed changes solve problems that don't exist (barrel files for a
   project with `@/*` aliases, Context for a 1-level-deep tree, hook
   decomposition for code that shares refs)
-- The riskiest items (SimpleEditor decomposition, hook splitting) create more
+- The riskiest items (DocumentEditor decomposition, hook splitting) create more
   complexity than they remove
 
 **Revised approach:** Two focused phases with high-value, low-risk changes only.
@@ -162,7 +162,7 @@ Files with side-effect SCSS imports:
 | File | Count | Order matters? |
 |------|-------|----------------|
 | `app/layout.tsx` | 3 (globals.css, \_variables.scss, \_keyframe-animations.scss) | Yes — cascade |
-| `simple-editor.tsx` | 11 (node SCSS files) | Possibly — cascade |
+| `document-editor.tsx` | 11 (node SCSS files) | Possibly — cascade |
 | `tab-bar.tsx` | 1 | No |
 | `toc-sidebar.tsx` | 1 | No |
 | `color-highlight-button.tsx` | 1 | No |
@@ -170,7 +170,7 @@ Files with side-effect SCSS imports:
 | `image-upload-node.tsx` | 1 | No |
 
 **Guard:** Add `// biome-ignore-all assist/source/organizeImports: CSS cascade`
-at the top of `app/layout.tsx`. For `simple-editor.tsx`, either add the same
+at the top of `app/layout.tsx`. For `document-editor.tsx`, either add the same
 guard or consolidate the 11 SCSS imports into a single SCSS entry point.
 
 ### 1.3 Remove empty `scripts/` directory
@@ -185,10 +185,10 @@ Empty directory with no files. Remove with `rmdir`.
 - `interface Config` → `YjsLoadHarnessConfig` in
   `tests/load/yjs-load-harness.ts` — genuinely ambiguous
 
-### 1.5 SimpleEditor file splitting (reconsidered)
+### 1.5 DocumentEditor file splitting (reconsidered)
 
 Move `MainToolbarContent`, `MobileToolbarContent`, and `EditorSkeleton` from
-`simple-editor.tsx` into separate files in the same directory. No new
+`document-editor.tsx` into separate files in the same directory. No new
 abstractions, no new props, no Context — just file organization.
 
 **Expected result:** Main file drops from ~562 lines to ~420 lines. Toolbar
@@ -196,15 +196,15 @@ components are easier to locate and read in isolation.
 
 **Files created:**
 
-- `components/tiptap-templates/simple/main-toolbar-content.tsx` (~100 lines)
-- `components/tiptap-templates/simple/mobile-toolbar-content.tsx` (~25 lines)
-- `components/tiptap-templates/simple/editor-skeleton.tsx` (~13 lines)
+- `components/document-editor/main-toolbar-content.tsx` (~100 lines)
+- `components/document-editor/mobile-toolbar-content.tsx` (~25 lines)
+- `components/document-editor/editor-skeleton.tsx` (~13 lines)
 
 ### 1.6 playground-scenarios relocation (reconsidered)
 
 Move `components/playground/playground-scenarios.ts` →
-`components/tiptap-templates/simple/playground-scenarios.ts`. It's consumed
-only by `simple-editor.tsx`. The `components/playground/` directory has no React
+`components/document-editor/playground-scenarios.ts`. It's consumed
+only by `document-editor.tsx`. The `components/playground/` directory has no React
 components and is misleading. After the move, remove the empty `playground/`
 directory.
 
@@ -224,13 +224,13 @@ Keep `ecosystem.config.cjs` — add deployment docs later.
 
 | `--tt-*` token | → Replace with | Usage count | Files |
 |----------------|----------------|-------------|-------|
-| `--tt-bg-color` | `var(--background)` | 6 | simple-editor, tab-bar, heading-drag, use-color-highlight |
-| `--tt-border-color` | `var(--border)` | 4 | _variables, tab-bar, simple-editor, heading-drag |
+| `--tt-bg-color` | `var(--background)` | 6 | document-editor, tab-bar, heading-drag, use-color-highlight |
+| `--tt-border-color` | `var(--border)` | 4 | _variables, tab-bar, document-editor, heading-drag |
 | `--tt-cursor-color` | `var(--foreground)` | 1 | paragraph-node |
-| `--tt-theme-text` | `var(--foreground)` | 2 | simple-editor |
+| `--tt-theme-text` | `var(--foreground)` | 2 | document-editor |
 | `--tt-card-bg-color` | `var(--card)` | 0 | (unused — just delete) |
 | `--tt-card-border-color` | `var(--border)` | 0 | (unused — just delete) |
-| `--tt-radius-sm` | `var(--radius-sm)` | 2 | simple-editor |
+| `--tt-radius-sm` | `var(--radius-sm)` | 2 | document-editor |
 | `--tt-radius-md` | `var(--radius-md)` | 2 | paragraph-node, image-upload-node |
 | `--tt-radius-lg` | `var(--radius-lg)` | 2 | image-upload-node |
 | `--tt-radius-xl` | `var(--radius-xl)` | 1 | color-highlight-button |
@@ -243,7 +243,7 @@ Keep `ecosystem.config.cjs` — add deployment docs later.
 
 | `--tt-*` token | shadcn equivalent | Usage count | Notes |
 |----------------|-------------------|-------------|-------|
-| `--tt-sidebar-bg-color` | `var(--sidebar)` | 2 | tab-bar, simple-editor |
+| `--tt-sidebar-bg-color` | `var(--sidebar)` | 2 | tab-bar, document-editor |
 | `--tt-radius-xs` | `--radius-sm` ≈ (0.25rem vs 0.27rem) | 11 | Keep as-is or map to `calc(var(--radius) * 0.56)` |
 
 **Tokens to KEEP (editor-specific, no shadcn equivalent):**
@@ -423,7 +423,7 @@ TitleDocument) were audited separately. See
 
 Next.js doesn't optimize internal barrels. The existing pattern (tiptap-ui has
 barrels; internal code uses direct imports) follows a natural public/internal
-boundary. `toc-sidebar/` has only 1 TS file; `tiptap-templates/simple/` has
+boundary. `toc-sidebar/` has only 1 TS file; `document-editor/` has
 `ThemeToggle` used only internally. Barrels add maintenance with no benefit.
 
 ### Single-letter callback params → DROP (confirmed)
@@ -494,7 +494,7 @@ Each phase must pass before proceeding:
 - **Barrel files:** Keep existing pattern. Do not add barrels everywhere.
 - **Hook return naming:** Already consistent per hook purpose. No rename needed.
 - **Single-letter params:** Idiomatic in short lambdas. No rename needed.
-- **SimpleEditor decomposition:** File-split existing sub-components (no new
+- **DocumentEditor decomposition:** File-split existing sub-components (no new
   abstractions). Full decomposition into hooks + Context is over-engineering.
 - **Collaboration caret:** Ship as separate feature branch
 - **Heading extensions portability:** Fix `@/` imports and hardcoded prefixes

@@ -1184,7 +1184,7 @@ Module-level `docCache` with reference counting ensures Y.Doc instances persist 
 - Existing perf observer: `tests/e2e/helpers/perf-observer.ts`
 - Yjs integration: `hooks/use-yjs-document.ts`
 - Yjs load harness: `tests/load/yjs-load-harness.ts`
-- Editor entry: `components/tiptap-templates/simple/simple-editor.tsx`
+- Editor entry: `components/document-editor/document-editor.tsx`
 
 ### External References
 

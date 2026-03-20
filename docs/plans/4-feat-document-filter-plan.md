@@ -27,9 +27,9 @@ Long documents with many heading sections are hard to navigate when looking for 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  app/page.tsx                                                    │
-│  └── reads URL search params on load → passes to SimpleEditor  │
+│  └── reads URL search params on load → passes to DocumentEditor │
 ├─────────────────────────────────────────────────────────────────┤
-│  SimpleEditorContent                                             │
+│  DocumentEditorContent                                           │
 │  ├── HeadingFilter extension (plugin)                           │
 │  │   ├── Plugin state: slugs, mode, previewQuery, decos        │
 │  │   ├── Decoration.inline() for highlights (only decoration)  │
@@ -709,13 +709,13 @@ export function FilterToolbarButton({ onClick, isActive }: { ... }) {
 
 | File | Changes |
 |------|---------|
-| `components/tiptap-templates/simple/simple-editor.tsx` | Add `HeadingFilter` extension, `FilterBar`, toolbar button, state wiring |
+| `components/document-editor/document-editor.tsx` | Add `HeadingFilter` extension, `FilterBar`, toolbar button, state wiring |
 | `components/toc-sidebar/toc-sidebar.tsx` | Add `matchedSectionIds` prop for dimming |
 | `components/toc-sidebar/toc-sidebar.scss` | Add dimmed heading styles |
-| `app/page.tsx` | Read URL search params on load, pass to `SimpleEditor` |
+| `app/page.tsx` | Read URL search params on load, pass to `DocumentEditor` |
 | `lib/icons.ts` | Add `FilterIcon` (LuFilter), `SearchIcon` (LuSearch) |
 
-#### `simple-editor.tsx` Changes
+#### `document-editor.tsx` Changes
 
 ```typescript
 // New state
@@ -801,8 +801,8 @@ useEffect(() => {
   setInitialFilter(readFilterUrl());
 }, []);
 
-// Pass to SimpleEditor
-<SimpleEditor
+// Pass to DocumentEditor
+<DocumentEditor
   key={activeTabId}
   documentId={activeTabId}
   initialFilter={initialFilter}
@@ -842,7 +842,7 @@ useEffect(() => {
 | Focus management | `use-heading-filter.ts` | On Escape, return focus to editor; on reopen, focus input |
 | Temporary reveal | `toc-sidebar.tsx` | Clicking a dimmed TOC heading scrolls to the heading position |
 | Empty document | `heading-filter-plugin.ts` | When doc has only title H1, show "0/0 sections" and empty state |
-| Plugin order | `simple-editor.tsx` | Ensure `HeadingFilter` is listed AFTER `HeadingFold` in extensions array so filter can dispatch to fold plugin |
+| Plugin order | `document-editor-config.ts` | Ensure `HeadingFilter` is listed AFTER `HeadingFold` in extensions array so filter can dispatch to fold plugin |
 | Per-tab scoping | `use-heading-filter.ts` | Filter URL params cleared on component unmount (tab switch) via `useEffect` cleanup |
 | Descendant propagation | `match-section.ts` | `getDescendantIds()` ensures matched heading's full subtree stays visible |
 | Preview TOC highlight | `toc-sidebar.tsx`, `toc-sidebar.scss` | `previewMatchIds` prop highlights matching TOC items during typing |
@@ -941,7 +941,7 @@ components/tiptap-ui/heading-filter/
 ### Modified Files (6)
 
 ```
-components/tiptap-templates/simple/simple-editor.tsx
+components/document-editor/document-editor.tsx
 components/tiptap-node/heading-node/heading-fold-plugin.ts  # persist flag + skipPersist state
 components/toc-sidebar/toc-sidebar.tsx                       # filteredIds + previewMatchIds props
 components/toc-sidebar/toc-sidebar.scss                      # dimmed + preview-match styles

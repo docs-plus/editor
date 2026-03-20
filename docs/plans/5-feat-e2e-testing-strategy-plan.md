@@ -7,6 +7,10 @@ date: 2026-03-15
 
 # Comprehensive E2E Testing Strategy
 
+> Historical note: this completed plan predates the `extensions/` refactor.
+> Path references to `components/tiptap-node/{heading-node,document-node}` are
+> legacy locations. Current extension sources live under `extensions/`.
+
 ## Overview
 
 Establish a three-layer testing infrastructure for TinyDocy's collaborative document editor: **Vitest** for fast headless schema/model tests and fuzzing, **Playwright** for browser-based feature E2E and performance baselines, and a **custom Yjs load harness** for 100-user concurrency simulation. All tests run against the dev server (`make dev`). CI/CD integration is deferred.
@@ -434,7 +438,7 @@ Page Object Model for the editor:
 - `buildDocument(headings)` — type heading structure via keyboard shortcuts (for small/medium docs)
 - `setContent(json)` — inject content via `window.__tiptap_editor.commands.setContent()` (for large docs, performance tests)
 
-**Editor exposure for testing:** Add to `simple-editor.tsx` (dev only). `process.env.NODE_ENV` is inlined by Next.js at build time, so this code is dead-code-eliminated in production builds:
+**Editor exposure for testing:** Add to `components/document-editor/use-document-editor-effects.ts` (dev only). `process.env.NODE_ENV` is inlined by Next.js at build time, so this code is dead-code-eliminated in production builds:
 
 ```typescript
 useEffect(() => {
@@ -647,7 +651,7 @@ Create these as JSON files in `tests/fixtures/`:
 
 - Brainstorm: `docs/brainstorms/8-e2e-testing-strategy-brainstorm.md`
 - Document model: `components/tiptap-node/document-node/document-node-extension.ts`
-- Editor setup: `components/tiptap-templates/simple/simple-editor.tsx` (lines 318-381)
+- Editor setup: `components/document-editor/document-editor.tsx` and `components/document-editor/document-editor-config.ts`
 - Fold plugin: `components/tiptap-node/heading-node/heading-fold-plugin.ts`
 - Filter plugin: `components/tiptap-node/heading-node/heading-filter-plugin.ts`
 - Headless-safe helpers: `compute-section.ts`, `can-map-decorations.ts`, `match-section.ts`, `fold-storage.ts`, `filter-url.ts`

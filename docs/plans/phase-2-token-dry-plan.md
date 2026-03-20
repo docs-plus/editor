@@ -60,7 +60,7 @@ token definition from `_variables.scss`.
 
 Consumers (6 usages):
 
-- `components/tiptap-templates/simple/simple-editor.scss`
+- `components/document-editor/document-editor.scss`
 - `components/tab-bar/tab-bar.scss`
 - `components/tiptap-node/heading-node/heading-drag.scss`
 
@@ -77,7 +77,7 @@ After replacing all consumers, remove from `_variables.scss`:
 Consumers (4 usages):
 
 - `components/tab-bar/tab-bar.scss`
-- `components/tiptap-templates/simple/simple-editor.scss`
+- `components/document-editor/document-editor.scss`
 - `components/tiptap-node/heading-node/heading-drag.scss`
 
 Note: `--tt-border-color-tint` is NOT derived from `--tt-border-color` — it's
@@ -108,13 +108,13 @@ usages and remove the definition.
 
 Consumers (2 usages):
 
-- `components/tiptap-templates/simple/simple-editor.scss`
+- `components/document-editor/document-editor.scss`
 
 **`--tt-radius-sm` → `var(--radius-sm)`**
 
 Consumers (2 usages):
 
-- `components/tiptap-templates/simple/simple-editor.scss`
+- `components/document-editor/document-editor.scss`
 
 Remove from `_variables.scss`:
 

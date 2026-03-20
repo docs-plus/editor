@@ -16,7 +16,7 @@ The project accumulated technical debt during rapid MVP feature development. Nam
 ## Key Decisions
 
 - **Scope**: Naming + folder structure + abstraction improvements. FAANG convention gaps (error boundaries, `types/`, `constants/`, env config, test infra) are deferred to a follow-up effort.
-- **Scaffold boundary**: All code is fair game — scaffold code (tiptap-ui/, tiptap-ui-primitive/, tiptap-templates/) will be refactored freely. Upstream merge cost is accepted.
+- **Scaffold boundary**: All code is fair game — scaffold code (tiptap-ui/, tiptap-ui-primitive/, document-editor/) will be refactored freely. Upstream merge cost is accepted.
 - **Acronym casing**: Title-case in PascalCase names — `TocSidebar` not `TOCSidebar`, following Google/Airbnb convention.
 - **Export pattern**: Named exports only — remove all `export default`. Modern React/Next.js convention, tree-shakeable.
 - **God file strategy**: Hybrid split — shared utilities (cn, shortcuts) stay in `lib/`, domain-specific utilities (upload, node manipulation) colocate near consumers.

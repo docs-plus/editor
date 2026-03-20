@@ -130,7 +130,7 @@ All custom plugins (HeadingScale, HeadingDrag, HeadingFold, HeadingFilter) share
 
 - `view().update()` copies `prevFoldedIds` (Set) and `prevAnimating` (Map) only when their values actually changed, avoiding O(F) allocations per keystroke when fold state is stable
 
-**SimpleEditor `onUpdate` callback:**
+**DocumentEditor `onUpdate` callback:**
 
 - `onTitleChange` fires only when the title text actually changes (ref comparison), preventing unnecessary parent re-renders on every keystroke in the document body
 

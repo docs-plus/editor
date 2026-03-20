@@ -4,7 +4,7 @@
 
 - Use Bun exclusively — `bun`, `bunx`, never `npm`, `npx`, `yarn`, or `pnpm`
 - Follow Conventional Commits — atomic commits, imperative mood, no AI/tool/agent references or trailers (`Made-with: Cursor`, `Co-authored-by: AI`); always show a commit review report and wait for explicit approval before committing
-- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; avoid overengineering (prefer simple fixed config over port-check scripts when complexity adds minimal value); extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments; prefer discoverable upper_snake env flags for operational toggles (limits, logging, throttle) instead of hiding behavior in code
+- Apply DRY, KISS, and SOLID principles — prefer simpler state over nullable + guards; avoid overengineering (prefer simple fixed config over port-check scripts when complexity adds minimal value); extract complex inline casts or nested ternaries into named helper functions; disable overzealous lint rules at config level rather than scattering disable comments; prefer discoverable upper_snake env flags for operational toggles (limits, logging, throttle) instead of hiding behavior in code; remove temporary compatibility shims and duplicated folder structures once migrations are complete
 - Review from a senior staff engineer / head-of-engineering perspective when asked, including OWASP-oriented gaps when changes touch transport, persistence, or abuse surfaces; for editor plugin code, review as ProseMirror/Tiptap core author checking for performance issues and memory leaks; when review delegation is requested, use the `code-reviewer` subagent
 - Prefer `lucide-react` icons via `lib/icons.ts` barrel file, not local SVG wrapper components
 - Use named exports only (no `export default` except where required by framework); title-case acronyms in PascalCase names — `TocSidebar` not `TOCSidebar`
@@ -24,7 +24,7 @@
 - Naming and exports: kebab-case files, PascalCase components with title-case acronyms, camelCase hooks/utils, named exports by default
 - shadcn/ui components in `components/ui/` are the default for new UI; old `tiptap-ui-primitive` is fully replaced
 - Utilities are domain-split in `lib/`: `utils.ts`, `shortcuts.ts`, `editor-utils.ts`, `url-utils.ts`, `icons.ts`, and `user-identity.ts`
-- Tabs are synced through Y.Doc `global-tabs` (`useSyncedTabs`) with Playground fixed at index 0; `activeTabId` is local per user; close operations call `DELETE /api/documents/[id]`, which is HTTP rate-limited separately from WS throttles on Hocuspocus
+- Tabs are synced through Y.Doc `global-tabs` (`useSyncedTabs`) with Playground fixed at index 0; `activeTabId` is local per user; close operations call `DELETE /api/documents/[id]`, which is HTTP rate-limited separately from WS throttles on Hocuspocus; the canonical editor implementation lives in `components/document-editor/` (legacy `components/tiptap-templates/simple` has been removed)
 - TOC supports dnd-kit drag-and-drop and section move semantics via `moveSection()`; heading-level and fold behavior are plugin-driven and optimized for large docs
 - Collaboration carets use `@tiptap/extension-collaboration-caret` with `HocuspocusProvider`; user identity is persisted in localStorage (`tinydocy-user`)
 - Document schema enforces title-first (`heading block*`), heading levels 1-6, and title-scoped paste handling; empty docs are seeded when Yjs fragment is empty

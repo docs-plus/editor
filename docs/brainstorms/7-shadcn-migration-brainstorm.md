@@ -46,7 +46,7 @@ Layer-by-layer migration was chosen over big-bang or component-by-component beca
 ### Layer 3: Rewrite Consumers
 
 - Update all tiptap-ui/ components (heading-button, mark-button, link-popover, etc.) to import from shadcn instead of tiptap-ui-primitive
-- Update simple-editor.tsx toolbar composition
+- Update document-editor.tsx toolbar composition
 - Update tab-bar, toc-sidebar, playground-toolbar, theme-toggle
 - Convert remaining UI SCSS to Tailwind utility classes
 - Update `cn()` usage — shadcn ships its own `cn()` via `clsx` + `tailwind-merge`

@@ -164,7 +164,7 @@ guards so Biome doesn't reorder them.
 `_variables.scss`, `_keyframe-animations.scss`) are in cascade order. If Biome
 would reorder them, add a biome-ignore comment.
 
-**`simple-editor.tsx`** — has 11 SCSS side-effect imports. Check if auto-sort
+**`document-editor.tsx`** — has SCSS side-effect imports. Check if auto-sort
 changes their order. If it does, add a biome-ignore comment block.
 
 ### Step 3c: Run auto-fix
@@ -209,14 +209,14 @@ Review `git diff` to confirm only import reordering (no logic changes).
 
 ---
 
-## Task 5: SimpleEditor file splitting
+## Task 5: DocumentEditor file splitting
 
 **Risk:** Low (no logic changes, just moving code to separate files)
 **Files:** 4 (1 modified, 3 created)
 
 ### Step 5a: Extract `MainToolbarContent`
 
-Create `components/tiptap-templates/simple/main-toolbar-content.tsx`:
+Create `components/document-editor/main-toolbar-content.tsx`:
 
 - Move the `MainToolbarContent` component (lines 131-230) to a new file
 - Add the necessary imports (ToolbarGroup, ToolbarSeparator, Spacer,
@@ -225,7 +225,7 @@ Create `components/tiptap-templates/simple/main-toolbar-content.tsx`:
 
 ### Step 5b: Extract `MobileToolbarContent`
 
-Create `components/tiptap-templates/simple/mobile-toolbar-content.tsx`:
+Create `components/document-editor/mobile-toolbar-content.tsx`:
 
 - Move the `MobileToolbarContent` component (lines 232-255) to a new file
 - Add necessary imports (ToolbarGroup, ToolbarSeparator, ArrowLeftIcon,
@@ -235,21 +235,21 @@ Create `components/tiptap-templates/simple/mobile-toolbar-content.tsx`:
 
 ### Step 5c: Extract `EditorSkeleton`
 
-Create `components/tiptap-templates/simple/editor-skeleton.tsx`:
+Create `components/document-editor/editor-skeleton.tsx`:
 
 - Move the `EditorSkeleton` component (lines 257-270) to a new file
 - No imports needed (pure HTML/CSS)
 - Export as named export
 
-### Step 5d: Update `simple-editor.tsx`
+### Step 5d: Update `document-editor.tsx`
 
 - Remove the 3 component definitions
 - Add imports:
 
   ```typescript
-  import { MainToolbarContent } from "@/components/tiptap-templates/simple/main-toolbar-content";
-  import { MobileToolbarContent } from "@/components/tiptap-templates/simple/mobile-toolbar-content";
-  import { EditorSkeleton } from "@/components/tiptap-templates/simple/editor-skeleton";
+  import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
+  import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
+  import { EditorSkeleton } from "@/components/document-editor/editor-skeleton";
   ```
 
 - All usages remain the same (component names unchanged)
@@ -273,16 +273,16 @@ Open the app — toolbar must render identically in desktop and mobile views.
 
 ```bash
 mv components/playground/playground-scenarios.ts \
-   components/tiptap-templates/simple/playground-scenarios.ts
+   components/document-editor/playground-scenarios.ts
 ```
 
-### Step 6b: Update import in `simple-editor.tsx`
+### Step 6b: Update import in `document-editor.tsx`
 
 ```typescript
 // Before
 import { generatePlaygroundContent } from "@/components/playground/playground-scenarios";
 // After
-import { generatePlaygroundContent } from "@/components/tiptap-templates/simple/playground-scenarios";
+import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
 ```
 
 ### Step 6c: Remove empty directory
@@ -294,7 +294,7 @@ rmdir components/playground/
 ### Step 6d: Check for other references
 
 Verify no other file imports from `@/components/playground/`. Already confirmed:
-only `simple-editor.tsx` imports it.
+only `document-editor.tsx` imports it.
 
 ---
 
@@ -317,8 +317,8 @@ bun run lint && bun run build && bun run test
 2. `refactor: migrate icons from react-icons to lucide-react`
 3. `style: add Biome import sorting with custom groups`
 4. `refactor: rename handleOnOpenChange and Config interface`
-5. `refactor: split SimpleEditor toolbar components to separate files`
-6. `refactor: relocate playground-scenarios to simple editor directory`
+5. `refactor: split DocumentEditor toolbar components to separate files`
+6. `refactor: relocate playground-scenarios to document-editor directory`
 
 Or collapse into 2 commits by logical grouping:
 

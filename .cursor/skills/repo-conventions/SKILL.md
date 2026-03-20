@@ -56,7 +56,7 @@ import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 | Thing | Convention | Example |
 |-------|-----------|---------|
 | Directories | kebab-case | `toc-sidebar/`, `tiptap-ui/` |
-| Files (components) | kebab-case | `tab-bar.tsx`, `simple-editor.tsx` |
+| Files (components) | kebab-case | `tab-bar.tsx`, `document-editor.tsx` |
 | Files (hooks) | kebab-case, `use-` prefix | `use-synced-tabs.ts`, `use-document-storage.ts` |
 | Files (utilities) | kebab-case | `editor-utils.ts`, `cn.ts` |
 | React components | PascalCase export, title-case acronyms | `export function TocSidebar()` |
@@ -75,7 +75,7 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 ├─────────────────────────────────────────┤
 │  components/       App-level components │  ← tab-bar, toc-sidebar
 ├─────────────────────────────────────────┤
-│  tiptap-templates/ Composed editors     │  ← simple-editor
+│  document-editor/ Integrated editor      │  ← document-editor
 ├─────────────────────────────────────────┤
 │  tiptap-ui/        Toolbar controls     │  ← buttons, popovers, dropdowns
 ├─────────────────────────────────────────┤
@@ -97,7 +97,7 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 |------|-----------|
 | `app/` | anything |
 | `components/` (root) | hooks, lib, styles, tiptap-ui-primitive |
-| `tiptap-templates/` | tiptap-ui, tiptap-ui-primitive, tiptap-node, hooks, lib, styles |
+| `document-editor/` | tiptap-ui, tiptap-node, extensions, hooks, lib, styles |
 | `tiptap-ui/` | tiptap-ui-primitive, hooks, lib, styles |
 | `tiptap-ui-primitive/` | hooks, lib, styles |
 | `tiptap-node/` | lib, styles |
@@ -113,7 +113,8 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 | An app-level component (sidebar, tab bar) | `components/` in its own folder |
 | A new editor toolbar control | `tiptap-ui/<name>/` with hook + component + index |
 | A generic UI primitive (button variant, input) | `tiptap-ui-primitive/<name>/` |
-| A new Tiptap node/extension | `tiptap-node/<name>/` |
+| A new Tiptap node style/nodeview asset | `tiptap-node/<name>/` |
+| A new standalone Tiptap extension/plugin | `extensions/<name>/` |
 | A shared React hook | `hooks/use-<name>.ts` |
 | A pure utility function | `lib/` |
 | A shared SCSS variable or animation | `styles/` |
@@ -132,7 +133,7 @@ These are hard rules, not suggestions:
 
 ### Tiptap code ownership
 
-All code in `tiptap-ui-primitive/`, `tiptap-ui/`, `tiptap-node/`, and `tiptap-templates/` is fully owned — refactor, rename, and restructure freely. There is no upstream scaffold boundary.
+All code in `document-editor/`, `tiptap-ui/`, `tiptap-node/`, and `extensions/` is fully owned — refactor, rename, and restructure freely. There is no upstream scaffold boundary.
 
 ## Code Formatting & Linting
 

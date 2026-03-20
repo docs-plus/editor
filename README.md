@@ -55,23 +55,37 @@ This starts two servers:
 ```text
 app/                    Next.js App Router (pages, layout, global styles)
 components/
-  tiptap-node/          Custom Tiptap/ProseMirror extensions
-    document-node/        TitleDocument — enforced H1-first schema
-    heading-node/         HeadingFold, HeadingDrag, HeadingFilter, HeadingScale
+  tiptap-node/          Remaining editor node assets (styles + nodeviews)
     code-block-node/      Syntax-highlighted code blocks (lowlight theme)
     table-node/           Resizable table styles
     image-upload-node/    Image upload with progress
     horizontal-rule-node/ Custom horizontal rule
   tiptap-ui/            Editor toolbar components (buttons, dropdowns, popovers)
-  tiptap-templates/     Editor templates (SimpleEditor, ThemeToggle)
+  document-editor/      Integrated editor shell (DocumentEditor, toolbar, playground)
   toc-sidebar/          Table of contents sidebar
   tab-bar/              Multi-tab document switcher
   ui/                   shadcn/ui components (Base UI primitives)
 hooks/                  Custom React hooks (tabs, Yjs document, theme)
 lib/                    Utilities (shortcuts, editor helpers, icons, URL utils)
+extensions/             Standalone editor extensions + shared helpers
+  title-document/         TitleDocument (H1-first schema)
+  heading-scale/          Dynamic heading scale
+  heading-drag/           Section drag handle + plugin helpers
+  heading-fold/           Fold/unfold extension + persistence helper
+  heading-filter/         Filter extension (+ optional foldAdapter integration)
+  shared/                 Shared PM helpers (computeSection, canMapDecorations, matchSection)
 tests/                  Test infrastructure (see Testing below)
 docs/                   Design documents, brainstorms, and implementation plans
 ```
+
+### Extension Integration Note (`HeadingFilter`)
+
+`HeadingFilter` can run in two modes:
+
+- **Standalone (no `foldAdapter`)**: filter highlighting and match state only
+- **Integrated (with `foldAdapter`)**: filter + fold coordination + fold restore on clear
+
+TinyDocy wires the integrated mode in `components/document-editor/document-editor.tsx` and test harness wiring in `tests/helpers/create-test-editor.ts`.
 
 ## Scripts
 

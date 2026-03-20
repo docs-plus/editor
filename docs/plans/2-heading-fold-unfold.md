@@ -26,7 +26,7 @@
 | Modify | `components/tiptap-icons.ts` | Add `ChevronRightIcon` export |
 | Modify | `components/toc-sidebar/toc-sidebar.tsx` | Add fold chevrons, child filtering |
 | Modify | `components/toc-sidebar/toc-sidebar.scss` | Chevron toggle styles |
-| Modify | `components/tiptap-templates/simple/simple-editor.tsx` | Register HeadingFold, wire fold state to TOC |
+| Modify | `components/document-editor/document-editor.tsx` | Register HeadingFold, wire fold state to TOC |
 
 ---
 
@@ -972,9 +972,9 @@ feat(fold): add fold chevrons and child filtering to TOC sidebar
 
 **Files:**
 
-- Modify: `components/tiptap-templates/simple/simple-editor.tsx`
+- Modify: `components/document-editor/document-editor.tsx`
 
-**Step 1: Add fold state to SimpleEditorContent**
+**Step 1: Add fold state to DocumentEditorContent**
 
 Add React state for `foldedIds` alongside the existing `tocItems` state:
 
@@ -991,24 +991,24 @@ import { HeadingFold } from "@/components/tiptap-node/heading-node/heading-fold-
 
 // In extensions array (after HeadingDrag):
 HeadingFold.configure({
-  documentId: docId,  // need to pass docId as prop to SimpleEditorContent
+  documentId: docId,  // need to pass docId as prop to DocumentEditorContent
   onFoldChange: setFoldedIds,
 }),
 ```
 
-Note: `SimpleEditorContent` currently doesn't receive `documentId`. It's available in the parent `SimpleEditor` as `docId`. Pass it through:
+Note: `DocumentEditorContent` currently doesn't receive `documentId`. It's available in the parent `DocumentEditor` as `docId`. Pass it through:
 
 ```typescript
-// SimpleEditor component:
-<SimpleEditorContent
+// DocumentEditor component:
+<DocumentEditorContent
   ydoc={ydoc}
   documentId={docId}     // ADD THIS
   onTitleChange={onTitleChange}
   ...
 />
 
-// SimpleEditorContent props:
-interface SimpleEditorContentProps {
+// DocumentEditorContent props:
+interface DocumentEditorContentProps {
   ydoc: Y.Doc;
   documentId: string;     // ADD THIS
   onTitleChange?: ...;
@@ -1039,7 +1039,7 @@ The `onToggleFold` callback calls `editor.commands.toggleFold(id)`, which dispat
 
 **Step 6: Verify**
 
-Run `bun biome check components/tiptap-templates/simple/simple-editor.tsx` — fix any issues.
+Run `bun biome check components/document-editor/document-editor.tsx` — fix any issues.
 
 Run `make dev` and verify:
 
@@ -1409,7 +1409,7 @@ feat(fold): handle edge cases and initial fold state restoration
 | 4 | Tiptap extension + commands | Create | `heading-fold-extension.ts` | Done |
 | 5 | Fold SCSS styles | Create | `heading-fold.scss` | Done |
 | 6 | TOC chevrons + child filtering | Modify | `toc-sidebar.tsx`, `toc-sidebar.scss` | Done |
-| 7 | Register extension, wire state | Modify | `simple-editor.tsx` | Done |
+| 7 | Register extension, wire state | Modify | `document-editor.tsx` | Done |
 | 8 | Animated transitions | Modify | `heading-fold-plugin.ts` | Done |
 | 9 | Cursor skip over folds | Modify | `heading-fold-plugin.ts` | Done |
 | 10 | Edge cases + known limitations | Modify | `heading-fold-plugin.ts` | Done |
@@ -1511,5 +1511,5 @@ Both margin-bottom and overlay height now animate from the same committed start 
 | `helpers/crinkle-renderer.ts` | ~83 | SVG crinkle strip generator (deleted in refactor) |
 | `toc-sidebar.tsx` (modified) | ~133 | Fold chevrons, child filtering |
 | `toc-sidebar.scss` (modified) | ~157 | Chevron and item-row styles |
-| `simple-editor.tsx` (modified) | — | Extension registration, state wiring |
+| `document-editor.tsx` (modified) | — | Extension registration, state wiring |
 | `tiptap-icons.ts` (modified) | — | `ChevronRightIcon` export |

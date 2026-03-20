@@ -4,7 +4,7 @@
 
 **Goal:** Replace the existing custom heading drag-and-drop with a forked `@tiptap/extension-drag-handle` architecture — floating handle outside contenteditable, `@floating-ui/dom` positioning, custom mouse events for section-level dragging, Notion-style visual feedback.
 
-**Architecture:** Fork the Tiptap drag-handle extension's handle rendering, floating-ui positioning, and rAF-throttled mousemove detection. Replace its HTML5 DnD drag engine with custom mouse events (mousedown/mousemove/mouseup). Add section-level computation, drag ghost, drop indicator, and auto-scroll. Keep the same `HeadingDrag` extension name and import path — the editor wiring in `simple-editor.tsx` stays unchanged.
+**Architecture:** Fork the Tiptap drag-handle extension's handle rendering, floating-ui positioning, and rAF-throttled mousemove detection. Replace its HTML5 DnD drag engine with custom mouse events (mousedown/mousemove/mouseup). Add section-level computation, drag ghost, drop indicator, and auto-scroll. Keep the same `HeadingDrag` extension name and import path — the editor wiring in `document-editor.tsx` stays unchanged.
 
 **Tech Stack:** Tiptap 3, ProseMirror, `@floating-ui/dom`, TypeScript, SCSS
 
@@ -882,7 +882,7 @@ export const HeadingDrag = Extension.create({
 bunx tsc --noEmit
 ```
 
-The import path (`HeadingDrag` from `heading-drag-extension`) is unchanged, so `simple-editor.tsx` needs no update.
+The import path (`HeadingDrag` from `heading-drag-extension`) is unchanged, so `document-editor.tsx` needs no update.
 
 **Step 3: Commit**
 
@@ -1122,7 +1122,7 @@ This is the overall feature commit if all previous tasks weren't committed separ
 | Modify | `components/tiptap-node/heading-node/heading-scale-extension.ts` (import shared `canMapDecorations`, decoration apply logic) |
 | Modify | `package.json` (add `@floating-ui/dom`, remove atlaskit + tiptap drag-handle + node-range) |
 | Deleted | `components/tiptap-node/heading-node/helpers/compute-fingerprint.ts` (superseded by `can-map-decorations.ts`) |
-| No change | `components/tiptap-templates/simple/simple-editor.tsx` (import path unchanged) |
+| No change | `components/document-editor/document-editor.tsx` (import path unchanged) |
 
 ---
 

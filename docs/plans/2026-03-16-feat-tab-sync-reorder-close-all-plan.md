@@ -20,8 +20,8 @@ implemented: 2026-03-16
 1. **Y.Array patterns** — Bootstrap in `onSynced` when empty; wrap reorder in `ydoc.transact()`; use `observe` not `observeDeep`; find by `id` not index to avoid race conditions.
 2. **dnd-kit** — Use `horizontalListSortingStrategy`, `restrictToHorizontalAxis` modifier; `activationConstraint: { distance: 8 }`; `KeyboardSensor` for accessibility; update only in `onDragEnd`; resolve dragged item by `id` at drop.
 3. **DELETE API** — Parallel `Promise.allSettled` for close-all; sequential Y.Array removal by `id`; `serverExternalPackages: ['better-sqlite3']` in next.config; WAL mode; 10s per-request timeout.
-4. **Race conditions** — Derive `tabs` and `validActive` together in observe; never render SimpleEditor when `documentId` not in `tabs`; use ref for `activeTabId` in observe callback.
-5. **Simplifications** — Remove `use-tabs.ts` after migration; skip `lib/sqlite.ts`; merge Close Tab + Close All into one phase; seed in SimpleEditor only.
+4. **Race conditions** — Derive `tabs` and `validActive` together in observe; never render DocumentEditor when `documentId` not in `tabs`; use ref for `activeTabId` in observe callback.
+5. **Simplifications** — Remove `use-tabs.ts` after migration; skip `lib/sqlite.ts`; merge Close Tab + Close All into one phase; seed in DocumentEditor only.
 
 ### New Considerations Discovered
 
@@ -78,8 +78,8 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 ### Empty Document Seeding
 
 - **When:** Client seeds only when `ydoc` is empty after first sync.
-- **Where:** Client-side in `SimpleEditor` — when synced and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(defaultContent)`.
-- **What:** Use `DEFAULT_EDITOR_CONTENT` in `simple-editor.tsx` (H1 + paragraph) — minimal valid doc per schema.
+- **Where:** Client-side in `DocumentEditor` — when synced and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(defaultContent)`.
+- **What:** Use `DEFAULT_EDITOR_CONTENT` in `document-editor-config.ts` (H1 + paragraph) — minimal valid doc per schema.
 - **Idempotency:** Only seed when doc is truly empty; Collaboration extension handles merge.
 
 ### API Guards
@@ -178,11 +178,11 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 - [x] Y.Array: `{ id, title, createdAt }`; Playground at index 0.
 - [x] Bootstrap in `onSynced` when empty; use `ydoc.getMap('meta').get('bootstrapped')` marker so only one client seeds; migration from localStorage when empty; clear localStorage only after sync confirmed.
 - [x] Observe: derive `tabs` and `validActive` together; `validActive = tabs.some(t => t.id === activeTabId) ? activeTabId : (tabs[0]?.id ?? PLAYGROUND_ID)`.
-- [x] Never render SimpleEditor when `documentId` not in `tabs`; use ref for `activeTabId` in observe callback.
+- [x] Never render DocumentEditor when `documentId` not in `tabs`; use ref for `activeTabId` in observe callback.
 - [x] `createTab`: push `{ id, title, createdAt }` to Y.Array; `id = crypto.randomUUID()`.
 - [x] Persist `activeTabId` in localStorage; read on init, write on `switchTab` and when fallback applies.
 - [x] `closeTab`: when closing active tab, set `activeTabId` to next tab or playground.
-- [x] Expose `ready` (false until first sync); do not render SimpleEditor until ready and `documentId` in tabs.
+- [x] Expose `ready` (false until first sync); do not render DocumentEditor until ready and `documentId` in tabs.
 - [x] Replace `useTabs` with `useSyncedTabs` in `app/page.tsx`; remove `use-tabs.ts` after migration.
 - [x] Debounce title updates (300–500ms) before writing to Y.Array.
 
@@ -211,8 +211,8 @@ Implement four related improvements to the tab bar and document lifecycle: (1) c
 
 ### Phase 5: Empty Doc Seeding
 
-- [x] In `SimpleEditor`: when `synced && editor && !isPlayground` and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(DEFAULT_EDITOR_CONTENT)` (Collaboration syncs to Y.Doc). Fragment name `'default'` matches Collaboration extension default; verify in implementation.
-- [x] No new hooks; keep logic in SimpleEditor.
+- [x] In `DocumentEditor`: when `synced && editor && !isPlayground` and `ydoc.getXmlFragment('default').length === 0`, call `editor.commands.setContent(DEFAULT_EDITOR_CONTENT)` (Collaboration syncs to Y.Doc). Fragment name `'default'` matches Collaboration extension default; verify in implementation.
+- [x] No new hooks; keep logic in DocumentEditor.
 
 ## File Structure
 
@@ -274,14 +274,14 @@ lib/
 |----------|--------|-----------|
 | Tab list storage | Y.Doc `global-tabs` | Reuses Hocuspocus; real-time sync; matches document content pattern |
 | Document delete trigger | Client-side on close | Explicit user intent; clear failure handling; disconnect ≠ delete |
-| Empty doc seeding | Client-side in SimpleEditor | Matches `initialContent` pattern; avoids custom Hocuspocus extension |
+| Empty doc seeding | Client-side in DocumentEditor | Matches `initialContent` pattern; avoids custom Hocuspocus extension |
 | Orphan docs on crash | Accept for MVP | Client may crash before DELETE; optional cleanup job later |
 
 ## References & Research
 
 - **Brainstorm:** [docs/brainstorms/10-tab-sync-reorder-close-all-brainstorm.md](../brainstorms/10-tab-sync-reorder-close-all-brainstorm.md)
 - **Existing patterns:** `hooks/use-synced-tabs.ts`, `hooks/use-yjs-document.ts`, `components/tab-bar/tab-bar.tsx`
-- **Minimal doc:** `DEFAULT_EDITOR_CONTENT` in `simple-editor.tsx` (H1 + paragraph)
+- **Minimal doc:** `DEFAULT_EDITOR_CONTENT` in `document-editor-config.ts` (H1 + paragraph)
 - **Hocuspocus SQLite schema:** `documents` table `(name, data)`; delete with `DELETE FROM documents WHERE name = ?`
 - **Y.Array API:** <https://docs.yjs.dev/api/shared-types/y.array>
 - **dnd-kit Sortable:** <https://docs.dndkit.com/presets/sortable>

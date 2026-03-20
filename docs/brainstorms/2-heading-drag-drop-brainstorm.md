@@ -242,7 +242,7 @@ If the editor loses focus during drag (user tabs away, another window gains focu
 
 ### Tiptap React v3 parent-swap lifecycle
 
-The most significant implementation challenge. Tiptap React v3 creates `EditorView` with a temporary internal div as parent. When `EditorContent` mounts, it moves `view.dom` to the real container (`simple-editor-content`). Any DOM elements appended to `view.dom.parentElement` in `plugin.view()` are orphaned on the temporary div, along with event listeners.
+The most significant implementation challenge. Tiptap React v3 creates `EditorView` with a temporary internal div as parent. When `EditorContent` mounts, it moves `view.dom` to the real container (`document-editor-content`). Any DOM elements appended to `view.dom.parentElement` in `plugin.view()` are orphaned on the temporary div, along with event listeners.
 
 **Fix:** `mount()` detects parent changes by comparing `mountedParent` with `editorView.dom.parentElement` on every `update()` call. When the parent changes, it calls `unmountParent()` to clean up old listeners and re-mounts to the new parent.
 
