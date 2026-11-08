@@ -1,10 +1,9 @@
-import type Database from "better-sqlite3";
-
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
+import type { SqliteDatabase } from "@/lib/sqlite-open";
 
 const DEFAULT_BATCH_SIZE = 100;
 
-export function bootstrapDocumentActivityTable(db: Database.Database): void {
+export function bootstrapDocumentActivityTable(db: SqliteDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS document_activity (
       name TEXT PRIMARY KEY,
@@ -15,7 +14,7 @@ export function bootstrapDocumentActivityTable(db: Database.Database): void {
 }
 
 export function upsertDocumentActivity(
-  db: Database.Database,
+  db: SqliteDatabase,
   name: string,
   sizeBytes: number,
   nowMs: number = Date.now(),
@@ -30,7 +29,7 @@ export function upsertDocumentActivity(
   stmt.run(name, nowMs, sizeBytes);
 }
 
-export function countNonSystemDocuments(db: Database.Database): number {
+export function countNonSystemDocuments(db: SqliteDatabase): number {
   const rows = db.prepare("SELECT name FROM documents").all() as Array<{
     name: string;
   }>;
@@ -41,7 +40,7 @@ export function countNonSystemDocuments(db: Database.Database): number {
   return count;
 }
 
-export function documentExists(db: Database.Database, name: string): boolean {
+export function documentExists(db: SqliteDatabase, name: string): boolean {
   const row = db
     .prepare("SELECT 1 FROM documents WHERE name = ? LIMIT 1")
     .get(name) as { 1: number } | undefined;
@@ -49,7 +48,7 @@ export function documentExists(db: Database.Database, name: string): boolean {
 }
 
 export function purgeStaleDocuments(
-  db: Database.Database,
+  db: SqliteDatabase,
   cutoffMs: number,
   batchSize: number = DEFAULT_BATCH_SIZE,
 ): { deletedCount: number; deletedNames: string[] } {

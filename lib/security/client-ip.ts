@@ -1,4 +1,3 @@
-import type { IncomingHttpHeaders } from "node:http";
 import { isIP } from "node:net";
 
 import { TRUSTED_PROXY } from "@/lib/security/guardrail-config";
@@ -42,10 +41,6 @@ function lastForwardedIp(value: string | null | undefined): string | undefined {
     .map((part) => part.trim())
     .filter(Boolean)
     .at(-1);
-}
-
-function headerValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value.join(",") : value;
 }
 
 /**
@@ -98,24 +93,24 @@ export function getClientIpFromHeaders(
  * never reach them. Mutates `headers` in place.
  */
 export function pinClientIp(
-  headers: IncomingHttpHeaders,
+  headers: Headers,
   peerAddress: string | undefined,
   options: ClientIpOptions = {},
 ): string {
   const ip = resolveClientIp(
     {
-      forwardedFor: headerValue(headers[FORWARDED_FOR]),
-      realIp: headerValue(headers[REAL_IP]),
+      forwardedFor: headers.get(FORWARDED_FOR),
+      realIp: headers.get(REAL_IP),
       peerAddress,
     },
     options,
   );
-  delete headers[FORWARDED_FOR];
-  headers[REAL_IP] = ip;
+  headers.delete(FORWARDED_FOR);
+  headers.set(REAL_IP, ip);
   return ip;
 }
 
 /** Client IP pinned by `pinClientIp` during the WebSocket upgrade. */
-export function getPinnedClientIp(headers: IncomingHttpHeaders): string {
-  return headerValue(headers[REAL_IP]) || UNKNOWN_CLIENT_IP;
+export function getPinnedClientIp(headers: Headers): string {
+  return headers.get(REAL_IP) || UNKNOWN_CLIENT_IP;
 }
