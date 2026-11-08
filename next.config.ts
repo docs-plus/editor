@@ -49,6 +49,9 @@ function buildContentSecurityPolicy(): string {
 }
 
 const nextConfig: NextConfig = {
+  // Next 16.4+ rewrites AGENTS.md when it detects a coding agent; that file
+  // holds curated repo conventions, so keep it hand-maintained.
+  agentRules: false,
   serverExternalPackages: ["better-sqlite3"],
   async headers() {
     return [

@@ -22,6 +22,8 @@ after passing reliability, collaboration, and scale checks.
 ## Prerequisites
 
 - [Bun](https://bun.sh) `>=1.3.10`
+- [Node.js](https://nodejs.org) `>=22.22.2` (Next.js, Vitest, ESLint and the
+  git hooks run on Node)
 - Playwright browsers for E2E: `bunx playwright install`
 
 ## Quick Start
