@@ -39,6 +39,13 @@ export function deduplicateTabs(tabs: Tab[]): Tab[] {
   });
 }
 
+/** Keep `preferredId` when it names an existing tab, else fall back to the first tab. */
+export function resolveActiveTabId(tabs: Tab[], preferredId: string): string {
+  return tabs.some((t) => t.id === preferredId)
+    ? preferredId
+    : (tabs[0]?.id ?? PLAYGROUND_ID);
+}
+
 export function isTab(value: unknown): value is Tab {
   return (
     typeof value === "object" &&

@@ -11,6 +11,7 @@ import {
   isTab,
   loadActiveTabIdFromStorage,
   persistActiveTabId,
+  resolveActiveTabId,
   type Tab,
 } from "@/lib/tab-api";
 
@@ -54,6 +55,21 @@ describe("ensurePlaygroundTab", () => {
     const result = ensurePlaygroundTab([]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(PLAYGROUND_ID);
+  });
+});
+
+describe("resolveActiveTabId", () => {
+  it("keeps the preferred id when it exists", () => {
+    expect(resolveActiveTabId([tab(PLAYGROUND_ID), tab("x")], "x")).toBe("x");
+  });
+
+  it("falls back to the first tab when the preferred id is missing", () => {
+    expect(resolveActiveTabId([tab("a"), tab("b")], "gone")).toBe("a");
+    expect(resolveActiveTabId([tab("a")], "")).toBe("a");
+  });
+
+  it("falls back to playground when there are no tabs", () => {
+    expect(resolveActiveTabId([], "x")).toBe(PLAYGROUND_ID);
   });
 });
 

@@ -3,7 +3,6 @@
 import { arrayMove } from "@dnd-kit/sortable";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import * as Y from "yjs";
 
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
@@ -23,6 +22,7 @@ import {
   getMigrationTabs,
   loadActiveTabIdFromStorage,
   persistActiveTabId,
+  resolveActiveTabId,
   type Tab,
 } from "@/lib/tab-api";
 
@@ -69,22 +69,17 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
         // Read before the migration below clears the shared storage key.
         const initialActive = loadActiveTabIdFromStorage();
         if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
+          const migration = getMigrationTabs();
           ydoc.transact(() => {
             meta.set("bootstrapped", true);
-            const migration = getMigrationTabs();
-            const seed = migration ?? getDefaultBootstrap();
-            tabsArray.insert(0, seed);
+            tabsArray.insert(0, migration ?? getDefaultBootstrap());
           });
-          if (getMigrationTabs()) {
-            clearMigrationStorage();
-          }
+          if (migration) clearMigrationStorage();
         }
 
         const raw = tabsArray.toArray();
         const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
-        const validActive = currentTabs.some((t) => t.id === initialActive)
-          ? initialActive
-          : (currentTabs[0]?.id ?? PLAYGROUND_ID);
+        const validActive = resolveActiveTabId(currentTabs, initialActive);
 
         setTabs(currentTabs);
         setActiveTabId(validActive);
@@ -94,22 +89,23 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       },
     });
 
+    // Runs synchronously inside Yjs transactions, so plain setState is used:
+    // local mutations (e.g. dnd-kit onDragEnd) are already batched by React,
+    // and flushSync here re-renders mid-transaction.
     const applyUpdate = () => {
       const raw = tabsArray.toArray();
       const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
-      const currentActive = activeTabIdRef.current;
-      const validActive = currentTabs.some((t) => t.id === currentActive)
-        ? currentActive
-        : (currentTabs[0]?.id ?? PLAYGROUND_ID);
+      setTabs(currentTabs);
 
-      flushSync(() => {
-        setTabs(currentTabs);
-        if (validActive !== currentActive) {
-          setActiveTabId(validActive);
-          activeTabIdRef.current = validActive;
-          persistActiveTabId(validActive);
-        }
-      });
+      // The initial sync and bootstrap seed fire this before onSynced picks
+      // the active tab; falling back here would persist Playground over it.
+      const currentActive = activeTabIdRef.current;
+      if (!currentActive) return;
+      const validActive = resolveActiveTabId(currentTabs, currentActive);
+      if (validActive === currentActive) return;
+      activeTabIdRef.current = validActive;
+      setActiveTabId(validActive);
+      persistActiveTabId(validActive);
     };
 
     tabsArray.observe(applyUpdate);
