@@ -150,6 +150,9 @@ export function buildDocumentEditorExtensions({
       // tags and command names, so the StarterKit marks must stay off.
       link: false,
       code: false,
+      // TitleDocument's content is `heading block*`, so the schema's default
+      // top-level type is `heading`; pin the trailing node to a paragraph.
+      trailingNode: { node: "paragraph" },
     }),
     Hyperlink.configure({
       popovers: {

@@ -43,7 +43,7 @@ tests/
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no vitest dep)
 ├── fixtures/                             # Static JSON document fixtures
 ├── unit/
-│   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants
+│   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants, trailing node
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
@@ -107,7 +107,7 @@ make test-stress   # stress probe only
 
 ### Schema Tests
 
-Verify the `heading block*` schema (TitleDocument extension) — first node is always H1, heading levels 1-6, paste handling preserves invariants. 10 random documents are generated and validated each run.
+Verify the `heading block*` schema (TitleDocument extension) — first node is always H1, heading levels 1-6, paste handling preserves invariants, the trailing node appended after a non-paragraph last block is a paragraph (never a heading). 10 random documents are generated and validated each run.
 
 ### Plugin Tests
 
