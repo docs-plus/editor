@@ -1,3 +1,5 @@
+import type { JSONContent } from "@tiptap/core";
+
 import { pick, randomInt, shuffle } from "@/lib/random";
 
 export interface GenerateRandomDocumentOptions {
@@ -17,7 +19,7 @@ const DEFAULT_CONTENT_TYPES = [
   "codeBlock",
 ];
 
-type ContentBlock = Record<string, unknown>;
+type ContentBlock = JSONContent;
 
 const PROSE_SENTENCES = [
   "The architecture relies on a shared document model enforced at the schema level.",
@@ -233,7 +235,7 @@ export function generateLargeDocument(
     | "deep"
     | "mixed"
     | GenerateLargeDocumentOptions = "mixed",
-): { type: "doc"; content: unknown[] } {
+): { type: "doc"; content: JSONContent[] } {
   const opts: GenerateLargeDocumentOptions =
     typeof shapeOrOptions === "string"
       ? { shape: shapeOrOptions }
@@ -242,7 +244,7 @@ export function generateLargeDocument(
   const richContent = opts.richContent ?? true;
   const contentTypes = opts.contentTypes ?? DEFAULT_CONTENT_TYPES;
 
-  const content: unknown[] = [
+  const content: JSONContent[] = [
     {
       type: "heading",
       attrs: { level: 1 },
@@ -290,7 +292,7 @@ export function generateLargeDocument(
  */
 export function generateRandomDocument(
   options: GenerateRandomDocumentOptions = {},
-): { type: "doc"; content: unknown[] } {
+): { type: "doc"; content: JSONContent[] } {
   const {
     minSections = 1,
     maxSections = 10,
@@ -300,7 +302,7 @@ export function generateRandomDocument(
   } = options;
 
   const sectionCount = randomInt(minSections, maxSections);
-  const content: unknown[] = [
+  const content: JSONContent[] = [
     {
       type: "heading",
       attrs: { level: 1 },

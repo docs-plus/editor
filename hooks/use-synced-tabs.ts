@@ -66,6 +66,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       document: ydoc,
       ...(token ? { token } : {}),
       onSynced() {
+        // Read before the migration below clears the shared storage key.
+        const initialActive = loadActiveTabIdFromStorage();
         if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
           ydoc.transact(() => {
             meta.set("bootstrapped", true);
@@ -78,7 +80,6 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
           }
         }
 
-        const initialActive = loadActiveTabIdFromStorage();
         const raw = tabsArray.toArray();
         const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
         const validActive = currentTabs.some((t) => t.id === initialActive)

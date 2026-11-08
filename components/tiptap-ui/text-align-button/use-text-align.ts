@@ -68,7 +68,7 @@ export function canSetTextAlign(
   editor: Editor | null,
   align: TextAlign,
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (
     !isExtensionAvailable(editor, "textAlign") ||
     isNodeTypeSelected(editor, ["image", "horizontalRule"])
@@ -93,7 +93,7 @@ export function isTextAlignActive(
   editor: Editor | null,
   align: TextAlign,
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   return editor.isActive({ textAlign: align });
 }
 
@@ -101,7 +101,7 @@ export function isTextAlignActive(
  * Sets text alignment in the editor
  */
 export function setTextAlign(editor: Editor | null, align: TextAlign): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!canSetTextAlign(editor, align)) return false;
 
   const chain = editor.chain().focus();
@@ -122,7 +122,7 @@ export function shouldShowTextAlignButton(props: {
 }): boolean {
   const { editor, hideWhenUnavailable, align } = props;
 
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
 
   if (!hideWhenUnavailable) {
     return true;
@@ -130,7 +130,7 @@ export function shouldShowTextAlignButton(props: {
 
   if (!isExtensionAvailable(editor, "textAlign")) return false;
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canSetTextAlign(editor, align);
   }
 

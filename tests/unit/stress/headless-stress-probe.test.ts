@@ -86,10 +86,7 @@ function findSectionEnd(
       pastTarget = true;
       return;
     }
-    if (
-      pastTarget &&
-      (node.attrs as Record<string, unknown>).level <= headingLevel
-    ) {
+    if (pastTarget && (node.attrs.level as number) <= headingLevel) {
       if (pos < end) end = pos;
     }
   });

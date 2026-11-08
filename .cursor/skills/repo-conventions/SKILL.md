@@ -85,7 +85,7 @@ The project has a clear layer hierarchy. Each layer may only import from layers 
 ├─────────────────────────────────────────┤
 │  hooks/            Shared React hooks   │  ← no UI, just logic
 ├─────────────────────────────────────────┤
-│  lib/              Pure utilities       │  ← cn, shortcuts, editor-utils, url-utils, icons
+│  lib/              Pure utilities       │  ← cn, shortcuts, editor-utils, icons
 ├─────────────────────────────────────────┤
 │  styles/           Design tokens        │  ← variables, keyframes
 └─────────────────────────────────────────┘
@@ -128,7 +128,7 @@ These are hard rules, not suggestions:
 3. **No barrel files at directory roots.** Do not create `components/index.ts` or `hooks/index.ts`. Barrel files are only for individual component folders (e.g. `tiptap-ui/mark-button/index.tsx`).
 4. **No dedicated types files.** Types and interfaces live in the file that defines or primarily uses them. `Tab` lives in `use-synced-tabs.ts`, not in `types/tab.ts`.
 5. **No wrapper components for the sake of wrapping.** If a component just passes props through to another component, delete it. Direct imports are better than indirection.
-6. **No "utils" dumping ground.** Split utilities by domain (e.g. `lib/cn.ts`, `lib/shortcuts.ts`, `lib/editor-utils.ts`, `lib/url-utils.ts`), not by creating a `utils/` folder.
+6. **No "utils" dumping ground.** Split utilities by domain (e.g. `lib/cn.ts`, `lib/shortcuts.ts`, `lib/editor-utils.ts`), not by creating a `utils/` folder.
 7. **Co-locate everything.** Styles, hooks, tests, and types for a component live in its folder, not in separate top-level directories.
 
 ### Tiptap code ownership
@@ -223,6 +223,7 @@ components/tab-bar.test.tsx
 | `bun run build`     | Production build                  |
 | `bun start`         | Start production server           |
 | `bun run lint`      | ESLint (Next.js rules)            |
+| `bun run typecheck` | TypeScript (`tsc --noEmit`)       |
 | `bun run format`    | Biome format all files            |
 | `bun run check`     | Biome lint + format check         |
 | `bun run check:fix` | Biome lint + format with auto-fix |

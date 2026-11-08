@@ -32,8 +32,11 @@ export {
   Italic as ItalicIcon,
   Link as LinkIcon,
   List as ListIcon,
+  ListIndentDecrease as IndentDecreaseIcon,
+  ListIndentIncrease as IndentIncreaseIcon,
   ListOrdered as ListOrderedIcon,
   ListTodo as ListTodoIcon,
+  MonitorPlay as MediaEmbedIcon,
   MoonStar as MoonStarIcon,
   PanelLeft as PanelLeftIcon,
   PanelLeftClose as PanelLeftCloseIcon,
@@ -51,6 +54,7 @@ export {
   Trash2 as TrashIcon,
   Underline as UnderlineIcon,
   Undo2 as Undo2Icon,
+  Workflow as MermaidIcon,
   X as CloseIcon,
 } from "lucide-react";
 

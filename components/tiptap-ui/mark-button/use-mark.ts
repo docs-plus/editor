@@ -26,7 +26,7 @@ export type Mark =
   | "bold"
   | "italic"
   | "strike"
-  | "code"
+  | "inlineCode"
   | "underline"
   | "superscript"
   | "subscript";
@@ -59,7 +59,7 @@ export const markIcons = {
   italic: ItalicIcon,
   underline: UnderlineIcon,
   strike: StrikeIcon,
-  code: Code2Icon,
+  inlineCode: Code2Icon,
   superscript: SuperscriptIcon,
   subscript: SubscriptIcon,
 };
@@ -69,7 +69,7 @@ export const MARK_SHORTCUT_KEYS: Record<Mark, string> = {
   italic: "mod+i",
   underline: "mod+u",
   strike: "mod+shift+s",
-  code: "mod+e",
+  inlineCode: "mod+e",
   superscript: "mod+.",
   subscript: "mod+,",
 };
@@ -78,7 +78,7 @@ export const MARK_SHORTCUT_KEYS: Record<Mark, string> = {
  * Checks if a mark can be toggled in the current editor state
  */
 export function canToggleMark(editor: Editor | null, type: Mark): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!isMarkInSchema(type, editor) || isNodeTypeSelected(editor, ["image"]))
     return false;
 
@@ -89,7 +89,7 @@ export function canToggleMark(editor: Editor | null, type: Mark): boolean {
  * Checks if a mark is currently active
  */
 export function isMarkActive(editor: Editor | null, type: Mark): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   return editor.isActive(type);
 }
 
@@ -97,7 +97,7 @@ export function isMarkActive(editor: Editor | null, type: Mark): boolean {
  * Toggles a mark in the editor
  */
 export function toggleMark(editor: Editor | null, type: Mark): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!canToggleMark(editor, type)) return false;
 
   return editor.chain().focus().toggleMark(type).run();
@@ -115,16 +115,26 @@ export function shouldShowMarkButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isMarkInSchema(type, editor)) return false;
-    if (!editor?.isActive("code")) return canToggleMark(editor, type);
+    if (!editor?.isActive("inlineCode")) return canToggleMark(editor, type);
     return true;
   });
 }
+
+const MARK_LABELS: Record<Mark, string> = {
+  bold: "Bold",
+  italic: "Italic",
+  underline: "Underline",
+  strike: "Strike",
+  inlineCode: "Inline code",
+  superscript: "Superscript",
+  subscript: "Subscript",
+};
 
 /**
  * Gets the formatted mark name
  */
 export function getFormattedMarkName(type: Mark): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  return MARK_LABELS[type];
 }
 
 /**

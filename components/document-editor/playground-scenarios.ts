@@ -2,6 +2,11 @@ import type { JSONContent } from "@tiptap/core";
 
 import { pick, randomInt, shuffle } from "@/lib/random";
 
+import {
+  createDiagramBlock,
+  PLAYGROUND_DIAGRAM_KEYS,
+} from "./playground-diagrams";
+
 const DOC_TITLES = [
   "Project Overview",
   "Technical Specification",
@@ -180,19 +185,17 @@ function createParagraphWithMarks(): JSONContent {
       "bold",
       "italic",
       "strike",
-      "code",
+      "inlineCode",
       "underline",
-      "link",
+      "hyperlink",
       "highlight",
       "highlight",
     ] as const);
-    if (mark === "link") {
+    if (mark === "hyperlink") {
       parts.push({
         type: "text",
         text: slice,
-        marks: [
-          { type: "link", attrs: { href: "https://example.com", title: null } },
-        ],
+        marks: [{ type: "hyperlink", attrs: { href: "https://example.com" } }],
       });
     } else if (mark === "highlight") {
       parts.push({
@@ -432,6 +435,8 @@ function createContentBlock(type: ContentBlockType): JSONContent {
   }
 }
 
+const DIAGRAM_SECTION_RATIO = 0.25;
+
 function createSectionBody(): JSONContent[] {
   const blocks: JSONContent[] = [];
   const paraCount = randomInt(5, 10);
@@ -442,6 +447,15 @@ function createSectionBody(): JSONContent[] {
   for (let i = 0; i < structuredCount; i++) {
     const insertAt = randomInt(1, blocks.length);
     blocks.splice(insertAt, 0, createContentBlock(pick(CONTENT_TYPES)));
+  }
+  // Diagrams render lazily but are heavier than text; keep ~1 per 4 sections.
+  if (Math.random() < DIAGRAM_SECTION_RATIO) {
+    const insertAt = randomInt(1, blocks.length);
+    blocks.splice(
+      insertAt,
+      0,
+      createDiagramBlock(pick(PLAYGROUND_DIAGRAM_KEYS)),
+    );
   }
   return blocks;
 }
@@ -511,6 +525,72 @@ function headingNodesToContent(nodes: HeadingNode[]): JSONContent[] {
   return result;
 }
 
+/** Fixed section that demos the @docs.plus extensions on every regenerate. */
+function createExtensionsShowcase(): JSONContent[] {
+  const text = (value: string, marks?: JSONContent["marks"]): JSONContent =>
+    marks
+      ? { type: "text", text: value, marks }
+      : { type: "text", text: value };
+
+  return [
+    {
+      type: "heading",
+      attrs: headingAttrs(2),
+      content: [text("Extensions tour")],
+    },
+    {
+      type: "paragraph",
+      content: [
+        text("Click "),
+        text("this link", [
+          { type: "hyperlink", attrs: { href: "https://docs.plus" } },
+        ]),
+        text(" to preview, copy or edit it; select text and press "),
+        text("Mod-K", [{ type: "inlineCode" }]),
+        text(" to add one. Wrap text in backticks for "),
+        text("inline code", [{ type: "inlineCode" }]),
+        text("."),
+      ],
+    },
+    {
+      type: "paragraph",
+      content: [
+        text(
+          "  This paragraph is indented. Press Tab at the start of a line to indent, Shift-Tab to outdent.",
+        ),
+      ],
+    },
+    {
+      type: "paragraph",
+      content: [
+        text(
+          "Paste a YouTube, Vimeo, Loom, SoundCloud, Spotify or X link on its own line to embed it, or use Embed media in the toolbar.",
+        ),
+      ],
+    },
+    {
+      type: "heading",
+      attrs: headingAttrs(3),
+      content: [text("Diagrams and charts")],
+    },
+    {
+      type: "paragraph",
+      content: [
+        text("Insert a diagram from the toolbar or type "),
+        text("```mermaid", [{ type: "inlineCode" }]),
+        text(
+          " and press Enter. Diagrams redraw as you edit their source; hover one to copy it or hide the source.",
+        ),
+      ],
+    },
+    createDiagramBlock("flowchart"),
+    createDiagramBlock("sequence"),
+    createDiagramBlock("barLineChart"),
+    createDiagramBlock("pieChart"),
+    createDiagramBlock("gantt"),
+  ];
+}
+
 export function generatePlaygroundContent(): JSONContent {
   const usedTitles = new Set<string>();
   const sectionCount = randomInt(32, 56);
@@ -523,6 +603,7 @@ export function generatePlaygroundContent(): JSONContent {
       content: [{ type: "text", text: pick(DOC_TITLES) }],
     },
     ...createSectionBody(),
+    ...createExtensionsShowcase(),
     ...headingNodesToContent(nestedHeadings),
   ];
 

@@ -1,0 +1,158 @@
+name: Refresh docs.plus extensions
+
+# Every 3 days: pull the latest @docs.plus/extension-* releases (plus the
+# Tiptap 3.x versions they peer on), rebuild the lockfile, run the full
+# verification suite and production build, then open or update a PR.
+# Nothing lands on the default branch without review.
+#
+# Requires: Settings → Actions → General → "Allow GitHub Actions to create
+# and approve pull requests".
+
+on:
+  schedule:
+    # 04:17 UTC on days 1, 4, 7, … of each month (cron has no true
+    # "every 72h"; the month boundary gap is 1–3 days).
+    - cron: "17 4 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs-plus-extensions
+  cancel-in-progress: false
+
+env:
+  UPDATE_BRANCH: deps/docs-plus-extensions
+  DOCS_PLUS_PACKAGES: >-
+    @docs.plus/extension-hyperlink
+    @docs.plus/extension-hypermultimedia
+    @docs.plus/extension-indent
+    @docs.plus/extension-inline-code
+    @docs.plus/extension-mermaid
+    @docs.plus/extension-placeholder
+
+jobs:
+  refresh:
+    name: Update, verify and open PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .tool-versions
+
+      # Next.js, Vitest/jsdom and ESLint run on Node (>= 22.22.2).
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install current lockfile
+        run: bun install --frozen-lockfile
+
+      - name: Update @docs.plus extensions and Tiptap peers
+        id: update
+        run: |
+          before=$(bun pm ls 2>/dev/null | grep -E '@docs\.plus/|@tiptap/' | sort || true)
+          # shellcheck disable=SC2086
+          bun update --latest $DOCS_PLUS_PACKAGES
+          # Stay on Tiptap 3.x (caret range) but pick up the newest minor the
+          # extensions may now peer on.
+          tiptap=$(jq -r '.dependencies | keys[] | select(startswith("@tiptap/"))' package.json)
+          # shellcheck disable=SC2086
+          bun update $tiptap
+          after=$(bun pm ls 2>/dev/null | grep -E '@docs\.plus/|@tiptap/' | sort || true)
+          {
+            echo "changes<<EOF"
+            diff <(echo "$before") <(echo "$after") | grep -E '^[<>]' || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if git diff --quiet -- package.json bun.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Extensions are already up to date."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- package.json bun.lock
+          fi
+
+      - name: Guard against duplicate ProseMirror / Yjs copies
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          # Two copies of these packages break the editor at runtime
+          # (schema / Y.Doc instanceof checks fail across copies).
+          dupes=$(find node_modules -name package.json \
+            | grep -E '/(prosemirror-(model|view|state|transform)|yjs|y-protocols)/package.json$' \
+            | sed -E 's#.*/((prosemirror-[a-z-]+)|yjs|y-protocols)/package.json#\1#' \
+            | sort | uniq -d || true)
+          if [ -n "$dupes" ]; then
+            echo "::error::Duplicate installs after update: $dupes. Regenerate bun.lock locally and dedupe."
+            exit 1
+          fi
+
+      - name: Lint and format check
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          bun run check
+          bun run lint
+
+      - name: Typecheck
+        if: steps.diff.outputs.changed == 'true'
+        run: bun run typecheck
+
+      - name: Unit tests
+        if: steps.diff.outputs.changed == 'true'
+        run: bun run test
+
+      - name: Production build
+        if: steps.diff.outputs.changed == 'true'
+        run: bun run build
+
+      - name: Open or update pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          CHANGES: ${{ steps.update.outputs.changes }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$UPDATE_BRANCH"
+          git add package.json bun.lock
+          git commit \
+            -m "build(deps): update docs.plus editor extensions" \
+            -m "Scheduled refresh of the @docs.plus Tiptap extensions and their Tiptap peers. Lint, typecheck, unit tests and the production build passed before this commit was made."
+          git push --force origin "$UPDATE_BRANCH"
+
+          body_file="$RUNNER_TEMP/pr-body.md"
+          {
+            echo 'Scheduled refresh of the `@docs.plus` editor extensions.'
+            echo
+            echo 'Verified on the runner: Biome, ESLint, typecheck, unit tests,'
+            echo 'production build, and the duplicate ProseMirror/Yjs install guard.'
+            echo
+            echo '```diff'
+            echo "$CHANGES"
+            echo '```'
+          } > "$body_file"
+
+          if gh pr view "$UPDATE_BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$UPDATE_BRANCH" --body-file "$body_file"
+          else
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "build(deps): update docs.plus editor extensions" \
+              --body-file "$body_file"
+          fi

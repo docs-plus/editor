@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { EditorView } from "@tiptap/pm/view";
+import { describe, expect, it, vi } from "vitest";
 
 import { headingFoldPluginKey } from "@/extensions/heading-fold";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
@@ -165,6 +166,43 @@ describe("HeadingFold plugin state", () => {
     expect(state?.animating.has("sec-a")).toBe(false);
     expect(state?.foldedIds.has("sec-a")).toBe(true);
     editor.destroy();
+  });
+
+  it("ends the fold animation in a view mounted after another view was destroyed", () => {
+    // React StrictMode / EditorContent remounts destroy and recreate views
+    // for the same plugin instance; the new view must still finish animations.
+    vi.useFakeTimers();
+    try {
+      const editor = createTestEditor({ content: FOLD_CONTENT });
+      const first = new EditorView(document.createElement("div"), {
+        state: editor.state,
+      });
+      first.destroy();
+
+      const second = new EditorView(document.createElement("div"), {
+        state: editor.state,
+      });
+      second.dispatch(
+        second.state.tr.setMeta(headingFoldPluginKey, {
+          type: "toggle",
+          id: "sec-a",
+          contentHeight: 100,
+        }),
+      );
+      expect(
+        headingFoldPluginKey.getState(second.state)?.animating.get("sec-a"),
+      ).toBe("folding");
+
+      vi.advanceTimersByTime(1000);
+
+      const state = headingFoldPluginKey.getState(second.state);
+      expect(state?.animating.has("sec-a")).toBe(false);
+      expect(state?.foldedIds.has("sec-a")).toBe(true);
+      second.destroy();
+      editor.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("content-only edit with folds active: decos mapped, foldedIds unchanged", () => {

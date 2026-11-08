@@ -153,3 +153,27 @@ body {
     opacity: 0.4;
   }
 }
+
+/* =====================
+     @docs.plus EXTENSION THEME
+     Map the packages' neutral tokens to shadcn variables so their popovers
+     and media toolbar match the app chrome in both themes. `html:root`
+     outranks the packages' own `:root` declarations regardless of CSS
+     chunk order. Accent colors keep the package defaults.
+     ===================== */
+html:root {
+  --hl-bg: var(--popover);
+  --hl-fg: var(--popover-foreground);
+  --hl-muted: var(--muted-foreground);
+  --hl-border: var(--border);
+  --hl-hover: var(--accent);
+  --hl-radius: var(--radius);
+  --hl-radius-sm: calc(var(--radius) * 0.8);
+  --hl-font: var(--font-sans), system-ui, sans-serif;
+
+  --hm-toolbar-bg: var(--popover);
+  --hm-toolbar-fg: var(--popover-foreground);
+  --hm-toolbar-border: var(--border);
+  --hm-toolbar-hover: var(--accent);
+  --hm-caption-fg: var(--muted-foreground);
+}
