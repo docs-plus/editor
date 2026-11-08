@@ -39,6 +39,10 @@ Local dev runs two services:
 Primary runtime knobs are environment-driven:
 
 - Guardrails and limits: `lib/security/guardrail-config.ts`
+- Client IP trust: set `TRUSTED_PROXY=1` only behind a reverse proxy that
+  appends to `X-Forwarded-For` (`ecosystem.config.cjs` does). Without it,
+  forwarding headers are ignored: WebSocket limits use the socket address and
+  HTTP limits share one global key.
 - Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
 - Hocus entrypoint: `scripts/hocus-server.ts`

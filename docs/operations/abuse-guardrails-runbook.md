@@ -21,7 +21,8 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `MAX_TOTAL_DOCUMENTS=2000`
 - `MAX_DOC_SIZE_BYTES=1048576`
 - `RETENTION_DAYS=30`
-- `TRUSTED_PROXY=0` (`1` behind trusted reverse proxy)
+- `TRUSTED_PROXY=0` (`1` only when a reverse proxy fronts every request;
+  `ecosystem.config.cjs` sets `1`; see Client IP Extraction Policy)
 - `HOCUS_LOGGER=0` to disable Hocuspocus Logger extension
 - `HOCUS_THROTTLE=0` to disable Hocuspocus Throttle extension
 - `HOCUS_THROTTLE_MAX_ATTEMPTS`, `HOCUS_THROTTLE_WINDOW_SECONDS`, `HOCUS_THROTTLE_BAN_MINUTES`
@@ -61,6 +62,9 @@ Failure signals:
 - Sharp sustained increase in `documents_delete_throttled`
 - Frequent `documents_delete_failed`
 - Repeated missing/failed retention events
+- `documents_delete_throttled` with `"ip":"unknown"` in production: client IPs
+  are not being resolved, so everyone shares one bucket. Check `TRUSTED_PROXY`
+  and the proxy's forwarding headers.
 
 ## Immediate Actions
 
@@ -70,5 +74,29 @@ Failure signals:
 
 ## Client IP Extraction Policy
 
+Per-IP guardrails (`WS_CONNECTION_LIMIT`, `DOC_CREATION_RATE_LIMIT`,
+`HTTP_MUTATION_RATE_LIMIT`, Hocuspocus Throttle) key on the client IP from
+`lib/security/client-ip.ts`.
+
 - Use `X-Forwarded-For`/`X-Real-IP` only when `TRUSTED_PROXY=1`.
-- In non-dev environments, private/reserved addresses are treated as unknown client identity.
+- `TRUSTED_PROXY=0` (default): both headers are client-controlled and ignored.
+  - WebSocket: the TCP peer address.
+  - HTTP (`DELETE /api/documents/[id]`): Next.js route handlers have no socket
+    address, so all requests share the `unknown` key. The limit becomes global
+    instead of bypassable by rotating headers.
+- `TRUSTED_PROXY=1`: the rightmost `X-Forwarded-For` entry (the address the
+  proxy appended; entries to its left are client-supplied), else `X-Real-IP`,
+  else (WebSocket only) the peer address.
+  - Assumes one proxy hop that appends to `X-Forwarded-For` (Traefik, Caddy,
+    HAProxy, nginx `$proxy_add_x_forwarded_for`). Behind a CDN plus a proxy the
+    rightmost entry is the CDN edge, so clients share a key per edge.
+  - The app ports (`3847`, `3848` under PM2) must be reachable only from the
+    proxy. A client that reaches them directly can forge the headers.
+- The Hocuspocus server resolves the IP once at the WebSocket upgrade and
+  rewrites the request so `X-Real-IP` holds it and `X-Forwarded-For` is
+  removed. Guardrail hooks and Throttle all read that value.
+- Values that are not a bare IP (for example `203.0.113.5:4711`) become
+  `unknown`; IPv4-mapped IPv6 (`::ffff:203.0.113.5`) is unwrapped.
+- In non-dev environments (`NODE_ENV` other than `development`), private/reserved
+  addresses are treated as unknown client identity. Behind a proxy with
+  `TRUSTED_PROXY=0`, every client therefore shares `unknown`.
