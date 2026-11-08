@@ -27,6 +27,7 @@ export const DEFAULT_EXTENSIONS = [
     codeBlock: false,
     link: false,
     code: false,
+    trailingNode: { node: "paragraph" },
   }),
   Hyperlink,
   InlineCode,

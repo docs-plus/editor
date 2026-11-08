@@ -146,14 +146,7 @@ test.describe("docs.plus extensions", () => {
 
     await expect
       .poll(() => topLevelTypes(page))
-      .toEqual([
-        "heading",
-        "paragraph",
-        "youtube",
-        "video",
-        "paragraph",
-        "heading",
-      ]);
+      .toEqual(["heading", "paragraph", "youtube", "video", "paragraph"]);
     await expect(
       page.locator('.tiptap iframe[src^="https://www.youtube.com/embed/"]'),
     ).toHaveCount(1);
@@ -170,7 +163,6 @@ test.describe("docs.plus extensions", () => {
       "heading",
       "paragraph",
       "paragraph",
-      "heading",
     ]);
   });
 });
