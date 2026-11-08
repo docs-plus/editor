@@ -45,7 +45,8 @@ tests/
 ├── unit/
 │   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
-│   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api
+│   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
+│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode)
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
 ├── e2e/
@@ -57,6 +58,7 @@ tests/
 │   │   └── soak-journeys.ts              # 2 scripted critical-path sequences
 │   ├── collaboration.spec.ts             # 2-user collaboration (join + real-time sync)
 │   ├── drag.spec.ts                      # Heading drag handle visibility
+│   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
@@ -64,6 +66,7 @@ tests/
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
+│   ├── security-headers.spec.ts          # Hardening headers + CSP media-embed host allowlist
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)
 │   └── yjs-soak/
@@ -131,6 +134,7 @@ make test-e2e
 | Test | Validates |
 |------|-----------|
 | `drag.spec.ts` | Hovering a heading shows the drag handle |
+| `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected |
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |

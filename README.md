@@ -14,6 +14,10 @@ after passing reliability, collaboration, and scale checks.
 - TOC sidebar with click navigation and section drag/drop.
 - Rich content blocks (lists, tasks, code, tables, images, marks) plus
   markdown import/export.
+- docs.plus editor extensions: link popovers with autolink and `Mod-K`,
+  inline code, Tab indent, cursor-local placeholders, live Mermaid diagrams and
+  charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom,
+  SoundCloud, Spotify, X).
 
 ## Prerequisites
 
@@ -56,6 +60,21 @@ Redis scaling notes:
 - Redis does not replace SQLite persistence; keep Hocuspocus at one instance per
   SQLite file unless you move persistence to shared storage.
 
+Editor extensions:
+
+- The `@docs.plus/extension-*` packages are wired in
+  `components/document-editor/document-editor-config.ts`; their stylesheets are
+  themed to the shadcn tokens in `document-editor.scss`.
+- Embed providers are allowlisted by exact host in the CSP (`next.config.ts`).
+- Mermaid SVG is sanitized with DOMPurify because any collaborator can author
+  a diagram.
+- Documents stored before the switch carry `link` / `code` marks; Hocuspocus
+  renames them to `hyperlink` / `inlineCode` on load
+  (`lib/yjs-mark-migration.ts`).
+- `.github/workflows/docs-plus-extensions.yml` refreshes the extensions every
+  3 days and opens a verified PR. It needs "Allow GitHub Actions to create and
+  approve pull requests" enabled in the repository settings.
+
 Operational guidance:
 [`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md)
 
@@ -91,6 +110,7 @@ Common commands:
 - `make dev` — run Next.js + Hocuspocus
 - `bun run build` — production build
 - `bun run lint` — ESLint (Next.js rules)
+- `bun run typecheck` — TypeScript (`tsc --noEmit`)
 - `bun run check` / `bun run check:fix` — Biome checks
 - `bun run test` — Vitest suite
 
