@@ -33,7 +33,7 @@ export function useThrottledCallback<T extends AnyProcedure>(
 } {
   const handler = useMemo(
     () => throttle<T>(fn, wait, options),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- same contract as useCallback(fn, deps)
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo -- same contract as useCallback(fn, deps)
     dependencies,
   );
 

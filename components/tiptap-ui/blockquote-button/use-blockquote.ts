@@ -45,7 +45,7 @@ export function canToggleBlockquote(
   editor: Editor | null,
   turnInto: boolean = true,
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (
     !isNodeInSchema("blockquote", editor) ||
     isNodeTypeSelected(editor, ["image"])
@@ -69,7 +69,7 @@ export function canToggleBlockquote(
  * Toggles blockquote formatting for a specific node or the current selection
  */
 export function toggleBlockquote(editor: Editor | null): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!canToggleBlockquote(editor)) return false;
 
   try {
@@ -100,7 +100,7 @@ export function shouldShowBlockquoteButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("blockquote", editor)) return false;
-    if (!editor?.isActive("code")) return canToggleBlockquote(editor);
+    if (!editor?.isActive("inlineCode")) return canToggleBlockquote(editor);
     return true;
   });
 }

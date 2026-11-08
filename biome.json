@@ -9,7 +9,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedImports": "warn",
         "useExhaustiveDependencies": "warn"
@@ -31,7 +31,7 @@
     "enabled": true,
     "actions": {
       "source": {
-        "recommended": true,
+        "preset": "recommended",
         "organizeImports": {
           "level": "on",
           "options": {
@@ -63,7 +63,16 @@
     }
   },
   "files": {
-    "includes": ["**", "!.next", "!out", "!build", "!*.min.js", "!*.min.css"]
+    "includes": [
+      "**",
+      "!.next",
+      "!out",
+      "!build",
+      "!*.min.js",
+      "!*.min.css",
+      "!**/*.md",
+      "!**/*.scss"
+    ]
   },
   "overrides": [
     {

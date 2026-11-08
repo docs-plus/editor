@@ -45,7 +45,7 @@ export function canToggleCodeBlock(
   editor: Editor | null,
   turnInto: boolean = true,
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (
     !isNodeInSchema("codeBlock", editor) ||
     isNodeTypeSelected(editor, ["image"])
@@ -72,7 +72,7 @@ export function canToggleCodeBlock(
  * Toggles code block in the editor
  */
 export function toggleCodeBlock(editor: Editor | null): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!canToggleCodeBlock(editor)) return false;
 
   try {
@@ -103,7 +103,7 @@ export function shouldShowCodeBlockButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("codeBlock", editor)) return false;
-    if (!editor?.isActive("code")) return canToggleCodeBlock(editor);
+    if (!editor?.isActive("inlineCode")) return canToggleCodeBlock(editor);
     return true;
   });
 }

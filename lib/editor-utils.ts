@@ -119,7 +119,7 @@ export function findNodePosition(props: {
 }): { pos: number; node: PMNode } | null {
   const { editor, node, nodePos } = props;
 
-  if (!editor || !editor.state?.doc) return null;
+  if (!editor?.state?.doc) return null;
 
   const hasValidNode = node !== undefined && node !== null;
   const hasValidPos = isValidPosition(nodePos);
@@ -165,7 +165,7 @@ export function isNodeTypeSelected(
   nodeTypeNames: string[] = [],
   checkAncestorNodes: boolean = false,
 ): boolean {
-  if (!editor || !editor.state.selection) return false;
+  if (!editor?.state.selection) return false;
 
   const { selection } = editor.state;
   if (selection.empty) return false;
@@ -229,7 +229,7 @@ export function shouldShowEditorButton(
   hideWhenUnavailable: boolean,
   schemaCheck: () => boolean,
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!hideWhenUnavailable) return true;
   return schemaCheck();
 }
@@ -247,7 +247,7 @@ export function moveSection(
   newLevel?: number,
 ): void {
   const headingNode = view.state.doc.nodeAt(sectionFrom);
-  if (!headingNode || headingNode.type.name !== "heading") return;
+  if (headingNode?.type.name !== "heading") return;
 
   const positionChanged = targetPos !== sectionFrom && targetPos !== sectionTo;
   const levelChanged = newLevel != null && newLevel !== headingNode.attrs.level;

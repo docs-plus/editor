@@ -66,7 +66,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       document: ydoc,
       ...(token ? { token } : {}),
       onSynced() {
-        // Read before seeding: clearMigrationStorage() drops the stored id.
+        // Read before the migration below clears the shared storage key.
         const initialActive = loadActiveTabIdFromStorage();
         if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
           const migration = getMigrationTabs();

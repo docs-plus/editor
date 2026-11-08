@@ -115,7 +115,7 @@ export function createHeadingDragPlugin(): Plugin<DecorationSet> {
 
         const { doc } = editorView.state;
         const headingNode = doc.nodeAt(pos);
-        if (!headingNode || headingNode.type.name !== "heading") return;
+        if (headingNode?.type.name !== "heading") return;
 
         const headingLevel = headingNode.attrs.level as number;
         const headingText = headingNode.textContent || "Heading";

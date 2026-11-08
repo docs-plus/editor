@@ -57,7 +57,8 @@ describe("runRetentionPurge", () => {
 
       const result = runRetentionPurge(db, {
         retentionDays: 1,
-        nowMs: 100_000,
+        // cutoff = nowMs - 1 day = 100_000 → only the 1_000 row is stale
+        nowMs: 100_000 + 24 * 60 * 60 * 1000,
         batchSize: 50,
       });
 

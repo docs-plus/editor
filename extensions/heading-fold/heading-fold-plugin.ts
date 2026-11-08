@@ -293,11 +293,6 @@ function isPositionFolded(
 export function createHeadingFoldPlugin(
   options: HeadingFoldPluginOptions,
 ): Plugin<HeadingFoldState> {
-  let destroyed = false;
-  let prevFoldedIds = new Set(options.initialFoldedIds);
-  let prevAnimating = new Map<string, "folding" | "unfolding">();
-  const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
   return new Plugin<HeadingFoldState>({
     key: headingFoldPluginKey,
 
@@ -459,7 +454,15 @@ export function createHeadingFoldPlugin(
       },
     },
 
+    // Lifecycle state is per EditorView: views can be destroyed and recreated
+    // for the same plugin (React StrictMode remounts, EditorContent remounts),
+    // and a shared `destroyed` flag would silence every later view's timers.
     view() {
+      let destroyed = false;
+      let prevFoldedIds = new Set(options.initialFoldedIds);
+      let prevAnimating = new Map<string, "folding" | "unfolding">();
+      const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
       return {
         update(view) {
           const currentState = headingFoldPluginKey.getState(view.state);

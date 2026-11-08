@@ -2,10 +2,15 @@
  * PM2 ecosystem config for production.
  * Next.js on 3847, Hocuspocus on 3848 (avoids common 3000/1234 conflicts).
  *
- * Optional env for editor-hocus (inherit from host or set here): TRUSTED_PROXY,
+ * Both apps run behind a TLS-terminating reverse proxy (production requires
+ * wss://), so TRUSTED_PROXY=1 lets them read the client IP from the proxy's
+ * X-Forwarded-For / X-Real-IP. Only the proxy may reach 3847/3848; a client
+ * hitting them directly could forge those headers.
+ *
+ * Optional env for editor-hocus (inherit from host or set here):
  * WS_CONNECTION_LIMIT, DOC_CREATION_RATE_LIMIT, HOCUS_THROTTLE*, HOCUS_LOGGER,
  * HOCUS_REDIS*, etc.
- * See README "Guardrail env vars" + "Hocuspocus server".
+ * See docs/operations/abuse-guardrails-runbook.md.
  */
 module.exports = {
   apps: [
@@ -14,7 +19,7 @@ module.exports = {
       cwd: __dirname,
       script: "bun",
       args: "run start",
-      env: { NODE_ENV: "production", PORT: 3847 },
+      env: { NODE_ENV: "production", PORT: 3847, TRUSTED_PROXY: "1" },
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
@@ -42,6 +47,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         HOCUS_PORT: "3848",
+        TRUSTED_PROXY: "1",
         DB_PATH: "db.sqlite",
         HOCUS_REDIS: "1",
         HOCUS_REDIS_HOST: "127.0.0.1",

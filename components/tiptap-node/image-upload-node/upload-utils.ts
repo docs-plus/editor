@@ -1,5 +1,8 @@
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
+/** Max images accepted per upload or paste gesture. */
+export const IMAGE_UPLOAD_LIMIT = 3;
+
 /**
  * Handles image upload with progress tracking and abort capability
  * @param file The file to upload

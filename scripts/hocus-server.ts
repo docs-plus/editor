@@ -1,7 +1,7 @@
 import { Server } from "@hocuspocus/server";
 import sqlite3 from "sqlite3";
 
-import { getClientIpFromHeaders } from "../lib/security/client-ip";
+import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
   isSystemDocumentId,
   isValidWsDocumentName,
@@ -9,6 +9,7 @@ import {
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
 import { getSqliteDbPath } from "../lib/sqlite-db-path";
+import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 
 function getPort(): number {
   const raw = process.env.HOCUS_PORT?.trim();
@@ -109,17 +110,6 @@ async function upsertDocumentActivity(
   );
 }
 
-function headersFromUnknown(value: unknown): Headers {
-  if (value instanceof Headers) return value;
-  const headers = new Headers();
-  if (value && typeof value === "object") {
-    for (const [key, raw] of Object.entries(value)) {
-      if (typeof raw === "string") headers.set(key, raw);
-    }
-  }
-  return headers;
-}
-
 function getDocumentName(value: unknown): string {
   if (!value || typeof value !== "object") return "";
   const candidate = (value as Record<string, unknown>).documentName;
@@ -156,22 +146,20 @@ await bootstrapMetadataTable(metadataDb);
 
 const server = new Server({
   extensions: buildHocusServerExtensions(getSqliteDbPath()),
+  // Runs before any onConnect (including Throttle), so every later hook keys on this IP.
+  async onUpgrade({ request }) {
+    pinClientIp(request.headers, request.socket.remoteAddress);
+  },
   async onConnect(data) {
-    const headers = headersFromUnknown(
-      (data as unknown as Record<string, unknown>).requestHeaders,
+    const decision = guardrails.onConnect(
+      getPinnedClientIp(data.requestHeaders),
     );
-    const ip = getClientIpFromHeaders(headers);
-    const decision = guardrails.onConnect(ip);
     if (!decision.allowed) {
       throw new Error(decision.reason);
     }
   },
   async onDisconnect(data) {
-    const headers = headersFromUnknown(
-      (data as unknown as Record<string, unknown>).requestHeaders,
-    );
-    const ip = getClientIpFromHeaders(headers);
-    guardrails.onDisconnect(ip);
+    guardrails.onDisconnect(getPinnedClientIp(data.requestHeaders));
   },
   async onLoadDocument(data) {
     const name = getDocumentName(data);
@@ -187,10 +175,7 @@ const server = new Server({
     try {
       const exists = await documentExists(metadataDb, name);
       if (exists) return;
-      const headers = headersFromUnknown(
-        (data as unknown as Record<string, unknown>).requestHeaders,
-      );
-      const ip = getClientIpFromHeaders(headers);
+      const ip = getPinnedClientIp(data.requestHeaders);
       const total = await countNonSystemDocuments(metadataDb);
       const decision = guardrails.canCreateDocument(ip, total);
       if (!decision.allowed) {
@@ -198,6 +183,16 @@ const server = new Server({
       }
     } finally {
       pendingDocuments.delete(name);
+    }
+  },
+  // Runs once per load, after SQLite applies the stored state and before any
+  // client syncs; the rewrite is persisted through onStoreDocument.
+  async afterLoadDocument({ document, documentName }) {
+    const migrated = migrateLegacyMarks(document);
+    if (migrated > 0) {
+      console.info(
+        `[hocus] migrated ${migrated} legacy mark range(s) in "${documentName}"`,
+      );
     }
   },
   async onStoreDocument(data) {

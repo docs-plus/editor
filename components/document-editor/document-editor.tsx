@@ -9,6 +9,9 @@ import {
   type HeadingFilterCallbackState,
   readFilterUrl,
 } from "@/extensions/heading-filter";
+import "@docs.plus/extension-hyperlink/styles.css";
+import "@docs.plus/extension-hypermultimedia/styles.css";
+import "@docs.plus/extension-mermaid/styles.css";
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss";
 import "@/components/tiptap-node/code-block-node/code-block-node.scss";
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss";
@@ -43,6 +46,7 @@ import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
+import { useMediaFileUpload } from "./use-media-file-upload";
 import {
   useDebouncedTocItems,
   useToolbarHeight,
@@ -72,9 +76,7 @@ function DocumentEditorContent({
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
-  const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
-    "main",
-  );
+  const [mobileView, setMobileView] = useState<"main" | "highlighter">("main");
   const toolbarRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef("");
   const toolbarHeight = useToolbarHeight(toolbarRef);
@@ -137,6 +139,8 @@ function DocumentEditorContent({
     defaultContent: DEFAULT_EDITOR_CONTENT,
   });
 
+  useMediaFileUpload(editor);
+
   const rect = useCursorVisibility({
     editor,
     overlayHeight: toolbarHeight,
@@ -160,7 +164,6 @@ function DocumentEditorContent({
           {effectiveMobileView === "main" ? (
             <MainToolbarContent
               onHighlighterClick={() => setMobileView("highlighter")}
-              onLinkClick={() => setMobileView("link")}
               onTocToggle={() => setTocVisible((v) => !v)}
               onFilterToggle={headingFilter.toggleBar}
               isMobile={isMobile}
@@ -170,10 +173,7 @@ function DocumentEditorContent({
               }
             />
           ) : (
-            <MobileToolbarContent
-              type={effectiveMobileView}
-              onBack={() => setMobileView("main")}
-            />
+            <MobileToolbarContent onBack={() => setMobileView("main")} />
           )}
         </Toolbar>
 

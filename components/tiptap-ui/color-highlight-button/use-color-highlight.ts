@@ -157,7 +157,7 @@ export function canColorHighlight(
   editor: Editor | null,
   mode: HighlightMode = "mark",
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
 
   if (mode === "mark") {
     if (
@@ -180,7 +180,7 @@ export function isColorHighlightActive(
   highlightColor?: string,
   mode: HighlightMode = "mark",
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
 
   if (mode === "mark") {
     return highlightColor
@@ -214,7 +214,7 @@ export function removeHighlight(
   editor: Editor | null,
   mode: HighlightMode = "mark",
 ): boolean {
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
   if (!canColorHighlight(editor, mode)) return false;
 
   if (mode === "mark") {
@@ -234,7 +234,7 @@ export function shouldShowColorHighlightButton(props: {
 }): boolean {
   const { editor, hideWhenUnavailable, mode } = props;
 
-  if (!editor || !editor.isEditable) return false;
+  if (!editor?.isEditable) return false;
 
   if (!hideWhenUnavailable) {
     return true;
@@ -247,7 +247,7 @@ export function shouldShowColorHighlightButton(props: {
     return false;
   }
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canColorHighlight(editor, mode);
   }
 

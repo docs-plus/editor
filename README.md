@@ -14,10 +14,16 @@ after passing reliability, collaboration, and scale checks.
 - TOC sidebar with click navigation and section drag/drop.
 - Rich content blocks (lists, tasks, code, tables, images, marks) plus
   markdown import/export.
+- docs.plus editor extensions: link popovers with autolink and `Mod-K`,
+  inline code, Tab indent, cursor-local placeholders, live Mermaid diagrams and
+  charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom,
+  SoundCloud, Spotify, X).
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) `>=1.3.10`
+- [Node.js](https://nodejs.org) `>=22.22.2` (Next.js, Vitest, ESLint and the
+  git hooks run on Node)
 - Playwright browsers for E2E: `bunx playwright install`
 
 ## Quick Start
@@ -39,6 +45,10 @@ Local dev runs two services:
 Primary runtime knobs are environment-driven:
 
 - Guardrails and limits: `lib/security/guardrail-config.ts`
+- Client IP trust: set `TRUSTED_PROXY=1` only behind a reverse proxy that
+  appends to `X-Forwarded-For` (`ecosystem.config.cjs` does). Without it,
+  forwarding headers are ignored: WebSocket limits use the socket address and
+  HTTP limits share one global key.
 - Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
 - Hocus entrypoint: `scripts/hocus-server.ts`
@@ -55,6 +65,21 @@ Redis scaling notes:
   requires a host-installed `redis-server` binary.
 - Redis does not replace SQLite persistence; keep Hocuspocus at one instance per
   SQLite file unless you move persistence to shared storage.
+
+Editor extensions:
+
+- The `@docs.plus/extension-*` packages are wired in
+  `components/document-editor/document-editor-config.ts`; their stylesheets are
+  themed to the shadcn tokens in `document-editor.scss`.
+- Embed providers are allowlisted by exact host in the CSP (`next.config.ts`).
+- Mermaid SVG is sanitized with DOMPurify because any collaborator can author
+  a diagram.
+- Documents stored before the switch carry `link` / `code` marks; Hocuspocus
+  renames them to `hyperlink` / `inlineCode` on load
+  (`lib/yjs-mark-migration.ts`).
+- `.github/workflows/docs-plus-extensions.yml` refreshes the extensions every
+  3 days and opens a verified PR. It needs "Allow GitHub Actions to create and
+  approve pull requests" enabled in the repository settings.
 
 Operational guidance:
 [`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md)
@@ -91,6 +116,7 @@ Common commands:
 - `make dev` — run Next.js + Hocuspocus
 - `bun run build` — production build
 - `bun run lint` — ESLint (Next.js rules)
+- `bun run typecheck` — TypeScript (`tsc --noEmit`)
 - `bun run check` / `bun run check:fix` — Biome checks
 - `bun run test` — Vitest suite
 

@@ -1,12 +1,28 @@
 "use client";
 
+import {
+  createHyperlinkPopover,
+  editHyperlinkPopover,
+  Hyperlink,
+  previewHyperlinkPopover,
+} from "@docs.plus/extension-hyperlink";
+import {
+  HyperMultimediaKit,
+  isMediaUrl,
+} from "@docs.plus/extension-hypermultimedia";
+import { Indent } from "@docs.plus/extension-indent";
+import { InlineCode } from "@docs.plus/extension-inline-code";
+import { Mermaid } from "@docs.plus/extension-mermaid";
+import {
+  Placeholder,
+  type PlaceholderRenderProps,
+} from "@docs.plus/extension-placeholder";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { JSONContent } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { Collaboration } from "@tiptap/extension-collaboration";
 import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
 import { Highlight } from "@tiptap/extension-highlight";
-import { Image } from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
@@ -18,16 +34,18 @@ import {
 import { TextAlign } from "@tiptap/extension-text-align";
 import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
-import { Placeholder, Selection } from "@tiptap/extensions";
+import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
+import DOMPurify from "dompurify";
 import type * as Y from "yjs";
 
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension";
 import {
   handleImageUpload,
+  IMAGE_UPLOAD_LIMIT,
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
 import { HeadingDrag } from "@/extensions/heading-drag";
@@ -57,6 +75,34 @@ const PARENT_PLACEHOLDER: Record<string, string> = {
   taskItem: "To-do",
   blockquote: "Quote",
 };
+
+function getPlaceholderText({
+  node,
+  pos,
+  parentName,
+}: PlaceholderRenderProps): string {
+  if (node.type.name === "heading" && pos === 0) return "Enter document name";
+  if (node.type.name === "paragraph" && parentName in PARENT_PLACEHOLDER) {
+    return PARENT_PLACEHOLDER[parentName];
+  }
+  return PLACEHOLDER_TEXT[node.type.name] ?? "";
+}
+
+/**
+ * Diagram sources are written by any collaborator, so every Mermaid SVG is
+ * sanitized before it enters the page. Profile per the extension's security
+ * guide: keeps ids, inline styles, roles and ARIA names; drops links, images,
+ * `<use>` and `<style>` so a source cannot fetch URLs or restyle the page.
+ */
+function sanitizeMermaidSvg(svg: string): Node {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true },
+    ADD_ATTR: ["role"],
+    FORBID_TAGS: ["style", "a", "image", "use"],
+    FORBID_ATTR: ["href", "xlink:href"],
+    RETURN_DOM_FRAGMENT: true,
+  });
+}
 
 interface BuildDocumentEditorExtensionsOptions {
   documentId: string;
@@ -100,12 +146,24 @@ export function buildDocumentEditorExtensions({
       horizontalRule: false,
       undoRedo: false,
       codeBlock: false,
-      link: {
-        openOnClick: false,
-        enableClickSelection: true,
-      },
+      // Replaced by @docs.plus Hyperlink / InlineCode; both claim the same
+      // tags and command names, so the StarterKit marks must stay off.
+      link: false,
+      code: false,
     }),
+    Hyperlink.configure({
+      popovers: {
+        previewHyperlink: previewHyperlinkPopover,
+        editHyperlink: editHyperlinkPopover,
+        createHyperlink: createHyperlinkPopover,
+      },
+      // Let pasted media URLs become embeds instead of plain links.
+      shouldAutoLink: (url) => !isMediaUrl(url),
+    }),
+    InlineCode,
     CodeBlockLowlight.configure({ lowlight }),
+    Mermaid.configure({ sanitize: sanitizeMermaidSvg }),
+    Indent,
     TitleDocument,
     HeadingScale,
     HeadingDrag,
@@ -128,25 +186,12 @@ export function buildDocumentEditorExtensions({
     TaskList,
     TaskItem.configure({ nested: true }),
     Highlight.configure({ multicolor: true }),
-    Image,
+    HyperMultimediaKit,
     Typography,
     Superscript,
     Subscript,
     Selection,
-    Placeholder.configure({
-      showOnlyCurrent: true,
-      includeChildren: true,
-      placeholder: ({ editor, node, pos }) => {
-        if (node.type.name === "heading" && pos === 0) {
-          return "Enter document name";
-        }
-        if (node.type.name === "paragraph") {
-          const parent = editor.state.doc.resolve(pos).parent.type.name;
-          if (parent in PARENT_PLACEHOLDER) return PARENT_PLACEHOLDER[parent];
-        }
-        return PLACEHOLDER_TEXT[node.type.name] ?? "";
-      },
-    }),
+    Placeholder.configure({ placeholder: getPlaceholderText }),
     UniqueID.configure({
       types: ["heading"],
     }),
@@ -159,7 +204,7 @@ export function buildDocumentEditorExtensions({
     ImageUploadNode.configure({
       accept: "image/*",
       maxSize: MAX_FILE_SIZE,
-      limit: 3,
+      limit: IMAGE_UPLOAD_LIMIT,
       upload: handleImageUpload,
       onError: (error) => console.error("Upload failed:", error),
     }),

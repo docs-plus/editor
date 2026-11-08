@@ -73,6 +73,7 @@ export const SortableTocItem = memo(function SortableTocItem({
       )}
       role="treeitem"
       tabIndex={0}
+      aria-selected={Boolean(item.isActive)}
       aria-level={item.level}
       aria-expanded={isFoldable ? !isFolded : undefined}
       data-level={item.level}
