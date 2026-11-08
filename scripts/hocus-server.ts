@@ -1,6 +1,13 @@
-import { Server } from "@hocuspocus/server";
-import sqlite3 from "sqlite3";
+import { Hocuspocus } from "@hocuspocus/server";
 
+import { createSqlitePersistence } from "../lib/hocus-persistence";
+import { logAbuseEvent } from "../lib/security/abuse-log";
+import {
+  bootstrapDocumentActivityTable,
+  countNonSystemDocuments,
+  documentExists,
+  upsertDocumentActivity,
+} from "../lib/security/activity-store";
 import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
   isSystemDocumentId,
@@ -10,6 +17,15 @@ import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensi
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
 import { getSqliteDbPath } from "../lib/sqlite-db-path";
 import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
+import { Database } from "bun:sqlite";
+
+/** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
+type SocketData = {
+  request: Request;
+  connection?: ReturnType<Hocuspocus["handleConnection"]>;
+};
 
 function getPort(): number {
   const raw = process.env.HOCUS_PORT?.trim();
@@ -19,116 +35,15 @@ function getPort(): number {
   return parsed;
 }
 
-function createMetadataDb(dbPath: string): sqlite3.Database {
-  const db = new sqlite3.Database(dbPath);
+/**
+ * `bun:sqlite`, not better-sqlite3: Bun below 1.4.1 crashes loading the
+ * better-sqlite3 13 addon, and this process always runs on Bun.
+ */
+function openDatabase(path: string): Database {
+  const db = new Database(path);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA busy_timeout = 5000;");
   return db;
-}
-
-function runSql(
-  db: sqlite3.Database,
-  sql: string,
-  params: Array<string | number> = [],
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, (error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-}
-
-function getSql<T extends object>(
-  db: sqlite3.Database,
-  sql: string,
-  params: Array<string | number> = [],
-): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (error, row) => {
-      if (error) reject(error);
-      else resolve(row as T | undefined);
-    });
-  });
-}
-
-async function bootstrapMetadataTable(db: sqlite3.Database): Promise<void> {
-  await runSql(
-    db,
-    `
-      CREATE TABLE IF NOT EXISTS document_activity (
-        name TEXT PRIMARY KEY,
-        last_persisted_at INTEGER NOT NULL,
-        last_size_bytes INTEGER NOT NULL DEFAULT 0
-      )
-    `,
-  );
-}
-
-async function documentExists(
-  db: sqlite3.Database,
-  name: string,
-): Promise<boolean> {
-  const row = await getSql<{ present: number }>(
-    db,
-    "SELECT 1 AS present FROM documents WHERE name = ? LIMIT 1",
-    [name],
-  );
-  return Boolean(row?.present);
-}
-
-async function countNonSystemDocuments(db: sqlite3.Database): Promise<number> {
-  const row = await getSql<{ count: number }>(
-    db,
-    `
-      SELECT COUNT(*) AS count
-      FROM documents
-      WHERE name != 'playground'
-        AND name != 'global-tabs'
-        AND name NOT LIKE 'global-tabs-%'
-    `,
-  );
-  return row?.count ?? 0;
-}
-
-async function upsertDocumentActivity(
-  db: sqlite3.Database,
-  name: string,
-  sizeBytes: number,
-): Promise<void> {
-  const now = Date.now();
-  await runSql(
-    db,
-    `
-      INSERT INTO document_activity (name, last_persisted_at, last_size_bytes)
-      VALUES (?, ?, ?)
-      ON CONFLICT(name) DO UPDATE SET
-        last_persisted_at = excluded.last_persisted_at,
-        last_size_bytes = excluded.last_size_bytes
-    `,
-    [name, now, sizeBytes],
-  );
-}
-
-function getDocumentName(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const candidate = (value as Record<string, unknown>).documentName;
-  return typeof candidate === "string" ? candidate : "";
-}
-
-function estimatePayloadSizeBytes(value: unknown): number {
-  if (!value || typeof value !== "object") return 0;
-  const record = value as Record<string, unknown>;
-  const update = record.update;
-  if (update instanceof Uint8Array) return update.byteLength;
-  const state = record.state;
-  if (state instanceof Uint8Array) return state.byteLength;
-  const document = record.document as { toJSON?: () => unknown } | undefined;
-  if (document?.toJSON) {
-    const json = JSON.stringify(document.toJSON());
-    return Buffer.byteLength(json, "utf8");
-  }
-  return 0;
 }
 
 if (
@@ -139,54 +54,57 @@ if (
 }
 
 const guardrails = createWsGuardrails();
-const metadataDb = createMetadataDb(getSqliteDbPath());
-const pendingDocuments = new Set<string>();
+const db = openDatabase(getSqliteDbPath());
+bootstrapDocumentActivityTable(db);
 
-await bootstrapMetadataTable(metadataDb);
-
-const server = new Server({
-  extensions: buildHocusServerExtensions(getSqliteDbPath()),
-  // Runs before any onConnect (including Throttle), so every later hook keys on this IP.
-  async onUpgrade({ request }) {
-    pinClientIp(request.headers, request.socket.remoteAddress);
+const persistence = createSqlitePersistence(db, {
+  canStore(documentName, sizeBytes) {
+    const decision = guardrails.canStoreDocument(documentName, sizeBytes);
+    if (!decision.allowed) {
+      logAbuseEvent("document_store_rejected", {
+        documentName,
+        sizeBytes,
+        reason: decision.reason,
+      });
+    }
+    return decision;
   },
-  async onConnect(data) {
-    const decision = guardrails.onConnect(
-      getPinnedClientIp(data.requestHeaders),
+  onStored(documentName, sizeBytes) {
+    if (!isSystemDocumentId(documentName)) {
+      upsertDocumentActivity(db, documentName, sizeBytes);
+    }
+  },
+});
+
+const hocuspocus = new Hocuspocus({
+  extensions: buildHocusServerExtensions(persistence),
+  async onConnect({ requestHeaders }) {
+    const decision = guardrails.onConnect(getPinnedClientIp(requestHeaders));
+    if (!decision.allowed) {
+      throw new Error(decision.reason);
+    }
+  },
+  async onDisconnect({ requestHeaders }) {
+    guardrails.onDisconnect(getPinnedClientIp(requestHeaders));
+  },
+  // Hocuspocus runs this once per document load (concurrent joiners share it).
+  async onLoadDocument({ documentName, requestHeaders }) {
+    if (!isValidWsDocumentName(documentName)) {
+      throw new Error("invalid_document_name");
+    }
+    if (isSystemDocumentId(documentName) || documentExists(db, documentName)) {
+      return;
+    }
+    const decision = guardrails.canCreateDocument(
+      getPinnedClientIp(requestHeaders),
+      countNonSystemDocuments(db),
     );
     if (!decision.allowed) {
       throw new Error(decision.reason);
     }
   },
-  async onDisconnect(data) {
-    guardrails.onDisconnect(getPinnedClientIp(data.requestHeaders));
-  },
-  async onLoadDocument(data) {
-    const name = getDocumentName(data);
-    if (!isValidWsDocumentName(name)) {
-      throw new Error("invalid_document_name");
-    }
-
-    if (isSystemDocumentId(name)) return;
-
-    // Allow concurrent joiners for a single in-flight doc creation.
-    if (pendingDocuments.has(name)) return;
-    pendingDocuments.add(name);
-    try {
-      const exists = await documentExists(metadataDb, name);
-      if (exists) return;
-      const ip = getPinnedClientIp(data.requestHeaders);
-      const total = await countNonSystemDocuments(metadataDb);
-      const decision = guardrails.canCreateDocument(ip, total);
-      if (!decision.allowed) {
-        throw new Error(decision.reason);
-      }
-    } finally {
-      pendingDocuments.delete(name);
-    }
-  },
-  // Runs once per load, after SQLite applies the stored state and before any
-  // client syncs; the rewrite is persisted through onStoreDocument.
+  // Runs once per load, after persistence applies the stored state and before
+  // any client syncs; the rewrite is persisted through the normal store path.
   async afterLoadDocument({ document, documentName }) {
     const migrated = migrateLegacyMarks(document);
     if (migrated > 0) {
@@ -195,27 +113,59 @@ const server = new Server({
       );
     }
   },
-  async onStoreDocument(data) {
-    const name = getDocumentName(data);
-    const sizeBytes = estimatePayloadSizeBytes(data);
-    const decision = guardrails.canStoreDocument(name, sizeBytes);
-    if (!decision.allowed) {
-      throw new Error(decision.reason);
-    }
-    if (!isSystemDocumentId(name)) {
-      await upsertDocumentActivity(metadataDb, name, sizeBytes);
-    }
+});
+
+const server = Bun.serve<SocketData>({
+  port: getPort(),
+  fetch(request, server) {
+    // Trust boundary: every hook (and Throttle) keys on the IP pinned here.
+    const headers = new Headers(request.headers);
+    pinClientIp(headers, server.requestIP(request)?.address);
+    const data = { request: new Request(request.url, { headers }) };
+    if (server.upgrade(request, { data })) return undefined;
+    return new Response("Welcome to Hocuspocus!");
+  },
+  websocket: {
+    open(ws) {
+      ws.data.connection = hocuspocus.handleConnection(ws, ws.data.request);
+    },
+    message(ws, message) {
+      ws.data.connection?.handleMessage(
+        typeof message === "string" ? Buffer.from(message) : message,
+      );
+    },
+    close(ws, code, reason) {
+      ws.data.connection?.handleClose({ code, reason });
+    },
+    // Pongs keep otherwise silent clients alive, as in @hocuspocus/server's Node Server.
+    pong(ws) {
+      ws.data.connection?.touch();
+    },
   },
 });
 
-server.listen(getPort());
+console.log(`Hocuspocus listening on ws://${server.hostname}:${server.port}`);
 
-process.on("SIGTERM", () => {
-  metadataDb.close();
-  process.exit(0);
-});
+let shuttingDown = false;
 
-process.on("SIGINT", () => {
-  metadataDb.close();
+/** Mirrors `Server.destroy()`: close sockets, flush debounced stores, wait for unload. */
+async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  server.stop();
+  hocuspocus.closeConnections();
+  hocuspocus.flushPendingStores();
+
+  const deadline = Date.now() + SHUTDOWN_TIMEOUT_MS;
+  while (hocuspocus.getDocumentsCount() > 0 && Date.now() < deadline) {
+    await Bun.sleep(50);
+  }
+
+  await hocuspocus.hooks("onDestroy", { instance: hocuspocus });
+  db.close();
   process.exit(0);
-});
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

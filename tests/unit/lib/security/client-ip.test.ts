@@ -1,5 +1,3 @@
-import type { IncomingHttpHeaders } from "node:http";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -98,30 +96,32 @@ describe("getClientIpFromHeaders (HTTP, no socket address)", () => {
 describe("pinClientIp (WebSocket upgrade)", () => {
   describe("without a trusted proxy", () => {
     it("replaces spoofed headers with the socket address", () => {
-      const headers: IncomingHttpHeaders = { ...spoofed };
+      const headers = new Headers(spoofed);
       expect(pinClientIp(headers, "198.51.100.20", untrusted)).toBe(
         "198.51.100.20",
       );
-      expect(headers).toEqual({ "x-real-ip": "198.51.100.20" });
+      expect(Object.fromEntries(headers)).toEqual({
+        "x-real-ip": "198.51.100.20",
+      });
     });
 
     it("unwraps IPv4-mapped IPv6 socket addresses", () => {
-      const headers: IncomingHttpHeaders = {};
+      const headers = new Headers();
       expect(pinClientIp(headers, "::ffff:198.51.100.20", untrusted)).toBe(
         "198.51.100.20",
       );
     });
 
     it("treats a private socket address as unknown outside development", () => {
-      const headers: IncomingHttpHeaders = { ...spoofed };
+      const headers = new Headers(spoofed);
       expect(pinClientIp(headers, "::ffff:127.0.0.1", untrusted)).toBe(
         UNKNOWN_CLIENT_IP,
       );
-      expect(headers["x-real-ip"]).toBe(UNKNOWN_CLIENT_IP);
+      expect(headers.get("x-real-ip")).toBe(UNKNOWN_CLIENT_IP);
     });
 
     it("keeps a loopback socket address in development", () => {
-      const headers: IncomingHttpHeaders = {};
+      const headers = new Headers();
       expect(
         pinClientIp(headers, "127.0.0.1", {
           trustedProxy: false,
@@ -131,7 +131,7 @@ describe("pinClientIp (WebSocket upgrade)", () => {
     });
 
     it("returns unknown when the socket address is missing", () => {
-      const headers: IncomingHttpHeaders = { ...spoofed };
+      const headers = new Headers(spoofed);
       expect(pinClientIp(headers, undefined, untrusted)).toBe(
         UNKNOWN_CLIENT_IP,
       );
@@ -140,16 +140,18 @@ describe("pinClientIp (WebSocket upgrade)", () => {
 
   describe("behind a trusted proxy", () => {
     it("pins the proxy-appended address and drops x-forwarded-for", () => {
-      const headers: IncomingHttpHeaders = {
+      const headers = new Headers({
         "x-forwarded-for": "198.51.100.99, 203.0.113.10",
         "x-real-ip": "198.51.100.5",
-      };
+      });
       expect(pinClientIp(headers, "10.0.0.2", trusted)).toBe("203.0.113.10");
-      expect(headers).toEqual({ "x-real-ip": "203.0.113.10" });
+      expect(Object.fromEntries(headers)).toEqual({
+        "x-real-ip": "203.0.113.10",
+      });
     });
 
     it("falls back to the socket address when the proxy sent no header", () => {
-      const headers: IncomingHttpHeaders = {};
+      const headers = new Headers();
       expect(pinClientIp(headers, "203.0.113.30", trusted)).toBe(
         "203.0.113.30",
       );
@@ -159,12 +161,12 @@ describe("pinClientIp (WebSocket upgrade)", () => {
 
 describe("getPinnedClientIp", () => {
   it("reads the address pinned at upgrade", () => {
-    const headers: IncomingHttpHeaders = { ...spoofed };
+    const headers = new Headers(spoofed);
     pinClientIp(headers, "198.51.100.20", untrusted);
     expect(getPinnedClientIp(headers)).toBe("198.51.100.20");
   });
 
   it("returns unknown when nothing was pinned", () => {
-    expect(getPinnedClientIp({})).toBe(UNKNOWN_CLIENT_IP);
+    expect(getPinnedClientIp(new Headers())).toBe(UNKNOWN_CLIENT_IP);
   });
 });

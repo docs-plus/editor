@@ -38,7 +38,8 @@ Open [http://localhost:3000](http://localhost:3000).
 Local dev runs two services:
 
 - Next.js UI on `:3000`
-- Hocuspocus WebSocket server on `:1234` (SQLite-backed)
+- Hocuspocus 4 WebSocket server on `:1234` (`Bun.serve`, SQLite via
+  `bun:sqlite`)
 
 ## Configuration
 
@@ -52,6 +53,7 @@ Primary runtime knobs are environment-driven:
 - Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
 - Hocus entrypoint: `scripts/hocus-server.ts`
+- Hocus persistence + document size guardrail: `lib/hocus-persistence.ts`
 - Discord / GitHub buttons (bottom status strip): optional
   `NEXT_PUBLIC_DISCORD_INVITE_URL`, `NEXT_PUBLIC_GITHUB_REPO_URL` — defaults in
   `lib/constants.ts`
@@ -116,7 +118,8 @@ Common commands:
 - `make dev` — run Next.js + Hocuspocus
 - `bun run build` — production build
 - `bun run lint` — ESLint (Next.js rules)
-- `bun run typecheck` — TypeScript (`tsc --noEmit`)
+- `bun run typecheck` — TypeScript (app + Bun-only Hocus server via
+  `tsconfig.hocus.json`)
 - `bun run check` / `bun run check:fix` — Biome checks
 - `bun run test` — Vitest suite
 

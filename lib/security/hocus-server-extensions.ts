@@ -1,6 +1,5 @@
 import { Logger } from "@hocuspocus/extension-logger";
 import { Redis } from "@hocuspocus/extension-redis";
-import { SQLite } from "@hocuspocus/extension-sqlite";
 import { Throttle } from "@hocuspocus/extension-throttle";
 import type { Extension } from "@hocuspocus/server";
 
@@ -18,7 +17,9 @@ import {
 /**
  * Hocuspocus extension stack. Order matters: Throttle must be first per upstream docs.
  */
-export function buildHocusServerExtensions(databasePath: string): Extension[] {
+export function buildHocusServerExtensions(
+  persistence: Extension,
+): Extension[] {
   const extensions: Extension[] = [];
 
   if (HOCUS_THROTTLE_ENABLED) {
@@ -48,7 +49,7 @@ export function buildHocusServerExtensions(databasePath: string): Extension[] {
     );
   }
 
-  extensions.push(new SQLite({ database: databasePath }));
+  extensions.push(persistence);
 
   return extensions;
 }

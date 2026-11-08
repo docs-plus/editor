@@ -10,7 +10,9 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 
 ## Runtime
 
-- Hocuspocus always runs via `bun run hocus` (custom bootstrap + SQLite + extensions).
+- Hocuspocus 4 always runs via `bun run hocus`: `Bun.serve` + `Hocuspocus.handleConnection`,
+  `bun:sqlite` persistence (`lib/hocus-persistence.ts`), guardrail hooks, optional extensions.
+- `SIGINT`/`SIGTERM` flush pending document stores before exit (bounded at 10s).
 
 ## Key Configuration
 
@@ -19,7 +21,8 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `WS_CONNECTION_LIMIT=10`
 - `DOC_CREATION_RATE_LIMIT=10`
 - `MAX_TOTAL_DOCUMENTS=2000`
-- `MAX_DOC_SIZE_BYTES=1048576`
+- `MAX_DOC_SIZE_BYTES=1048576` (encoded Yjs state; oversized stores are skipped and the
+  document unloads once its last client leaves)
 - `RETENTION_DAYS=30`
 - `TRUSTED_PROXY=0` (`1` only when a reverse proxy fronts every request;
   `ecosystem.config.cjs` sets `1`; see Client IP Extraction Policy)
@@ -51,6 +54,7 @@ Search logs for these JSON event names:
 - `documents_delete_failed`
 - `retention_purge_completed`
 - `retention_purge_completed_retry`
+- `document_store_rejected` (document over `MAX_DOC_SIZE_BYTES`; not persisted)
 
 Expected healthy signals:
 

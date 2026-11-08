@@ -18,7 +18,8 @@
 ## Learned Workspace Facts
 
 - TinyDocy is a lightweight collaborative editor testbed for docs.plus, positioned as an online-capable demo where abuse and OWASP-minded guardrails matter; stack is Next.js 16 App Router + Tiptap 3 + Yjs + Hocuspocus + SQLite, with Bun runtime
-- Persistence is Hocuspocus WebSocket + SQLite via custom `bun run hocus` (`scripts/hocus-server.ts`) using `@hocuspocus/extension-sqlite`, custom WS guardrails in `lib/security/*`, and optional official `extension-logger` / `extension-throttle` toggled by `HOCUS_*` env; local dev starts both services with `make dev` (`make -j2`)
+- Persistence is Hocuspocus 4 WebSocket + SQLite via custom `bun run hocus` (`scripts/hocus-server.ts`: `Bun.serve` + `Hocuspocus.handleConnection`, `bun:sqlite`) with fetch/store persistence in `lib/hocus-persistence.ts` on the `extension-sqlite`-compatible `documents` table, custom WS guardrails in `lib/security/*`, and optional official `extension-logger` / `extension-throttle` / `extension-redis` toggled by `HOCUS_*` env; local dev starts both services with `make dev` (`make -j2`)
+- SQLite drivers: `better-sqlite3` 13 on Node (Next.js API, scripts, Vitest) and `bun:sqlite` in the Hocus process (better-sqlite3 13 crashes on Bun < 1.4.1); shared helpers take the driver-agnostic `SqliteDatabase` type from `lib/sqlite-open.ts`; Bun types are scoped to `tsconfig.hocus.json` and `bun run typecheck` checks both projects
 - Root `README.md` is the only README; tests docs live in `tests/TESTING.md`; avoid adding `CHANGELOG.md` or deployment PM2/Traefik guides
 - Code quality/tooling: Biome for formatting/linting, ESLint scoped to Next.js rules, strict TypeScript; Husky runs lint-staged pre-commit and commitlint on commit-msg
 - Naming and exports: kebab-case files, PascalCase components with title-case acronyms, camelCase hooks/utils, named exports by default
