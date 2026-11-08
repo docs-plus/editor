@@ -89,7 +89,7 @@ export function shouldShowUndoRedoButton(props: {
 
   if (!editor || !editor.isEditable) return false;
 
-  if (hideWhenUnavailable && !editor.isActive("code")) {
+  if (hideWhenUnavailable && !editor.isActive("inlineCode")) {
     return canExecuteUndoRedoAction(editor, action);
   }
 

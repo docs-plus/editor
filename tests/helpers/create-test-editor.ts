@@ -1,9 +1,12 @@
+import { Hyperlink } from "@docs.plus/extension-hyperlink";
+import { HyperMultimediaKit } from "@docs.plus/extension-hypermultimedia";
+import { Indent } from "@docs.plus/extension-indent";
+import { InlineCode } from "@docs.plus/extension-inline-code";
 import type { Extension, JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { Highlight } from "@tiptap/extension-highlight";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
-import { Image } from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
@@ -22,7 +25,12 @@ export const DEFAULT_EXTENSIONS = [
     document: false,
     horizontalRule: false,
     codeBlock: false,
+    link: false,
+    code: false,
   }),
+  Hyperlink,
+  InlineCode,
+  Indent,
   CodeBlockLowlight.configure({ lowlight }),
   TitleDocument,
   TableOfContents,
@@ -49,7 +57,7 @@ export const DEFAULT_EXTENSIONS = [
   HorizontalRule,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Highlight.configure({ multicolor: true }),
-  Image,
+  HyperMultimediaKit,
   TaskList,
   TaskItem.configure({ nested: true }),
   TableKit,

@@ -26,7 +26,7 @@ export type Mark =
   | "bold"
   | "italic"
   | "strike"
-  | "code"
+  | "inlineCode"
   | "underline"
   | "superscript"
   | "subscript";
@@ -59,7 +59,7 @@ export const markIcons = {
   italic: ItalicIcon,
   underline: UnderlineIcon,
   strike: StrikeIcon,
-  code: Code2Icon,
+  inlineCode: Code2Icon,
   superscript: SuperscriptIcon,
   subscript: SubscriptIcon,
 };
@@ -69,7 +69,7 @@ export const MARK_SHORTCUT_KEYS: Record<Mark, string> = {
   italic: "mod+i",
   underline: "mod+u",
   strike: "mod+shift+s",
-  code: "mod+e",
+  inlineCode: "mod+e",
   superscript: "mod+.",
   subscript: "mod+,",
 };
@@ -115,16 +115,26 @@ export function shouldShowMarkButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isMarkInSchema(type, editor)) return false;
-    if (!editor?.isActive("code")) return canToggleMark(editor, type);
+    if (!editor?.isActive("inlineCode")) return canToggleMark(editor, type);
     return true;
   });
 }
+
+const MARK_LABELS: Record<Mark, string> = {
+  bold: "Bold",
+  italic: "Italic",
+  underline: "Underline",
+  strike: "Strike",
+  inlineCode: "Inline code",
+  superscript: "Superscript",
+  subscript: "Subscript",
+};
 
 /**
  * Gets the formatted mark name
  */
 export function getFormattedMarkName(type: Mark): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  return MARK_LABELS[type];
 }
 
 /**

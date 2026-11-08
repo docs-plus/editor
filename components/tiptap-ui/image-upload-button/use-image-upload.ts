@@ -88,7 +88,7 @@ export function shouldShowImageUploadButton(props: {
 
   if (!isExtensionAvailable(editor, "imageUpload")) return false;
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canInsertImage(editor);
   }
 

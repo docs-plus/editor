@@ -176,7 +176,7 @@ export function shouldShowListButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema(type, editor)) return false;
-    if (!editor?.isActive("code")) return canToggleList(editor, type);
+    if (!editor?.isActive("inlineCode")) return canToggleList(editor, type);
     return true;
   });
 }

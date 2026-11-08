@@ -180,19 +180,17 @@ function createParagraphWithMarks(): JSONContent {
       "bold",
       "italic",
       "strike",
-      "code",
+      "inlineCode",
       "underline",
-      "link",
+      "hyperlink",
       "highlight",
       "highlight",
     ] as const);
-    if (mark === "link") {
+    if (mark === "hyperlink") {
       parts.push({
         type: "text",
         text: slice,
-        marks: [
-          { type: "link", attrs: { href: "https://example.com", title: null } },
-        ],
+        marks: [{ type: "hyperlink", attrs: { href: "https://example.com" } }],
       });
     } else if (mark === "highlight") {
       parts.push({

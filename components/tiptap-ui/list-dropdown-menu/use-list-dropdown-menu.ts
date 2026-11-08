@@ -102,7 +102,7 @@ export function shouldShowListDropdown(params: {
 
   if (!listInSchema) return false;
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canToggleAny;
   }
 

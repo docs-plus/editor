@@ -103,7 +103,7 @@ export function shouldShowCodeBlockButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("codeBlock", editor)) return false;
-    if (!editor?.isActive("code")) return canToggleCodeBlock(editor);
+    if (!editor?.isActive("inlineCode")) return canToggleCodeBlock(editor);
     return true;
   });
 }

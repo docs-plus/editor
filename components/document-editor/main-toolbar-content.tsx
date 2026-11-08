@@ -9,10 +9,13 @@ import {
 } from "@/components/tiptap-ui/color-highlight-popover";
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
 import { FilterToolbarButton } from "@/components/tiptap-ui/heading-filter";
+import { HyperlinkButton } from "@/components/tiptap-ui/hyperlink-button";
 import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
-import { LinkButton, LinkPopover } from "@/components/tiptap-ui/link-popover";
+import { IndentButton } from "@/components/tiptap-ui/indent-button";
 import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
 import { MarkButton } from "@/components/tiptap-ui/mark-button";
+import { MediaEmbedPopover } from "@/components/tiptap-ui/media-embed-popover";
+import { MermaidButton } from "@/components/tiptap-ui/mermaid-button";
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
 import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
 import { Spacer } from "@/components/ui/spacer";
@@ -22,7 +25,6 @@ import { PanelLeftIcon } from "@/lib/icons";
 
 interface MainToolbarContentProps {
   onHighlighterClick: () => void;
-  onLinkClick: () => void;
   onTocToggle: () => void;
   onFilterToggle: () => void;
   isMobile: boolean;
@@ -32,7 +34,6 @@ interface MainToolbarContentProps {
 
 export function MainToolbarContent({
   onHighlighterClick,
-  onLinkClick,
   onTocToggle,
   onFilterToggle,
   isMobile,
@@ -72,6 +73,7 @@ export function MainToolbarContent({
         <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} />
         <BlockquoteButton />
         <CodeBlockButton />
+        <MermaidButton />
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -80,14 +82,14 @@ export function MainToolbarContent({
         <MarkButton type="bold" />
         <MarkButton type="italic" />
         <MarkButton type="strike" />
-        <MarkButton type="code" />
+        <MarkButton type="inlineCode" />
         <MarkButton type="underline" />
         {!isMobile ? (
           <ColorHighlightPopover />
         ) : (
           <ColorHighlightPopoverButton onClick={onHighlighterClick} />
         )}
-        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
+        <HyperlinkButton />
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -109,7 +111,15 @@ export function MainToolbarContent({
       <ToolbarSeparator />
 
       <ToolbarGroup>
+        <IndentButton action="outdent" />
+        <IndentButton action="indent" />
+      </ToolbarGroup>
+
+      <ToolbarSeparator />
+
+      <ToolbarGroup>
         <ImageUploadButton text="Add" size="sm" />
+        <MediaEmbedPopover />
       </ToolbarGroup>
 
       <Spacer />

@@ -164,7 +164,7 @@ export function shouldShowHeadingButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!editor || !isNodeInSchema("heading", editor)) return false;
-    if (!editor.isActive("code")) {
+    if (!editor.isActive("inlineCode")) {
       if (Array.isArray(level)) {
         return level.some((l) => canToggleHeading(editor, l));
       }

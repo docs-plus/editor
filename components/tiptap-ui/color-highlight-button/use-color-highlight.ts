@@ -247,7 +247,7 @@ export function shouldShowColorHighlightButton(props: {
     return false;
   }
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canColorHighlight(editor, mode);
   }
 

@@ -100,7 +100,7 @@ export function shouldShowBlockquoteButton(props: {
 
   return shouldShowEditorButton(editor, hideWhenUnavailable, () => {
     if (!isNodeInSchema("blockquote", editor)) return false;
-    if (!editor?.isActive("code")) return canToggleBlockquote(editor);
+    if (!editor?.isActive("inlineCode")) return canToggleBlockquote(editor);
     return true;
   });
 }

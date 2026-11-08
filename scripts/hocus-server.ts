@@ -9,6 +9,7 @@ import {
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
 import { getSqliteDbPath } from "../lib/sqlite-db-path";
+import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 
 function getPort(): number {
   const raw = process.env.HOCUS_PORT?.trim();
@@ -198,6 +199,16 @@ const server = new Server({
       }
     } finally {
       pendingDocuments.delete(name);
+    }
+  },
+  // Runs once per load, after SQLite applies the stored state and before any
+  // client syncs; the rewrite is persisted through onStoreDocument.
+  async afterLoadDocument({ document, documentName }) {
+    const migrated = migrateLegacyMarks(document);
+    if (migrated > 0) {
+      console.info(
+        `[hocus] migrated ${migrated} legacy mark range(s) in "${documentName}"`,
+      );
     }
   },
   async onStoreDocument(data) {

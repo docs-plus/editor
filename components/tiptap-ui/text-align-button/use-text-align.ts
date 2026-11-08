@@ -130,7 +130,7 @@ export function shouldShowTextAlignButton(props: {
 
   if (!isExtensionAvailable(editor, "textAlign")) return false;
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive("inlineCode")) {
     return canSetTextAlign(editor, align);
   }
 
