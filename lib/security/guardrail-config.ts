@@ -48,6 +48,11 @@ export const MAX_DOC_SIZE_BYTES = parseEnvInt(
 
 export const RETENTION_DAYS = parseEnvInt(process.env.RETENTION_DAYS, 30, 1);
 
+/**
+ * `1` only when every request arrives through one reverse proxy that appends the
+ * client address to `X-Forwarded-For` (default: off). Off, those headers and
+ * `X-Real-IP` are ignored: WS uses the socket address, HTTP the shared `unknown` key.
+ */
 export const TRUSTED_PROXY = process.env.TRUSTED_PROXY?.trim() === "1";
 
 /** `0` disables `@hocuspocus/extension-logger` (default: on). */
