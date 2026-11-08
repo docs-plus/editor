@@ -46,6 +46,7 @@ tests/
 │   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api
+│   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
 ├── e2e/
