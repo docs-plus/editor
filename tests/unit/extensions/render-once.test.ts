@@ -177,4 +177,28 @@ describe("CollaborationRenderOnce", () => {
     mountLikeEditorContent(editor);
     expect(calls).toBe(1);
   });
+
+  it("writes local edits to Yjs, and only when the document changed", () => {
+    const ydoc = prosemirrorJSONToYDoc(schema, CONTENT, "default");
+    editor = new Editor({
+      element: document.createElement("div"),
+      extensions: [
+        ...BASE_EXTENSIONS,
+        CollaborationRenderOnce.configure({ document: ydoc }),
+      ],
+    });
+    mountLikeEditorContent(editor);
+    let yTransactions = 0;
+    ydoc.on("afterTransaction", () => {
+      yTransactions += 1;
+    });
+
+    editor.commands.setTextSelection(2);
+    editor.view.dispatch(editor.state.tr.setMeta("cursorPing", true));
+    expect(yTransactions).toBe(0);
+
+    editor.commands.insertContentAt(1, "Zero ");
+    expect(yTransactions).toBe(1);
+    expect(ydoc.getXmlFragment("default").toString()).toContain("Zero One");
+  });
 });

@@ -3,8 +3,44 @@ import {
   Collaboration,
   type CollaborationOptions,
 } from "@tiptap/extension-collaboration";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
+
+/**
+ * Makes the y-tiptap sync plugin's view skip updates that leave the
+ * document alone. Its `update` writes the editor document to Yjs on every
+ * view update, comparing every top-level block with the Yjs fragment
+ * inside a Yjs transaction, though only a new document can need writing.
+ * Selection moves and meta-only transactions (the collaboration-caret
+ * plugin dispatches one after every local keystroke) skip that pass.
+ */
+function syncOnDocumentChange(plugin: Plugin): void {
+  const createView = plugin.spec.view;
+  if (!createView) return;
+  plugin.spec.view = (editorView: EditorView) => {
+    const pluginView = createView(editorView);
+    return {
+      update: (view: EditorView, prevState: EditorState) => {
+        if (view.state.doc !== prevState.doc) {
+          pluginView.update?.(view, prevState);
+        }
+      },
+      destroy: () => pluginView.destroy?.(),
+    };
+  };
+}
+
+/** `Collaboration` whose sync plugin skips updates that change no content. */
+const CollaborationSyncOnDocChange = Collaboration.extend({
+  addProseMirrorPlugins() {
+    const plugins = this.parent?.() ?? [];
+    for (const plugin of plugins) {
+      if (plugin.spec.key === ySyncPluginKey) syncOnDocumentChange(plugin);
+    }
+    return plugins;
+  },
+});
 
 /**
  * `Collaboration` that builds the editor document from Yjs once per editor.
@@ -23,6 +59,9 @@ import { ySyncPluginKey } from "@tiptap/y-tiptap";
  * that runs right after the sync plugin's (Collaboration has priority 1000,
  * this extension the default 100). Remote changes keep arriving through the
  * binding's Yjs observers, which do not depend on plugin views.
+ *
+ * The sync plugin's view also skips updates that leave the document alone
+ * (see `syncOnDocumentChange`).
  */
 export const CollaborationRenderOnce = Extension.create<CollaborationOptions>({
   name: "collaborationRenderOnce",
@@ -38,7 +77,7 @@ export const CollaborationRenderOnce = Extension.create<CollaborationOptions>({
 
   addExtensions() {
     return [
-      Collaboration.configure({
+      CollaborationSyncOnDocChange.configure({
         ...this.options,
         // The sync plugin would call this on every plugin-view init; it runs
         // once, after the render below, instead.
