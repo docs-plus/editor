@@ -10,7 +10,7 @@ import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import {
   getGlobalTabsDoc,
   getHocuspocusToken,
-  getHocuspocusWsUrl,
+  getSharedHocuspocusSocket,
 } from "@/lib/hocuspocus";
 import {
   clearMigrationStorage,
@@ -64,7 +64,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
 
     const token = getHocuspocusToken();
     const provider = new HocuspocusProvider({
-      url: getHocuspocusWsUrl(),
+      websocketProvider: getSharedHocuspocusSocket(),
       name: getGlobalTabsDoc(),
       document: ydoc,
       ...(token ? { token } : {}),
@@ -90,6 +90,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
         setReady(true);
       },
     });
+    provider.attach();
 
     // Runs synchronously inside Yjs transactions, so plain setState is used:
     // local mutations (e.g. dnd-kit onDragEnd) are already batched by React,

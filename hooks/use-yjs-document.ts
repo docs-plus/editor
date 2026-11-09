@@ -4,7 +4,10 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 
-import { getHocuspocusToken, getHocuspocusWsUrl } from "@/lib/hocuspocus";
+import {
+  getHocuspocusToken,
+  getSharedHocuspocusSocket,
+} from "@/lib/hocuspocus";
 
 /** Close reason Hocuspocus sends when an update would exceed the size cap. */
 export const DOCUMENT_TOO_LARGE_REASON = "document_too_large";
@@ -44,7 +47,7 @@ export function useYjsDocument(documentId: string) {
     const doc = acquireDoc(documentId);
     const token = getHocuspocusToken();
     const provider = new HocuspocusProvider({
-      url: getHocuspocusWsUrl(),
+      websocketProvider: getSharedHocuspocusSocket(),
       name: documentId,
       document: doc,
       ...(token ? { token } : {}),
@@ -58,6 +61,7 @@ export function useYjsDocument(documentId: string) {
       },
     });
 
+    provider.attach();
     setYdoc(doc);
     setProviderRef(provider);
 

@@ -19,8 +19,11 @@ vi.mock("@hocuspocus/provider", () => ({
     constructor(config: ProviderConfig) {
       mock.providers.push(config);
     }
+    attach() {}
     destroy() {}
   },
+  // Shared socket (lib/hocuspocus.ts); the provider mock never uses it.
+  HocuspocusProviderWebsocket: class {},
 }));
 
 const TABS_KEY = "tinydocy-tabs";

@@ -26,10 +26,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
-import {
-  type TableOfContentData,
-  TableOfContents,
-} from "@tiptap/extension-table-of-contents";
+import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
@@ -54,6 +51,7 @@ import {
 } from "@/extensions/heading-filter";
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
+import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { TitleDocument } from "@/extensions/title-document";
 import { lowlight } from "@/lib/lowlight";
 
@@ -205,7 +203,7 @@ export function buildDocumentEditorExtensions({
     UniqueID.configure({
       types: ["heading"],
     }),
-    TableOfContents.configure({
+    FastTableOfContents.configure({
       onUpdate: onTocUpdate,
       scrollParent: () =>
         (document.querySelector(".document-editor-wrapper") as HTMLElement) ??
