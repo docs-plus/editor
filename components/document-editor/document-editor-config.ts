@@ -51,6 +51,7 @@ import {
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
 import {
+  CaretBlockVisible,
   CollaborationRenderOnce,
   NodeViewsRenderOnce,
 } from "@/extensions/render-once";
@@ -190,6 +191,7 @@ export function buildDocumentEditorExtensions({
       document: ydoc,
     }),
     NodeViewsRenderOnce,
+    CaretBlockVisible,
     CollaborationCaret.configure({
       provider,
     }),
