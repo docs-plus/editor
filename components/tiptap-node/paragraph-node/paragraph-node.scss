@@ -20,8 +20,11 @@
 }
 
 /* Ensure each top-level node has relative positioning
-   so absolutely positioned placeholders work correctly */
-.tiptap.ProseMirror > * {
+   so absolutely positioned placeholders work correctly.
+   The media resize gripper is a top-level widget that positions itself
+   (`position: absolute` from its offsetParent); made relative, its
+   left/top offset it from its flow position instead, far from the media. */
+.tiptap.ProseMirror > :not(.hypermultimedia__resize-gripper) {
   position: relative;
 }
 

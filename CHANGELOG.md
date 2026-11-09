@@ -8,6 +8,18 @@ deploying it.
 
 ## [Unreleased]
 
+### Fixed
+- **Image resize handles appear on the image again.** A host rule made every
+  top-level editor child `position: relative`, including the media
+  extension's resize gripper, so its handles were drawn below and beside the
+  hovered image (wherever the gripper sat in the document flow). The rule now
+  skips the gripper.
+
+### Deploy
+- Pull, build and restart as usual.
+
+## 2026-11-09 · #14 CI on every pull request
+
 ### Added
 - **CI on every pull request and push to `main`** (`.github/workflows/ci.yml`).
   - The checks job runs Biome, ESLint, the typecheck, unit tests and the
