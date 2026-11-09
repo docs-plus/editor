@@ -1,14 +1,38 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { DocumentEditor } from "@/components/document-editor";
+import {
+  AppSkeleton,
+  SkeletonDocument,
+  SkeletonEditorBody,
+} from "@/components/app-skeleton";
 import { TabBar } from "@/components/tab-bar";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 import { trackEvent } from "@/lib/analytics";
 
 /** How long the intro waits for the collab server before showing a notice. */
 const UNREACHABLE_AFTER_MS = 10_000;
+
+/**
+ * The editor (Tiptap, ProseMirror, extensions, highlighting) is most of the
+ * app's JavaScript. Loading it as its own chunk lets the page hydrate and
+ * open the WebSocket first; the chunk downloads while the tab list syncs.
+ */
+const loadDocumentEditor = () =>
+  import("@/components/document-editor/document-editor").then(
+    (module) => module.DocumentEditor,
+  );
+
+const DocumentEditor = dynamic(loadDocumentEditor, {
+  ssr: false,
+  loading: () => (
+    <SkeletonEditorBody>
+      <SkeletonDocument />
+    </SkeletonEditorBody>
+  ),
+});
 
 interface EditorAppProps {
   /** Server-rendered content shown until the synced tabs are ready. */
@@ -40,6 +64,10 @@ export function EditorApp({ intro }: EditorAppProps) {
   }, []);
 
   useEffect(() => {
+    void loadDocumentEditor();
+  }, []);
+
+  useEffect(() => {
     if (ready) {
       trackEvent("editor_ready", {});
       return;
@@ -51,7 +79,7 @@ export function EditorApp({ intro }: EditorAppProps) {
   if (!ready) {
     return (
       <>
-        {intro}
+        <AppSkeleton>{intro}</AppSkeleton>
         {unreachable && (
           <p role="alert" className="site-intro-offline">
             Can&apos;t reach the collaboration server. Check your connection and

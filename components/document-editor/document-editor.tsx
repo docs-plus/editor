@@ -30,7 +30,10 @@ import {
   buildDocumentEditorExtensions,
   DEFAULT_EDITOR_CONTENT,
 } from "@/components/document-editor/document-editor-config";
-import { EditorSkeleton } from "@/components/document-editor/editor-skeleton";
+import {
+  SkeletonDocument,
+  SkeletonEditorBody,
+} from "@/components/app-skeleton";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
@@ -248,7 +251,13 @@ export function DocumentEditor({
   const docId = documentId ?? "default";
   const { ydoc, provider, synced, rejectedReason } = useYjsDocument(docId);
 
-  if (!synced || !ydoc || !provider) return <EditorSkeleton />;
+  if (!synced || !ydoc || !provider) {
+    return (
+      <SkeletonEditorBody>
+        <SkeletonDocument />
+      </SkeletonEditorBody>
+    );
+  }
 
   return (
     <DocumentEditorContent

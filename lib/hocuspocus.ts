@@ -1,3 +1,5 @@
+import { HocuspocusProviderWebsocket } from "@hocuspocus/provider";
+
 declare global {
   interface Window {
     __HOCUS_URL?: string;
@@ -41,4 +43,19 @@ export function getHocuspocusToken(): string | undefined {
     return window.__HOCUS_TOKEN;
   }
   return undefined;
+}
+
+let sharedSocket: HocuspocusProviderWebsocket | null = null;
+
+/**
+ * One WebSocket for every document this tab opens (tab list and editor).
+ * A separate socket per document costs an extra TCP/TLS handshake and
+ * upgrade before the editor can sync. Providers built on it must call
+ * `attach()`; `destroy()` on a provider then leaves the socket open.
+ */
+export function getSharedHocuspocusSocket(): HocuspocusProviderWebsocket {
+  sharedSocket ??= new HocuspocusProviderWebsocket({
+    url: getHocuspocusWsUrl(),
+  });
+  return sharedSocket;
 }

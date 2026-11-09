@@ -1,17 +1,17 @@
 "use client";
 
 import { arrayMove } from "@dnd-kit/sortable";
-import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as Y from "yjs";
+import type * as Y from "yjs";
 
 import { trackEvent } from "@/lib/analytics";
-import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import {
-  getGlobalTabsDoc,
-  getHocuspocusToken,
-  getHocuspocusWsUrl,
-} from "@/lib/hocuspocus";
+  acquireCollabSession,
+  onSynced,
+  releaseCollabSession,
+} from "@/lib/collab-session";
+import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
+import { getGlobalTabsDoc } from "@/lib/hocuspocus";
 import {
   clearMigrationStorage,
   DELETE_TIMEOUT_MS,
@@ -57,38 +57,32 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const ydoc = new Y.Doc();
+    const tabsDocName = getGlobalTabsDoc();
+    const { doc: ydoc, provider } = acquireCollabSession(tabsDocName);
     const tabsArray = ydoc.getArray<unknown>("tabs");
     const meta = ydoc.getMap("meta");
     tabsArrayRef.current = tabsArray;
 
-    const token = getHocuspocusToken();
-    const provider = new HocuspocusProvider({
-      url: getHocuspocusWsUrl(),
-      name: getGlobalTabsDoc(),
-      document: ydoc,
-      ...(token ? { token } : {}),
-      onSynced() {
-        // Read before the migration below clears the shared storage key.
-        const initialActive = loadActiveTabIdFromStorage();
-        if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
-          const migration = getMigrationTabs();
-          ydoc.transact(() => {
-            meta.set("bootstrapped", true);
-            tabsArray.insert(0, migration ?? getDefaultBootstrap());
-          });
-          if (migration) clearMigrationStorage();
-        }
+    const stopSyncListener = onSynced(provider, () => {
+      // Read before the migration below clears the shared storage key.
+      const initialActive = loadActiveTabIdFromStorage();
+      if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
+        const migration = getMigrationTabs();
+        ydoc.transact(() => {
+          meta.set("bootstrapped", true);
+          tabsArray.insert(0, migration ?? getDefaultBootstrap());
+        });
+        if (migration) clearMigrationStorage();
+      }
 
-        const currentTabs = sanitizeTabs(tabsArray.toArray());
-        const validActive = resolveActiveTabId(currentTabs, initialActive);
+      const currentTabs = sanitizeTabs(tabsArray.toArray());
+      const validActive = resolveActiveTabId(currentTabs, initialActive);
 
-        setTabs(currentTabs);
-        setActiveTabId(validActive);
-        activeTabIdRef.current = validActive;
-        persistActiveTabId(validActive);
-        setReady(true);
-      },
+      setTabs(currentTabs);
+      setActiveTabId(validActive);
+      activeTabIdRef.current = validActive;
+      persistActiveTabId(validActive);
+      setReady(true);
     });
 
     // Runs synchronously inside Yjs transactions, so plain setState is used:
@@ -118,8 +112,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       }
       tabsArrayRef.current = null;
       tabsArray.unobserve(applyUpdate);
-      provider.destroy();
-      ydoc.destroy();
+      stopSyncListener();
+      releaseCollabSession(tabsDocName);
       setReady(false);
     };
   }, []);

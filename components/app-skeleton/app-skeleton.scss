@@ -1,0 +1,162 @@
+// Loading shell. Mirrors the live layout (tab bar 38px, toolbar 44px,
+// 270px table of contents from 768px, 648px page card) so nothing moves
+// when the editor replaces it. Loaded with the page, not the editor chunk.
+
+.app-skeleton {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+}
+
+.skeleton-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0 0.5rem;
+  background-color: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.skeleton-editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.skeleton-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  flex-shrink: 0;
+  padding: 0 0.5rem;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.skeleton-canvas {
+  display: flex;
+  flex: 1;
+  background-color: var(--tt-canvas-color);
+}
+
+.skeleton-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 270px;
+  flex-shrink: 0;
+  padding: 1rem 1.125rem;
+
+  @media (max-width: 767px) {
+    display: none;
+  }
+}
+
+.skeleton-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 648px;
+  margin: 0.75rem auto;
+  padding: 3rem;
+  background-color: var(--background);
+  border: 1px solid var(--tt-border-color-tint);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--tt-page-shadow);
+  color: var(--foreground);
+  line-height: 1.6;
+
+  @media (max-width: 480px) {
+    margin: 0 auto;
+    padding: 1rem 1.5rem;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+.skeleton-block {
+  flex-shrink: 0;
+  border-radius: var(--tt-radius-xs, 4px);
+  background-color: var(--tt-gray-light-a-100);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  .dark & {
+    background-color: var(--tt-gray-dark-a-100);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+// Server-rendered intro (SiteIntro) shown in the page card until the
+// editor is ready, so crawlers and no-JS visitors get real content.
+.site-intro {
+  display: contents;
+
+  h1 {
+    font-size: 1.875rem;
+    line-height: 1.25;
+    font-weight: 700;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+
+  ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+
+  a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.site-intro-notice {
+  font-weight: 500;
+}
+
+.site-intro-status {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.site-intro-offline {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2rem);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--destructive);
+  color: var(--primary-foreground);
+  font-size: 0.875rem;
+  z-index: 50;
+}
