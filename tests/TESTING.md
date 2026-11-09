@@ -305,8 +305,14 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   Playwright summary; treat that as a bug to fix, not a pass.
 - **On failure:** `test-results/` and the dev-server log are uploaded as the
   `e2e-results` artifact.
-- **Not run in CI:** the `pwa`, soak and load layers. Run them locally before
-  merging changes they cover.
+- **Nightly, not per PR:** `.github/workflows/nightly.yml` runs the `pwa`
+  project against a production build, the Yjs soak, the quick multi- and
+  single-user soaks and the load harness (both scenarios) every day at 03:41
+  UTC, or from Actions → Nightly → Run workflow. Run the layer locally before
+  merging a change it covers.
+- **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
+  CI on its branch itself (`gh workflow run ci.yml`), because pull requests
+  opened with the workflow token start no workflows.
 - **Workflow rules:** `tests/unit/ci/workflow-permissions.test.ts` checks every
   workflow file. Each workflow needs a read-only default token, explicit
   per-job permissions, `persist-credentials: false` on checkout, and actions

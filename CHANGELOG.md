@@ -8,12 +8,26 @@ deploying it.
 
 ## [Unreleased]
 
+### Added
+- **Nightly workflow** (`.github/workflows/nightly.yml`, 03:41 UTC and on
+  demand) for the layers CI skips: the `pwa` project against a production
+  build, the Yjs and quick multi- and single-user soaks, and the load
+  harness (100 clients, distributed and conflicting edits).
+
 ### Fixed
 - **Image resize handles appear on the image again.** A host rule made every
   top-level editor child `position: relative`, including the media
   extension's resize gripper, so its handles were drawn below and beside the
   hovered image (wherever the gripper sat in the document flow). The rule now
   skips the gripper.
+- **Typing right after Enter or a heading shortcut no longer scrambles the
+  text.** Chromium misplaces the caret when a character is typed into a
+  block whose content `content-visibility: auto` (added in #12) is still
+  skipping, such as one just created: "marker" became "arkerm". The block
+  holding the caret now stays rendered (`CaretBlockVisible`,
+  `extensions/render-once/`). Reproduced without TinyDocy in a plain
+  `contenteditable`; with the fix, stress runs that failed 23–60% of the
+  time pass, and switching it off brings the failures back.
 
 ### Changed
 - **E2E tests no longer race the editor.** Under load they failed
@@ -21,12 +35,17 @@ deploying it.
   - Helpers wait for the server's first sync before editing (the editor is
     editable earlier, from the device copy); the editor region carries
     `data-server-synced` for them.
-  - After Enter or a heading shortcut, helpers wait two frames before
-    typing (`settleCaret`, `typeInNewParagraphAtEnd`). Chrome confirms a
-    caret ProseMirror places in a new empty block a moment later, and a key
-    typed before that lands behind the caret.
+  - `buildDocument` puts the caret in the title through the editor;
+    `openFilter` leaves an open bar alone and never closes one the shortcut
+    just opened; `typeInNewParagraphAtEnd` replaces three copies.
+  - The soak's filter journey and bot used a class that no longer exists,
+    so they never filtered; they find the input by its label again.
   - The Mod-K test waits for the shift-arrow selection; the offline banner
     test waits for a full reconnect before testing that the banner returns.
+- **Extension update PRs run CI.** Pull requests opened with the workflow
+  token start no workflows, so the scheduled `@docs.plus` update PR would
+  wait forever on the required CI checks. The update workflow now starts CI
+  on its branch (`gh workflow run`, the documented exception).
 
 ### Deploy
 - Pull, build and restart as usual.

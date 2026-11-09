@@ -226,7 +226,9 @@ Playwright.
 
 **CI** (`.github/workflows/ci.yml`) runs on every pull request and push to
 `main`. One job runs Biome, ESLint, the typecheck, unit tests and the
-production build; the other runs the Playwright Chromium suite.
+production build; the other runs the Playwright Chromium suite. A nightly
+workflow (`.github/workflows/nightly.yml`) runs the service worker, soak and
+load layers on a schedule.
 
 The `@docs.plus/extension-*` packages are refreshed every three days by
 `.github/workflows/docs-plus-extensions.yml`. It opens a pull request after a
