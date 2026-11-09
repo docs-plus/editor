@@ -2,7 +2,7 @@
 
 import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { Toolbar } from "@/components/ui/toolbar";
@@ -88,6 +88,16 @@ const REJECTION_NOTICES: Record<string, string> = {
     "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
 };
 
+const EDITOR_PROPS = {
+  attributes: {
+    autocomplete: "off",
+    autocorrect: "off",
+    autocapitalize: "off",
+    "aria-label": "Main content area, start typing to enter text.",
+    class: "document-editor",
+  },
+};
+
 function DocumentEditorContent({
   ydoc,
   provider,
@@ -115,25 +125,26 @@ function DocumentEditorContent({
     mode: "or",
   });
 
+  // `useEditor` compares its options on every render and, when any differ,
+  // calls `editor.setOptions`: a full view update that also re-syncs the
+  // whole document to Yjs. Keep every option stable between renders.
+  const extensions = useMemo(
+    () =>
+      buildDocumentEditorExtensions({
+        documentId,
+        ydoc,
+        provider,
+        onFoldChange: setFoldedIds,
+        onFilterChange: setFilterState,
+        onTocUpdate: updateTocItems,
+      }),
+    [documentId, ydoc, provider, updateTocItems],
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        autocomplete: "off",
-        autocorrect: "off",
-        autocapitalize: "off",
-        "aria-label": "Main content area, start typing to enter text.",
-        class: "document-editor",
-      },
-    },
-    extensions: buildDocumentEditorExtensions({
-      documentId,
-      ydoc,
-      provider,
-      onFoldChange: setFoldedIds,
-      onFilterChange: setFilterState,
-      onTocUpdate: updateTocItems,
-    }),
+    editorProps: EDITOR_PROPS,
+    extensions,
     content: initialContent ?? DEFAULT_EDITOR_CONTENT,
     onUpdate: ({ editor: e, transaction }) => {
       // Only this visitor's own edits rename the tab: renders from the
