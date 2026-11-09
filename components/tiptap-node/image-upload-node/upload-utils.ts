@@ -1,14 +1,20 @@
+import { prepareImageForEmbed } from "@/lib/image-downscale";
+
+/** Max size of a picked/pasted file before it is downscaled for embedding. */
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 /** Max images accepted per upload or paste gesture. */
 export const IMAGE_UPLOAD_LIMIT = 3;
 
 /**
- * Handles image upload with progress tracking and abort capability
+ * Converts an image file into an embeddable data URL. Raster images are
+ * downscaled and re-encoded until they fit `MAX_EMBED_IMAGE_BYTES`, so one
+ * photo cannot push the shared document past the server's size cap.
  * @param file The file to upload
  * @param onProgress Optional callback for tracking upload progress
  * @param abortSignal Optional AbortSignal for cancelling the upload
- * @returns Promise resolving to the URL of the uploaded image
+ * @returns Promise resolving to the data URL of the image
+ * @throws Error with a user-facing message when the image can't be embedded
  */
 export const handleImageUpload = async (
   file: File,
@@ -25,36 +31,10 @@ export const handleImageUpload = async (
     );
   }
 
-  return new Promise((resolve, reject) => {
-    if (abortSignal?.aborted) {
-      reject(new Error("Upload cancelled"));
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress?.({ progress: Math.round((e.loaded / e.total) * 100) });
-      }
-    };
-
-    reader.onload = () => {
-      onProgress?.({ progress: 100 });
-      resolve(reader.result as string);
-    };
-
-    reader.onerror = () => reject(new Error("Failed to read file"));
-
-    abortSignal?.addEventListener(
-      "abort",
-      () => {
-        reader.abort();
-        reject(new Error("Upload cancelled"));
-      },
-      { once: true },
-    );
-
-    reader.readAsDataURL(file);
+  const src = await prepareImageForEmbed(file, {
+    signal: abortSignal,
+    onProgress: (progress) => onProgress?.({ progress }),
   });
+  onProgress?.({ progress: 100 });
+  return src;
 };
