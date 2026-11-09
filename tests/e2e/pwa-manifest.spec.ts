@@ -1,6 +1,20 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import { EditorPage } from "./helpers/editor-page";
+
 /** Runs against `make dev` (chromium project): manifest, icons, head tags. */
+
+const LIGHT = "#fafafa";
+const DARK = "#171717";
+
+/** Per-test global-tabs doc, as EditorPage does, for pages opened by hand. */
+async function isolateTabs(page: Page): Promise<void> {
+  const tabsDoc = `global-tabs-pwa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  await page.addInitScript((name: string) => {
+    (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
+      name;
+  }, tabsDoc);
+}
 
 interface ManifestIcon {
   src: string;
@@ -83,5 +97,77 @@ test.describe("PWA manifest", () => {
     expect(await cornerAlpha(page, "/pwa-icons/maskable-512")).toBe(255);
     expect(await cornerAlpha(page, "/apple-icon")).toBe(255);
     expect(await cornerAlpha(page, "/pwa-icons/any-512")).toBe(0);
+  });
+});
+
+test.describe("theme-color and iOS metadata", () => {
+  /** Browsers use the first theme-color meta in tree order. */
+  const themeColor = (page: Page) =>
+    page.locator('meta[name="theme-color"]').first();
+  const storeDarkTheme = (page: Page) =>
+    page
+      .context()
+      .addInitScript(() => localStorage.setItem("tinydocy-theme", "dark"));
+
+  test("head carries the web-app tags", async ({ page }) => {
+    const html = await (await page.request.get("/")).text();
+    expect(html).toContain(
+      '<meta name="apple-mobile-web-app-title" content="TinyDocy"',
+    );
+    expect(html).toContain(
+      '<meta name="apple-mobile-web-app-status-bar-style" content="default"',
+    );
+    expect(html).toContain('name="mobile-web-app-capable"');
+    expect(html).toContain('rel="apple-touch-icon"');
+    expect(html).toContain('rel="manifest"');
+    expect(html).toContain(`<meta name="theme-color" content="${LIGHT}"`);
+  });
+
+  test("stored dark theme sets the title bar before hydration", async ({
+    page,
+  }) => {
+    await storeDarkTheme(page);
+    await page.goto("/about");
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  });
+
+  test("the toggle updates the title bar and survives reload", async ({
+    page,
+  }) => {
+    const editor = new EditorPage(page);
+    await editor.goto();
+
+    await page.getByRole("button", { name: "Switch to dark mode" }).click();
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+
+    await page.reload();
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await expect(themeColor(page)).toHaveAttribute("content", LIGHT);
+  });
+
+  test("soft navigation keeps the dark title bar", async ({ page }) => {
+    await storeDarkTheme(page);
+    await isolateTabs(page);
+    await page.goto("/about");
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+
+    await page
+      .getByRole("navigation", { name: "Site" })
+      .getByRole("link", { name: "Open the editor" })
+      .click();
+    await page.waitForURL((url) => url.pathname === "/");
+    await page.locator(".tiptap").first().waitFor();
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+  });
+
+  test("the OS colour scheme does not change the title bar", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/about");
+    await expect(themeColor(page)).toHaveAttribute("content", LIGHT);
   });
 });

@@ -4,27 +4,26 @@ import { useEffect, useState } from "react";
 
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { MoonStarIcon, SunIcon } from "@/lib/icons";
-
-const THEME_KEY = "tinydocy-theme";
+import { applyTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 
 export function ThemeToggle() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
+  // The inline boot script already applied the stored theme: read it back.
   useEffect(() => {
-    const stored = localStorage.getItem(THEME_KEY);
-    setIsDarkMode(stored === "dark");
+    setIsDarkMode(document.documentElement.classList.contains("dark"));
   }, []);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", isDarkMode);
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () =>
-    setIsDarkMode((prev) => {
-      const next = !prev;
-      localStorage.setItem(THEME_KEY, next ? "dark" : "light");
-      return next;
-    });
+  const toggleDarkMode = () => {
+    const next = !isDarkMode;
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light");
+    } catch {
+      // Private mode: the choice lasts for this page only.
+    }
+    setIsDarkMode(next);
+  };
 
   return (
     <ToolbarButton
