@@ -31,5 +31,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "scripts/hocus-server.ts"]
+  "exclude": [
+    "node_modules",
+    "scripts/hocus-server.ts",
+    "lib/pwa/service-worker.ts"
+  ]
 }

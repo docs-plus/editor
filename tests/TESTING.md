@@ -186,6 +186,33 @@ Two tests with distinct strategies:
 
 Each user gets a unique identity via `window.__HOCUS_TOKEN` injected through `page.addInitScript()`.
 
+### PWA Tests
+
+Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so caches never leak into other tests.
+
+| Test | Project | Validates |
+|------|---------|-----------|
+| `pwa-manifest.spec.ts` | `chromium` (`make dev`) | Manifest shape and omitted members; icon sizes and opaque/rounded corners; apple and theme-color head tags; theme-color follows the dark toggle, reloads and soft navigation |
+| `pwa-offline.spec.ts` | `pwa` (production build) | Registration after `load` with scope `/`; cache contents (own static files and shell pages only); `sw.js` headers; offline reload of `/` shows the stored shell, unvisited paths show `/offline`; `/api` and other bypass routes never come from the worker; repeat visits are not slower |
+
+The worker runs only on a production build. Use port 3847 and localhost only, never tiny.docs.plus:
+
+```bash
+NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build && PORT=3847 bun run start
+HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
+PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
+```
+
+Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts` (Node environment).
+
+Manual install checklist (localhost production build):
+
+- **Chrome desktop:** the install icon appears in the address bar; installing opens a standalone window whose title bar follows the theme toggle.
+- **Chrome Android:** `adb reverse tcp:3847 tcp:3847`, open `http://localhost:3847`, install; the home-screen icon is the maskable "T" with no white ring.
+- **iOS Simulator (Safari):** Share → Add to Home Screen; the home-screen icon has no black corners and is titled "TinyDocy".
+- **Edge desktop:** same as Chrome desktop.
+- DevTools → Application → Manifest shows no errors, App Id `/`, three icons; "Show only the minimum safe area for maskable icons" keeps the "T" inside the circle.
+
 ## Layer 3: Soak Tests (Playwright, long-running)
 
 Sustained editing sessions that detect memory leaks, latency degradation, and schema corruption over time. Documents use realistic content (paragraphs, bullet lists, ordered lists, task lists, code blocks, blockquotes per section).

@@ -17,6 +17,8 @@ test.describe("security headers", () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("connect-src");
+    expect(csp).toContain("worker-src 'self'");
+    expect(csp).toContain("manifest-src 'self'");
   });
 
   test("CSP allows media embed providers by exact host only", async ({

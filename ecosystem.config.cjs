@@ -13,9 +13,10 @@
  * See docs/operations/abuse-guardrails-runbook.md.
  *
  * NEXT_PUBLIC_* values (NEXT_PUBLIC_HOCUS_URL, NEXT_PUBLIC_SITE_URL,
- * NEXT_PUBLIC_GA_MEASUREMENT_ID, NEXT_PUBLIC_PRIVACY_*) and SEO_NOINDEX are
- * inlined by `bun run build`. Put them in .env.production before building;
- * setting them here has no effect.
+ * NEXT_PUBLIC_GA_MEASUREMENT_ID, NEXT_PUBLIC_PRIVACY_*,
+ * NEXT_PUBLIC_SERVICE_WORKER) and SEO_NOINDEX are inlined by `bun run build`.
+ * Put them in .env.production before building, then `bun run build` and
+ * `pm2 restart editor-next`; setting them here has no effect.
  */
 module.exports = {
   apps: [

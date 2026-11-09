@@ -52,10 +52,16 @@ export default function PrivacyPage() {
 
         <h2>Stored in your browser</h2>
         <p>
-          Your display name and caret colour, your open tabs, your theme and
-          your analytics choice are kept in this browser&apos;s local storage.
-          Your name and caret colour are shown to other people editing the same
-          document. None of this is sent to Google.
+          Your display name and caret colour, the tab you last had open, your
+          theme and your analytics choice are kept in this browser&apos;s local
+          storage. Your name and caret colour are shown to other people editing
+          the same document. None of this is sent to Google.
+        </p>
+        <p>
+          To load faster and show a page when you are offline, a service worker
+          keeps copies of {SITE_NAME}&apos;s own pages and code in this
+          browser&apos;s cache. It never stores your documents and does not
+          touch the live editing connection.
         </p>
 
         <h2>Embedded media</h2>

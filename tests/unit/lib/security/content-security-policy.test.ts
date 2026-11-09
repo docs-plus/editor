@@ -52,6 +52,12 @@ describe("buildContentSecurityPolicy", () => {
     expect(csp).toContain("form-action 'self'");
   });
 
+  it("pins the service worker and manifest to this origin", () => {
+    const csp = buildContentSecurityPolicy({ ...base, gaMeasurementId: null });
+    expect(directive(csp, "worker-src")).toEqual(["'self'"]);
+    expect(directive(csp, "manifest-src")).toEqual(["'self'"]);
+  });
+
   it("allows eval only in development", () => {
     const csp = buildContentSecurityPolicy({
       ...base,
