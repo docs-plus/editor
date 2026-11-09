@@ -1,0 +1,213 @@
+name: Nightly
+
+# The test layers CI skips on pull requests, once a day on main:
+#   pwa    service worker and offline tests against a production build
+#   soak   Yjs reconnection soak, a quick multi-user soak and a 5-minute
+#          single-user soak against next dev
+#   load   the Yjs load harness (100 clients, both scenarios) against
+#          Hocuspocus
+#
+# Read-only token and no secrets, like CI. A red run means a regression in
+# offline editing, long sessions or concurrency that no PR check covers.
+
+on:
+  schedule:
+    # 03:41 UTC daily.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  # One runner opens many sockets and documents from one IP.
+  DOC_CREATION_RATE_LIMIT: "2000"
+  WS_CONNECTION_LIMIT: "200"
+  WS_SOCKETS_PER_IP: "600"
+  WS_UPGRADE_RATE_LIMIT: "6000"
+  HOCUS_THROTTLE: "0"
+
+jobs:
+  pwa:
+    name: Service worker and offline (production build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Production build
+        run: bun run build
+
+      # The service worker runs only in production builds; Hocuspocus allows
+      # the per-test tab lists (make dev-hocus).
+      - name: Start servers
+        run: |
+          PORT=3847 bun run start > "$RUNNER_TEMP/next.log" 2>&1 &
+          make dev-hocus > "$RUNNER_TEMP/hocus.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -s -o /dev/null http://127.0.0.1:1234 &&
+              curl -sf -o /dev/null http://localhost:3847/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::servers did not start"
+          exit 1
+
+      - name: Run the pwa project
+        run: >-
+          PWA_BASE_URL=http://localhost:3847 CI=
+          bunx playwright test --project=pwa --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-pwa
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  soak:
+    name: Soak (Yjs, multi-user, single-user)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Start dev servers
+        run: |
+          make dev > "$RUNNER_TEMP/dev.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            if curl -s -o /dev/null http://127.0.0.1:1234 &&
+              curl -sf -o /dev/null http://localhost:3000/; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf -o /dev/null --max-time 120 http://localhost:3000/
+
+      - name: Yjs reconnection and rapid tab switch
+        run: CI= bunx playwright test --project=yjs-soak --trace retain-on-failure
+
+      - name: Multi-user soak (30 s, 3 users)
+        run: >-
+          SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 CI=
+          bunx playwright test --project=soak soak-collab.spec.ts
+          --trace retain-on-failure
+
+      - name: Single-user soak (5 min, 50 headings)
+        run: >-
+          SOAK_DURATION=300000 SOAK_HEADINGS=50 CI=
+          bunx playwright test --project=soak soak.spec.ts
+          --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-soak
+          path: |
+            test-results/
+            ${{ runner.temp }}/dev.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  load:
+    name: Yjs load harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Start Hocuspocus
+        run: |
+          make dev-hocus > "$RUNNER_TEMP/hocus.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:1234 && exit 0
+            sleep 1
+          done
+          echo "::error::Hocuspocus did not start"
+          exit 1
+
+      - name: Distributed edits (100 clients, 30 s)
+        run: bun run test:load
+        env:
+          LOAD_SCENARIO: distributed
+
+      - name: Conflicting edits (100 clients, 30 s)
+        run: bun run test:load
+        env:
+          LOAD_SCENARIO: conflict
+
+      - name: Upload server log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-load
+          path: ${{ runner.temp }}/hocus.log
+          if-no-files-found: ignore
+          retention-days: 7
