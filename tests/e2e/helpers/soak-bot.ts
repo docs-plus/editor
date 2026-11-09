@@ -101,7 +101,7 @@ export const DEFAULT_ACTIONS: SoakAction[] = [
     execute: async (ep, page) => {
       await page.click(".tiptap");
       await ep.openFilter();
-      const input = page.locator(".filter-panel-input");
+      const input = page.getByLabel("Filter term");
       await input.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
       if (await input.isVisible()) {
         const word = WORDS[Math.floor(Math.random() * WORDS.length)];
