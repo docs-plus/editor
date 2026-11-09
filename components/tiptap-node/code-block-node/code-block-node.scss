@@ -49,6 +49,10 @@
       border-radius: 0;
       -webkit-text-fill-color: inherit;
       color: inherit;
+      // Defence in depth for the collaborator-controlled language class
+      // (see SafeCodeBlock): code text can never become a positioned layer,
+      // which also makes any injected inset/z-index utilities inert.
+      position: static !important;
     }
 
     .hljs-comment,

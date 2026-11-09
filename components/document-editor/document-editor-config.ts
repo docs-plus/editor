@@ -19,7 +19,6 @@ import {
 } from "@docs.plus/extension-placeholder";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { JSONContent } from "@tiptap/core";
-import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { Collaboration } from "@tiptap/extension-collaboration";
 import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
 import { Highlight } from "@tiptap/extension-highlight";
@@ -57,6 +56,8 @@ import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
 import { TitleDocument } from "@/extensions/title-document";
 import { lowlight } from "@/lib/lowlight";
+
+import { SafeCodeBlock } from "./safe-code-block";
 
 /** Minimal valid doc per TitleDocument schema (H1 + body). */
 export const DEFAULT_EDITOR_CONTENT = {
@@ -170,7 +171,7 @@ export function buildDocumentEditorExtensions({
       },
     }),
     InlineCode,
-    CodeBlockLowlight.configure({ lowlight }),
+    SafeCodeBlock.configure({ lowlight }),
     Mermaid.configure({ sanitize: sanitizeMermaidSvg }),
     Indent,
     TitleDocument,
