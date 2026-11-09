@@ -224,6 +224,10 @@ ProseMirror · Yjs and Hocuspocus 4 · SQLite · Tailwind CSS 4 and Sass ·
 TypeScript (strict) · Biome, ESLint, Husky and commitlint · Vitest and
 Playwright.
 
+**CI** (`.github/workflows/ci.yml`) runs on every pull request and push to
+`main`. One job runs Biome, ESLint, the typecheck, unit tests and the
+production build; the other runs the Playwright Chromium suite.
+
 The `@docs.plus/extension-*` packages are refreshed every three days by
 `.github/workflows/docs-plus-extensions.yml`. It opens a pull request after a
 read-only verification job, which needs "Allow GitHub Actions to create and
