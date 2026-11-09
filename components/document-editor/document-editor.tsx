@@ -2,7 +2,14 @@
 
 import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type * as Y from "yjs";
 
 import { Toolbar } from "@/components/ui/toolbar";
@@ -57,7 +64,9 @@ import {
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
 import {
-  useDebouncedTocItems,
+  type TocItemsStore,
+  useTocItems,
+  useTocItemsStore,
   useToolbarHeight,
 } from "./use-document-editor-ui-state";
 import "@/components/document-editor/document-editor.scss";
@@ -88,6 +97,17 @@ const REJECTION_NOTICES: Record<string, string> = {
     "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
 };
 
+/** The outline sidebar, re-rendered on its own when the items change. */
+function DocumentOutline({
+  tocStore,
+  ...props
+}: Omit<ComponentProps<typeof TocSidebar>, "items"> & {
+  tocStore: TocItemsStore;
+}) {
+  const items = useTocItems(tocStore);
+  return <TocSidebar items={items} {...props} />;
+}
+
 const EDITOR_PROPS = {
   attributes: {
     autocomplete: "off",
@@ -114,7 +134,7 @@ function DocumentEditorContent({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef("");
   const toolbarHeight = useToolbarHeight(toolbarRef);
-  const { tocItems, updateTocItems } = useDebouncedTocItems();
+  const tocStore = useTocItemsStore();
 
   const [tocVisible, setTocVisible] = useState(true);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
@@ -136,9 +156,9 @@ function DocumentEditorContent({
         provider,
         onFoldChange: setFoldedIds,
         onFilterChange: setFilterState,
-        onTocUpdate: updateTocItems,
+        onTocUpdate: tocStore.set,
       }),
-    [documentId, ydoc, provider, updateTocItems],
+    [documentId, ydoc, provider, tocStore],
   );
 
   const editor = useEditor({
@@ -224,8 +244,8 @@ function DocumentEditorContent({
 
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
-            <TocSidebar
-              items={tocItems}
+            <DocumentOutline
+              tocStore={tocStore}
               editor={editor}
               foldedIds={foldedIds}
               onToggleFold={handleToggleFold}
