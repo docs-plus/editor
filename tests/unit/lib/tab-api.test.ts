@@ -60,3 +60,14 @@ describe("repairTabsArray", () => {
     expect(repairTabsArray(tabs)).toBe(0);
   });
 });
+
+describe("repairTabsArray with tombstones", () => {
+  it("drops tabs whose documents were deleted", () => {
+    const doc = new Y.Doc();
+    const tabs = doc.getArray<unknown>("tabs");
+    const deleted = { ...VALID, id: "22222222-2222-2222-2222-222222222222" };
+    tabs.push([VALID, deleted]);
+    expect(repairTabsArray(tabs, (id) => id === deleted.id)).toBe(1);
+    expect(tabs.toArray()).toEqual([VALID]);
+  });
+});

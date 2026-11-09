@@ -43,7 +43,10 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `HOCUS_ALLOW_ISOLATED_TABS_DOCS=1`: **dev and tests only** (`make dev`, Playwright).
   Allows per-test `global-tabs-<id>` documents. The server refuses to start with it in
   production.
-- `RETENTION_DAYS=30`
+- `RETENTION_DAYS=30` (idle documents are deleted and tombstoned)
+- `TOMBSTONE_RETENTION_DAYS=90`: how long a deleted or expired document name stays
+  blocked. It must outlive any offline copy a browser may still hold; otherwise that
+  copy could recreate the document on reconnect.
 - `TRUSTED_PROXY=0` (`1` only when a reverse proxy fronts every request;
   `ecosystem.config.cjs` sets `1`; see Client IP Extraction Policy)
 - `HOCUS_LOGGER=0` to disable Hocuspocus Logger extension
@@ -112,6 +115,12 @@ Failure signals:
 1. Reduce blast radius by tightening/de-tuning env thresholds as needed.
 2. If WS runtime instability appears, restart the Hocus process; tune or disable `HOCUS_THROTTLE` / guardrail envs if false positives dominate.
 3. If retention fails repeatedly, run purge manually after service stabilization.
+
+## Taking Content Down
+
+Delete the document (DELETE `/api/documents/<id>` or the tab's close button), which
+tombstones it. Never reset or overwrite its stored Yjs state: browsers holding an
+offline copy would push the old content straight back on reconnect.
 
 ## Scheduled Jobs
 

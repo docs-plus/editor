@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import * as Y from "yjs";
 
-import { isDocumentUpdateFrame } from "@/lib/security/hocus-document-guard";
+import {
+  addsNoItems,
+  isDocumentUpdateFrame,
+} from "@/lib/security/hocus-document-guard";
 
 /** Hocuspocus frame: varString document name, varUint fields, payload. */
 function frame(name: string, ...varUints: number[]): Uint8Array {
@@ -34,5 +38,43 @@ describe("isDocumentUpdateFrame (A04-2)", () => {
     expect(isDocumentUpdateFrame(frame("doc", 2))).toBe(false);
     expect(isDocumentUpdateFrame(new Uint8Array())).toBe(false);
     expect(isDocumentUpdateFrame(Uint8Array.from([200]))).toBe(false);
+  });
+});
+
+describe("addsNoItems (delete-only updates at the cap)", () => {
+  function docWithText(text: string): Y.Doc {
+    const doc = new Y.Doc();
+    doc.getText("t").insert(0, text);
+    return doc;
+  }
+
+  it("allows a deletion so a document at its cap can be trimmed", () => {
+    const server = docWithText("hello world");
+    const client = new Y.Doc();
+    Y.applyUpdate(client, Y.encodeStateAsUpdate(server));
+    const before = Y.encodeStateVector(client);
+    client.getText("t").delete(0, 5);
+    const deletion = Y.encodeStateAsUpdate(client, before);
+    expect(addsNoItems(deletion, server)).toBe(true);
+  });
+
+  it("allows a resend of content the server already has", () => {
+    const server = docWithText("same");
+    expect(addsNoItems(Y.encodeStateAsUpdate(server), server)).toBe(true);
+  });
+
+  it("refuses an update that inserts content", () => {
+    const server = docWithText("hello");
+    const client = new Y.Doc();
+    Y.applyUpdate(client, Y.encodeStateAsUpdate(server));
+    const before = Y.encodeStateVector(client);
+    client.getText("t").insert(5, "!");
+    expect(addsNoItems(Y.encodeStateAsUpdate(client, before), server)).toBe(
+      false,
+    );
+  });
+
+  it("treats garbage as growth (fails closed)", () => {
+    expect(addsNoItems(Uint8Array.from([9, 9, 9]), new Y.Doc())).toBe(false);
   });
 });

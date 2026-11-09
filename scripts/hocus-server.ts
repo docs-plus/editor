@@ -94,10 +94,6 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const guardrails = createWsGuardrails();
-const documentGuard = new DocumentGuard({
-  maxDocumentBytes: guardrails.maxDocumentBytes,
-  maxAwarenessStateBytes: MAX_AWARENESS_STATE_BYTES,
-});
 const socketGate = createSocketGate({
   socketsPerIp: WS_SOCKETS_PER_IP,
   maxSockets: MAX_WS_SOCKETS,
@@ -106,6 +102,11 @@ const socketGate = createSocketGate({
 });
 const db = openDatabase(getSqliteDbPath());
 bootstrapDocumentActivityTable(db);
+const documentGuard = new DocumentGuard({
+  maxDocumentBytes: guardrails.maxDocumentBytes,
+  maxAwarenessStateBytes: MAX_AWARENESS_STATE_BYTES,
+  isDeletedDocument: (name) => isTombstoned(db, name),
+});
 
 const persistence = createSqlitePersistence(db, {
   canStore(documentName, sizeBytes) {
@@ -136,6 +137,11 @@ const hocuspocus = new Hocuspocus({
   // so attempts whose document load fails never leak a slot.
   async onConnect({ requestHeaders, documentName }) {
     const ip = getPinnedClientIp(requestHeaders);
+    // Also when the document is still in memory (onLoadDocument is skipped),
+    // so a reconnecting offline copy cannot reach a deleted document.
+    if (isTombstoned(db, documentName)) {
+      throw reject("document_deleted", { ip, documentName });
+    }
     const decision = guardrails.canConnect(ip);
     if (!decision.allowed) {
       throw reject(decision.reason, { ip, documentName });

@@ -101,6 +101,7 @@ export function purgeStaleDocuments(
   db: SqliteDatabase,
   cutoffMs: number,
   batchSize: number = DEFAULT_BATCH_SIZE,
+  nowMs: number = Date.now(),
 ): { deletedCount: number; deletedNames: string[] } {
   const staleRows = db
     .prepare(
@@ -128,10 +129,17 @@ export function purgeStaleDocuments(
     const deleteActivity = db.prepare(
       "DELETE FROM document_activity WHERE name = ?",
     );
+    // Expired documents stay blocked like deleted ones, so an offline copy
+    // shows them as deleted instead of silently recreating them.
+    const tombstone = db.prepare(
+      `INSERT INTO document_tombstones (name, deleted_at) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET deleted_at = excluded.deleted_at`,
+    );
 
     for (const name of candidates) {
       deleteDocument.run(name);
       deleteActivity.run(name);
+      tombstone.run(name, nowMs);
     }
 
     db.exec("COMMIT");

@@ -62,4 +62,31 @@ describe("runRetentionPurge", () => {
       "playground",
     ]);
   });
+
+  it("tombstones purged documents and keeps tombstones past the retention cutoff", () => {
+    db = new Database(":memory:");
+    db.exec("CREATE TABLE documents (name TEXT PRIMARY KEY, data BLOB)");
+    bootstrapDocumentActivityTable(db);
+    const id = "33333333-3333-3333-3333-333333333333";
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      id,
+      Buffer.from("{}"),
+    );
+    upsertDocumentActivity(db, id, 10, 0);
+    const DAY = 24 * 60 * 60 * 1000;
+    const tombstone = () =>
+      db
+        .prepare("SELECT deleted_at FROM document_tombstones WHERE name = ?")
+        .get(id);
+
+    runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY });
+    expect(tombstone()).toEqual({ deleted_at: 31 * DAY });
+
+    // A later purge past the 30-day document cutoff keeps the tombstone...
+    runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY + 60 * DAY });
+    expect(tombstone()).toBeDefined();
+    // ...until TOMBSTONE_RETENTION_DAYS (default 90) have passed.
+    runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY + 91 * DAY });
+    expect(tombstone()).toBeUndefined();
+  });
 });
