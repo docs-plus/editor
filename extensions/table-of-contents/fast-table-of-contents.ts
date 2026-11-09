@@ -1,10 +1,24 @@
 import type { Editor } from "@tiptap/core";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
 
-import { applyActiveState, collectTocItems } from "./table-of-contents-items";
+import {
+  applyActiveState,
+  collectTocItems,
+  sameTocItems,
+} from "./table-of-contents-items";
+import { createTocIdPlugin } from "./toc-id-plugin";
+
+/**
+ * Least time between two outline rebuilds. Rebuilding reads layout and,
+ * when the outline changed, re-renders it, so a burst of changes (typing)
+ * is coalesced into one rebuild per interval instead of one per keystroke;
+ * a change after a quiet interval rebuilds at once.
+ */
+export const TOC_REBUILD_INTERVAL_MS = 250;
 
 type Runtime = {
-  frame: number;
+  timer: ReturnType<typeof setTimeout> | undefined;
+  rebuiltAt: number;
   scrollFrame: number;
   activeKey: string;
   scrollTarget: HTMLElement | Window | null;
@@ -32,8 +46,12 @@ function scrollTopOf(target: HTMLElement | Window | null): number {
  * - The stock extension rebuilds on every document change and reads
  *   `domAtPos(...).offsetTop` per heading, forcing a full synchronous layout
  *   after each keystroke, then dispatches an extra transaction. Here,
- *   rebuilds are coalesced into one per animation frame, use `nodeDOM`, and
- *   read layout once per rebuild.
+ *   rebuilds are at least {@link TOC_REBUILD_INTERVAL_MS} apart, use
+ *   `nodeDOM`, read layout once, and call `onUpdate` only when the outline
+ *   changed (headings, text, levels or active state; positions move with
+ *   every keystroke above a heading, so consumers resolve them on use).
+ * - The stock id plugin walks the whole document, inline content included,
+ *   after every change; see {@link createTocIdPlugin}.
  * - On scroll the stock extension recomputes every item and calls
  *   `onUpdate` (a React re-render) per scroll event. Here, scroll work runs
  *   once per frame and `onUpdate` fires only when the active heading changes.
@@ -67,7 +85,8 @@ export const FastTableOfContents = TableOfContents.extend({
     if (tr.docChanged) editor.view.dispatch(tr);
 
     const runtime: Runtime = {
-      frame: 0,
+      timer: undefined,
+      rebuiltAt: Date.now(),
       scrollFrame: 0,
       activeKey: "",
       scrollTarget: resolveScrollTarget(options.scrollParent),
@@ -93,21 +112,35 @@ export const FastTableOfContents = TableOfContents.extend({
     rebuild(this.editor, this.options, this.storage);
   },
 
+  addProseMirrorPlugins() {
+    return [
+      createTocIdPlugin({
+        anchorTypes: this.options.anchorTypes ?? ["heading"],
+        getId: this.options.getId,
+      }),
+    ];
+  },
+
   onTransaction({ transaction }) {
     if (!transaction.docChanged) return;
     const runtime = runtimes.get(this.editor);
-    if (!runtime || runtime.frame) return;
+    if (!runtime || runtime.timer) return;
     const { editor, options, storage } = this;
-    runtime.frame = requestAnimationFrame(() => {
-      runtime.frame = 0;
-      if (!editor.isDestroyed) rebuild(editor, options, storage);
-    });
+    const wait = runtime.rebuiltAt + TOC_REBUILD_INTERVAL_MS - Date.now();
+    runtime.timer = setTimeout(
+      () => {
+        runtime.timer = undefined;
+        runtime.rebuiltAt = Date.now();
+        if (!editor.isDestroyed) rebuild(editor, options, storage);
+      },
+      Math.max(0, wait),
+    );
   },
 
   onDestroy() {
     const runtime = runtimes.get(this.editor);
     if (!runtime) return;
-    cancelAnimationFrame(runtime.frame);
+    clearTimeout(runtime.timer);
     cancelAnimationFrame(runtime.scrollFrame);
     runtime.scrollTarget?.removeEventListener("scroll", runtime.onScroll);
     runtimes.delete(this.editor);
@@ -131,7 +164,9 @@ function rebuild(editor: Editor, options: Options, storage: Storage): void {
   storage.scrollPosition = position;
   const next = applyActiveState(items, position);
   if (runtime) runtime.activeKey = next.key;
+  const unchanged =
+    !isInitialCreation && sameTocItems(storage.content, next.items);
   storage.content = next.items;
   storage.anchors = next.items.map((item) => item.dom);
-  options.onUpdate?.(next.items, isInitialCreation);
+  if (!unchanged) options.onUpdate?.(next.items, isInitialCreation);
 }

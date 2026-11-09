@@ -25,6 +25,7 @@ import { createPortal } from "react-dom";
 
 import { SortableTocItem } from "@/components/toc-sidebar/sortable-toc-item";
 import { computeSection, findAllSections } from "@/extensions/shared";
+import { findTocAnchor } from "@/extensions/table-of-contents";
 import { moveSection } from "@/lib/editor-utils";
 import { cn } from "@/lib/utils";
 
@@ -145,11 +146,18 @@ export function TocSidebar({
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {
       if (!editor) return;
-      const node = editor.state.doc.nodeAt(item.pos);
-      const endPos = node ? item.pos + node.nodeSize - 1 : item.pos + 1;
-      editor.commands.setTextSelection(endPos);
+      // Items only refresh when the outline changes, so their positions and
+      // DOM nodes can trail edits; find the heading as it is now.
+      const anchor = findTocAnchor(editor.state.doc, item.id);
+      if (!anchor) return;
+      const { node, pos } = anchor;
+      editor.commands.setTextSelection(pos + node.nodeSize - 1);
       editor.commands.focus();
-      requestAnimationFrame(() => scrollHeadingIntoView(item.dom));
+      requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
+        const dom = editor.view.nodeDOM(pos);
+        if (dom instanceof HTMLElement) scrollHeadingIntoView(dom);
+      });
     },
     [editor],
   );

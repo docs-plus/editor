@@ -65,6 +65,7 @@ tests/
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
 │   ├── pwa-connection.spec.ts            # Offline edits, connection status, offline banner/shell
+│   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
@@ -140,6 +141,7 @@ make test-e2e
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
+| `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |
 | `toc-drag.spec.ts` | TOC drag handle visibility; title H1 not draggable; drag reorder moves editor sections; folded section drag handle |
 
@@ -193,7 +195,7 @@ Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so ca
 | Test | Project | Validates |
 |------|---------|-----------|
 | `pwa-manifest.spec.ts` | `chromium` (`make dev`) | Manifest shape and omitted members; icon sizes and opaque/rounded corners; apple and theme-color head tags; theme-color follows the dark toggle, reloads and soft navigation; install button (synthetic `beforeinstallprompt`, pre-hydration capture, hidden when installed, iOS hint by keyboard) |
-| `pwa-offline.spec.ts` | `pwa` (production build) | Registration after `load` with scope `/`; cache contents (own static files and shell pages only); `sw.js` headers; offline reload of `/` shows the stored shell, unvisited paths show `/offline`; `/api` and other bypass routes never come from the worker; repeat visits are not slower |
+| `pwa-offline.spec.ts` | `pwa` (production build) | Registration after `load` with scope `/`; cache contents (own static files and shell pages only); `sw.js` headers; offline reload of `/` shows the stored shell, unvisited paths show `/offline`; `/api` and other bypass routes never come from the worker; repeat visits are not slower; a fully offline reload reopens the editor with the document from the device |
 
 The worker runs only on a production build. Use port 3847 and localhost only, never tiny.docs.plus:
 

@@ -2,7 +2,14 @@
 
 import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type * as Y from "yjs";
 
 import { Toolbar } from "@/components/ui/toolbar";
@@ -57,7 +64,9 @@ import {
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
 import {
-  useDebouncedTocItems,
+  type TocItemsStore,
+  useTocItems,
+  useTocItemsStore,
   useToolbarHeight,
 } from "./use-document-editor-ui-state";
 import "@/components/document-editor/document-editor.scss";
@@ -88,6 +97,27 @@ const REJECTION_NOTICES: Record<string, string> = {
     "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
 };
 
+/** The outline sidebar, re-rendered on its own when the items change. */
+function DocumentOutline({
+  tocStore,
+  ...props
+}: Omit<ComponentProps<typeof TocSidebar>, "items"> & {
+  tocStore: TocItemsStore;
+}) {
+  const items = useTocItems(tocStore);
+  return <TocSidebar items={items} {...props} />;
+}
+
+const EDITOR_PROPS = {
+  attributes: {
+    autocomplete: "off",
+    autocorrect: "off",
+    autocapitalize: "off",
+    "aria-label": "Main content area, start typing to enter text.",
+    class: "document-editor",
+  },
+};
+
 function DocumentEditorContent({
   ydoc,
   provider,
@@ -104,7 +134,7 @@ function DocumentEditorContent({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef("");
   const toolbarHeight = useToolbarHeight(toolbarRef);
-  const { tocItems, updateTocItems } = useDebouncedTocItems();
+  const tocStore = useTocItemsStore();
 
   const [tocVisible, setTocVisible] = useState(true);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
@@ -115,25 +145,26 @@ function DocumentEditorContent({
     mode: "or",
   });
 
+  // `useEditor` compares its options on every render and, when any differ,
+  // calls `editor.setOptions`: a full view update that also re-syncs the
+  // whole document to Yjs. Keep every option stable between renders.
+  const extensions = useMemo(
+    () =>
+      buildDocumentEditorExtensions({
+        documentId,
+        ydoc,
+        provider,
+        onFoldChange: setFoldedIds,
+        onFilterChange: setFilterState,
+        onTocUpdate: tocStore.set,
+      }),
+    [documentId, ydoc, provider, tocStore],
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        autocomplete: "off",
-        autocorrect: "off",
-        autocapitalize: "off",
-        "aria-label": "Main content area, start typing to enter text.",
-        class: "document-editor",
-      },
-    },
-    extensions: buildDocumentEditorExtensions({
-      documentId,
-      ydoc,
-      provider,
-      onFoldChange: setFoldedIds,
-      onFilterChange: setFilterState,
-      onTocUpdate: updateTocItems,
-    }),
+    editorProps: EDITOR_PROPS,
+    extensions,
     content: initialContent ?? DEFAULT_EDITOR_CONTENT,
     onUpdate: ({ editor: e, transaction }) => {
       // Only this visitor's own edits rename the tab: renders from the
@@ -213,8 +244,8 @@ function DocumentEditorContent({
 
         <div className="editor-with-toc">
           {tocVisible && !isMobile && (
-            <TocSidebar
-              items={tocItems}
+            <DocumentOutline
+              tocStore={tocStore}
               editor={editor}
               foldedIds={foldedIds}
               onToggleFold={handleToggleFold}

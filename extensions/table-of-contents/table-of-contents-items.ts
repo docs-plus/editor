@@ -7,6 +7,7 @@ import {
   type TableOfContentData,
   type TableOfContentDataItem,
 } from "@tiptap/extension-table-of-contents";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 type CollectOptions = {
   anchorTypes: readonly string[];
@@ -75,4 +76,48 @@ export function applyActiveState(
     })),
     key: activeIndex === -1 ? "" : `${items[activeIndex]?.id}:${activeIndex}`,
   };
+}
+
+/**
+ * Whether two item lists render the same outline: same headings, text,
+ * levels, numbering and active state. Positions and DOM nodes are ignored,
+ * since they move with every edit above a heading; resolve them on use with
+ * {@link findTocAnchor}.
+ */
+export function sameTocItems(
+  a: TableOfContentData,
+  b: TableOfContentData,
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((item, index) => {
+      const other = b[index];
+      return (
+        item.id === other.id &&
+        item.textContent === other.textContent &&
+        item.level === other.level &&
+        item.originalLevel === other.originalLevel &&
+        item.itemIndex === other.itemIndex &&
+        item.isActive === other.isActive &&
+        item.isScrolledOver === other.isScrolledOver
+      );
+    })
+  );
+}
+
+/** The anchor node carrying TOC id `id` and its position, if any. */
+export function findTocAnchor(
+  doc: ProseMirrorNode,
+  id: string,
+): { node: ProseMirrorNode; pos: number } | null {
+  let found: { node: ProseMirrorNode; pos: number } | null = null;
+  doc.descendants((node, pos) => {
+    if (found) return false;
+    if (node.attrs["data-toc-id"] === id) {
+      found = { node, pos };
+      return false;
+    }
+    return !node.isTextblock;
+  });
+  return found;
 }

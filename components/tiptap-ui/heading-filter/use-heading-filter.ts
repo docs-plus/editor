@@ -1,13 +1,12 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
+import { type Editor, useCurrentEditor } from "@tiptap/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type HeadingFilterCallbackState,
   updateFilterUrl,
 } from "@/extensions/heading-filter";
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 
 const DEBOUNCE_MS = 250;
 
@@ -40,7 +39,10 @@ export function useHeadingFilter({
   editor: providedEditor,
   filterState,
 }: UseHeadingFilterOptions): UseHeadingFilterReturn {
-  const { editor } = useTiptapEditor(providedEditor);
+  // Only the instance is needed. Subscribing to editor state here would
+  // re-render the caller, the whole editor shell, on every transaction.
+  const { editor: contextEditor } = useCurrentEditor();
+  const editor = providedEditor ?? contextEditor;
   const [isBarOpen, setIsBarOpen] = useState(false);
   const [query, setQueryState] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);

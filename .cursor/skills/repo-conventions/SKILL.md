@@ -19,7 +19,7 @@ All tooling decisions below are final. Any agent working in this repo must follo
 | `bun run <script>`              | `npm run <script>`              |
 | `bunx <tool>`                   | `npx <tool>`                    |
 | `bun dev`                       | `npm run dev`                   |
-| `bun test`                      | `npm test`                      |
+| `bun run test` (Vitest)         | `npm test` or `bun test`        |
 
 - The lockfile is `bun.lock` — never generate or reference `package-lock.json` or `yarn.lock`
 - Bun version is pinned in `.tool-versions` and `package.json` (`packageManager` + `engines`)
@@ -174,6 +174,11 @@ All commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 Allowed types: `feat`, `fix`, `refactor`, `perf`, `style`, `test`, `build`, `ci`, `chore`, `docs`, `revert`
 
 See the `commit-review` skill for full commit message guidelines.
+
+Every pull request also adds an entry to `CHANGELOG.md` under **Unreleased**
+(Keep a Changelog sections: Added, Changed, Fixed, Security, plus a Deploy note
+when operators must do something). On merge, the Unreleased entry becomes a
+dated `## YYYY-MM-DD · #<PR> <title>` section.
 
 ## Git Hooks
 

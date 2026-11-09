@@ -1,5 +1,8 @@
 import { mergeAttributes } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import type { Plugin } from "@tiptap/pm/state";
+
+import { createIncrementalLowlightPlugin } from "./incremental-lowlight";
 
 /**
  * Allowed shape of a code block `language` attribute: one identifier-like
@@ -13,6 +16,11 @@ export function sanitizeCodeLanguage(value: unknown): string | null {
   return typeof value === "string" && SAFE_CODE_LANGUAGE.test(value)
     ? value
     : null;
+}
+
+/** The stock lowlight plugin, recognised by its plugin key (`lowlight$`). */
+function isStockLowlightPlugin(plugin: Plugin): boolean {
+  return (plugin as unknown as { key: string }).key.startsWith("lowlight$");
 }
 
 /**
@@ -53,6 +61,23 @@ export const SafeCodeBlock = CodeBlockLowlight.extend({
         rendered: false,
       },
     };
+  },
+
+  // Same decorations as the stock lowlight plugin, re-highlighting only the
+  // code blocks a change touches (see incremental-lowlight.ts); the other
+  // code block plugins stay.
+  addProseMirrorPlugins() {
+    const { lowlight, defaultLanguage } = this.options;
+    return [
+      ...(this.parent?.() ?? []).filter(
+        (plugin) => !isStockLowlightPlugin(plugin),
+      ),
+      createIncrementalLowlightPlugin({
+        name: this.name,
+        lowlight,
+        defaultLanguage,
+      }),
+    ];
   },
 
   renderHTML({ node, HTMLAttributes }) {
