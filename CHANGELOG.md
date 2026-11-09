@@ -8,6 +8,39 @@ deploying it.
 
 ## [Unreleased]
 
+### Added
+- **Nightly workflow** (`.github/workflows/nightly.yml`, 03:41 UTC and on
+  demand) for the layers CI skips: the `pwa` project against a production
+  build, the Yjs and quick multi- and single-user soaks, and the load
+  harness (100 clients, distributed and conflicting edits).
+
+### Fixed
+- **Typing right after Enter or a heading shortcut no longer scrambles the
+  text.** Chromium misplaces the caret when a character is typed into a
+  block whose content `content-visibility: auto` (added in #12) is still
+  skipping, such as one just created: "marker" became "arkerm". The block
+  holding the caret now stays rendered (`CaretBlockVisible`,
+  `extensions/render-once/`). Reproduced without TinyDocy in a plain
+  `contenteditable`; with the fix, stress runs that failed 23–60% of the
+  time pass, and switching it off brings the failures back. This was the
+  real cause of the e2e caret races #15 worked around, so the tests' caret
+  waits (`settleCaret`) are removed again.
+
+### Changed
+- **Extension update PRs run CI.** Pull requests opened with the workflow
+  token start no workflows, so the scheduled `@docs.plus` update PR would
+  wait forever on the required CI checks. The update workflow now starts CI
+  on its branch (`gh workflow run`, the documented exception).
+- The soak's filter journey and bot used a class that no longer exists, so
+  they never filtered; they find the input by its label again. `openFilter`
+  leaves an open bar alone.
+
+### Deploy
+- Pull, build and restart as usual. Start the first nightly run from
+  Actions → Nightly → Run workflow if you want results before 03:41 UTC.
+
+## 2026-11-09 · #15 Image resize handles, e2e races
+
 ### Fixed
 - **Image resize handles appear on the image again.** A host rule made every
   top-level editor child `position: relative`, including the media
@@ -16,20 +49,15 @@ deploying it.
   skips the gripper.
 
 ### Changed
-- **E2E tests no longer race the editor.** Under load they failed
-  intermittently; stress runs (25–40 repeats, 6 workers) now pass every time.
+- **E2E tests no longer race the editor.**
   - Helpers wait for the server's first sync before editing (the editor is
     editable earlier, from the device copy); the editor region carries
     `data-server-synced` for them.
-  - After Enter or a heading shortcut, helpers wait two frames before
-    typing (`settleCaret`, `typeInNewParagraphAtEnd`). Chrome confirms a
-    caret ProseMirror places in a new empty block a moment later, and a key
-    typed before that lands behind the caret.
+  - `buildDocument` puts the caret in the title through the editor;
+    `openFilter` no longer closes a bar the shortcut just opened;
+    `typeInNewParagraphAtEnd` replaces three copies.
   - The Mod-K test waits for the shift-arrow selection; the offline banner
     test waits for a full reconnect before testing that the banner returns.
-
-### Deploy
-- Pull, build and restart as usual.
 
 ## 2026-11-09 · #14 CI on every pull request
 

@@ -59,7 +59,7 @@ export async function filterLifecycleJourney(
 
   for (let round = 0; round < 3; round++) {
     await page.click(".tiptap");
-    const filterInput = page.locator(".filter-panel-input");
+    const filterInput = page.getByLabel("Filter term");
     const alreadyVisible = await filterInput.isVisible().catch(() => false);
     if (!alreadyVisible) {
       await ep.openFilter();

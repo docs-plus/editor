@@ -112,6 +112,8 @@ body {
      - A contained block does not wrap around a float, so nothing after a
        floated (wrap left / right) media block is contained.
      - Print lays out everything.
+     - The block holding the caret stays rendered (`.is-caret-block`).
+       Chromium misplaces the caret when typing into a skipped block.
      ===================== */
 @media screen {
   @supports (overflow-clip-margin: 1px) {
@@ -134,6 +136,10 @@ body {
         contain-intrinsic-block-size: auto 15rem;
       }
 
+      /* The caret's block (CaretBlockVisible): Chromium misplaces the caret
+         when typing into a block it is skipping, such as one just created
+         by Enter. */
+      > .is-caret-block,
       > .ProseMirror-widget,
       > :is([style*="float: left"], [style*="float: right"]),
       > :is([style*="float: left"], [style*="float: right"]) ~ * {
