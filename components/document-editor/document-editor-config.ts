@@ -162,6 +162,12 @@ export function buildDocumentEditorExtensions({
       },
       // Let pasted media URLs become embeds instead of plain links.
       shouldAutoLink: (url) => !isMediaUrl(url),
+      // Public sandbox: links are user-generated content.
+      HTMLAttributes: {
+        target: null,
+        rel: "noopener noreferrer nofollow ugc",
+        class: null,
+      },
     }),
     InlineCode,
     CodeBlockLowlight.configure({ lowlight }),

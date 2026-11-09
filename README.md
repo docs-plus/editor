@@ -1,9 +1,14 @@
 # TinyDocy
 
-TinyDocy is a collaborative document editor built with Tiptap 3, ProseMirror,
-Yjs, and Hocuspocus. It is the focused validation environment for
-[docs.plus](https://docs.plus): features land here first, then move upstream
-after passing reliability, collaboration, and scale checks.
+TinyDocy is a free, open-source (MIT) document editor where several people edit
+the same page at once and see each other's cursors. It is built with Tiptap 3,
+Yjs and Hocuspocus, needs no account, and is the public testbed for
+[docs.plus](https://docs.plus): editor features land here first and move to
+docs.plus once they pass collaboration and scale checks.
+
+**Live demo: [tiny.docs.plus](https://tiny.docs.plus)** — open it in two
+windows and watch edits sync. It is a public sandbox: everyone sees the same
+documents, so don't type anything private.
 
 ## Core Capabilities
 
@@ -12,8 +17,8 @@ after passing reliability, collaboration, and scale checks.
 - Real-time multi-user collaboration with presence/carets.
 - Multi-tab document workflow with synced tab state.
 - TOC sidebar with click navigation and section drag/drop.
-- Rich content blocks (lists, tasks, code, tables, images, marks) plus
-  markdown import/export.
+- Rich content blocks: lists, task lists, code blocks with syntax
+  highlighting, tables, blockquotes and text marks.
 - docs.plus editor extensions: link popovers with autolink and `Mod-K`,
   inline code, Tab indent, cursor-local placeholders, live Mermaid diagrams and
   charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom,
@@ -58,6 +63,24 @@ Primary runtime knobs are environment-driven:
   `NEXT_PUBLIC_DISCORD_INVITE_URL`, `NEXT_PUBLIC_GITHUB_REPO_URL` — defaults in
   `lib/constants.ts`
 
+Build-time settings (inlined by `bun run build`, so put them in
+`.env.production` before building; setting them at runtime has no effect):
+
+- `NEXT_PUBLIC_SITE_URL` — canonical origin for metadata, sitemap, robots and
+  JSON-LD (default `https://tiny.docs.plus`). Site copy lives in
+  `lib/site-config.ts`.
+- `SEO_NOINDEX=1` — preview/staging builds: `noindex` meta, `Disallow: /`,
+  empty sitemap.
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX` — optional, opt-in Google
+  Analytics 4. Unset or malformed IDs, `next dev`, Vitest and automated
+  browsers ship no tag; the CSP only gains Google hosts when it is set.
+  Visitors must click Allow, and Global Privacy Control / Do Not Track are
+  honoured. Required GA property settings and the event list:
+  [`docs/operations/analytics-runbook.md`](docs/operations/analytics-runbook.md).
+- `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` — data
+  controller and contact shown on `/privacy` (falls back to GitHub issues).
+  Set both before enabling analytics.
+
 Redis scaling notes:
 
 - Redis extension is opt-in via `HOCUS_REDIS=1`.
@@ -73,7 +96,8 @@ Editor extensions:
 - The `@docs.plus/extension-*` packages are wired in
   `components/document-editor/document-editor-config.ts`; their stylesheets are
   themed to the shadcn tokens in `document-editor.scss`.
-- Embed providers are allowlisted by exact host in the CSP (`next.config.ts`).
+- Embed providers are allowlisted by exact host in the CSP
+  (`lib/security/content-security-policy.ts`).
 - Mermaid SVG is sanitized with DOMPurify because any collaborator can author
   a diagram.
 - Documents stored before the switch carry `link` / `code` marks; Hocuspocus
@@ -84,7 +108,8 @@ Editor extensions:
   approve pull requests" enabled in the repository settings.
 
 Operational guidance:
-[`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md)
+[`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md),
+[`docs/operations/analytics-runbook.md`](docs/operations/analytics-runbook.md)
 
 ## Project Structure
 

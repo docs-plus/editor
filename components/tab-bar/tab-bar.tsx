@@ -214,7 +214,12 @@ export function TabBar({
   const playgroundTab = tabs.find((t) => t.id === PLAYGROUND_ID);
 
   return (
-    <div className="tab-bar" role="tablist" aria-label="Document tabs">
+    <div
+      className="tab-bar"
+      role="tablist"
+      aria-label="Document tabs"
+      data-nosnippet
+    >
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

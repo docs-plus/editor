@@ -123,7 +123,14 @@ const server = Bun.serve<SocketData>({
     pinClientIp(headers, server.requestIP(request)?.address);
     const data = { request: new Request(request.url, { headers }) };
     if (server.upgrade(request, { data })) return undefined;
-    return new Response("Welcome to Hocuspocus!");
+    // Plain HTTP is only a health check: keep it out of search results.
+    const noindex = { "X-Robots-Tag": "noindex, nofollow" };
+    if (new URL(request.url).pathname === "/robots.txt") {
+      return new Response("User-agent: *\nDisallow: /\n", {
+        headers: { ...noindex, "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    return new Response("ok", { headers: noindex });
   },
   websocket: {
     open(ws) {

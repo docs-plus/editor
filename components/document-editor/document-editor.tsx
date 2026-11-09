@@ -149,7 +149,7 @@ function DocumentEditorContent({
   const effectiveMobileView = isMobile ? mobileView : "main";
 
   return (
-    <div className="document-editor-wrapper">
+    <main className="document-editor-wrapper" data-nosnippet>
       <EditorContext.Provider value={{ editor }}>
         <Toolbar
           ref={toolbarRef}
@@ -221,7 +221,7 @@ function DocumentEditorContent({
 
         <CollabStatusGroup provider={provider} />
       </EditorContext.Provider>
-    </div>
+    </main>
   );
 }
 
