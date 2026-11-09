@@ -211,14 +211,9 @@ Never pin exact versions manually — use the `^` range that Bun sets by default
 
 ## Testing
 
-**Framework:** Vitest (when tests are added).
+**Frameworks:** Vitest for unit tests (`tests/unit/`), Playwright for end-to-end, soak and service worker tests (`tests/e2e/`), plus a Bun load harness (`tests/load/`). Layers, commands and conventions: `tests/TESTING.md`.
 
-New features and bug fixes should include tests. Test files live next to the code they test:
-
-```
-components/tab-bar.tsx
-components/tab-bar.test.tsx
-```
+New features and bug fixes include tests. CI runs lint, typecheck, unit tests, the build and the Chromium e2e suite on every pull request; a nightly workflow runs the `pwa`, soak and load layers.
 
 ## Project Scripts
 
@@ -228,7 +223,9 @@ components/tab-bar.test.tsx
 | `bun run build`     | Production build                  |
 | `bun start`         | Start production server           |
 | `bun run lint`      | ESLint (Next.js rules)            |
-| `bun run typecheck` | TypeScript (`tsc --noEmit`)       |
+| `bun run typecheck` | TypeScript: app, Hocuspocus, service worker |
+| `bun run test`      | Vitest unit tests                 |
+| `bun run test:e2e`  | Playwright Chromium e2e           |
 | `bun run format`    | Biome format all files            |
 | `bun run check`     | Biome lint + format check         |
 | `bun run check:fix` | Biome lint + format with auto-fix |

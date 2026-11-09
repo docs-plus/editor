@@ -1,0 +1,35 @@
+name: Release
+
+# Pushing a v* tag publishes a GitHub release for it: GitHub's generated
+# list of pull requests merged since the previous tag, after a pointer to
+# CHANGELOG.md, which carries the operator Deploy notes. Tag main after the
+# last pull request of the release is merged:
+#   git tag -a v0.2.0 -m "TinyDocy v0.2.0" origin/main && git push origin v0.2.0
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Never checks out or runs repository code: only gh talks to the API.
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "TinyDocy $TAG" \
+            --generate-notes \
+            --notes "Changes and deploy notes for every merged pull request: [CHANGELOG.md](https://github.com/$GH_REPO/blob/$TAG/CHANGELOG.md)."

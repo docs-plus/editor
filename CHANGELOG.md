@@ -4,9 +4,26 @@ All notable changes to TinyDocy. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). TinyDocy is deployed
 continuously from `main`, so entries are grouped by merged pull request rather
 than by version number. Each entry lists anything an operator has to do when
-deploying it.
+deploying it. Tagged releases (`vX.Y.Z`, from v0.1.0) bundle the entries merged
+since the previous tag.
 
 ## [Unreleased]
+
+### Added
+- **README badges:** CI and nightly status, latest release, license, live
+  demo, docs.plus links (website, source, npm extensions, Discord) and the
+  stack.
+- **Releases:** pushing a `v*` tag publishes a GitHub release
+  (`.github/workflows/release.yml`) with the pull requests merged since the
+  previous tag and a link to this file. The first tag is `v0.1.0`.
+
+### Changed
+- The workflow-rules test allows a workflow without actions (the release
+  workflow only runs `gh`) and checks once across all workflows that the
+  action parser still finds some.
+- `tests/TESTING.md`, the repo-conventions skill and `AGENTS.md` describe the
+  current test layout, CI and nightly runs, the server-sync wait in e2e
+  helpers and the resize-gripper exception.
 
 ## 2026-11-09 · #16 Caret after Enter, nightly tests, CI for update PRs
 
