@@ -44,6 +44,13 @@ export const SITE_FEATURES = [
 ] as const;
 
 export const THEME_COLOR = "#fafafa";
+/** Dark-theme title bar: matches .dark --sidebar (oklch(0.205 0 0)). */
+export const THEME_COLOR_DARK = "#171717";
+/** Manifest splash: matches body --background (oklch(1 0 0)). */
+export const BACKGROUND_COLOR = "#ffffff";
+/** Install-dialog description: says up front that documents are public. */
+export const APP_DESCRIPTION =
+  "Real-time collaborative editor on Tiptap and Yjs. Public sandbox: everyone sees the same documents, so don't type anything private.";
 export const REPO_URL = GITHUB_REPO_URL;
 export const COMMUNITY_URL = DISCORD_INVITE_URL;
 

@@ -66,7 +66,12 @@ test.describe("SEO surfaces", () => {
     const manifest = await page.request.get("/manifest.webmanifest");
     expect((await manifest.json()).name).toBe("TinyDocy");
 
-    for (const path of ["/icon", "/apple-icon", "/opengraph-image"]) {
+    for (const path of [
+      "/icon",
+      "/apple-icon",
+      "/pwa-icons/any-192",
+      "/opengraph-image",
+    ]) {
       const image = await page.request.get(path);
       expect(image.headers()["content-type"]).toBe("image/png");
     }
