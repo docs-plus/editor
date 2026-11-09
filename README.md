@@ -57,6 +57,13 @@ Primary runtime knobs are environment-driven:
   HTTP limits share one global key.
 - Hocus extensions (`HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS`, ...):
   `lib/security/hocus-server-extensions.ts`
+- WebSocket admission and size limits (`HOCUS_ALLOWED_ORIGINS`,
+  `WS_SOCKETS_PER_IP`, `HOCUS_MAX_PAYLOAD_BYTES`, per-document caps, ...):
+  `lib/security/guardrail-config.ts`, documented in the abuse runbook.
+  `HOCUS_ALLOW_ISOLATED_TABS_DOCS=1` is for `make dev` and Playwright only.
+- Embedded images are downscaled in the browser to
+  `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` (default 256 KB) so one photo cannot push
+  a document past the server's size cap.
 - Hocus entrypoint: `scripts/hocus-server.ts`
 - Hocus persistence + document size guardrail: `lib/hocus-persistence.ts`
 - Discord / GitHub buttons (bottom status strip): optional

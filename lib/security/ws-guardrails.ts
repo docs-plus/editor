@@ -1,10 +1,17 @@
-import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  isTabsDocumentId,
+  PLAYGROUND_DOC,
+} from "@/lib/security/doc-id-validator";
 import {
   DOC_CREATION_RATE_LIMIT_PER_HOUR,
   MAX_DOC_SIZE_BYTES,
+  MAX_PLAYGROUND_DOC_SIZE_BYTES,
+  MAX_TABS_DOC_SIZE_BYTES,
   MAX_TOTAL_DOCUMENTS,
+  RATE_LIMIT_MAX_KEYS,
   WS_CONNECTION_LIMIT_PER_IP,
 } from "@/lib/security/guardrail-config";
+import { createTimestampWindows } from "@/lib/security/rate-limit";
 
 export type GuardrailDecision =
   | { allowed: true }
@@ -15,22 +22,28 @@ type WsGuardrailsConfig = {
   docCreationPerHour: number;
   maxTotalDocuments: number;
   maxDocSizeBytes: number;
+  maxPlaygroundDocSizeBytes: number;
+  maxTabsDocSizeBytes: number;
+  maxKeys: number;
   now: () => number;
 };
 
 export type WsGuardrails = {
-  onConnect(ip: string): GuardrailDecision;
+  /** Checks the per-IP limit without counting the attempt. */
+  canConnect(ip: string): GuardrailDecision;
+  /** Counts a connection once Hocuspocus has established it. */
+  onConnected(ip: string): void;
   onDisconnect(ip: string): void;
   canCreateDocument(
     ip: string,
     totalNonSystemDocuments: number,
   ): GuardrailDecision;
+  /** Byte cap for a document's encoded state. */
+  maxDocumentBytes(name: string): number;
   canStoreDocument(name: string, sizeBytes: number): GuardrailDecision;
 };
 
-function cleanupWindow(events: number[], cutoffMs: number): number[] {
-  return events.filter((timestamp) => timestamp > cutoffMs);
-}
+const HOUR_MS = 60 * 60 * 1000;
 
 export function createWsGuardrails(
   config: Partial<WsGuardrailsConfig> = {},
@@ -41,19 +54,35 @@ export function createWsGuardrails(
       config.docCreationPerHour ?? DOC_CREATION_RATE_LIMIT_PER_HOUR,
     maxTotalDocuments: config.maxTotalDocuments ?? MAX_TOTAL_DOCUMENTS,
     maxDocSizeBytes: config.maxDocSizeBytes ?? MAX_DOC_SIZE_BYTES,
+    maxPlaygroundDocSizeBytes:
+      config.maxPlaygroundDocSizeBytes ?? MAX_PLAYGROUND_DOC_SIZE_BYTES,
+    maxTabsDocSizeBytes: config.maxTabsDocSizeBytes ?? MAX_TABS_DOC_SIZE_BYTES,
+    maxKeys: config.maxKeys ?? RATE_LIMIT_MAX_KEYS,
     now: config.now ?? Date.now,
   };
   const activeConnections = new Map<string, number>();
-  const createEvents = new Map<string, number[]>();
+  const createEvents = createTimestampWindows(
+    HOUR_MS,
+    settings.now,
+    settings.maxKeys,
+  );
+
+  function maxDocumentBytes(name: string): number {
+    if (name === PLAYGROUND_DOC) return settings.maxPlaygroundDocSizeBytes;
+    if (isTabsDocumentId(name)) return settings.maxTabsDocSizeBytes;
+    return settings.maxDocSizeBytes;
+  }
 
   return {
-    onConnect(ip: string): GuardrailDecision {
+    canConnect(ip: string): GuardrailDecision {
       const active = activeConnections.get(ip) ?? 0;
       if (active >= settings.wsConnectionsPerIp) {
         return { allowed: false, reason: "ws_connection_limit_exceeded" };
       }
-      activeConnections.set(ip, active + 1);
       return { allowed: true };
+    },
+    onConnected(ip: string): void {
+      activeConnections.set(ip, (activeConnections.get(ip) ?? 0) + 1);
     },
     onDisconnect(ip: string): void {
       const active = activeConnections.get(ip) ?? 0;
@@ -70,21 +99,16 @@ export function createWsGuardrails(
       if (totalNonSystemDocuments >= settings.maxTotalDocuments) {
         return { allowed: false, reason: "max_total_documents_exceeded" };
       }
-      const hourMs = 60 * 60 * 1000;
-      const now = settings.now();
-      const existing = createEvents.get(ip) ?? [];
-      const recent = cleanupWindow(existing, now - hourMs);
-      if (recent.length >= settings.docCreationPerHour) {
-        createEvents.set(ip, recent);
+      const recent = createEvents.recent(ip);
+      if (!recent || recent.length >= settings.docCreationPerHour) {
         return { allowed: false, reason: "doc_creation_rate_limit_exceeded" };
       }
-      recent.push(now);
-      createEvents.set(ip, recent);
+      recent.push(settings.now());
       return { allowed: true };
     },
+    maxDocumentBytes,
     canStoreDocument(name: string, sizeBytes: number): GuardrailDecision {
-      if (isSystemDocumentId(name)) return { allowed: true };
-      if (sizeBytes > settings.maxDocSizeBytes) {
+      if (sizeBytes > maxDocumentBytes(name)) {
         return { allowed: false, reason: "max_document_size_exceeded" };
       }
       return { allowed: true };

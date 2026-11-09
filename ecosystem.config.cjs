@@ -57,6 +57,8 @@ module.exports = {
         HOCUS_REDIS: "1",
         HOCUS_REDIS_HOST: "127.0.0.1",
         HOCUS_REDIS_PORT: "6380",
+        // Only the public site may open collaboration sockets from a browser.
+        HOCUS_ALLOWED_ORIGINS: "https://tiny.docs.plus",
       },
       instances: 1,
       exec_mode: "fork",

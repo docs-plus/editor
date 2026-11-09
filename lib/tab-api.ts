@@ -1,4 +1,5 @@
-import { PLAYGROUND_ID } from "@/lib/constants";
+import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
+import { isValidUserDocumentId } from "@/lib/security/doc-id-validator";
 
 export type Tab = {
   id: string;
@@ -57,6 +58,42 @@ export function isTab(value: unknown): value is Tab {
     "createdAt" in value &&
     typeof (value as Tab).createdAt === "number"
   );
+}
+
+export const MAX_TAB_TITLE_LENGTH = 200;
+
+/**
+ * True for an entry any client may render: a well-formed tab whose id is the
+ * playground or a valid user document id. The tab list is shared and writable
+ * by every anonymous visitor, so nothing in it is trusted.
+ */
+export function isValidTabEntry(value: unknown): value is Tab {
+  return (
+    isTab(value) &&
+    Number.isFinite(value.createdAt) &&
+    (value.id === PLAYGROUND_ID || isValidUserDocumentId(value.id))
+  );
+}
+
+/**
+ * The renderable tab list from raw shared state: drops malformed entries and
+ * duplicates, trims titles, caps the count and keeps the playground first.
+ */
+export function sanitizeTabs(
+  raw: readonly unknown[],
+  maxTabs: number = MAX_TABS_PER_CLIENT,
+): Tab[] {
+  const valid = raw.filter(isValidTabEntry).map((tab) => ({
+    id: tab.id,
+    title: tab.title.slice(0, MAX_TAB_TITLE_LENGTH),
+    createdAt: tab.createdAt,
+  }));
+  return ensurePlaygroundTab(deduplicateTabs(valid)).slice(0, maxTabs);
+}
+
+/** Index of `id` in the raw shared array, skipping malformed entries. */
+export function findRawTabIndex(raw: readonly unknown[], id: string): number {
+  return raw.findIndex((entry) => isTab(entry) && entry.id === id);
 }
 
 export function loadActiveTabIdFromStorage(): string {

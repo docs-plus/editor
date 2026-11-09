@@ -7,7 +7,7 @@ dev-next: ## Start Next.js dev server
 	bun next dev
 
 dev-hocus: ## Start Hocuspocus WebSocket + SQLite server (custom bootstrap)
-	HOCUS_PORT=1234 DB_PATH=db.sqlite bun run hocus
+	HOCUS_PORT=1234 DB_PATH=db.sqlite HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
 
 build: ## Build for production
 	bun next build

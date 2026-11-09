@@ -1,10 +1,16 @@
 import type Database from "better-sqlite3";
 import { NextResponse } from "next/server";
 
-import { PLAYGROUND_ID } from "@/lib/constants";
 import { logAbuseEvent } from "@/lib/security/abuse-log";
+import {
+  bootstrapDocumentActivityTable,
+  deleteDocumentPermanently,
+} from "@/lib/security/activity-store";
 import { getClientIpFromHeaders } from "@/lib/security/client-ip";
-import { isValidUserDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  isSystemDocumentId,
+  isValidUserDocumentId,
+} from "@/lib/security/doc-id-validator";
 import { HTTP_MUTATION_RATE_LIMIT_PER_MINUTE } from "@/lib/security/guardrail-config";
 import { createSlidingWindowLimiter } from "@/lib/security/rate-limit";
 import { openBetterSqlite, SQLITE_BUSY } from "@/lib/sqlite-open";
@@ -17,14 +23,14 @@ const deleteLimiter = createSlidingWindowLimiter({
 });
 
 function deleteWithRetry(db: Database.Database, id: string): boolean {
-  const stmt = db.prepare("DELETE FROM documents WHERE name = ?");
+  bootstrapDocumentActivityTable(db);
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const result = stmt.run(id);
-      return result.changes > 0;
+      return deleteDocumentPermanently(db, id);
     } catch (err) {
-      const code = (err as { code?: number }).code;
-      if (code === SQLITE_BUSY && attempt < MAX_RETRIES - 1) continue;
+      const code = (err as { code?: number | string }).code;
+      const busy = code === SQLITE_BUSY || code === "SQLITE_BUSY";
+      if (busy && attempt < MAX_RETRIES - 1) continue;
       throw err;
     }
   }
@@ -53,10 +59,10 @@ export async function DELETE(
     );
   }
 
-  if (id === PLAYGROUND_ID) {
-    logAbuseEvent("documents_delete_playground_rejected", { ip, id });
+  if (isSystemDocumentId(id)) {
+    logAbuseEvent("documents_delete_system_rejected", { ip, id });
     return NextResponse.json(
-      { error: "Cannot delete playground document" },
+      { error: "Cannot delete a shared system document" },
       { status: 400 },
     );
   }
@@ -70,6 +76,7 @@ export async function DELETE(
     const db = openBetterSqlite({ timeoutMs: 5000 });
     try {
       const deleted = deleteWithRetry(db, id);
+      logAbuseEvent("document_deleted", { ip, id, existed: deleted });
       return NextResponse.json({ deleted }, { status: deleted ? 200 : 404 });
     } finally {
       db.close();

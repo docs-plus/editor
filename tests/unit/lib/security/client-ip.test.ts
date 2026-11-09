@@ -86,9 +86,13 @@ describe("getClientIpFromHeaders (HTTP, no socket address)", () => {
       ).toBe("10.0.0.7");
     });
 
-    it("accepts IPv6 addresses", () => {
-      const headers = new Headers({ "x-forwarded-for": "2001:db8::1" });
-      expect(getClientIpFromHeaders(headers, trusted)).toBe("2001:db8::1");
+    it("keys IPv6 addresses by their /64 prefix", () => {
+      const a = new Headers({ "x-forwarded-for": "2001:db8:1:2::1" });
+      const b = new Headers({ "x-forwarded-for": "2001:db8:1:2:ffff::9" });
+      const other = new Headers({ "x-forwarded-for": "2001:db8:1:3::1" });
+      expect(getClientIpFromHeaders(a, trusted)).toBe("2001:db8:1:2::/64");
+      expect(getClientIpFromHeaders(b, trusted)).toBe("2001:db8:1:2::/64");
+      expect(getClientIpFromHeaders(other, trusted)).toBe("2001:db8:1:3::/64");
     });
   });
 });
