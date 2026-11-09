@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Caps what embedded players can request, whatever `allow` a
+          // collaborator puts on the iframe.
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), display-capture=(), clipboard-read=(), payment=(), usb=(), serial=(), hid=()",
+          },
           {
             key: "Content-Security-Policy",
             value: buildContentSecurityPolicy({

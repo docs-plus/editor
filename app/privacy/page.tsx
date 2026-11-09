@@ -58,6 +58,14 @@ export default function PrivacyPage() {
           document. None of this is sent to Google.
         </p>
 
+        <h2>Embedded media</h2>
+        <p>
+          Anyone can embed images, audio, video and posts from other websites in
+          a document. When you open that document, your browser loads them from
+          those websites, which then see your IP address and browser details, as
+          with any web page that embeds third-party content.
+        </p>
+
         <h2>Server logs</h2>
         <p>
           To protect the service from abuse, the server logs your IP address and
