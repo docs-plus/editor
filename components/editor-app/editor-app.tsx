@@ -11,6 +11,10 @@ import {
 import { TabBar } from "@/components/tab-bar";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 import { trackEvent } from "@/lib/analytics";
+import {
+  hasUnsyncedCollabChanges,
+  subscribeUnsyncedChanges,
+} from "@/lib/collab-session";
 
 /** How long the intro waits for the collab server before showing a notice. */
 const UNREACHABLE_AFTER_MS = 10_000;
@@ -33,6 +37,36 @@ const DocumentEditor = dynamic(loadDocumentEditor, {
     </SkeletonEditorBody>
   ),
 });
+
+function confirmUnload(event: BeforeUnloadEvent): void {
+  event.preventDefault();
+  event.returnValue = ""; // Safari and older Chromium
+}
+
+/**
+ * Asks before closing or reloading while edits have not reached the server.
+ * The listener exists only while they are pending, so the page stays
+ * eligible for the back/forward cache, and no React state changes per
+ * keystroke (each edit is pending until the server acknowledges it).
+ */
+function useUnsyncedChangesGuard(): void {
+  useEffect(() => {
+    let guarded = false;
+    const update = () => {
+      const unsynced = hasUnsyncedCollabChanges();
+      if (unsynced === guarded) return;
+      guarded = unsynced;
+      if (unsynced) window.addEventListener("beforeunload", confirmUnload);
+      else window.removeEventListener("beforeunload", confirmUnload);
+    };
+    const unsubscribe = subscribeUnsyncedChanges(update);
+    update();
+    return () => {
+      unsubscribe();
+      window.removeEventListener("beforeunload", confirmUnload);
+    };
+  }, []);
+}
 
 interface EditorAppProps {
   /** Server-rendered content shown until the synced tabs are ready. */
@@ -57,6 +91,7 @@ export function EditorApp({ intro }: EditorAppProps) {
   const [playgroundRegenerateTrigger, setPlaygroundRegenerateTrigger] =
     useState(0);
   const [unreachable, setUnreachable] = useState(false);
+  useUnsyncedChangesGuard();
 
   const handlePlaygroundRegenerate = useCallback(() => {
     setPlaygroundRegenerateTrigger((t) => t + 1);

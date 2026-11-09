@@ -58,12 +58,13 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     if (typeof window === "undefined") return;
 
     const tabsDocName = getGlobalTabsDoc();
-    const { doc: ydoc, provider } = acquireCollabSession(tabsDocName);
+    const session = acquireCollabSession(tabsDocName);
+    const ydoc = session.doc;
     const tabsArray = ydoc.getArray<unknown>("tabs");
     const meta = ydoc.getMap("meta");
     tabsArrayRef.current = tabsArray;
 
-    const stopSyncListener = onSynced(provider, () => {
+    const stopSyncListener = onSynced(session, () => {
       // Read before the migration below clears the shared storage key.
       const initialActive = loadActiveTabIdFromStorage();
       if (tabsArray.length === 0 && !meta.get("bootstrapped")) {

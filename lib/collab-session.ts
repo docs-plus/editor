@@ -9,6 +9,9 @@ import {
 /** How long an unused session stays open before it detaches. */
 const RELEASE_DELAY_MS = 1000;
 
+/** How often a released session with unsynced edits checks whether it can go. */
+const DIRTY_RECHECK_MS = 5000;
+
 /** Close reason Hocuspocus sends when an update would exceed the size cap. */
 export const DOCUMENT_TOO_LARGE_REASON = "document_too_large";
 
@@ -17,14 +20,46 @@ export type CollabSession = {
   provider: HocuspocusProvider;
   /** Set once the server refused this document's updates; it stays local. */
   rejectedReason: string | null;
+  /**
+   * The document has synced with the server at least once, so its content
+   * is real even while the socket is down (the provider resets `isSynced`
+   * on every disconnect).
+   */
+  hasSynced: boolean;
 };
 
 type Entry = CollabSession & {
   refs: number;
+  /** Local edits the server has not acknowledged yet. */
+  dirty: boolean;
   releaseTimer?: ReturnType<typeof setTimeout>;
 };
 
 const sessions = new Map<string, Entry>();
+const unsyncedListeners = new Set<() => void>();
+
+function setDirty(entry: Entry, dirty: boolean): void {
+  if (entry.dirty === dirty) return;
+  entry.dirty = dirty;
+  for (const listener of unsyncedListeners) listener();
+}
+
+/** Calls `listener` whenever `hasUnsyncedCollabChanges()` may have changed. */
+export function subscribeUnsyncedChanges(listener: () => void): () => void {
+  unsyncedListeners.add(listener);
+  return () => {
+    unsyncedListeners.delete(listener);
+  };
+}
+
+/**
+ * True while any open or recently closed document has local edits the
+ * server has not acknowledged (typed offline, or still in flight).
+ */
+export function hasUnsyncedCollabChanges(): boolean {
+  for (const entry of sessions.values()) if (entry.dirty) return true;
+  return false;
+}
 
 /**
  * One Y.Doc and provider per document name, shared by every component that
@@ -53,7 +88,29 @@ export function acquireCollabSession(name: string): CollabSession {
     ...(token ? { token } : {}),
   });
   provider.attach();
-  const entry: Entry = { doc, provider, refs: 1, rejectedReason: null };
+  const entry: Entry = {
+    doc,
+    provider,
+    refs: 1,
+    rejectedReason: null,
+    hasSynced: false,
+    dirty: false,
+  };
+  provider.on("synced", () => {
+    entry.hasSynced = true;
+  });
+  // Local edits (y-prosemirror, seeding, tab list changes) have an origin
+  // other than the provider. A refused document can never sync them.
+  doc.on("update", (_update: Uint8Array, origin: unknown) => {
+    if (origin !== provider && !entry.rejectedReason) setDirty(entry, true);
+  });
+  // The provider resets its count to 1 on every (re)connect and counts down
+  // as the server acknowledges, so 0 means the server has everything.
+  provider.on("unsyncedChanges", ({ number }: { number: number }) => {
+    if (number === 0) setDirty(entry, false);
+  });
+  // A refused document (deleted tab, rate limit) will never acknowledge.
+  provider.on("authenticationFailed", () => setDirty(entry, false));
   // After a size refusal, stop syncing this document instead of
   // re-authenticating on every reconnect: each retry resends the refused
   // update, and enough retries get the visitor's IP banned by Throttle.
@@ -63,34 +120,48 @@ export function acquireCollabSession(name: string): CollabSession {
     }
     entry.rejectedReason = event.reason;
     provider.detach();
+    setDirty(entry, false);
   });
   sessions.set(name, entry);
   return entry;
 }
 
+/**
+ * Drops one reference. A session with edits the server has not acknowledged
+ * stays attached, however long the socket is down, so they are not lost: on
+ * reconnect the provider's sync step 2 sends them.
+ */
 export function releaseCollabSession(name: string): void {
   const entry = sessions.get(name);
   if (!entry) return;
   entry.refs--;
   if (entry.refs > 0 || entry.releaseTimer) return;
-  entry.releaseTimer = setTimeout(() => {
+  const tryRelease = () => {
+    entry.releaseTimer = undefined;
     if (entry.refs > 0) return;
+    if (entry.dirty) {
+      entry.releaseTimer = setTimeout(tryRelease, DIRTY_RECHECK_MS);
+      return;
+    }
     sessions.delete(name);
     entry.provider.destroy();
     entry.doc.destroy();
-  }, RELEASE_DELAY_MS);
+  };
+  entry.releaseTimer = setTimeout(tryRelease, RELEASE_DELAY_MS);
 }
 
 /**
- * Calls `handler` on every sync of `provider`, and right away if it has
- * already synced (a reused session will not emit `synced` again).
+ * Calls `handler` on every sync of the session's provider, and right away
+ * if it has synced before: a reused session will not emit `synced` again,
+ * and one reused while offline still holds its content.
  */
 export function onSynced(
-  provider: HocuspocusProvider,
+  session: CollabSession,
   handler: () => void,
 ): () => void {
+  const { provider } = session;
   provider.on("synced", handler);
-  if (provider.isSynced) handler();
+  if (provider.isSynced || session.hasSynced) handler();
   return () => {
     provider.off("synced", handler);
   };

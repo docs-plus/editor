@@ -23,7 +23,7 @@ export function useYjsDocument(documentId: string) {
   useEffect(() => {
     const session = acquireCollabSession(documentId);
     const { doc, provider } = session;
-    const stopSyncListener = onSynced(provider, () => setSynced(true));
+    const stopSyncListener = onSynced(session, () => setSynced(true));
     // A reused session may already have been refused.
     if (session.rejectedReason) setRejectedReason(session.rejectedReason);
     const onClose = ({ event }: { event: { reason?: string } }) => {
