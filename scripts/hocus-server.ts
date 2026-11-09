@@ -6,6 +6,7 @@ import {
   bootstrapDocumentActivityTable,
   countNonSystemDocuments,
   documentExists,
+  isTombstoned,
   upsertDocumentActivity,
 } from "../lib/security/activity-store";
 import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
@@ -13,8 +14,22 @@ import {
   isSystemDocumentId,
   isValidWsDocumentName,
 } from "../lib/security/doc-id-validator";
+import {
+  HOCUS_ALLOW_ISOLATED_TABS_DOCS,
+  HOCUS_ALLOWED_ORIGINS,
+  HOCUS_AUTH_TIMEOUT_MS,
+  HOCUS_BACKPRESSURE_LIMIT_BYTES,
+  HOCUS_HOST,
+  HOCUS_MAX_PAYLOAD_BYTES,
+  MAX_AWARENESS_STATE_BYTES,
+  MAX_WS_SOCKETS,
+  WS_SOCKETS_PER_IP,
+  WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
+} from "../lib/security/guardrail-config";
+import { DocumentGuard } from "../lib/security/hocus-document-guard";
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
+import { createSocketGate } from "../lib/security/ws-socket-gate";
 import { getSqliteDbPath } from "../lib/sqlite-db-path";
 import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 import { Database } from "bun:sqlite";
@@ -24,7 +39,9 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 type SocketData = {
   request: Request;
+  ip: string;
   connection?: ReturnType<Hocuspocus["handleConnection"]>;
+  authTimer?: ReturnType<typeof setTimeout>;
 };
 
 function getPort(): number {
@@ -46,19 +63,55 @@ function openDatabase(path: string): Database {
   return db;
 }
 
-if (
-  process.env.NODE_ENV === "production" &&
-  process.env.NEXT_PUBLIC_HOCUS_URL?.startsWith("ws://")
-) {
-  throw new Error("Production requires wss:// for NEXT_PUBLIC_HOCUS_URL");
+/**
+ * A rejection the client sees as a reason, logged once as a structured
+ * abuse event instead of a stack trace per attempt.
+ */
+function reject(
+  reason: string,
+  details: Record<string, unknown>,
+): Error & { reason: string } {
+  logAbuseEvent("ws_guardrail_rejected", { reason, ...details });
+  const error = Object.assign(new Error(reason), { reason });
+  error.stack = "";
+  return error;
+}
+
+if (process.env.NODE_ENV === "production") {
+  if (process.env.NEXT_PUBLIC_HOCUS_URL?.startsWith("ws://")) {
+    throw new Error("Production requires wss:// for NEXT_PUBLIC_HOCUS_URL");
+  }
+  if (HOCUS_ALLOW_ISOLATED_TABS_DOCS) {
+    throw new Error(
+      "HOCUS_ALLOW_ISOLATED_TABS_DOCS is a test-only flag; unset it in production",
+    );
+  }
+  if (HOCUS_ALLOWED_ORIGINS.length === 0) {
+    console.warn(
+      "[hocus] HOCUS_ALLOWED_ORIGINS is empty: any website can open sockets",
+    );
+  }
 }
 
 const guardrails = createWsGuardrails();
+const documentGuard = new DocumentGuard({
+  maxDocumentBytes: guardrails.maxDocumentBytes,
+  maxAwarenessStateBytes: MAX_AWARENESS_STATE_BYTES,
+});
+const socketGate = createSocketGate({
+  socketsPerIp: WS_SOCKETS_PER_IP,
+  maxSockets: MAX_WS_SOCKETS,
+  upgradesPerMinute: WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
+  allowedOrigins: HOCUS_ALLOWED_ORIGINS,
+});
 const db = openDatabase(getSqliteDbPath());
 bootstrapDocumentActivityTable(db);
 
 const persistence = createSqlitePersistence(db, {
   canStore(documentName, sizeBytes) {
+    if (isTombstoned(db, documentName)) {
+      return { allowed: false, reason: "document_deleted" };
+    }
     const decision = guardrails.canStoreDocument(documentName, sizeBytes);
     if (!decision.allowed) {
       logAbuseEvent("document_store_rejected", {
@@ -70,6 +123,7 @@ const persistence = createSqlitePersistence(db, {
     return decision;
   },
   onStored(documentName, sizeBytes) {
+    documentGuard.recordStored(documentName, sizeBytes);
     if (!isSystemDocumentId(documentName)) {
       upsertDocumentActivity(db, documentName, sizeBytes);
     }
@@ -77,30 +131,43 @@ const persistence = createSqlitePersistence(db, {
 });
 
 const hocuspocus = new Hocuspocus({
-  extensions: buildHocusServerExtensions(persistence),
-  async onConnect({ requestHeaders }) {
-    const decision = guardrails.onConnect(getPinnedClientIp(requestHeaders));
+  extensions: buildHocusServerExtensions(persistence, documentGuard),
+  // Checks only: a connection counts once it is established (`connected`),
+  // so attempts whose document load fails never leak a slot.
+  async onConnect({ requestHeaders, documentName }) {
+    const ip = getPinnedClientIp(requestHeaders);
+    const decision = guardrails.canConnect(ip);
     if (!decision.allowed) {
-      throw new Error(decision.reason);
+      throw reject(decision.reason, { ip, documentName });
     }
+  },
+  async connected({ requestHeaders }) {
+    guardrails.onConnected(getPinnedClientIp(requestHeaders));
   },
   async onDisconnect({ requestHeaders }) {
     guardrails.onDisconnect(getPinnedClientIp(requestHeaders));
   },
   // Hocuspocus runs this once per document load (concurrent joiners share it).
   async onLoadDocument({ documentName, requestHeaders }) {
+    const ip = getPinnedClientIp(requestHeaders);
     if (!isValidWsDocumentName(documentName)) {
-      throw new Error("invalid_document_name");
+      throw reject("invalid_document_name", {
+        ip,
+        documentName: documentName.slice(0, 80),
+      });
+    }
+    if (isTombstoned(db, documentName)) {
+      throw reject("document_deleted", { ip, documentName });
     }
     if (isSystemDocumentId(documentName) || documentExists(db, documentName)) {
       return;
     }
     const decision = guardrails.canCreateDocument(
-      getPinnedClientIp(requestHeaders),
+      ip,
       countNonSystemDocuments(db),
     );
     if (!decision.allowed) {
-      throw new Error(decision.reason);
+      throw reject(decision.reason, { ip, documentName });
     }
   },
   // Runs once per load, after persistence applies the stored state and before
@@ -109,32 +176,74 @@ const hocuspocus = new Hocuspocus({
     const migrated = migrateLegacyMarks(document);
     if (migrated > 0) {
       console.info(
-        `[hocus] migrated ${migrated} legacy mark range(s) in "${documentName}"`,
+        `[hocus] migrated ${migrated} legacy mark range(s) in ${JSON.stringify(documentName)}`,
       );
     }
   },
 });
 
 const server = Bun.serve<SocketData>({
+  hostname: HOCUS_HOST,
   port: getPort(),
   fetch(request, server) {
     // Trust boundary: every hook (and Throttle) keys on the IP pinned here.
     const headers = new Headers(request.headers);
-    pinClientIp(headers, server.requestIP(request)?.address);
-    const data = { request: new Request(request.url, { headers }) };
-    if (server.upgrade(request, { data })) return undefined;
-    return new Response("Welcome to Hocuspocus!");
+    const ip = pinClientIp(headers, server.requestIP(request)?.address);
+
+    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      const admission = socketGate.admit(ip, request.headers.get("origin"));
+      if (!admission.allowed) {
+        logAbuseEvent("ws_upgrade_rejected", {
+          ip,
+          reason: admission.reason,
+          origin: request.headers.get("origin"),
+        });
+        return new Response(admission.reason, { status: admission.status });
+      }
+      const data: SocketData = {
+        request: new Request(request.url, { headers }),
+        ip,
+      };
+      if (server.upgrade(request, { data })) {
+        socketGate.opened(ip);
+        return undefined;
+      }
+    }
+
+    // Plain HTTP is only a health check: keep it out of search results.
+    const noindex = { "X-Robots-Tag": "noindex, nofollow" };
+    if (new URL(request.url).pathname === "/robots.txt") {
+      return new Response("User-agent: *\nDisallow: /\n", {
+        headers: { ...noindex, "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    return new Response("ok", { headers: noindex });
   },
   websocket: {
+    // Frames above this close with 1009 before Hocuspocus decodes them.
+    maxPayloadLength: HOCUS_MAX_PAYLOAD_BYTES,
+    backpressureLimit: HOCUS_BACKPRESSURE_LIMIT_BYTES,
+    closeOnBackpressureLimit: true,
     open(ws) {
       ws.data.connection = hocuspocus.handleConnection(ws, ws.data.request);
+      // Sockets that never authenticate would otherwise stay open forever.
+      ws.data.authTimer = setTimeout(() => {
+        logAbuseEvent("ws_auth_timeout", { ip: ws.data.ip });
+        ws.close(4408, "auth_timeout");
+      }, HOCUS_AUTH_TIMEOUT_MS);
     },
     message(ws, message) {
+      if (ws.data.authTimer) {
+        clearTimeout(ws.data.authTimer);
+        ws.data.authTimer = undefined;
+      }
       ws.data.connection?.handleMessage(
         typeof message === "string" ? Buffer.from(message) : message,
       );
     },
     close(ws, code, reason) {
+      clearTimeout(ws.data.authTimer);
+      socketGate.closed(ws.data.ip);
       ws.data.connection?.handleClose({ code, reason });
     },
     // Pongs keep otherwise silent clients alive, as in @hocuspocus/server's Node Server.

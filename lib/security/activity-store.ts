@@ -9,8 +9,58 @@ export function bootstrapDocumentActivityTable(db: SqliteDatabase): void {
       name TEXT PRIMARY KEY,
       last_persisted_at INTEGER NOT NULL,
       last_size_bytes INTEGER NOT NULL DEFAULT 0
-    )
+    );
+    CREATE TABLE IF NOT EXISTS document_tombstones (
+      name TEXT PRIMARY KEY,
+      deleted_at INTEGER NOT NULL
+    );
   `);
+}
+
+/** True when the document was deleted through the API and must stay gone. */
+export function isTombstoned(db: SqliteDatabase, name: string): boolean {
+  return Boolean(
+    db.prepare("SELECT 1 FROM document_tombstones WHERE name = ?").get(name),
+  );
+}
+
+/**
+ * Deletes a document and its activity row and records a tombstone, in one
+ * transaction. The Hocuspocus process may still hold the document in memory;
+ * the tombstone stops it from writing the document back (resurrection) and
+ * from loading it again. Returns whether a stored document existed.
+ */
+export function deleteDocumentPermanently(
+  db: SqliteDatabase,
+  name: string,
+  nowMs: number = Date.now(),
+): boolean {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const existed = documentExists(db, name);
+    db.prepare("DELETE FROM documents WHERE name = ?").run(name);
+    db.prepare("DELETE FROM document_activity WHERE name = ?").run(name);
+    db.prepare(
+      `INSERT INTO document_tombstones (name, deleted_at) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET deleted_at = excluded.deleted_at`,
+    ).run(name, nowMs);
+    db.exec("COMMIT");
+    return existed;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+/** Drops tombstones older than the retention cutoff; returns how many. */
+export function purgeTombstones(db: SqliteDatabase, cutoffMs: number): number {
+  const stale = db
+    .prepare("SELECT name FROM document_tombstones WHERE deleted_at < ?")
+    .all(cutoffMs);
+  db.prepare("DELETE FROM document_tombstones WHERE deleted_at < ?").run(
+    cutoffMs,
+  );
+  return stale.length;
 }
 
 export function upsertDocumentActivity(

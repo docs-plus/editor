@@ -5,6 +5,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 
+import { trackEvent } from "@/lib/analytics";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import {
   getGlobalTabsDoc,
@@ -14,15 +15,17 @@ import {
 import {
   clearMigrationStorage,
   DELETE_TIMEOUT_MS,
-  deduplicateTabs,
   deleteDocument,
-  ensurePlaygroundTab,
+  findRawTabIndex,
   generateId,
   getDefaultBootstrap,
   getMigrationTabs,
+  isTab,
   loadActiveTabIdFromStorage,
+  MAX_TAB_TITLE_LENGTH,
   persistActiveTabId,
   resolveActiveTabId,
+  sanitizeTabs,
   type Tab,
 } from "@/lib/tab-api";
 
@@ -47,7 +50,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
   const [activeTabId, setActiveTabId] = useState("");
   const [ready, setReady] = useState(false);
   const activeTabIdRef = useRef("");
-  const tabsArrayRef = useRef<Y.Array<Tab> | null>(null);
+  const tabsArrayRef = useRef<Y.Array<unknown> | null>(null);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingRef = useRef(false);
 
@@ -55,7 +58,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     if (typeof window === "undefined") return;
 
     const ydoc = new Y.Doc();
-    const tabsArray = ydoc.getArray<Tab>("tabs");
+    const tabsArray = ydoc.getArray<unknown>("tabs");
     const meta = ydoc.getMap("meta");
     tabsArrayRef.current = tabsArray;
 
@@ -77,8 +80,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
           if (migration) clearMigrationStorage();
         }
 
-        const raw = tabsArray.toArray();
-        const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
+        const currentTabs = sanitizeTabs(tabsArray.toArray());
         const validActive = resolveActiveTabId(currentTabs, initialActive);
 
         setTabs(currentTabs);
@@ -93,8 +95,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     // local mutations (e.g. dnd-kit onDragEnd) are already batched by React,
     // and flushSync here re-renders mid-transaction.
     const applyUpdate = () => {
-      const raw = tabsArray.toArray();
-      const currentTabs = ensurePlaygroundTab(deduplicateTabs(raw));
+      const currentTabs = sanitizeTabs(tabsArray.toArray());
       setTabs(currentTabs);
 
       // The initial sync and bootstrap seed fire this before onSynced picks
@@ -132,7 +133,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
   const createTab = useCallback(() => {
     const arr = tabsArrayRef.current;
     if (!arr) return;
-    const current = ensurePlaygroundTab(deduplicateTabs(arr.toArray()));
+    const current = sanitizeTabs(arr.toArray());
     if (current.length >= MAX_TABS_PER_CLIENT) return;
     const tab: Tab = {
       id: generateId(),
@@ -140,6 +141,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       createdAt: Date.now(),
     };
     arr.push([tab]);
+    trackEvent("tab_create", { tab_count: current.length + 1 });
     setActiveTabId(tab.id);
     persistActiveTabId(tab.id);
   }, []);
@@ -148,7 +150,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     if (closingRef.current) return;
     const arr = tabsArrayRef.current;
     if (!arr || id === PLAYGROUND_ID) return;
-    const current = arr.toArray();
+    const current = sanitizeTabs(arr.toArray());
     if (current.length <= 1) return;
     const idx = current.findIndex((t) => t.id === id);
     if (idx < 0) return;
@@ -171,7 +173,9 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
           current[0]?.id ??
           PLAYGROUND_ID)
         : activeTabIdRef.current;
-    arr.delete(idx, 1);
+    // Re-resolve: the shared array may have changed while DELETE was in flight.
+    const rawIdx = findRawTabIndex(arr.toArray(), id);
+    if (rawIdx >= 0) arr.delete(rawIdx, 1);
     setActiveTabId(newActive);
     persistActiveTabId(newActive);
   }, []);
@@ -180,7 +184,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     if (closingRef.current) return;
     const arr = tabsArrayRef.current;
     if (!arr) return;
-    const current = arr.toArray();
+    const current = sanitizeTabs(arr.toArray());
     const userTabs = current.filter((t) => t.id !== PLAYGROUND_ID);
     if (userTabs.length === 0) return;
 
@@ -232,7 +236,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     const ydoc = arr.doc;
     const indices = arr
       .toArray()
-      .map((t, i) => (succeededSet.has(t.id) ? i : -1))
+      .map((t, i) => (isTab(t) && succeededSet.has(t.id) ? i : -1))
       .filter((i) => i >= 0)
       .sort((a, b) => b - a);
 
@@ -244,8 +248,11 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     } else {
       doDelete();
     }
+    if (succeeded.length > 0) {
+      trackEvent("tab_close_all", { closed_count: succeeded.length });
+    }
 
-    const remaining = arr.toArray();
+    const remaining = sanitizeTabs(arr.toArray());
     const nextId =
       remaining[0]?.id ??
       (() => {
@@ -264,8 +271,9 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
   const reorderTab = useCallback((id: string, targetIndex: number) => {
     const arr = tabsArrayRef.current;
     if (!arr || id === PLAYGROUND_ID) return;
-    const raw = arr.toArray();
-    const current = ensurePlaygroundTab(deduplicateTabs(raw));
+    // Rewrites the whole array from the sanitized list, which also drops any
+    // malformed entries another client wrote.
+    const current = sanitizeTabs(arr.toArray());
     const oldIndex = current.findIndex((t) => t.id === id);
     if (oldIndex < 0) return;
     if (oldIndex === targetIndex) return;
@@ -297,11 +305,15 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       titleDebounceRef.current = null;
       const a = tabsArrayRef.current;
       if (!a) return;
-      const current = a.toArray();
-      const idx = current.findIndex((t) => t.id === id);
+      const idx = findRawTabIndex(a.toArray(), id);
       if (idx < 0) return;
+      const existing = a.get(idx);
+      if (!isTab(existing)) return;
       const ydoc = a.doc;
-      const item = { ...current[idx], title };
+      const item: Tab = {
+        ...existing,
+        title: title.slice(0, MAX_TAB_TITLE_LENGTH),
+      };
       if (ydoc) {
         ydoc.transact(() => {
           a.delete(idx, 1);

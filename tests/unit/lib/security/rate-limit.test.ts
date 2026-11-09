@@ -33,4 +33,21 @@ describe("createSlidingWindowLimiter", () => {
     now = 2_100;
     expect(limiter.check("ip-a").allowed).toBe(true);
   });
+
+  it("forgets quiet keys and fails closed when the key table is full (A04-6)", () => {
+    let now = 0;
+    const limiter = createSlidingWindowLimiter({
+      limit: 5,
+      windowMs: 1000,
+      now: () => now,
+      maxKeys: 100,
+    });
+    for (let i = 0; i < 100; i++) limiter.check(`ip-${i}`);
+    expect(limiter.size()).toBe(100);
+    expect(limiter.check("new-ip").allowed).toBe(false);
+
+    now = 1001;
+    expect(limiter.check("new-ip").allowed).toBe(true);
+    expect(limiter.size()).toBe(1);
+  });
 });

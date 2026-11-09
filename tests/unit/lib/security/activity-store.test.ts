@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   bootstrapDocumentActivityTable,
   countNonSystemDocuments,
+  deleteDocumentPermanently,
   documentExists,
+  isTombstoned,
   purgeStaleDocuments,
+  purgeTombstones,
   upsertDocumentActivity,
 } from "@/lib/security/activity-store";
 
@@ -48,6 +51,11 @@ describe("activity-store", () => {
       Buffer.from("{}"),
     );
     db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      "global-tabs",
+      Buffer.from("{}"),
+    );
+    // Per-test tab lists count like any document (SEC-01), so they expire.
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
       "global-tabs-abc",
       Buffer.from("{}"),
     );
@@ -56,7 +64,7 @@ describe("activity-store", () => {
       Buffer.from("{}"),
     );
 
-    expect(countNonSystemDocuments(db)).toBe(1);
+    expect(countNonSystemDocuments(db)).toBe(2);
     expect(documentExists(db, "11111111-1111-1111-1111-111111111111")).toBe(
       true,
     );
@@ -96,5 +104,30 @@ describe("activity-store", () => {
     );
     expect(documentExists(db, "playground")).toBe(true);
     expect(documentExists(db, "global-tabs")).toBe(true);
+  });
+
+  it("tombstones deleted documents so they cannot be stored again (A01-4)", () => {
+    db = new Database(":memory:");
+    seedDocumentsTable();
+    bootstrapDocumentActivityTable(db);
+    const id = "11111111-1111-1111-1111-111111111111";
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      id,
+      Buffer.from("{}"),
+    );
+    upsertDocumentActivity(db, id, 2, 1000);
+
+    expect(deleteDocumentPermanently(db, id, 5000)).toBe(true);
+    expect(documentExists(db, id)).toBe(false);
+    expect(isTombstoned(db, id)).toBe(true);
+    expect(
+      db.prepare("SELECT 1 FROM document_activity WHERE name = ?").get(id),
+    ).toBeUndefined();
+    // A second delete is idempotent and reports nothing was stored.
+    expect(deleteDocumentPermanently(db, id, 6000)).toBe(false);
+
+    expect(purgeTombstones(db, 5999)).toBe(0);
+    expect(purgeTombstones(db, 6001)).toBe(1);
+    expect(isTombstoned(db, id)).toBe(false);
   });
 });

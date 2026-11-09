@@ -43,6 +43,31 @@ function lastForwardedIp(value: string | null | undefined): string | undefined {
     .at(-1);
 }
 
+/** Expands an IPv6 address to its eight 16-bit groups, or null if malformed. */
+function expandIpv6(ip: string): string[] | null {
+  const halves = ip.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  return [...head, ...Array<string>(missing).fill("0"), ...tail];
+}
+
+/**
+ * One key per IPv6 /64: a single host usually controls a whole /64, so
+ * per-address limits would let it rotate through 2^64 addresses.
+ */
+export function toIpv6Prefix64(ip: string): string {
+  const groups = expandIpv6(ip);
+  if (!groups) return ip;
+  const prefix = groups
+    .slice(0, 4)
+    .map((group) => Number.parseInt(group || "0", 16).toString(16))
+    .join(":");
+  return `${prefix}::/64`;
+}
+
 /**
  * Forwarding headers count only behind a trusted proxy; otherwise any client
  * could rotate them to dodge per-IP limits, so only the TCP peer address is used.
@@ -63,7 +88,7 @@ function resolveClientIp(
   if (nodeEnv !== "development" && isPrivateOrReservedIp(ip)) {
     return UNKNOWN_CLIENT_IP;
   }
-  return ip;
+  return isIP(ip) === 6 ? toIpv6Prefix64(ip) : ip;
 }
 
 /**

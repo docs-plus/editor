@@ -9,6 +9,7 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
+import { trackEvent } from "@/lib/analytics";
 import { MermaidIcon } from "@/lib/icons";
 
 const LABEL = "Insert diagram";
@@ -43,7 +44,9 @@ export const MermaidButton = forwardRef<HTMLButtonElement, MermaidButtonProps>(
       (event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (event.defaultPrevented || !editor) return;
-        editor.chain().focus().insertMermaid().run();
+        if (editor.chain().focus().insertMermaid().run()) {
+          trackEvent("diagram_insert", {});
+        }
       },
       [editor, onClick],
     );

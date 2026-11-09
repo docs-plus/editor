@@ -28,6 +28,8 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
       "react-hooks/immutability": "off",
+      // Biome's lint/complexity/noArguments owns this (one audited exception: gtag).
+      "prefer-rest-params": "off",
     },
   },
 ]);

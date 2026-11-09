@@ -37,7 +37,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? {
         command:
-          "DOC_CREATION_RATE_LIMIT=2000 WS_CONNECTION_LIMIT=200 HOCUS_THROTTLE=0 make dev",
+          "DOC_CREATION_RATE_LIMIT=2000 WS_CONNECTION_LIMIT=200 WS_SOCKETS_PER_IP=600 WS_UPGRADE_RATE_LIMIT=6000 HOCUS_THROTTLE=0 make dev",
         url: "http://localhost:3000",
         timeout: 60_000,
       }

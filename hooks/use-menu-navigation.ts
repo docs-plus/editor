@@ -40,6 +40,12 @@ interface MenuNavigationOptions<T> {
    * @default true
    */
   autoSelectFirstItem?: boolean;
+  /**
+   * Whether Tab / Shift+Tab move between items. Toolbars pass false so Tab
+   * leaves the widget (WCAG 2.1.2, no keyboard trap); arrows still navigate.
+   * @default true
+   */
+  captureTab?: boolean;
 }
 
 /**
@@ -60,6 +66,7 @@ export function useMenuNavigation<T>({
   onClose,
   orientation = "vertical",
   autoSelectFirstItem = true,
+  captureTab = true,
 }: MenuNavigationOptions<T>) {
   const [selectedIndex, setSelectedIndex] = useState<number>(
     autoSelectFirstItem ? 0 : -1,
@@ -111,6 +118,7 @@ export function useMenuNavigation<T>({
         }
 
         case "Tab": {
+          if (!captureTab) return false;
           event.preventDefault();
           if (event.shiftKey) {
             movePrev();
@@ -181,6 +189,7 @@ export function useMenuNavigation<T>({
     onSelect,
     onClose,
     orientation,
+    captureTab,
   ]);
 
   useEffect(() => {

@@ -47,4 +47,14 @@ test.describe("security headers", () => {
     expect(directive("connect-src")).toContain("https://publish.x.com");
     expect(directive("script-src")).toContain("https://platform.twitter.com");
   });
+
+  test("CSP has no analytics hosts unless GA is configured", async ({
+    page,
+  }) => {
+    const response = await page.request.get("/");
+    const csp = response.headers()["content-security-policy"] ?? "";
+    // Dev and CI builds never set NEXT_PUBLIC_GA_MEASUREMENT_ID.
+    expect(csp).not.toMatch(/google/);
+    expect(response.headers()["x-powered-by"]).toBeUndefined();
+  });
 });
