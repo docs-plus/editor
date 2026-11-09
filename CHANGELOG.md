@@ -16,9 +16,17 @@ deploying it.
   skips the gripper.
 
 ### Changed
-- E2E helpers wait for the server's first sync before editing (the editor
-  is editable earlier, from the device copy), and the editor region carries
-  `data-server-synced` for them.
+- **E2E tests no longer race the editor.** Under load they failed
+  intermittently; stress runs (25–40 repeats, 6 workers) now pass every time.
+  - Helpers wait for the server's first sync before editing (the editor is
+    editable earlier, from the device copy); the editor region carries
+    `data-server-synced` for them.
+  - After Enter or a heading shortcut, helpers wait two frames before
+    typing (`settleCaret`, `typeInNewParagraphAtEnd`). Chrome confirms a
+    caret ProseMirror places in a new empty block a moment later, and a key
+    typed before that lands behind the caret.
+  - The Mod-K test waits for the shift-arrow selection; the offline banner
+    test waits for a full reconnect before testing that the banner returns.
 
 ### Deploy
 - Pull, build and restart as usual.

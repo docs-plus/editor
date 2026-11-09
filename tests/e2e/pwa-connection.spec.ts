@@ -6,7 +6,7 @@ import {
   type WebSocketRoute,
 } from "@playwright/test";
 
-import { EditorPage } from "./helpers/editor-page";
+import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
 
 /**
  * Cuts the collab WebSocket on demand. `context.setOffline()` flips
@@ -63,13 +63,6 @@ async function openUserTab(page: Page, network: Network): Promise<string> {
   return docId;
 }
 
-async function typeAtEnd(page: Page, text: string): Promise<void> {
-  await page.locator(".tiptap").click();
-  await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type(text);
-}
-
 test.describe("offline edits", () => {
   test.setTimeout(120_000);
 
@@ -82,7 +75,7 @@ test.describe("offline edits", () => {
     const docId = await openUserTab(page, network);
 
     await network.goOffline();
-    await typeAtEnd(page, "offline-marker");
+    await typeInNewParagraphAtEnd(page, "offline-marker");
 
     await page.locator(`[data-tab-id="playground"]`).click();
     await page.waitForTimeout(3000);
@@ -147,7 +140,7 @@ test.describe("connection status strip", () => {
     await expect(strip(page)).toContainText("Offline");
     await expect(liveRegion(page)).toContainText("You're offline");
 
-    await typeAtEnd(page, "x");
+    await typeInNewParagraphAtEnd(page, "x");
     await expect(strip(page)).toContainText("Offline · edits not synced yet");
 
     await network.goOnline();
@@ -235,6 +228,14 @@ test.describe("offline app shell", () => {
     await network.goOnline();
     await expect(newTab).toBeEnabled({ timeout: 5000 });
     await expect(banner(page)).toHaveCount(0);
+    // Tab actions come back while still connecting; the dismissal lasts
+    // until the connection is really back, so wait for that before testing
+    // that the banner returns.
+    await expect(page.locator("div.fixed[data-state]")).toHaveAttribute(
+      "data-state",
+      "online",
+      { timeout: 10_000 },
+    );
 
     await network.goOffline();
     await expect(banner(page)).toBeVisible({ timeout: 1000 });

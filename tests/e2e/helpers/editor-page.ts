@@ -3,6 +3,35 @@ import type { JSONContent } from "@tiptap/core";
 
 import { getPlaywrightModifierKey } from "./playwright-modifier-key";
 
+/**
+ * Waits two frames after a key that put the caret in a new empty block.
+ * ProseMirror moves the DOM caret there at once, but Chrome confirms it
+ * with a `selectionchange` a moment later, and a key typed before that is
+ * inserted with the caret left in front of it ("ached-markerc"). Measured:
+ * every insertion after the event landed right, half of those before it did
+ * not. People do not type that fast after Enter or a shortcut; tests do.
+ */
+export async function settleCaret(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+/** Types `text` into a new paragraph at the end of the document. */
+export async function typeInNewParagraphAtEnd(
+  page: Page,
+  text: string,
+): Promise<void> {
+  await page.locator(".tiptap").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("Enter");
+  await settleCaret(page);
+  await page.keyboard.type(text);
+}
+
 export class EditorPage {
   constructor(private page: Page) {}
 
@@ -95,6 +124,15 @@ export class EditorPage {
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         ),
     );
+  }
+
+  /** Waits until the caret's block is a heading of `level` and settles. */
+  async waitForCaretInHeading(level: number): Promise<void> {
+    await this.page.waitForFunction((expected: number) => {
+      const parent = window.__tiptap_editor?.state.selection.$from.parent;
+      return parent?.type.name === "heading" && parent.attrs.level === expected;
+    }, level);
+    await settleCaret(this.page);
   }
 
   /** Puts the caret at the end of the title and waits for DOM focus. */
@@ -247,6 +285,7 @@ export class EditorPage {
         // Heading shortcut is Mod+Alt+level (Meta on Mac, Control on Windows)
         const mod = getPlaywrightModifierKey();
         await this.page.keyboard.press(`${mod}+Alt+${level}`);
+        await this.waitForCaretInHeading(level);
         await this.typeText(text);
         await this.pressKey("Enter");
       }
