@@ -192,7 +192,7 @@ Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so ca
 
 | Test | Project | Validates |
 |------|---------|-----------|
-| `pwa-manifest.spec.ts` | `chromium` (`make dev`) | Manifest shape and omitted members; icon sizes and opaque/rounded corners; apple and theme-color head tags; theme-color follows the dark toggle, reloads and soft navigation |
+| `pwa-manifest.spec.ts` | `chromium` (`make dev`) | Manifest shape and omitted members; icon sizes and opaque/rounded corners; apple and theme-color head tags; theme-color follows the dark toggle, reloads and soft navigation; install button (synthetic `beforeinstallprompt`, pre-hydration capture, hidden when installed, iOS hint by keyboard) |
 | `pwa-offline.spec.ts` | `pwa` (production build) | Registration after `load` with scope `/`; cache contents (own static files and shell pages only); `sw.js` headers; offline reload of `/` shows the stored shell, unvisited paths show `/offline`; `/api` and other bypass routes never come from the worker; repeat visits are not slower |
 
 The worker runs only on a production build. Use port 3847 and localhost only, never tiny.docs.plus:
@@ -207,9 +207,9 @@ Offline is simulated with `context.setOffline(true)`, which also cuts the worker
 
 Manual install checklist (localhost production build):
 
-- **Chrome desktop:** the install icon appears in the address bar; installing opens a standalone window whose title bar follows the theme toggle.
+- **Chrome desktop:** the install icon appears in the status strip and the address bar; the strip button opens the native dialog; installing opens a standalone window whose title bar follows the theme toggle, and the strip button is gone in both the window and the tab.
 - **Chrome Android:** `adb reverse tcp:3847 tcp:3847`, open `http://localhost:3847`, install; the home-screen icon is the maskable "T" with no white ring.
-- **iOS Simulator (Safari):** Share → Add to Home Screen; the home-screen icon has no black corners and is titled "TinyDocy".
+- **iOS Simulator (Safari):** the strip's install button shows the Share → Add to Home Screen hint (Enter opens it, Escape closes it and returns focus); the home-screen icon has no black corners and is titled "TinyDocy".
 - **Edge desktop:** same as Chrome desktop.
 - DevTools → Application → Manifest shows no errors, App Id `/`, three icons; "Show only the minimum safe area for maskable icons" keeps the "T" inside the circle.
 

@@ -33,6 +33,7 @@ export interface AnalyticsEventMap {
   media_embed: { provider: MediaNodeType };
   collab_peers: { peers_bucket: PeersBucket };
   outbound_click: { target: "github" | "discord" };
+  pwa_install: { outcome: "accepted" | "dismissed" };
 }
 
 type PrivacyAwareNavigator = Navigator & { globalPrivacyControl?: boolean };

@@ -120,8 +120,13 @@ Editor extensions:
 Installable app (PWA):
 
 - Files: `app/manifest.ts`, `app/pwa-icons/[id]` (any-192, any-512,
-  maskable-512), `app/offline`, `lib/pwa/*` (worker and routing rules)
-  and `components/pwa/*` (registration and the offline retry button).
+  maskable-512), `app/offline`, `lib/pwa/*` (worker, routing rules and the
+  install-prompt store) and `components/pwa/*` (registration, the offline
+  retry button and the install button).
+- Install button: the first icon in the status strip's community card. The
+  inline script in `app/layout.tsx` captures `beforeinstallprompt` before
+  hydration; iOS gets a one-line Share → Add to Home Screen hint. Nothing
+  renders once the app is installed.
 - The manifest `id` is frozen at `"/"`: changing it orphans existing installs.
 - The service worker (`lib/pwa/service-worker.ts`, served at
   `/_next/static/service-worker/sw.js`) registers only in production builds.

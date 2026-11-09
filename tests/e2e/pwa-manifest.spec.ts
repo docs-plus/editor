@@ -171,3 +171,105 @@ test.describe("theme-color and iOS metadata", () => {
     await expect(themeColor(page)).toHaveAttribute("content", LIGHT);
   });
 });
+
+test.describe("install button", () => {
+  const IPHONE_UA =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+
+  /** Chromium only fires beforeinstallprompt for installable origins. */
+  function dispatchInstallPrompt(page: Page): Promise<void> {
+    return page.evaluate(() => {
+      const event = Object.assign(
+        new Event("beforeinstallprompt", { cancelable: true }),
+        {
+          prompt: async () => {},
+          userChoice: Promise.resolve({
+            outcome: "dismissed",
+            platform: "web",
+          }),
+        },
+      );
+      window.dispatchEvent(event);
+    });
+  }
+
+  const installButton = (page: Page) =>
+    page.getByRole("button", { name: "Install TinyDocy" });
+
+  test("appears with a prompt and hides after use", async ({ page }) => {
+    const editor = new EditorPage(page);
+    await editor.goto();
+    await expect(page.getByLabel("Discord community")).toBeVisible();
+    await expect(installButton(page)).toHaveCount(0);
+
+    await dispatchInstallPrompt(page);
+    await expect(installButton(page)).toBeVisible();
+
+    await installButton(page).click();
+    await expect(installButton(page)).toHaveCount(0);
+  });
+
+  test("a prompt fired before hydration is not lost", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.addEventListener("DOMContentLoaded", () => {
+        window.dispatchEvent(
+          Object.assign(
+            new Event("beforeinstallprompt", { cancelable: true }),
+            {
+              prompt: async () => {},
+              userChoice: Promise.resolve({
+                outcome: "dismissed",
+                platform: "web",
+              }),
+            },
+          ),
+        );
+      });
+    });
+    const editor = new EditorPage(page);
+    await editor.goto();
+    await expect(installButton(page)).toBeVisible();
+  });
+
+  test("stays hidden in the installed app", async ({ page }) => {
+    // Report display-mode: standalone; every other query stays real.
+    await page.addInitScript(() => {
+      const matchMedia = window.matchMedia.bind(window);
+      window.matchMedia = (query: string) => {
+        const list = matchMedia(query);
+        return query.includes("display-mode")
+          ? Object.defineProperty(list, "matches", { value: true })
+          : list;
+      };
+    });
+    const editor = new EditorPage(page);
+    await editor.goto();
+    await dispatchInstallPrompt(page);
+    await expect(page.getByLabel("Discord community")).toBeVisible();
+    await expect(installButton(page)).toHaveCount(0);
+  });
+
+  test("iOS shows the Add to Home Screen hint", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: IPHONE_UA,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    try {
+      const editor = new EditorPage(page);
+      await editor.goto();
+
+      const button = installButton(page);
+      await button.focus();
+      await page.keyboard.press("Enter");
+      const hint = page.getByText("Add to Home Screen");
+      await expect(hint).toBeVisible();
+
+      await page.keyboard.press("Escape");
+      await expect(hint).toBeHidden();
+      await expect(button).toBeFocused();
+    } finally {
+      await context.close();
+    }
+  });
+});

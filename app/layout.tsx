@@ -14,6 +14,7 @@ import {
   SOCIAL_TITLE,
   THEME_COLOR,
 } from "@/lib/site-config";
+import { INSTALL_PROMPT_CAPTURE_SCRIPT } from "@/lib/pwa/install-prompt";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
@@ -61,8 +62,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.variable}>
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load
-          dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load and catches the install prompt before hydration
+          dangerouslySetInnerHTML={{
+            __html: THEME_BOOT_SCRIPT + INSTALL_PROMPT_CAPTURE_SCRIPT,
+          }}
         />
         <TooltipProvider>{children}</TooltipProvider>
         <GoogleAnalytics />

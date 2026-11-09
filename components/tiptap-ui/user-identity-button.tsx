@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { InstallAppButton } from "@/components/pwa";
 import { ConnectionStatus } from "@/components/tiptap-ui/connection-status";
 import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
 import { buttonVariants } from "@/components/ui/button";
@@ -197,6 +198,7 @@ export function UserIdentityButton() {
             statusCardClass,
           )}
         >
+          <InstallAppButton />
           <CommunityIconLink
             href={DISCORD_INVITE_URL}
             ariaLabel="Discord community"
