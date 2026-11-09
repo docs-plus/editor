@@ -6,12 +6,10 @@ import type * as Y from "yjs";
 
 import {
   acquireCollabSession,
+  DOCUMENT_TOO_LARGE_REASON,
   onSynced,
   releaseCollabSession,
 } from "@/lib/collab-session";
-
-/** Close reason Hocuspocus sends when an update would exceed the size cap. */
-export const DOCUMENT_TOO_LARGE_REASON = "document_too_large";
 
 export function useYjsDocument(documentId: string) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
@@ -23,8 +21,11 @@ export function useYjsDocument(documentId: string) {
   const [rejectedReason, setRejectedReason] = useState<string | null>(null);
 
   useEffect(() => {
-    const { doc, provider } = acquireCollabSession(documentId);
+    const session = acquireCollabSession(documentId);
+    const { doc, provider } = session;
     const stopSyncListener = onSynced(provider, () => setSynced(true));
+    // A reused session may already have been refused.
+    if (session.rejectedReason) setRejectedReason(session.rejectedReason);
     const onClose = ({ event }: { event: { reason?: string } }) => {
       if (event.reason === DOCUMENT_TOO_LARGE_REASON) {
         setRejectedReason(event.reason);
