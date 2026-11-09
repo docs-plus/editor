@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
 
 import { applyActiveState, collectTocItems } from "./table-of-contents-items";
+import { createTocIdPlugin } from "./toc-id-plugin";
 
 type Runtime = {
   frame: number;
@@ -34,6 +35,8 @@ function scrollTopOf(target: HTMLElement | Window | null): number {
  *   after each keystroke, then dispatches an extra transaction. Here,
  *   rebuilds are coalesced into one per animation frame, use `nodeDOM`, and
  *   read layout once per rebuild.
+ * - The stock id plugin walks the whole document, inline content included,
+ *   after every change; see {@link createTocIdPlugin}.
  * - On scroll the stock extension recomputes every item and calls
  *   `onUpdate` (a React re-render) per scroll event. Here, scroll work runs
  *   once per frame and `onUpdate` fires only when the active heading changes.
@@ -91,6 +94,15 @@ export const FastTableOfContents = TableOfContents.extend({
       passive: true,
     });
     rebuild(this.editor, this.options, this.storage);
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      createTocIdPlugin({
+        anchorTypes: this.options.anchorTypes ?? ["heading"],
+        getId: this.options.getId,
+      }),
+    ];
   },
 
   onTransaction({ transaction }) {

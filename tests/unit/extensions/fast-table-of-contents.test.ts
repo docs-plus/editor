@@ -1,16 +1,24 @@
-import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
+import type { Extension } from "@tiptap/core";
+import {
+  type TableOfContentData,
+  TableOfContents,
+} from "@tiptap/extension-table-of-contents";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   applyActiveState,
   collectTocItems,
+  FastTableOfContents,
 } from "@/extensions/table-of-contents";
 
-import { createTestEditor } from "../../helpers/create-test-editor";
+import {
+  createTestEditor,
+  DEFAULT_EXTENSIONS,
+} from "../../helpers/create-test-editor";
 
-const heading = (level: number, text: string) => ({
+const heading = (level: number, text: string, id?: string) => ({
   type: "heading",
-  attrs: { level },
+  attrs: { level, ...(id ? { "data-toc-id": id, id } : {}) },
   content: [{ type: "text", text }],
 });
 
@@ -68,5 +76,77 @@ describe("applyActiveState", () => {
       applyActiveState(list, 899).key,
     );
     expect(applyActiveState(list, -1).key).toBe("");
+  });
+});
+
+const paragraph = (text: string) => ({
+  type: "paragraph",
+  content: [{ type: "text", text }],
+});
+
+function fastTocEditor(
+  content: object,
+  onUpdate?: (items: TableOfContentData) => void,
+) {
+  return createTestEditor({
+    content,
+    extensions: [
+      ...DEFAULT_EXTENSIONS.filter((ext) => ext !== TableOfContents),
+      FastTableOfContents.configure({ onUpdate }),
+    ] as Extension[],
+  });
+}
+
+const tocIds = (instance: ReturnType<typeof createTestEditor>) => {
+  const ids: unknown[] = [];
+  instance.state.doc.forEach((node) => {
+    if (node.type.name === "heading") ids.push(node.attrs["data-toc-id"]);
+  });
+  return ids;
+};
+
+describe("TOC ids", () => {
+  it("gives new and duplicated headings fresh ids, keeping the first", () => {
+    editor = fastTocEditor({
+      type: "doc",
+      content: [heading(1, "Title", "t"), paragraph("Body")],
+    });
+    editor.commands.insertContentAt(editor.state.doc.content.size, [
+      heading(2, "Copy", "t"),
+      heading(2, "Fresh"),
+    ]);
+    const ids = tocIds(editor);
+    expect(ids[0]).toBe("t");
+    expect(new Set(ids).size).toBe(3);
+    expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(
+      true,
+    );
+  });
+
+  it("gives the second half of a split heading its own id", () => {
+    editor = fastTocEditor({
+      type: "doc",
+      content: [heading(1, "Title", "t"), heading(2, "Left Right", "lr")],
+    });
+    // Inside "Left Right", between the words.
+    editor.chain().setTextSelection(13).splitBlock().run();
+    const ids = tocIds(editor);
+    expect(ids).toHaveLength(3);
+    expect(ids[1]).toBe("lr");
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it("does not touch headings when body text changes", () => {
+    editor = fastTocEditor({
+      type: "doc",
+      content: [heading(1, "Title", "t"), paragraph("Body")],
+    });
+    const transactions: number[] = [];
+    editor.on("transaction", ({ transaction }) =>
+      transactions.push(transaction.steps.length),
+    );
+    editor.commands.insertContentAt(9, "more ");
+    expect(transactions).toEqual([1]);
+    expect(tocIds(editor)).toEqual(["t"]);
   });
 });
