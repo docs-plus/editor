@@ -9,6 +9,23 @@ deploying it.
 ## [Unreleased]
 
 ### Added
+- **CI on every pull request and push to `main`** (`.github/workflows/ci.yml`).
+  - The checks job runs Biome, ESLint, the typecheck, unit tests and the
+    production build.
+  - The e2e job runs the Playwright Chromium suite against `next dev` and
+    Hocuspocus.
+  - Jobs get a read-only token and no secrets, and actions are pinned to
+    commit SHAs.
+  - The stress probe is a timing benchmark, so it runs as a separate,
+    non-blocking step.
+
+### Deploy
+- Nothing to deploy. To require these checks before merging, add the two CI
+  jobs as required status checks in the `main` branch protection rule.
+
+## 2026-11-09 · #13 Faster typing, changelog and README
+
+### Added
 - `CHANGELOG.md` (this file). Contributors add an entry under Unreleased with
   every pull request.
 

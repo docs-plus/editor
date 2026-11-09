@@ -289,6 +289,29 @@ Phases: connect → seed (realistic document with paragraphs, lists, task lists)
 
 Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+
+| Job | Runs |
+|---|---|
+| Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
+| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bunx playwright test --project=chromium --retries=1` |
+
+- **Stress probe:** `bun run test:stress` runs as a separate step with
+  `continue-on-error`. It measures transaction time, so a slow shared runner
+  can miss its threshold without the code being wrong.
+- **Retries:** a test that passes on retry is listed as "flaky" in the
+  Playwright summary; treat that as a bug to fix, not a pass.
+- **On failure:** `test-results/` and the dev-server log are uploaded as the
+  `e2e-results` artifact.
+- **Not run in CI:** the `pwa`, soak and load layers. Run them locally before
+  merging changes they cover.
+- **Workflow rules:** `tests/unit/ci/workflow-permissions.test.ts` checks every
+  workflow file. Each workflow needs a read-only default token, explicit
+  per-job permissions, `persist-credentials: false` on checkout, and actions
+  pinned to commit SHAs.
+
 ## Key Conventions
 
 - **Rich document content** — `generateLargeDocument` produces 3-5 paragraphs + mixed structured blocks per heading section by default. Pass `{ richContent: false }` for lightweight documents. Playground content includes tables, syntax-highlighted code blocks (multi-language), and highlighted text.

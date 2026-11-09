@@ -1,0 +1,140 @@
+name: CI
+
+# Runs on every pull request and on pushes to main:
+#   checks  Biome, ESLint, typecheck (3 projects), unit tests, production build
+#   e2e     Playwright Chromium suite against `next dev` + Hocuspocus
+#
+# Read-only token and no secrets: pull requests from forks run the same way.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # Next.js, Vitest/jsdom and ESLint run on Node.
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Biome
+        run: bun run check
+
+      - name: ESLint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      # The stress probe is a timing benchmark (step below), not a gate.
+      - name: Unit tests
+        run: bun run test --exclude 'tests/unit/stress/**'
+
+      # Shared runners vary in speed, so a miss here is reported, not fatal.
+      - name: Stress benchmark (informational)
+        continue-on-error: true
+        run: bun run test:stress
+
+      - name: Production build
+        run: bun run build
+
+  e2e:
+    name: Playwright (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      # Same raised limits as playwright.config.ts: three workers open many
+      # sockets and documents from one IP.
+      DOC_CREATION_RATE_LIMIT: "2000"
+      WS_CONNECTION_LIMIT: "200"
+      WS_SOCKETS_PER_IP: "600"
+      WS_UPGRADE_RATE_LIMIT: "6000"
+      HOCUS_THROTTLE: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      # `make dev` runs next dev and Hocuspocus on one db.sqlite (the DELETE
+      # route and Hocuspocus must read the same tombstones) with isolated
+      # tab lists allowed. Pages are compiled once before the tests start.
+      - name: Start dev servers
+        run: |
+          make dev > "$RUNNER_TEMP/dev.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            if curl -s -o /dev/null http://127.0.0.1:1234 &&
+              curl -sf -o /dev/null http://localhost:3000/; then
+              break
+            fi
+            sleep 1
+          done
+          for path in / /about /privacy /offline; do
+            curl -sf -o /dev/null --max-time 120 "http://localhost:3000$path"
+          done
+
+      # CI= : use the servers started above instead of Playwright's webServer.
+      # One retry absorbs cold-runner timing; retried passes are still listed
+      # as "flaky" in the summary.
+      - name: Run Playwright
+        run: CI= bunx playwright test --project=chromium --retries=1 --trace off
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: |
+            test-results/
+            ${{ runner.temp }}/dev.log
+          if-no-files-found: ignore
+          retention-days: 7
