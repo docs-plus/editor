@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 
 import { AnalyticsChoice } from "@/components/analytics";
+import { OfflineDataControl } from "@/components/pwa";
 import { SitePage } from "@/components/site-page";
+import {
+  OFFLINE_DOC_MAX_AGE_DAYS,
+  OFFLINE_MAX_DOCS,
+} from "@/lib/offline/local-doc-store";
 import {
   PRIVACY_CONTACT,
   REPO_URL,
@@ -52,11 +57,26 @@ export default function PrivacyPage() {
 
         <h2>Stored in your browser</h2>
         <p>
-          Your display name and caret colour, your open tabs, your theme and
-          your analytics choice are kept in this browser&apos;s local storage.
-          Your name and caret colour are shown to other people editing the same
-          document. None of this is sent to Google.
+          Your display name and caret colour, the tab you last had open, your
+          theme and your analytics choice are kept in this browser&apos;s local
+          storage. Your name and caret colour are shown to other people editing
+          the same document. None of this is sent to Google.
         </p>
+        <p>
+          To load faster and show a page when you are offline, a service worker
+          keeps copies of {SITE_NAME}&apos;s own pages and code in this
+          browser&apos;s cache. It does not touch the live editing connection.
+        </p>
+        <p>
+          So you can keep working offline and reopen documents instantly, this
+          browser also keeps a copy of the documents and the tab list you open
+          (IndexedDB), for up to {OFFLINE_DOC_MAX_AGE_DAYS} days and at most{" "}
+          {OFFLINE_MAX_DOCS} documents. Edits made offline are sent when you
+          reconnect. A copy is removed when its tab is closed, and a document
+          deleted on the server is never restored from it. The copies stay on
+          this device; anyone using it can read them.
+        </p>
+        <OfflineDataControl />
 
         <h2>Embedded media</h2>
         <p>

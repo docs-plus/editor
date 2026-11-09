@@ -7,11 +7,14 @@ import type * as Y from "yjs";
 import { trackEvent } from "@/lib/analytics";
 import {
   acquireCollabSession,
+  forgetLocalCopy,
+  liveSessionNames,
   onSynced,
   releaseCollabSession,
 } from "@/lib/collab-session";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import { getGlobalTabsDoc } from "@/lib/hocuspocus";
+import { sweepLocalCopies } from "@/lib/offline";
 import {
   clearMigrationStorage,
   DELETE_TIMEOUT_MS,
@@ -58,15 +61,19 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     if (typeof window === "undefined") return;
 
     const tabsDocName = getGlobalTabsDoc();
-    const { doc: ydoc, provider } = acquireCollabSession(tabsDocName);
+    const session = acquireCollabSession(tabsDocName);
+    const ydoc = session.doc;
     const tabsArray = ydoc.getArray<unknown>("tabs");
     const meta = ydoc.getMap("meta");
     tabsArrayRef.current = tabsArray;
 
-    const stopSyncListener = onSynced(provider, () => {
+    const stopSyncListener = onSynced(session, () => {
       // Read before the migration below clears the shared storage key.
       const initialActive = loadActiveTabIdFromStorage();
-      if (tabsArray.length === 0 && !meta.get("bootstrapped")) {
+      // Rendering from the offline copy is not a server answer: only seed
+      // the shared list, and sweep stale copies, once the server synced.
+      const serverSynced = session.provider.isSynced || session.hasSynced;
+      if (serverSynced && tabsArray.length === 0 && !meta.get("bootstrapped")) {
         const migration = getMigrationTabs();
         ydoc.transact(() => {
           meta.set("bootstrapped", true);
@@ -77,6 +84,12 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
 
       const currentTabs = sanitizeTabs(tabsArray.toArray());
       const validActive = resolveActiveTabId(currentTabs, initialActive);
+      if (serverSynced) {
+        sweepLocalCopies(
+          new Set([tabsDocName, ...currentTabs.map((tab) => tab.id)]),
+          liveSessionNames(),
+        );
+      }
 
       setTabs(currentTabs);
       setActiveTabId(validActive);
@@ -170,6 +183,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     // Re-resolve: the shared array may have changed while DELETE was in flight.
     const rawIdx = findRawTabIndex(arr.toArray(), id);
     if (rawIdx >= 0) arr.delete(rawIdx, 1);
+    forgetLocalCopy(id);
     setActiveTabId(newActive);
     persistActiveTabId(newActive);
   }, []);
@@ -227,6 +241,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     }
 
     const succeededSet = new Set(succeeded);
+    for (const id of succeeded) forgetLocalCopy(id);
     const ydoc = arr.doc;
     const indices = arr
       .toArray()

@@ -6,7 +6,10 @@ import {
   purgeStaleDocuments,
   purgeTombstones,
 } from "../lib/security/activity-store";
-import { RETENTION_DAYS } from "../lib/security/guardrail-config";
+import {
+  RETENTION_DAYS,
+  TOMBSTONE_RETENTION_DAYS,
+} from "../lib/security/guardrail-config";
 import { openBetterSqlite, SQLITE_BUSY } from "../lib/sqlite-open";
 
 export function runRetentionPurge(
@@ -17,10 +20,11 @@ export function runRetentionPurge(
   const retentionDays = options.retentionDays ?? RETENTION_DAYS;
   const cutoffMs =
     (options.nowMs ?? Date.now()) - retentionDays * 24 * 60 * 60 * 1000;
-  const result = purgeStaleDocuments(db, cutoffMs, options.batchSize);
-  // Tombstoned names are random UUIDs that are never reused, so they only
-  // need to outlive any client that could still hold the document open.
-  purgeTombstones(db, cutoffMs);
+  const nowMs = options.nowMs ?? Date.now();
+  const result = purgeStaleDocuments(db, cutoffMs, options.batchSize, nowMs);
+  // Tombstones must outlive every offline copy in a browser, which can
+  // reconnect long after the document went idle on the server.
+  purgeTombstones(db, nowMs - TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   return result;
 }
 

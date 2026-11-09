@@ -19,7 +19,6 @@ import {
 } from "@docs.plus/extension-placeholder";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { JSONContent } from "@tiptap/core";
-import { Collaboration } from "@tiptap/extension-collaboration";
 import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
 import { Highlight } from "@tiptap/extension-highlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -51,6 +50,10 @@ import {
 } from "@/extensions/heading-filter";
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
+import {
+  CollaborationRenderOnce,
+  NodeViewsRenderOnce,
+} from "@/extensions/render-once";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { TitleDocument } from "@/extensions/title-document";
 import { lowlight } from "@/lib/lowlight";
@@ -183,9 +186,10 @@ export function buildDocumentEditorExtensions({
       onFilterChange,
       foldAdapter: createHeadingFilterFoldAdapter(),
     }),
-    Collaboration.configure({
+    CollaborationRenderOnce.configure({
       document: ydoc,
     }),
+    NodeViewsRenderOnce,
     CollaborationCaret.configure({
       provider,
     }),

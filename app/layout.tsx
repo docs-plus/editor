@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
 import { GoogleAnalytics } from "@/components/analytics";
+import { ServiceWorkerRegistration } from "@/components/pwa";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   SITE_DESCRIPTION,
@@ -13,6 +14,8 @@ import {
   SOCIAL_TITLE,
   THEME_COLOR,
 } from "@/lib/site-config";
+import { INSTALL_PROMPT_CAPTURE_SCRIPT } from "@/lib/pwa/install-prompt";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
 import "@/styles/_variables.scss";
@@ -43,6 +46,7 @@ export const metadata: Metadata = {
     description: SOCIAL_DESCRIPTION,
   },
   formatDetection: { email: false, address: false, telephone: false },
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -58,13 +62,14 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.variable}>
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load and catches the install prompt before hydration
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(localStorage.getItem("tinydocy-theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}})()`,
+            __html: THEME_BOOT_SCRIPT + INSTALL_PROMPT_CAPTURE_SCRIPT,
           }}
         />
         <TooltipProvider>{children}</TooltipProvider>
         <GoogleAnalytics />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

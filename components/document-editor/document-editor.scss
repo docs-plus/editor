@@ -49,7 +49,7 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
 }
 
 .document-editor-wrapper {
@@ -96,6 +96,50 @@ body {
 
   .document-editor-content .tiptap.ProseMirror.document-editor {
     padding: 1rem 1.5rem 30vh;
+  }
+}
+
+/* =====================
+     OFF-SCREEN BLOCKS
+     The browser skips style, layout and paint for top-level blocks outside
+     the viewport, so a long document lays out roughly one screen at load
+     instead of all of it. Skipped blocks take the estimated height below
+     until first rendered, then their last real height (`auto`).
+     `content-visibility: auto` also contains every block, rendered or not:
+     - Paint is clipped to the block; `overflow-clip-margin` leaves room for
+       ink that overflows it (collaborator caret labels sit above the first
+       line). Browsers without it keep the plain layout.
+     - A contained block does not wrap around a float, so nothing after a
+       floated (wrap left / right) media block is contained.
+     - Print lays out everything.
+     ===================== */
+@media screen {
+  @supports (overflow-clip-margin: 1px) {
+    .document-editor-content .tiptap.ProseMirror.document-editor > * {
+      content-visibility: auto;
+      overflow-clip-margin: 3rem;
+      contain-intrinsic-block-size: auto 4.5rem;
+    }
+
+    .document-editor-content .tiptap.ProseMirror.document-editor {
+      > :is(h1, h2, h3, h4, h5, h6) {
+        contain-intrinsic-block-size: auto 2rem;
+      }
+
+      > :is(ul, ol, blockquote, pre, .tableWrapper) {
+        contain-intrinsic-block-size: auto 9rem;
+      }
+
+      > :is(.mermaid-diagram, [class*="hypermultimedia--"]) {
+        contain-intrinsic-block-size: auto 15rem;
+      }
+
+      > .ProseMirror-widget,
+      > :is([style*="float: left"], [style*="float: right"]),
+      > :is([style*="float: left"], [style*="float: right"]) ~ * {
+        content-visibility: visible;
+      }
+    }
   }
 }
 

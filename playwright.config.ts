@@ -9,15 +9,32 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:3000",
     headless: true,
+    // Only the production-build `pwa` project runs the service worker.
+    serviceWorkers: "block",
   },
   projects: [
     {
       name: "chromium",
       testMatch: ["**/*.spec.ts"],
-      testIgnore: ["**/soak*.spec.ts", "**/yjs-soak/**"],
+      testIgnore: [
+        "**/soak*.spec.ts",
+        "**/yjs-soak/**",
+        "**/pwa-offline.spec.ts",
+      ],
       use: {
         browserName: "chromium",
         viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
+      // Needs a production build: `bun run build && PORT=3847 bun run start`.
+      name: "pwa",
+      testMatch: ["**/pwa-offline.spec.ts"],
+      workers: 1,
+      use: {
+        browserName: "chromium",
+        baseURL: process.env.PWA_BASE_URL ?? "http://localhost:3847",
+        serviceWorkers: "allow",
       },
     },
     {

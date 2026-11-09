@@ -218,6 +218,15 @@
   }
 }
 
+.tab-bar-tab-close:disabled {
+  cursor: default;
+
+  &:hover {
+    opacity: 0.35 !important;
+    background-color: transparent !important;
+  }
+}
+
 .tab-bar-tab-close {
   display: flex;
   align-items: center;

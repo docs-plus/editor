@@ -22,6 +22,8 @@ export const DOCUMENT_TOO_LARGE = {
 type DocumentGuardOptions = {
   /** Byte cap for a document's encoded state. */
   maxDocumentBytes: (documentName: string) => number;
+  /** Tombstoned (deleted) documents: dropped from tab lists on repair. */
+  isDeletedDocument?: (documentName: string) => boolean;
   /** Largest JSON-encoded awareness state relayed per client. */
   maxAwarenessStateBytes: number;
   /** Delay before repairing a tab list after a change (coalesces bursts). */
@@ -51,6 +53,18 @@ function readVarUint(
   return null;
 }
 
+/** The Yjs update carried by a Sync step 2 or update frame, else null. */
+function readSyncUpdate(frame: Uint8Array): Uint8Array | null {
+  const nameLength = readVarUint(frame, 0);
+  if (!nameLength) return null;
+  const messageType = readVarUint(frame, nameLength[1] + nameLength[0]);
+  if (!messageType || messageType[0] !== MESSAGE_SYNC) return null;
+  const syncType = readVarUint(frame, messageType[1]);
+  if (!syncType || syncType[0] === SYNC_STEP_1) return null;
+  const length = readVarUint(frame, syncType[1]);
+  return length ? frame.subarray(length[1], length[1] + length[0]) : null;
+}
+
 /**
  * True when a Hocuspocus frame carries document content: a non-empty Sync
  * step 2 or update. Awareness, auth, step 1, stateless frames and the empty
@@ -59,14 +73,23 @@ function readVarUint(
  * cap could not even be opened).
  */
 export function isDocumentUpdateFrame(frame: Uint8Array): boolean {
-  const nameLength = readVarUint(frame, 0);
-  if (!nameLength) return false;
-  const messageType = readVarUint(frame, nameLength[1] + nameLength[0]);
-  if (!messageType || messageType[0] !== MESSAGE_SYNC) return false;
-  const syncType = readVarUint(frame, messageType[1]);
-  if (!syncType || syncType[0] === SYNC_STEP_1) return false;
-  const updateLength = readVarUint(frame, syncType[1]);
-  return updateLength !== null && updateLength[0] > EMPTY_UPDATE_BYTES;
+  const update = readSyncUpdate(frame);
+  return update !== null && update.byteLength > EMPTY_UPDATE_BYTES;
+}
+
+/**
+ * True when applying `update` to `document` adds no new items: it only
+ * deletes, or repeats what the document already has. Such an update cannot
+ * grow content, so a document at its cap can still be trimmed. Only called
+ * on the over-cap path, where the decode cost is acceptable.
+ */
+export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
+  try {
+    const missing = Y.diffUpdate(update, Y.encodeStateVector(document));
+    return Y.decodeUpdate(missing).structs.length === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -100,7 +123,10 @@ export class DocumentGuard implements Extension {
     documentName,
   }: afterLoadDocumentPayload): Promise<void> {
     if (isTabsDocumentId(documentName)) {
-      const removed = repairTabsArray(document.getArray("tabs"));
+      const removed = repairTabsArray(
+        document.getArray("tabs"),
+        this.options.isDeletedDocument,
+      );
       if (removed > 0) {
         logAbuseEvent("tabs_doc_repaired", { documentName, removed });
       }
@@ -112,11 +138,14 @@ export class DocumentGuard implements Extension {
     documentName,
     update,
     requestHeaders,
+    document,
   }: beforeHandleMessagePayload): Promise<void> {
     const size = this.sizes.get(documentName);
     if (!size || !isDocumentUpdateFrame(update)) return;
     const limit = this.options.maxDocumentBytes(documentName);
     if (size.stored + size.pending + update.byteLength <= limit) return;
+    const payload = readSyncUpdate(update);
+    if (payload && addsNoItems(payload, document)) return;
     logAbuseEvent("ws_update_too_large", {
       ip: getPinnedClientIp(requestHeaders),
       documentName,
@@ -171,7 +200,10 @@ export class DocumentGuard implements Extension {
     if (this.repairTimers.has(documentName)) return;
     const timer = setTimeout(() => {
       this.repairTimers.delete(documentName);
-      const removed = repairTabsArray(document.getArray("tabs"));
+      const removed = repairTabsArray(
+        document.getArray("tabs"),
+        this.options.isDeletedDocument,
+      );
       if (removed > 0) {
         logAbuseEvent("tabs_doc_repaired", { documentName, removed });
       }

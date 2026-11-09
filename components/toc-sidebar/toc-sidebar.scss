@@ -3,7 +3,7 @@
   top: 1rem;
   align-self: flex-start;
   width: 270px;
-  max-height: calc(100vh - var(--tt-toolbar-height) - 38px - 2rem);
+  max-height: calc(100dvh - var(--tt-toolbar-height) - 38px - 2rem);
   overflow-y: auto;
   flex-shrink: 0;
   padding: 1rem 0.5rem;

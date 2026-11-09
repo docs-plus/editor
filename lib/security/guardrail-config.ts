@@ -63,6 +63,17 @@ export const MAX_TABS_DOC_SIZE_BYTES = parseEnvInt(
 export const RETENTION_DAYS = parseEnvInt(process.env.RETENTION_DAYS, 30, 1);
 
 /**
+ * Days a deleted or expired document name stays blocked (default 90). Must
+ * outlive every offline copy a browser may still hold, or that copy could
+ * recreate the document on reconnect.
+ */
+export const TOMBSTONE_RETENTION_DAYS = parseEnvInt(
+  process.env.TOMBSTONE_RETENTION_DAYS,
+  90,
+  1,
+);
+
+/**
  * `1` lets clients open per-test `global-tabs-<id>` documents (Playwright
  * isolation). Dev and test only: never set it in production.
  */

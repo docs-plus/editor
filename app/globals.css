@@ -129,3 +129,11 @@
     @apply font-sans;
   }
 }
+
+/* No pull-to-refresh reload in the installed app. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}

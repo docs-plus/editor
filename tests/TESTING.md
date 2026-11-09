@@ -64,6 +64,7 @@ tests/
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
+│   ├── pwa-connection.spec.ts            # Offline edits, connection status, offline banner/shell
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
@@ -138,6 +139,7 @@ make test-e2e
 | `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected |
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
+| `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |
 | `toc-drag.spec.ts` | TOC drag handle visibility; title H1 not draggable; drag reorder moves editor sections; folded section drag handle |
 
@@ -183,6 +185,33 @@ Two tests with distinct strategies:
 2. **"real-time sync between two connected users"** — Both users connected simultaneously. User A types; 2s wait before asserting on User B. Inherently timing-sensitive; `retries: 2`.
 
 Each user gets a unique identity via `window.__HOCUS_TOKEN` injected through `page.addInitScript()`.
+
+### PWA Tests
+
+Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so caches never leak into other tests.
+
+| Test | Project | Validates |
+|------|---------|-----------|
+| `pwa-manifest.spec.ts` | `chromium` (`make dev`) | Manifest shape and omitted members; icon sizes and opaque/rounded corners; apple and theme-color head tags; theme-color follows the dark toggle, reloads and soft navigation; install button (synthetic `beforeinstallprompt`, pre-hydration capture, hidden when installed, iOS hint by keyboard) |
+| `pwa-offline.spec.ts` | `pwa` (production build) | Registration after `load` with scope `/`; cache contents (own static files and shell pages only); `sw.js` headers; offline reload of `/` shows the stored shell, unvisited paths show `/offline`; `/api` and other bypass routes never come from the worker; repeat visits are not slower |
+
+The worker runs only on a production build. Use port 3847 and localhost only, never tiny.docs.plus:
+
+```bash
+NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build && PORT=3847 bun run start
+HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
+PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
+```
+
+Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts` (Node environment).
+
+Manual install checklist (localhost production build):
+
+- **Chrome desktop:** the install icon appears in the status strip and the address bar; the strip button opens the native dialog; installing opens a standalone window whose title bar follows the theme toggle, and the strip button is gone in both the window and the tab.
+- **Chrome Android:** `adb reverse tcp:3847 tcp:3847`, open `http://localhost:3847`, install; the home-screen icon is the maskable "T" with no white ring.
+- **iOS Simulator (Safari):** the strip's install button shows the Share → Add to Home Screen hint (Enter opens it, Escape closes it and returns focus); the home-screen icon has no black corners and is titled "TinyDocy".
+- **Edge desktop:** same as Chrome desktop.
+- DevTools → Application → Manifest shows no errors, App Id `/`, three icons; "Show only the minimum safe area for maskable icons" keeps the "T" inside the circle.
 
 ## Layer 3: Soak Tests (Playwright, long-running)
 

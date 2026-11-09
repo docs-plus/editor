@@ -41,6 +41,8 @@ export function buildContentSecurityPolicy({
 }: ContentSecurityPolicyOptions): string {
   const scriptSources = [
     "'self'",
+    // Do not switch to nonces while the service worker stores HTML: a stored
+    // page would replay its nonce.
     "'unsafe-inline'",
     ...(nodeEnv === "development" ? ["'unsafe-eval'"] : []),
     ...X_WIDGET_SCRIPT_HOSTS,
@@ -61,6 +63,8 @@ export function buildContentSecurityPolicy({
     "media-src 'self' blob: https:",
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
     `frame-src ${MEDIA_FRAME_HOSTS.join(" ")}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",

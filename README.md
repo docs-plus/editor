@@ -87,6 +87,16 @@ Build-time settings (inlined by `bun run build`, so put them in
 - `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` — data
   controller and contact shown on `/privacy` (falls back to GitHub issues).
   Set both before enabling analytics.
+- `NEXT_PUBLIC_SERVICE_WORKER=0` — emergency off switch for the service
+  worker (default on): pages unregister it and delete its caches on the next
+  load. See the PWA section below.
+- `NEXT_PUBLIC_OFFLINE_CACHE=0` — turns off offline copies of documents
+  (default on) and deletes copies already stored in visitors' browsers. With
+  copies on, documents and the tab list open from IndexedDB before the
+  server answers, and edits made offline sync on reconnect (at most 512 KB of
+  offline edits, 30 documents, 14 days; see `lib/offline/`). Deleted
+  documents stay deleted: the server refuses tombstoned names for
+  `TOMBSTONE_RETENTION_DAYS` (default 90).
 
 Redis scaling notes:
 
@@ -114,9 +124,32 @@ Editor extensions:
   3 days and opens a verified PR. It needs "Allow GitHub Actions to create and
   approve pull requests" enabled in the repository settings.
 
+Installable app (PWA):
+
+- Files: `app/manifest.ts`, `app/pwa-icons/[id]` (any-192, any-512,
+  maskable-512), `app/offline`, `lib/pwa/*` (worker, routing rules and the
+  install-prompt store) and `components/pwa/*` (registration, the offline
+  retry button and the install button).
+- Install button: the first icon in the status strip's community card. The
+  inline script in `app/layout.tsx` captures `beforeinstallprompt` before
+  hydration; iOS gets a one-line Share → Add to Home Screen hint. Nothing
+  renders once the app is installed.
+- The manifest `id` is frozen at `"/"`: changing it orphans existing installs.
+- The service worker (`lib/pwa/service-worker.ts`, served at
+  `/_next/static/service-worker/sw.js`) registers only in production builds.
+  It caches the app's own pages and `/_next/static` files, never documents,
+  `/api` or cross-origin requests. Kill switch and deployment rules:
+  [`docs/operations/service-worker-runbook.md`](docs/operations/service-worker-runbook.md).
+- Deliberately omitted: `shortcuts` and `launch_handler` (no per-document URLs;
+  focus-existing would break the two-window demo), `share_target`,
+  `file_handlers` and `protocol_handlers` (a public sandbox must not receive
+  files or links), Window Controls Overlay (clashes with the tab bar), push,
+  badging and background sync (no accounts), and screenshots (for now).
+
 Operational guidance:
 [`docs/operations/abuse-guardrails-runbook.md`](docs/operations/abuse-guardrails-runbook.md),
-[`docs/operations/analytics-runbook.md`](docs/operations/analytics-runbook.md)
+[`docs/operations/analytics-runbook.md`](docs/operations/analytics-runbook.md),
+[`docs/operations/service-worker-runbook.md`](docs/operations/service-worker-runbook.md)
 
 ## Project Structure
 
@@ -135,6 +168,7 @@ extensions/             Standalone editor extensions
   heading-drag/         Section drag extension
   heading-fold/         Fold/unfold extension
   heading-filter/       Heading filter extension
+  render-once/          Render a large collaborative doc once on mount
   shared/               Shared ProseMirror helpers
 hooks/                  Shared React hooks
 lib/                    Utilities and security modules
@@ -150,8 +184,8 @@ Common commands:
 - `make dev` — run Next.js + Hocuspocus
 - `bun run build` — production build
 - `bun run lint` — ESLint (Next.js rules)
-- `bun run typecheck` — TypeScript (app + Bun-only Hocus server via
-  `tsconfig.hocus.json`)
+- `bun run typecheck` — TypeScript (app, the Bun-only Hocus server via
+  `tsconfig.hocus.json`, and the service worker via `tsconfig.sw.json`)
 - `bun run check` / `bun run check:fix` — Biome checks
 - `bun run test` — Vitest suite
 

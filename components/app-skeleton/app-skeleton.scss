@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
 }
 
 .skeleton-tab-bar {
@@ -159,4 +159,17 @@
   color: var(--primary-foreground);
   font-size: 0.875rem;
   z-index: 50;
+}
+
+// Offline device: a calm notice, not a failure. The editor opens by itself
+// once the connection is back.
+.site-intro-offline-muted {
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+// The server-rendered "Connecting to the live editor…" would contradict it.
+body:has(.site-intro-offline-muted) .site-intro-status {
+  display: none;
 }

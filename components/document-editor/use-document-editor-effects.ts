@@ -13,6 +13,8 @@ interface UseDocumentEditorEffectsOptions {
   ydoc: Y.Doc;
   documentId: string;
   playgroundRegenerateTrigger?: number;
+  /** The server has confirmed the document (seeding waits for it). */
+  serverSynced: boolean;
   readInitialFilter: () => { slugs: string[]; mode: "or" | "and" } | null;
   openFilterBar: () => void;
   toggleFilterBar: () => void;
@@ -25,6 +27,7 @@ export function useDocumentEditorEffects({
   ydoc,
   documentId,
   playgroundRegenerateTrigger,
+  serverSynced,
   readInitialFilter,
   openFilterBar,
   toggleFilterBar,
@@ -60,15 +63,19 @@ export function useDocumentEditorEffects({
     }
   }, [editor, openFilterBar, readInitialFilter]);
 
+  // The trigger counter outlives this editor (it lives in EditorApp), so a
+  // remount must not replay a click that an earlier editor already handled.
+  const handledRegenerateRef = useRef(playgroundRegenerateTrigger ?? 0);
   useEffect(() => {
     if (
       !editor ||
       documentId !== PLAYGROUND_ID ||
       !playgroundRegenerateTrigger ||
-      playgroundRegenerateTrigger <= 0
+      playgroundRegenerateTrigger <= handledRegenerateRef.current
     ) {
       return;
     }
+    handledRegenerateRef.current = playgroundRegenerateTrigger;
     editor.commands.setContent(generatePlaygroundContent());
   }, [
     editor,
@@ -77,8 +84,10 @@ export function useDocumentEditorEffects({
     generatePlaygroundContent,
   ]);
 
+  // Seed only once the server has answered: an empty doc rendered offline
+  // (or from a stale copy) may already have content on the server.
   useEffect(() => {
-    if (!editor || !ydoc) return;
+    if (!editor || !ydoc || !serverSynced) return;
     const fragment = ydoc.getXmlFragment("default");
     if (fragment.length > 0) return;
     const content =
@@ -86,7 +95,14 @@ export function useDocumentEditorEffects({
         ? generatePlaygroundContent()
         : defaultContent;
     editor.commands.setContent(content);
-  }, [editor, ydoc, documentId, generatePlaygroundContent, defaultContent]);
+  }, [
+    editor,
+    ydoc,
+    serverSynced,
+    documentId,
+    generatePlaygroundContent,
+    defaultContent,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

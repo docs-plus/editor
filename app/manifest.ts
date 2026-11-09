@@ -1,19 +1,31 @@
 import type { MetadataRoute } from "next";
 
-import { SITE_DESCRIPTION, SITE_NAME, THEME_COLOR } from "@/lib/site-config";
+import { pwaManifestIcon } from "@/lib/pwa-icons";
+import {
+  APP_DESCRIPTION,
+  BACKGROUND_COLOR,
+  SITE_NAME,
+  THEME_COLOR,
+} from "@/lib/site-config";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    // Install identity: never change, or existing installs are orphaned.
+    id: "/",
     name: SITE_NAME,
     short_name: SITE_NAME,
-    description: SITE_DESCRIPTION,
+    description: APP_DESCRIPTION,
+    lang: "en",
+    dir: "ltr",
     start_url: "/",
+    scope: "/",
     display: "standalone",
-    background_color: THEME_COLOR,
+    background_color: BACKGROUND_COLOR,
     theme_color: THEME_COLOR,
-    icons: [
-      { src: "/icon", sizes: "512x512", type: "image/png" },
-      { src: "/apple-icon", sizes: "180x180", type: "image/png" },
-    ],
+    categories: ["productivity", "utilities"],
+    prefer_related_applications: false,
+    icons: (["any-192", "any-512", "maskable-512"] as const).map(
+      pwaManifestIcon,
+    ),
   };
 }
