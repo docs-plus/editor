@@ -8,7 +8,9 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
+import { useConnectionState } from "@/hooks/use-connection-state";
 import { useSyncedTabs } from "@/hooks/use-synced-tabs";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -93,6 +95,14 @@ export function EditorApp({ intro }: EditorAppProps) {
   const [unreachable, setUnreachable] = useState(false);
   useUnsyncedChangesGuard();
 
+  const connection = useConnectionState();
+  const offline = connection === "offline";
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  // A dismissal lasts until the connection is back.
+  useEffect(() => {
+    if (connection === "online") setBannerDismissed(false);
+  }, [connection]);
+
   const handlePlaygroundRegenerate = useCallback(() => {
     setPlaygroundRegenerateTrigger((t) => t + 1);
     trackEvent("playground_regenerate", {});
@@ -115,11 +125,21 @@ export function EditorApp({ intro }: EditorAppProps) {
     return (
       <>
         <AppSkeleton>{intro}</AppSkeleton>
-        {unreachable && (
-          <p role="alert" className="site-intro-offline">
-            Can&apos;t reach the collaboration server. Check your connection and
-            reload.
+        {offline ? (
+          <p
+            role="status"
+            className="site-intro-offline site-intro-offline-muted"
+          >
+            You&apos;re offline. TinyDocy opens your documents when you
+            reconnect.
           </p>
+        ) : (
+          unreachable && (
+            <p role="alert" className="site-intro-offline">
+              Can&apos;t reach the collaboration server. Check your connection
+              and reload.
+            </p>
+          )
         )}
       </>
     );
@@ -132,6 +152,7 @@ export function EditorApp({ intro }: EditorAppProps) {
         activeTabId={activeTabId}
         canCreateTab={canCreateTab}
         createTabLimitMessage={createTabLimitMessage}
+        offline={offline}
         onSwitch={switchTab}
         onCreate={createTab}
         onClose={closeTab}
@@ -139,6 +160,9 @@ export function EditorApp({ intro }: EditorAppProps) {
         onReorder={reorderTab}
         onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
+      {offline && !bannerDismissed && (
+        <OfflineBanner onDismiss={() => setBannerDismissed(true)} />
+      )}
       <DocumentEditor
         key={activeTabId}
         documentId={activeTabId}

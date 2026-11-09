@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { ConnectionState } from "@/hooks/use-connection-state";
 import {
@@ -51,11 +57,17 @@ function connectionLabel(
   state: ConnectionState,
   count: number,
   unsynced: boolean,
-): string {
+): ReactNode {
   if (state === "online")
     return `${count} user${count === 1 ? "" : "s"} online`;
   if (state === "connecting") return "Reconnecting…";
-  return unsynced ? "Offline · edits not synced yet" : "Offline";
+  if (!unsynced) return "Offline";
+  // Phones: the strip has no room, and the offline banner says it.
+  return (
+    <>
+      Offline<span className="max-sm:hidden"> · edits not synced yet</span>
+    </>
+  );
 }
 
 /**

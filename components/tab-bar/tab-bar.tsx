@@ -19,6 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect } from "react";
 
+import { OFFLINE_TAB_ACTION_HINT } from "@/components/pwa/offline-banner";
 import { TabContent } from "@/components/tab-bar/tab-content";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
@@ -38,6 +39,8 @@ interface TabBarProps {
   activeTabId: string;
   canCreateTab?: boolean;
   createTabLimitMessage?: string;
+  /** Creating and closing tabs need the server; both are disabled offline. */
+  offline?: boolean;
   onSwitch: (id: string) => void;
   onCreate: () => void;
   onClose: (id: string) => void;
@@ -46,16 +49,32 @@ interface TabBarProps {
   onPlaygroundRegenerate?: () => void;
 }
 
+function newTabLabel(canCreateTab: boolean, offline: boolean): string {
+  if (offline) return "New tab (offline)";
+  return canCreateTab ? "New tab (⌘T)" : "New tab (limit reached)";
+}
+
+function newTabTitle(
+  canCreateTab: boolean,
+  offline: boolean,
+  limitMessage: string,
+): string {
+  if (offline) return OFFLINE_TAB_ACTION_HINT;
+  return canCreateTab ? "New tab (⌘T)" : limitMessage;
+}
+
 function SortableTab({
   tab,
   isActive,
   tabsLength,
+  offline,
   onSwitch,
   onClose,
 }: {
   tab: Tab;
   isActive: boolean;
   tabsLength: number;
+  offline: boolean;
   onSwitch: (id: string) => void;
   onClose: (id: string) => void;
 }) {
@@ -85,7 +104,7 @@ function SortableTab({
         title={tab.title || "Untitled"}
         onSwitch={() => onSwitch(tab.id)}
         onAuxClick={(e) => {
-          if (e.button === 1 && tabsLength > 1) {
+          if (e.button === 1 && tabsLength > 1 && !offline) {
             e.preventDefault();
             onClose(tab.id);
           }
@@ -107,6 +126,8 @@ function SortableTab({
               type="button"
               tabIndex={-1}
               aria-label={`Close ${tab.title || "Untitled"}`}
+              title={offline ? OFFLINE_TAB_ACTION_HINT : undefined}
+              disabled={offline}
               className="tab-bar-tab-close"
               onClick={(e) => {
                 e.stopPropagation();
@@ -127,6 +148,7 @@ export function TabBar({
   activeTabId,
   canCreateTab = true,
   createTabLimitMessage = "Maximum tabs reached",
+  offline = false,
   onSwitch,
   onCreate,
   onClose,
@@ -166,12 +188,13 @@ export function TabBar({
 
       if (mod && e.key === "t") {
         e.preventDefault();
-        if (!canCreateTab) return;
+        if (!canCreateTab || offline) return;
         onCreate();
       }
 
       if (mod && e.key === "w") {
         e.preventDefault();
+        if (offline) return;
         if (tabs.length > 1 && activeTabId !== PLAYGROUND_ID)
           onClose(activeTabId);
       }
@@ -197,6 +220,7 @@ export function TabBar({
       tabs,
       activeTabId,
       canCreateTab,
+      offline,
       onCreate,
       onClose,
       onSwitch,
@@ -268,6 +292,7 @@ export function TabBar({
                 tab={tab}
                 isActive={tab.id === activeTabId}
                 tabsLength={tabs.length}
+                offline={offline}
                 onSwitch={onSwitch}
                 onClose={onClose}
               />
@@ -278,9 +303,9 @@ export function TabBar({
           type="button"
           className="tab-bar-new"
           onClick={onCreate}
-          disabled={!canCreateTab}
-          aria-label={canCreateTab ? "New tab (⌘T)" : "New tab (limit reached)"}
-          title={canCreateTab ? "New tab (⌘T)" : createTabLimitMessage}
+          disabled={!canCreateTab || offline}
+          aria-label={newTabLabel(canCreateTab, offline)}
+          title={newTabTitle(canCreateTab, offline, createTabLimitMessage)}
         >
           <PlusIcon size={14} />
         </button>
@@ -288,9 +313,9 @@ export function TabBar({
           type="button"
           className="tab-bar-close-all"
           onClick={onCloseAll}
-          disabled={userTabs.length === 0}
+          disabled={userTabs.length === 0 || offline}
           aria-label="Close all tabs"
-          title="Close all tabs"
+          title={offline ? OFFLINE_TAB_ACTION_HINT : "Close all tabs"}
         >
           <PanelLeftCloseIcon size={14} />
         </button>
