@@ -5,6 +5,14 @@ name: Refresh docs.plus extensions
 # verification suite and production build, then open or update a PR.
 # Nothing lands on the default branch without review.
 #
+# Two jobs keep freshly published code away from write credentials:
+#   verify  read-only token, no persisted git credentials, no cache writes.
+#           Updates with lifecycle scripts disabled (bunfig.toml also holds
+#           back releases younger than 3 days), then runs lint, typecheck,
+#           unit tests and the production build against the new packages.
+#   pr      write token, but never installs or executes dependencies: it
+#           only commits the verified package.json / bun.lock with git/gh.
+#
 # Requires: Settings → Actions → General → "Allow GitHub Actions to create
 # and approve pull requests".
 
@@ -16,8 +24,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: docs-plus-extensions
@@ -25,6 +32,7 @@ concurrency:
 
 env:
   UPDATE_BRANCH: deps/docs-plus-extensions
+  ARTIFACT_NAME: docs-plus-extensions-update
   DOCS_PLUS_PACKAGES: >-
     @docs.plus/extension-hyperlink
     @docs.plus/extension-hypermultimedia
@@ -34,51 +42,60 @@ env:
     @docs.plus/extension-placeholder
 
 jobs:
-  refresh:
-    name: Update, verify and open PR
+  verify:
+    name: Update and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      base_sha: ${{ steps.diff.outputs.base_sha }}
+      digest: ${{ steps.stage.outputs.digest }}
     steps:
       - name: Checkout default branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
 
+      # no-cache: this job executes unreviewed package code, so it must not
+      # save a dependency cache other runs could restore.
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .tool-versions
+          no-cache: true
 
       # Next.js, Vitest/jsdom and ESLint run on Node (>= 22.22.2).
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Install current lockfile
         run: bun install --frozen-lockfile
 
+      - name: Snapshot installed packages
+        run: bun pm ls --all > "$RUNNER_TEMP/deps-before.txt"
+
       - name: Update @docs.plus extensions and Tiptap peers
-        id: update
         run: |
-          before=$(bun pm ls 2>/dev/null | grep -E '@docs\.plus/|@tiptap/' | sort || true)
+          # --ignore-scripts: no lifecycle script (project or trusted
+          # dependency) runs while the new versions are resolved.
           # shellcheck disable=SC2086
-          bun update --latest $DOCS_PLUS_PACKAGES
+          bun update --ignore-scripts --latest $DOCS_PLUS_PACKAGES
           # Stay on Tiptap 3.x (caret range) but pick up the newest minor the
           # extensions may now peer on.
           tiptap=$(jq -r '.dependencies | keys[] | select(startswith("@tiptap/"))' package.json)
           # shellcheck disable=SC2086
-          bun update $tiptap
-          after=$(bun pm ls 2>/dev/null | grep -E '@docs\.plus/|@tiptap/' | sort || true)
-          {
-            echo "changes<<EOF"
-            diff <(echo "$before") <(echo "$after") | grep -E '^[<>]' || true
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          bun update --ignore-scripts $tiptap
 
       - name: Detect changes
         id: diff
         run: |
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if git diff --quiet -- package.json bun.lock; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Extensions are already up to date."
@@ -86,6 +103,48 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git diff --stat -- package.json bun.lock
           fi
+
+      # Staged (and fingerprinted) before any updated package code runs, so
+      # the PR job can detect tampering by the steps below.
+      - name: Stage update and PR body
+        id: stage
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          dir="$RUNNER_TEMP/deps-update"
+          mkdir -p "$dir"
+          cp package.json bun.lock "$dir/"
+
+          # Flatten the tree so transitive changes show up as plain lines.
+          flatten() { tail -n +2 | sed -E 's/^[│├└─ ]+//' | LC_ALL=C sort; }
+          flatten < "$RUNNER_TEMP/deps-before.txt" > "$RUNNER_TEMP/before.txt"
+          bun pm ls --all | flatten > "$RUNNER_TEMP/after.txt"
+          changes=$(diff "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt" \
+            | sed -nE -e 's/^< /- /p' -e 's/^> /+ /p' || true)
+          max_lines=400
+          total=$(printf '%s\n' "$changes" | wc -l)
+
+          {
+            echo 'Scheduled refresh of the `@docs.plus` editor extensions.'
+            echo
+            echo 'Verified on the runner: Biome, ESLint, typecheck, unit tests,'
+            echo 'production build, and the duplicate ProseMirror/Yjs install guard.'
+            echo
+            echo 'Installed packages before → after (`bun pm ls --all`, includes transitive):'
+            echo
+            echo '```diff'
+            sed -n "1,${max_lines}p" <<< "$changes"
+            if [ "$total" -gt "$max_lines" ]; then
+              echo "# … $((total - max_lines)) more lines truncated"
+            fi
+            echo '```'
+            echo
+            echo '```'
+            git diff --stat -- package.json bun.lock
+            echo '```'
+          } > "$dir/pr-body.md"
+
+          digest=$(cd "$dir" && sha256sum package.json bun.lock pr-body.md | sha256sum | cut -d' ' -f1)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Guard against duplicate ProseMirror / Yjs copies
         if: steps.diff.outputs.changed == 'true'
@@ -119,35 +178,111 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: bun run build
 
-      - name: Open or update pull request
+      - name: Upload verified update
         if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/deps-update/
+          if-no-files-found: error
+          retention-days: 3
+
+  pr:
+    name: Open or update pull request
+    needs: verify
+    if: needs.verify.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    # This job must never install or run dependencies (no bun / node):
+    # it only moves the verified files onto a branch with git and gh.
+    steps:
+      # Same commit the verify job tested, so a push to the default branch in
+      # the meantime cannot be silently reverted by the stale package.json.
+      - name: Checkout verified base commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.verify.outputs.base_sha }}
+          persist-credentials: false
+
+      - name: Download verified update
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/deps-update
+
+      - name: Validate update
+        env:
+          EXPECTED_DIGEST: ${{ needs.verify.outputs.digest }}
+        run: |
+          dir="$RUNNER_TEMP/deps-update"
+          for f in package.json bun.lock pr-body.md; do
+            if [ ! -f "$dir/$f" ] || [ -L "$dir/$f" ]; then
+              echo "::error::Artifact is missing regular file $f."
+              exit 1
+            fi
+          done
+
+          digest=$(cd "$dir" && sha256sum package.json bun.lock pr-body.md | sha256sum | cut -d' ' -f1)
+          if [ "$digest" != "$EXPECTED_DIGEST" ]; then
+            echo "::error::Artifact changed after it was staged (digest mismatch)."
+            exit 1
+          fi
+
+          # Only @docs.plus / @tiptap dependency versions may change.
+          norm='.dependencies |= with_entries(if (.key | test("^@(docs\\.plus|tiptap)/")) then .value = "*" else . end)'
+          if ! diff <(jq -S "$norm" package.json) <(jq -S "$norm" "$dir/package.json"); then
+            echo "::error::package.json changed outside the @docs.plus / @tiptap dependency versions."
+            exit 1
+          fi
+
+      - name: Commit, push and open or update pull request
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
-          CHANGES: ${{ steps.update.outputs.changes }}
+          BOT_NAME: github-actions[bot]
+          BOT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          dir="$RUNNER_TEMP/deps-update"
+          basic=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          git_auth() {
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" "$@"
+          }
+
+          # Lease target: the branch as it is right now ("" = must not exist).
+          remote_sha=$(git_auth ls-remote --heads origin "refs/heads/$UPDATE_BRANCH" | cut -f1)
+
+          pr=$(gh pr view "$UPDATE_BRANCH" --json state,commits 2>/dev/null || echo '{}')
+          pr_state=$(jq -r '.state // ""' <<< "$pr")
+          if [ "$pr_state" = "OPEN" ]; then
+            foreign=$(jq -r '.commits[]?.authors[]?.email' <<< "$pr" \
+              | grep -vxF "$BOT_EMAIL" | sort -u || true)
+            if [ -n "$foreign" ]; then
+              echo "::warning::Open PR on $UPDATE_BRANCH has commits by others ($(echo "$foreign" | paste -sd, -)); not overwriting it."
+              exit 0
+            fi
+          fi
+
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           git switch -C "$UPDATE_BRANCH"
+          cp "$dir/package.json" "$dir/bun.lock" .
           git add package.json bun.lock
           git commit \
             -m "build(deps): update docs.plus editor extensions" \
             -m "Scheduled refresh of the @docs.plus Tiptap extensions and their Tiptap peers. Lint, typecheck, unit tests and the production build passed before this commit was made."
-          git push --force origin "$UPDATE_BRANCH"
+          git_auth push \
+            --force-with-lease="refs/heads/$UPDATE_BRANCH:$remote_sha" \
+            origin "HEAD:refs/heads/$UPDATE_BRANCH"
 
           body_file="$RUNNER_TEMP/pr-body.md"
-          {
-            echo 'Scheduled refresh of the `@docs.plus` editor extensions.'
-            echo
-            echo 'Verified on the runner: Biome, ESLint, typecheck, unit tests,'
-            echo 'production build, and the duplicate ProseMirror/Yjs install guard.'
-            echo
-            echo '```diff'
-            echo "$CHANGES"
-            echo '```'
-          } > "$body_file"
+          head -c 60000 "$dir/pr-body.md" > "$body_file"
 
-          if gh pr view "$UPDATE_BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+          if [ "$pr_state" = "OPEN" ]; then
             gh pr edit "$UPDATE_BRANCH" --body-file "$body_file"
           else
             gh pr create \

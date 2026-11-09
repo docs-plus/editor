@@ -1,0 +1,6 @@
+# Supply-chain guardrail: only resolve package versions that have been
+# public for at least 3 days (value in seconds). Gives the registry and the
+# community time to catch and unpublish compromised releases before
+# `bun add` / `bun update` (local or in CI) can pick them up.
+[install]
+minimumReleaseAge = 259200
