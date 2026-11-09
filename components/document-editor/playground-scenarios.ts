@@ -7,6 +7,10 @@ import {
   PLAYGROUND_DIAGRAM_KEYS,
 } from "./playground-diagrams";
 
+/** Lean landing doc: everyone shares the Playground, so keep first load fast. */
+const PLAYGROUND_SECTION_RANGE = [4, 6] as const;
+const PLAYGROUND_MAX_DEPTH = 3;
+
 const DOC_TITLES = [
   "Project Overview",
   "Technical Specification",
@@ -593,8 +597,13 @@ function createExtensionsShowcase(): JSONContent[] {
 
 export function generatePlaygroundContent(): JSONContent {
   const usedTitles = new Set<string>();
-  const sectionCount = randomInt(32, 56);
-  const nestedHeadings = buildNestedHeadings(1, 6, sectionCount, usedTitles);
+  const sectionCount = randomInt(...PLAYGROUND_SECTION_RANGE);
+  const nestedHeadings = buildNestedHeadings(
+    1,
+    PLAYGROUND_MAX_DEPTH,
+    sectionCount,
+    usedTitles,
+  );
 
   const content: JSONContent["content"] = [
     {
