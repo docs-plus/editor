@@ -8,6 +8,8 @@ deploying it.
 
 ## [Unreleased]
 
+## 2026-11-09 · #16 Caret after Enter, nightly tests, CI for update PRs
+
 ### Added
 - **Nightly workflow** (`.github/workflows/nightly.yml`, 03:41 UTC and on
   demand) for the layers CI skips: the `pwa` project against a production
