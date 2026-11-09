@@ -266,6 +266,9 @@ function DocumentEditorContent({
             role="region"
             aria-label="Document editor"
             className="document-editor-content"
+            // The editor opens editable from the device copy before the
+            // server answers; this marks the first real server sync.
+            data-server-synced={serverSynced}
           />
           {headingFilter.hasActiveFilters &&
             filterState.matchedSectionIds.size === 0 && (

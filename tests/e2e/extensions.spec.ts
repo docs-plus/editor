@@ -84,6 +84,18 @@ test.describe("docs.plus extensions", () => {
     await page.keyboard.down("Shift");
     for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowLeft");
     await page.keyboard.up("Shift");
+    // The browser extends the selection natively and ProseMirror reads it on
+    // the next selectionchange, which a busy page can deliver after Mod-K.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = window.__tiptap_editor?.state;
+          if (!state) return "";
+          const { from, to } = state.selection;
+          return state.doc.textBetween(from, to);
+        }),
+      )
+      .toBe("me");
     await page.keyboard.press(`${getPlaywrightModifierKey()}+k`);
 
     const urlInput = page

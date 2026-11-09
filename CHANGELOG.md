@@ -15,6 +15,11 @@ deploying it.
   hovered image (wherever the gripper sat in the document flow). The rule now
   skips the gripper.
 
+### Changed
+- E2E helpers wait for the server's first sync before editing (the editor
+  is editable earlier, from the device copy), and the editor region carries
+  `data-server-synced` for them.
+
 ### Deploy
 - Pull, build and restart as usual.
 
