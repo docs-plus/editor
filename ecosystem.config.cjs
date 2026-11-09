@@ -59,6 +59,9 @@ module.exports = {
         HOCUS_REDIS_PORT: "6380",
         // Only the public site may open collaboration sockets from a browser.
         HOCUS_ALLOWED_ORIGINS: "https://tiny.docs.plus",
+        // Room for the long-document showcase (about 1.4 MB); images are
+        // downscaled to 256 KB, so ordinary documents stay far below this.
+        MAX_DOC_SIZE_BYTES: "2097152",
       },
       instances: 1,
       exec_mode: "fork",
