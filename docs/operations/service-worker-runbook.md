@@ -96,6 +96,19 @@ To turn the worker back on, revert the flag and the constant, then rebuild.
   bump `SHELL_CACHE` in `lib/pwa/sw-config.ts`. Keep `STATIC_CACHE` stable so
   tabs opened before a deploy can still load their lazy chunks.
 
+## Manifest and install: fixed decisions
+
+- The manifest `id` is frozen at `"/"`. Changing it orphans every existing
+  install.
+- Deliberately omitted, so do not add them without revisiting the reason:
+  - `shortcuts` and `launch_handler`: there are no per-document URLs, and
+    focus-existing would break the "open it in two windows" demo;
+  - `share_target`, `file_handlers` and `protocol_handlers`: a public sandbox
+    must not receive files or links from other apps;
+  - Window Controls Overlay: it clashes with the tab bar;
+  - push, badging and background sync: there are no accounts;
+  - screenshots: deferred until the UI settles.
+
 ## Local checks
 
 ```sh
