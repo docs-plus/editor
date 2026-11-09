@@ -8,6 +8,11 @@ deploying it.
 
 ## [Unreleased]
 
+### Changed
+- `tests/TESTING.md`, the repo-conventions skill and `AGENTS.md` describe the
+  current test layout, CI and nightly runs, the server-sync wait in e2e
+  helpers and the resize-gripper exception.
+
 ## 2026-11-09 · #16 Caret after Enter, nightly tests, CI for update PRs
 
 ### Added

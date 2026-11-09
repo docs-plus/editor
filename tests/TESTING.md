@@ -48,6 +48,8 @@ tests/
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode)
+│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting
+│   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
 ├── e2e/
@@ -59,7 +61,7 @@ tests/
 │   │   └── soak-journeys.ts              # 2 scripted critical-path sequences
 │   ├── collaboration.spec.ts             # 2-user collaboration (join + real-time sync)
 │   ├── drag.spec.ts                      # Heading drag handle visibility
-│   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds
+│   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds, image resize gripper
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
@@ -137,7 +139,7 @@ make test-e2e
 | Test | Validates |
 |------|-----------|
 | `drag.spec.ts` | Hovering a heading shows the drag handle |
-| `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected |
+| `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected; the image resize gripper covers the hovered image and resizes it |
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
@@ -326,6 +328,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Y.Doc caching** — `useYjsDocument` uses a module-level `docCache` with reference counting. Y.Doc instances persist across component unmounts (tab switches) to prevent content loss.
 - **Platform-specific keys** — soak bot uses `Meta` (macOS) or `Control` (others) for keyboard shortcuts. Never use `Mod` — it is ProseMirror-only and unknown to Playwright.
 - **Test isolation** — each test generates a unique `docId` with timestamp + random suffix to prevent cross-test interference on the shared Hocuspocus server. Tab state is isolated via `window.__GLOBAL_TABS_DOC` (set per test in `EditorPage.goto()`) so parallel tests use separate `global-tabs-{docId}` Yjs documents.
+- **Wait for the server, then type at full speed** — `EditorPage.waitForSync()` waits for `data-server-synced` on the editor region (the editor is editable earlier, from the device copy, and a new document is seeded only after the first server sync). Tests then type without artificial waits; if typed text lands in the wrong place, look for an app bug first (the caret-after-Enter race was `content-visibility`, fixed by `CaretBlockVisible`). Use `typeInNewParagraphAtEnd(page, text)` to add text at the end of a document.
 - **Assertion split** — `assert-invariants.ts` (imports vitest `expect`) for unit tests; `assert-invariants-json.ts` (pure `throw`) for Playwright tests.
 
 ## Related Documentation
