@@ -236,7 +236,7 @@ function DocumentEditorContent({
             saved. Copy what you need into a new tab.
           </p>
         )}
-        <CollabStatusGroup provider={provider} />
+        <CollabStatusGroup />
       </EditorContext.Provider>
     </main>
   );

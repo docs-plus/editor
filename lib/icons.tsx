@@ -12,6 +12,7 @@ export {
   Bold as BoldIcon,
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
+  CloudOff as CloudOffIcon,
   CloudUpload as CloudUploadIcon,
   Code as Code2Icon,
   CornerDownLeft as CornerDownLeftIcon,

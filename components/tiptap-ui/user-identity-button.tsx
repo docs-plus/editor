@@ -1,13 +1,12 @@
 "use client";
 
-import type { HocuspocusProvider } from "@hocuspocus/provider";
-import { WebSocketStatus } from "@hocuspocus/provider";
 import { useCurrentEditor } from "@tiptap/react";
 import throttle from "lodash.throttle";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ConnectionStatus } from "@/components/tiptap-ui/connection-status";
 import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConnectionState } from "@/hooks/use-connection-state";
 import {
   type AnalyticsEventMap,
   bucketPeers,
@@ -78,23 +78,6 @@ function CommunityIconLink({
   );
 }
 
-function useConnectionStatus(provider: HocuspocusProvider) {
-  const [status, setStatus] = useState<WebSocketStatus>(() =>
-    provider.isSynced ? WebSocketStatus.Connected : WebSocketStatus.Connecting,
-  );
-
-  useEffect(() => {
-    const handler = ({ status: s }: { status: WebSocketStatus }) =>
-      setStatus(s);
-    provider.on("status", handler);
-    return () => {
-      provider.off("status", handler);
-    };
-  }, [provider]);
-
-  return status;
-}
-
 function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
   const [users, setUsers] = useState<{ name?: string; color?: string }[]>([]);
   const prevJsonRef = useRef("");
@@ -142,18 +125,14 @@ function useTrackPeakPeers(count: number, connected: boolean): void {
   }, [connected, count]);
 }
 
-interface UserIdentityButtonProps {
-  provider: HocuspocusProvider;
-}
-
-export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
+export function UserIdentityButton() {
   const { editor } = useCurrentEditor();
   const [identity, setIdentity] = useState<UserIdentity | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const status = useConnectionStatus(provider);
+  const connection = useConnectionState();
   const users = useOnlineUsers(editor);
 
-  const connected = status === WebSocketStatus.Connected;
+  const connected = connection === "online";
   const count = users.length;
   useTrackPeakPeers(count, connected);
 
@@ -176,7 +155,7 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
           "fixed bottom-4 right-4 z-50",
           "flex items-center gap-4 p-1 text-xs",
         )}
-        data-state={connected ? "online" : "offline"}
+        data-state={connection}
       >
         <div
           className={cn(
@@ -184,20 +163,7 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
             statusCardClass,
           )}
         >
-          <div className="flex items-center gap-1.5 text-muted-foreground select-none">
-            <span
-              className={cn(
-                "size-1.5 rounded-md shrink-0",
-                connected ? "bg-emerald-500 animate-pulse" : "bg-destructive",
-              )}
-              aria-hidden="true"
-            />
-            <span className="tabular-nums whitespace-nowrap">
-              {connected
-                ? `${count} user${count === 1 ? "" : "s"} online`
-                : "offline"}
-            </span>
-          </div>
+          <ConnectionStatus state={connection} count={count} />
 
           <span className="text-border/60" aria-hidden="true">
             ·

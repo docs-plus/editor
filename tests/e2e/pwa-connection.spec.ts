@@ -123,3 +123,56 @@ test.describe("offline edits", () => {
     await context.close();
   });
 });
+
+test.describe("connection status strip", () => {
+  test.setTimeout(90_000);
+
+  const strip = (page: Page) => page.locator("div.fixed[data-state]");
+  const liveRegion = (page: Page) =>
+    page.locator('[role="status"][aria-live="polite"]');
+
+  test("shows offline, unsynced edits and recovery", async ({
+    context,
+    page,
+  }) => {
+    const network = new Network(context, page);
+    await openUserTab(page, network);
+    await expect(strip(page)).toHaveAttribute("data-state", "online");
+    await expect(liveRegion(page)).toHaveText("");
+
+    await network.goOffline();
+    await expect(strip(page)).toHaveAttribute("data-state", "offline", {
+      timeout: 1000,
+    });
+    await expect(strip(page)).toContainText("Offline");
+    await expect(liveRegion(page)).toContainText("You're offline");
+
+    await typeAtEnd(page, "x");
+    await expect(strip(page)).toContainText("Offline · edits not synced yet");
+
+    await network.goOnline();
+    await expect(strip(page)).toHaveAttribute("data-state", "online", {
+      timeout: 5000,
+    });
+    await expect(strip(page)).toContainText("online");
+    await expect(liveRegion(page)).toContainText("Back online");
+  });
+
+  test("says reconnecting before offline when only the server is gone", async ({
+    context,
+    page,
+  }) => {
+    const network = new Network(context, page);
+    await openUserTab(page, network);
+
+    await network.dropSocket();
+    await expect(strip(page)).toHaveAttribute("data-state", "connecting");
+    await expect(strip(page)).toContainText("Reconnecting…");
+    // Not announced: a flapping socket must stay quiet.
+    await expect(liveRegion(page)).toHaveText("");
+    await expect(strip(page)).toHaveAttribute("data-state", "offline", {
+      timeout: 6000,
+    });
+    await expect(liveRegion(page)).toContainText("You're offline");
+  });
+});
