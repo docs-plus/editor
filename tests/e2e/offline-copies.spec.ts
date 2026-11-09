@@ -6,7 +6,7 @@ import {
   type WebSocketRoute,
 } from "@playwright/test";
 
-import { EditorPage } from "./helpers/editor-page";
+import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
 
 /** Closes the collab WebSocket on demand (Next's HMR socket is left alone). */
 class CollabSocket {
@@ -74,13 +74,6 @@ async function openDoc(page: Page, socket: CollabSocket): Promise<string> {
   return docId;
 }
 
-async function typeAtEnd(page: Page, text: string): Promise<void> {
-  await page.locator(".tiptap").click();
-  await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type(text);
-}
-
 async function waitForCopy(page: Page, docId: string): Promise<void> {
   await expect
     .poll(() => storedCopies(page), { timeout: 10_000 })
@@ -96,7 +89,7 @@ test.describe("offline copies", () => {
   }) => {
     const socket = new CollabSocket(context, page);
     const docId = await openDoc(page, socket);
-    await typeAtEnd(page, "cached-marker");
+    await typeInNewParagraphAtEnd(page, "cached-marker");
     await waitForCopy(page, docId);
     await page.waitForTimeout(1500); // let the debounced save include the edit
 
@@ -120,7 +113,7 @@ test.describe("offline copies", () => {
     await waitForCopy(page, docId);
 
     await socket.cut();
-    await typeAtEnd(page, "reload-marker");
+    await typeInNewParagraphAtEnd(page, "reload-marker");
     await page.waitForTimeout(1500); // offline copy is saved on a short debounce
     page.on("dialog", (dialog) => void dialog.accept());
     await page.reload();
@@ -145,7 +138,7 @@ test.describe("offline copies", () => {
   }) => {
     const socket = new CollabSocket(context, page);
     const docId = await openDoc(page, socket);
-    await typeAtEnd(page, "doomed-marker");
+    await typeInNewParagraphAtEnd(page, "doomed-marker");
     await waitForCopy(page, docId);
 
     await socket.cut();
@@ -170,7 +163,7 @@ test.describe("offline copies", () => {
   }) => {
     const socket = new CollabSocket(context, page);
     const docId = await openDoc(page, socket);
-    await typeAtEnd(page, "closing-marker");
+    await typeInNewParagraphAtEnd(page, "closing-marker");
     await waitForCopy(page, docId);
 
     await page.locator(`[data-tab-id="${docId}"]`).hover();

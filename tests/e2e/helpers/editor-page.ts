@@ -3,6 +3,35 @@ import type { JSONContent } from "@tiptap/core";
 
 import { getPlaywrightModifierKey } from "./playwright-modifier-key";
 
+/**
+ * Waits two frames after a key that put the caret in a new empty block.
+ * ProseMirror moves the DOM caret there at once, but Chrome confirms it
+ * with a `selectionchange` a moment later, and a key typed before that is
+ * inserted with the caret left in front of it ("ached-markerc"). Measured:
+ * every insertion after the event landed right, half of those before it did
+ * not. People do not type that fast after Enter or a shortcut; tests do.
+ */
+export async function settleCaret(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+/** Types `text` into a new paragraph at the end of the document. */
+export async function typeInNewParagraphAtEnd(
+  page: Page,
+  text: string,
+): Promise<void> {
+  await page.locator(".tiptap").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("Enter");
+  await settleCaret(page);
+  await page.keyboard.type(text);
+}
+
 export class EditorPage {
   constructor(private page: Page) {}
 
@@ -70,14 +99,57 @@ export class EditorPage {
     });
   }
 
+  /**
+   * Waits for the server's first sync. The editor is editable earlier (it
+   * opens from the device copy), and a new document is seeded only after
+   * this sync, so typing before it races the seed.
+   */
   async waitForSync(): Promise<void> {
     await this.page.waitForFunction(
-      () =>
-        document.querySelector(".tiptap")?.getAttribute("contenteditable") ===
-        "true",
-      { timeout: 10000 },
+      () => {
+        const region = document.querySelector(".document-editor-content");
+        return (
+          region?.getAttribute("data-server-synced") === "true" &&
+          region.querySelector(".tiptap")?.getAttribute("contenteditable") ===
+            "true"
+        );
+      },
+      { timeout: 15000 },
     );
-    await this.page.waitForTimeout(500);
+    // The seed runs in a React effect after that render; two frames later it
+    // has been applied.
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+  }
+
+  /** Waits until the caret's block is a heading of `level` and settles. */
+  async waitForCaretInHeading(level: number): Promise<void> {
+    await this.page.waitForFunction((expected: number) => {
+      const parent = window.__tiptap_editor?.state.selection.$from.parent;
+      return parent?.type.name === "heading" && parent.attrs.level === expected;
+    }, level);
+    await settleCaret(this.page);
+  }
+
+  /** Puts the caret at the end of the title and waits for DOM focus. */
+  async focusTitle(): Promise<void> {
+    await this.page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const title = editor?.state.doc.firstChild;
+      if (!editor || !title) return;
+      editor
+        .chain()
+        .focus()
+        .setTextSelection(title.nodeSize - 1)
+        .run();
+    });
+    await this.page.waitForFunction(
+      () => document.activeElement?.classList.contains("ProseMirror") ?? false,
+    );
   }
 
   async typeText(text: string, options?: { delay?: number }): Promise<void> {
@@ -148,13 +220,16 @@ export class EditorPage {
     await this.page.click(".tiptap");
     const modifier = getPlaywrightModifierKey();
     await this.page.keyboard.press(`${modifier}+Shift+f`);
-    const filterBar = this.page.getByRole("search", {
-      name: "Document filter",
-    });
-    if ((await filterBar.count()) === 0) {
+    const filterInput = this.page.getByLabel("Filter term");
+    // The shortcut opens the bar after a render; clicking the toggle before
+    // that would close it again, so give the shortcut time first.
+    try {
+      await filterInput.waitFor({ timeout: 2000 });
+    } catch {
       await this.page
         .getByRole("button", { name: "Toggle document filter" })
         .click();
+      await filterInput.waitFor();
     }
   }
 
@@ -197,7 +272,9 @@ export class EditorPage {
   async buildDocument(
     headings: Array<{ level: number; text: string }>,
   ): Promise<void> {
-    await this.page.click(".tiptap");
+    // A click lands wherever the seeded document puts the middle of the
+    // editor; start in the title instead.
+    await this.focusTitle();
     for (let i = 0; i < headings.length; i++) {
       const { level, text } = headings[i];
 
@@ -208,6 +285,7 @@ export class EditorPage {
         // Heading shortcut is Mod+Alt+level (Meta on Mac, Control on Windows)
         const mod = getPlaywrightModifierKey();
         await this.page.keyboard.press(`${mod}+Alt+${level}`);
+        await this.waitForCaretInHeading(level);
         await this.typeText(text);
         await this.pressKey("Enter");
       }

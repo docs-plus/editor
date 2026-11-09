@@ -1,5 +1,7 @@
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
+import { typeInNewParagraphAtEnd } from "./helpers/editor-page";
+
 /**
  * Service worker behaviour. Workers run only on a production build:
  *   bun run build && PORT=3847 bun run start
@@ -223,10 +225,7 @@ test.describe("offline editing", () => {
     const editor = page.locator(".tiptap");
     await expect(editor).toBeVisible({ timeout: 30_000 });
     const marker = `device-copy-${Date.now()}`;
-    await editor.click();
-    await page.keyboard.press("ControlOrMeta+End");
-    await page.keyboard.press("Enter");
-    await page.keyboard.type(marker);
+    await typeInNewParagraphAtEnd(page, marker);
     // Debounced save to IndexedDB, and the lazily loaded editor chunks are
     // in the static cache once the editor has rendered.
     await page.waitForTimeout(2500);

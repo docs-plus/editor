@@ -8,6 +8,31 @@ deploying it.
 
 ## [Unreleased]
 
+### Fixed
+- **Image resize handles appear on the image again.** A host rule made every
+  top-level editor child `position: relative`, including the media
+  extension's resize gripper, so its handles were drawn below and beside the
+  hovered image (wherever the gripper sat in the document flow). The rule now
+  skips the gripper.
+
+### Changed
+- **E2E tests no longer race the editor.** Under load they failed
+  intermittently; stress runs (25–40 repeats, 6 workers) now pass every time.
+  - Helpers wait for the server's first sync before editing (the editor is
+    editable earlier, from the device copy); the editor region carries
+    `data-server-synced` for them.
+  - After Enter or a heading shortcut, helpers wait two frames before
+    typing (`settleCaret`, `typeInNewParagraphAtEnd`). Chrome confirms a
+    caret ProseMirror places in a new empty block a moment later, and a key
+    typed before that lands behind the caret.
+  - The Mod-K test waits for the shift-arrow selection; the offline banner
+    test waits for a full reconnect before testing that the banner returns.
+
+### Deploy
+- Pull, build and restart as usual.
+
+## 2026-11-09 · #14 CI on every pull request
+
 ### Added
 - **CI on every pull request and push to `main`** (`.github/workflows/ci.yml`).
   - The checks job runs Biome, ESLint, the typecheck, unit tests and the

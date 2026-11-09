@@ -84,6 +84,18 @@ test.describe("docs.plus extensions", () => {
     await page.keyboard.down("Shift");
     for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowLeft");
     await page.keyboard.up("Shift");
+    // The browser extends the selection natively and ProseMirror reads it on
+    // the next selectionchange, which a busy page can deliver after Mod-K.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = window.__tiptap_editor?.state;
+          if (!state) return "";
+          const { from, to } = state.selection;
+          return state.doc.textBetween(from, to);
+        }),
+      )
+      .toBe("me");
     await page.keyboard.press(`${getPlaywrightModifierKey()}+k`);
 
     const urlInput = page
@@ -164,5 +176,61 @@ test.describe("docs.plus extensions", () => {
       "paragraph",
       "paragraph",
     ]);
+  });
+
+  test("the resize gripper covers the hovered image and resizes it", async ({
+    page,
+  }) => {
+    const svg = encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#888"/></svg>',
+    );
+    const filler = Array.from({ length: 12 }, (_, i) => ({
+      type: "paragraph",
+      content: [{ type: "text", text: `Filler paragraph ${i + 1}.` }],
+    }));
+    await editorPage.setContent({
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Media" }],
+        },
+        ...filler,
+        {
+          type: "image",
+          attrs: { src: `data:image/svg+xml,${svg}`, alt: "Sample" },
+        },
+        ...filler,
+      ],
+    });
+
+    const image = page.locator('.tiptap img[alt="Sample"]');
+    await image.scrollIntoViewIfNeeded();
+    await image.hover();
+    const gripper = page.locator(".hypermultimedia__resize-gripper--active");
+    await expect(gripper).toBeVisible();
+
+    // The gripper is a top-level widget positioned from its offsetParent; a
+    // host rule that makes it `position: relative` moves it off the media.
+    const imageBox = await image.boundingBox();
+    const gripperBox = await gripper.boundingBox();
+    if (!imageBox || !gripperBox) throw new Error("missing boxes");
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs(gripperBox[key] - imageBox[key])).toBeLessThanOrEqual(2);
+    }
+
+    const handle = gripper.locator(".media-resize-clamp--right");
+    const handleBox = await handle.boundingBox();
+    if (!handleBox) throw new Error("missing handle");
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 80, startY, { steps: 8 });
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await image.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(imageBox.width + 40);
   });
 });
