@@ -9,6 +9,8 @@ since the previous tag.
 
 ## [Unreleased]
 
+## 2026-11-09 · #18 README badges, release workflow, testing docs
+
 ### Added
 - **README badges:** CI and nightly status, latest release, license, live
   demo, docs.plus links (website, source, npm extensions, Discord) and the
