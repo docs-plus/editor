@@ -11,7 +11,9 @@ name: Refresh docs.plus extensions
 #           back releases younger than 3 days), then runs lint, typecheck,
 #           unit tests and the production build against the new packages.
 #   pr      write token, but never installs or executes dependencies: it
-#           only commits the verified package.json / bun.lock with git/gh.
+#           only commits the verified package.json / bun.lock with git/gh,
+#           then starts CI on the branch (bot-made PRs start no workflows,
+#           and CI is a required check on main).
 #
 # Requires: Settings → Actions → General → "Allow GitHub Actions to create
 # and approve pull requests".
@@ -196,6 +198,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Start CI on the update branch (see the last step).
+      actions: write
     # This job must never install or run dependencies (no bun / node):
     # it only moves the verified files onto a branch with git and gh.
     steps:
@@ -291,3 +295,13 @@ jobs:
               --title "build(deps): update docs.plus editor extensions" \
               --body-file "$body_file"
           fi
+
+      # Pushes and pull requests made with GITHUB_TOKEN start no workflows,
+      # so the PR would wait forever on the required CI checks. A
+      # workflow_dispatch is the documented exception; its check runs land
+      # on the branch head, which is the PR head.
+      - name: Run CI on the update branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run ci.yml --ref "$UPDATE_BRANCH"
