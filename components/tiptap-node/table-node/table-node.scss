@@ -18,10 +18,17 @@
     );
   }
 
+  // The spacing sits on the wrapper, not the table: top-level blocks are
+  // contained (see document-editor.scss), so a table margin would no longer
+  // collapse through the wrapper into the neighbouring blocks' margins.
+  .tableWrapper {
+    margin: 1.5em 0;
+  }
+
   table {
     border-collapse: collapse;
     width: 100%;
-    margin: 1.5em 0;
+    margin: 0;
     overflow: hidden;
     table-layout: fixed;
 
