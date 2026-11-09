@@ -6,9 +6,9 @@ import type * as Y from "yjs";
 
 import {
   acquireCollabSession,
-  DOCUMENT_TOO_LARGE_REASON,
-  onSynced,
+  isSessionReady,
   releaseCollabSession,
+  subscribeSession,
 } from "@/lib/collab-session";
 
 export function useYjsDocument(documentId: string) {
@@ -16,35 +16,44 @@ export function useYjsDocument(documentId: string) {
   const [providerRef, setProviderRef] = useState<HocuspocusProvider | null>(
     null,
   );
+  /** Renderable: synced with the server, or restored from the offline copy. */
   const [synced, setSynced] = useState(false);
-  /** Set when the server refuses this document's updates (size cap). */
+  /** The server has confirmed this document at least once. */
+  const [serverSynced, setServerSynced] = useState(false);
+  /** Why edits are refused (size cap, deleted, offline budget), if they are. */
   const [rejectedReason, setRejectedReason] = useState<string | null>(null);
 
   useEffect(() => {
     const session = acquireCollabSession(documentId);
     const { doc, provider } = session;
-    const stopSyncListener = onSynced(session, () => setSynced(true));
-    // A reused session may already have been refused.
-    if (session.rejectedReason) setRejectedReason(session.rejectedReason);
-    const onClose = ({ event }: { event: { reason?: string } }) => {
-      if (event.reason === DOCUMENT_TOO_LARGE_REASON) {
-        setRejectedReason(event.reason);
-      }
+    const sync = () => {
+      setSynced(isSessionReady(session));
+      setServerSynced(session.hasSynced || provider.isSynced);
+      setRejectedReason(session.rejectedReason);
     };
-    provider.on("close", onClose);
+    sync();
+    const unsubscribe = subscribeSession(session, sync);
+    provider.on("synced", sync);
     setYdoc(doc);
     setProviderRef(provider);
 
     return () => {
-      stopSyncListener();
-      provider.off("close", onClose);
+      unsubscribe();
+      provider.off("synced", sync);
       releaseCollabSession(documentId);
       setYdoc(null);
       setProviderRef(null);
       setSynced(false);
+      setServerSynced(false);
       setRejectedReason(null);
     };
   }, [documentId]);
 
-  return { ydoc, provider: providerRef, synced, rejectedReason };
+  return {
+    ydoc,
+    provider: providerRef,
+    synced,
+    serverSynced,
+    rejectedReason,
+  };
 }

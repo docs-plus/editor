@@ -11,3 +11,11 @@ export {
   OFFLINE_MAX_DOCS,
   storeKey,
 } from "./local-doc-store";
+export {
+  clearOfflineData,
+  getLocalDocStore,
+  OFFLINE_CACHE_ENABLED,
+  OFFLINE_EDIT_BUDGET_BYTES,
+  removeLocalCopy,
+  sweepLocalCopies,
+} from "./offline-cache";

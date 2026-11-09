@@ -146,7 +146,14 @@ export function bindLocalCopy(
   doc: Y.Doc,
   name: string,
   store: LocalDocStore,
-  { debounceMs = 750 }: { debounceMs?: number } = {},
+  {
+    debounceMs = 750,
+    hydrate = true,
+  }: {
+    debounceMs?: number;
+    /** False to only save (the copy was not read in time). */
+    hydrate?: boolean;
+  } = {},
 ): LocalBinding {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
@@ -167,8 +174,7 @@ export function bindLocalCopy(
     timer = setTimeout(write, debounceMs);
   };
 
-  const hydrated = store
-    .load(name)
+  const hydrated = (hydrate ? store.load(name) : Promise.resolve(null))
     .then((update) => {
       if (destroyed || !update) return false;
       Y.applyUpdate(doc, update, LOCAL_ORIGIN);

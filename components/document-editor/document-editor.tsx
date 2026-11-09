@@ -1,5 +1,6 @@
 "use client";
 
+import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
@@ -47,6 +48,11 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
+import {
+  DOCUMENT_DELETED_REASON,
+  DOCUMENT_TOO_LARGE_REASON,
+  OFFLINE_BUDGET_REASON,
+} from "@/lib/collab-session";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
@@ -67,8 +73,19 @@ type DocumentEditorContentProps = DocumentEditorProps & {
   ydoc: Y.Doc;
   provider: import("@hocuspocus/provider").HocuspocusProvider;
   documentId: string;
-  /** The server refused updates: further edits would be lost. */
-  sizeLimitReached: boolean;
+  /** Why edits are refused (size cap, deleted, offline budget), if they are. */
+  rejectedReason: string | null;
+  /** The server has confirmed this document; seeding waits for it. */
+  serverSynced: boolean;
+};
+
+const REJECTION_NOTICES: Record<string, string> = {
+  [DOCUMENT_TOO_LARGE_REASON]:
+    "This document is over the size limit, so new changes can't be saved. Copy what you need into a new tab.",
+  [DOCUMENT_DELETED_REASON]:
+    "This document was deleted. You're seeing your device's last copy; copy what you need into a new tab.",
+  [OFFLINE_BUDGET_REASON]:
+    "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
 };
 
 function DocumentEditorContent({
@@ -78,7 +95,8 @@ function DocumentEditorContent({
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
-  sizeLimitReached,
+  rejectedReason,
+  serverSynced,
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
@@ -117,8 +135,10 @@ function DocumentEditorContent({
       onTocUpdate: updateTocItems,
     }),
     content: initialContent ?? DEFAULT_EDITOR_CONTENT,
-    onUpdate: ({ editor: e }) => {
-      if (!onTitleChange) return;
+    onUpdate: ({ editor: e, transaction }) => {
+      // Only this visitor's own edits rename the tab: renders from the
+      // offline copy or from other collaborators must not write titles.
+      if (!onTitleChange || isChangeOrigin(transaction)) return;
       const title = e.state.doc.firstChild?.textContent || "Untitled";
       if (title === prevTitleRef.current) return;
       prevTitleRef.current = title;
@@ -128,8 +148,8 @@ function DocumentEditorContent({
 
   // Stop accepting input the server would drop.
   useEffect(() => {
-    if (editor && sizeLimitReached) editor.setEditable(false);
-  }, [editor, sizeLimitReached]);
+    if (editor) editor.setEditable(rejectedReason === null);
+  }, [editor, rejectedReason]);
 
   const headingFilter = useHeadingFilter({ editor, filterState });
 
@@ -143,6 +163,7 @@ function DocumentEditorContent({
     ydoc,
     documentId,
     playgroundRegenerateTrigger,
+    serverSynced,
     readInitialFilter: readFilterUrl,
     openFilterBar: headingFilter.openBar,
     toggleFilterBar: headingFilter.toggleBar,
@@ -230,10 +251,10 @@ function DocumentEditorContent({
             )}
         </div>
 
-        {sizeLimitReached && (
+        {rejectedReason && (
           <p role="alert" className="document-size-notice">
-            This document is over the size limit, so new changes can&apos;t be
-            saved. Copy what you need into a new tab.
+            {REJECTION_NOTICES[rejectedReason] ??
+              "New changes to this document can't be saved."}
           </p>
         )}
         <CollabStatusGroup />
@@ -249,7 +270,8 @@ export function DocumentEditor({
   playgroundRegenerateTrigger,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
-  const { ydoc, provider, synced, rejectedReason } = useYjsDocument(docId);
+  const { ydoc, provider, synced, serverSynced, rejectedReason } =
+    useYjsDocument(docId);
 
   if (!synced || !ydoc || !provider) {
     return (
@@ -267,7 +289,8 @@ export function DocumentEditor({
       onTitleChange={onTitleChange}
       initialContent={initialContent}
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-      sizeLimitReached={rejectedReason !== null}
+      rejectedReason={rejectedReason}
+      serverSynced={serverSynced}
     />
   );
 }
