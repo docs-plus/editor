@@ -12,6 +12,7 @@ import { useCallback } from "react";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Lib ---
+import { trackEvent } from "@/lib/analytics";
 import { isNodeInSchema } from "@/lib/editor-utils";
 
 export const MEDIA_EMBED_HINT =
@@ -89,7 +90,10 @@ export function embedMedia(editor: Editor | null, rawUrl: string): boolean {
   const type = resolveMediaType(rawUrl);
   if (!type) return false;
   const chain = MEDIA_INSERTERS[type](editor.chain().focus(), rawUrl.trim());
-  return moveCaretBelowInsertedNode(chain).run();
+  const embedded = moveCaretBelowInsertedNode(chain).run();
+  // Provider enum only: never the URL.
+  if (embedded) trackEvent("media_embed", { provider: type });
+  return embedded;
 }
 
 export function useMediaEmbed(providedEditor?: Editor | null) {

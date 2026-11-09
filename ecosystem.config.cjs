@@ -11,6 +11,11 @@
  * WS_CONNECTION_LIMIT, DOC_CREATION_RATE_LIMIT, HOCUS_THROTTLE*, HOCUS_LOGGER,
  * HOCUS_REDIS*, etc.
  * See docs/operations/abuse-guardrails-runbook.md.
+ *
+ * NEXT_PUBLIC_* values (NEXT_PUBLIC_HOCUS_URL, NEXT_PUBLIC_SITE_URL,
+ * NEXT_PUBLIC_GA_MEASUREMENT_ID, NEXT_PUBLIC_PRIVACY_*) and SEO_NOINDEX are
+ * inlined by `bun run build`. Put them in .env.production before building;
+ * setting them here has no effect.
  */
 module.exports = {
   apps: [

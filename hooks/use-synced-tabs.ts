@@ -5,6 +5,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 
+import { trackEvent } from "@/lib/analytics";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import {
   getGlobalTabsDoc,
@@ -140,6 +141,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       createdAt: Date.now(),
     };
     arr.push([tab]);
+    trackEvent("tab_create", { tab_count: current.length + 1 });
     setActiveTabId(tab.id);
     persistActiveTabId(tab.id);
   }, []);
@@ -243,6 +245,9 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
       ydoc.transact(doDelete);
     } else {
       doDelete();
+    }
+    if (succeeded.length > 0) {
+      trackEvent("tab_close_all", { closed_count: succeeded.length });
     }
 
     const remaining = arr.toArray();

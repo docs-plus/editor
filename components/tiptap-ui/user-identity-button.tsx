@@ -4,6 +4,7 @@ import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { WebSocketStatus } from "@hocuspocus/provider";
 import { useCurrentEditor } from "@tiptap/react";
 import throttle from "lodash.throttle";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -14,6 +15,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type AnalyticsEventMap,
+  bucketPeers,
+  PEERS_BUCKETS,
+  trackEvent,
+} from "@/lib/analytics";
 import { DISCORD_INVITE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 import { DiscordIcon, GithubIcon, PencilIcon } from "@/lib/icons";
 import {
@@ -37,11 +44,13 @@ function CommunityIconLink({
   href,
   ariaLabel,
   tooltip,
+  analyticsTarget,
   children,
 }: {
   href: string;
   ariaLabel: string;
   tooltip: string;
+  analyticsTarget: AnalyticsEventMap["outbound_click"]["target"];
   children: ReactNode;
 }) {
   return (
@@ -54,6 +63,9 @@ function CommunityIconLink({
             rel="noopener noreferrer"
             className={communityIconLinkClass}
             aria-label={ariaLabel}
+            onClick={() =>
+              trackEvent("outbound_click", { target: analyticsTarget })
+            }
           >
             {children}
           </a>
@@ -117,6 +129,19 @@ function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
   return users;
 }
 
+/** Reports the peak peer bucket per document view: at most 5 events. */
+function useTrackPeakPeers(count: number, connected: boolean): void {
+  const peakRankRef = useRef(-1);
+  useEffect(() => {
+    if (!connected || count < 1) return;
+    const bucket = bucketPeers(count);
+    const rank = PEERS_BUCKETS.indexOf(bucket);
+    if (rank <= peakRankRef.current) return;
+    peakRankRef.current = rank;
+    trackEvent("collab_peers", { peers_bucket: bucket });
+  }, [connected, count]);
+}
+
 interface UserIdentityButtonProps {
   provider: HocuspocusProvider;
 }
@@ -128,14 +153,15 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
   const status = useConnectionStatus(provider);
   const users = useOnlineUsers(editor);
 
+  const connected = status === WebSocketStatus.Connected;
+  const count = users.length;
+  useTrackPeakPeers(count, connected);
+
   useEffect(() => {
     setIdentity(getUserIdentity());
   }, []);
 
   if (!identity) return null;
-
-  const connected = status === WebSocketStatus.Connected;
-  const count = users.length;
 
   const handleSave = (next: UserIdentity) => {
     saveUserIdentity(next);
@@ -209,6 +235,7 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
             href={DISCORD_INVITE_URL}
             ariaLabel="Discord community"
             tooltip="Join the Discord community"
+            analyticsTarget="discord"
           >
             <DiscordIcon />
           </CommunityIconLink>
@@ -216,9 +243,16 @@ export function UserIdentityButton({ provider }: UserIdentityButtonProps) {
             href={GITHUB_REPO_URL}
             ariaLabel="Source on GitHub"
             tooltip="View source on GitHub"
+            analyticsTarget="github"
           >
             <GithubIcon />
           </CommunityIconLink>
+          <Link
+            href="/privacy"
+            className="px-1.5 text-muted-foreground hover:text-foreground hover:underline underline-offset-2"
+          >
+            Privacy
+          </Link>
         </div>
       </div>
 
