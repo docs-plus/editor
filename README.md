@@ -135,6 +135,7 @@ extensions/             Standalone editor extensions
   heading-drag/         Section drag extension
   heading-fold/         Fold/unfold extension
   heading-filter/       Heading filter extension
+  render-once/          Render a large collaborative doc once on mount
   shared/               Shared ProseMirror helpers
 hooks/                  Shared React hooks
 lib/                    Utilities and security modules
