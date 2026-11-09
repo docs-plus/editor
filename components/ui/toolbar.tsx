@@ -45,6 +45,7 @@ function useToolbarNavigation(
     orientation: "horizontal",
     onSelect: (el) => el.click(),
     autoSelectFirstItem: false,
+    captureTab: false,
   });
 
   useEffect(() => {
@@ -89,7 +90,7 @@ const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
       <div
         ref={composedRef}
         role="toolbar"
-        aria-label="toolbar"
+        aria-label="Formatting"
         data-slot="toolbar"
         data-variant={variant}
         className={cn(
