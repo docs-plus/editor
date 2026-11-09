@@ -10,14 +10,29 @@ import {
 import { PLAYGROUND_ID } from "@/lib/constants";
 import type { Tab } from "@/lib/tab-api";
 
+/** Provider double: `onSynced()` simulates the server sync completing. */
 type ProviderConfig = { document: Y.Doc; onSynced: () => void };
 
 const mock = vi.hoisted(() => ({ providers: [] as ProviderConfig[] }));
 
 vi.mock("@hocuspocus/provider", () => ({
   HocuspocusProvider: class {
-    constructor(config: ProviderConfig) {
-      mock.providers.push(config);
+    isSynced = false;
+    document: Y.Doc;
+    private syncedHandlers = new Set<() => void>();
+    constructor(config: { document: Y.Doc }) {
+      this.document = config.document;
+      mock.providers.push(this);
+    }
+    onSynced = () => {
+      this.isSynced = true;
+      for (const handler of this.syncedHandlers) handler();
+    };
+    on(event: string, handler: () => void) {
+      if (event === "synced") this.syncedHandlers.add(handler);
+    }
+    off(event: string, handler: () => void) {
+      if (event === "synced") this.syncedHandlers.delete(handler);
     }
     attach() {}
     destroy() {}
@@ -86,6 +101,10 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
   mock.providers.length = 0;
   latest.current = undefined;
+  // Sessions outlive an unmount briefly (lib/collab-session.ts): give every
+  // test its own tab-list document so none reuses another's.
+  (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
+    `global-tabs-${crypto.randomUUID()}`;
   consoleError = vi.spyOn(console, "error");
   root = createRoot(document.createElement("div"));
   act(() => root.render(createElement(Harness)));

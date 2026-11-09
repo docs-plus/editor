@@ -16,6 +16,12 @@ test.describe("SEO surfaces", () => {
     const html = await fetchHtml(page, "/");
 
     expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+    // The app-shell skeleton is server-rendered with the intro in its page
+    // card, so the first paint already has the editor's layout.
+    expect(html).toMatch(
+      /class="skeleton-page"[^>]*>\s*<article class="site-intro"/,
+    );
+    expect(html).toContain('class="skeleton-tab-bar"');
     expect(html).toContain("<main");
     expect(html).toMatch(/<link rel="canonical" href="https?:\/\/[^"]+"/);
     expect(html).toContain('property="og:image"');
