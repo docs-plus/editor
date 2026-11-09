@@ -13,6 +13,22 @@ deploying it.
   every pull request.
 
 ### Changed
+- **Typing is 3–4x faster in large documents.** With 1,455 blocks, a
+  keystroke reaches the next frame in 13–14 ms on desktop (was 52–69 ms) and
+  50–56 ms on an emulated phone (was 203–282 ms). Mount time is unchanged.
+  - The editor shell no longer re-renders on every transaction, and the
+    editor options stay stable, so Tiptap no longer reconfigures the view per
+    keystroke.
+  - Toolbar controls share one store per editor: selection, mark, focus and
+    editable changes update them at once; document changes update them after
+    150 ms of quiet (`TOOLBAR_SETTLE_MS`).
+  - Heading ids are assigned only when a change touches a heading, instead
+    of walking the whole document.
+  - The outline rebuilds at most every 250 ms while typing, notifies only
+    when it actually changes, and re-renders only the sidebar.
+  - Code blocks are re-highlighted only where a change touches them
+    (`components/document-editor/incremental-lowlight.ts`).
+  - The Yjs sync plugin skips its pass when the document is unchanged.
 - Root README restructured for evaluators, self-hosters, operators and
   contributors.
 
