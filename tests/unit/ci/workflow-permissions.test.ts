@@ -32,6 +32,12 @@ const WORKFLOW_FILES = readdirSync(WORKFLOWS_DIR).filter((f) =>
 const RUNS_DEPENDENCIES = /\bbun (install|update|run (test|build|lint))\b/;
 const PINNED_USES = /@[0-9a-f]{40}( #.*)?$/;
 
+const actionRefs = (source: string): string[] =>
+  source
+    .split("\n")
+    .map((line) => line.match(/^\s*(?:-\s+)?uses:\s*(.+?)\s*$/)?.[1])
+    .filter((value): value is string => value !== undefined);
+
 const readWorkflow = (file: string) => {
   const source = readFileSync(path.join(WORKFLOWS_DIR, file), "utf8");
   return { source, workflow: parse(source) as Workflow };
@@ -83,14 +89,17 @@ describe.each(WORKFLOW_FILES)("workflow %s", (file) => {
   });
 
   it("pins every action to a full commit SHA", () => {
-    const uses = source
-      .split("\n")
-      .map((line) => line.match(/^\s*(?:-\s+)?uses:\s*(.+?)\s*$/)?.[1])
-      .filter((value): value is string => value !== undefined);
-
-    expect(uses.length).toBeGreaterThan(0);
-    for (const ref of uses) {
+    for (const ref of actionRefs(source)) {
       expect(ref).toMatch(PINNED_USES);
     }
   });
+});
+
+// A workflow may use no actions at all (release.yml only runs gh), but the
+// parser above must still find the ones that exist.
+it("finds the actions the workflows use", () => {
+  const all = WORKFLOW_FILES.flatMap((file) =>
+    actionRefs(readWorkflow(file).source),
+  );
+  expect(all.length).toBeGreaterThan(0);
 });

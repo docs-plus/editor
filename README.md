@@ -249,6 +249,11 @@ production build; the other runs the Playwright Chromium suite. A nightly
 workflow (`.github/workflows/nightly.yml`) runs the service worker, soak and
 load layers on a schedule.
 
+**Releases:** tag `main` with `vX.Y.Z` and push the tag;
+`.github/workflows/release.yml` publishes the GitHub release, listing the pull
+requests merged since the previous tag and linking to
+[CHANGELOG.md](CHANGELOG.md).
+
 The `@docs.plus/extension-*` packages are refreshed every three days by
 `.github/workflows/docs-plus-extensions.yml`. It opens a pull request after a
 read-only verification job, which needs "Allow GitHub Actions to create and
