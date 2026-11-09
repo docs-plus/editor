@@ -64,6 +64,7 @@ tests/
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
+│   ├── pwa-connection.spec.ts            # Offline edits, connection status, offline banner/shell
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
@@ -138,6 +139,7 @@ make test-e2e
 | `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected |
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
+| `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |
 | `toc-drag.spec.ts` | TOC drag handle visibility; title H1 not draggable; drag reorder moves editor sections; folded section drag handle |
 
