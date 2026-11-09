@@ -234,3 +234,18 @@ html:root {
   font-size: 0.875rem;
   z-index: 50;
 }
+
+// Shown when the server refuses this document's updates (size cap).
+.document-size-notice {
+  position: fixed;
+  top: 6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2rem);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--destructive);
+  color: var(--primary-foreground);
+  font-size: 0.875rem;
+  z-index: 50;
+}

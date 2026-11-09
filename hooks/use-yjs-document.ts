@@ -6,6 +6,9 @@ import * as Y from "yjs";
 
 import { getHocuspocusToken, getHocuspocusWsUrl } from "@/lib/hocuspocus";
 
+/** Close reason Hocuspocus sends when an update would exceed the size cap. */
+export const DOCUMENT_TOO_LARGE_REASON = "document_too_large";
+
 const docCache = new Map<string, { doc: Y.Doc; refCount: number }>();
 
 function acquireDoc(documentId: string): Y.Doc {
@@ -34,6 +37,8 @@ export function useYjsDocument(documentId: string) {
     null,
   );
   const [synced, setSynced] = useState(false);
+  /** Set when the server refuses this document's updates (size cap). */
+  const [rejectedReason, setRejectedReason] = useState<string | null>(null);
 
   useEffect(() => {
     const doc = acquireDoc(documentId);
@@ -46,6 +51,11 @@ export function useYjsDocument(documentId: string) {
       onSynced() {
         setSynced(true);
       },
+      onClose({ event }) {
+        if (event.reason === DOCUMENT_TOO_LARGE_REASON) {
+          setRejectedReason(event.reason);
+        }
+      },
     });
 
     setYdoc(doc);
@@ -57,8 +67,9 @@ export function useYjsDocument(documentId: string) {
       setYdoc(null);
       setProviderRef(null);
       setSynced(false);
+      setRejectedReason(null);
     };
   }, [documentId]);
 
-  return { ydoc, provider: providerRef, synced };
+  return { ydoc, provider: providerRef, synced, rejectedReason };
 }

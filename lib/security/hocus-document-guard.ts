@@ -32,6 +32,8 @@ type SizeEstimate = { stored: number; pending: number };
 
 const MESSAGE_SYNC = 0;
 const SYNC_STEP_1 = 0;
+/** An encoded Yjs update with no structs and no deletions is `[0, 0]`. */
+const EMPTY_UPDATE_BYTES = 2;
 
 /** Reads a lib0 varUint at `offset`; returns [value, nextOffset] or null. */
 function readVarUint(
@@ -50,9 +52,11 @@ function readVarUint(
 }
 
 /**
- * True when a Hocuspocus frame carries document content: a Sync message of
- * type step 2 or update. Awareness, auth, step 1 and stateless frames do
- * not grow the document, so they never count toward its size.
+ * True when a Hocuspocus frame carries document content: a non-empty Sync
+ * step 2 or update. Awareness, auth, step 1, stateless frames and the empty
+ * step 2 every client sends when it connects do not grow the document, so
+ * they never count toward its size (otherwise a document already over its
+ * cap could not even be opened).
  */
 export function isDocumentUpdateFrame(frame: Uint8Array): boolean {
   const nameLength = readVarUint(frame, 0);
@@ -60,7 +64,9 @@ export function isDocumentUpdateFrame(frame: Uint8Array): boolean {
   const messageType = readVarUint(frame, nameLength[1] + nameLength[0]);
   if (!messageType || messageType[0] !== MESSAGE_SYNC) return false;
   const syncType = readVarUint(frame, messageType[1]);
-  return syncType !== null && syncType[0] !== SYNC_STEP_1;
+  if (!syncType || syncType[0] === SYNC_STEP_1) return false;
+  const updateLength = readVarUint(frame, syncType[1]);
+  return updateLength !== null && updateLength[0] > EMPTY_UPDATE_BYTES;
 }
 
 /**

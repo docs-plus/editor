@@ -1,7 +1,7 @@
 "use client";
 
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { Toolbar } from "@/components/ui/toolbar";
@@ -64,6 +64,8 @@ type DocumentEditorContentProps = DocumentEditorProps & {
   ydoc: Y.Doc;
   provider: import("@hocuspocus/provider").HocuspocusProvider;
   documentId: string;
+  /** The server refused updates: further edits would be lost. */
+  sizeLimitReached: boolean;
 };
 
 function DocumentEditorContent({
@@ -73,6 +75,7 @@ function DocumentEditorContent({
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
+  sizeLimitReached,
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
@@ -119,6 +122,11 @@ function DocumentEditorContent({
       onTitleChange(title);
     },
   });
+
+  // Stop accepting input the server would drop.
+  useEffect(() => {
+    if (editor && sizeLimitReached) editor.setEditable(false);
+  }, [editor, sizeLimitReached]);
 
   const headingFilter = useHeadingFilter({ editor, filterState });
 
@@ -219,6 +227,12 @@ function DocumentEditorContent({
             )}
         </div>
 
+        {sizeLimitReached && (
+          <p role="alert" className="document-size-notice">
+            This document is over the size limit, so new changes can&apos;t be
+            saved. Copy what you need into a new tab.
+          </p>
+        )}
         <CollabStatusGroup provider={provider} />
       </EditorContext.Provider>
     </main>
@@ -232,7 +246,7 @@ export function DocumentEditor({
   playgroundRegenerateTrigger,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
-  const { ydoc, provider, synced } = useYjsDocument(docId);
+  const { ydoc, provider, synced, rejectedReason } = useYjsDocument(docId);
 
   if (!synced || !ydoc || !provider) return <EditorSkeleton />;
 
@@ -244,6 +258,7 @@ export function DocumentEditor({
       onTitleChange={onTitleChange}
       initialContent={initialContent}
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+      sizeLimitReached={rejectedReason !== null}
     />
   );
 }
