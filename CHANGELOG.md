@@ -8,6 +8,11 @@ deploying it.
 
 ## [Unreleased]
 
+### Added
+- **README badges:** CI and nightly status, latest release, license, live
+  demo, docs.plus links (website, source, npm extensions, Discord) and the
+  stack.
+
 ### Changed
 - `tests/TESTING.md`, the repo-conventions skill and `AGENTS.md` describe the
   current test layout, CI and nightly runs, the server-sync wait in e2e

@@ -1,5 +1,24 @@
 # TinyDocy
 
+[![CI](https://github.com/docs-plus/editor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/docs-plus/editor/actions/workflows/ci.yml)
+[![Nightly](https://github.com/docs-plus/editor/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/docs-plus/editor/actions/workflows/nightly.yml)
+[![Release](https://img.shields.io/github/v/release/docs-plus/editor?label=release)](https://github.com/docs-plus/editor/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-tiny.docs.plus-bb4d00)](https://tiny.docs.plus)
+
+[![docs.plus](https://img.shields.io/badge/docs.plus-website-111827)](https://docs.plus)
+[![docs.plus source](https://img.shields.io/badge/docs.plus-source-181717?logo=github&logoColor=white)](https://github.com/docs-plus/docs.plus)
+[![@docs.plus extensions](https://img.shields.io/badge/npm-%40docs.plus%2Fextension--*-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/org/docs.plus)
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/25JPG38J59)
+
+[![Bun](https://img.shields.io/badge/Bun-1.3-000000?logo=bun&logoColor=white)](https://bun.sh)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev)
+[![Tiptap](https://img.shields.io/badge/Tiptap-3-000000?logo=tiptap&logoColor=white)](https://tiptap.dev)
+[![Yjs](https://img.shields.io/badge/Yjs-CRDT-0f766e)](https://yjs.dev)
+[![Hocuspocus](https://img.shields.io/badge/Hocuspocus-4-000000)](https://tiptap.dev/docs/hocuspocus)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+
 TinyDocy is a free, open-source (MIT) document editor where several people edit
 the same page at once and see each other's cursors. It is built with Tiptap 3,
 Yjs and Hocuspocus, needs no account, installs as an app, and keeps working
