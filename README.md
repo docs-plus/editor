@@ -90,6 +90,13 @@ Build-time settings (inlined by `bun run build`, so put them in
 - `NEXT_PUBLIC_SERVICE_WORKER=0` — emergency off switch for the service
   worker (default on): pages unregister it and delete its caches on the next
   load. See the PWA section below.
+- `NEXT_PUBLIC_OFFLINE_CACHE=0` — turns off offline copies of documents
+  (default on) and deletes copies already stored in visitors' browsers. With
+  copies on, documents and the tab list open from IndexedDB before the
+  server answers, and edits made offline sync on reconnect (at most 512 KB of
+  offline edits, 30 documents, 14 days; see `lib/offline/`). Deleted
+  documents stay deleted: the server refuses tombstoned names for
+  `TOMBSTONE_RETENTION_DAYS` (default 90).
 
 Redis scaling notes:
 

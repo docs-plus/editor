@@ -263,6 +263,32 @@ export function subscribeSession(
   };
 }
 
+/**
+ * Deletes a document's offline copy and stops saving it (tab closed or
+ * document deleted), so a session still open or releasing cannot write it
+ * back.
+ */
+export function forgetLocalCopy(name: string): void {
+  const entry = sessions.get(name);
+  if (entry?.binding) {
+    entry.binding.destroy();
+    entry.binding = null;
+  }
+  removeLocalCopy(name);
+}
+
+/** Writes every pending offline copy now (page hidden or closing). */
+function flushLocalCopies(): void {
+  for (const entry of sessions.values()) void entry.binding?.flush();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushLocalCopies);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushLocalCopies();
+  });
+}
+
 /** Names of sessions still open or holding unsynced edits. */
 export function liveSessionNames(): Set<string> {
   return new Set(sessions.keys());

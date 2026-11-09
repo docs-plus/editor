@@ -37,6 +37,7 @@ vi.mock("@hocuspocus/provider", () => ({
 
 import {
   acquireCollabSession,
+  DOCUMENT_DELETED_REASON,
   DOCUMENT_TOO_LARGE_REASON,
   hasUnsyncedCollabChanges,
   onSynced,
@@ -202,5 +203,16 @@ describe("unsynced edits", () => {
     const stop = onSynced(acquireCollabSession(name), handler);
     expect(handler).toHaveBeenCalledOnce();
     stop();
+  });
+
+  it("marks a document deleted while away as refused and stops syncing it", () => {
+    const session = acquireCollabSession(unique());
+    const provider = created.at(-1) as FakeProvider;
+    provider.emit("authenticationFailed", { reason: "rate_limited" });
+    expect(session.rejectedReason).toBeNull();
+
+    provider.emit("authenticationFailed", { reason: DOCUMENT_DELETED_REASON });
+    expect(session.rejectedReason).toBe(DOCUMENT_DELETED_REASON);
+    expect(provider.detach).toHaveBeenCalledOnce();
   });
 });

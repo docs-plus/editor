@@ -7,13 +7,14 @@ import type * as Y from "yjs";
 import { trackEvent } from "@/lib/analytics";
 import {
   acquireCollabSession,
+  forgetLocalCopy,
   liveSessionNames,
   onSynced,
   releaseCollabSession,
 } from "@/lib/collab-session";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
 import { getGlobalTabsDoc } from "@/lib/hocuspocus";
-import { removeLocalCopy, sweepLocalCopies } from "@/lib/offline";
+import { sweepLocalCopies } from "@/lib/offline";
 import {
   clearMigrationStorage,
   DELETE_TIMEOUT_MS,
@@ -182,7 +183,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     // Re-resolve: the shared array may have changed while DELETE was in flight.
     const rawIdx = findRawTabIndex(arr.toArray(), id);
     if (rawIdx >= 0) arr.delete(rawIdx, 1);
-    removeLocalCopy(id);
+    forgetLocalCopy(id);
     setActiveTabId(newActive);
     persistActiveTabId(newActive);
   }, []);
@@ -240,7 +241,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     }
 
     const succeededSet = new Set(succeeded);
-    for (const id of succeeded) removeLocalCopy(id);
+    for (const id of succeeded) forgetLocalCopy(id);
     const ydoc = arr.doc;
     const indices = arr
       .toArray()

@@ -211,3 +211,31 @@ test.describe("service worker", () => {
     expect(withWorker).toBeLessThanOrEqual(blocked * 1.15 + 100);
   });
 });
+
+test.describe("offline editing", () => {
+  test.setTimeout(120_000);
+
+  test("the editor reopens offline with the document from the device", async ({
+    page,
+    context,
+  }) => {
+    await openControlled(page);
+    const editor = page.locator(".tiptap");
+    await expect(editor).toBeVisible({ timeout: 30_000 });
+    const marker = `device-copy-${Date.now()}`;
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(marker);
+    // Debounced save to IndexedDB, and the lazily loaded editor chunks are
+    // in the static cache once the editor has rendered.
+    await page.waitForTimeout(2500);
+
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.locator(".tiptap")).toContainText(marker, {
+      timeout: 30_000,
+    });
+    await context.setOffline(false);
+  });
+});
