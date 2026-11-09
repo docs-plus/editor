@@ -10,13 +10,18 @@ test.skip(!process.env.PWA_BASE_URL, "needs a production build");
 
 const WORKER_PATH = "/_next/static/service-worker/sw.js";
 
-/** Per-context global-tabs doc, as EditorPage does. */
+/**
+ * One isolated global-tabs doc for the whole file (the project runs one
+ * worker and no test edits tabs): every new doc counts against the server's
+ * DOC_CREATION_RATE_LIMIT, which defaults to 10 per hour per IP.
+ */
+const TABS_DOC = `global-tabs-pwa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 async function isolateTabs(context: BrowserContext): Promise<void> {
-  const tabsDoc = `global-tabs-pwa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await context.addInitScript((name: string) => {
     (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
       name;
-  }, tabsDoc);
+  }, TABS_DOC);
 }
 
 async function waitForControl(page: Page): Promise<void> {
@@ -183,7 +188,7 @@ test.describe("service worker", () => {
       await isolateTabs(context);
       const page = await context.newPage();
       await page.goto("/");
-      await page.locator(".tiptap").first().waitFor();
+      await page.locator(".tiptap").first().waitFor({ timeout: 20_000 });
       if (controlled) await waitForControl(page);
 
       const times: number[] = [];
