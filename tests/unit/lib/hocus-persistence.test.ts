@@ -1,9 +1,7 @@
-// @vitest-environment node
-
 import { Database } from "bun:sqlite";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import { Hocuspocus } from "@hocuspocus/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
 import { createSqlitePersistence } from "@/lib/hocus-persistence";
@@ -36,7 +34,16 @@ async function writeText(
   const connection = await server.openDirectConnection(name);
   await connection.transact((doc) => doc.getText("body").insert(0, text));
   await connection.disconnect({ unloadImmediately: false });
-  await vi.waitFor(() => expect(server.getDocumentsCount()).toBe(0));
+  await waitForUnload(server);
+}
+
+/** Waits (up to 1 s) for the debounced store + unload. */
+async function waitForUnload(server: Hocuspocus): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (server.getDocumentsCount() > 0) {
+    if (Date.now() > deadline) throw new Error("document was not unloaded");
+    await Bun.sleep(10);
+  }
 }
 
 async function readText(server: Hocuspocus, name: string): Promise<string> {

@@ -1,8 +1,9 @@
+import { describe, expect, it } from "bun:test";
+
 import { getSchema, type JSONContent } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
 import { StarterKit } from "@tiptap/starter-kit";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
-import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 
 import {

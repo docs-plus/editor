@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import { handleImageUpload } from "@/components/tiptap-node/image-upload-node/upload-utils";
 import {

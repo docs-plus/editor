@@ -1,5 +1,6 @@
+import { expect } from "bun:test";
+
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
-import { expect } from "vitest";
 
 import { computeSection } from "@/extensions/shared";
 

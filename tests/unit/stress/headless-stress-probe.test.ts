@@ -1,5 +1,6 @@
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
+
 import type { JSONContent } from "@tiptap/core";
-import { describe, expect, test } from "vitest";
 
 import { headingFilterPluginKey } from "@/extensions/heading-filter";
 import { headingFoldPluginKey } from "@/extensions/heading-fold";
@@ -236,7 +237,10 @@ function binarySearchCeiling(shape: DocumentShape): number {
   return low;
 }
 
-describe("headless stress probe", { timeout: 60_000 }, () => {
+// Each binary search renders dozens of documents.
+setDefaultTimeout(60_000);
+
+describe("headless stress probe", () => {
   test("flat shape: ceiling >= 200 headings under 16ms p95", () => {
     const ceiling = binarySearchCeiling("flat");
     console.log(`Flat shape ceiling: ${ceiling} headings`);

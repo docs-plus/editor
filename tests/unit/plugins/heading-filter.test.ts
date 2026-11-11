@@ -1,5 +1,6 @@
+import { describe, expect, it } from "bun:test";
+
 import type { Extension } from "@tiptap/core";
-import { describe, expect, it } from "vitest";
 
 import {
   HeadingFilter,

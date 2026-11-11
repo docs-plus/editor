@@ -1,5 +1,6 @@
+import { describe, expect, it } from "bun:test";
+
 import type { JSONContent } from "@tiptap/core";
-import { describe, expect, it } from "vitest";
 
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
 

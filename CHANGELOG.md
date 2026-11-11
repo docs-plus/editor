@@ -22,11 +22,17 @@ since the previous tag.
   `node` stub on `PATH`, so anything that falls back to Node fails the run.
   Plain `bunx` ignores `[run] bun`, so workflows, git hooks and scripts call
   local tools as `bun <bin>` (`bun playwright test`, `bun lint-staged`).
+- **Unit tests on `bun test`:** Bun's test runner with a happy-dom preload
+  (`tests/setup.ts`) replaces Vitest. `bun run test` takes about 8 s,
+  against 9–12 s with Vitest; the stress probe runs on its own
+  (`test:stress`). Module mocks use `mock.module()` and `await import()`,
+  and modules that read env at import time load through `importFresh()`.
+  Make targets write JUnit XML to `test-reports/`.
 - **Load harness:** clients use Bun's built-in `WebSocket`.
 
 ### Removed
 - `better-sqlite3` and `@types/better-sqlite3` (native addon).
-- `ws` and `@types/ws`.
+- `vitest`, `jsdom`, `@vitejs/plugin-react`, `ws` and `@types/ws`.
 
 ### Deploy
 - Upgrade Bun on the server to 1.4.4 or later **before** pulling

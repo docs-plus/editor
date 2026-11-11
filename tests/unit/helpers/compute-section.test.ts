@@ -1,5 +1,6 @@
+import { describe, expect, it } from "bun:test";
+
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { describe, expect, it } from "vitest";
 
 import { computeSection } from "@/extensions/shared";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

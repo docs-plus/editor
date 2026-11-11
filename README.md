@@ -57,8 +57,8 @@ documents, so don't type anything private.
 ## Quick start
 
 Requires [Bun](https://bun.sh) 1.4.4 or later. Node.js is not needed: Next.js,
-Vitest, ESLint, Playwright and the git hooks all run on the Bun runtime
-(`[run] bun = true` in `bunfig.toml`).
+ESLint, Playwright and the git hooks run on the Bun runtime (`[run] bun = true`
+in `bunfig.toml`), and unit tests use `bun test`.
 
 ```bash
 bun install
@@ -219,7 +219,7 @@ Release notes for each change, including deploy steps, are in the
 |---|---|
 | `make dev` | Next.js and Hocuspocus together. |
 | `bun run build` / `bun run start` | Production build and server. |
-| `bun run test` | Vitest unit, fuzz and stress tests. Use this, not `bun test`. |
+| `bun run test` | Unit tests with `bun test` (the stress probe runs with `test:stress`). |
 | `bun run test:e2e` | Playwright against `make dev` (set `CI=` to reuse running servers). |
 | `bun run test:pwa` | Service worker and offline tests against a production build (`PWA_BASE_URL`). |
 | `bun run test:perf`, `test:soak`, `test:load` | Typing latency, long-running soak and the Yjs load harness. |
@@ -240,7 +240,7 @@ The full conventions are in [AGENTS.md](AGENTS.md).
 
 **Stack:** Bun · Next.js 16 (App Router, Turbopack) · React 19 · Tiptap 3 and
 ProseMirror · Yjs and Hocuspocus 4 · SQLite · Tailwind CSS 4 and Sass ·
-TypeScript (strict) · Biome, ESLint, Husky and commitlint · Vitest and
+TypeScript (strict) · Biome, ESLint, Husky and commitlint · `bun test` and
 Playwright.
 
 **CI** (`.github/workflows/ci.yml`) runs on every pull request and push to

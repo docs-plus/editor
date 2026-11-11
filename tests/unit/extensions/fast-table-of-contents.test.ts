@@ -1,9 +1,10 @@
+import { afterEach, describe, expect, it, vi } from "bun:test";
+
 import type { Extension } from "@tiptap/core";
 import {
   type TableOfContentData,
   TableOfContents,
 } from "@tiptap/extension-table-of-contents";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyActiveState,
@@ -142,7 +143,7 @@ describe("findTocAnchor", () => {
     editor.commands.insertContentAt(1, "New ");
     const found = findTocAnchor(editor.state.doc, "two");
     expect(found?.node.textContent).toBe("Two");
-    expect(editor.state.doc.nodeAt(found?.pos ?? -1)).toBe(found?.node);
+    expect(editor.state.doc.nodeAt(found?.pos ?? -1)).toBe(found?.node ?? null);
     expect(findTocAnchor(editor.state.doc, "missing")).toBeNull();
   });
 });

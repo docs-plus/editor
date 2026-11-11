@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+
+import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
 type DeleteRouteModule = typeof import("@/app/api/documents/[id]/route");
 
@@ -6,9 +8,8 @@ const INVALID_ID_PARAMS = {
   params: Promise.resolve({ id: "../bad-document-id" }),
 };
 
-async function loadDeleteRoute(): Promise<DeleteRouteModule> {
-  vi.resetModules();
-  return import("@/app/api/documents/[id]/route");
+function loadDeleteRoute(): Promise<DeleteRouteModule> {
+  return importFresh("@/app/api/documents/[id]/route");
 }
 
 function deleteRequest(headers: Record<string, string>): Request {
@@ -23,7 +24,7 @@ describe("DELETE /api/documents/[id] rate limiting", () => {
     delete process.env.HTTP_MUTATION_RATE_LIMIT;
     delete process.env.TRUSTED_PROXY;
     vi.restoreAllMocks();
-    vi.resetModules();
+    resetModules();
   });
 
   it("returns 429 with Retry-After when rate limit is exceeded", async () => {

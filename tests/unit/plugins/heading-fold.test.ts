@@ -1,5 +1,6 @@
+import { describe, expect, it, vi } from "bun:test";
+
 import { EditorView } from "@tiptap/pm/view";
-import { describe, expect, it, vi } from "vitest";
 
 import { headingFoldPluginKey } from "@/extensions/heading-fold";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

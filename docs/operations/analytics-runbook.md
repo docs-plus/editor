@@ -8,7 +8,7 @@ enforce on its own.
 
 - **Off by default.** The tag exists only in production builds made with a
   valid `NEXT_PUBLIC_GA_MEASUREMENT_ID` (`G-` followed by 4–20 uppercase
-  letters or digits). `next dev`, Vitest, unset or malformed IDs ship no tag,
+  letters or digits). `next dev`, unit tests, unset or malformed IDs ship no tag,
   and the CSP has no Google hosts.
 - **Opt-in.** Nothing is requested from Google before the visitor clicks
   Allow in the consent banner (bottom left). Decline and Allow look the same.

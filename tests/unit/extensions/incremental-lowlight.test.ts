@@ -1,6 +1,7 @@
+import { afterEach, describe, expect, it, vi } from "bun:test";
+
 import type { Editor, Extension, JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   incrementalLowlightPluginKey,
@@ -120,7 +121,7 @@ describe("incremental lowlight", () => {
       (plugin) => (plugin as unknown as { key: string }).key,
     );
     expect(keys.some((key) => key.startsWith("lowlight$"))).toBe(false);
-    expect(keys).toContain("incrementalLowlight$");
+    expect(incrementalLowlightPluginKey.get(instance.state)).toBeDefined();
     expectFullyHighlighted(instance);
   });
 

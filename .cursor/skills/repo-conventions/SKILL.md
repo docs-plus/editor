@@ -17,9 +17,9 @@ All tooling decisions below are final. Any agent working in this repo must follo
 | `bun add <pkg>`                 | `npm install <pkg>`             |
 | `bun add -d <pkg>`              | `npm install --save-dev <pkg>`  |
 | `bun run <script>`              | `npm run <script>`              |
-| `bunx <tool>`                   | `npx <tool>`                    |
+| `bun <bin>` (local), `bunx --bun <pkg>` (remote) | `npx <tool>` (plain `bunx` runs bins on Node) |
 | `bun dev`                       | `npm run dev`                   |
-| `bun run test` (Vitest)         | `npm test` or `bun test`        |
+| `bun run test` (`bun test`)     | `npm test`                      |
 
 - The lockfile is `bun.lock` — never generate or reference `package-lock.json` or `yarn.lock`
 - Bun version is pinned in `.tool-versions` and `package.json` (`packageManager` + `engines`)
@@ -211,7 +211,7 @@ Never pin exact versions manually — use the `^` range that Bun sets by default
 
 ## Testing
 
-**Frameworks:** Vitest for unit tests (`tests/unit/`), Playwright for end-to-end, soak and service worker tests (`tests/e2e/`), plus a Bun load harness (`tests/load/`). Layers, commands and conventions: `tests/TESTING.md`.
+**Frameworks:** `bun test` with a happy-dom preload for unit tests (`tests/unit/`), Playwright for end-to-end, soak and service worker tests (`tests/e2e/`), plus a Bun load harness (`tests/load/`). Layers, commands and conventions: `tests/TESTING.md`.
 
 New features and bug fixes include tests. CI runs lint, typecheck, unit tests, the build and the Chromium e2e suite on every pull request; a nightly workflow runs the `pwa`, soak and load layers.
 
@@ -224,7 +224,7 @@ New features and bug fixes include tests. CI runs lint, typecheck, unit tests, t
 | `bun start`         | Start production server           |
 | `bun run lint`      | ESLint (Next.js rules)            |
 | `bun run typecheck` | TypeScript: app (with Hocuspocus), service worker |
-| `bun run test`      | Vitest unit tests                 |
+| `bun run test`      | Unit tests (`bun test`)           |
 | `bun run test:e2e`  | Playwright Chromium e2e           |
 | `bun run format`    | Biome format all files            |
 | `bun run check`     | Biome lint + format check         |

@@ -24,14 +24,14 @@ check: ## Run Biome check
 test-reports-dir:
 	@mkdir -p test-reports
 
-test: test-reports-dir ## Run Vitest unit tests
-	VITEST_REPORT_FILE=test-reports/unit-report.json bun run test
+test: test-reports-dir ## Run unit tests (bun test)
+	bun run test --reporter=junit --reporter-outfile=test-reports/unit-report.xml
 
-test-watch: ## Run Vitest in watch mode
+test-watch: ## Run unit tests in watch mode
 	bun run test:watch
 
 test-fuzz: test-reports-dir ## Run fuzz test suite
-	VITEST_REPORT_FILE=test-reports/fuzz-report.json bun run test:fuzz
+	bun run test:fuzz --reporter=junit --reporter-outfile=test-reports/fuzz-report.xml
 
 test-e2e: test-reports-dir ## Run Playwright E2E tests
 	PLAYWRIGHT_REPORT_FILE=test-reports/e2e-report.json bun run test:e2e
@@ -46,7 +46,7 @@ test-load: test-reports-dir ## Run Yjs concurrency load test (LOAD_CLIENTS, LOAD
 	LOAD_CLIENTS="$(LOAD_CLIENTS)" LOAD_DURATION="$(LOAD_DURATION)" LOAD_RATE="$(LOAD_RATE)" LOAD_SCENARIO="$(LOAD_SCENARIO)" bun tests/load/yjs-load-harness.ts
 
 test-stress: test-reports-dir ## Run headless stress probe
-	VITEST_REPORT_FILE=test-reports/stress-report.json bun run test:stress
+	bun run test:stress --reporter=junit --reporter-outfile=test-reports/stress-report.xml
 
 test-soak: test-reports-dir ## Run full soak test suite (SOAK_DURATION, SOAK_HEADINGS, SOAK_MEMORY_GROWTH_LIMIT)
 	PLAYWRIGHT_REPORT_FILE=test-reports/soak-playwright-report.json SOAK_DURATION="$(SOAK_DURATION)" SOAK_HEADINGS="$(SOAK_HEADINGS)" SOAK_MEMORY_GROWTH_LIMIT="$(SOAK_MEMORY_GROWTH_LIMIT)" bun run test:soak

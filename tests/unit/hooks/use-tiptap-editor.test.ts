@@ -1,6 +1,7 @@
+import { afterEach, describe, expect, it, vi } from "bun:test";
+
 import type { Editor, Extension } from "@tiptap/core";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   getEditorVersionStore,
@@ -41,8 +42,9 @@ function setup() {
   const store = getEditorVersionStore(editor);
   const listener = vi.fn();
   const unsubscribe = store.subscribe(listener);
-  // Let `onCreate` work (UniqueID's id pass) settle first.
-  vi.advanceTimersByTime(TOOLBAR_SETTLE_MS);
+  // Let `onCreate` work (UniqueID's id pass) settle first. Tiptap emits
+  // `create` from a timer, so its settle timer outlasts one TOOLBAR_SETTLE_MS.
+  vi.runAllTimers();
   listener.mockClear();
   return { editor, store, listener, unsubscribe };
 }
