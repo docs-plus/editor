@@ -9,6 +9,13 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Fixed
+- **Favicon:** `/favicon.ico` was still the Create Next App default, so
+  browser tabs, bookmarks and other clients that ask for it showed the wrong
+  icon. It now holds the brand "T" mark at 16, 32 and 48 px, generated from
+  the same `BrandMark` as `app/icon.tsx` by `scripts/generate-favicon.tsx`
+  (run `bun scripts/generate-favicon.tsx` after changing the mark).
+
 ## 2026-11-09 · #18 README badges, release workflow, testing docs
 
 ### Added
