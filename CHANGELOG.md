@@ -30,6 +30,9 @@ since the previous tag.
   Make targets write JUnit XML to `test-reports/`.
 - **Load harness:** clients use Bun's built-in `WebSocket`.
 
+### Added
+- CI fails on high and critical advisories (`bun audit --audit-level=high`).
+
 ### Removed
 - `better-sqlite3` and `@types/better-sqlite3` (native addon).
 - `vitest`, `jsdom`, `@vitejs/plugin-react`, `ws` and `@types/ws`.

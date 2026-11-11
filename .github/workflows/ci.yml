@@ -54,6 +54,10 @@ jobs:
           chmod +x "$RUNNER_TEMP/no-node/node"
           echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
 
+      # Fail on high and critical advisories.
+      - name: Audit dependencies
+        run: bun audit --audit-level=high
+
       - name: Biome
         run: bun run check
 

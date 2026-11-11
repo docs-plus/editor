@@ -244,8 +244,8 @@ TypeScript (strict) · Biome, ESLint, Husky and commitlint · `bun test` and
 Playwright.
 
 **CI** (`.github/workflows/ci.yml`) runs on every pull request and push to
-`main`. One job runs Biome, ESLint, the typecheck, unit tests and the
-production build; the other runs the Playwright Chromium suite. A nightly
+`main`. One job runs `bun audit`, Biome, ESLint, the typecheck, unit tests
+and the production build; the other runs the Playwright Chromium suite. A nightly
 workflow (`.github/workflows/nightly.yml`) runs the service worker, soak and
 load layers on a schedule.
 
