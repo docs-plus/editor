@@ -1,41 +1,38 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock, vi } from "bun:test";
+
+import * as hocuspocusProvider from "@hocuspocus/provider";
 import * as Y from "yjs";
 
-// vi.mock factories are hoisted above module code, so the double lives in
-// vi.hoisted too.
-const fake = vi.hoisted(() => {
-  class FakeProvider {
-    isSynced = false;
-    attach = vi.fn();
-    detach = vi.fn();
-    destroy = vi.fn();
-    private handlers = new Map<string, Set<(payload: unknown) => void>>();
-    constructor() {
-      fake.created.push(this);
-    }
-    on(event: string, handler: (payload: unknown) => void) {
-      if (!this.handlers.has(event)) this.handlers.set(event, new Set());
-      this.handlers.get(event)?.add(handler);
-    }
-    off(event: string, handler: (payload: unknown) => void) {
-      this.handlers.get(event)?.delete(handler);
-    }
-    emit(event: string, payload: unknown) {
-      for (const handler of this.handlers.get(event) ?? []) handler(payload);
-    }
-  }
-  const fake = { FakeProvider, created: [] as FakeProvider[] };
-  return fake;
-});
-const created = fake.created;
-type FakeProvider = (typeof created)[number];
+const created: FakeProvider[] = [];
 
-vi.mock("@hocuspocus/provider", () => ({
-  HocuspocusProvider: fake.FakeProvider,
+class FakeProvider {
+  isSynced = false;
+  attach = vi.fn();
+  detach = vi.fn();
+  destroy = vi.fn();
+  private handlers = new Map<string, Set<(payload: unknown) => void>>();
+  constructor() {
+    created.push(this);
+  }
+  on(event: string, handler: (payload: unknown) => void) {
+    if (!this.handlers.has(event)) this.handlers.set(event, new Set());
+    this.handlers.get(event)?.add(handler);
+  }
+  off(event: string, handler: (payload: unknown) => void) {
+    this.handlers.get(event)?.delete(handler);
+  }
+  emit(event: string, payload: unknown) {
+    for (const handler of this.handlers.get(event) ?? []) handler(payload);
+  }
+}
+
+mock.module("@hocuspocus/provider", () => ({
+  ...hocuspocusProvider,
+  HocuspocusProvider: FakeProvider,
   HocuspocusProviderWebsocket: class {},
 }));
-
-import {
+// Loaded after the mock: static imports are hoisted above `mock.module`.
+const {
   acquireCollabSession,
   DOCUMENT_DELETED_REASON,
   DOCUMENT_TOO_LARGE_REASON,
@@ -43,7 +40,7 @@ import {
   onSynced,
   releaseCollabSession,
   subscribeUnsyncedChanges,
-} from "@/lib/collab-session";
+} = await import("@/lib/collab-session");
 
 const unique = () => `doc-${crypto.randomUUID()}`;
 

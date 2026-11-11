@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
 import { Mermaid } from "@docs.plus/extension-mermaid";
 import { Editor, type Extension, type JSONContent } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
 import { StarterKit } from "@tiptap/starter-kit";
-import { afterEach, describe, expect, it } from "vitest";
 
 import {
   SafeCodeBlock,

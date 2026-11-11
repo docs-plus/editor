@@ -1,9 +1,10 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
 import { Editor, getSchema, type JSONContent, Node } from "@tiptap/core";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
-import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 
 import {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { assertFirstNodeIsH1 } from "@/tests/helpers/assert-invariants";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

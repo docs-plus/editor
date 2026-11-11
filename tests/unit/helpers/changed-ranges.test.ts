@@ -1,5 +1,6 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
 import type { Editor } from "@tiptap/core";
-import { afterEach, describe, expect, it } from "vitest";
 
 import { changedRanges, rangesTouchNode } from "@/extensions/shared";
 

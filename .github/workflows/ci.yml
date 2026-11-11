@@ -54,6 +54,10 @@ jobs:
           chmod +x "$RUNNER_TEMP/no-node/node"
           echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
 
+      # Fail on high and critical advisories.
+      - name: Audit dependencies
+        run: bun audit --audit-level=high
+
       - name: Biome
         run: bun run check
 
@@ -63,9 +67,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # The stress probe is a timing benchmark (step below), not a gate.
+      # `bun run test` skips the stress probe; it runs below as a non-gating
+      # benchmark.
       - name: Unit tests
-        run: bun run test --exclude 'tests/unit/stress/**'
+        run: bun run test
 
       # Shared runners vary in speed, so a miss here is reported, not fatal.
       - name: Stress benchmark (informational)

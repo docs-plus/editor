@@ -1,5 +1,6 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
 import type { Editor, Extension } from "@tiptap/core";
-import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CARET_BLOCK_CLASS,

@@ -1,5 +1,6 @@
+import { describe, expect, it } from "bun:test";
+
 import type { Transaction } from "@tiptap/pm/state";
-import { describe, expect, it } from "vitest";
 
 import { canMapDecorations } from "@/extensions/shared";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

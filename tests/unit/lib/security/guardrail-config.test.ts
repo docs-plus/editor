@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
+
+import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
 const ENV_KEYS = [
   "HTTP_MUTATION_RATE_LIMIT",
@@ -27,15 +29,14 @@ function clearGuardrailEnv(): void {
   }
 }
 
-async function loadConfigModule(): Promise<GuardrailConfigModule> {
-  vi.resetModules();
-  return import("@/lib/security/guardrail-config");
+function loadConfigModule(): Promise<GuardrailConfigModule> {
+  return importFresh("@/lib/security/guardrail-config");
 }
 
 describe("guardrail-config", () => {
   afterEach(() => {
     clearGuardrailEnv();
-    vi.resetModules();
+    resetModules();
   });
 
   it("uses defaults when env vars are missing", async () => {

@@ -1,11 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock, vi } from "bun:test";
 
-vi.mock("@/lib/analytics-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/analytics-config")>()),
+import * as analyticsConfig from "@/lib/analytics-config";
+
+const { parseMeasurementId, resolveMeasurementId } = analyticsConfig;
+
+mock.module("@/lib/analytics-config", () => ({
+  ...analyticsConfig,
   GA_MEASUREMENT_ID: "G-TEST1234",
 }));
-
-import {
+// Loaded after the mock: static imports are hoisted above `mock.module`.
+const {
   bucketPeers,
   hasPrivacySignal,
   initGtag,
@@ -15,11 +19,7 @@ import {
   saveConsent,
   trackEvent,
   trackPageView,
-} from "@/lib/analytics";
-import {
-  parseMeasurementId,
-  resolveMeasurementId,
-} from "@/lib/analytics-config";
+} = await import("@/lib/analytics");
 
 type TestNavigator = Partial<Navigator & { globalPrivacyControl: boolean }>;
 const fakeNavigator = (fields: TestNavigator) => fields as Navigator;
@@ -109,6 +109,8 @@ describe("gtag bootstrap", () => {
     // biome-ignore lint/suspicious/noDocumentCookie: test fixture
     document.cookie = "_ga=GA1.1.123; Path=/";
     // biome-ignore lint/suspicious/noDocumentCookie: test fixture
+    document.cookie = "_ga_TEST1234=GS1.1.123; Path=/";
+    // biome-ignore lint/suspicious/noDocumentCookie: test fixture
     document.cookie = "keep=1; Path=/";
     revokeGtag("G-TEST1234");
 
@@ -118,7 +120,8 @@ describe("gtag bootstrap", () => {
       "update",
       { analytics_storage: "denied" },
     ]);
-    expect(document.cookie).not.toContain("_ga=");
+    // Absent or empty: happy-dom keeps an emptied cookie after `Max-Age=0`.
+    expect(document.cookie).not.toMatch(/(^|; )_ga(_\w+)?=[^;]/);
     expect(document.cookie).toContain("keep=1");
   });
 

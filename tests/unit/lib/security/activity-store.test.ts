@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
-
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import {
   bootstrapDocumentActivityTable,

@@ -19,7 +19,7 @@ export function parseMeasurementId(raw: string | undefined): string | null {
   return MEASUREMENT_ID_PATTERN.test(id) ? id : null;
 }
 
-/** Null in `next dev`, Vitest, or without a valid ID: every caller no-ops. */
+/** Null in `next dev`, tests, or without a valid ID: every caller no-ops. */
 export function resolveMeasurementId(
   raw: string | undefined,
   nodeEnv: string | undefined,

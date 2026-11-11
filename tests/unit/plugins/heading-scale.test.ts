@@ -1,6 +1,7 @@
+import { describe, expect, it } from "bun:test";
+
 import type { Editor } from "@tiptap/core";
 import { DecorationSet } from "@tiptap/pm/view";
-import { describe, expect, it } from "vitest";
 
 import { headingScalePluginKey } from "@/extensions/heading-scale";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";

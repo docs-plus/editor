@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+
+import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
 type InstallPromptModule = typeof import("@/lib/pwa/install-prompt");
 
@@ -15,9 +17,8 @@ function stubInstalled(matches: boolean): void {
   ) as typeof window.matchMedia;
 }
 
-async function loadModule(): Promise<InstallPromptModule> {
-  vi.resetModules();
-  return import("@/lib/pwa/install-prompt");
+function loadModule(): Promise<InstallPromptModule> {
+  return importFresh("@/lib/pwa/install-prompt");
 }
 
 describe("install prompt store", () => {
@@ -31,7 +32,10 @@ describe("install prompt store", () => {
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
     window.__TINYDOCY_INSTALL_PROMPT = undefined;
+    // An own `userAgent` shadows the prototype getter; deleting restores it.
+    Reflect.deleteProperty(navigator, "userAgent");
     vi.restoreAllMocks();
+    resetModules();
   });
 
   it("is unavailable without an event", async () => {
@@ -82,9 +86,11 @@ describe("install prompt store", () => {
   });
 
   it("shows the Add to Home Screen hint on iOS", async () => {
-    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-    );
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    });
     const { getInstallAvailability } = await loadModule();
     expect(getInstallAvailability()).toBe("ios");
   });

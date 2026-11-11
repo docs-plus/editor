@@ -1,8 +1,7 @@
-// @vitest-environment node
+import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 type Permissions = string | Record<string, string> | undefined;

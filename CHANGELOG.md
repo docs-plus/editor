@@ -9,6 +9,28 @@ since the previous tag.
 
 ## [Unreleased]
 
+## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
+
+### Changed
+- **Unit tests on `bun test`:** Bun's test runner with a happy-dom preload
+  (`tests/setup.ts`) replaces Vitest. `bun run test` takes about 8 s,
+  against 9–12 s with Vitest; the stress probe runs on its own
+  (`test:stress`). Module mocks use `mock.module()` and `await import()`,
+  and modules that read env at import time load through `importFresh()`.
+  Make targets write JUnit XML to `test-reports/`.
+- **Load harness:** clients use Bun's built-in `WebSocket`.
+
+### Added
+- CI fails on high and critical advisories (`bun audit --audit-level=high`).
+
+### Removed
+- `vitest`, `jsdom`, `@vitejs/plugin-react`, `ws` and `@types/ws`.
+
+### Deploy
+- Pull, build and restart as usual.
+
+## 2026-11-11 · #21 Bun runtime everywhere, one SQLite driver
+
 ### Changed
 - **Bun runtime everywhere:** `bunfig.toml` `[run] bun = true` runs Next.js
   (dev, build, start), Vitest, ESLint, Playwright and commitlint on Bun

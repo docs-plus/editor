@@ -2,7 +2,7 @@
 
 TinyDocy uses a multi-layer testing strategy covering schema correctness, feature behavior, performance, long-running stability, and real-time collaboration at scale.
 
-**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets. Collaboration tests use `retries: 2` and extended waits to reduce flakiness. Load harness uses `WebSocketPolyfill` (type assertion) for Node.js compatibility.
+**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write reports to `test-reports/` when run via Make targets. Collaboration tests use `retries: 2` and extended waits to reduce flakiness.
 
 **Prerequisites:** Dev servers must be running for Playwright tests.
 
@@ -14,7 +14,7 @@ make dev
 
 | Command | What it runs | Duration |
 |---------|-------------|----------|
-| `make test` | Vitest unit + fuzz + schema + plugin tests | ~2s |
+| `make test` | Unit, fuzz, schema and plugin tests (`bun test`) | ~8s |
 | `make test-fuzz` | Chaos and structured fuzz tests | ~1s |
 | `make test-stress` | Headless stress probe (binary search for heading ceiling) | ~30s |
 | `make test-e2e` | Playwright chromium E2E suite (features, performance, collaboration) | ~90s |
@@ -30,7 +30,7 @@ make dev
 
 ```
 tests/
-├── setup.ts                              # Vitest global setup (jsdom, localStorage mock)
+├── setup.ts                              # `bun test` preload (happy-dom window, Bun-native fetch/timers)
 ├── helpers/
 │   ├── create-test-editor.ts             # Headless Tiptap Editor factory
 │   ├── document-builders.ts              # ProseMirror node builders (via prosemirror-test-builder)
@@ -38,9 +38,10 @@ tests/
 │   ├── env-parsers.ts                    # Generic parseEnvNumber (?? semantics)
 │   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings)
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
+│   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
-│   ├── assert-invariants.ts              # Schema invariant assertions (Vitest)
-│   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no vitest dep)
+│   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
+│   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no `bun:test` dep)
 ├── fixtures/                             # Static JSON document fixtures
 ├── unit/
 │   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants, trailing node
@@ -83,13 +84,13 @@ tests/
 
 ## Test Reports (`test-reports/`)
 
-All test layers write JSON reports when run via Make targets:
+All test layers write reports when run via Make targets:
 
 | Report file | Source | Contents |
 |-------------|--------|----------|
-| `unit-report.json` | `make test` | Vitest JSON (suites, tests, durations) |
-| `fuzz-report.json` | `make test-fuzz` | Vitest JSON |
-| `stress-report.json` | `make test-stress` | Vitest JSON |
+| `unit-report.xml` | `make test` | JUnit XML from `bun test` (suites, tests, durations) |
+| `fuzz-report.xml` | `make test-fuzz` | JUnit XML |
+| `stress-report.xml` | `make test-stress` | JUnit XML |
 | `e2e-report.json` | `make test-e2e` | Playwright JSON (tests, outcomes) |
 | `perf-report-{ts}.json` | `make test-perf` | Latency stats per heading count |
 | `perf-collab-report-{ts}.json` | `make test-perf-collab` | Multi-user latency stats |
@@ -99,9 +100,14 @@ All test layers write JSON reports when run via Make targets:
 | `*-playwright-report.json` | soak targets | Playwright JSON for soak runs |
 | `yjs-soak-report.json` | `make test-yjs-soak` | Playwright JSON for yjs-soak |
 
-## Layer 1: Unit Tests (Vitest)
+## Layer 1: Unit Tests (`bun test`)
 
-Fast, headless tests that validate the document model, ProseMirror plugin state, and utility functions without a browser.
+Fast, headless tests that validate the document model, ProseMirror plugin state, and utility functions without a browser. `bunfig.toml` `[test]` limits `bun test` to `tests/unit` and preloads `tests/setup.ts` (a happy-dom window).
+
+All files share one process, so tests must not leave state behind:
+
+- **Module mocks** — spread the real module into `mock.module()` and replace only what the test needs (other files import the same module), then load the module under test with `await import()` (static imports are hoisted above the mock).
+- **Import-time state or env** — load the module with `importFresh()` (`tests/helpers/import-fresh.ts`) after setting `process.env`, and call `resetModules()` in `afterEach`.
 
 ```bash
 make test          # all unit tests
@@ -207,7 +213,7 @@ HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
 PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
 ```
 
-Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts` (Node environment).
+Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts`.
 
 Manual install checklist (localhost production build):
 
@@ -271,7 +277,7 @@ Creates multiple tabs via the tab bar UI, switches between them 20 times, types 
 
 ## Layer 5: Load Harness (standalone Bun script)
 
-Headless N-client Yjs convergence test — no browser required. Uses Node.js `ws` package via `WebSocketPolyfill` (type assertion required; Hocuspocus runtime supports it when passing `url` directly, but TypeScript types omit it). CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
+Headless N-client Yjs convergence test — no browser required. Clients use Bun's built-in `WebSocket`. CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
 
 ```bash
 make test-load                                              # 100 clients, 30s, distributed
@@ -329,7 +335,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Platform-specific keys** — soak bot uses `Meta` (macOS) or `Control` (others) for keyboard shortcuts. Never use `Mod` — it is ProseMirror-only and unknown to Playwright.
 - **Test isolation** — each test generates a unique `docId` with timestamp + random suffix to prevent cross-test interference on the shared Hocuspocus server. Tab state is isolated via `window.__GLOBAL_TABS_DOC` (set per test in `EditorPage.goto()`) so parallel tests use separate `global-tabs-{docId}` Yjs documents.
 - **Wait for the server, then type at full speed** — `EditorPage.waitForSync()` waits for `data-server-synced` on the editor region (the editor is editable earlier, from the device copy, and a new document is seeded only after the first server sync). Tests then type without artificial waits; if typed text lands in the wrong place, look for an app bug first (the caret-after-Enter race was `content-visibility`, fixed by `CaretBlockVisible`). Use `typeInNewParagraphAtEnd(page, text)` to add text at the end of a document.
-- **Assertion split** — `assert-invariants.ts` (imports vitest `expect`) for unit tests; `assert-invariants-json.ts` (pure `throw`) for Playwright tests.
+- **Assertion split** — `assert-invariants.ts` (imports `expect` from `bun:test`) for unit tests; `assert-invariants-json.ts` (pure `throw`) for Playwright tests.
 
 ## Related Documentation
 

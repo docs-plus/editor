@@ -1,28 +1,36 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+  vi,
+} from "bun:test";
+
+import * as hocuspocusProvider from "@hocuspocus/provider";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
-import {
-  type UseSyncedTabsReturn,
-  useSyncedTabs,
-} from "@/hooks/use-synced-tabs";
+import type { UseSyncedTabsReturn } from "@/hooks/use-synced-tabs";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import type { Tab } from "@/lib/tab-api";
 
 /** Provider double: `onSynced()` simulates the server sync completing. */
 type ProviderConfig = { document: Y.Doc; onSynced: () => void };
 
-const mock = vi.hoisted(() => ({ providers: [] as ProviderConfig[] }));
+const providers: ProviderConfig[] = [];
 
-vi.mock("@hocuspocus/provider", () => ({
+mock.module("@hocuspocus/provider", () => ({
+  ...hocuspocusProvider,
   HocuspocusProvider: class {
     isSynced = false;
     document: Y.Doc;
     private syncedHandlers = new Set<() => void>();
     constructor(config: { document: Y.Doc }) {
       this.document = config.document;
-      mock.providers.push(this);
+      providers.push(this);
     }
     onSynced = () => {
       this.isSynced = true;
@@ -40,6 +48,8 @@ vi.mock("@hocuspocus/provider", () => ({
   // Shared socket (lib/hocuspocus.ts); the provider mock never uses it.
   HocuspocusProviderWebsocket: class {},
 }));
+// Loaded after the mock: static imports are hoisted above `mock.module`.
+const { useSyncedTabs } = await import("@/hooks/use-synced-tabs");
 
 const TABS_KEY = "tinydocy-tabs";
 const playground: Tab = {
@@ -67,7 +77,7 @@ function hookResult(): UseSyncedTabsReturn {
 }
 
 function currentProvider(): ProviderConfig {
-  const provider = mock.providers.at(-1);
+  const provider = providers.at(-1);
   if (!provider) throw new Error("HocuspocusProvider was not constructed");
   return provider;
 }
@@ -99,7 +109,7 @@ beforeEach(() => {
   (
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-  mock.providers.length = 0;
+  providers.length = 0;
   latest.current = undefined;
   // Sessions outlive an unmount briefly (lib/collab-session.ts): give every
   // test its own tab-list document so none reuses another's.

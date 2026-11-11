@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { GA_CONNECT_HOSTS, GA_SCRIPT_HOSTS } from "@/lib/analytics-config";
 import { buildContentSecurityPolicy } from "@/lib/security/content-security-policy";

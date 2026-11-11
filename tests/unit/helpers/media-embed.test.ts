@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { resolveMediaType } from "@/components/tiptap-ui/media-embed-popover/use-media-embed";
 
@@ -15,7 +15,7 @@ describe("resolveMediaType", () => {
     ["https://example.com/podcast.mp3", "audio"],
     ["https://example.com/photo.png", "image"],
     ["  https://example.com/photo.png  ", "image"],
-  ])("maps %s to %s", (url, expected) => {
+  ] as const)("maps %s to %s", (url, expected) => {
     expect(resolveMediaType(url)).toBe(expected);
   });
 

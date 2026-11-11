@@ -1,36 +1,44 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+  vi,
+} from "bun:test";
+
 import { WebSocketStatus } from "@hocuspocus/provider";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  type ConnectionState,
-  useConnectionState,
-} from "@/hooks/use-connection-state";
+import type { ConnectionState } from "@/hooks/use-connection-state";
+import * as hocuspocus from "@/lib/hocuspocus";
 
 /** Shared socket double: `setStatus()` emits `status` like the real one. */
-const socket = vi.hoisted(() => {
-  const handlers = new Set<() => void>();
-  return {
-    status: "connected" as string,
-    connect: vi.fn(async () => {}),
-    on(_event: string, handler: () => void) {
-      handlers.add(handler);
-    },
-    off(_event: string, handler: () => void) {
-      handlers.delete(handler);
-    },
-    setStatus(status: string) {
-      this.status = status;
-      for (const handler of handlers) handler();
-    },
-    listenerCount: () => handlers.size,
-  };
-});
+const handlers = new Set<() => void>();
+const socket = {
+  status: "connected" as string,
+  connect: vi.fn(async () => {}),
+  on(_event: string, handler: () => void) {
+    handlers.add(handler);
+  },
+  off(_event: string, handler: () => void) {
+    handlers.delete(handler);
+  },
+  setStatus(status: string) {
+    this.status = status;
+    for (const handler of handlers) handler();
+  },
+  listenerCount: () => handlers.size,
+};
 
-vi.mock("@/lib/hocuspocus", () => ({
+mock.module("@/lib/hocuspocus", () => ({
+  ...hocuspocus,
   getSharedHocuspocusSocket: () => socket,
 }));
+// Loaded after the mock: static imports are hoisted above `mock.module`.
+const { useConnectionState } = await import("@/hooks/use-connection-state");
 
 let browserOnline = true;
 let root: Root;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildHandleDecos } from "@/extensions/heading-drag/helpers/drag-helpers";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
