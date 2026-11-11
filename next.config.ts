@@ -8,7 +8,6 @@ const nextConfig: NextConfig = {
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,
   poweredByHeader: false,
-  serverExternalPackages: ["better-sqlite3"],
   async headers() {
     return [
       {

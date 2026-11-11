@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -12,7 +11,9 @@ import {
   upsertDocumentActivity,
 } from "@/lib/security/activity-store";
 
-let db: Database.Database;
+import { Database } from "bun:sqlite";
+
+let db: Database;
 function seedDocumentsTable(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS documents (
@@ -122,7 +123,7 @@ describe("activity-store", () => {
     expect(isTombstoned(db, id)).toBe(true);
     expect(
       db.prepare("SELECT 1 FROM document_activity WHERE name = ?").get(id),
-    ).toBeUndefined();
+    ).toBeNull();
     // A second delete is idempotent and reports nothing was stored.
     expect(deleteDocumentPermanently(db, id, 6000)).toBe(false);
 

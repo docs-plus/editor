@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": ["node"],
+    "types": ["bun"],
     "plugins": [
       {
         "name": "next"
@@ -31,9 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": [
-    "node_modules",
-    "scripts/hocus-server.ts",
-    "lib/pwa/service-worker.ts"
-  ]
+  "exclude": ["node_modules", "lib/pwa/service-worker.ts"]
 }

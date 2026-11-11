@@ -2,7 +2,8 @@ import { SkipFurtherHooksError } from "@hocuspocus/common";
 import { Database } from "@hocuspocus/extension-database";
 
 import type { GuardrailDecision } from "@/lib/security/ws-guardrails";
-import type { SqliteDatabase } from "@/lib/sqlite-open";
+
+import type { Database as SqliteDatabase } from "bun:sqlite";
 
 /**
  * Same table as `@hocuspocus/extension-sqlite` (v3 and v4), so existing
@@ -36,7 +37,9 @@ export function createSqlitePersistence(
   { canStore, onStored }: SqlitePersistenceOptions,
 ): Database {
   db.exec(DOCUMENTS_SCHEMA);
-  const selectState = db.prepare('SELECT data FROM "documents" WHERE name = ?');
+  const selectState = db.prepare<{ data: Uint8Array }, [string]>(
+    'SELECT data FROM "documents" WHERE name = ?',
+  );
   const upsertState = db.prepare(`
     INSERT INTO "documents" ("name", "data") VALUES (?, ?)
     ON CONFLICT(name) DO UPDATE SET data = excluded.data
@@ -44,11 +47,7 @@ export function createSqlitePersistence(
 
   return new Database({
     async fetch({ documentName }) {
-      const row = selectState.get(documentName) as
-        | { data: Uint8Array }
-        | null
-        | undefined;
-      return row?.data ?? null;
+      return selectState.get(documentName)?.data ?? null;
     },
     async store({ documentName, state }) {
       const decision = canStore(documentName, state.byteLength);

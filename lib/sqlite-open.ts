@@ -1,39 +1,28 @@
-import Database from "better-sqlite3";
-
 import { getSqliteDbPath } from "@/lib/sqlite-db-path";
 
-/** SQLite `SQLITE_BUSY` result code */
-export const SQLITE_BUSY = 5;
+import { Database } from "bun:sqlite";
 
-type SqliteBinding = string | number | bigint | boolean | Uint8Array;
+/** SQLite `SQLITE_BUSY` result code */
+const SQLITE_BUSY = 5;
+
+/** True for `SQLITE_BUSY` errors from `bun:sqlite` (`errno` 5). */
+export function isSqliteBusyError(error: unknown): boolean {
+  const { code, errno } = (error ?? {}) as { code?: unknown; errno?: unknown };
+  return code === "SQLITE_BUSY" || errno === SQLITE_BUSY;
+}
 
 /**
- * Statement surface shared by better-sqlite3 (Next.js, scripts and tests on
- * Node) and `bun:sqlite` (Hocuspocus server on Bun).
+ * Opens the shared SQLite file (`DB_PATH`) in WAL mode. Next.js, the
+ * Hocuspocus server and the retention script all run on Bun and share it.
  */
-export interface SqliteStatement {
-  run(...params: SqliteBinding[]): unknown;
-  get(...params: SqliteBinding[]): unknown;
-  all(...params: SqliteBinding[]): unknown[];
-}
-
-/** Driver-agnostic handle for helpers that only run plain SQL. */
-export interface SqliteDatabase {
-  exec(sql: string): unknown;
-  prepare(sql: string): SqliteStatement;
-}
-
-export function openBetterSqlite(options?: {
-  /** Default 5000 */
-  timeoutMs?: number;
-  /** If set, runs `PRAGMA busy_timeout = …` (ms) */
+export function openSqlite({
+  busyTimeoutMs = 5000,
+}: {
+  /** How long a write waits for another process's lock. Default 5000 ms. */
   busyTimeoutMs?: number;
-}): Database.Database {
-  const timeoutMs = options?.timeoutMs ?? 5000;
-  const db = new Database(getSqliteDbPath(), { timeout: timeoutMs });
-  db.pragma("journal_mode = WAL");
-  if (options?.busyTimeoutMs != null) {
-    db.pragma(`busy_timeout = ${options.busyTimeoutMs}`);
-  }
+} = {}): Database {
+  const db = new Database(getSqliteDbPath());
+  db.exec("PRAGMA journal_mode = WAL;");
+  db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs};`);
   return db;
 }
