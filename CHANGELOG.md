@@ -16,6 +16,15 @@ since the previous tag.
   the same `BrandMark` as `app/icon.tsx` by `scripts/generate-favicon.tsx`
   (run `bun scripts/generate-favicon.tsx` after changing the mark).
 
+### Changed
+- **Dependencies:** `@docs.plus/extension-*` 2.2.0 → 2.3.0, Tiptap 3.33.0 →
+  3.33.1 (`@tiptap/y-tiptap` 3.2.0 → 3.3.0), Next.js and
+  `eslint-config-next` 16.4.5 → 16.4.6, `lucide-react` 1.72.0,
+  `react-hotkeys-hook` 5.4.0, `@vitejs/plugin-react` 6.3.0, `sass` 1.108.2.
+  Installed ahead of the 3-day `minimumReleaseAge` window on purpose (the
+  guard in `bunfig.toml` is unchanged). TypeScript 7 is left for its own
+  change.
+
 ## 2026-11-09 · #18 README badges, release workflow, testing docs
 
 ### Added
