@@ -9,6 +9,8 @@ since the previous tag.
 
 ## [Unreleased]
 
+## 2026-11-11 · #20 Brand favicon, dependency updates
+
 ### Fixed
 - **Favicon:** `/favicon.ico` was still the Create Next App default, so
   browser tabs, bookmarks and other clients that ask for it showed the wrong
@@ -24,6 +26,9 @@ since the previous tag.
   Installed ahead of the 3-day `minimumReleaseAge` window on purpose (the
   guard in `bunfig.toml` is unchanged). TypeScript 7 is left for its own
   change.
+
+### Deploy
+- Pull, build and restart as usual.
 
 ## 2026-11-09 · #18 README badges, release workflow, testing docs
 
