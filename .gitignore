@@ -30,6 +30,9 @@ next-env.d.ts
 !.cursor/skills/
 !.cursor/rules/
 
+# claude code — local preview config
+.claude/launch.json
+
 # hocuspocus (SQLite main + WAL mode sidecar files)
 db.sqlite
 db.sqlite-wal

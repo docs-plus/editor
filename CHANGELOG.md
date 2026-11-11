@@ -9,6 +9,9 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Changed
+- `.gitignore` ignores `.claude/launch.json`, the local preview config.
+
 ## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
 
 ### Changed
