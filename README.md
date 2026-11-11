@@ -223,7 +223,7 @@ Release notes for each change, including deploy steps, are in the
 | `bun run test:e2e` | Playwright against `make dev` (set `CI=` to reuse running servers). |
 | `bun run test:pwa` | Service worker and offline tests against a production build (`PWA_BASE_URL`). |
 | `bun run test:perf`, `test:soak`, `test:load` | Typing latency, long-running soak and the Yjs load harness. |
-| `bun run typecheck` | TypeScript for the app, the Bun-only Hocuspocus server and the service worker. |
+| `bun run typecheck` | TypeScript for the app (including the Hocuspocus server) and the service worker. |
 | `bun run lint` / `bun run check` | ESLint (Next.js rules) and Biome. |
 
 Test layers, environments and CI notes: [tests/TESTING.md](tests/TESTING.md).

@@ -223,7 +223,7 @@ New features and bug fixes include tests. CI runs lint, typecheck, unit tests, t
 | `bun run build`     | Production build                  |
 | `bun start`         | Start production server           |
 | `bun run lint`      | ESLint (Next.js rules)            |
-| `bun run typecheck` | TypeScript: app, Hocuspocus, service worker |
+| `bun run typecheck` | TypeScript: app (with Hocuspocus), service worker |
 | `bun run test`      | Vitest unit tests                 |
 | `bun run test:e2e`  | Playwright Chromium e2e           |
 | `bun run format`    | Biome format all files            |

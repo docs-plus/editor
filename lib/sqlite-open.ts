@@ -1,14 +1,9 @@
+import { Database, SQLiteError } from "bun:sqlite";
+
 import { getSqliteDbPath } from "@/lib/sqlite-db-path";
 
-import { Database } from "bun:sqlite";
-
-/** SQLite `SQLITE_BUSY` result code */
-const SQLITE_BUSY = 5;
-
-/** True for `SQLITE_BUSY` errors from `bun:sqlite` (`errno` 5). */
 export function isSqliteBusyError(error: unknown): boolean {
-  const { code, errno } = (error ?? {}) as { code?: unknown; errno?: unknown };
-  return code === "SQLITE_BUSY" || errno === SQLITE_BUSY;
+  return error instanceof SQLiteError && error.code === "SQLITE_BUSY";
 }
 
 /**
