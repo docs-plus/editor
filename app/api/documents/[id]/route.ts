@@ -1,3 +1,5 @@
+import type { Database } from "bun:sqlite";
+
 import { NextResponse } from "next/server";
 
 import { logAbuseEvent } from "@/lib/security/abuse-log";
@@ -13,8 +15,6 @@ import {
 import { HTTP_MUTATION_RATE_LIMIT_PER_MINUTE } from "@/lib/security/guardrail-config";
 import { createSlidingWindowLimiter } from "@/lib/security/rate-limit";
 import { isSqliteBusyError, openSqlite } from "@/lib/sqlite-open";
-
-import type { Database } from "bun:sqlite";
 
 const MAX_RETRIES = 3;
 const ONE_MINUTE_MS = 60_000;

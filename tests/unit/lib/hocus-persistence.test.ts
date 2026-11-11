@@ -1,12 +1,13 @@
 // @vitest-environment node
+
+import { Database } from "bun:sqlite";
+
 import { Hocuspocus } from "@hocuspocus/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
 import { createSqlitePersistence } from "@/lib/hocus-persistence";
 import type { GuardrailDecision } from "@/lib/security/ws-guardrails";
-
-import { Database } from "bun:sqlite";
 
 const ALLOW: GuardrailDecision = { allowed: true };
 

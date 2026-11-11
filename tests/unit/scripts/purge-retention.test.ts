@@ -1,3 +1,5 @@
+import { Database } from "bun:sqlite";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -5,8 +7,6 @@ import {
   upsertDocumentActivity,
 } from "@/lib/security/activity-store";
 import { runRetentionPurge } from "@/scripts/purge-retention";
-
-import { Database } from "bun:sqlite";
 
 let db: Database;
 describe("runRetentionPurge", () => {

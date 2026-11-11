@@ -1,6 +1,6 @@
-import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
-
 import type { Database } from "bun:sqlite";
+
+import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
 
 const DEFAULT_BATCH_SIZE = 100;
 

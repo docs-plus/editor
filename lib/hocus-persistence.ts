@@ -1,9 +1,9 @@
+import type { Database as SqliteDatabase } from "bun:sqlite";
+
 import { SkipFurtherHooksError } from "@hocuspocus/common";
 import { Database } from "@hocuspocus/extension-database";
 
 import type { GuardrailDecision } from "@/lib/security/ws-guardrails";
-
-import type { Database as SqliteDatabase } from "bun:sqlite";
 
 /**
  * Same table as `@hocuspocus/extension-sqlite` (v3 and v4), so existing

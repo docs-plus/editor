@@ -1,3 +1,5 @@
+import type { Database } from "bun:sqlite";
+
 import { logAbuseEvent } from "../lib/security/abuse-log";
 import {
   bootstrapDocumentActivityTable,
@@ -9,7 +11,6 @@ import {
   TOMBSTONE_RETENTION_DAYS,
 } from "../lib/security/guardrail-config";
 import { isSqliteBusyError, openSqlite } from "../lib/sqlite-open";
-import type { Database } from "bun:sqlite";
 
 export function runRetentionPurge(
   db: Database,
