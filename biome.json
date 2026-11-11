@@ -41,7 +41,7 @@
           "level": "on",
           "options": {
             "groups": [
-              ":NODE:",
+              [":BUN:", ":NODE:"],
               ":BLANK_LINE:",
               ":PACKAGE:",
               ":BLANK_LINE:",

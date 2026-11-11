@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 import { logAbuseEvent } from "../lib/security/abuse-log";
 import {
@@ -10,10 +10,10 @@ import {
   RETENTION_DAYS,
   TOMBSTONE_RETENTION_DAYS,
 } from "../lib/security/guardrail-config";
-import { openBetterSqlite, SQLITE_BUSY } from "../lib/sqlite-open";
+import { isSqliteBusyError, openSqlite } from "../lib/sqlite-open";
 
 export function runRetentionPurge(
-  db: Database.Database,
+  db: Database,
   options: { retentionDays?: number; batchSize?: number; nowMs?: number } = {},
 ): { deletedCount: number; deletedNames: string[] } {
   bootstrapDocumentActivityTable(db);
@@ -29,7 +29,7 @@ export function runRetentionPurge(
 }
 
 function runCli(): void {
-  const db = openBetterSqlite({ timeoutMs: 10_000, busyTimeoutMs: 10_000 });
+  const db = openSqlite({ busyTimeoutMs: 10_000 });
   try {
     try {
       const result = runRetentionPurge(db);
@@ -38,8 +38,7 @@ function runCli(): void {
         deletedNames: result.deletedNames,
       });
     } catch (error) {
-      const sqliteCode = (error as { code?: number }).code;
-      if (sqliteCode === SQLITE_BUSY) {
+      if (isSqliteBusyError(error)) {
         const retried = runRetentionPurge(db);
         logAbuseEvent("retention_purge_completed_retry", {
           deletedCount: retried.deletedCount,

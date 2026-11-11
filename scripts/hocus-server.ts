@@ -30,9 +30,8 @@ import { DocumentGuard } from "../lib/security/hocus-document-guard";
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
 import { createSocketGate } from "../lib/security/ws-socket-gate";
-import { getSqliteDbPath } from "../lib/sqlite-db-path";
+import { openSqlite } from "../lib/sqlite-open";
 import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
-import { Database } from "bun:sqlite";
 
 /** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -50,17 +49,6 @@ function getPort(): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 1234;
   return parsed;
-}
-
-/**
- * `bun:sqlite`, not better-sqlite3: Bun below 1.4.1 crashes loading the
- * better-sqlite3 13 addon, and this process always runs on Bun.
- */
-function openDatabase(path: string): Database {
-  const db = new Database(path);
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA busy_timeout = 5000;");
-  return db;
 }
 
 /**
@@ -100,7 +88,7 @@ const socketGate = createSocketGate({
   upgradesPerMinute: WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
   allowedOrigins: HOCUS_ALLOWED_ORIGINS,
 });
-const db = openDatabase(getSqliteDbPath());
+const db = openSqlite();
 bootstrapDocumentActivityTable(db);
 const documentGuard = new DocumentGuard({
   maxDocumentBytes: guardrails.maxDocumentBytes,

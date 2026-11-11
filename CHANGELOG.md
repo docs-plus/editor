@@ -9,6 +9,38 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Changed
+- **Bun runtime everywhere:** `bunfig.toml` `[run] bun = true` runs Next.js
+  (dev, build, start), Vitest, ESLint, Playwright and commitlint on Bun
+  instead of Node. Node.js is no longer needed. Bun 1.4.4 or later is
+  required (`.tool-versions`, `engines`, `packageManager`).
+- **One SQLite driver:** the documents API, the retention script and the
+  tests use `bun:sqlite` through `openSqlite()` in `lib/sqlite-open.ts`,
+  like Hocuspocus already did. The app `tsconfig.json` now uses Bun types,
+  so `tsconfig.hocus.json` is gone.
+- **CI:** workflows no longer install Node. After install, CI puts a failing
+  `node` stub on `PATH`, so anything that falls back to Node fails the run.
+  Plain `bunx` ignores `[run] bun`, so workflows, git hooks and scripts call
+  local tools as `bun <bin>` (`bun playwright test`, `bun lint-staged`).
+
+### Removed
+- `better-sqlite3` and `@types/better-sqlite3` (native addon).
+
+### Deploy
+- Upgrade Bun on the server to 1.4.4 or later **before** pulling
+  (`bun upgrade`; check with `bun --version`). This change is tested and
+  pinned on 1.4.4.
+- Then `bun install --frozen-lockfile`, `bun run build` and restart the apps
+  as usual. They run on Bun because `bunfig.toml` sits in their working
+  folder.
+- Optional: to move the PM2 daemon itself off Node, run
+  `bunx --bun pm2@6.0.14 kill` and then
+  `bunx --bun pm2@6.0.14 start ecosystem.config.cjs` (and `save` if you use
+  a saved process list).
+  After that, Node can be removed from the server.
+
+## 2026-11-11 · #20 Brand favicon, dependency updates
+
 ### Fixed
 - **Favicon:** `/favicon.ico` was still the Create Next App default, so
   browser tabs, bookmarks and other clients that ask for it showed the wrong
@@ -24,6 +56,9 @@ since the previous tag.
   Installed ahead of the 3-day `minimumReleaseAge` window on purpose (the
   guard in `bunfig.toml` is unchanged). TypeScript 7 is left for its own
   change.
+
+### Deploy
+- Pull, build and restart as usual.
 
 ## 2026-11-09 · #18 README badges, release workflow, testing docs
 

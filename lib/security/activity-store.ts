@@ -1,9 +1,10 @@
+import type { Database } from "bun:sqlite";
+
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
-import type { SqliteDatabase } from "@/lib/sqlite-open";
 
 const DEFAULT_BATCH_SIZE = 100;
 
-export function bootstrapDocumentActivityTable(db: SqliteDatabase): void {
+export function bootstrapDocumentActivityTable(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS document_activity (
       name TEXT PRIMARY KEY,
@@ -18,7 +19,7 @@ export function bootstrapDocumentActivityTable(db: SqliteDatabase): void {
 }
 
 /** True when the document was deleted through the API and must stay gone. */
-export function isTombstoned(db: SqliteDatabase, name: string): boolean {
+export function isTombstoned(db: Database, name: string): boolean {
   return Boolean(
     db.prepare("SELECT 1 FROM document_tombstones WHERE name = ?").get(name),
   );
@@ -31,7 +32,7 @@ export function isTombstoned(db: SqliteDatabase, name: string): boolean {
  * from loading it again. Returns whether a stored document existed.
  */
 export function deleteDocumentPermanently(
-  db: SqliteDatabase,
+  db: Database,
   name: string,
   nowMs: number = Date.now(),
 ): boolean {
@@ -53,7 +54,7 @@ export function deleteDocumentPermanently(
 }
 
 /** Drops tombstones older than the retention cutoff; returns how many. */
-export function purgeTombstones(db: SqliteDatabase, cutoffMs: number): number {
+export function purgeTombstones(db: Database, cutoffMs: number): number {
   const stale = db
     .prepare("SELECT name FROM document_tombstones WHERE deleted_at < ?")
     .all(cutoffMs);
@@ -64,7 +65,7 @@ export function purgeTombstones(db: SqliteDatabase, cutoffMs: number): number {
 }
 
 export function upsertDocumentActivity(
-  db: SqliteDatabase,
+  db: Database,
   name: string,
   sizeBytes: number,
   nowMs: number = Date.now(),
@@ -79,7 +80,7 @@ export function upsertDocumentActivity(
   stmt.run(name, nowMs, sizeBytes);
 }
 
-export function countNonSystemDocuments(db: SqliteDatabase): number {
+export function countNonSystemDocuments(db: Database): number {
   const rows = db.prepare("SELECT name FROM documents").all() as Array<{
     name: string;
   }>;
@@ -90,15 +91,14 @@ export function countNonSystemDocuments(db: SqliteDatabase): number {
   return count;
 }
 
-export function documentExists(db: SqliteDatabase, name: string): boolean {
-  const row = db
-    .prepare("SELECT 1 FROM documents WHERE name = ? LIMIT 1")
-    .get(name) as { 1: number } | undefined;
-  return Boolean(row);
+export function documentExists(db: Database, name: string): boolean {
+  return Boolean(
+    db.prepare("SELECT 1 FROM documents WHERE name = ? LIMIT 1").get(name),
+  );
 }
 
 export function purgeStaleDocuments(
-  db: SqliteDatabase,
+  db: Database,
   cutoffMs: number,
   batchSize: number = DEFAULT_BATCH_SIZE,
   nowMs: number = Date.now(),

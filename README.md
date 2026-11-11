@@ -11,7 +11,7 @@
 [![@docs.plus extensions](https://img.shields.io/badge/npm-%40docs.plus%2Fextension--*-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/org/docs.plus)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/25JPG38J59)
 
-[![Bun](https://img.shields.io/badge/Bun-1.3-000000?logo=bun&logoColor=white)](https://bun.sh)
+[![Bun](https://img.shields.io/badge/Bun-1.4-000000?logo=bun&logoColor=white)](https://bun.sh)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev)
 [![Tiptap](https://img.shields.io/badge/Tiptap-3-000000?logo=tiptap&logoColor=white)](https://tiptap.dev)
@@ -56,9 +56,9 @@ documents, so don't type anything private.
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) 1.3.10 or later and
-[Node.js](https://nodejs.org) 22.22.2 or later (Next.js, Vitest, ESLint and the
-git hooks run on Node).
+Requires [Bun](https://bun.sh) 1.4.4 or later. Node.js is not needed: Next.js,
+Vitest, ESLint, Playwright and the git hooks all run on the Bun runtime
+(`[run] bun = true` in `bunfig.toml`).
 
 ```bash
 bun install
@@ -223,7 +223,7 @@ Release notes for each change, including deploy steps, are in the
 | `bun run test:e2e` | Playwright against `make dev` (set `CI=` to reuse running servers). |
 | `bun run test:pwa` | Service worker and offline tests against a production build (`PWA_BASE_URL`). |
 | `bun run test:perf`, `test:soak`, `test:load` | Typing latency, long-running soak and the Yjs load harness. |
-| `bun run typecheck` | TypeScript for the app, the Bun-only Hocuspocus server and the service worker. |
+| `bun run typecheck` | TypeScript for the app (including the Hocuspocus server) and the service worker. |
 | `bun run lint` / `bun run check` | ESLint (Next.js rules) and Biome. |
 
 Test layers, environments and CI notes: [tests/TESTING.md](tests/TESTING.md).

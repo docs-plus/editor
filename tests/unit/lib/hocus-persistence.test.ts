@@ -1,6 +1,8 @@
 // @vitest-environment node
+
+import { Database } from "bun:sqlite";
+
 import { Hocuspocus } from "@hocuspocus/server";
-import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
@@ -9,7 +11,7 @@ import type { GuardrailDecision } from "@/lib/security/ws-guardrails";
 
 const ALLOW: GuardrailDecision = { allowed: true };
 
-let db: Database.Database;
+let db: Database;
 
 function createServer(
   canStore: (name: string, size: number) => GuardrailDecision = () => ALLOW,

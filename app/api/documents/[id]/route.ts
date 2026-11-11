@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
+
 import { NextResponse } from "next/server";
 
 import { logAbuseEvent } from "@/lib/security/abuse-log";
@@ -13,7 +14,7 @@ import {
 } from "@/lib/security/doc-id-validator";
 import { HTTP_MUTATION_RATE_LIMIT_PER_MINUTE } from "@/lib/security/guardrail-config";
 import { createSlidingWindowLimiter } from "@/lib/security/rate-limit";
-import { openBetterSqlite, SQLITE_BUSY } from "@/lib/sqlite-open";
+import { isSqliteBusyError, openSqlite } from "@/lib/sqlite-open";
 
 const MAX_RETRIES = 3;
 const ONE_MINUTE_MS = 60_000;
@@ -22,15 +23,13 @@ const deleteLimiter = createSlidingWindowLimiter({
   windowMs: ONE_MINUTE_MS,
 });
 
-function deleteWithRetry(db: Database.Database, id: string): boolean {
+function deleteWithRetry(db: Database, id: string): boolean {
   bootstrapDocumentActivityTable(db);
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       return deleteDocumentPermanently(db, id);
     } catch (err) {
-      const code = (err as { code?: number | string }).code;
-      const busy = code === SQLITE_BUSY || code === "SQLITE_BUSY";
-      if (busy && attempt < MAX_RETRIES - 1) continue;
+      if (isSqliteBusyError(err) && attempt < MAX_RETRIES - 1) continue;
       throw err;
     }
   }
@@ -73,7 +72,7 @@ export async function DELETE(
   }
 
   try {
-    const db = openBetterSqlite({ timeoutMs: 5000 });
+    const db = openSqlite();
     try {
       const deleted = deleteWithRetry(db, id);
       logAbuseEvent("document_deleted", { ip, id, existed: deleted });

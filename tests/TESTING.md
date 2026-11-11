@@ -298,7 +298,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 | Job | Runs |
 |---|---|
 | Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
-| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bunx playwright test --project=chromium --retries=1` |
+| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --retries=1` |
 
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner

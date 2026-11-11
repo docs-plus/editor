@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
@@ -177,28 +177,33 @@ describe("getDefaultBootstrap", () => {
 });
 
 describe("deleteDocument", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("returns true on 200", async () => {
-    globalThis.fetch = async () =>
-      new Response(null, { status: 200 }) as Response;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
     expect(await deleteDocument("doc-1")).toBe(true);
   });
 
   it("returns true on 404 (already gone)", async () => {
-    globalThis.fetch = async () =>
-      new Response(null, { status: 404 }) as Response;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 404 }),
+    );
     expect(await deleteDocument("doc-1")).toBe(true);
   });
 
   it("returns false on 500", async () => {
-    globalThis.fetch = async () =>
-      new Response(null, { status: 500 }) as Response;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 500 }),
+    );
     expect(await deleteDocument("doc-1")).toBe(false);
   });
 
   it("returns false on network error", async () => {
-    globalThis.fetch = async () => {
-      throw new Error("network");
-    };
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network"));
     expect(await deleteDocument("doc-1")).toBe(false);
   });
 });

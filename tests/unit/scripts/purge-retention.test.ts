@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -7,7 +8,7 @@ import {
 } from "@/lib/security/activity-store";
 import { runRetentionPurge } from "@/scripts/purge-retention";
 
-let db: Database.Database;
+let db: Database;
 describe("runRetentionPurge", () => {
   afterEach(() => {
     db?.close();
@@ -84,9 +85,9 @@ describe("runRetentionPurge", () => {
 
     // A later purge past the 30-day document cutoff keeps the tombstone...
     runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY + 60 * DAY });
-    expect(tombstone()).toBeDefined();
+    expect(tombstone()).not.toBeNull();
     // ...until TOMBSTONE_RETENTION_DAYS (default 90) have passed.
     runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY + 91 * DAY });
-    expect(tombstone()).toBeUndefined();
+    expect(tombstone()).toBeNull();
   });
 });

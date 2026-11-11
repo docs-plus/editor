@@ -69,13 +69,6 @@ jobs:
           bun-version-file: .tool-versions
           no-cache: true
 
-      # Next.js, Vitest/jsdom and ESLint run on Node (>= 22.22.2).
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
       - name: Install current lockfile
         run: bun install --frozen-lockfile
 
