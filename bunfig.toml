@@ -4,3 +4,8 @@
 # `bun add` / `bun update` (local or in CI) can pick them up.
 [install]
 minimumReleaseAge = 259200
+
+# Run package bins (next, vitest, eslint, playwright, ...) on the Bun
+# runtime instead of Node, including `bun run` scripts and `bunx`.
+[run]
+bun = true

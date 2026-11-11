@@ -184,8 +184,8 @@ dated `## YYYY-MM-DD · #<PR> <title>` section.
 
 Husky manages git hooks:
 
-- **pre-commit** — runs `bunx lint-staged` (Biome check on staged files)
-- **commit-msg** — runs `bunx commitlint` (enforces conventional commits)
+- **pre-commit** — runs `bun lint-staged` (Biome check on staged files)
+- **commit-msg** — runs `bun commitlint` (enforces conventional commits)
 
 Do not bypass hooks with `--no-verify` unless explicitly asked by the user.
 

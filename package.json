@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "packageManager": "bun@1.3.10",
+  "packageManager": "bun@1.4.4",
   "engines": {
-    "bun": ">=1.3.10"
+    "bun": ">=1.4.4"
   },
   "scripts": {
     "dev": "next dev",
@@ -22,17 +22,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fuzz": "vitest run tests/unit/fuzz/",
-    "test:e2e": "bunx playwright test --project=chromium",
-    "test:pwa": "bunx playwright test --project=pwa",
-    "test:perf": "bunx playwright test tests/e2e/performance.spec.ts --project=chromium",
-    "test:perf-collab": "bunx playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
+    "test:e2e": "playwright test --project=chromium",
+    "test:pwa": "playwright test --project=pwa",
+    "test:perf": "playwright test tests/e2e/performance.spec.ts --project=chromium",
+    "test:perf-collab": "playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
     "test:stress": "vitest run tests/unit/stress/",
-    "test:soak": "bunx playwright test --project=soak",
-    "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 bunx playwright test --project=soak soak.spec.ts",
-    "test:soak:collab": "bunx playwright test --project=soak soak-collab.spec.ts",
-    "test:soak:collab:quick": "SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 bunx playwright test --project=soak soak-collab.spec.ts",
-    "test:yjs-soak": "bunx playwright test --project=yjs-soak"
+    "test:soak": "playwright test --project=soak",
+    "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 playwright test --project=soak soak.spec.ts",
+    "test:soak:collab": "playwright test --project=soak soak-collab.spec.ts",
+    "test:soak:collab:quick": "SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 playwright test --project=soak soak-collab.spec.ts",
+    "test:yjs-soak": "playwright test --project=yjs-soak"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css}": [

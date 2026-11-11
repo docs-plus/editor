@@ -37,15 +37,22 @@ jobs:
         with:
           bun-version-file: .tool-versions
 
-      # Next.js, Vitest/jsdom and ESLint run on Node.
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
       - name: Install
         run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
 
       - name: Biome
         run: bun run check
@@ -93,17 +100,25 @@ jobs:
         with:
           bun-version-file: .tool-versions
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
       - name: Install
         run: bun install --frozen-lockfile
 
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
       - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bun playwright install --with-deps chromium
 
       # `make dev` runs next dev and Hocuspocus on one db.sqlite (the DELETE
       # route and Hocuspocus must read the same tombstones) with isolated
@@ -126,7 +141,7 @@ jobs:
       # One retry absorbs cold-runner timing; retried passes are still listed
       # as "flaky" in the summary.
       - name: Run Playwright
-        run: CI= bunx playwright test --project=chromium --retries=1 --trace off
+        run: CI= bun playwright test --project=chromium --retries=1 --trace off
 
       - name: Upload failure artifacts
         if: failure()

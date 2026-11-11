@@ -49,17 +49,11 @@ jobs:
         with:
           bun-version-file: .tool-versions
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
       - name: Install
         run: bun install --frozen-lockfile
 
       - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bun playwright install --with-deps chromium
 
       - name: Production build
         run: bun run build
@@ -83,7 +77,7 @@ jobs:
       - name: Run the pwa project
         run: >-
           PWA_BASE_URL=http://localhost:3847 CI=
-          bunx playwright test --project=pwa --trace retain-on-failure
+          bun playwright test --project=pwa --trace retain-on-failure
 
       - name: Upload failure artifacts
         if: failure()
@@ -113,17 +107,11 @@ jobs:
         with:
           bun-version-file: .tool-versions
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
       - name: Install
         run: bun install --frozen-lockfile
 
       - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bun playwright install --with-deps chromium
 
       - name: Start dev servers
         run: |
@@ -138,18 +126,18 @@ jobs:
           curl -sf -o /dev/null --max-time 120 http://localhost:3000/
 
       - name: Yjs reconnection and rapid tab switch
-        run: CI= bunx playwright test --project=yjs-soak --trace retain-on-failure
+        run: CI= bun playwright test --project=yjs-soak --trace retain-on-failure
 
       - name: Multi-user soak (30 s, 3 users)
         run: >-
           SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 CI=
-          bunx playwright test --project=soak soak-collab.spec.ts
+          bun playwright test --project=soak soak-collab.spec.ts
           --trace retain-on-failure
 
       - name: Single-user soak (5 min, 50 headings)
         run: >-
           SOAK_DURATION=300000 SOAK_HEADINGS=50 CI=
-          bunx playwright test --project=soak soak.spec.ts
+          bun playwright test --project=soak soak.spec.ts
           --trace retain-on-failure
 
       - name: Upload failure artifacts
