@@ -19,7 +19,6 @@
  */
 
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import WebSocket from "ws";
 import * as Y from "yjs";
 
 import { formatBytes } from "@/lib/utils";
@@ -320,7 +319,6 @@ function createClients(config: YjsLoadHarnessConfig): {
         name: config.doc,
         document: doc,
         token: `load-client-${i}-${config.doc}`,
-        WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket,
         onSynced() {
           syncedSet.add(i);
           if (syncedSet.size === config.clients) {

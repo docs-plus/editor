@@ -22,9 +22,11 @@ since the previous tag.
   `node` stub on `PATH`, so anything that falls back to Node fails the run.
   Plain `bunx` ignores `[run] bun`, so workflows, git hooks and scripts call
   local tools as `bun <bin>` (`bun playwright test`, `bun lint-staged`).
+- **Load harness:** clients use Bun's built-in `WebSocket`.
 
 ### Removed
 - `better-sqlite3` and `@types/better-sqlite3` (native addon).
+- `ws` and `@types/ws`.
 
 ### Deploy
 - Upgrade Bun on the server to 1.4.4 or later **before** pulling

@@ -2,7 +2,7 @@
 
 TinyDocy uses a multi-layer testing strategy covering schema correctness, feature behavior, performance, long-running stability, and real-time collaboration at scale.
 
-**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets. Collaboration tests use `retries: 2` and extended waits to reduce flakiness. Load harness uses `WebSocketPolyfill` (type assertion) for Node.js compatibility.
+**Recent additions:** Configurable performance tests — `make test-perf` (single-user typing latency, `PERF_HEADINGS`, `PERF_SHAPE`) and `make test-perf-collab` (multi-user concurrent typing on a shared document, `PERF_COLLAB_USERS`, `PERF_COLLAB_HEADINGS`, `PERF_COLLAB_SHAPE`). See Performance Tests and Multi-User Performance Tests sections below. All test layers write JSON reports to `test-reports/` when run via Make targets. Collaboration tests use `retries: 2` and extended waits to reduce flakiness.
 
 **Prerequisites:** Dev servers must be running for Playwright tests.
 
@@ -271,7 +271,7 @@ Creates multiple tabs via the tab bar UI, switches between them 20 times, types 
 
 ## Layer 5: Load Harness (standalone Bun script)
 
-Headless N-client Yjs convergence test — no browser required. Uses Node.js `ws` package via `WebSocketPolyfill` (type assertion required; Hocuspocus runtime supports it when passing `url` directly, but TypeScript types omit it). CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
+Headless N-client Yjs convergence test — no browser required. Clients use Bun's built-in `WebSocket`. CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
 
 ```bash
 make test-load                                              # 100 clients, 30s, distributed
