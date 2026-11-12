@@ -196,3 +196,19 @@ html:root {
     margin: 0;
   }
 }
+
+// Token highlights (data-highlight set by TokenHighlight); palette lives in
+// styles/_variables.scss and switches with .dark.
+$highlight-tokens: gray, brown, red, orange, yellow, green, teal, blue, purple,
+  pink;
+
+.tiptap mark[data-highlight] {
+  color: inherit;
+}
+
+@each $token in $highlight-tokens {
+  .tiptap mark[data-highlight="#{$token}"] {
+    background-color: var(--tt-color-highlight-#{$token});
+    color: inherit;
+  }
+}
