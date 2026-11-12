@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import { generateLargeDocument } from "@/tests/helpers/document-generators";
+
 import { openToolbarTestDoc } from "./helpers/a11y";
 
 const toolbarButton = (page: Page, name: string) =>
@@ -124,5 +126,64 @@ test.describe("indent in lists", () => {
 
     await toolbarButton(page, "Outdent").click();
     await expect(page.locator(".tiptap ul ul")).toHaveCount(0);
+  });
+});
+
+test.describe("focus not obscured by the sticky toolbar", () => {
+  const toolbarBottom = async (page: Page) => {
+    const box = await page.getByRole("toolbar").boundingBox();
+    return box!.y + box!.height;
+  };
+
+  test("scrollIntoView keeps a heading below the toolbar", async ({ page }) => {
+    const editorPage = await openToolbarTestDoc(page);
+    await editorPage.setContent(generateLargeDocument(30));
+    await page.evaluate(() => {
+      const wrapper = document.querySelector(".document-editor-wrapper");
+      if (wrapper) wrapper.scrollTop = wrapper.scrollHeight;
+    });
+
+    const heading = page.locator(".tiptap").getByRole("heading").nth(10);
+    await heading.evaluate((el) => el.scrollIntoView({ block: "start" }));
+
+    const bottom = await toolbarBottom(page);
+    expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(bottom - 1);
+  });
+
+  test("the caret is never hidden behind the toolbar", async ({ page }) => {
+    const editorPage = await openToolbarTestDoc(page);
+    await editorPage.setContent(generateLargeDocument(30));
+
+    // Park paragraph 20 right under the toolbar, then let ProseMirror scroll
+    // the selection into view (native ArrowUp scrolling is not deterministic).
+    const pos = await page.evaluate(() => {
+      const ed = window.__tiptap_editor!;
+      let seen = 0;
+      let found = 0;
+      ed.state.doc.descendants((node, p) => {
+        if (found || node.type.name !== "paragraph") return;
+        if (++seen === 20) found = p + 1;
+      });
+      const dom = ed.view.nodeDOM(found - 1) as HTMLElement;
+      const wrapper = document.querySelector(".document-editor-wrapper")!;
+      wrapper.scrollTop +=
+        dom.getBoundingClientRect().top - wrapper.getBoundingClientRect().top;
+      return found;
+    });
+    await page.evaluate(
+      (p) =>
+        window.__tiptap_editor
+          ?.chain()
+          .setTextSelection(p)
+          .scrollIntoView()
+          .run(),
+      pos,
+    );
+
+    const caretTop = await page.evaluate(() => {
+      const ed = window.__tiptap_editor!;
+      return ed.view.coordsAtPos(ed.state.selection.from).top;
+    });
+    expect(caretTop).toBeGreaterThanOrEqual(await toolbarBottom(page));
   });
 });

@@ -56,6 +56,9 @@ body {
   width: 100%;
   flex: 1;
   overflow: auto;
+  // The toolbar is sticky inside this scroll container, so keep scrolled-to
+  // targets (outline jumps, scrollIntoView) from landing under it.
+  scroll-padding-top: var(--tt-toolbar-height);
 }
 
 .editor-with-toc {

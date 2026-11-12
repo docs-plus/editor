@@ -108,6 +108,8 @@ function DocumentOutline({
   return <TocSidebar items={items} {...props} />;
 }
 
+const SCROLL_CLEARANCE = { top: 52, bottom: 8, left: 0, right: 0 };
+
 const EDITOR_PROPS = {
   attributes: {
     autocomplete: "off",
@@ -116,6 +118,10 @@ const EDITOR_PROPS = {
     "aria-label": "Main content area, start typing to enter text.",
     class: "document-editor",
   },
+  // ProseMirror ignores CSS scroll-padding when it scrolls the caret, so keep
+  // it clear of the sticky toolbar here: 52 = --tt-toolbar-height (44) + 8px air.
+  scrollMargin: SCROLL_CLEARANCE,
+  scrollThreshold: SCROLL_CLEARANCE,
 };
 
 function DocumentEditorContent({
