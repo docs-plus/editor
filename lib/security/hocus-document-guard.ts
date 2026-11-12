@@ -54,7 +54,21 @@ type DocumentGuardOptions = {
   maxAwarenessStateBytes: number;
   /** Delay before repairing a tab list after a change (coalesces bursts). */
   tabsRepairDelayMs?: number;
+  /** One `editor_root_swept` update line per document per window (default 1 min). */
+  sweepLogWindowMs?: number;
+  /** Clock for the sweep log window (tests). */
+  now?: () => number;
 };
+
+/** Sweeps of one document since its last logged line, not logged one by one. */
+type SweepLogWindow = {
+  since: number;
+  sweeps: number;
+  removed: number;
+  types: Set<string>;
+};
+
+const SWEEP_LOG_WINDOW_MS = 60_000;
 
 type SizeEstimate = { stored: number; pending: number };
 
@@ -271,9 +285,10 @@ export function findDisallowedSchemaNames(
 }
 
 /**
- * One abuse line per sweep that removed something. `ip` is the sender of the
- * update that let the content land, which for content Yjs held pending is
- * not necessarily the client that wrote it.
+ * One abuse line for a sweep that removed something. `ip` is the sender of
+ * the update that let the content land, which for content Yjs held pending
+ * is not necessarily the client that wrote it (an attacker can arrange for it
+ * to be an innocent client).
  */
 function logRootSweep(
   documentName: string,
@@ -295,6 +310,18 @@ function logRootSweep(
   });
 }
 
+/** The sweeps a window held back, as one line without an `ip`. */
+function logHeldSweeps(documentName: string, window: SweepLogWindow): void {
+  if (window.sweeps === 0) return;
+  logAbuseEvent("editor_root_swept", {
+    documentName,
+    phase: "update",
+    sweeps: window.sweeps,
+    removed: window.removed,
+    types: [...window.types],
+  });
+}
+
 /**
  * Enforces document size while updates arrive, not only at save time.
  *
@@ -313,6 +340,7 @@ export class DocumentGuard implements Extension {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly sweepLogs = new Map<string, SweepLogWindow>();
 
   constructor(private readonly options: DocumentGuardOptions) {}
 
@@ -338,7 +366,7 @@ export class DocumentGuard implements Extension {
       // release could not be mounted by anyone.
       logRootSweep(documentName, "load", sweepEditorRoot(document));
       watchEditorRoot(document, (sweep, origin) =>
-        logRootSweep(documentName, "update", sweep, origin),
+        this.logUpdateSweep(documentName, sweep, origin),
       );
     }
     this.recordStored(documentName, Y.encodeStateAsUpdate(document).byteLength);
@@ -432,6 +460,9 @@ export class DocumentGuard implements Extension {
   async afterUnloadDocument({
     documentName,
   }: afterUnloadDocumentPayload): Promise<void> {
+    const sweepLog = this.sweepLogs.get(documentName);
+    if (sweepLog) logHeldSweeps(documentName, sweepLog);
+    this.sweepLogs.delete(documentName);
     this.sizes.delete(documentName);
     clearTimeout(this.repairTimers.get(documentName));
     this.repairTimers.delete(documentName);
@@ -440,6 +471,40 @@ export class DocumentGuard implements Extension {
   async onDestroy(): Promise<void> {
     for (const timer of this.repairTimers.values()) clearTimeout(timer);
     this.repairTimers.clear();
+    for (const [documentName, sweepLog] of this.sweepLogs) {
+      logHeldSweeps(documentName, sweepLog);
+    }
+    this.sweepLogs.clear();
+  }
+
+  /**
+   * Logs the first sweep of a document per window and counts the rest, so a
+   * client sending stray content in a loop cannot flood the log. The count
+   * is logged when the next window opens, or when the document unloads.
+   * Keyed by document only: per IP, rotating addresses would bypass it.
+   */
+  private logUpdateSweep(
+    documentName: string,
+    sweep: RootSweep,
+    origin: unknown,
+  ): void {
+    const now = (this.options.now ?? Date.now)();
+    const windowMs = this.options.sweepLogWindowMs ?? SWEEP_LOG_WINDOW_MS;
+    const current = this.sweepLogs.get(documentName);
+    if (current && now - current.since < windowMs) {
+      current.sweeps += 1;
+      current.removed += sweep.removed;
+      for (const type of sweep.types) current.types.add(type);
+      return;
+    }
+    if (current) logHeldSweeps(documentName, current);
+    logRootSweep(documentName, "update", sweep, origin);
+    this.sweepLogs.set(documentName, {
+      since: now,
+      sweeps: 0,
+      removed: 0,
+      types: new Set(),
+    });
   }
 
   private scheduleTabsRepair(documentName: string, document: Y.Doc): void {

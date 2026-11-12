@@ -46,10 +46,15 @@ const onlyElements = (doc: Y.Doc) =>
   topLevel(doc).every((child) => child instanceof Y.XmlElement);
 
 /** Loads `document` through the guard, as Hocuspocus does after a fetch. */
-async function loadThroughGuard(document: Y.Doc, documentName = "doc") {
+async function loadThroughGuard(
+  document: Y.Doc,
+  documentName = "doc",
+  options: Partial<ConstructorParameters<typeof DocumentGuard>[0]> = {},
+) {
   const guard = new DocumentGuard({
     maxDocumentBytes: () => 1e9,
     maxAwarenessStateBytes: 4096,
+    ...options,
   });
   await guard.afterLoadDocument({
     document,
@@ -437,6 +442,112 @@ describe("DocumentGuard root sweep", () => {
       ip: "203.0.113.7",
     });
     expect(swept[0]).not.toContain("stray");
+  });
+
+  describe("log volume", () => {
+    const WINDOW_MS = 60_000;
+
+    /** A loaded document, a clock, and a client writing top-level text to it. */
+    async function sweptDocument(documentName = "doc") {
+      const clock = { now: 1_000 };
+      const document = serverDoc();
+      const guard = await loadThroughGuard(document, documentName, {
+        sweepLogWindowMs: WINDOW_MS,
+        now: () => clock.now,
+      });
+      const client = syncedClient(document);
+      const headers = new Headers({ "x-real-ip": "203.0.113.7" });
+      const origin = {
+        source: "connection",
+        connection: { request: { headers } },
+      };
+      /** One update per call, each leaving top-level text for the sweep. */
+      const pollute = (times: number) => {
+        for (const update of updatesOf(
+          client,
+          ...Array.from({ length: times }, () => () => {
+            client.getXmlFragment("default").insert(0, [new Y.XmlText("x")]);
+          }),
+        )) {
+          Y.applyUpdate(document, update, origin);
+        }
+      };
+      return { clock, document, guard, pollute };
+    }
+
+    const sweptLines = (lines: string[]) =>
+      lines
+        .filter((line) => line.includes("editor_root_swept"))
+        .map((line) => JSON.parse(line));
+
+    it("logs one line per window and counts the rest", async () => {
+      const { clock, document, pollute } = await sweptDocument();
+
+      const first = sweptLines(await captureAbuseLog(() => pollute(100)));
+
+      expect(onlyElements(document)).toBe(true);
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({ removed: 1, ip: "203.0.113.7" });
+      expect(first[0].sweeps).toBeUndefined();
+
+      clock.now += WINDOW_MS;
+      const next = sweptLines(await captureAbuseLog(() => pollute(1)));
+
+      expect(next).toHaveLength(2);
+      expect(next[0]).toMatchObject({
+        documentName: "doc",
+        phase: "update",
+        sweeps: 99,
+        removed: 99,
+        types: ["text"],
+      });
+      expect(next[0].ip).toBeUndefined();
+      expect(next[1]).toMatchObject({ removed: 1, ip: "203.0.113.7" });
+      expect(next[1].sweeps).toBeUndefined();
+    });
+
+    it("reports the count still pending when the document unloads", async () => {
+      const { guard, pollute } = await sweptDocument();
+      await captureAbuseLog(() => pollute(5));
+
+      const lines = sweptLines(
+        await captureAbuseLog(() =>
+          guard.afterUnloadDocument({
+            documentName: "doc",
+          } as Parameters<DocumentGuard["afterUnloadDocument"]>[0]),
+        ),
+      );
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ sweeps: 4, removed: 4 });
+      expect(
+        sweptLines(await captureAbuseLog(() => guard.onDestroy())),
+      ).toEqual([]);
+    });
+
+    it("reports pending counts when the server shuts down", async () => {
+      const { guard, pollute } = await sweptDocument();
+      await captureAbuseLog(() => pollute(3));
+
+      const lines = sweptLines(await captureAbuseLog(() => guard.onDestroy()));
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ sweeps: 2, removed: 2 });
+    });
+
+    it("throttles each document on its own", async () => {
+      const a = await sweptDocument("a");
+      const b = await sweptDocument("b");
+
+      const lines = sweptLines(
+        await captureAbuseLog(() => {
+          a.pollute(3);
+          b.pollute(3);
+        }),
+      );
+
+      expect(lines.map((line) => line.documentName)).toEqual(["a", "b"]);
+    });
   });
 
   it("leaves a clean document untouched at load", async () => {
