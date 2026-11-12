@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import {
   contrastRatio,
@@ -177,6 +177,17 @@ async function selectWord(page: Page) {
   });
 }
 
+/** A focused swatch can show its tooltip, and Esc dismisses that first
+ * (WCAG 1.4.13); the next Esc closes the dialog. Never more than two. */
+async function closeWithEscape(page: Page, dialog: Locator) {
+  for (let press = 0; press < 2; press += 1) {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+    if (!(await dialog.isVisible())) return;
+  }
+  await expect(dialog).toBeHidden();
+}
+
 test("highlight dialog: named swatches, focus on open, arrows move focus only", async ({
   page,
 }) => {
@@ -214,8 +225,7 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
   await expect(
     dialog.getByRole("button", { name: "Blue highlight" }),
   ).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 
   // Reopen: Blue is pressed, focused and carries a check glyph.
@@ -224,7 +234,7 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-pressed", "true");
   await expect(blue.locator("svg")).toHaveCount(1);
-  await page.keyboard.press("Escape");
+  await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 });
 

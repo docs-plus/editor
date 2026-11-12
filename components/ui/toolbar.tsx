@@ -13,7 +13,14 @@ interface ToolbarProps extends BaseProps {
 }
 
 const ITEM_SELECTOR = 'button, [role="button"], [tabindex="0"]';
+const SYNC_KEYS = new Set(["ArrowLeft", "ArrowRight"]);
 const ROVING_GROUP_SELECTOR = "[data-roving-group]";
+
+/** A focused native button activates itself on Enter; the toolbar's roving
+ * index can lag behind focus, so it must not swallow that key. */
+function ignoreNativeEnter(event: KeyboardEvent) {
+  return !(event.key === "Enter" && event.target instanceof HTMLButtonElement);
+}
 
 function ignoreRovingGroupEvents(event: KeyboardEvent) {
   return !(
@@ -66,15 +73,35 @@ function useToolbarNavigation(
     return () => observer.disconnect();
   }, [collectItems, toolbarRef]);
 
-  const { selectedIndex } = useMenuNavigation<HTMLElement>({
+  // Document-level capture runs before the menu hook's own listener on the
+  // toolbar, so the roving index is synced to the focused item before the
+  // arrow moves it.
+  const syncIndexRef = useRef<(index: number) => void>(undefined);
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const syncToFocus = (event: KeyboardEvent) => {
+      if (!SYNC_KEYS.has(event.key)) return;
+      if (!toolbar.contains(event.target as Node)) return;
+      if (!ignoreRovingGroupEvents(event)) return;
+      const index = collectItems().indexOf(event.target as HTMLElement);
+      if (index >= 0) syncIndexRef.current?.(index);
+    };
+    document.addEventListener("keydown", syncToFocus, true);
+    return () => document.removeEventListener("keydown", syncToFocus, true);
+  }, [collectItems, toolbarRef]);
+
+  const { selectedIndex, setSelectedIndex } = useMenuNavigation<HTMLElement>({
     containerRef: toolbarRef,
     items,
     orientation: "horizontal",
     onSelect: (el) => el.click(),
     autoSelectFirstItem: false,
     captureTab: false,
-    shouldHandle: ignoreRovingGroupEvents,
+    shouldHandle: (event) =>
+      ignoreRovingGroupEvents(event) && ignoreNativeEnter(event),
   });
+  syncIndexRef.current = setSelectedIndex;
 
   useEffect(() => {
     const toolbar = toolbarRef.current;

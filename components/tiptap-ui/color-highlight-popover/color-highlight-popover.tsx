@@ -189,6 +189,16 @@ export function ColorHighlightPopoverContent({
             aria-label={swatchName(color.label)}
             tabIndex={tabIndexFor(index)}
             useColorValue={useColorValue}
+            // Applying refocuses the editor (Tiptap defers that by a frame);
+            // take focus back so Esc still returns it to the trigger.
+            onApplied={
+              isGrid
+                ? () =>
+                    requestAnimationFrame(() =>
+                      itemAt(containerRef.current, index)?.focus(),
+                    )
+                : undefined
+            }
           />
         ))}
       </div>
