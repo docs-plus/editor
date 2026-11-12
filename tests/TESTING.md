@@ -17,8 +17,8 @@ make dev
 | `make test` | Unit, fuzz, schema and plugin tests (`bun test`) | ~8s |
 | `make test-fuzz` | Chaos and structured fuzz tests | ~1s |
 | `make test-stress` | Headless stress probe (binary search for heading ceiling) | ~30s |
-| `make test-e2e` | Playwright chromium E2E suite (features, performance, collaboration) | ~90s |
-| `make test-perf` | Typing latency tests only (default 10, 50 headings; `PERF_HEADINGS=200` for custom) | ~15s |
+| `make test-e2e` | Playwright `chromium` E2E suite (features, collaboration), then the `perf` project (typing budget) | ~90s |
+| `make test-perf` | Typing latency tests only, `perf` project without its `chromium` dependency (default 10, 50 headings; `PERF_HEADINGS=200` for custom) | ~15s |
 | `make test-perf-collab` | Multi-user typing latency on shared doc (default 2 users, 50 headings) | ~30s |
 | `make test-load` | Yjs load harness (100 headless clients, convergence) | ~40s |
 | `make test-soak-quick` | Single-user soak (5 min, 50 headings, rich content) | ~6 min |
@@ -177,6 +177,8 @@ make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
 
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Nightly or manual runs can pass `PERF_HEADINGS=50,500`.
 
+The spec runs in its own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores it. Selecting both (`--project=chromium --project=perf`, as CI and `make test-e2e` do) times typing only after the parallel suite has finished, so other workers never compete for the CPU. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 
 Measures keystroke-to-paint latency when **multiple users type concurrently** in the same document. Each user types in a different paragraph to avoid conflicts. Reports per-user p50/p95 and aggregate stats.
@@ -311,7 +313,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 | Job | Runs |
 |---|---|
 | Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
-| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --retries=1` |
+| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --project=perf --retries=1` (`perf` starts after `chromium`, on one worker) |
 
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
