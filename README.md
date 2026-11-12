@@ -247,14 +247,14 @@ Playwright.
 `main`. One job runs `bun audit`, Biome, ESLint, the typecheck, unit tests
 and the production build; the other runs the Playwright Chromium suite. A nightly
 workflow (`.github/workflows/nightly.yml`) runs the service worker, soak and
-load layers on a schedule.
+load layers twice a day (03:41 and 08:00 UTC).
 
 **Releases:** tag `main` with `vX.Y.Z` and push the tag;
 `.github/workflows/release.yml` publishes the GitHub release, listing the pull
 requests merged since the previous tag and linking to
 [CHANGELOG.md](CHANGELOG.md).
 
-The `@docs.plus/extension-*` packages are refreshed every three days by
+The `@docs.plus/extension-*` packages are refreshed daily (04:17 UTC) by
 `.github/workflows/docs-plus-extensions.yml`. It opens a pull request after a
 read-only verification job, which needs "Allow GitHub Actions to create and
 approve pull requests" in the repository's Actions settings.

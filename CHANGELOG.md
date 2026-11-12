@@ -11,6 +11,9 @@ since the previous tag.
 
 ### Changed
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
+- **Nightly runs twice a day:** 03:41 UTC (night) and 08:00 UTC (morning).
+- **docs.plus extension refresh runs daily** at 04:17 UTC instead of every
+  three days. `bunfig.toml` still holds back releases younger than 3 days.
 
 ## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
 
