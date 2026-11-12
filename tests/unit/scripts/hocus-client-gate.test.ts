@@ -190,9 +190,11 @@ describe("hocus-server client schema gate", () => {
   it(
     "never lets a refused client grow the queue into a socket reset",
     async () => {
+      // Read after stop: a caller-owned DB outlives the server.
       const server = await start({
         HOCUS_MIN_CLIENT_SCHEMA: "2",
         HOCUS_THROTTLE: "1",
+        DB_PATH: createTempDbPath(),
       });
       const socket = openSocket(server, "1");
       const closeCodes: number[] = [];

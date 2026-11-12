@@ -1,11 +1,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { Subprocess } from "bun";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "../..");
 const READY_LINE = "Hocuspocus listening";
 const READY_TIMEOUT_MS = 15_000;
 const PORT_ATTEMPTS = 3;
+/** Longer than hocus-server's own 10 s shutdown bound. */
+const STOP_TIMEOUT_MS = 12_000;
 
 /** The raised socket limits the e2e dev servers run with (playwright.config.ts). */
 const E2E_LIMITS = {
@@ -18,17 +21,63 @@ const E2E_LIMITS = {
 export type SpawnedHocus = {
   url: string;
   dbPath: string;
+  pid: number;
   /** Everything the server wrote to stdout and stderr so far. */
   logs(): string;
-  /** SIGTERM, then waits for exit and for the output to drain. */
-  stop(): Promise<void>;
+  /**
+   * SIGTERM, then SIGKILL after `timeoutMs`; waits for exit and for the
+   * output to drain, then removes the temp DB unless the caller owns it.
+   */
+  stop(options?: { timeoutMs?: number }): Promise<void>;
 };
+
+/** Servers still running, killed if this process exits first. */
+const running = new Set<Subprocess>();
+let exitHooksInstalled = false;
+
+function killRunning(): void {
+  for (const proc of running) proc.kill("SIGKILL");
+  running.clear();
+}
+
+/**
+ * Kills every spawned server when this process exits or is interrupted. A
+ * SIGKILL of this process runs no hook: each server also exits when its
+ * stdin pipe closes (`HOCUS_EXIT_ON_STDIN_EOF`).
+ */
+function installExitHooks(): void {
+  if (exitHooksInstalled) return;
+  exitHooksInstalled = true;
+  process.on("exit", killRunning);
+  // A signal listener replaces the default exit, so exit explicitly.
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const) {
+    process.once(signal, () => {
+      killRunning();
+      process.exit(code);
+    });
+  }
+}
+
+async function exitWithin(proc: Subprocess, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+  });
+  const result = await Promise.race([proc.exited, timedOut]);
+  clearTimeout(timer);
+  if (result !== "timeout") return;
+  proc.kill("SIGKILL");
+  await proc.exited;
+}
 
 function randomPort(): number {
   return 20_000 + Math.floor(Math.random() * 20_000);
 }
 
-/** A fresh temp directory holding `db.sqlite`, removed by `stop()`. */
+/** A fresh temp directory holding `db.sqlite`; callers that pass it own it. */
 export function createTempDbPath(): string {
   return path.join(mkdtempSync(path.join(tmpdir(), "hocus-")), "db.sqlite");
 }
@@ -52,18 +101,24 @@ async function startOnce(
     HOCUS_ALLOW_ISOLATED_TABS_DOCS: "1",
     ...E2E_LIMITS,
     ...env,
+    HOCUS_EXIT_ON_STDIN_EOF: "1",
   };
   const childEnv = Object.fromEntries(
     Object.entries(merged).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
+  installExitHooks();
   const proc = Bun.spawn(["bun", "scripts/hocus-server.ts"], {
     cwd: REPO_ROOT,
     env: childEnv,
+    // Never written: the server exits when this pipe closes with us.
+    stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
   });
+  running.add(proc);
+  void proc.exited.then(() => running.delete(proc));
 
   let output = "";
   let onOutput = () => {};
@@ -109,11 +164,15 @@ async function startOnce(
   return {
     url: `ws://127.0.0.1:${port}`,
     dbPath,
+    pid: proc.pid,
     logs: () => output,
-    async stop() {
-      if (proc.exitCode === null) proc.kill("SIGTERM");
-      await proc.exited;
+    async stop({ timeoutMs = STOP_TIMEOUT_MS } = {}) {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        proc.kill("SIGTERM");
+      }
+      await exitWithin(proc, timeoutMs);
       await drained;
+      cleanup();
     },
   };
 }
@@ -122,8 +181,9 @@ async function startOnce(
  * Runs `bun scripts/hocus-server.ts` on a random port (20000–40000) with a
  * temp `DB_PATH`, throttle and logger off, isolated tab lists allowed and the
  * raised e2e socket limits, then `env` on top. Resolves once it listens.
- * The temp DB stays readable after `stop()`; callers that passed `DB_PATH`
- * own its cleanup.
+ * `stop()` removes the temp DB; to read the database after the server
+ * stopped, pass your own `DB_PATH` (from `createTempDbPath()`) and remove
+ * it yourself. The server never outlives this process.
  */
 export async function spawnHocus(
   env: Record<string, string> = {},

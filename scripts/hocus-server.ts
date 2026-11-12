@@ -309,3 +309,15 @@ async function shutdown(): Promise<void> {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+// Test harnesses spawn the server with a stdin pipe and set this flag, so
+// it shuts down when its parent dies, even by SIGKILL (no orphans). Off for
+// `make dev` and PM2, whose stdin may be closed from the start.
+if (process.env.HOCUS_EXIT_ON_STDIN_EOF === "1") {
+  void (async () => {
+    for await (const _ of Bun.stdin.stream()) {
+      // The parent never writes; only the end of the stream matters.
+    }
+    await shutdown();
+  })();
+}
