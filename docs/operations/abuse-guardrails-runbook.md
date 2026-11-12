@@ -45,7 +45,8 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
   production.
 - `HOCUS_MIN_CLIENT_SCHEMA=0`: minimum `schema` a client must send. `0` only logs the
   per-minute `client_schema` aggregate; `1` or more refuses older bundles with
-  `client_outdated`. Never set it below a value it has had in production; see the
+  `client_outdated`. Never set it above the highest schema any shipped bundle sends
+  (currently 2), or release N clients are refused too. Never set it below a value it has had in production; see the
   [schema rollout runbook](schema-rollout-runbook.md).
 - `RETENTION_DAYS=30` (idle documents are deleted and tombstoned)
 - `TOMBSTONE_RETENTION_DAYS=90`: how long a deleted or expired document name stays

@@ -20,7 +20,9 @@ release raises it.
 
 Details worth knowing:
 
-- **Gate.** At `HOCUS_MIN_CLIENT_SCHEMA=0` (the default) nothing is refused.
+- **Gate.** Never set `HOCUS_MIN_CLIENT_SCHEMA` above the highest schema any
+  shipped bundle sends (currently 2), or release N clients are refused too.
+  At `HOCUS_MIN_CLIENT_SCHEMA=0` (the default) nothing is refused.
   At 1 or more, a socket is refused unless `schema` is a plain decimal integer
   at or above the minimum; a missing value counts as 0. `global-tabs` and every
   `global-tabs-*` document are exempt so outdated clients can still list tabs
@@ -44,7 +46,7 @@ Hocus prints one JSON line per minute while sockets are connecting, written to
 the PM2 output log (default `~/.pm2/logs/editor-hocus-out.log`):
 
 ```json
-{"type":"hocus","event":"client_schema","window_start":"2026-11-12T10:41:00.000Z","missing":3,"invalid":0,"low":12,"ok":240,"refused":0,"builds":{"a1b2c3d":240,"unknown":15}}
+{"type":"hocus","event":"client_schema","window_start":"2026-11-12T10:41:00.000Z","missing":3,"invalid":0,"low":12,"ok":240,"refused":0,"builds":{"a1b2c3d4e5f6":240,"unknown":15}}
 ```
 
 `missing`, `invalid`, `low` and `ok` are mutually exclusive buckets (`low` is a
@@ -58,11 +60,12 @@ Adoption over the last 24 hours, `ok / (missing + invalid + low + ok)`:
 grep '"event":"client_schema"' ~/.pm2/logs/editor-hocus-out.log \
   | jq -s --arg since "$(date -u -d '24 hours ago' +%FT%TZ)" \
     '[.[] | select(.window_start >= $since)]
-     | (map(.ok) | add) / (map(.missing + .invalid + .low + .ok) | add)'
+     | (map(.missing + .invalid + .low + .ok) | add // 0) as $total
+     | if $total == 0 then 0 else ((map(.ok) | add // 0) / $total) end'
 ```
 
 (`date -d` is GNU; on macOS use `date -u -v-24H +%FT%TZ`.) An empty window
-prints `null`.
+prints `0`.
 
 **The counts are per auth attempt, not per socket or per user.** A browser that
 retries, or a refused client that is retried, adds to `low` and `refused` each
@@ -75,6 +78,16 @@ gate therefore reads the ratio **while the gate is log-only**:
 Adoption affects user experience only; documents are already protected by the
 other guards.
 
+The full N+1 ship gates (spec section 3.1) are:
+
+- Adoption as above (per attempt; refused retries excluded from the reading).
+- Refused-client soak: 3,000 typed characters, 0 `4205` resets, 0 `ws_throttle_ban`.
+- Mixed-version nightly soak, N + N+1: 0 deleted blocks, 0 unexpected freezes.
+- Hostile tests: an unknown name is refused at ingress; delete-all and
+  paragraph-before-title repair instead of freezing.
+- Staging drill: env set to 0, effective minimum still 2 (once PR C ships the floor).
+- CHANGELOG Deploy note: Hocus restart first, then Next, at low traffic.
+
 ## Release order
 
 Release N (the change that introduces these guards) goes first with the gate
@@ -83,12 +96,7 @@ names are `editor-hocus` and `editor-next`.
 
 1. **Deploy release N** — client + server; gate log-only; server ingress allowlist already includes `textColor` and `fontSize` (N clients that meet them freeze, never delete).
 2. **Wait** for the N+1 ship gates (adoption above).
-3. **Server-only step: deploy the next release's server half and restart Hocus *before* Next.** The owner runs it:
-   `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log
-   (`refused` above 0 in `client_schema`), then
-   `bunx pm2@6.0.14 restart editor-next --update-env`. Build so the client
-   bundle served by the still-running Next process does not change before its
-   restart.
+3. **Server-only step: deploy PR C's server half and restart Hocus *before* Next.** PR C sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. (Until PR C ships, setting `HOCUS_MIN_CLIENT_SCHEMA=2` is the manual equivalent.) The owner runs it: `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log (`refused` above 0 in `client_schema`), then `bunx pm2@6.0.14 restart editor-next --update-env`. Verify the build step does not change the client bundle served by the still-running Next process before its restart; if it does, build into a separate directory.
 4. **Restart Next** to serve the new client with the new marks.
 
 Never serve the new client before step 3 completes. Deploy at low traffic.
