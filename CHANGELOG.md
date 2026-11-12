@@ -65,8 +65,10 @@ since the previous tag.
   it can place it, but a client could slip it past by sending it before the
   block it follows (and before this release, with a single update). Hocus now
   deletes such content after every change to the fragment's top level, in the
-  same broadcast that delivers it, and cleans stored documents when they load
-  (`editor_root_swept` abuse event).
+  same broadcast that delivers it whatever its size (Hocuspocus no longer
+  flushes its broadcast queue early at 1 MiB), and cleans stored documents
+  when they load (`editor_root_swept` abuse event, at most one line per
+  document per minute plus a count).
 - **Size-cap bypass closed:** the update-size guard decoded frames by hand
   and could be bypassed with SyncReply frames or padded varints. It now
   decodes with lib0 exactly as Hocuspocus does, so the cap and the new name

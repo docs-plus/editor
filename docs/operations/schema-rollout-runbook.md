@@ -47,16 +47,19 @@ Details worth knowing:
   `afterLoadDocument` (tab lists are skipped). It runs synchronously inside the
   transaction that released the content, whatever its source (a connection,
   Redis, or a pending update), so its deletion is queued in the same
-  event-loop turn and Hocuspocus merges both into one broadcast: connected
-  clients never see the stray content. Typing inside a block never triggers
-  it; adding or removing a block costs one walk of the top level. A document
+  event-loop turn as the update that released the content, and Hocuspocus
+  merges both into one broadcast: connected clients never see the stray
+  content. That holds only because Hocus turns off Hocuspocus's early flush
+  (`BROADCAST_FLUSH_OPTIONS`: `flushDelay: 0`, `flushMaxBytes: Infinity`).
+  With the 1 MiB default, a releasing update that filled the queue went out
+  alone; open editors then failed on it, and a keystroke before the deletion
+  arrived could rewrite the document from a stale view and lose content. Do
+  not set a finite `flushMaxBytes` or `flushDelay: false`. The queue still
+  empties at the end of every turn and holds only updates that are in memory
+  anyway, so this adds no latency. Typing inside a block never triggers the sweep;
+  adding or removing a block costs one walk of the top level. A document
   stored with such content before this release is cleaned when it next loads,
-  before any client syncs. One known gap: Hocuspocus flushes its broadcast
-  queue as soon as it holds 1 MiB (`flushMaxBytes`). If the update that
-  releases the content fills it, connected clients get the content and the
-  deletion as two messages: an open editor fails to apply the first and
-  recovers, with no content lost, when the second arrives. The stored
-  document and every later load are clean either way.
+  before any client syncs.
 - **Highlights.** Highlights render from tokens but keep the attribute key
   `color`. Unknown values (old hex colours, the popover's old "Default
   background" `var(--background)`) render as plain text; the stored value is
@@ -174,7 +177,11 @@ per hour, or any burst from many IPs after a deploy, as P2. See the
 `editor_root_swept` is normally zero too. `phase: "load"` means a document
 stored before this release held top-level content; a few right after the
 deploy are expected. `phase: "update"` means a client got content past ingress
-by sending it before its position; treat any as P2 and check the `ip`.
+by sending it before its position; treat any as P2. Hocus logs at most one
+such line per document per minute and counts the rest in a later line with
+`sweeps` and no `ip`. The `ip` is the connection whose update released the
+content, which an attacker can arrange to be an innocent client's; never act
+on it alone.
 
 ## Scripts and load tests
 

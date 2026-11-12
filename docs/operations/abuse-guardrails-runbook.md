@@ -108,9 +108,14 @@ Search logs for these JSON event names:
   `removed` counts entries, `types` uses fixed labels such as `text` and never
   content). `phase: "load"` cleaned a document stored before the sweep
   existed. `phase: "update"` means a client sent the content ahead of the block
-  it follows, so ingress could not place it; `ip` is the sender of the update
-  that released it, which may be a later update from the same client. Treat
-  any `update` event as P2; see the [schema rollout runbook](schema-rollout-runbook.md).
+  it follows, so ingress could not place it. `ip` is the connection whose
+  update released the content, not necessarily the one that sent it: an
+  attacker can arrange for it to be an innocent client's, so never ban or
+  block on the IP alone. Update lines are logged at most once per document per
+  minute; the sweeps in between are counted in one later line with `sweeps`
+  (and no `ip`), written when the next minute's first sweep or the document's
+  unload comes. Treat any `update` event as P2; see the
+  [schema rollout runbook](schema-rollout-runbook.md).
 
 Hocuspocus Logger output is one JSON line per message (`{"type":"hocus",...}`), so
 client-chosen document names cannot forge log lines.
