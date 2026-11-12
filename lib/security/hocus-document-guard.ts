@@ -319,30 +319,50 @@ export class DocumentGuard implements Extension {
   }: beforeHandleMessagePayload): Promise<void> {
     const payload = readSyncUpdate(update);
     if (payload === null) return;
-    if (payload !== MALFORMED && payload.byteLength <= EMPTY_UPDATE_BYTES)
-      return;
-    // Undecodable frames and updates log `names: []` (nothing nameable).
-    const names =
-      payload === MALFORMED
-        ? null
-        : findDisallowedSchemaNames(payload, undefined, document);
-    if (payload === MALFORMED || names === null || names.length > 0) {
-      logAbuseEvent("ws_unknown_schema_name", {
-        ip: getPinnedClientIp(requestHeaders),
-        documentName,
-        names: names ?? [],
-      });
-      throw SCHEMA_REJECTED;
+    if (payload === MALFORMED) {
+      this.refuseSchema(requestHeaders, documentName, null);
     }
+    if (payload.byteLength <= EMPTY_UPDATE_BYTES) return;
+    // Size first: arithmetic, and a delete-only update decodes to no structs.
+    this.refuseOverCap(payload, update, document, documentName, requestHeaders);
+    const names = findDisallowedSchemaNames(payload, undefined, document);
+    if (names === null || names.length > 0) {
+      this.refuseSchema(requestHeaders, documentName, names);
+    }
+  }
+
+  /** Closes with `schema_rejected`; undecodable input logs `names: []`. */
+  private refuseSchema(
+    requestHeaders: beforeHandleMessagePayload["requestHeaders"],
+    documentName: string,
+    names: string[] | null,
+  ): never {
+    logAbuseEvent("ws_unknown_schema_name", {
+      ip: getPinnedClientIp(requestHeaders),
+      documentName,
+      names: names ?? [],
+    });
+    throw SCHEMA_REJECTED;
+  }
+
+  /** Closes with `document_too_large` when `payload` would pass the cap. */
+  private refuseOverCap(
+    payload: Uint8Array,
+    frame: Uint8Array,
+    document: Y.Doc,
+    documentName: string,
+    requestHeaders: beforeHandleMessagePayload["requestHeaders"],
+  ): void {
     const size = this.sizes.get(documentName);
     if (!size) return;
     const limit = this.options.maxDocumentBytes(documentName);
-    if (size.stored + size.pending + update.byteLength <= limit) return;
+    const estimatedBytes = size.stored + size.pending + frame.byteLength;
+    if (estimatedBytes <= limit) return;
     if (addsNoItems(payload, document)) return;
     logAbuseEvent("ws_update_too_large", {
       ip: getPinnedClientIp(requestHeaders),
       documentName,
-      estimatedBytes: size.stored + size.pending + update.byteLength,
+      estimatedBytes,
       limit,
     });
     throw DOCUMENT_TOO_LARGE;

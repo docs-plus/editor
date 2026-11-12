@@ -398,6 +398,35 @@ describe("findDisallowedSchemaNames (B2)", () => {
       }
     });
 
+    it("refuses an over-cap update by size before scanning names (M1)", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          run(guardFor(20), rawFrame([0, 2], craft(["zzz"], []))),
+        ).rejects.toEqual(DOCUMENT_TOO_LARGE);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("still scans names under the cap and without a size record", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          run(guardFor(), rawFrame([0, 2], unknown)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+        const unrecorded = new DocumentGuard({
+          maxDocumentBytes: () => 20,
+          maxAwarenessStateBytes: 4096,
+        });
+        await expect(
+          run(unrecorded, rawFrame([0, 2], unknown)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("checks top-level content against the server's document", async () => {
       const warn = spyOn(console, "warn").mockImplementation(() => {});
       try {
