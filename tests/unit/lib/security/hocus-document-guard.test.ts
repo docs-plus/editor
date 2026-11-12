@@ -199,7 +199,7 @@ describe("findDisallowedSchemaNames (B2)", () => {
     it("allows content whose position it cannot resolve yet", () => {
       const { server, client, fragment } = serverAndClient();
       // The paragraph has not reached the server: Yjs holds the text pending,
-      // and the client repair strips it if it lands in the fragment.
+      // and the server sweep deletes it if it lands in the fragment.
       changes(client, () =>
         fragment.insert(1, [new Y.XmlElement("paragraph")]),
       );

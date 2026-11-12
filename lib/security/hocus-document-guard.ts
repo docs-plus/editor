@@ -6,6 +6,7 @@ import type {
   Extension,
   onChangePayload,
 } from "@hocuspocus/server";
+import { isTransactionOrigin } from "@hocuspocus/server";
 import * as decoding from "lib0/decoding";
 import * as Y from "yjs";
 
@@ -17,6 +18,12 @@ import {
 import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { getPinnedClientIp } from "@/lib/security/client-ip";
 import { isTabsDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  isNonElementContent,
+  type RootSweep,
+  sweepEditorRoot,
+  watchEditorRoot,
+} from "@/lib/security/editor-root-sweep";
 import {
   decodeFrameHeader,
   HOCUS_SYNC_MESSAGE_TYPES,
@@ -204,16 +211,6 @@ function createRootResolver(
   };
 }
 
-/** Countable content the editor fragment cannot hold (it holds elements). */
-function isNonElementContent(item: Y.Item): boolean {
-  const { content } = item;
-  if (content instanceof Y.ContentDeleted) return false;
-  if (content instanceof Y.ContentType) {
-    return !(content.type instanceof Y.XmlElement);
-  }
-  return item.parentSub === null;
-}
-
 /**
  * Node and mark names in `update` that the schema allowlist does not know, at
  * most `limit` of them (truncated for logging). Null when the update cannot
@@ -224,7 +221,9 @@ function isNonElementContent(item: Y.Item): boolean {
  * position is resolved against `document`, the server's copy. Content whose
  * position is not there yet is allowed: a client resuming from its device
  * copy types before its sync step 2 arrives, and Yjs holds such content
- * pending. If it later lands in the fragment, the client repair strips it.
+ * pending. If a later update releases it into the fragment, the server sweep
+ * (`watchEditorRoot`) deletes it in the same broadcast; the client repair
+ * cannot, because y-tiptap throws before reporting invalid content.
  *
  * Known gap: element attribute keys and marks on inline atom nodes are not
  * checked. y-prosemirror stores no marks on elements, and Tiptap drops
@@ -272,6 +271,31 @@ export function findDisallowedSchemaNames(
 }
 
 /**
+ * One abuse line per sweep that removed something. `ip` is the sender of the
+ * update that let the content land, which for content Yjs held pending is
+ * not necessarily the client that wrote it.
+ */
+function logRootSweep(
+  documentName: string,
+  phase: "load" | "update",
+  { removed, types }: RootSweep,
+  origin?: unknown,
+): void {
+  if (removed === 0) return;
+  const ip =
+    isTransactionOrigin(origin) && origin.source === "connection"
+      ? getPinnedClientIp(origin.connection.request.headers)
+      : undefined;
+  logAbuseEvent("editor_root_swept", {
+    documentName,
+    phase,
+    removed,
+    types,
+    ...(ip ? { ip } : {}),
+  });
+}
+
+/**
  * Enforces document size while updates arrive, not only at save time.
  *
  * The estimate is the last known encoded size plus every update applied
@@ -309,6 +333,13 @@ export class DocumentGuard implements Extension {
       if (removed > 0) {
         logAbuseEvent("tabs_doc_repaired", { documentName, removed });
       }
+    } else {
+      // Before any client syncs: a stored document poisoned before this
+      // release could not be mounted by anyone.
+      logRootSweep(documentName, "load", sweepEditorRoot(document));
+      watchEditorRoot(document, (sweep, origin) =>
+        logRootSweep(documentName, "update", sweep, origin),
+      );
     }
     this.recordStored(documentName, Y.encodeStateAsUpdate(document).byteLength);
   }
