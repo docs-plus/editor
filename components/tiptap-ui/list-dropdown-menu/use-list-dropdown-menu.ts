@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 // --- Tiptap UI ---
 import {
@@ -191,7 +191,6 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   } = config || {};
 
   const { editor } = useTiptapEditor(providedEditor);
-  const [isVisible, setIsVisible] = useState(true);
 
   const listInSchema = types.some((type) => isNodeInSchema(type, editor));
 
@@ -202,29 +201,15 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   const activeType = getActiveListType(editor, types);
   const activeList = filteredLists.find((option) => option.type === activeType);
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleSelectionUpdate = () => {
-      setIsVisible(
-        shouldShowListDropdown({
-          editor,
-          listTypes: types,
-          hideWhenUnavailable,
-          listInSchema,
-          canToggleAny,
-        }),
-      );
-    };
-
-    handleSelectionUpdate();
-
-    editor.on("selectionUpdate", handleSelectionUpdate);
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate);
-    };
-  }, [canToggleAny, editor, hideWhenUnavailable, listInSchema, types]);
+  const isVisible =
+    !editor ||
+    shouldShowListDropdown({
+      editor,
+      listTypes: types,
+      hideWhenUnavailable,
+      listInSchema,
+      canToggleAny,
+    });
 
   return {
     isVisible,

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
@@ -140,27 +140,11 @@ export function useImageUpload(config?: UseImageUploadConfig) {
 
   const { editor } = useTiptapEditor(providedEditor);
   const isMobile = useIsBreakpoint();
-  const [isVisible, setIsVisible] = useState<boolean>(true);
   const canInsert = canInsertImage(editor);
   const isActive = isImageActive(editor);
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleSelectionUpdate = () => {
-      setIsVisible(
-        shouldShowImageUploadButton({ editor, hideWhenUnavailable }),
-      );
-    };
-
-    handleSelectionUpdate();
-
-    editor.on("selectionUpdate", handleSelectionUpdate);
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate);
-    };
-  }, [editor, hideWhenUnavailable]);
+  const isVisible =
+    !editor || shouldShowImageUploadButton({ editor, hideWhenUnavailable });
 
   const handleImage = useCallback(() => {
     if (!editor) return false;

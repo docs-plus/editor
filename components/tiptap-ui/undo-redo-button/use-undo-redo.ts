@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -141,26 +141,11 @@ export function useUndoRedo(config: UseUndoRedoConfig) {
   } = config;
 
   const { editor } = useTiptapEditor(providedEditor);
-  const [isVisible, setIsVisible] = useState<boolean>(true);
   const canExecute = canExecuteUndoRedoAction(editor, action);
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleUpdate = () => {
-      setIsVisible(
-        shouldShowUndoRedoButton({ editor, hideWhenUnavailable, action }),
-      );
-    };
-
-    handleUpdate();
-
-    editor.on("transaction", handleUpdate);
-
-    return () => {
-      editor.off("transaction", handleUpdate);
-    };
-  }, [editor, hideWhenUnavailable, action]);
+  const isVisible =
+    !editor ||
+    shouldShowUndoRedoButton({ editor, hideWhenUnavailable, action });
 
   const handleAction = useCallback(() => {
     if (!editor) return false;
