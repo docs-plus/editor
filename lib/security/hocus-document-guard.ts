@@ -170,6 +170,8 @@ function createRootResolver(
 
   return (item) => {
     const path: Y.Item[] = [];
+    // A Set, not `path.includes`: a hostile chain would make that quadratic.
+    const seen = new Set<Y.Item>();
     let current = item;
     let root: RootName;
     for (;;) {
@@ -188,9 +190,10 @@ function createRootResolver(
         break;
       }
       path.push(current);
+      seen.add(current);
       const origin = current.origin ?? current.rightOrigin;
       const next = origin ? findInUpdate(origin) : undefined;
-      if (!origin || next === undefined || path.includes(next)) {
+      if (!origin || next === undefined || seen.has(next)) {
         root = origin ? findInDocument(origin) : undefined;
         break;
       }

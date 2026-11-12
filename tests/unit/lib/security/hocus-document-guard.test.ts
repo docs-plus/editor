@@ -208,6 +208,22 @@ describe("findDisallowedSchemaNames (B2)", () => {
       expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
     });
 
+    it("resolves a long chain of blocks in linear time", () => {
+      // ~1.2 MB, under the size cap: quadratic took ~550 ms here, linear ~30.
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment("default");
+      const blocks = Array.from(
+        { length: 100_000 },
+        () => new Y.XmlElement("paragraph"),
+      );
+      fragment.insert(0, blocks);
+      fragment.insert(blocks.length, [new Y.XmlText("x")]);
+      const update = Y.encodeStateAsUpdate(doc);
+      const started = performance.now();
+      expect(findDisallowedSchemaNames(update)).toEqual(["#text"]);
+      expect(performance.now() - started).toBeLessThan(250);
+    });
+
     it("allows typing, blocks and other root types", () => {
       const { server, client, fragment } = serverAndClient();
       const update = changes(client, () => {
