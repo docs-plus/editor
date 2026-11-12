@@ -58,6 +58,7 @@ import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
+import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
@@ -85,9 +86,6 @@ type DocumentEditorContentProps = DocumentEditorProps & {
   /** The server has confirmed this document; seeding waits for it. */
   serverSynced: boolean;
 };
-
-/** The Yjs field the collaboration extension syncs. */
-const COLLAB_FIELD = "default";
 
 const getServerGuardState = (): SchemaGuardState => "ok";
 
@@ -141,7 +139,7 @@ function DocumentEditorContent({
 
   // Freezes on unknown schema names, repairs misfits of known ones.
   const schemaGuard = useMemo(
-    () => createSchemaGuard(ydoc.getXmlFragment(COLLAB_FIELD)),
+    () => createSchemaGuard(ydoc.getXmlFragment(EDITOR_FRAGMENT_NAME)),
     [ydoc],
   );
   const guardState = useSyncExternalStore(
