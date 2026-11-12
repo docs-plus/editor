@@ -21,13 +21,13 @@ describe("schema-name allowlist", () => {
     ).toEqual([]);
   });
 
-  it("allows nothing beyond the schema except legacy and pending marks", () => {
+  it("allows nothing beyond the schema except legacy marks", () => {
     expect([...SCHEMA_NODE_NAMES].filter((n) => !(n in schema.nodes))).toEqual(
       [],
     );
     expect(
       [...SCHEMA_MARK_NAMES].filter((m) => !(m in schema.marks)).sort(),
-    ).toEqual(["code", "fontSize", "link", "textColor"]);
+    ).toEqual(["code", "link"]);
   });
 
   it("accepts hashed keys of allowed marks only", () => {

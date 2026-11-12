@@ -128,15 +128,19 @@ describe("findDisallowedSchemaNames (B2)", () => {
     }
   });
 
-  it("allows legacy, pending and hashed mark keys", () => {
-    const keys = [
-      "link",
-      "code",
-      "textColor",
-      "fontSize",
-      "hyperlink--abcd1234",
-    ];
+  it("allows legacy and hashed mark keys", () => {
+    const keys = ["link", "code", "hyperlink--abcd1234"];
     expect(findDisallowedSchemaNames(craft([], keys))).toEqual([]);
+  });
+
+  it("refuses the smart toolbar marks until their server half ships", () => {
+    // Allowed in N, `textColor` would freeze every N client on any document.
+    expect(findDisallowedSchemaNames(craft([], ["textColor"]))).toEqual([
+      "textColor",
+    ]);
+    expect(
+      findDisallowedSchemaNames(craft([], ["fontSize--abcd1234"])),
+    ).toEqual(["fontSize"]);
   });
 
   it("names unknown elements and marks", () => {

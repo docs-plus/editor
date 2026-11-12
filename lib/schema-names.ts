@@ -9,9 +9,6 @@ export function markNameFromKey(key: string): string {
 /** Marks stored by earlier releases; the renamer still migrates them on load. */
 export const LEGACY_MARK_NAMES = ["link", "code"] as const;
 
-/** Marks reserved for the smart toolbar, allowed before their extensions ship. */
-export const PENDING_MARK_NAMES = ["textColor", "fontSize"] as const;
-
 /** Every node the editor schema can write. Keep in sync with `schema-snapshot.json`. */
 export const SCHEMA_NODE_NAMES: ReadonlySet<string> = new Set([
   "audio",
@@ -43,7 +40,12 @@ export const SCHEMA_NODE_NAMES: ReadonlySet<string> = new Set([
   "youtube",
 ]);
 
-/** Every mark the editor schema can write, plus legacy and pending marks. */
+/**
+ * Every mark the editor schema can write, plus legacy marks. New marks are
+ * added with the server half of the release that ships them, deployed
+ * before its clients: allowing a name earlier lets anyone freeze documents
+ * for every client that does not know it.
+ */
 export const SCHEMA_MARK_NAMES: ReadonlySet<string> = new Set([
   "bold",
   "highlight",
@@ -55,7 +57,6 @@ export const SCHEMA_MARK_NAMES: ReadonlySet<string> = new Set([
   "superscript",
   "underline",
   ...LEGACY_MARK_NAMES,
-  ...PENDING_MARK_NAMES,
 ]);
 
 export function isAllowedNodeName(name: string): boolean {
