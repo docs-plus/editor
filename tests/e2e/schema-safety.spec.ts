@@ -270,6 +270,36 @@ test("a paragraph before the title is repaired", async ({ browser }) => {
   await context.close();
 });
 
+test("a top-level hard break is fitted, not frozen", async ({ browser }) => {
+  const docId = newDocId();
+  const { context, page } = await openEditor(browser, docId);
+  await typeInNewParagraphAtEnd(page, "body text");
+  await expect
+    .poll(() => readServer(docId), { timeout: 15_000 })
+    .toContain("body text");
+
+  // A known name in the wrong place: allowed at ingress, so the client heals it.
+  const attacker = await connect(docId);
+  attacker.fragment.insert(1, [new Y.XmlElement("hardBreak")]);
+  attacker.disconnect();
+
+  await expect
+    .poll(() => readServer(docId), { timeout: 5000 })
+    .toContain("</heading><paragraph><hardbreak></hardbreak></paragraph>");
+  await expect
+    .poll(() => repairedState(page, { arrived: "body text" }), {
+      timeout: 3000,
+    })
+    .toEqual(REPAIRED);
+  await page.locator(".tiptap").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("after fit");
+  await expect
+    .poll(() => readServer(docId), { timeout: 15_000 })
+    .toContain("after fit");
+  await context.close();
+});
+
 test("a pre-N device copy migrates through real IndexedDB", async ({
   browser,
 }) => {
