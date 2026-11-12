@@ -26,6 +26,20 @@ export const DOCUMENT_TOO_LARGE_REASON = "document_too_large";
 export const DOCUMENT_DELETED_REASON = "document_deleted";
 /** Local pause: too many edits collected offline (clears on sync). */
 export const OFFLINE_BUDGET_REASON = "offline_budget";
+/** Auth refusal for a bundle older than the server's minimum client schema. */
+export const CLIENT_OUTDATED_REASON = "client_outdated";
+/** Close reason for an update naming a node or mark the server does not allow. */
+export const SCHEMA_REJECTED_REASON = "schema_rejected";
+
+/**
+ * Close reasons after which the document stops syncing: every reconnect
+ * would resend the refused update, and enough retries get the visitor's IP
+ * banned by Throttle. The device copy is kept.
+ */
+const STOP_SYNC_CLOSE_REASONS = new Set([
+  DOCUMENT_TOO_LARGE_REASON,
+  SCHEMA_REJECTED_REASON,
+]);
 
 /**
  * How long to wait for the local copy before connecting without it.
@@ -36,7 +50,10 @@ const HYDRATE_TIMEOUT_MS = 1000;
 export type CollabSession = {
   doc: Y.Doc;
   provider: HocuspocusProvider;
-  /** Why this document's edits are refused (size, deleted, offline budget). */
+  /**
+   * Why this document's edits are refused (size, deleted, offline budget,
+   * outdated client, schema refusal).
+   */
   rejectedReason: string | null;
   /** The document was rendered from its offline copy before the server synced. */
   hasLocalCopy: boolean;
@@ -162,6 +179,13 @@ export function acquireCollabSession(name: string): CollabSession {
   provider.on("authenticationFailed", ({ reason }: { reason: string }) => {
     // A refused document (deleted tab, rate limit) will never acknowledge.
     setDirty(entry, false);
+    if (reason === CLIENT_OUTDATED_REASON) {
+      // Re-authenticating on every reconnect would only be refused again.
+      // Keep the device copy: the reloaded bundle uploads it.
+      provider.detach();
+      reject(entry, CLIENT_OUTDATED_REASON);
+      return;
+    }
     if (reason !== DOCUMENT_DELETED_REASON) return;
     // Deleted while this copy was away: never resurrect it from the device.
     provider.detach();
@@ -169,16 +193,16 @@ export function acquireCollabSession(name: string): CollabSession {
     removeLocalCopy(name);
     reject(entry, DOCUMENT_DELETED_REASON);
   });
-  // After a size refusal, stop syncing this document instead of
-  // re-authenticating on every reconnect: each retry resends the refused
-  // update, and enough retries get the visitor's IP banned by Throttle.
   provider.on("close", ({ event }: { event: { reason?: string } }) => {
-    if (event.reason !== DOCUMENT_TOO_LARGE_REASON || entry.rejectedReason) {
-      return;
-    }
+    const reason = event.reason ?? "";
+    // The offline pause leaves the provider attached; other refusals detach.
+    const detached =
+      entry.rejectedReason !== null &&
+      entry.rejectedReason !== OFFLINE_BUDGET_REASON;
+    if (!STOP_SYNC_CLOSE_REASONS.has(reason) || detached) return;
     provider.detach();
     setDirty(entry, false);
-    reject(entry, DOCUMENT_TOO_LARGE_REASON);
+    reject(entry, reason);
   });
 
   attachWithLocalCopy(entry, name);
@@ -277,15 +301,20 @@ export function forgetLocalCopy(name: string): void {
   removeLocalCopy(name);
 }
 
-/** Writes every pending offline copy now (page hidden or closing). */
-function flushLocalCopies(): void {
-  for (const entry of sessions.values()) void entry.binding?.flush();
+/**
+ * Writes every pending offline copy now (page hidden or closing, or before
+ * a reload). Settles once every write has finished or failed.
+ */
+export async function flushAllLocalCopies(): Promise<void> {
+  await Promise.allSettled(
+    [...sessions.values()].map((entry) => entry.binding?.flush()),
+  );
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("pagehide", flushLocalCopies);
+  window.addEventListener("pagehide", () => void flushAllLocalCopies());
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushLocalCopies();
+    if (document.visibilityState === "hidden") void flushAllLocalCopies();
   });
 }
 

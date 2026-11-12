@@ -62,7 +62,11 @@ export interface CollabEditorFixture {
  * Several fixtures can share one `server` and see each other's writes.
  */
 export function createCollabEditor(
-  options: { server?: Y.Doc } = {},
+  options: {
+    server?: Y.Doc;
+    /** Also called with every error passed to `onInvalidContent`. */
+    onInvalidContent?: (error: Error) => void;
+  } = {},
 ): CollabEditorFixture {
   const schema = getSchema(BASE_EXTENSIONS);
   const server = options.server ?? prosemirrorJSONToYDoc(schema, SEED, FIELD);
@@ -100,7 +104,12 @@ export function createCollabEditor(
       ...BASE_EXTENSIONS,
       CollaborationRenderOnce.configure({
         document: client,
-        ySyncOptions: { onInvalidContent: (e: Error) => errors.push(e) },
+        ySyncOptions: {
+          onInvalidContent: (e: Error) => {
+            errors.push(e);
+            options.onInvalidContent?.(e);
+          },
+        },
       }),
     ],
   });

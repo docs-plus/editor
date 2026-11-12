@@ -114,6 +114,11 @@ interface BuildDocumentEditorExtensionsOptions {
   onFoldChange: (foldedIds: Set<string>) => void;
   onFilterChange: (state: HeadingFilterCallbackState) => void;
   onTocUpdate: (anchors: TableOfContentData) => void;
+  /**
+   * Called when the shared document stops fitting the schema (the editor
+   * freezes). Runs inside the sync binding: record only, never write.
+   */
+  onInvalidContent?: (error: Error) => void;
 }
 
 function createHeadingFilterFoldAdapter() {
@@ -142,6 +147,7 @@ export function buildDocumentEditorExtensions({
   onFoldChange,
   onFilterChange,
   onTocUpdate,
+  onInvalidContent,
 }: BuildDocumentEditorExtensionsOptions) {
   return [
     StarterKit.configure({
@@ -189,6 +195,7 @@ export function buildDocumentEditorExtensions({
     }),
     CollaborationRenderOnce.configure({
       document: ydoc,
+      ...(onInvalidContent ? { ySyncOptions: { onInvalidContent } } : {}),
     }),
     NodeViewsRenderOnce,
     CaretBlockVisible,
