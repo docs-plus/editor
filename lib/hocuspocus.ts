@@ -1,5 +1,7 @@
 import { HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 
+import { withClientVersion } from "@/lib/schema-version";
+
 declare global {
   interface Window {
     __HOCUS_URL?: string;
@@ -55,7 +57,7 @@ let sharedSocket: HocuspocusProviderWebsocket | null = null;
  */
 export function getSharedHocuspocusSocket(): HocuspocusProviderWebsocket {
   sharedSocket ??= new HocuspocusProviderWebsocket({
-    url: getHocuspocusWsUrl(),
+    url: withClientVersion(getHocuspocusWsUrl()),
   });
   return sharedSocket;
 }
