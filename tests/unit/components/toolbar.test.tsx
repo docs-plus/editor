@@ -86,6 +86,27 @@ describe("Toolbar focus repair", () => {
     input.remove();
   });
 
+  it("does not pull focus back after an arrow press once focus has left", async () => {
+    const { root, container } = mount(true);
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    await settle();
+    byLabel(container, "A")?.focus();
+    act(() => {
+      byLabel(container, "A")?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+    });
+    await settle();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("B");
+    input.focus();
+    // Any later DOM change inside the toolbar re-collects its items.
+    mount(false, root, container);
+    await settle();
+    expect(document.activeElement?.tagName).toBe("INPUT");
+    input.remove();
+  });
+
   it("keeps aria-disabled items navigable", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

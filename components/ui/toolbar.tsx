@@ -29,6 +29,10 @@ function ignoreRovingGroupEvents(event: KeyboardEvent) {
   );
 }
 
+function sameItems(a: HTMLElement[], b: HTMLElement[]) {
+  return a.length === b.length && a.every((el, i) => el === b[i]);
+}
+
 function useToolbarNavigation(
   toolbarRef: React.RefObject<HTMLDivElement | null>,
 ) {
@@ -62,7 +66,7 @@ function useToolbarNavigation(
 
     const updateItems = () => {
       const next = collectItems();
-      setItems(next);
+      setItems((prev) => (sameItems(prev, next) ? prev : next));
       repairFocus(next);
     };
 
@@ -145,11 +149,14 @@ function useToolbarNavigation(
     };
   }, [collectItems, toolbarRef]);
 
+  // Only an arrow press moves focus. `items` also changes on every DOM
+  // mutation in the toolbar, which must not pull focus back from the editor.
   useEffect(() => {
+    if (!toolbarRef.current?.contains(document.activeElement)) return;
     if (selectedIndex !== undefined && items[selectedIndex]) {
       items[selectedIndex].focus();
     }
-  }, [selectedIndex, items]);
+  }, [selectedIndex, items, toolbarRef]);
 }
 
 const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(

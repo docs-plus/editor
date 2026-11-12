@@ -33,6 +33,46 @@ test.describe("toolbar focus and disabled controls", () => {
       .toBe(true);
   });
 
+  test("arrowing in the toolbar never pulls focus back from the editor later", async ({
+    page,
+  }) => {
+    const editorPage = await openToolbarTestDoc(page);
+    await editorPage.setContent({
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Title" }],
+        },
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: "Section " }],
+        },
+        { type: "paragraph", content: [{ type: "text", text: "Last " }] },
+      ],
+    });
+    await page.keyboard.press("Shift");
+    await toolbarButton(page, "Bold").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(toolbarButton(page, "Italic")).toBeFocused();
+
+    await page.locator(".tiptap p", { hasText: "Last" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.type("one ");
+    await page.locator(".tiptap h2", { hasText: "Section" }).click();
+    await page.keyboard.press("End");
+    // The toolbar re-renders for the heading (new icon, Indent's reason):
+    // that DOM change must not move focus back to Italic.
+    await expect(toolbarButton(page, "Heading 2")).toBeVisible();
+    await page.keyboard.type("two");
+
+    await expect(page.locator(".tiptap p")).toHaveText("Last one ");
+    await expect(page.locator(".tiptap h2")).toHaveText("Section two");
+    await expect(page.locator(".tiptap")).toBeFocused();
+  });
+
   test("a disabled Undo explains itself via aria-describedby", async ({
     page,
   }) => {
