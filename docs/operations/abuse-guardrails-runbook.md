@@ -96,8 +96,10 @@ Search logs for these JSON event names:
 - `ws_throttle_ban` (Throttle banned an IP), `ws_auth_timeout`
 - `ws_update_too_large`, `ws_awareness_too_large`
 - `ws_unknown_schema_name` (an update or frame named a node or mark outside
-  `lib/schema-names.ts`, or could not be decoded, with `names: []`; the socket is closed
-  with `4422` `schema_rejected`). Alert at more than a handful per hour or any
+  `lib/schema-names.ts`, put non-element content at the top of a document
+  (`#text`), or could not be decoded, with `names: []`; that document's
+  connection is closed with `4422` `schema_rejected`, while the socket and its
+  other documents stay open). Alert at more than a handful per hour or any
   multi-IP burst after a deploy; see the [schema rollout runbook](schema-rollout-runbook.md).
 - `tabs_doc_repaired` (malformed entries removed from a shared tab list; repeated
   events point to a client writing bad data)

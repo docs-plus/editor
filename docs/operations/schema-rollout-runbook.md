@@ -15,8 +15,8 @@ release raises it.
 |---|---|---|
 | Version gate | The client sends `schema=2` and `build=<id>` on the shared socket URL (`lib/schema-version.ts`). Hocus counts them and, when `HOCUS_MIN_CLIENT_SCHEMA` is above 0, refuses older bundles with `client_outdated`. | `client_schema` log line, once a minute |
 | Offline namespace | Device copies live under `1:${host}~s2:${name}`. Pre-N bundles never read that key, so they cannot save a damaged copy over a new one. Legacy copies are merged in, then deleted inside one IndexedDB transaction. | none (client only) |
-| Freeze and repair | A document with unknown node or mark names freezes read-only with the update banner. Known-name misfits (a paragraph before the title, an emptied fragment) are repaired in place. | `schema_repair_failed` analytics event when a repair fails |
-| Ingress allowlist | Hocus refuses any update that names a node or mark outside `lib/schema-names.ts` and closes the socket with `4422` `schema_rejected`. Malformed sync frames are refused the same way. | `ws_unknown_schema_name` abuse event |
+| Freeze and repair | A document with unknown node or mark names freezes read-only with the update banner, by design. Any misfit made only of known names is fitted to the schema in place: an emptied fragment is reseeded, a missing title inserted, elements whose content does not fit are removed (as earlier releases did) and stray inline nodes such as a top-level hard break are wrapped in a paragraph. | `schema_repair_failed` analytics event when a repair fails |
+| Ingress allowlist | Hocus refuses any update that names a node or mark outside `lib/schema-names.ts`, or puts content other than an element directly in the editor fragment (logged as `#text`), and closes that document's connection with `4422` `schema_rejected`; the shared socket and its other documents stay open. Malformed sync frames are refused the same way. | `ws_unknown_schema_name` abuse event |
 
 Details worth knowing:
 
@@ -46,13 +46,15 @@ Hocus prints one JSON line per minute while sockets are connecting, written to
 the PM2 output log (default `~/.pm2/logs/editor-hocus-out.log`):
 
 ```json
-{"type":"hocus","event":"client_schema","window_start":"2026-11-12T10:41:00.000Z","missing":3,"invalid":0,"low":12,"ok":240,"refused":0,"builds":{"a1b2c3d4e5f6":240,"unknown":15}}
+{"type":"hocus","event":"client_schema","window_start":"2026-11-12T10:41:00.000Z","missing":3,"invalid":0,"low":12,"ok":240,"refused":0,"builds":{"a1b2c3d4e5f6":240,"missing":15}}
 ```
 
 `missing`, `invalid`, `low` and `ok` are mutually exclusive buckets (`low` is a
 valid number below the current client schema, 2). `refused` counts attempts the
-gate refused and overlaps the others. `builds` counts the `build` values seen;
-anything outside a strict pattern is bucketed, never echoed.
+gate refused and overlaps the others. `builds` counts the `build` values seen:
+no value counts as `missing`, anything outside a strict pattern as `invalid`,
+and new values past the per-window cap as `other`; a non-matching value is
+never echoed.
 
 Adoption over the last 24 hours, `ok / (missing + invalid + low + ok)`:
 
@@ -83,8 +85,9 @@ The full N+1 ship gates (spec section 3.1) are:
 - Adoption as above (per attempt; refused retries excluded from the reading).
 - Refused-client soak: 3,000 typed characters, 0 `4205` resets, 0 `ws_throttle_ban`.
 - Mixed-version nightly soak, N + N+1: 0 deleted blocks, 0 unexpected freezes.
-- Hostile tests: an unknown name is refused at ingress; delete-all and
-  paragraph-before-title repair instead of freezing.
+- Hostile tests: an unknown name is refused at ingress; delete-all,
+  paragraph-before-title and other known-name misfits (a top-level list item
+  or hard break) are repaired instead of freezing.
 - Staging drill: env set to 0, effective minimum still 2 (once PR C ships the floor).
 - CHANGELOG Deploy note: Hocus restart first, then Next, at low traffic.
 
@@ -94,9 +97,9 @@ Release N (the change that introduces these guards) goes first with the gate
 log-only. Raising the minimum follows the four steps from the spec. PM2 process
 names are `editor-hocus` and `editor-next`.
 
-1. **Deploy release N** — client + server; gate log-only; server ingress allowlist already includes `textColor` and `fontSize` (N clients that meet them freeze, never delete).
+1. **Deploy release N** — client + server; gate log-only; server ingress allowlist is the current schema plus legacy `link`/`code`. `textColor` and `fontSize` are **not** allowed yet: they ship with PR C's server half in step 3. Allowed earlier, anyone could write `textColor` and freeze any document for every N client. (N clients that meet them freeze read-only by design, never delete.)
 2. **Wait** for the N+1 ship gates (adoption above).
-3. **Server-only step: deploy PR C's server half and restart Hocus *before* Next.** PR C sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. (Until PR C ships, setting `HOCUS_MIN_CLIENT_SCHEMA=2` is the manual equivalent.) The owner runs it: `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log (`refused` above 0 in `client_schema`), then `bunx pm2@6.0.14 restart editor-next --update-env`. Verify the build step does not change the client bundle served by the still-running Next process before its restart; if it does, build into a separate directory.
+3. **Server-only step: deploy PR C's server half and restart Hocus *before* Next.** It adds `textColor` and `fontSize` to the ingress allowlist. PR C sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. (Until PR C ships, setting `HOCUS_MIN_CLIENT_SCHEMA=2` is the manual equivalent.) The owner runs it: `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log (`refused` above 0 in `client_schema`), then `bunx pm2@6.0.14 restart editor-next --update-env`. Verify the build step does not change the client bundle served by the still-running Next process before its restart; if it does, build into a separate directory.
 4. **Restart Next** to serve the new client with the new marks.
 
 Never serve the new client before step 3 completes. Deploy at low traffic.
@@ -122,7 +125,8 @@ Release N itself: restart `editor-hocus` first, then rebuild and restart
 
 Every new mark or node name ships in `lib/schema-names.ts` in a Hocus restart
 that **precedes** any client that writes it. The allowlist is the current
-schema plus legacy `link`/`code` plus the pending `textColor` and `fontSize`.
+schema plus legacy `link`/`code`; `textColor` and `fontSize` join it with PR
+C's server half (release order step 3), never earlier.
 The schema snapshot test (`tests/unit/schema/schema-snapshot.test.ts`) fails
 when the editor schema drifts from the committed snapshot, which is how an
 unreviewed change from the daily docs.plus extension refresh is caught; update
@@ -134,7 +138,7 @@ first.
 | Banner | Meaning | What to do |
 |---|---|---|
 | "A newer TinyDocy is available. Reload to keep editing; your changes on this device are kept." | Either the server refused this bundle (`client_outdated`) or the document holds content this bundle does not know. The document is read-only; the device copy is kept. The Reload button saves pending copies first. | Reload. If it persists after the new build is served, check the deploy served the right bundle. |
-| "This document can't be edited in this version." | A known-name misfit could not be repaired. Counted by `schema_repair_failed`. | Collect the document name; copy content from the read-only view. Repeats mean a repair gap: file a bug. |
+| "This document can't be edited in this version." | A known-name misfit could not be repaired (the repair threw, or the content still did not fit). Counted by `schema_repair_failed`. | Collect the document name; copy content from the read-only view. Repeats mean a repair gap: file a bug. |
 | "The server didn't accept this document's latest changes. Your changes on this device are kept." | Ingress refused an update (`4422` `schema_rejected`, `ws_unknown_schema_name`). | Check the `names` in the abuse event: an unlisted mark or node means the allowlist rule was broken. |
 
 ## Alerts
