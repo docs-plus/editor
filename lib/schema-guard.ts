@@ -1,14 +1,20 @@
 import type { Editor } from "@tiptap/core";
+import type { Schema } from "@tiptap/pm/model";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 
 import { trackEvent } from "@/lib/analytics";
-import { findUnknownSchemaNames, repairKnownMisfit } from "@/lib/schema-repair";
+import {
+  findUnknownSchemaNames,
+  type RepairResult,
+  repairKnownMisfit,
+} from "@/lib/schema-repair";
 
 /**
  * - `ok`: the shared document fits the schema (or is not ours to repair).
  * - `outdated`: it names nodes or marks this bundle does not know.
- * - `unrepairable`: a misfit of known names that the repair cannot fix.
+ * - `unrepairable`: a misfit of known names that the repair could not fix
+ *   (it threw, or the content still does not fit afterwards).
  */
 export type SchemaGuardState = "ok" | "outdated" | "unrepairable";
 
@@ -23,10 +29,12 @@ export type SchemaGuard = {
   subscribe(listener: () => void): () => void;
 };
 
-type SchemaGuardOptions = {
+export type SchemaGuardOptions = {
   /** Delay before the repair, spread so collaborators rarely race it. */
   repairDelayMs?: () => number;
   onRepairFailed?: () => void;
+  /** Fits known-name content to the schema; a seam for tests. */
+  repair?: (fragment: Y.XmlFragment, schema: Schema) => RepairResult;
 };
 
 const MAX_REPAIR_DELAY_MS = 500;
@@ -43,9 +51,10 @@ function reportRepairFailed(): void {
 /**
  * Reacts to y-tiptap freezing the editor on content that does not fit the
  * schema (B1). Unknown names mean a newer bundle wrote them: stay frozen
- * and ask for a reload. A misfit of known names (a paragraph before the
- * title, an emptied fragment) is repaired in Yjs so one raw write cannot
- * lock a document.
+ * and ask for a reload. Any misfit made only of known names (a paragraph
+ * before the title, an emptied fragment, a top-level list item or hard
+ * break, a list holding a bare paragraph) is fitted to the schema in Yjs by
+ * `repairKnownMisfit`, so one raw write cannot lock a document.
  *
  * `onInvalidContent` fires inside the binding's projection (also during
  * plugin-view init), where Yjs writes are swallowed, so it only records and
@@ -56,6 +65,7 @@ export function createSchemaGuard(
   {
     repairDelayMs = randomRepairDelayMs,
     onRepairFailed = reportRepairFailed,
+    repair = repairKnownMisfit,
   }: SchemaGuardOptions = {},
 ): SchemaGuard {
   let state: SchemaGuardState = "ok";
@@ -112,7 +122,12 @@ export function createSchemaGuard(
     }
     // A refused document shows its own notice and could not sync a repair.
     if (!canWrite()) return null;
-    repairKnownMisfit(fragment);
+    try {
+      repair(fragment, editor.schema);
+    } catch (error) {
+      console.warn("Schema repair threw:", error);
+      return "unrepairable";
+    }
     // A repair can leave the content invalid: trust the binding, not the result.
     return current.invalidContentError === null ? "ok" : "unrepairable";
   }

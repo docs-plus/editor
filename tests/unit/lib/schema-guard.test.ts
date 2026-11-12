@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import * as Y from "yjs";
 
-import { createSchemaGuard, type SchemaGuard } from "@/lib/schema-guard";
+import {
+  createSchemaGuard,
+  type SchemaGuard,
+  type SchemaGuardOptions,
+} from "@/lib/schema-guard";
 import {
   type CollabEditorFixture,
   createCollabEditor,
@@ -22,7 +26,11 @@ type Setup = {
 const fixtures: CollabEditorFixture[] = [];
 
 function setup(
-  options: { repairDelayMs?: number; server?: Y.Doc } = {},
+  options: {
+    repairDelayMs?: number;
+    server?: Y.Doc;
+    repair?: SchemaGuardOptions["repair"];
+  } = {},
 ): Setup {
   let guard: SchemaGuard | undefined;
   const f = createCollabEditor({
@@ -34,6 +42,7 @@ function setup(
   guard = createSchemaGuard(f.fragment, {
     repairDelayMs: () => options.repairDelayMs ?? 0,
     onRepairFailed,
+    repair: options.repair,
   });
   let writable = true;
   const unbind = guard.bind({ editor: f.editor, canWrite: () => writable });
@@ -98,12 +107,37 @@ describe("schema guard", () => {
     expect(onRepairFailed).not.toHaveBeenCalled();
   });
 
-  it("reports unrepairable once", async () => {
+  it("heals a top-level list item instead of locking the document", async () => {
     const { f, guard, onRepairFailed } = setup();
+    f.remote((frag) => frag.insert(1, [new Y.XmlElement("listItem")]));
+    await settle();
+    expect(guard.getState()).toBe("ok");
+    expect(f.binding()?.invalidContentError).toBeNull();
+    expect(f.editor.view.editable).toBe(true);
+    expect(f.server.getXmlFragment("default").toString()).toBe(
+      '<heading level="1">Title</heading><paragraph>hello world</paragraph>',
+    );
+    expect(onRepairFailed).not.toHaveBeenCalled();
+  });
+
+  it("reports unrepairable once", async () => {
+    const { guard, f, onRepairFailed } = setup({ repair: () => "none" });
     f.remote((frag) => frag.insert(1, [new Y.XmlElement("listItem")]));
     await settle();
     expect(guard.getState()).toBe("unrepairable");
     expect(onRepairFailed).toHaveBeenCalledTimes(1);
+    f.remote((frag) => frag.insert(1, [new Y.XmlElement("listItem")]));
+    await settle();
+    expect(guard.getState()).toBe("unrepairable");
+    expect(onRepairFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a repair that throws as unrepairable", async () => {
+    const { guard, f, onRepairFailed } = setup({
+      repair: () => {
+        throw new Error("boom");
+      },
+    });
     f.remote((frag) => frag.insert(1, [new Y.XmlElement("listItem")]));
     await settle();
     expect(guard.getState()).toBe("unrepairable");

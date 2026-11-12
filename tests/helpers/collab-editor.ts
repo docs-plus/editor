@@ -1,4 +1,9 @@
-import { Editor, getSchema, type JSONContent } from "@tiptap/core";
+import {
+  type AnyExtension,
+  Editor,
+  getSchema,
+  type JSONContent,
+} from "@tiptap/core";
 import type { Schema } from "@tiptap/pm/model";
 import { StarterKit } from "@tiptap/starter-kit";
 import {
@@ -66,9 +71,12 @@ export function createCollabEditor(
     server?: Y.Doc;
     /** Also called with every error passed to `onInvalidContent`. */
     onInvalidContent?: (error: Error) => void;
+    /** Added to the StarterKit + title-first schema (tables, task lists…). */
+    extensions?: AnyExtension[];
   } = {},
 ): CollabEditorFixture {
-  const schema = getSchema(BASE_EXTENSIONS);
+  const extensions = [...BASE_EXTENSIONS, ...(options.extensions ?? [])];
+  const schema = getSchema(extensions);
   const server = options.server ?? prosemirrorJSONToYDoc(schema, SEED, FIELD);
   const client = new Y.Doc();
   Y.applyUpdate(client, Y.encodeStateAsUpdate(server), server);
@@ -101,7 +109,7 @@ export function createCollabEditor(
   const editor = new Editor({
     element: document.createElement("div"),
     extensions: [
-      ...BASE_EXTENSIONS,
+      ...extensions,
       CollaborationRenderOnce.configure({
         document: client,
         ySyncOptions: {
