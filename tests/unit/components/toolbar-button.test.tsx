@@ -71,3 +71,37 @@ describe("ToolbarButton pressed state", () => {
     expect(button.getAttribute("aria-pressed")).toBe("mixed");
   });
 });
+
+describe("ToolbarButton disabled with a reason", () => {
+  it("stays focusable, explains itself and ignores clicks", () => {
+    let clicks = 0;
+    const button = render({
+      disabled: true,
+      disabledReason: "Nothing to undo",
+      "aria-label": "Undo",
+      onClick: () => {
+        clicks += 1;
+      },
+    });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    const describedBy = button.getAttribute("aria-describedby");
+    if (!describedBy) throw new Error("aria-describedby missing");
+    const reason = document.getElementById(describedBy);
+    expect(reason?.textContent).toBe("Nothing to undo");
+    expect(reason?.hasAttribute("hidden")).toBe(true);
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    act(() => button.click());
+    expect(clicks).toBe(0);
+  });
+
+  it("is not described when enabled", () => {
+    const button = render({
+      disabledReason: "Nothing to undo",
+      "aria-label": "Undo",
+    });
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+  });
+});

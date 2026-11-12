@@ -68,6 +68,7 @@ export function ListDropdownMenu({
   return (
     <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger
+        disabled={!canToggle}
         render={
           <ToolbarButton
             type="button"

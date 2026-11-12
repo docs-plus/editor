@@ -12,25 +12,52 @@ interface ToolbarProps extends BaseProps {
   variant?: "floating" | "fixed";
 }
 
+const ITEM_SELECTOR = 'button, [role="button"], [tabindex="0"]';
+const ROVING_GROUP_SELECTOR = "[data-roving-group]";
+
+function ignoreRovingGroupEvents(event: KeyboardEvent) {
+  return !(
+    event.target instanceof Element &&
+    event.target.closest(ROVING_GROUP_SELECTOR)
+  );
+}
+
 function useToolbarNavigation(
   toolbarRef: React.RefObject<HTMLDivElement | null>,
 ) {
   const [items, setItems] = useState<HTMLElement[]>([]);
+  const lastFocusRef = useRef<{ el: HTMLElement; index: number } | null>(null);
 
   const collectItems = useCallback(() => {
     if (!toolbarRef.current) return [];
     return Array.from(
-      toolbarRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [role="button"]:not([disabled]), [tabindex="0"]:not([disabled])',
-      ),
-    );
+      toolbarRef.current.querySelectorAll<HTMLElement>(ITEM_SELECTOR),
+    ).filter((el) => !el.closest(ROVING_GROUP_SELECTOR));
   }, [toolbarRef]);
 
   useEffect(() => {
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
 
-    const updateItems = () => setItems(collectItems());
+    const repairFocus = (next: HTMLElement[]) => {
+      const last = lastFocusRef.current;
+      if (!last || last.el.isConnected || next.length === 0) return;
+      const active = document.activeElement;
+      const focusLost =
+        !active ||
+        active === document.body ||
+        !active.isConnected ||
+        active === last.el;
+      lastFocusRef.current = null;
+      if (!focusLost) return;
+      next[Math.min(last.index, next.length - 1)]?.focus();
+    };
+
+    const updateItems = () => {
+      const next = collectItems();
+      setItems(next);
+      repairFocus(next);
+    };
 
     updateItems();
     const observer = new MutationObserver(updateItems);
@@ -46,6 +73,7 @@ function useToolbarNavigation(
     onSelect: (el) => el.click(),
     autoSelectFirstItem: false,
     captureTab: false,
+    shouldHandle: ignoreRovingGroupEvents,
   });
 
   useEffect(() => {
@@ -64,14 +92,31 @@ function useToolbarNavigation(
         target.removeAttribute("data-focus-visible");
     };
 
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest(ROVING_GROUP_SELECTOR)) return;
+      const index = collectItems().indexOf(target);
+      if (index >= 0) lastFocusRef.current = { el: target, index };
+    };
+
+    const handleFocusOut = (e: FocusEvent) => {
+      const next = e.relatedTarget;
+      if (next instanceof Node && !toolbar.contains(next))
+        lastFocusRef.current = null;
+    };
+
     toolbar.addEventListener("focus", handleFocus, true);
     toolbar.addEventListener("blur", handleBlur, true);
+    toolbar.addEventListener("focusin", handleFocusIn);
+    toolbar.addEventListener("focusout", handleFocusOut);
 
     return () => {
       toolbar.removeEventListener("focus", handleFocus, true);
       toolbar.removeEventListener("blur", handleBlur, true);
+      toolbar.removeEventListener("focusin", handleFocusIn);
+      toolbar.removeEventListener("focusout", handleFocusOut);
     };
-  }, [toolbarRef]);
+  }, [collectItems, toolbarRef]);
 
   useEffect(() => {
     if (selectedIndex !== undefined && items[selectedIndex]) {

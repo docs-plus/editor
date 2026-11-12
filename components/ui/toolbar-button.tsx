@@ -1,7 +1,7 @@
 "use client";
 
 import type { VariantProps } from "class-variance-authority";
-import { Fragment, forwardRef, useMemo } from "react";
+import { Fragment, forwardRef, useId, useMemo } from "react";
 
 import { Button, type buttonVariants } from "@/components/ui/button";
 import {
@@ -19,6 +19,8 @@ interface ToolbarButtonProps
   showTooltip?: boolean;
   shortcutKeys?: string;
   isActive?: boolean;
+  /** Why the control is disabled; announced via aria-describedby and shown in the tooltip. */
+  disabledReason?: string;
 }
 
 function ShortcutDisplay({ shortcuts }: { shortcuts: string[] }) {
@@ -51,6 +53,8 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
       variant = "ghost",
       size = "icon-sm",
       isActive,
+      disabled,
+      disabledReason,
       ...props
     },
     ref,
@@ -66,8 +70,16 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
         ? isActive
         : undefined);
 
+    const reasonId = useId();
+    const reason = disabled && disabledReason ? disabledReason : undefined;
+
     const buttonProps = {
       ...props,
+      disabled,
+      focusableWhenDisabled: true,
+      "aria-describedby": reason
+        ? [props["aria-describedby"], reasonId].filter(Boolean).join(" ")
+        : props["aria-describedby"],
       "aria-pressed": ariaPressed,
       "data-active": isActive ? "true" : undefined,
     };
@@ -77,40 +89,52 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
       className,
     );
 
+    const reasonNode = reason ? (
+      <span id={reasonId} hidden>
+        {reason}
+      </span>
+    ) : null;
+
     if (!tooltip || !showTooltip) {
       return (
-        <Button
-          ref={ref}
-          variant={variant}
-          size={size}
-          className={buttonClasses}
-          {...buttonProps}
-        >
-          {children}
-        </Button>
+        <>
+          <Button
+            ref={ref}
+            variant={variant}
+            size={size}
+            className={buttonClasses}
+            {...buttonProps}
+          >
+            {children}
+          </Button>
+          {reasonNode}
+        </>
       );
     }
 
     return (
-      <Tooltip>
-        <TooltipTrigger
-          ref={ref}
-          render={
-            <Button
-              variant={variant}
-              size={size}
-              className={buttonClasses}
-              {...buttonProps}
-            />
-          }
-        >
-          {children}
-        </TooltipTrigger>
-        <TooltipContent>
-          {tooltip}
-          <ShortcutDisplay shortcuts={shortcuts} />
-        </TooltipContent>
-      </Tooltip>
+      <>
+        <Tooltip>
+          <TooltipTrigger
+            ref={ref}
+            render={
+              <Button
+                variant={variant}
+                size={size}
+                className={buttonClasses}
+                {...buttonProps}
+              />
+            }
+          >
+            {children}
+          </TooltipTrigger>
+          <TooltipContent>
+            {reason ?? tooltip}
+            {!reason && <ShortcutDisplay shortcuts={shortcuts} />}
+          </TooltipContent>
+        </Tooltip>
+        {reasonNode}
+      </>
     );
   },
 );

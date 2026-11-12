@@ -73,6 +73,7 @@ export const HeadingDropdownMenu = forwardRef<
     return (
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger
+          disabled={!canToggleHeading}
           render={
             <ToolbarButton
               type="button"

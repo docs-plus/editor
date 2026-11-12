@@ -179,6 +179,7 @@ export function ColorHighlightPopover({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger
+        disabled={!canColorHighlight}
         render={
           <ColorHighlightPopoverButton
             disabled={!canColorHighlight}

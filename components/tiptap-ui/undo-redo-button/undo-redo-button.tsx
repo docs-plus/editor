@@ -75,6 +75,7 @@ export const UndoRedoButton = forwardRef<
       <ToolbarButton
         type="button"
         disabled={!canExecute}
+        disabledReason={`Nothing to ${action}`}
         tabIndex={-1}
         aria-label={label}
         tooltip={label}
