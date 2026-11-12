@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import {
   contrastRatio,
+  expectNoSeriousA11yViolations,
   openToolbarTestDoc,
   resolveRgb,
   setTheme,
@@ -258,3 +259,139 @@ test("mobile highlight panel: one arrow press moves one swatch", async ({
     group.getByRole("button", { name: "Blue highlight" }),
   ).toBeFocused();
 });
+
+const CONTEXTS = [
+  "paragraph",
+  "title",
+  "heading",
+  "bullet list",
+  "code block",
+  "table",
+  "read-only",
+] as const;
+type Context = (typeof CONTEXTS)[number];
+
+const CONTEXT_CONTENT: Record<
+  Exclude<Context, "title" | "read-only">,
+  object
+> = {
+  paragraph: {
+    type: "paragraph",
+    content: [{ type: "text", text: "plain text" }],
+  },
+  heading: {
+    type: "heading",
+    attrs: { level: 2 },
+    content: [{ type: "text", text: "A section" }],
+  },
+  "bullet list": {
+    type: "bulletList",
+    content: [
+      {
+        type: "listItem",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "item" }] },
+        ],
+      },
+    ],
+  },
+  "code block": {
+    type: "codeBlock",
+    attrs: { language: "javascript" },
+    content: [{ type: "text", text: "const a = 1;" }],
+  },
+  table: {
+    type: "table",
+    content: [
+      {
+        type: "tableRow",
+        content: [
+          {
+            type: "tableCell",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "cell" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+/** Appends a block of the given kind and puts the caret inside it. */
+async function placeCaretIn(page: Page, context: Context) {
+  await page.evaluate(
+    ({ context, node }) => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      if (context === "title") {
+        editor.chain().focus().setTextSelection(1).run();
+        return;
+      }
+      if (context === "read-only") {
+        editor.setEditable(false);
+        return;
+      }
+      const end = editor.state.doc.content.size;
+      editor.chain().focus().insertContentAt(end, node).run();
+      editor.commands.setTextSelection(editor.state.doc.content.size - 3);
+    },
+    {
+      context,
+      node:
+        context === "title" || context === "read-only"
+          ? null
+          : CONTEXT_CONTENT[context],
+    },
+  );
+}
+
+type Popup = "text style menu" | "list menu" | "highlight dialog";
+
+async function openPopup(page: Page, popup: Popup) {
+  const toolbar = page.getByRole("toolbar");
+  if (popup === "highlight dialog") {
+    await selectWord(page);
+    await toolbar
+      .getByRole("button", { name: /highlight/i })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Highlight colours" }),
+    ).toBeVisible();
+    return;
+  }
+  const menus = toolbar.locator('button[aria-haspopup="menu"]');
+  await menus.nth(popup === "text style menu" ? 0 : 1).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+}
+
+for (const theme of ["light", "dark"] as const) {
+  for (const context of CONTEXTS) {
+    test(`toolbar has no serious axe violations: ${context}, ${theme}`, async ({
+      page,
+    }) => {
+      await setTheme(page, theme);
+      await openToolbarTestDoc(page);
+      await placeCaretIn(page, context);
+      await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
+    });
+  }
+  for (const popup of [
+    "text style menu",
+    "list menu",
+    "highlight dialog",
+  ] as const) {
+    test(`open ${popup} has no serious axe violations (${theme})`, async ({
+      page,
+    }) => {
+      await setTheme(page, theme);
+      await openToolbarTestDoc(page);
+      await openPopup(page, popup);
+      await expectNoSeriousA11yViolations(page, [
+        '[role="toolbar"]',
+        '[role="menu"], [role="dialog"]',
+      ]);
+    });
+  }
+}

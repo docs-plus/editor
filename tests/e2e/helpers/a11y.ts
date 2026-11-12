@@ -1,4 +1,5 @@
-import type { Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, type Page } from "@playwright/test";
 
 import { EditorPage } from "./editor-page";
 
@@ -61,4 +62,35 @@ export async function openToolbarTestDoc(page: Page): Promise<EditorPage> {
   await editorPage.waitForSync();
   await editorPage.focusTitle();
   return editorPage;
+}
+
+const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
+/**
+ * Runs axe on each `include` selector and fails on any serious or critical
+ * violation, listing rule id, impact and targets. `wcag22aa` carries
+ * `target-size` (2.5.8).
+ */
+export async function expectNoSeriousA11yViolations(
+  page: Page,
+  include: string[],
+): Promise<void> {
+  const lines: string[] = [];
+  for (const selector of include) {
+    const { violations } = await new AxeBuilder({ page })
+      .include(selector)
+      .withTags(AXE_TAGS)
+      .analyze();
+    for (const violation of violations) {
+      if (violation.impact !== "serious" && violation.impact !== "critical")
+        continue;
+      const targets = violation.nodes
+        .map((node) => node.target.join(" "))
+        .join(" | ");
+      lines.push(
+        `${selector}: ${violation.id} (${violation.impact}) ${targets}`,
+      );
+    }
+  }
+  expect(lines, lines.join("\n")).toEqual([]);
 }

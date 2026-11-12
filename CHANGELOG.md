@@ -10,6 +10,13 @@ since the previous tag.
 ## [Unreleased]
 
 ### Added
+- **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
+  axe sweep of the toolbar in seven editor contexts and three open popups in
+  light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),
+  the toolbar behaviour spec (`toolbar.spec.ts`), and a typing-budget
+  assertion in `performance.spec.ts` (p95 with the toolbar within 10% of
+  toolbar off, per-keystroke timer, `PERF_ROUNDS` default 5).
+  `E2E_BASE_URL` overrides the Playwright base URL.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
@@ -17,10 +24,27 @@ since the previous tag.
   alongside it. Docs only, no runtime change.
 
 ### Changed
+- **Toolbar updates catch up within 1 s** (`TOOLBAR_MAX_WAIT_MS`) during
+  continuous edits, such as a collaborator typing without pause.
+- **Toolbar controls derive visibility in render,** so they hide at once when
+  a document turns read-only, and per-keystroke listener work is gone.
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
 - **Nightly runs twice a day:** 03:41 UTC (night) and 08:00 UTC (morning).
 - **docs.plus extension refresh runs daily** at 04:17 UTC instead of every
   three days. `bunfig.toml` still holds back releases younger than 3 days.
+
+### Fixed
+- **Toolbar focus outline and pressed bar** are visible in dark mode and in
+  Windows High Contrast (forced colours).
+- **Disabled toolbar controls stay focusable** and say why they are disabled.
+- **Style and list menus are named by value** ("Normal text", "No list") and
+  use radio items; picking the checked item does nothing.
+- **Highlight swatches are named pressed buttons** in a dialog.
+- **Indent and outdent buttons work in lists,** like Tab.
+- **Headings and the caret stay clear of the sticky toolbar.**
+- **Focus no longer drops to the page** when a toolbar control disappears.
+- **Undo no longer wipes a new document:** the empty-document seed is kept
+  out of the undo history.
 
 ## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
 
