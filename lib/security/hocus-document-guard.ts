@@ -17,6 +17,10 @@ import {
 import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { getPinnedClientIp } from "@/lib/security/client-ip";
 import { isTabsDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  decodeFrameHeader,
+  HOCUS_SYNC_MESSAGE_TYPES,
+} from "@/lib/security/hocus-frame";
 import { repairTabsArray } from "@/lib/security/tabs-doc-repair";
 
 /** Close code for an update that would push a document past its cap. */
@@ -46,8 +50,6 @@ type DocumentGuardOptions = {
 
 type SizeEstimate = { stored: number; pending: number };
 
-/** Hocuspocus handles `Sync` (0) and `SyncReply` (4) frames identically. */
-const SYNC_MESSAGE_TYPES: ReadonlySet<number> = new Set([0, 4]);
 const SYNC_STEP_1 = 0;
 const SYNC_STEP_2 = 1;
 const SYNC_UPDATE = 2;
@@ -68,9 +70,8 @@ function readSyncUpdate(
   frame: Uint8Array,
 ): Uint8Array | null | typeof MALFORMED {
   try {
-    const decoder = decoding.createDecoder(frame);
-    decoding.readVarString(decoder);
-    if (!SYNC_MESSAGE_TYPES.has(decoding.readVarUint(decoder))) return null;
+    const { decoder, messageType } = decodeFrameHeader(frame);
+    if (!HOCUS_SYNC_MESSAGE_TYPES.has(messageType)) return null;
     const syncType = decoding.readVarUint(decoder);
     if (syncType === SYNC_STEP_1) return null;
     if (syncType !== SYNC_STEP_2 && syncType !== SYNC_UPDATE) return MALFORMED;

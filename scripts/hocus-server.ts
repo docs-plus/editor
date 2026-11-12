@@ -11,6 +11,13 @@ import {
 } from "../lib/security/activity-store";
 import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
+  clientOutdatedError,
+  createClientSchemaCounter,
+  isClientOutdated,
+  isGateExempt,
+  shouldDropOutdatedFrame,
+} from "../lib/security/client-schema-gate";
+import {
   isSystemDocumentId,
   isValidWsDocumentName,
 } from "../lib/security/doc-id-validator";
@@ -21,6 +28,7 @@ import {
   HOCUS_BACKPRESSURE_LIMIT_BYTES,
   HOCUS_HOST,
   HOCUS_MAX_PAYLOAD_BYTES,
+  HOCUS_MIN_CLIENT_SCHEMA,
   MAX_AWARENESS_STATE_BYTES,
   MAX_WS_SOCKETS,
   WS_SOCKETS_PER_IP,
@@ -41,6 +49,12 @@ type SocketData = {
   ip: string;
   connection?: ReturnType<Hocuspocus["handleConnection"]>;
   authTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * The socket URL's `schema` is below `HOCUS_MIN_CLIENT_SCHEMA`, so every
+   * gated document on it is refused. Judged once at upgrade (the URL cannot
+   * change) and freed with the socket.
+   */
+  outdated: boolean;
 };
 
 function getPort(): number {
@@ -88,6 +102,7 @@ const socketGate = createSocketGate({
   upgradesPerMinute: WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
   allowedOrigins: HOCUS_ALLOWED_ORIGINS,
 });
+const clientSchemaCounter = createClientSchemaCounter();
 const db = openSqlite();
 bootstrapDocumentActivityTable(db);
 const documentGuard = new DocumentGuard({
@@ -123,12 +138,22 @@ const hocuspocus = new Hocuspocus({
   extensions: buildHocusServerExtensions(persistence, documentGuard),
   // Checks only: a connection counts once it is established (`connected`),
   // so attempts whose document load fails never leak a slot.
-  async onConnect({ requestHeaders, documentName }) {
+  async onConnect({ requestHeaders, requestParameters, documentName }) {
     const ip = getPinnedClientIp(requestHeaders);
     // Also when the document is still in memory (onLoadDocument is skipped),
     // so a reconnecting offline copy cannot reach a deleted document.
     if (isTombstoned(db, documentName)) {
       throw reject("document_deleted", { ip, documentName });
+    }
+    // Outdated bundles must not write with a schema the server no longer
+    // accepts. Not abuse: counted in the aggregate, never logged per attempt.
+    if (!isGateExempt(documentName)) {
+      const outdated = isClientOutdated(
+        requestParameters.get("schema"),
+        HOCUS_MIN_CLIENT_SCHEMA,
+      );
+      clientSchemaCounter.record(requestParameters, outdated);
+      if (outdated) throw clientOutdatedError();
     }
     const decision = guardrails.canConnect(ip);
     if (!decision.allowed) {
@@ -197,6 +222,10 @@ const server = Bun.serve<SocketData>({
       const data: SocketData = {
         request: new Request(request.url, { headers }),
         ip,
+        outdated: isClientOutdated(
+          new URL(request.url).searchParams.get("schema"),
+          HOCUS_MIN_CLIENT_SCHEMA,
+        ),
       };
       if (server.upgrade(request, { data })) {
         socketGate.opened(ip);
@@ -227,13 +256,17 @@ const server = Bun.serve<SocketData>({
       }, HOCUS_AUTH_TIMEOUT_MS);
     },
     message(ws, message) {
+      const frame =
+        typeof message === "string" ? Buffer.from(message) : message;
+      // Refused documents keep sending sync and awareness; queued unauthenticated,
+      // they would reset the whole socket (tab list included) at 1,000 frames.
+      // Only outdated sockets parse headers, so the hot path is unchanged.
+      if (ws.data.outdated && shouldDropOutdatedFrame(frame)) return;
       if (ws.data.authTimer) {
         clearTimeout(ws.data.authTimer);
         ws.data.authTimer = undefined;
       }
-      ws.data.connection?.handleMessage(
-        typeof message === "string" ? Buffer.from(message) : message,
-      );
+      ws.data.connection?.handleMessage(frame);
     },
     close(ws, code, reason) {
       clearTimeout(ws.data.authTimer);
@@ -247,6 +280,9 @@ const server = Bun.serve<SocketData>({
   },
 });
 
+console.log(
+  `[hocus] client schema gate: min=${HOCUS_MIN_CLIENT_SCHEMA}${HOCUS_MIN_CLIENT_SCHEMA === 0 ? " (log only)" : ""}`,
+);
 console.log(`Hocuspocus listening on ws://${server.hostname}:${server.port}`);
 
 let shuttingDown = false;
@@ -267,6 +303,7 @@ async function shutdown(): Promise<void> {
 
   await hocuspocus.hooks("onDestroy", { instance: hocuspocus });
   db.close();
+  clientSchemaCounter.stop();
   process.exit(0);
 }
 
