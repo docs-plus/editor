@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useRef, useState } from "react";
+import { forwardRef, useCallback, useId, useRef, useState } from "react";
 
 // --- Tiptap UI ---
 import { canToggleHeading } from "@/components/tiptap-ui/heading-button";
@@ -25,6 +25,8 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Icons ---
 import { ChevronDownIcon } from "@/lib/icons";
+
+const TITLE_STYLE_REASON = "Title is always H1";
 
 export interface HeadingDropdownMenuProps
   extends Omit<ToolbarButtonProps, "type">,
@@ -99,9 +101,17 @@ export const HeadingDropdownMenu = forwardRef<
       return editor?.view.dom ?? true;
     }, [editor]);
 
+    const reasonId = useId();
+
     if (!isVisible) {
       return null;
     }
+
+    // The title is always a level 1 heading; its style cannot change.
+    const inTitle = value === "title";
+    const itemProps = inTitle
+      ? { disabled: true, "aria-describedby": reasonId }
+      : undefined;
 
     return (
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
@@ -133,11 +143,23 @@ export const HeadingDropdownMenu = forwardRef<
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="start" finalFocus={finalFocus}>
+          {inTitle && (
+            <div
+              id={reasonId}
+              className="px-1.5 py-1 text-xs text-muted-foreground"
+            >
+              {TITLE_STYLE_REASON}
+            </div>
+          )}
           <DropdownMenuRadioGroup
             value={value}
             onValueChange={handleValueChange}
           >
-            <DropdownMenuRadioItem value="paragraph" closeOnClick>
+            <DropdownMenuRadioItem
+              value="paragraph"
+              closeOnClick
+              {...itemProps}
+            >
               {TEXT_STYLE_LABELS.paragraph}
             </DropdownMenuRadioItem>
             {levels.map((level) => (
@@ -146,6 +168,7 @@ export const HeadingDropdownMenu = forwardRef<
                 value={`heading-${level}`}
                 closeOnClick
                 disabled={!canToggleHeading(editor, level)}
+                {...itemProps}
               >
                 {TEXT_STYLE_LABELS[`heading-${level}`]}
               </DropdownMenuRadioItem>

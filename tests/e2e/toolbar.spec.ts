@@ -186,6 +186,21 @@ test.describe("toolbar focus and disabled controls", () => {
     await expect(page.getByRole("menu")).toHaveCount(0);
   });
 
+  test("in the title, text styles are disabled and say why", async ({
+    page,
+  }) => {
+    await openToolbarTestDoc(page);
+    await toolbarButton(page, "Title").click();
+    const items = page.getByRole("menuitemradio");
+    await expect(items).toHaveCount(7);
+    for (const item of await items.all()) {
+      await expect(item).toHaveAttribute("aria-disabled", "true");
+      await expect(item).toHaveAccessibleDescription("Title is always H1");
+    }
+    await page.keyboard.press("Escape");
+    await expect(toolbarButton(page, "Title")).toBeVisible();
+  });
+
   test("picking a list type closes the menu and returns focus to the editor", async ({
     page,
   }) => {
