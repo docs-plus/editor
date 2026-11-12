@@ -43,6 +43,10 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `HOCUS_ALLOW_ISOLATED_TABS_DOCS=1`: **dev and tests only** (`make dev`, Playwright).
   Allows per-test `global-tabs-<id>` documents. The server refuses to start with it in
   production.
+- `HOCUS_MIN_CLIENT_SCHEMA=0`: minimum `schema` a client must send. `0` only logs the
+  per-minute `client_schema` aggregate; `1` or more refuses older bundles with
+  `client_outdated`. Never set it below a value it has had in production; see the
+  [schema rollout runbook](schema-rollout-runbook.md).
 - `RETENTION_DAYS=30` (idle documents are deleted and tombstoned)
 - `TOMBSTONE_RETENTION_DAYS=90`: how long a deleted or expired document name stays
   blocked. It must outlive any offline copy a browser may still hold; otherwise that
@@ -90,6 +94,10 @@ Search logs for these JSON event names:
   `ws_server_full`, `ws_upgrade_rate`
 - `ws_throttle_ban` (Throttle banned an IP), `ws_auth_timeout`
 - `ws_update_too_large`, `ws_awareness_too_large`
+- `ws_unknown_schema_name` (an update or frame named a node or mark outside
+  `lib/schema-names.ts`, or could not be decoded, with `names: []`; the socket is closed
+  with `4422` `schema_rejected`). Alert at more than a handful per hour or any
+  multi-IP burst after a deploy; see the [schema rollout runbook](schema-rollout-runbook.md).
 - `tabs_doc_repaired` (malformed entries removed from a shared tab list; repeated
   events point to a client writing bad data)
 

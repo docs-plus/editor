@@ -1,0 +1,146 @@
+# Schema Rollout Runbook
+
+How TinyDocy ships new document marks and nodes without old browser bundles
+deleting content. Design background: `docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`
+section 3.1.
+
+An old bundle that meets a mark it does not know makes y-prosemirror delete the
+whole block and upload the deletion. Four guards stop that. Release N (this
+change) ships all four; the minimum client schema stays log-only until a later
+release raises it.
+
+## What the guards are
+
+| Guard | What it does | Where to see it |
+|---|---|---|
+| Version gate | The client sends `schema=2` and `build=<id>` on the shared socket URL (`lib/schema-version.ts`). Hocus counts them and, when `HOCUS_MIN_CLIENT_SCHEMA` is above 0, refuses older bundles with `client_outdated`. | `client_schema` log line, once a minute |
+| Offline namespace | Device copies live under `1:${host}~s2:${name}`. Pre-N bundles never read that key, so they cannot save a damaged copy over a new one. Legacy copies are merged in, then deleted inside one IndexedDB transaction. | none (client only) |
+| Freeze and repair | A document with unknown node or mark names freezes read-only with the update banner. Known-name misfits (a paragraph before the title, an emptied fragment) are repaired in place. | `schema_repair_failed` analytics event when a repair fails |
+| Ingress allowlist | Hocus refuses any update that names a node or mark outside `lib/schema-names.ts` and closes the socket with `4422` `schema_rejected`. Malformed sync frames are refused the same way. | `ws_unknown_schema_name` abuse event |
+
+Details worth knowing:
+
+- **Gate.** At `HOCUS_MIN_CLIENT_SCHEMA=0` (the default) nothing is refused.
+  At 1 or more, a socket is refused unless `schema` is a plain decimal integer
+  at or above the minimum; a missing value counts as 0. `global-tabs` and every
+  `global-tabs-*` document are exempt so outdated clients can still list tabs
+  and show the banner. `playground` is gated. Order in `onConnect`: tombstone
+  check, gate, then the usual connection checks. The gate never calls
+  `reject()`, so refusals do not feed the abuse alerts, and raw `schema` values
+  are never logged. Neither `client_outdated` nor `schema_rejected` makes the
+  client reconnect.
+- **Ingress.** Frames are decoded with lib0 the way Hocuspocus does (message
+  types 0 and 4). A frame that cannot be decoded is also refused, logged with
+  `names: []`. Decoding every frame also closed an older size-cap bypass that
+  used SyncReply frames and padded varints.
+- **Highlights.** Highlights render from tokens but keep the attribute key
+  `color`. Unknown values (old hex colours, the popover's old "Default
+  background" `var(--background)`) render as plain text; the stored value is
+  untouched.
+
+## Reading adoption
+
+Hocus prints one JSON line per minute while sockets are connecting, written to
+the PM2 output log (default `~/.pm2/logs/editor-hocus-out.log`):
+
+```json
+{"type":"hocus","event":"client_schema","window_start":"2026-11-12T10:41:00.000Z","missing":3,"invalid":0,"low":12,"ok":240,"refused":0,"builds":{"a1b2c3d":240,"unknown":15}}
+```
+
+`missing`, `invalid`, `low` and `ok` are mutually exclusive buckets (`low` is a
+valid number below the current client schema, 2). `refused` counts attempts the
+gate refused and overlaps the others. `builds` counts the `build` values seen;
+anything outside a strict pattern is bucketed, never echoed.
+
+Adoption over the last 24 hours, `ok / (missing + invalid + low + ok)`:
+
+```sh
+grep '"event":"client_schema"' ~/.pm2/logs/editor-hocus-out.log \
+  | jq -s --arg since "$(date -u -d '24 hours ago' +%FT%TZ)" \
+    '[.[] | select(.window_start >= $since)]
+     | (map(.ok) | add) / (map(.missing + .invalid + .low + .ok) | add)'
+```
+
+(`date -d` is GNU; on macOS use `date -u -v-24H +%FT%TZ`.) An empty window
+prints `null`.
+
+**The counts are per auth attempt, not per socket or per user.** A browser that
+retries, or a refused client that is retried, adds to `low` and `refused` each
+time, so while the gate is enforcing the ratio understates adoption. The N+1
+gate therefore reads the ratio **while the gate is log-only**:
+
+> Ship gate: adoption at or above 95% over a trailing 24 h, held for at least
+> 48 h, read while `HOCUS_MIN_CLIENT_SCHEMA` is 0.
+
+Adoption affects user experience only; documents are already protected by the
+other guards.
+
+## Release order
+
+Release N (the change that introduces these guards) goes first with the gate
+log-only. Raising the minimum follows the four steps from the spec. PM2 process
+names are `editor-hocus` and `editor-next`.
+
+1. **Deploy release N** — client + server; gate log-only; server ingress allowlist already includes `textColor` and `fontSize` (N clients that meet them freeze, never delete).
+2. **Wait** for the N+1 ship gates (adoption above).
+3. **Server-only step: deploy the next release's server half and restart Hocus *before* Next.** The owner runs it:
+   `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log
+   (`refused` above 0 in `client_schema`), then
+   `bunx pm2@6.0.14 restart editor-next --update-env`. Build so the client
+   bundle served by the still-running Next process does not change before its
+   restart.
+4. **Restart Next** to serve the new client with the new marks.
+
+Never serve the new client before step 3 completes. Deploy at low traffic.
+
+Release N itself: restart `editor-hocus` first, then rebuild and restart
+`editor-next`, with `HOCUS_MIN_CLIENT_SCHEMA` unset or `0`.
+
+## Rollback
+
+- Reverting the **client** is safe, down to release N.
+- **Never lower the floor.** Never set `HOCUS_MIN_CLIENT_SCHEMA` below a value
+  it has already had in production: bundles that were refused would be
+  admitted again and could damage documents. A later release makes this
+  structural with `SCHEMA_FLOOR = 2` in code; until then it is a rule.
+- **Never roll back below release N.** Pre-N bundles do not know the guards.
+  Offline copies are the practical reason: while pre-N and N bundles coexist on
+  one device, storage can hold up to 30 legacy plus 30 `~s2` copies, and after N
+  merges a legacy copy, a pre-N bundle cannot see that merged copy, so its
+  unsynced edits stay hidden until the device runs N again (within the 14-day
+  copy expiry).
+
+## Allowlist rule
+
+Every new mark or node name ships in `lib/schema-names.ts` in a Hocus restart
+that **precedes** any client that writes it. The allowlist is the current
+schema plus legacy `link`/`code` plus the pending `textColor` and `fontSize`.
+The schema snapshot test (`tests/unit/schema/schema-snapshot.test.ts`) fails
+when the editor schema drifts from the committed snapshot, which is how an
+unreviewed change from the daily docs.plus extension refresh is caught; update
+the allowlist and the snapshot in the same change and deploy the allowlist
+first.
+
+## Banners users may report
+
+| Banner | Meaning | What to do |
+|---|---|---|
+| "A newer TinyDocy is available. Reload to keep editing; your changes on this device are kept." | Either the server refused this bundle (`client_outdated`) or the document holds content this bundle does not know. The document is read-only; the device copy is kept. The Reload button saves pending copies first. | Reload. If it persists after the new build is served, check the deploy served the right bundle. |
+| "This document can't be edited in this version." | A known-name misfit could not be repaired. Counted by `schema_repair_failed`. | Collect the document name; copy content from the read-only view. Repeats mean a repair gap: file a bug. |
+| "The server didn't accept this document's latest changes. Your changes on this device are kept." | Ingress refused an update (`4422` `schema_rejected`, `ws_unknown_schema_name`). | Check the `names` in the abuse event: an unlisted mark or node means the allowlist rule was broken. |
+
+## Alerts
+
+`ws_unknown_schema_name` in the abuse log is normally zero. A steady trickle
+means a client is writing names the server does not allow: either a hostile
+client or a release that skipped the allowlist step. Treat more than a handful
+per hour, or any burst from many IPs after a deploy, as P2. See the
+[abuse guardrails runbook](abuse-guardrails-runbook.md).
+
+## Scripts and load tests
+
+Anything that opens a collaboration socket must send `?schema=2` once the
+minimum is above 0, or it is refused. The load harness
+(`tests/load/yjs-load-harness.ts`) already does. Tests that spawn Hocus use
+`spawnHocus()` from `tests/helpers/spawn-hocus.ts`; see
+[tests/TESTING.md](../../tests/TESTING.md).

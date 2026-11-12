@@ -196,6 +196,13 @@ Two tests with distinct strategies:
 
 Each user gets a unique identity via `window.__HOCUS_TOKEN` injected through `page.addInitScript()`.
 
+### Schema Safety Tests (`schema-safety.spec.ts`)
+
+Covers the rollout guards in `docs/operations/schema-rollout-runbook.md`: outdated clients, ingress refusal (`4422` `schema_rejected`) and schema repair. It spawns its own Hocus with `HOCUS_MIN_CLIENT_SCHEMA=2` through `spawnHocus()` (`tests/helpers/spawn-hocus.ts`), which starts `bun run hocus` on a random port with a temp `DB_PATH`, the e2e socket limits and Throttle/Logger off, and returns `{ url, dbPath, logs(), stop() }`. Unit tests use the same helper.
+
+- `window.__HOCUS_SCHEMA` (set in `page.addInitScript()`) overrides the `schema` value the client sends, to impersonate an older bundle.
+- `E2E_BASE_URL` (default `http://localhost:3000`) and `E2E_HOCUS_URL` (default `ws://127.0.0.1:1234`) point Playwright at dev servers on other ports.
+
 ### PWA Tests
 
 Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so caches never leak into other tests.
