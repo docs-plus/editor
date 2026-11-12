@@ -29,3 +29,18 @@ export const bulletList = built.bulletList;
 export const listItem = built.listItem;
 export const hr = built.horizontalRule;
 export const img = built.image;
+
+/** Position of the first character of `text` inside the editor's document. */
+export function posInside(
+  editor: { state: { doc: import("prosemirror-model").Node } },
+  text: string,
+): number {
+  let found = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (found === -1 && node.isText && node.text?.includes(text)) {
+      found = pos + (node.text?.indexOf(text) ?? 0);
+    }
+  });
+  if (found === -1) throw new Error(`Text not found: ${text}`);
+  return found;
+}

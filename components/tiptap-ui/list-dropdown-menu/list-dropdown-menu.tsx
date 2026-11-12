@@ -1,13 +1,22 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-import { ListButton, type ListType } from "@/components/tiptap-ui/list-button";
-import { useListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
+import {
+  canToggleList,
+  type ListType,
+} from "@/components/tiptap-ui/list-button";
+import {
+  type ListValue,
+  setListType,
+  useListDropdownMenu,
+} from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
@@ -46,7 +55,8 @@ export function ListDropdownMenu({
   const { editor } = useTiptapEditor(providedEditor);
   const [isOpen, setIsOpen] = useState(false);
 
-  const { filteredLists, canToggle, isActive, isVisible, Icon } =
+  const picked = useRef(false);
+  const { filteredLists, canToggle, isActive, isVisible, value, Icon } =
     useListDropdownMenu({
       editor,
       types,
@@ -60,6 +70,22 @@ export function ListDropdownMenu({
     },
     [onOpenChange],
   );
+
+  const handleValueChange = useCallback(
+    (next: string) => {
+      picked.current = true;
+      setListType(editor, next as ListValue);
+    },
+    [editor],
+  );
+
+  // After a pick the editor already holds the selection, so focus goes
+  // there; Esc and outside clicks fall back to the trigger.
+  const finalFocus = useCallback(() => {
+    if (!picked.current) return true;
+    picked.current = false;
+    return editor?.view.dom ?? true;
+  }, [editor]);
 
   if (!isVisible) {
     return null;
@@ -75,7 +101,8 @@ export function ListDropdownMenu({
             isActive={isActive}
             tabIndex={-1}
             disabled={!canToggle}
-            aria-label="List options"
+            aria-label="List"
+            aria-haspopup="menu"
             tooltip="List"
             size="sm"
             {...buttonProps}
@@ -86,20 +113,19 @@ export function ListDropdownMenu({
         <ChevronDownIcon className="size-3 opacity-60" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start">
-        <div className="flex flex-col gap-0.5 p-1">
+      <DropdownMenuContent align="start" finalFocus={finalFocus}>
+        <DropdownMenuRadioGroup value={value} onValueChange={handleValueChange}>
+          <DropdownMenuRadioItem value="none">No list</DropdownMenuRadioItem>
           {filteredLists.map((option) => (
-            <ListButton
+            <DropdownMenuRadioItem
               key={option.type}
-              editor={editor}
-              type={option.type}
-              text={option.label}
-              showTooltip={false}
-              size="sm"
-              className="w-full justify-start"
-            />
+              value={option.type}
+              disabled={!canToggleList(editor, option.type)}
+            >
+              {option.label}
+            </DropdownMenuRadioItem>
           ))}
-        </div>
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

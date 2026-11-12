@@ -13,6 +13,7 @@ import {
 } from "@/components/tiptap-ui/heading-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+import { prepareBlockToggle } from "@/lib/editor-utils";
 // --- Icons ---
 import { HeadingIcon } from "@/lib/icons";
 
@@ -34,6 +35,61 @@ export interface UseHeadingDropdownMenuConfig {
    * @default false
    */
   hideWhenUnavailable?: boolean;
+}
+
+export type TextStyleValue = "title" | "paragraph" | `heading-${Level}`;
+
+export const TEXT_STYLE_LABELS: Record<TextStyleValue, string> = {
+  title: "Title",
+  paragraph: "Normal text",
+  "heading-1": "Heading 1",
+  "heading-2": "Heading 2",
+  "heading-3": "Heading 3",
+  "heading-4": "Heading 4",
+  "heading-5": "Heading 5",
+  "heading-6": "Heading 6",
+};
+
+/**
+ * Reads the text style at the caret. The first block of a document is its
+ * title, whatever its level.
+ */
+export function getTextStyleValue(editor: Editor | null): TextStyleValue {
+  if (!editor) return "paragraph";
+  const { $from } = editor.state.selection;
+  if ($from.index(0) === 0) return "title";
+  const { parent } = $from;
+  if (parent.type.name !== "heading") return "paragraph";
+  return `heading-${parent.attrs.level as Level}`;
+}
+
+/**
+ * Sets the text style of the selected block. Unlike `toggleHeading`, picking
+ * the current style does nothing.
+ */
+export function setTextStyle(
+  editor: Editor | null,
+  value: Exclude<TextStyleValue, "title">,
+): boolean {
+  if (!editor?.isEditable) return false;
+  const current = getTextStyleValue(editor);
+  if (current === "title" || current === value) return false;
+
+  const level =
+    value === "paragraph" ? undefined : (Number(value.slice(8)) as Level);
+  if (level && !canToggleHeading(editor, level)) return false;
+
+  try {
+    const chain = prepareBlockToggle(editor);
+    (level
+      ? chain.setNode("heading", { level })
+      : chain.setNode("paragraph")
+    ).run();
+    editor.chain().focus().selectTextblockEnd().run();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -120,6 +176,7 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
 
   return {
     isVisible,
+    value: getTextStyleValue(editor),
     activeLevel,
     isActive,
     canToggleHeading: canToggleHeadingState,

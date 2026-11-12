@@ -9,6 +9,7 @@ import {
   isListActive,
   type ListType,
   listIcons,
+  toggleList,
 } from "@/components/tiptap-ui/list-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -109,6 +110,29 @@ export function shouldShowListDropdown(params: {
   return true;
 }
 
+export type ListValue = ListType | "none";
+
+const LIST_TYPES: ListType[] = ["bulletList", "orderedList", "taskList"];
+
+export function getListValue(editor: Editor | null): ListValue {
+  if (!editor?.isEditable) return "none";
+  return LIST_TYPES.find((type) => isListActive(editor, type)) ?? "none";
+}
+
+/**
+ * Sets the list type of the selected blocks, or removes the list with
+ * `"none"`. Unlike `toggleList`, picking the current value does nothing.
+ */
+export function setListType(editor: Editor | null, value: ListValue): boolean {
+  if (!editor?.isEditable) return false;
+  const current = getListValue(editor);
+  if (current === value) return false;
+
+  if (current !== "none" && !toggleList(editor, current)) return false;
+  if (value === "none") return true;
+  return toggleList(editor, value);
+}
+
 /**
  * Gets the currently active list type from the available types
  */
@@ -205,6 +229,7 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   return {
     isVisible,
     activeType,
+    value: getListValue(editor),
     isActive: isAnyActive,
     canToggle: canToggleAny,
     types,
