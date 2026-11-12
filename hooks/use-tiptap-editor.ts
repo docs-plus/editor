@@ -13,6 +13,13 @@ import { useSyncExternalStore } from "react";
  */
 export const TOOLBAR_SETTLE_MS = 150;
 
+/**
+ * The longest toolbar state may trail the document while changes never
+ * pause, such as a collaborator who keeps typing: the toolbar catches up at
+ * least this often instead of waiting for {@link TOOLBAR_SETTLE_MS} of quiet.
+ */
+export const TOOLBAR_MAX_WAIT_MS = 1000;
+
 interface EditorVersionStore {
   subscribe: (listener: () => void) => () => void;
   getVersion: () => number;
@@ -37,7 +44,8 @@ function changesToolbarContext(tr: Transaction): boolean {
 /**
  * A version number per editor that moves when its toolbar may need to
  * re-render: at once for selection, stored-mark, focus and editable
- * changes; after {@link TOOLBAR_SETTLE_MS} of quiet for document changes.
+ * changes; after {@link TOOLBAR_SETTLE_MS} of quiet for document changes,
+ * or {@link TOOLBAR_MAX_WAIT_MS} after the first change of a burst.
  */
 export function getEditorVersionStore(editor: Editor): EditorVersionStore {
   const existing = stores.get(editor);
@@ -45,11 +53,17 @@ export function getEditorVersionStore(editor: Editor): EditorVersionStore {
 
   const listeners = new Set<() => void>();
   let version = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  let maxWaitTimer: ReturnType<typeof setTimeout> | undefined;
 
+  const clearTimers = () => {
+    clearTimeout(settleTimer);
+    clearTimeout(maxWaitTimer);
+    settleTimer = undefined;
+    maxWaitTimer = undefined;
+  };
   const notify = () => {
-    clearTimeout(timer);
-    timer = undefined;
+    clearTimers();
     version += 1;
     for (const listener of listeners) listener();
   };
@@ -62,8 +76,9 @@ export function getEditorVersionStore(editor: Editor): EditorVersionStore {
   }) => {
     const applied = [transaction, ...appendedTransactions];
     if (applied.some((tr) => tr.docChanged)) {
-      clearTimeout(timer);
-      timer = setTimeout(notify, TOOLBAR_SETTLE_MS);
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(notify, TOOLBAR_SETTLE_MS);
+      maxWaitTimer ??= setTimeout(notify, TOOLBAR_MAX_WAIT_MS);
     } else if (applied.some(changesToolbarContext)) {
       notify();
     }
@@ -86,8 +101,7 @@ export function getEditorVersionStore(editor: Editor): EditorVersionStore {
         if (listeners.size > 0) return;
         editor.off("transaction", onTransaction);
         editor.off("update", onUpdate);
-        clearTimeout(timer);
-        timer = undefined;
+        clearTimers();
       };
     },
     getVersion: () => version,

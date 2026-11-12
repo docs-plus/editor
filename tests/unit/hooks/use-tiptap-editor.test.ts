@@ -5,6 +5,7 @@ import { TableOfContents } from "@tiptap/extension-table-of-contents";
 
 import {
   getEditorVersionStore,
+  TOOLBAR_MAX_WAIT_MS,
   TOOLBAR_SETTLE_MS,
 } from "@/hooks/use-tiptap-editor";
 
@@ -81,6 +82,41 @@ describe("editor version store", () => {
     expect(listener).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("notifies at least every TOOLBAR_MAX_WAIT_MS while changes never pause", () => {
+    const { editor: instance, listener } = setup();
+    for (let t = 0; t < 2 * TOOLBAR_MAX_WAIT_MS; t += 100) {
+      instance.commands.insertContentAt(9, "x");
+      vi.advanceTimersByTime(100);
+    }
+    // Max-wait fires at 1000 and 2000. The 2000 notify also clears the settle
+    // timer from the insert at 1900, so no third call follows.
+    expect(listener).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(TOOLBAR_SETTLE_MS);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts a fresh max-wait window after a notify", () => {
+    const { editor: instance, listener } = setup();
+    instance.commands.insertContentAt(9, "x");
+    vi.advanceTimersByTime(TOOLBAR_SETTLE_MS);
+    expect(listener).toHaveBeenCalledTimes(1);
+    // A max-wait timer left over from the first change would fire at 1000.
+    for (let t = 0; t < TOOLBAR_MAX_WAIT_MS - 100; t += 100) {
+      instance.commands.insertContentAt(9, "x");
+      vi.advanceTimersByTime(100);
+    }
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves no timer behind when the last subscriber leaves mid-burst", () => {
+    const { editor: instance, listener, unsubscribe } = setup();
+    instance.commands.insertContentAt(9, "x");
+    unsubscribe();
+    vi.advanceTimersByTime(TOOLBAR_MAX_WAIT_MS);
+    expect(listener).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("stops listening once the last subscriber leaves", () => {

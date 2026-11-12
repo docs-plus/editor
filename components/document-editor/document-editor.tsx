@@ -4,6 +4,7 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  Profiler,
   useCallback,
   useEffect,
   useMemo,
@@ -44,6 +45,7 @@ import {
 } from "@/components/app-skeleton";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
+import { countToolbarCommit } from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
 import {
   FilterBar,
@@ -230,20 +232,22 @@ function DocumentEditorContent({
               : {}),
           }}
         >
-          {effectiveMobileView === "main" ? (
-            <MainToolbarContent
-              onHighlighterClick={() => setMobileView("highlighter")}
-              onTocToggle={() => setTocVisible((v) => !v)}
-              onFilterToggle={headingFilter.toggleBar}
-              isMobile={isMobile}
-              tocVisible={tocVisible}
-              filterActive={
-                headingFilter.isBarOpen || headingFilter.hasActiveFilters
-              }
-            />
-          ) : (
-            <MobileToolbarContent onBack={() => setMobileView("main")} />
-          )}
+          <Profiler id="toolbar" onRender={countToolbarCommit}>
+            {effectiveMobileView === "main" ? (
+              <MainToolbarContent
+                onHighlighterClick={() => setMobileView("highlighter")}
+                onTocToggle={() => setTocVisible((v) => !v)}
+                onFilterToggle={headingFilter.toggleBar}
+                isMobile={isMobile}
+                tocVisible={tocVisible}
+                filterActive={
+                  headingFilter.isBarOpen || headingFilter.hasActiveFilters
+                }
+              />
+            ) : (
+              <MobileToolbarContent onBack={() => setMobileView("main")} />
+            )}
+          </Profiler>
         </Toolbar>
 
         <FilterBar {...headingFilter} />

@@ -1,8 +1,13 @@
-import { expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
+import {
+  TOOLBAR_MAX_WAIT_MS,
+  TOOLBAR_SETTLE_MS,
+} from "@/hooks/use-tiptap-editor";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
 
 import { openToolbarTestDoc } from "./helpers/a11y";
+import { EditorPage } from "./helpers/editor-page";
 
 const toolbarButton = (page: Page, name: string) =>
   page.getByRole("toolbar").getByRole("button", { name, exact: true });
@@ -185,5 +190,118 @@ test.describe("focus not obscured by the sticky toolbar", () => {
       return ed.view.coordsAtPos(ed.state.selection.from).top;
     });
     expect(caretTop).toBeGreaterThanOrEqual(await toolbarBottom(page));
+  });
+});
+
+test.describe("toolbar update timing", () => {
+  test("toolbar follows a remote block change within 1 s while the collaborator keeps typing", async ({
+    browser,
+  }) => {
+    const docId = `toolbar-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const contexts: BrowserContext[] = [];
+    const openUser = async (name: string) => {
+      const ctx = await browser.newContext();
+      contexts.push(ctx);
+      const page = await ctx.newPage();
+      await page.addInitScript(
+        `window.__HOCUS_TOKEN = ${JSON.stringify(`${name}-${docId}`)}`,
+      );
+      const editorPage = new EditorPage(page);
+      await editorPage.goto(docId);
+      await editorPage.waitForSync();
+      return { page, editorPage };
+    };
+
+    try {
+      const a = await openUser("toolbar-a");
+      const heading = (level: number, text: string) => ({
+        type: "heading",
+        attrs: { level },
+        content: [{ type: "text", text }],
+      });
+      // The target starts as a heading: Yjs cannot rename an element, so a
+      // paragraph-to-heading change arrives as delete + insert and moves B's
+      // caret out of it. A level change is an attribute update in place.
+      await a.editorPage.setContent({
+        type: "doc",
+        content: [
+          heading(1, "Title"),
+          heading(2, "Target heading"),
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Typing here" }],
+          },
+        ],
+      });
+
+      const b = await openUser("toolbar-b");
+      const target = b.page.locator(".tiptap h2", {
+        hasText: "Target heading",
+      });
+      await expect(target).toBeVisible();
+      await target.click();
+      await expect(toolbarButton(b.page, "Heading 2")).toBeVisible();
+
+      await a.page.locator(".tiptap p", { hasText: "Typing here" }).click();
+      await a.page.keyboard.press("End");
+      let typingDone = false;
+      const typing = a.page.keyboard
+        .type("x".repeat(100), { delay: 50 })
+        .then(() => {
+          typingDone = true;
+        });
+
+      await a.page.waitForTimeout(1000);
+      await a.page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        let pos = -1;
+        editor.state.doc.descendants((node, p) => {
+          if (node.textContent === "Target heading") pos = p;
+          return pos < 0;
+        });
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, {
+            ...editor.state.doc.nodeAt(pos)?.attrs,
+            level: 3,
+          }),
+        );
+      });
+      const changedAt = Date.now();
+
+      // Worst case: the max-wait window, plus a keystroke gap, sync and
+      // render. The unit test proves the exact 1 s cap; this separates it
+      // from ~4 s of starvation.
+      await expect(toolbarButton(b.page, "Heading 3")).toBeVisible({
+        timeout: TOOLBAR_MAX_WAIT_MS + 500,
+      });
+      expect(Date.now() - changedAt).toBeLessThan(TOOLBAR_MAX_WAIT_MS + 500);
+      expect(typingDone).toBe(false); // A was still typing when B caught up
+      await typing;
+    } finally {
+      await Promise.all(contexts.map((ctx) => ctx.close()));
+    }
+  });
+
+  test("a typing burst commits the toolbar at most once per settle window", async ({
+    page,
+  }) => {
+    await openToolbarTestDoc(page);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      window.__toolbarCommits = 0;
+    });
+
+    const start = Date.now();
+    await page.keyboard.type("a".repeat(150), { delay: 20 });
+    const burstMs = Date.now() - start;
+    await page.waitForTimeout(TOOLBAR_SETTLE_MS + 100);
+
+    const commits = await page.evaluate(() => window.__toolbarCommits ?? 0);
+    expect(commits).toBeGreaterThanOrEqual(1); // the counter is wired
+    expect(commits).toBeLessThanOrEqual(
+      Math.floor(burstMs / TOOLBAR_MAX_WAIT_MS) + 1,
+    );
   });
 });
