@@ -127,16 +127,25 @@ describe("Toolbar focus repair", () => {
       );
     });
     await settle();
-    byLabel(container, "A")?.focus();
-    // The arrow index starts unsynced (-1): first press lands on A, second on B.
-    for (let press = 0; press < 2; press += 1) {
+    const b = byLabel(container, "B");
+    // Focusable when disabled: aria-disabled, never the native attribute.
+    expect(b?.getAttribute("aria-disabled")).toBe("true");
+    expect(b?.hasAttribute("disabled")).toBe(false);
+
+    const press = async (key: string) => {
       act(() => {
-        byLabel(container, "A")?.dispatchEvent(
-          new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true }),
         );
       });
-    }
-    await settle();
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("B");
+      await settle();
+      return document.activeElement?.getAttribute("aria-label");
+    };
+    byLabel(container, "A")?.focus();
+    // One press per step: the arrow index follows focus, and the disabled
+    // item is a stop of its own.
+    expect(await press("ArrowRight")).toBe("B");
+    expect(await press("ArrowRight")).toBe("C");
+    expect(await press("ArrowLeft")).toBe("B");
   });
 });
