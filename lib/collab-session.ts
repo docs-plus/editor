@@ -177,15 +177,16 @@ export function acquireCollabSession(name: string): CollabSession {
     if (number === 0) setDirty(entry, false);
   });
   provider.on("authenticationFailed", ({ reason }: { reason: string }) => {
-    // A refused document (deleted tab, rate limit) will never acknowledge.
-    setDirty(entry, false);
     if (reason === CLIENT_OUTDATED_REASON) {
       // Re-authenticating on every reconnect would only be refused again.
-      // Keep the device copy: the reloaded bundle uploads it.
+      // Keep the device copy: the reloaded bundle uploads it. Unsynced
+      // edits stay dirty, so the session (and its copy) is not released.
       provider.detach();
       reject(entry, CLIENT_OUTDATED_REASON);
       return;
     }
+    // A refused document (deleted tab, rate limit) will never acknowledge.
+    setDirty(entry, false);
     if (reason !== DOCUMENT_DELETED_REASON) return;
     // Deleted while this copy was away: never resurrect it from the device.
     provider.detach();

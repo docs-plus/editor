@@ -41,6 +41,7 @@ const {
   DOCUMENT_DELETED_REASON,
   DOCUMENT_TOO_LARGE_REASON,
   hasUnsyncedCollabChanges,
+  liveSessionNames,
   OFFLINE_BUDGET_REASON,
   onSynced,
   releaseCollabSession,
@@ -230,6 +231,21 @@ describe("schema refusals", () => {
     expect(session.rejectedReason).toBe(CLIENT_OUTDATED_REASON);
     session.doc.getText("t").insert(0, "x");
     expect(hasUnsyncedCollabChanges()).toBe(false);
+  });
+
+  it("keeps an outdated client's unsynced edits protected", () => {
+    vi.useFakeTimers();
+    const name = unique();
+    const session = acquireCollabSession(name);
+    const provider = created[0] as FakeProvider;
+    session.doc.getText("t").insert(0, "typed offline");
+    provider.emit("authenticationFailed", { reason: CLIENT_OUTDATED_REASON });
+    // Still unsynced: the reloaded bundle uploads them from the device copy.
+    expect(hasUnsyncedCollabChanges()).toBe(true);
+    releaseCollabSession(name);
+    vi.advanceTimersByTime(60_000);
+    expect(provider.destroy).not.toHaveBeenCalled();
+    expect(liveSessionNames().has(name)).toBe(true);
   });
 
   it("stops syncing after a schema_rejected close", () => {
