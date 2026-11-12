@@ -60,8 +60,20 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
       [shortcutKeys],
     );
 
+    const ariaPressed =
+      props["aria-pressed"] ??
+      (isActive !== undefined && !props["aria-haspopup"]
+        ? isActive
+        : undefined);
+
+    const buttonProps = {
+      ...props,
+      "aria-pressed": ariaPressed,
+      "data-active": isActive ? "true" : undefined,
+    };
+
     const buttonClasses = cn(
-      isActive && "bg-foreground/10 text-foreground",
+      "data-active:bg-foreground/10 data-active:text-foreground",
       className,
     );
 
@@ -72,7 +84,7 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
           variant={variant}
           size={size}
           className={buttonClasses}
-          {...props}
+          {...buttonProps}
         >
           {children}
         </Button>
@@ -88,7 +100,7 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
               variant={variant}
               size={size}
               className={buttonClasses}
-              {...props}
+              {...buttonProps}
             />
           }
         >
