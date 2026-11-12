@@ -1,10 +1,13 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
+import { type Connection, Document } from "@hocuspocus/server";
 import type { JSONContent } from "@tiptap/core";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import * as decoding from "lib0/decoding";
 import * as Y from "yjs";
 
 import {
+  BROADCAST_FLUSH_OPTIONS,
   ROOT_SWEEP_ORIGIN,
   sweepEditorRoot,
   watchEditorRoot,
@@ -216,6 +219,100 @@ describe("watchEditorRoot", () => {
     expect(sawStray).toBe(false);
     expect(topLevel(victim)).toHaveLength(topLevel(server).length);
     expect(onlyElements(victim)).toBe(true);
+  });
+
+  describe("through a Hocuspocus document", () => {
+    /** Over Hocuspocus's 1 MiB default `flushMaxBytes`, under the 2 MiB frame cap. */
+    const BIG_TEXT = "x".repeat(1_150_000);
+
+    /** Sync frames `document` broadcasts, decoded to their update payloads. */
+    function captureBroadcasts(document: Document): Uint8Array[] {
+      const updates: Uint8Array[] = [];
+      const connection = {
+        messageAddress: document.name,
+        send(message: Uint8Array) {
+          const decoder = decoding.createDecoder(message);
+          decoding.readVarString(decoder);
+          if (decoding.readVarUint(decoder) !== 0) return;
+          if (decoding.readVarUint(decoder) !== 2) return;
+          updates.push(decoding.readVarUint8Array(decoder));
+        },
+      };
+      document.addConnection(connection as unknown as Connection);
+      return updates;
+    }
+
+    /**
+     * An open editor relayed through a Hocuspocus document running the sweep,
+     * after an attacker's U2 (top-level text) and a U1 over 1 MiB releasing it.
+     */
+    async function releaseOverOneMiB(options: typeof BROADCAST_FLUSH_OPTIONS) {
+      const fixture = createCollabEditor();
+      const document = new Document("doc", {}, options);
+      Y.applyUpdate(document, Y.encodeStateAsUpdate(fixture.server));
+      watchEditorRoot(document, () => {});
+      const broadcasts = captureBroadcasts(document);
+      const attacker = syncedClient(document);
+      const fragment = attacker.getXmlFragment("default");
+      const [u1, u2] = updatesOf(
+        attacker,
+        () => {
+          const paragraph = new Y.XmlElement("paragraph");
+          fragment.insert(fragment.length, [paragraph]);
+          paragraph.insert(0, [new Y.XmlText(BIG_TEXT)]);
+        },
+        () =>
+          fragment.insert(fragment.length, [new Y.XmlText("stray root text")]),
+      );
+      Y.applyUpdate(document, u2);
+      Y.applyUpdate(document, u1);
+      await new Promise((resolve) => setImmediate(resolve));
+      return { fixture, broadcasts };
+    }
+
+    it("sends a release over 1 MiB and its sweep as one broadcast", async () => {
+      const { fixture, broadcasts } = await releaseOverOneMiB(
+        BROADCAST_FLUSH_OPTIONS,
+      );
+      try {
+        expect(broadcasts).toHaveLength(1);
+        // The editor receives each broadcast, and the user types after each.
+        const thrown: unknown[] = [];
+        for (const update of broadcasts) {
+          try {
+            Y.applyUpdate(fixture.server, update, "relay");
+            fixture.editor.commands.insertContentAt(1, "K");
+          } catch (error) {
+            thrown.push(error);
+          }
+        }
+        expect(thrown).toEqual([]);
+        expect(fixture.errors).toEqual([]);
+        expect(onlyElements(fixture.server)).toBe(true);
+        const stored = fixture.server.getXmlFragment("default").toString();
+        expect(stored).toContain("hello world");
+        expect(stored).toContain(BIG_TEXT);
+        expect(stored).not.toContain("stray");
+      } finally {
+        fixture.destroy();
+      }
+    });
+
+    it("would split them at Hocuspocus's 1 MiB default", async () => {
+      const { fixture, broadcasts } = await releaseOverOneMiB({
+        flushDelay: 0,
+        flushMaxBytes: 1024 * 1024,
+      });
+      try {
+        expect(broadcasts).toHaveLength(2);
+        const relay = new Y.Doc();
+        Y.applyUpdate(relay, Y.encodeStateAsUpdate(fixture.server));
+        Y.applyUpdate(relay, broadcasts[0]);
+        expect(onlyElements(relay)).toBe(false);
+      } finally {
+        fixture.destroy();
+      }
+    });
   });
 
   it("ignores typing, new blocks and its own deletions", () => {

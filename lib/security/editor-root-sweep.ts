@@ -5,6 +5,31 @@ import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 /** Transaction origin of the server's sweep, so its own deletions are skipped. */
 export const ROOT_SWEEP_ORIGIN = "editor-root-sweep";
 
+/**
+ * Hocuspocus broadcast batching that keeps the sweep in the same broadcast as
+ * the update releasing the content it deletes.
+ *
+ * The sweep's deletion is emitted right after that update, in the same tick.
+ * Hocuspocus queues both and merges them at the end of the event-loop turn
+ * (`flushDelay: 0`; `false` would send each one on its own), unless the
+ * queued bytes reach `flushMaxBytes` first: then the releasing update goes
+ * out alone, open editors receive content y-tiptap cannot project (it throws),
+ * and a keystroke before the sweep arrives rewrites the document from a stale
+ * view. Hocuspocus's 1 MiB default is within reach of one 2 MiB frame.
+ *
+ * `flushMaxBytes` only bounds what one document queues for one window
+ * (Document.handleUpdate); the window still closes at the end of the turn, so
+ * no limit adds no latency. The queue holds this turn's updates, already
+ * applied to the document and in memory anyway; merging them once costs one
+ * copy of the turn's bytes, as the early flushes would. A finite threshold
+ * would have to stay above every per-document cap plus a frame (the
+ * playground's is 4 MiB), and would silently reopen the split when one grows.
+ */
+export const BROADCAST_FLUSH_OPTIONS = {
+  flushDelay: 0,
+  flushMaxBytes: Number.POSITIVE_INFINITY,
+} as const;
+
 /** What a sweep removed: top-level entries and fixed labels, never content. */
 export type RootSweep = { removed: number; types: string[] };
 
@@ -74,8 +99,8 @@ export function sweepEditorRoot(doc: Y.Doc): RootSweep {
  *
  * Yjs runs observers synchronously while it finishes a transaction, so the
  * sweep's deletion is emitted right after the update that added the content,
- * in the same event-loop turn: Hocuspocus merges both into one broadcast.
- * `onSwept` gets the origin of that update.
+ * in the same event-loop turn. Hocuspocus merges both into one broadcast only
+ * with `BROADCAST_FLUSH_OPTIONS`. `onSwept` gets the origin of that update.
  */
 export function watchEditorRoot(
   doc: Y.Doc,

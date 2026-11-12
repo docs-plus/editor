@@ -199,6 +199,86 @@ describe("hocus-server editor root sweep", () => {
   );
 
   it(
+    "broadcasts a release over 1 MiB and its sweep as one update",
+    async () => {
+      // Production's cap, so the 1.1 MiB release is accepted.
+      const server = await spawnHocus({
+        DB_PATH: createTempDbPath(),
+        MAX_DOC_SIZE_BYTES: "2097152",
+      });
+      servers.push(server);
+      const name = crypto.randomUUID();
+      const attacker = await connect(server, name);
+      attacker.document.transact(() => {
+        const seed = prosemirrorJSONToYDoc(
+          schema,
+          titleOnly as JSONContent,
+          "default",
+        );
+        Y.applyUpdate(attacker.document, Y.encodeStateAsUpdate(seed));
+      });
+      await waitFor(
+        () => !attacker.provider.hasUnsyncedChanges,
+        "seed stored on the server",
+      );
+      const victim = await connect(server, name);
+      const blocks = victim.document.getXmlFragment("default").length;
+
+      // U1 adds a block over 1 MiB, U2 top-level text after it; U2 goes first.
+      const forged = new Y.Doc();
+      Y.applyUpdate(forged, Y.encodeStateAsUpdate(attacker.document));
+      const updates: Uint8Array[] = [];
+      forged.on("update", (update: Uint8Array) => updates.push(update));
+      const fragment = forged.getXmlFragment("default");
+      const bigText = "x".repeat(1_150_000);
+      forged.transact(() => {
+        const paragraph = new Y.XmlElement("paragraph");
+        fragment.insert(blocks, [paragraph]);
+        paragraph.insert(0, [new Y.XmlText(bigText)]);
+      });
+      forged.transact(() =>
+        fragment.insert(blocks + 1, [new Y.XmlText("stray text")]),
+      );
+      const [u1, u2] = updates;
+      expect(u1.byteLength).toBeGreaterThan(1024 * 1024);
+      // The server holds U2 pending and broadcasts nothing yet.
+      attacker.sendUpdate(u2);
+      await Bun.sleep(300);
+
+      let received = 0;
+      let sawStray = false;
+      victim.document.on("update", () => received++);
+      victim.document.getXmlFragment("default").observe(() => {
+        if (!onlyElements(victim.document)) sawStray = true;
+      });
+      attacker.sendUpdate(u1);
+      await waitFor(
+        () => victim.document.getXmlFragment("default").length === blocks + 1,
+        "victim received the block",
+      );
+      await Bun.sleep(300);
+
+      expect(received).toBe(1);
+      expect(sawStray).toBe(false);
+      expect(victim.document.store.pendingStructs).toBeNull();
+      expect(attacker.closes).toEqual([]);
+      const editor = createCollabEditor({ server: victim.document });
+      try {
+        expect(editor.errors).toEqual([]);
+        const text = editor.editor.getText();
+        expect(text).toContain(bigText);
+        expect(text).not.toContain("stray");
+        expect(victim.document.getXmlFragment("default").length).toBe(
+          blocks + 1,
+        );
+      } finally {
+        editor.destroy();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "cleans a stored document holding top-level text when it loads",
     async () => {
       const dbPath = createTempDbPath();

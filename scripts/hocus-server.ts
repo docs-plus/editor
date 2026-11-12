@@ -21,6 +21,7 @@ import {
   isSystemDocumentId,
   isValidWsDocumentName,
 } from "../lib/security/doc-id-validator";
+import { BROADCAST_FLUSH_OPTIONS } from "../lib/security/editor-root-sweep";
 import {
   HOCUS_ALLOW_ISOLATED_TABS_DOCS,
   HOCUS_ALLOWED_ORIGINS,
@@ -135,6 +136,8 @@ const persistence = createSqlitePersistence(db, {
 });
 
 const hocuspocus = new Hocuspocus({
+  // No early flush: the root sweep must reach clients with the update it fixes.
+  ...BROADCAST_FLUSH_OPTIONS,
   extensions: buildHocusServerExtensions(persistence, documentGuard),
   // Checks only: a connection counts once it is established (`connected`),
   // so attempts whose document load fails never leak a slot.
