@@ -88,20 +88,24 @@ type KeystrokeWindow = Window & {
 };
 
 /**
- * Times each keystroke's synchronous handling: keydown `timeStamp` to a
- * MessageChannel message posted from a capture-phase `input` listener (runs
- * after the event's task, so ProseMirror, Yjs and toolbar work in the event
- * are included). Unlike Event Timing it has no 16 ms floor and, unlike
+ * Times each keystroke's synchronous handling: from its keydown `timeStamp` to
+ * a microtask queued by a bubble-phase `input` listener on `window`, the last
+ * listener of the event. By then ProseMirror's DOM-change flush (a
+ * MutationObserver microtask), the Yjs write and the toolbar's transaction
+ * listener have all run, so their work in the event is included. Deferred
+ * work (timers, React renders) is not; Task 7's commit budget gates that.
+ *
+ * It must not stop at a task such as a `MessageChannel` message: under CPU
+ * throttle Chrome runs input ahead of normal-priority tasks, so such messages
+ * pile up while typing continues and drain together once it stops, timing
+ * the scheduler's backlog and whatever task ran before it instead of the key.
+ * Unlike Event Timing it has no 16 ms floor and, unlike
  * requestAnimationFrame, no frame quantization.
  */
 export async function injectKeystrokeTimer(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const w = window as KeystrokeWindow;
     w.__keystroke_latencies = [];
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      w.__keystroke_latencies?.push(performance.now() - (w.__keydown_ts ?? 0));
-    };
     window.addEventListener(
       "keydown",
       (e) => {
@@ -109,7 +113,14 @@ export async function injectKeystrokeTimer(page: Page): Promise<void> {
       },
       true,
     );
-    window.addEventListener("input", () => channel.port2.postMessage(0), true);
+    window.addEventListener("input", () => {
+      const keydownTs = w.__keydown_ts;
+      if (keydownTs === undefined) return;
+      w.__keydown_ts = undefined;
+      queueMicrotask(() => {
+        w.__keystroke_latencies?.push(performance.now() - keydownTs);
+      });
+    });
   });
 }
 

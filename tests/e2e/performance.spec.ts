@@ -18,9 +18,10 @@ import {
 
 const PERF_HEADINGS = parsePerfHeadings(process.env.PERF_HEADINGS, [10, 50]);
 const PERF_SHAPE = parsePerfShape(process.env.PERF_SHAPE);
-const PERF_ROUNDS = Number(process.env.PERF_ROUNDS ?? 3);
+const PERF_ROUNDS = Number(process.env.PERF_ROUNDS ?? 5);
 const PERF_CPU_THROTTLE = Number(process.env.PERF_CPU_THROTTLE ?? 4);
 const PERF_MAX_REGRESSION = Number(process.env.PERF_MAX_REGRESSION ?? 0.1);
+const KEYSTROKES = 100;
 
 const perfResults: Array<{
   label: string;
@@ -63,11 +64,9 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     });
     await collectKeystrokeLatencies(page);
     await page.click(".tiptap p");
-    await page.keyboard.type("a".repeat(100), { delay: 10 });
-    // Let queued MessageChannel callbacks drain before reading the samples.
-    await page.waitForTimeout(300);
+    await page.keyboard.type("a".repeat(KEYSTROKES), { delay: 10 });
     const samples = await collectKeystrokeLatencies(page);
-    expect(samples.length, "keystroke samples").toBeGreaterThan(50);
+    expect(samples.length, "keystroke samples").toBe(KEYSTROKES);
     return percentile(samples, 95);
   } finally {
     await context.close();
