@@ -12,6 +12,33 @@ import { EditorPage } from "./helpers/editor-page";
 const toolbarButton = (page: Page, name: string) =>
   page.getByRole("toolbar").getByRole("button", { name, exact: true });
 
+/**
+ * Runs every later animation frame ~80 ms late, as on a loaded machine.
+ * Tiptap's `focus()` waits a frame, so a keystroke right after a menu pick
+ * arrives before it; the menu must hand focus back without waiting.
+ */
+async function delayAnimationFrames(page: Page) {
+  await page.evaluate(() => {
+    const timers = new Map<number, number>();
+    let nextId = 1;
+    window.requestAnimationFrame = (callback) => {
+      const id = nextId++;
+      timers.set(
+        id,
+        window.setTimeout(() => {
+          timers.delete(id);
+          callback(performance.now());
+        }, 80),
+      );
+      return id;
+    };
+    window.cancelAnimationFrame = (id) => {
+      window.clearTimeout(timers.get(id));
+      timers.delete(id);
+    };
+  });
+}
+
 test.describe("toolbar focus and disabled controls", () => {
   test("focus stays in the toolbar when the document turns read-only", async ({
     page,
@@ -145,14 +172,32 @@ test.describe("toolbar focus and disabled controls", () => {
     await expect(toolbarButton(page, "Heading 2")).toBeVisible();
   });
 
-  test("picking a text style returns focus to the editor", async ({ page }) => {
+  test("picking a text style closes the menu and returns focus to the editor", async ({
+    page,
+  }) => {
     const editorPage = await openToolbarTestDoc(page);
     await editorPage.buildDocument([{ level: 1, text: "Title" }]);
     await page.keyboard.type("Body");
     await toolbarButton(page, "Normal text").click();
+    await delayAnimationFrames(page);
     await page.getByRole("menuitemradio", { name: "Heading 2" }).click();
     await page.keyboard.type("X");
-    await expect(page.locator(".tiptap h2")).toContainText("BodyX");
+    await expect(page.locator(".tiptap h2")).toHaveText("BodyX");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  test("picking a list type closes the menu and returns focus to the editor", async ({
+    page,
+  }) => {
+    const editorPage = await openToolbarTestDoc(page);
+    await editorPage.buildDocument([{ level: 1, text: "Title" }]);
+    await page.keyboard.type("Item");
+    await toolbarButton(page, "List").click();
+    await delayAnimationFrames(page);
+    await page.getByRole("menuitemradio", { name: "Bullet List" }).click();
+    await page.keyboard.type("X");
+    await expect(page.locator(".tiptap ul li")).toHaveText("ItemX");
+    await expect(page.getByRole("menu")).toHaveCount(0);
   });
 });
 

@@ -66,9 +66,13 @@ export function ListDropdownMenu({
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
+      // Base UI returns focus only after the exit animation, and Tiptap's
+      // focus() waits a frame: a keystroke typed before either would go to
+      // the menu, so hand focus to the editor now.
+      if (!open && picked.current) editor?.view.focus();
       onOpenChange?.(open);
     },
-    [onOpenChange],
+    [editor, onOpenChange],
   );
 
   const handleValueChange = useCallback(
@@ -115,11 +119,14 @@ export function ListDropdownMenu({
 
       <DropdownMenuContent align="start" finalFocus={finalFocus}>
         <DropdownMenuRadioGroup value={value} onValueChange={handleValueChange}>
-          <DropdownMenuRadioItem value="none">No list</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="none" closeOnClick>
+            No list
+          </DropdownMenuRadioItem>
           {filteredLists.map((option) => (
             <DropdownMenuRadioItem
               key={option.type}
               value={option.type}
+              closeOnClick
               disabled={!canToggleList(editor, option.type)}
             >
               {option.label}

@@ -72,8 +72,12 @@ export const HeadingDropdownMenu = forwardRef<
 
     const handleOpenChange = useCallback(
       (open: boolean) => {
-        if (!editor || !canToggle) return;
+        if (open && (!editor || !canToggle)) return;
         setIsOpen(open);
+        // Base UI returns focus only after the exit animation, and Tiptap's
+        // focus() waits a frame: a keystroke typed before either would go
+        // to the menu, so hand focus to the editor now.
+        if (!open && picked.current) editor?.view.focus();
         onOpenChange?.(open);
       },
       [canToggle, editor, onOpenChange],
@@ -133,13 +137,14 @@ export const HeadingDropdownMenu = forwardRef<
             value={value}
             onValueChange={handleValueChange}
           >
-            <DropdownMenuRadioItem value="paragraph">
+            <DropdownMenuRadioItem value="paragraph" closeOnClick>
               {TEXT_STYLE_LABELS.paragraph}
             </DropdownMenuRadioItem>
             {levels.map((level) => (
               <DropdownMenuRadioItem
                 key={level}
                 value={`heading-${level}`}
+                closeOnClick
                 disabled={!canToggleHeading(editor, level)}
               >
                 {TEXT_STYLE_LABELS[`heading-${level}`]}
