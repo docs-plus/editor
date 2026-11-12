@@ -108,3 +108,21 @@ test.describe("toolbar focus and disabled controls", () => {
     await expect(page.locator(".tiptap h2")).toContainText("BodyX");
   });
 });
+
+test.describe("indent in lists", () => {
+  test("indent button nests a list item and outdent lifts it back", async ({
+    page,
+  }) => {
+    await openToolbarTestDoc(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("- one");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("two");
+
+    await toolbarButton(page, "Indent").click();
+    await expect(page.locator(".tiptap ul ul li")).toHaveText("two");
+
+    await toolbarButton(page, "Outdent").click();
+    await expect(page.locator(".tiptap ul ul")).toHaveCount(0);
+  });
+});
