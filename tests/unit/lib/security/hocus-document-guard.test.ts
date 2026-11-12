@@ -108,14 +108,16 @@ describe("findDisallowedSchemaNames (B2)", () => {
   const toUpdate = (json: JSONContent) =>
     Y.encodeStateAsUpdate(prosemirrorJSONToYDoc(schema, json, "default"));
 
-  /** An update with one XmlText per given format key and element name. */
+  /** An update with the given elements, then a paragraph formatted with each key. */
   function craft(elements: string[], formatKeys: string[]): Uint8Array {
     const doc = new Y.Doc();
     const fragment = doc.getXmlFragment("default");
     for (const name of elements) fragment.push([new Y.XmlElement(name)]);
     if (formatKeys.length > 0) {
+      const paragraph = new Y.XmlElement("paragraph");
       const text = new Y.XmlText();
-      fragment.push([text]);
+      fragment.push([paragraph]);
+      paragraph.push([text]);
       text.insert(0, "x");
       for (const key of formatKeys) text.format(0, 1, { [key]: true });
     }
@@ -141,6 +143,87 @@ describe("findDisallowedSchemaNames (B2)", () => {
     expect(
       findDisallowedSchemaNames(craft([], ["fontSize--abcd1234"])),
     ).toEqual(["fontSize"]);
+  });
+
+  describe("content directly in the editor fragment (I4)", () => {
+    /** A server document holding a title, and a client synced to it. */
+    function serverAndClient() {
+      const server = prosemirrorJSONToYDoc(
+        schema,
+        titleOnly as JSONContent,
+        "default",
+      );
+      const client = new Y.Doc();
+      Y.applyUpdate(client, Y.encodeStateAsUpdate(server));
+      return { server, client, fragment: client.getXmlFragment("default") };
+    }
+    const changes = (client: Y.Doc, edit: () => void) => {
+      const before = Y.encodeStateVector(client);
+      edit();
+      return Y.encodeStateAsUpdate(client, before);
+    };
+
+    it("refuses top-level text in a fresh fragment", () => {
+      const doc = new Y.Doc();
+      doc.getXmlFragment("default").insert(0, [new Y.XmlText("x")]);
+      expect(findDisallowedSchemaNames(Y.encodeStateAsUpdate(doc))).toEqual([
+        "#text",
+      ]);
+    });
+
+    it("refuses top-level text placed after an existing block", () => {
+      const { server, client, fragment } = serverAndClient();
+      const update = changes(client, () =>
+        fragment.insert(1, [new Y.XmlText("x")]),
+      );
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
+    });
+
+    it("refuses top-level text placed before an existing block", () => {
+      const { server, client, fragment } = serverAndClient();
+      const update = changes(client, () =>
+        fragment.insert(0, [new Y.XmlText("x")]),
+      );
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
+    });
+
+    it("refuses top-level text chained after a new block in one update", () => {
+      const { server, client, fragment } = serverAndClient();
+      const update = changes(client, () => {
+        fragment.insert(1, [new Y.XmlElement("paragraph")]);
+        fragment.insert(2, [new Y.XmlText("x")]);
+      });
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
+    });
+
+    it("refuses content whose position it cannot resolve", () => {
+      const { server, client, fragment } = serverAndClient();
+      // The paragraph never reaches the server: the text hangs off nothing.
+      changes(client, () =>
+        fragment.insert(1, [new Y.XmlElement("paragraph")]),
+      );
+      const update = changes(client, () =>
+        fragment.insert(2, [new Y.XmlText("x")]),
+      );
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
+    });
+
+    it("allows typing, blocks and other root types", () => {
+      const { server, client, fragment } = serverAndClient();
+      const update = changes(client, () => {
+        const paragraph = new Y.XmlElement("paragraph");
+        fragment.insert(1, [paragraph]);
+        const text = new Y.XmlText();
+        paragraph.insert(0, [text]);
+        text.insert(0, "hello");
+        ((fragment.get(0) as Y.XmlElement).get(0) as Y.XmlText).insert(
+          0,
+          "typed ",
+        );
+        client.getArray("tabs").insert(0, ["not the editor"]);
+      });
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual([]);
+    });
   });
 
   it("names unknown elements and marks", () => {
@@ -180,7 +263,7 @@ describe("findDisallowedSchemaNames (B2)", () => {
     } as unknown as Parameters<DocumentGuard["beforeHandleMessage"]>[0];
   }
 
-  it("closes with schema_rejected before any size check and logs ws_unknown_schema_name", async () => {
+  it("closes with schema_rejected and logs ws_unknown_schema_name", async () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
       const guard = new DocumentGuard({
@@ -310,6 +393,32 @@ describe("findDisallowedSchemaNames (B2)", () => {
             rawFrame([4, 2], toUpdate(mixedContent as JSONContent)),
           ),
         ).rejects.toEqual(DOCUMENT_TOO_LARGE);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("checks top-level content against the server's document", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const document = prosemirrorJSONToYDoc(
+          schema,
+          titleOnly as JSONContent,
+          "default",
+        );
+        const client = new Y.Doc();
+        Y.applyUpdate(client, Y.encodeStateAsUpdate(document));
+        const before = Y.encodeStateVector(client);
+        client.getXmlFragment("default").insert(1, [new Y.XmlText("x")]);
+        const update = Y.encodeStateAsUpdate(client, before);
+        await expect(
+          guardFor().beforeHandleMessage({
+            documentName: "doc",
+            update: rawFrame([0, 2], update),
+            requestHeaders: new Headers(),
+            document,
+          } as unknown as Parameters<DocumentGuard["beforeHandleMessage"]>[0]),
+        ).rejects.toEqual(SCHEMA_REJECTED);
       } finally {
         warn.mockRestore();
       }

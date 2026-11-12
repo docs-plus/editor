@@ -22,6 +22,7 @@ import {
   HOCUS_SYNC_MESSAGE_TYPES,
 } from "@/lib/security/hocus-frame";
 import { repairTabsArray } from "@/lib/security/tabs-doc-repair";
+import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 /** Close code for an update that would push a document past its cap. */
 export const DOCUMENT_TOO_LARGE = {
@@ -112,10 +113,114 @@ export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
   }
 }
 
+/** Reported for content stored directly in the editor fragment. */
+const ROOT_CONTENT_NAME = "#text";
+
+/** A root type's name, `null` inside a nested type, `undefined` if unknown. */
+type RootName = string | null | undefined;
+
+/**
+ * Finds the root type each item of an update lands in. An item encodes its
+ * parent only when it has no origin; otherwise it inherits the parent of its
+ * left (or right) origin, found among the update's own items or, failing
+ * that, in the server's document.
+ */
+function createRootResolver(
+  structs: readonly Y.Item[],
+  document: Y.Doc | undefined,
+): (item: Y.Item) => RootName {
+  const byClient = new Map<number, Y.Item[]>();
+  for (const struct of structs) {
+    const items = byClient.get(struct.id.client) ?? [];
+    items.push(struct);
+    byClient.set(struct.id.client, items);
+  }
+  const memo = new Map<Y.Item, RootName>();
+
+  /** Items of one client arrive in clock order: binary search the range. */
+  function findInUpdate(id: Y.ID): Y.Item | undefined {
+    const items = byClient.get(id.client);
+    if (!items) return undefined;
+    let low = 0;
+    let high = items.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >> 1;
+      const item = items[middle];
+      if (id.clock < item.id.clock) high = middle - 1;
+      else if (id.clock >= item.id.clock + item.length) low = middle + 1;
+      else return item;
+    }
+    return undefined;
+  }
+
+  function findInDocument(id: Y.ID): RootName {
+    if (!document) return undefined;
+    let found: Y.AbstractStruct;
+    try {
+      found = Y.getItem(document.store, id);
+    } catch {
+      return undefined;
+    }
+    // Yjs discards an item whose origin was garbage collected.
+    if (!(found instanceof Y.Item)) return null;
+    const parent = found.parent;
+    if (!(parent instanceof Y.AbstractType)) return null;
+    return parent._item === null ? Y.findRootTypeKey(parent) : null;
+  }
+
+  return (item) => {
+    const path: Y.Item[] = [];
+    let current = item;
+    let root: RootName;
+    for (;;) {
+      if (memo.has(current)) {
+        root = memo.get(current);
+        break;
+      }
+      const parent = current.parent as unknown;
+      if (typeof parent === "string") {
+        root = parent;
+        break;
+      }
+      // An ID: the parent is an item, so a nested type.
+      if (parent !== null) {
+        root = null;
+        break;
+      }
+      path.push(current);
+      const origin = current.origin ?? current.rightOrigin;
+      const next = origin ? findInUpdate(origin) : undefined;
+      if (!origin || next === undefined || path.includes(next)) {
+        root = origin ? findInDocument(origin) : undefined;
+        break;
+      }
+      current = next;
+    }
+    for (const visited of path) memo.set(visited, root);
+    return root;
+  };
+}
+
+/** Countable content the editor fragment cannot hold (it holds elements). */
+function isNonElementContent(item: Y.Item): boolean {
+  const { content } = item;
+  if (content instanceof Y.ContentDeleted) return false;
+  if (content instanceof Y.ContentType) {
+    return !(content.type instanceof Y.XmlElement);
+  }
+  return item.parentSub === null;
+}
+
 /**
  * Node and mark names in `update` that the schema allowlist does not know, at
  * most `limit` of them (truncated for logging). Null when the update cannot
  * be decoded, so callers fail closed.
+ *
+ * Content placed directly in the editor fragment (`default`) that is not an
+ * element is reported as `#text`: y-tiptap cannot project it and throws. Its
+ * position is resolved against `document`, the server's copy; content whose
+ * position cannot be resolved there or in the update is refused too, as
+ * Yjs would hold it back and apply it later, unchecked.
  *
  * Known gap: element attribute keys and marks on inline atom nodes are not
  * checked. y-prosemirror stores no marks on elements, and Tiptap drops
@@ -124,6 +229,7 @@ export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
 export function findDisallowedSchemaNames(
   update: Uint8Array,
   limit = 3,
+  document?: Y.Doc,
 ): string[] | null {
   const found: string[] = [];
   // A format run emits a start and an end item with the same key.
@@ -132,10 +238,13 @@ export function findDisallowedSchemaNames(
     if (!found.includes(shown)) found.push(shown);
   };
   try {
-    for (const struct of Y.decodeUpdate(update).structs) {
+    const items = Y.decodeUpdate(update).structs.filter(
+      (struct): struct is Y.Item => struct instanceof Y.Item,
+    );
+    const rootOf = createRootResolver(items, document);
+    for (const item of items) {
       if (found.length >= limit) break;
-      if (!(struct instanceof Y.Item)) continue;
-      const { content } = struct;
+      const { content } = item;
       if (content instanceof Y.ContentType) {
         if (
           content.type instanceof Y.XmlElement &&
@@ -147,6 +256,11 @@ export function findDisallowedSchemaNames(
         !isAllowedMarkKey(content.key)
       ) {
         report(markNameFromKey(content.key));
+      }
+      if (!isNonElementContent(item)) continue;
+      const root = rootOf(item);
+      if (root === EDITOR_FRAGMENT_NAME || root === undefined) {
+        report(ROOT_CONTENT_NAME);
       }
     }
   } catch {
@@ -209,7 +323,9 @@ export class DocumentGuard implements Extension {
       return;
     // Undecodable frames and updates log `names: []` (nothing nameable).
     const names =
-      payload === MALFORMED ? null : findDisallowedSchemaNames(payload);
+      payload === MALFORMED
+        ? null
+        : findDisallowedSchemaNames(payload, undefined, document);
     if (payload === MALFORMED || names === null || names.length > 0) {
       logAbuseEvent("ws_unknown_schema_name", {
         ip: getPinnedClientIp(requestHeaders),
