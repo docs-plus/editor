@@ -8,6 +8,7 @@ import * as Y from "yjs";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
 import {
   addsNoItems,
+  DOCUMENT_TOO_LARGE,
   DocumentGuard,
   findDisallowedSchemaNames,
   isDocumentUpdateFrame,
@@ -203,5 +204,124 @@ describe("findDisallowedSchemaNames (B2)", () => {
         payloadFor("doc", toUpdate(mixedContent as JSONContent)),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  describe("frame decoding matches Hocuspocus (bypass fixes)", () => {
+    const unknown = craft(["zzz"], []);
+
+    /** Frame with raw prefix bytes between the name and the payload. */
+    function rawFrame(prefix: number[], update: Uint8Array, padLength = false) {
+      const encoder = encoding.createEncoder();
+      encoding.writeVarString(encoder, "doc");
+      for (const byte of prefix) encoding.writeUint8(encoder, byte);
+      if (padLength) {
+        // length varint padded with zero continuation bytes
+        const n = update.byteLength;
+        for (const byte of [(n & 0x7f) | 0x80, 0x80, 0x80, 0x80, 0x80, 0x00])
+          encoding.writeUint8(encoder, byte);
+        encoding.writeUint8Array(encoder, update);
+      } else {
+        encoding.writeVarUint8Array(encoder, update);
+      }
+      return encoding.toUint8Array(encoder);
+    }
+    const guardFor = (maxBytes = 1e9) => {
+      const guard = new DocumentGuard({
+        maxDocumentBytes: () => maxBytes,
+        maxAwarenessStateBytes: 4096,
+      });
+      guard.recordStored("doc", 10);
+      return guard;
+    };
+    const run = (guard: DocumentGuard, frame: Uint8Array) =>
+      guard.beforeHandleMessage({
+        documentName: "doc",
+        update: frame,
+        requestHeaders: new Headers(),
+        document: new Y.Doc(),
+      } as unknown as Parameters<DocumentGuard["beforeHandleMessage"]>[0]);
+
+    it("rejects an unknown name in a SyncReply (type 4) frame", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          run(guardFor(), rawFrame([4, 2], unknown)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+        const event = JSON.parse(String(warn.mock.calls[0]?.[0]));
+        expect(event).toMatchObject({
+          event: "ws_unknown_schema_name",
+          documentName: "doc",
+          names: ["zzz"],
+        });
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("rejects sync step 2 (syncType 1) carrying an unknown name", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          run(guardFor(), rawFrame([0, 1], unknown)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("rejects zero-padded varints in the type and length fields", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const paddedType = [0x80, 0x80, 0x80, 0x80, 0x80, 0x00, 2];
+        await expect(
+          run(guardFor(), rawFrame(paddedType, unknown)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+        await expect(
+          run(guardFor(), rawFrame([0, 2], unknown, true)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("fails closed on a truncated sync frame", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const frame = rawFrame([0, 2], unknown);
+        await expect(
+          run(guardFor(), frame.subarray(0, frame.length - 3)),
+        ).rejects.toEqual(SCHEMA_REJECTED);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('"names":[]');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("still size-caps an over-cap update sent as type 4", async () => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          run(
+            guardFor(20),
+            rawFrame([4, 2], toUpdate(mixedContent as JSONContent)),
+          ),
+        ).rejects.toEqual(DOCUMENT_TOO_LARGE);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("passes a well-formed frame and leaves non-sync types alone", async () => {
+      const valid = toUpdate(mixedContent as JSONContent);
+      await expect(
+        run(guardFor(), rawFrame([0, 2], valid)),
+      ).resolves.toBeUndefined();
+      await expect(
+        run(guardFor(), rawFrame([4, 2], valid)),
+      ).resolves.toBeUndefined();
+      await expect(
+        run(guardFor(), rawFrame([1], unknown)),
+      ).resolves.toBeUndefined();
+    });
   });
 });

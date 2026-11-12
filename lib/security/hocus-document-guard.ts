@@ -6,6 +6,7 @@ import type {
   Extension,
   onChangePayload,
 } from "@hocuspocus/server";
+import * as decoding from "lib0/decoding";
 import * as Y from "yjs";
 
 import {
@@ -45,37 +46,38 @@ type DocumentGuardOptions = {
 
 type SizeEstimate = { stored: number; pending: number };
 
-const MESSAGE_SYNC = 0;
+/** Hocuspocus handles `Sync` (0) and `SyncReply` (4) frames identically. */
+const SYNC_MESSAGE_TYPES: ReadonlySet<number> = new Set([0, 4]);
 const SYNC_STEP_1 = 0;
+const SYNC_STEP_2 = 1;
+const SYNC_UPDATE = 2;
 /** An encoded Yjs update with no structs and no deletions is `[0, 0]`. */
 const EMPTY_UPDATE_BYTES = 2;
 
-/** Reads a lib0 varUint at `offset`; returns [value, nextOffset] or null. */
-function readVarUint(
-  bytes: Uint8Array,
-  offset: number,
-): [number, number] | null {
-  let value = 0;
-  let shift = 0;
-  for (let i = offset; i < bytes.length && shift < 35; i++) {
-    const byte = bytes[i] ?? 0;
-    value += (byte & 0x7f) * 2 ** shift;
-    if (byte < 0x80) return [value, i + 1];
-    shift += 7;
-  }
-  return null;
-}
+/** A sync frame whose body cannot be decoded; it must never be applied. */
+const MALFORMED = Symbol("malformed-sync-frame");
 
-/** The Yjs update carried by a Sync step 2 or update frame, else null. */
-function readSyncUpdate(frame: Uint8Array): Uint8Array | null {
-  const nameLength = readVarUint(frame, 0);
-  if (!nameLength) return null;
-  const messageType = readVarUint(frame, nameLength[1] + nameLength[0]);
-  if (!messageType || messageType[0] !== MESSAGE_SYNC) return null;
-  const syncType = readVarUint(frame, messageType[1]);
-  if (!syncType || syncType[0] === SYNC_STEP_1) return null;
-  const length = readVarUint(frame, syncType[1]);
-  return length ? frame.subarray(length[1], length[1] + length[0]) : null;
+/**
+ * The Yjs update carried by a Sync / SyncReply step 2 or update frame.
+ * Null for frames that carry none (awareness, auth, step 1, stateless).
+ * `MALFORMED` for a sync frame that does not decode. Decoded with lib0, as
+ * Hocuspocus does, so padded varints and out-of-range lengths cannot make
+ * the guard and the server disagree about what a frame contains.
+ */
+function readSyncUpdate(
+  frame: Uint8Array,
+): Uint8Array | null | typeof MALFORMED {
+  try {
+    const decoder = decoding.createDecoder(frame);
+    decoding.readVarString(decoder);
+    if (!SYNC_MESSAGE_TYPES.has(decoding.readVarUint(decoder))) return null;
+    const syncType = decoding.readVarUint(decoder);
+    if (syncType === SYNC_STEP_1) return null;
+    if (syncType !== SYNC_STEP_2 && syncType !== SYNC_UPDATE) return MALFORMED;
+    return decoding.readVarUint8Array(decoder);
+  } catch {
+    return MALFORMED;
+  }
 }
 
 /**
@@ -87,7 +89,11 @@ function readSyncUpdate(frame: Uint8Array): Uint8Array | null {
  */
 export function isDocumentUpdateFrame(frame: Uint8Array): boolean {
   const update = readSyncUpdate(frame);
-  return update !== null && update.byteLength > EMPTY_UPDATE_BYTES;
+  return (
+    update !== null &&
+    update !== MALFORMED &&
+    update.byteLength > EMPTY_UPDATE_BYTES
+  );
 }
 
 /**
@@ -197,9 +203,13 @@ export class DocumentGuard implements Extension {
     document,
   }: beforeHandleMessagePayload): Promise<void> {
     const payload = readSyncUpdate(update);
-    if (!payload || payload.byteLength <= EMPTY_UPDATE_BYTES) return;
-    const names = findDisallowedSchemaNames(payload);
-    if (names === null || names.length > 0) {
+    if (payload === null) return;
+    if (payload !== MALFORMED && payload.byteLength <= EMPTY_UPDATE_BYTES)
+      return;
+    // Undecodable frames and updates log `names: []` (nothing nameable).
+    const names =
+      payload === MALFORMED ? null : findDisallowedSchemaNames(payload);
+    if (payload === MALFORMED || names === null || names.length > 0) {
       logAbuseEvent("ws_unknown_schema_name", {
         ip: getPinnedClientIp(requestHeaders),
         documentName,
