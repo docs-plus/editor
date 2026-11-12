@@ -58,6 +58,15 @@ since the previous tag.
   three days. `bunfig.toml` still holds back releases younger than 3 days.
 
 ### Security
+- **Top-level content can no longer lock a document:** content other than an
+  element directly in a document's editor fragment made y-tiptap throw before
+  the client repair could run, so no client could open that document and open
+  editors could later overwrite it from a stale view. Ingress refuses it when
+  it can place it, but a client could slip it past by sending it before the
+  block it follows (and before this release, with a single update). Hocus now
+  deletes such content after every change to the fragment's top level, in the
+  same broadcast that delivers it, and cleans stored documents when they load
+  (`editor_root_swept` abuse event).
 - **Size-cap bypass closed:** the update-size guard decoded frames by hand
   and could be bypassed with SyncReply frames or padded varints. It now
   decodes with lib0 exactly as Hocuspocus does, so the cap and the new name

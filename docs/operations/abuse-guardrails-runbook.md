@@ -72,7 +72,7 @@ Redis deployment notes:
 - **P1**: total document cap reached, users cannot create new docs
 - **P2**: sustained throttle spike (`429`, `ws_guardrail_rejected`,
   `ws_upgrade_rejected` or `ws_throttle_ban`) for 5+ minutes, or any
-  `tabs_doc_repaired`
+  `tabs_doc_repaired` or `editor_root_swept` with `phase: "update"`
 - **P3**: retention purge failure
 
 ## Detection and Triage
@@ -103,6 +103,14 @@ Search logs for these JSON event names:
   multi-IP burst after a deploy; see the [schema rollout runbook](schema-rollout-runbook.md).
 - `tabs_doc_repaired` (malformed entries removed from a shared tab list; repeated
   events point to a client writing bad data)
+- `editor_root_swept` (Hocus deleted content that is not an element from the
+  top of a document's editor fragment, which no client could otherwise open;
+  `removed` counts entries, `types` uses fixed labels such as `text` and never
+  content). `phase: "load"` cleaned a document stored before the sweep
+  existed. `phase: "update"` means a client sent the content ahead of the block
+  it follows, so ingress could not place it; `ip` is the sender of the update
+  that released it, which may be a later update from the same client. Treat
+  any `update` event as P2; see the [schema rollout runbook](schema-rollout-runbook.md).
 
 Hocuspocus Logger output is one JSON line per message (`{"type":"hocus",...}`), so
 client-chosen document names cannot forge log lines.

@@ -7,7 +7,8 @@ section 3.1.
 An old bundle that meets a mark it does not know makes y-prosemirror delete the
 whole block and upload the deletion. Four guards stop that. Release N (this
 change) ships all four; the minimum client schema stays log-only until a later
-release raises it.
+release raises it. A server-side root sweep also keeps every document
+mountable when content slips past the ingress check.
 
 ## What the guards are
 
@@ -17,6 +18,7 @@ release raises it.
 | Offline namespace | Device copies live under `1:${host}~s2:${name}`. Pre-N bundles never read that key, so they cannot save a damaged copy over a new one. Legacy copies are merged in, then deleted inside one IndexedDB transaction. | none (client only) |
 | Freeze and repair | A document with unknown node or mark names freezes read-only with the update banner, by design. Any misfit made only of known names is fitted to the schema in place: an emptied fragment is reseeded, a missing title inserted, elements whose content does not fit are removed (as earlier releases did) and stray inline nodes such as a top-level hard break are wrapped in a paragraph. | `schema_repair_failed` analytics event when a repair fails |
 | Ingress allowlist | Hocus refuses any update that names a node or mark outside `lib/schema-names.ts`, or puts content other than an element directly in the editor fragment (logged as `#text`), and closes that document's connection with `4422` `schema_rejected`; the shared socket and its other documents stay open. Malformed sync frames are refused the same way. | `ws_unknown_schema_name` abuse event |
+| Root sweep | After every change to the top level of a document's editor fragment, and once when Hocus loads a document, Hocus deletes anything there that is not an element (`lib/security/editor-root-sweep.ts`). y-tiptap throws on such content before the client repair can run, so without the sweep no client could open the document. | `editor_root_swept` abuse event |
 
 Details worth knowing:
 
@@ -35,6 +37,26 @@ Details worth knowing:
   types 0 and 4). A frame that cannot be decoded is also refused, logged with
   `names: []`. Decoding every frame also closed an older size-cap bypass that
   used SyncReply frames and padded varints.
+- **Root sweep.** Ingress places top-level content against the server's copy
+  of the document. Content whose position the server does not have yet is let
+  through, because a client resuming from its device copy types before its
+  sync completes; Yjs holds it pending until a later update supplies the
+  position. A client can use that to land text directly in the fragment
+  (send the text first, then the block it follows). The sweep is a shallow
+  Yjs observer on the `default` fragment, installed by `DocumentGuard` in
+  `afterLoadDocument` (tab lists are skipped). It runs synchronously inside the
+  transaction that released the content, whatever its source (a connection,
+  Redis, or a pending update), so its deletion is queued in the same
+  event-loop turn and Hocuspocus merges both into one broadcast: connected
+  clients never see the stray content. Typing inside a block never triggers
+  it; adding or removing a block costs one walk of the top level. A document
+  stored with such content before this release is cleaned when it next loads,
+  before any client syncs. One known gap: Hocuspocus flushes its broadcast
+  queue as soon as it holds 1 MiB (`flushMaxBytes`). If the update that
+  releases the content fills it, connected clients get the content and the
+  deletion as two messages: an open editor fails to apply the first and
+  recovers, with no content lost, when the second arrives. The stored
+  document and every later load are clean either way.
 - **Highlights.** Highlights render from tokens but keep the attribute key
   `color`. Unknown values (old hex colours, the popover's old "Default
   background" `var(--background)`) render as plain text; the stored value is
@@ -148,6 +170,11 @@ means a client is writing names the server does not allow: either a hostile
 client or a release that skipped the allowlist step. Treat more than a handful
 per hour, or any burst from many IPs after a deploy, as P2. See the
 [abuse guardrails runbook](abuse-guardrails-runbook.md).
+
+`editor_root_swept` is normally zero too. `phase: "load"` means a document
+stored before this release held top-level content; a few right after the
+deploy are expected. `phase: "update"` means a client got content past ingress
+by sending it before its position; treat any as P2 and check the `ip`.
 
 ## Scripts and load tests
 
