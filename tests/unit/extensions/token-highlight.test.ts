@@ -43,7 +43,7 @@ describe("TokenHighlight", () => {
     expect(html("teal")).toContain('data-highlight="teal"');
   });
 
-  // a bare <mark> still gets the browser's default background; the safety goal is no inline style
+  // the bare <mark> is made transparent by document-editor.scss (`mark:not([data-highlight])`)
   it("renders unknown and hostile values without inline style or token", () => {
     for (const v of [
       "red;background:url(x)",
@@ -52,6 +52,7 @@ describe("TokenHighlight", () => {
       "cyan",
     ]) {
       expect(html(v)).not.toContain("style=");
+      expect(html(v)).toContain("<mark");
       expect(html(v)).not.toContain("data-highlight");
     }
   });

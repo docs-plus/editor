@@ -202,7 +202,9 @@ html:root {
 $highlight-tokens: gray, brown, red, orange, yellow, green, teal, blue, purple,
   pink;
 
-.tiptap mark[data-highlight] {
+// Unknown, hex, var(--background) or hostile values render as plain text.
+.tiptap mark:not([data-highlight]) {
+  background-color: transparent;
   color: inherit;
 }
 
