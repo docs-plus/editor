@@ -196,16 +196,68 @@ describe("findDisallowedSchemaNames (B2)", () => {
       expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
     });
 
-    it("refuses content whose position it cannot resolve", () => {
+    it("allows content whose position it cannot resolve yet", () => {
       const { server, client, fragment } = serverAndClient();
-      // The paragraph never reaches the server: the text hangs off nothing.
+      // The paragraph has not reached the server: Yjs holds the text pending,
+      // and the client repair strips it if it lands in the fragment.
       changes(client, () =>
         fragment.insert(1, [new Y.XmlElement("paragraph")]),
       );
       const update = changes(client, () =>
         fragment.insert(2, [new Y.XmlText("x")]),
       );
-      expect(findDisallowedSchemaNames(update, 3, server)).toEqual(["#text"]);
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual([]);
+    });
+
+    /** A client restored from a device copy holding edits the server lacks. */
+    function resumedFromDeviceCopy(
+      offlineEdit: (fragment: Y.XmlFragment) => void,
+    ) {
+      const { server, client, fragment } = serverAndClient();
+      offlineEdit(fragment);
+      const resumed = new Y.Doc();
+      Y.applyUpdate(resumed, Y.encodeStateAsUpdate(client));
+      return { server, resumed, fragment: resumed.getXmlFragment("default") };
+    }
+    const textOf = (fragment: Y.XmlFragment, index: number) =>
+      (fragment.get(index) as Y.XmlElement).get(0) as Y.XmlText;
+
+    it("allows a keystroke after offline text, before the sync", () => {
+      const { server, resumed, fragment } = resumedFromDeviceCopy((offline) =>
+        textOf(offline, 0).insert(textOf(offline, 0).length, " offline words"),
+      );
+      const update = changes(resumed, () => {
+        const text = textOf(fragment, 0);
+        text.insert(text.length, "!");
+      });
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual([]);
+    });
+
+    it("allows a keystroke in a paragraph created offline", () => {
+      const { server, resumed, fragment } = resumedFromDeviceCopy((offline) => {
+        const paragraph = new Y.XmlElement("paragraph");
+        offline.insert(1, [paragraph]);
+        const text = new Y.XmlText();
+        paragraph.insert(0, [text]);
+        text.insert(0, "offline paragraph");
+      });
+      const update = changes(resumed, () => {
+        const text = textOf(fragment, 1);
+        text.insert(text.length, "?");
+      });
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual([]);
+    });
+
+    it("allows a tab list update whose origin is not on the server yet", () => {
+      const server = new Y.Doc();
+      server.getArray("tabs").insert(0, [{ id: "playground" }]);
+      const client = new Y.Doc();
+      Y.applyUpdate(client, Y.encodeStateAsUpdate(server));
+      const tabs = client.getArray("tabs");
+      // The first push is still queued when the provider drops its queue.
+      changes(client, () => tabs.push([{ id: "unsent" }]));
+      const update = changes(client, () => tabs.push([{ id: "next" }]));
+      expect(findDisallowedSchemaNames(update, 3, server)).toEqual([]);
     });
 
     it("resolves a long chain of blocks in linear time", () => {

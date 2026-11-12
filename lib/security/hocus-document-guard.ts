@@ -116,7 +116,7 @@ export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
 /** Reported for content stored directly in the editor fragment. */
 const ROOT_CONTENT_NAME = "#text";
 
-/** A root type's name, `null` inside a nested type, `undefined` if unknown. */
+/** A root type's name, `null` inside a nested type, `undefined` if not known yet. */
 type RootName = string | null | undefined;
 
 /**
@@ -221,9 +221,10 @@ function isNonElementContent(item: Y.Item): boolean {
  *
  * Content placed directly in the editor fragment (`default`) that is not an
  * element is reported as `#text`: y-tiptap cannot project it and throws. Its
- * position is resolved against `document`, the server's copy; content whose
- * position cannot be resolved there or in the update is refused too, as
- * Yjs would hold it back and apply it later, unchecked.
+ * position is resolved against `document`, the server's copy. Content whose
+ * position is not there yet is allowed: a client resuming from its device
+ * copy types before its sync step 2 arrives, and Yjs holds such content
+ * pending. If it later lands in the fragment, the client repair strips it.
  *
  * Known gap: element attribute keys and marks on inline atom nodes are not
  * checked. y-prosemirror stores no marks on elements, and Tiptap drops
@@ -262,9 +263,7 @@ export function findDisallowedSchemaNames(
       }
       if (!isNonElementContent(item)) continue;
       const root = rootOf(item);
-      if (root === EDITOR_FRAGMENT_NAME || root === undefined) {
-        report(ROOT_CONTENT_NAME);
-      }
+      if (root === EDITOR_FRAGMENT_NAME) report(ROOT_CONTENT_NAME);
     }
   } catch {
     return null;
