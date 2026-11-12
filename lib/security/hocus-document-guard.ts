@@ -8,6 +8,11 @@ import type {
 } from "@hocuspocus/server";
 import * as Y from "yjs";
 
+import {
+  isAllowedMarkKey,
+  isAllowedNodeName,
+  markNameFromKey,
+} from "@/lib/schema-names";
 import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { getPinnedClientIp } from "@/lib/security/client-ip";
 import { isTabsDocumentId } from "@/lib/security/doc-id-validator";
@@ -18,6 +23,14 @@ export const DOCUMENT_TOO_LARGE = {
   code: 4413,
   reason: "document_too_large",
 } as const;
+
+/** Close for an update naming a node or mark outside the schema allowlist. */
+export const SCHEMA_REJECTED = {
+  code: 4422,
+  reason: "schema_rejected",
+} as const;
+
+const MAX_LOGGED_NAME_LENGTH = 40;
 
 type DocumentGuardOptions = {
   /** Byte cap for a document's encoded state. */
@@ -93,6 +106,49 @@ export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
 }
 
 /**
+ * Node and mark names in `update` that the schema allowlist does not know, at
+ * most `limit` of them (truncated for logging). Null when the update cannot
+ * be decoded, so callers fail closed.
+ *
+ * Known gap: element attribute keys and marks on inline atom nodes are not
+ * checked. y-prosemirror stores no marks on elements, and Tiptap drops
+ * unknown attributes.
+ */
+export function findDisallowedSchemaNames(
+  update: Uint8Array,
+  limit = 3,
+): string[] | null {
+  const found: string[] = [];
+  // A format run emits a start and an end item with the same key.
+  const report = (name: string) => {
+    const shown = name.slice(0, MAX_LOGGED_NAME_LENGTH);
+    if (!found.includes(shown)) found.push(shown);
+  };
+  try {
+    for (const struct of Y.decodeUpdate(update).structs) {
+      if (found.length >= limit) break;
+      if (!(struct instanceof Y.Item)) continue;
+      const { content } = struct;
+      if (content instanceof Y.ContentType) {
+        if (
+          content.type instanceof Y.XmlElement &&
+          !isAllowedNodeName(content.type.nodeName)
+        )
+          report(content.type.nodeName);
+      } else if (
+        content instanceof Y.ContentFormat &&
+        !isAllowedMarkKey(content.key)
+      ) {
+        report(markNameFromKey(content.key));
+      }
+    }
+  } catch {
+    return null;
+  }
+  return found;
+}
+
+/**
  * Enforces document size while updates arrive, not only at save time.
  *
  * The estimate is the last known encoded size plus every update applied
@@ -140,12 +196,22 @@ export class DocumentGuard implements Extension {
     requestHeaders,
     document,
   }: beforeHandleMessagePayload): Promise<void> {
+    const payload = readSyncUpdate(update);
+    if (!payload || payload.byteLength <= EMPTY_UPDATE_BYTES) return;
+    const names = findDisallowedSchemaNames(payload);
+    if (names === null || names.length > 0) {
+      logAbuseEvent("ws_unknown_schema_name", {
+        ip: getPinnedClientIp(requestHeaders),
+        documentName,
+        names: names ?? [],
+      });
+      throw SCHEMA_REJECTED;
+    }
     const size = this.sizes.get(documentName);
-    if (!size || !isDocumentUpdateFrame(update)) return;
+    if (!size) return;
     const limit = this.options.maxDocumentBytes(documentName);
     if (size.stored + size.pending + update.byteLength <= limit) return;
-    const payload = readSyncUpdate(update);
-    if (payload && addsNoItems(payload, document)) return;
+    if (addsNoItems(payload, document)) return;
     logAbuseEvent("ws_update_too_large", {
       ip: getPinnedClientIp(requestHeaders),
       documentName,
