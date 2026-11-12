@@ -316,7 +316,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Nightly, not per PR:** `.github/workflows/nightly.yml` runs the `pwa`
   project against a production build, the Yjs soak, the quick multi- and
   single-user soaks and the load harness (both scenarios) every day at 03:41
-  UTC, or from Actions → Nightly → Run workflow. Run the layer locally before
+  and 08:00 UTC, or from Actions → Nightly → Run workflow. Run the layer locally before
   merging a change it covers.
 - **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
   CI on its branch itself (`gh workflow run ci.yml`), because pull requests

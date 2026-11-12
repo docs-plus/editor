@@ -1,6 +1,6 @@
 name: Nightly
 
-# The test layers CI skips on pull requests, once a day on main:
+# The test layers CI skips on pull requests, twice a day on main:
 #   pwa    service worker and offline tests against a production build
 #   soak   Yjs reconnection soak, a quick multi-user soak and a 5-minute
 #          single-user soak against next dev
@@ -12,8 +12,9 @@ name: Nightly
 
 on:
   schedule:
-    # 03:41 UTC daily.
+    # Twice daily: 03:41 UTC (night) and 08:00 UTC (morning).
     - cron: "41 3 * * *"
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 permissions:
