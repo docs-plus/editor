@@ -24,6 +24,10 @@ since the previous tag.
   alongside it. Docs only, no runtime change.
 
 ### Changed
+- **Typing budget runs on its own:** `performance.spec.ts` moved to a `perf`
+  Playwright project (one worker, starts after `chromium`). CI and
+  `make test-e2e` run `--project=chromium --project=perf`; `make test-perf`
+  runs `--project=perf --no-deps`.
 - **Toolbar updates catch up within 1 s** (`TOOLBAR_MAX_WAIT_MS`) during
   continuous edits, such as a collaborator typing without pause.
 - **Toolbar controls derive visibility in render,** so they hide at once when
@@ -34,12 +38,23 @@ since the previous tag.
   three days. `bunfig.toml` still holds back releases younger than 3 days.
 
 ### Fixed
-- **Toolbar focus outline and pressed bar** are visible in dark mode and in
-  Windows High Contrast (forced colours).
+- **Focus outline and pressed bar on every button:** `Button`
+  (`components/ui/button.tsx`) draws a 2px solid focus outline and a 2px
+  pressed bar (`aria-pressed`), so the new look applies app-wide, not only
+  in the toolbar. Both stay visible in dark mode and in Windows High
+  Contrast (forced colours).
 - **Disabled toolbar controls stay focusable** and say why they are disabled.
 - **Style and list menus are named by value** ("Normal text", "No list") and
-  use radio items; picking the checked item does nothing.
-- **Highlight swatches are named pressed buttons** in a dialog.
+  use radio items; picking the checked item does nothing. They close after a
+  pick and return focus to the editor at once, so the next keystroke lands in
+  the document.
+- **Text styles are disabled in the title,** with the reason "Title is
+  always H1"; the style button still reads "Title".
+- **Highlight swatches are named pressed buttons** in a dialog. Focus stays
+  in the dialog, Esc returns it to the Highlight button, and toolbar arrow
+  keys move from whichever control has focus.
+- **Typing stays in the editor after arrowing in the toolbar:** a later
+  toolbar re-render no longer pulls focus back to the last arrowed control.
 - **Indent and outdent buttons work in lists,** like Tab.
 - **Headings and the caret stay clear of the sticky toolbar.**
 - **Focus no longer drops to the page** when a toolbar control disappears.
