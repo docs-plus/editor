@@ -10,6 +10,28 @@ since the previous tag.
 ## [Unreleased]
 
 ### Added
+- **Rollout safety for the smart toolbar (release N).** Lets later releases
+  add marks and attributes without freezing or corrupting older clients. See
+  `docs/operations/schema-rollout-runbook.md`.
+  - **Client version gate, log-only:** `HOCUS_MIN_CLIENT_SCHEMA` (default 0,
+    no floor yet). Hocus logs per-minute `client_schema` counts and refuses
+    nothing until an operator raises it.
+  - **`schema` and `build` socket parameters** sent by the client
+    (`NEXT_PUBLIC_BUILD_ID`, default the git short SHA).
+  - **Ingress name allowlist:** updates that introduce a node or mark name
+    outside the schema are refused with close 4422 (`schema_rejected`,
+    logged as `ws_unknown_schema_name`) and the client does not reconnect.
+  - **Freeze on unknown, repair on misfit:** the editor goes read-only on an
+    unknown schema name or an outdated client, repairs known misfits, and
+    shows a notice (outdated: reload, device copy kept; failed repair:
+    `schema_repair_failed` event and banner).
+  - **Offline `~s2` namespace** for device copies, with a transactional merge
+    of legacy copies (the legacy key is deleted only after a successful
+    save; IndexedDB writes now settle on commit).
+  - **Token-aware highlight rendering** (attribute key stays `color`) and a
+    teal highlight variable. The playground seed uses tokens.
+  - **Schema snapshot test** and **schema rollout runbook**.
+  - `E2E_BASE_URL` overrides the Playwright base URL.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
@@ -17,10 +39,28 @@ since the previous tag.
   alongside it. Docs only, no runtime change.
 
 ### Changed
+- **Highlights with an unknown value render as plain text:** a highlight
+  whose value is not a known token (old hex highlights, the old "Default
+  background") renders without an inline style. Stored values are untouched.
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
 - **Nightly runs twice a day:** 03:41 UTC (night) and 08:00 UTC (morning).
 - **docs.plus extension refresh runs daily** at 04:17 UTC instead of every
   three days. `bunfig.toml` still holds back releases younger than 3 days.
+
+### Security
+- **Size-cap bypass closed:** the update-size guard decoded frames by hand
+  and could be bypassed with SyncReply frames or padded varints. It now
+  decodes with lib0 exactly as Hocuspocus does, so the cap and the new name
+  allowlist see every update.
+
+### Deploy
+1. Pull, `bun install --frozen-lockfile`, then `bun run build`.
+2. Restart Hocus first: `bunx pm2@6.0.14 restart editor-hocus --update-env`.
+   Confirm `[hocus] client schema gate: min=0 (log only)` in its log.
+3. Then restart Next: `bunx pm2@6.0.14 restart editor-next --update-env`.
+4. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. Read the `client_schema` counts.
+5. From now on, never roll back below this release, and never lower the gate
+   once raised (see the runbook). `NEXT_PUBLIC_BUILD_ID` is optional.
 
 ## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
 
