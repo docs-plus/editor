@@ -26,6 +26,24 @@ test.describe("toolbar focus and disabled controls", () => {
       .toBe(true);
   });
 
+  test("a disabled Undo explains itself via aria-describedby", async ({
+    page,
+  }) => {
+    await openToolbarTestDoc(page);
+    const undo = toolbarButton(page, "Undo");
+    await expect(undo).toHaveAttribute("aria-disabled", "true");
+    await expect
+      .poll(() =>
+        undo.evaluate((el) =>
+          (el.getAttribute("aria-describedby") ?? "")
+            .split(" ")
+            .map((id) => document.getElementById(id)?.textContent)
+            .filter(Boolean),
+        ),
+      )
+      .toContain("Nothing to undo");
+  });
+
   test("an aria-disabled menu trigger stays closed", async ({ page }) => {
     await openToolbarTestDoc(page);
     // Lists cannot apply to a selected horizontal rule, so the trigger is disabled.

@@ -105,3 +105,42 @@ describe("ToolbarButton disabled with a reason", () => {
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
   });
 });
+
+describe("ToolbarButton disabled with a reason and a tooltip", () => {
+  it("keeps the reason in aria-describedby through the tooltip trigger", () => {
+    const button = render({
+      disabled: true,
+      disabledReason: "Nothing to undo",
+      tooltip: "Undo",
+      shortcutKeys: "mod+z",
+      "aria-label": "Undo",
+    });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    const ids = (button.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .filter(Boolean);
+    const texts = ids.map((id) => document.getElementById(id)?.textContent);
+    expect(texts).toContain("Nothing to undo");
+  });
+
+  it("shows the reason, not the label or shortcut, in the tooltip", async () => {
+    const button = render({
+      disabled: true,
+      disabledReason: "Nothing to undo",
+      tooltip: "Undo",
+      shortcutKeys: "mod+z",
+      "aria-label": "Undo",
+    });
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+      button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      button.focus();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    const popup = document.querySelector('[data-slot="tooltip-content"]');
+    expect(popup?.textContent).toContain("Nothing to undo");
+    expect(popup?.textContent).not.toContain("Undo​");
+    expect(popup?.querySelector("kbd")).toBeNull();
+  });
+});
