@@ -71,6 +71,7 @@ Code alone cannot disable GA4's automatic collection. In GA Admin:
 | `collab_peers` | `peers_bucket` (`1`, `2`, `3-5`, `6-10`, `11+`; peak per document view) | `components/tiptap-ui/user-identity-button.tsx` |
 | `outbound_click` | `target` (`github`, `discord`) | `components/tiptap-ui/user-identity-button.tsx` |
 | `pwa_install` | `outcome` (`accepted`, `dismissed`) | `components/pwa/install-app-button.tsx` |
+| `schema_repair_failed` | — | `lib/schema-guard.ts` |
 
 Register `provider` and `peers_bucket` as event-scoped custom dimensions, and
 `tab_count` and `closed_count` as custom metrics.

@@ -1,9 +1,32 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
 import type { NextConfig } from "next";
 
 import { GA_MEASUREMENT_ID } from "./lib/analytics-config";
 import { buildContentSecurityPolicy } from "./lib/security/content-security-policy";
 
+function resolveBuildId(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_BUILD_ID?.trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const sha = execSync("git rev-parse --short=12 HEAD", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    if (sha) return sha;
+  } catch {
+    // not a git checkout (e.g. a source tarball)
+  }
+  const pkg = JSON.parse(readFileSync("./package.json", "utf8")) as {
+    version: string;
+  };
+  return pkg.version;
+}
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_BUILD_ID: resolveBuildId() },
   // Next 16.4+ rewrites AGENTS.md when it detects a coding agent; that file
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,

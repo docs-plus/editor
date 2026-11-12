@@ -5,6 +5,12 @@ import * as Y from "yjs";
  * merged into: every copy under an older epoch is ignored and cleared.
  */
 export const OFFLINE_CACHE_EPOCH = 1;
+/**
+ * Namespace for copies written by schema-aware bundles. Hardcoded, never
+ * derived from CLIENT_SCHEMA: pre-N bundles only read and prune keys without
+ * it, so they can never load or merge these copies.
+ */
+export const OFFLINE_NAMESPACE = "s2";
 /** Copies older than this are dropped. Keep below TOMBSTONE_RETENTION_DAYS. */
 export const OFFLINE_DOC_MAX_AGE_DAYS = 14;
 /** At most this many documents are kept on the device. */
@@ -17,7 +23,7 @@ const DB_NAME = "tinydocy-offline";
 const STORE = "docs";
 
 export type StoredDoc = {
-  /** `<epoch>:<server host>:<document name>` */
+  /** `<epoch>:<server host>~s2:<document name>`, or the legacy `<epoch>:<server host>:<document name>` */
   key: string;
   name: string;
   update: Uint8Array;
@@ -29,12 +35,42 @@ export interface DocStoreBackend {
   get(key: string): Promise<StoredDoc | undefined>;
   put(doc: StoredDoc): Promise<void>;
   delete(key: string): Promise<void>;
+  /**
+   * Deletes `key` only if it still holds a copy with this `updatedAt` and
+   * byte length, checked and deleted atomically. True if it was deleted.
+   */
+  deleteIfUnchanged(
+    key: string,
+    expected: { updatedAt: number; byteLength: number },
+  ): Promise<boolean>;
   all(): Promise<StoredDoc[]>;
   clear(): Promise<void>;
 }
 
 export function storeKey(serverHost: string, name: string): string {
+  return `${OFFLINE_CACHE_EPOCH}:${serverHost}~${OFFLINE_NAMESPACE}:${name}`;
+}
+
+/** Key pre-N bundles read and write; merged into `storeKey` on load. */
+export function legacyStoreKey(serverHost: string, name: string): string {
   return `${OFFLINE_CACHE_EPOCH}:${serverHost}:${name}`;
+}
+
+/** The saved copy plus a legacy copy still waiting to be merged. */
+export type LoadedCopy = {
+  current: Uint8Array | null;
+  legacy: StoredDoc | null;
+};
+
+function isUnchanged(
+  doc: StoredDoc | undefined,
+  expected: { updatedAt: number; byteLength: number },
+): boolean {
+  return (
+    doc !== undefined &&
+    doc.updatedAt === expected.updatedAt &&
+    doc.update.byteLength === expected.byteLength
+  );
 }
 
 function isCurrent(doc: StoredDoc, now: number): boolean {
@@ -52,15 +88,33 @@ export class LocalDocStore {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async load(name: string): Promise<Uint8Array | null> {
-    const key = storeKey(this.serverHost, name);
+  /** Both copies of `name`, or null if neither exists (expired ones are deleted). */
+  async load(name: string): Promise<LoadedCopy | null> {
+    const current = await this.read(storeKey(this.serverHost, name));
+    const legacy = await this.read(legacyStoreKey(this.serverHost, name));
+    if (!current && !legacy) return null;
+    return { current: current?.update ?? null, legacy };
+  }
+
+  private async read(key: string): Promise<StoredDoc | null> {
     const stored = await this.backend.get(key);
     if (!stored) return null;
     if (!isCurrent(stored, this.now())) {
       await this.backend.delete(key);
       return null;
     }
-    return stored.update;
+    return stored;
+  }
+
+  /**
+   * Deletes the legacy copy once it is merged and saved, unless a pre-N tab
+   * rewrote it since `legacy` was loaded. True if it was deleted.
+   */
+  async retireLegacy(name: string, legacy: StoredDoc): Promise<boolean> {
+    return this.backend.deleteIfUnchanged(
+      legacyStoreKey(this.serverHost, name),
+      { updatedAt: legacy.updatedAt, byteLength: legacy.update.byteLength },
+    );
   }
 
   async save(name: string, update: Uint8Array): Promise<void> {
@@ -74,6 +128,7 @@ export class LocalDocStore {
 
   async remove(name: string): Promise<void> {
     await this.backend.delete(storeKey(this.serverHost, name));
+    await this.backend.delete(legacyStoreKey(this.serverHost, name));
   }
 
   async clear(): Promise<void> {
@@ -82,8 +137,10 @@ export class LocalDocStore {
 
   /**
    * Deletes expired and other-epoch copies, copies whose names `isWanted`
-   * rejects, and the least recently saved copies beyond `maxDocs`. Names in
-   * `keep` (open or unsynced documents) are never deleted.
+   * rejects, and the least recently saved documents beyond `maxDocs` (both
+   * keys of a document count once and go together). Names in `keep` (open
+   * or unsynced documents) are never deleted. Current and legacy keys of
+   * this server follow the same rules.
    */
   async prune({
     keep,
@@ -95,12 +152,15 @@ export class LocalDocStore {
     maxDocs?: number;
   }): Promise<string[]> {
     const now = this.now();
-    const prefix = `${OFFLINE_CACHE_EPOCH}:${this.serverHost}:`;
+    const prefixes = [
+      storeKey(this.serverHost, ""),
+      legacyStoreKey(this.serverHost, ""),
+    ];
     const docs = await this.backend.all();
     const removed: string[] = [];
     const survivors: StoredDoc[] = [];
     for (const doc of docs) {
-      const ours = doc.key.startsWith(prefix);
+      const ours = prefixes.some((prefix) => doc.key.startsWith(prefix));
       const stale = !isCurrent(doc, now);
       if (keep.has(doc.name) && ours && !stale) {
         survivors.push(doc);
@@ -114,17 +174,23 @@ export class LocalDocStore {
         survivors.push(doc);
       }
     }
-    const evictable = survivors
-      .filter((doc) => !keep.has(doc.name))
-      .sort((a, b) => a.updatedAt - b.updatedAt);
-    let excess = survivors.length - maxDocs;
-    for (const doc of evictable) {
+    const byName = new Map<string, StoredDoc[]>();
+    for (const doc of survivors) {
+      byName.set(doc.name, [...(byName.get(doc.name) ?? []), doc]);
+    }
+    const lastSaved = (copies: StoredDoc[]) =>
+      Math.max(...copies.map((doc) => doc.updatedAt));
+    const evictable = [...byName]
+      .filter(([name]) => !keep.has(name))
+      .sort(([, a], [, b]) => lastSaved(a) - lastSaved(b));
+    let excess = byName.size - maxDocs;
+    for (const [name, copies] of evictable) {
       if (excess <= 0) break;
-      await this.backend.delete(doc.key);
-      removed.push(doc.name);
+      for (const doc of copies) await this.backend.delete(doc.key);
+      removed.push(name);
       excess--;
     }
-    return removed;
+    return [...new Set(removed)];
   }
 }
 
@@ -139,8 +205,9 @@ export type LocalBinding = {
 /**
  * Mirrors `doc` into the store: applies the saved copy first (with
  * LOCAL_ORIGIN), then saves the compacted state shortly after every change,
- * local or remote. Storage errors never break editing; they only disable
- * the local copy for this document.
+ * local or remote. A legacy copy is merged too, saved under the current key,
+ * and only then retired. Storage errors never break editing; they only
+ * disable the local copy for this document.
  */
 export function bindLocalCopy(
   doc: Y.Doc,
@@ -158,6 +225,7 @@ export function bindLocalCopy(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
   let disabled = false;
+  let migration: Promise<void> | undefined;
 
   const write = async () => {
     timer = undefined;
@@ -174,10 +242,30 @@ export function bindLocalCopy(
     timer = setTimeout(write, debounceMs);
   };
 
+  // LOCAL_ORIGIN updates never reach onUpdate, so the merged state is saved
+  // explicitly; the legacy copy is deleted only once that save succeeded.
+  const migrate = async (legacy: StoredDoc, merged: Uint8Array) => {
+    try {
+      await store.save(name, merged);
+    } catch {
+      disabled = true;
+      return;
+    }
+    try {
+      await store.retireLegacy(name, legacy);
+    } catch {
+      // Kept; the next load merges it again.
+    }
+  };
+
   const hydrated = (hydrate ? store.load(name) : Promise.resolve(null))
-    .then((update) => {
-      if (destroyed || !update) return false;
-      Y.applyUpdate(doc, update, LOCAL_ORIGIN);
+    .then((copy) => {
+      if (destroyed || !copy) return false;
+      if (copy.current) Y.applyUpdate(doc, copy.current, LOCAL_ORIGIN);
+      if (copy.legacy) {
+        Y.applyUpdate(doc, copy.legacy.update, LOCAL_ORIGIN);
+        migration = migrate(copy.legacy, Y.encodeStateAsUpdate(doc));
+      }
       return true;
     })
     .catch(() => {
@@ -191,6 +279,7 @@ export function bindLocalCopy(
   return {
     hydrated,
     async flush() {
+      await migration;
       if (!timer) return;
       clearTimeout(timer);
       await write();
@@ -232,18 +321,55 @@ export function createIndexedDbBackend(): DocStoreBackend | null {
     const db = await open();
     return request(run(db.transaction(STORE, mode).objectStore(STORE)));
   };
+  /**
+   * Runs `run` in one readwrite transaction and settles on commit, not on
+   * request success: a write that later aborts (quota) must reject, or the
+   * caller would treat an unsaved copy as saved.
+   */
+  const commit = async <T>(
+    run: (store: IDBObjectStore, done: (value: T) => void) => void,
+  ): Promise<T> => {
+    const db = await open();
+    return new Promise<T>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      let result: T;
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error("transaction aborted"));
+      run(tx.objectStore(STORE), (value) => {
+        result = value;
+      });
+    });
+  };
   return {
     get: (key) => withStore("readonly", (s) => s.get(key)),
-    put: async (doc) => {
-      await withStore("readwrite", (s) => s.put(doc));
-    },
-    delete: async (key) => {
-      await withStore("readwrite", (s) => s.delete(key));
-    },
+    put: (doc) =>
+      commit<void>((s) => {
+        s.put(doc);
+      }),
+    delete: (key) =>
+      commit<void>((s) => {
+        s.delete(key);
+      }),
+    // Check and delete in one transaction with no await in between, so a
+    // pre-N tab cannot rewrite the copy after the check.
+    deleteIfUnchanged: (key, expected) =>
+      commit<boolean>((s, done) => {
+        done(false);
+        const req = s.get(key);
+        req.onsuccess = () => {
+          if (!isUnchanged(req.result as StoredDoc | undefined, expected)) {
+            return;
+          }
+          s.delete(key);
+          done(true);
+        };
+      }),
     all: () => withStore("readonly", (s) => s.getAll()),
-    clear: async () => {
-      await withStore("readwrite", (s) => s.clear());
-    },
+    clear: () =>
+      commit<void>((s) => {
+        s.clear();
+      }),
   };
 }
 
@@ -257,6 +383,11 @@ export function createMemoryBackend(): DocStoreBackend {
     },
     delete: async (key) => {
       docs.delete(key);
+    },
+    deleteIfUnchanged: async (key, expected) => {
+      if (!isUnchanged(docs.get(key), expected)) return false;
+      docs.delete(key);
+      return true;
     },
     all: async () => [...docs.values()],
     clear: async () => docs.clear(),
