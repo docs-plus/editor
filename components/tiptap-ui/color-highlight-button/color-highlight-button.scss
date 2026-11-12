@@ -6,6 +6,24 @@
   border-radius: var(--radius-xl);
   background-color: var(--highlight-color);
   transition: transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  // Dots must keep their colour in forced-colours mode; a CanvasText border
+  // keeps them visible, and the check glyph carries the pressed state (1.4.1).
+  forced-color-adjust: none;
+  border: 1px solid CanvasText;
+  box-sizing: border-box;
+
+  .tiptap-button-highlight-check {
+    position: relative;
+    z-index: 1;
+    width: 0.8rem;
+    height: 0.8rem;
+    color: CanvasText;
+    stroke-width: 3;
+  }
 
   &::after {
     content: "";

@@ -14,6 +14,8 @@ import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+// --- Icons ---
+import { CheckIcon } from "@/lib/icons";
 
 // --- Styles ---
 import "@/components/tiptap-ui/color-highlight-button/color-highlight-button.scss";
@@ -147,7 +149,14 @@ export const ColorHighlightButton = forwardRef<
               style={
                 { "--highlight-color": highlightColor } as React.CSSProperties
               }
-            />
+            >
+              {isActive && (
+                <CheckIcon
+                  aria-hidden="true"
+                  className="tiptap-button-highlight-check"
+                />
+              )}
+            </span>
             {text && <span>{text}</span>}
             {showShortcut && <ShortcutBadge shortcutKeys={shortcutKeys} />}
           </>

@@ -22,7 +22,7 @@ export function MobileToolbarContent({ onBack }: MobileToolbarContentProps) {
 
       <ToolbarSeparator />
 
-      <ColorHighlightPopoverContent />
+      <ColorHighlightPopoverContent navigation="toolbar" />
     </>
   );
 }

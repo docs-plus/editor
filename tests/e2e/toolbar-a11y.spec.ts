@@ -152,3 +152,99 @@ test("forced colours keep the focus outline and mark pressed with Highlight", as
     contentType: "image/png",
   });
 });
+
+/** Types a word into a fresh paragraph and selects it. */
+async function selectWord(page: Page) {
+  await page.evaluate(() => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    const end = editor.state.doc.content.size;
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(end, {
+        type: "paragraph",
+        content: [{ type: "text", text: "highlight me" }],
+      })
+      .run();
+    const { doc } = editor.state;
+    const to = doc.content.size - 1;
+    editor
+      .chain()
+      .focus()
+      .setTextSelection({ from: to - "highlight me".length, to })
+      .run();
+  });
+}
+
+test("highlight dialog: named swatches, focus on open, arrows move focus only", async ({
+  page,
+}) => {
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  const trigger = page
+    .getByRole("toolbar")
+    .getByRole("button", { name: /highlight/i })
+    .first();
+  await expect(trigger).not.toHaveAttribute("aria-pressed", /.*/);
+  await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+  await trigger.click();
+
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  await expect(
+    dialog.getByRole("group", { name: "Highlight colours" }),
+  ).toBeVisible();
+  await expect(
+    dialog.locator('[role="menuitem"], [tabindex="0"]:not(button)'),
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "Green highlight" }),
+  ).toBeFocused();
+
+  const before = await page.evaluate(() => window.__tiptap_editor?.getJSON());
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    dialog.getByRole("button", { name: "Blue highlight" }),
+  ).toBeFocused();
+  expect(await page.evaluate(() => window.__tiptap_editor?.getJSON())).toEqual(
+    before,
+  );
+
+  await page.keyboard.press("Enter");
+  await expect(
+    dialog.getByRole("button", { name: "Blue highlight" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  // Reopen: Blue is pressed, focused and carries a check glyph.
+  await page.keyboard.press("Enter");
+  const blue = dialog.getByRole("button", { name: "Blue highlight" });
+  await expect(blue).toBeFocused();
+  await expect(blue).toHaveAttribute("aria-pressed", "true");
+  await expect(blue.locator("svg")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
+test("mobile highlight panel: one arrow press moves one swatch", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  await page
+    .getByRole("toolbar")
+    .getByRole("button", { name: "Highlight text" })
+    .click();
+
+  const group = page.getByRole("group", { name: "Highlight colours" });
+  await expect(group).toBeVisible();
+  const green = group.getByRole("button", { name: "Green highlight" });
+  await green.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    group.getByRole("button", { name: "Blue highlight" }),
+  ).toBeFocused();
+});

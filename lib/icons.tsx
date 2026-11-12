@@ -10,6 +10,7 @@ export {
   ArrowLeft as ArrowLeftIcon,
   Ban as BanIcon,
   Bold as BoldIcon,
+  Check as CheckIcon,
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   CloudOff as CloudOffIcon,
