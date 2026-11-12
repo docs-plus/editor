@@ -1,8 +1,9 @@
 import { type Fragment, type Node, type Schema, Slice } from "@tiptap/pm/model";
 import { Transform } from "@tiptap/pm/transform";
 import {
+  type BindingMetadata,
+  initProseMirrorDoc,
   updateYFragment,
-  yXmlFragmentToProseMirrorFragment,
 } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 
@@ -101,6 +102,42 @@ function fitDocument(schema: Schema, content: Fragment): Node | null {
   ).doc;
 }
 
+/**
+ * Writes the fitted document's blocks to the fragment. A block the fit kept
+ * (the very node it was projected to) is left alone, so it keeps attributes
+ * this release does not know: `updateYFragment` on the whole fragment would
+ * rewrite it once the block count changes. Each run of blocks between kept
+ * ones is replaced by new elements, filled by `updateYFragment`.
+ */
+function writeFitted(
+  doc: Y.Doc,
+  fragment: Y.XmlFragment,
+  fitted: Node,
+  meta: BindingMetadata,
+): void {
+  const indexOf = new Map<unknown, number>();
+  fragment.toArray().forEach((child, index) => {
+    const projected = meta.mapping.get(child);
+    if (projected) indexOf.set(projected, index);
+  });
+  // From the end, so the indices of earlier blocks stay valid.
+  let yEnd = fragment.length;
+  let pEnd = fitted.childCount;
+  for (let pIndex = fitted.childCount - 1; pIndex >= -1; pIndex--) {
+    const yIndex = pIndex < 0 ? -1 : indexOf.get(fitted.child(pIndex));
+    if (yIndex === undefined || yIndex >= yEnd) continue;
+    fragment.delete(yIndex + 1, yEnd - yIndex - 1);
+    const nodes = fitted.content.content.slice(pIndex + 1, pEnd);
+    const elements = nodes.map((node) => new Y.XmlElement(node.type.name));
+    fragment.insert(yIndex + 1, elements);
+    elements.forEach((element, i) => {
+      updateYFragment(doc, element, nodes[i], meta);
+    });
+    yEnd = yIndex;
+    pEnd = pIndex;
+  }
+}
+
 const wroteAnything = (transaction: Y.Transaction) =>
   transaction.changed.size > 0 || transaction.deleteSet.clients.size > 0;
 
@@ -145,16 +182,10 @@ export function repairKnownMisfit(
       result = "inserted-title";
     }
     // Without `reportInvalidContent`, projecting deletes misfit elements.
-    const fitted = fitDocument(
-      schema,
-      yXmlFragmentToProseMirrorFragment(fragment, schema),
-    );
-    if (fitted) {
-      updateYFragment(doc, fragment, fitted, {
-        mapping: new Map(),
-        isOMark: new Map(),
-      });
-    }
+    // One shared mapping tells which blocks the fit left alone.
+    const { doc: projected, meta } = initProseMirrorDoc(fragment, schema);
+    const fitted = fitDocument(schema, projected.content);
+    if (fitted) writeFitted(doc, fragment, fitted, meta);
     if (result === "none" && wroteAnything(transaction)) result = "fitted";
   }, SCHEMA_REPAIR_ORIGIN);
   return result;

@@ -142,6 +142,58 @@ describe("B1: freeze on unknown names, repair known misfits", () => {
     f.destroy();
   });
 
+  /** A paragraph carrying an attribute this release does not know. */
+  function futureParagraph(): Y.XmlElement {
+    const paragraph = new Y.XmlElement("paragraph");
+    paragraph.setAttribute("futureAttr", "keep-me");
+    paragraph.insert(0, [new Y.XmlText("future block")]);
+    return paragraph;
+  }
+  const futureItem = (f: CollabEditorFixture) =>
+    f.fragment
+      .toArray()
+      .find((child) => child.toString().includes("future block"));
+
+  /** Sibling layouts around a block with an unknown attribute. */
+  const siblingLayouts: [string, (frag: Y.XmlFragment) => void][] = [
+    [
+      "after a top-level hard break",
+      (frag) => {
+        frag.insert(1, [futureParagraph()]);
+        frag.insert(1, [new Y.XmlElement("hardBreak")]);
+      },
+    ],
+    [
+      "between misfits that change the block count",
+      (frag) => {
+        // Two hard breaks share one paragraph: later blocks shift up.
+        frag.insert(1, [
+          new Y.XmlElement("hardBreak"),
+          new Y.XmlElement("hardBreak"),
+          futureParagraph(),
+          new Y.XmlElement("hardBreak"),
+        ]);
+      },
+    ],
+  ];
+
+  for (const [layout, misfit] of siblingLayouts) {
+    it(`keeps an untouched sibling's unknown attribute ${layout}`, async () => {
+      const f = createCollabEditor();
+      f.remote(misfit);
+      await tick();
+      const future = futureItem(f);
+      expect(future).toBeDefined();
+      expect(repairKnownMisfit(f.fragment, f.schema)).toBe("fitted");
+      expect(fits(f)).toBe(true);
+      expect(futureItem(f)).toBe(future);
+      expect(serverXml(f)).toContain(
+        '<paragraph futureAttr="keep-me">future block</paragraph>',
+      );
+      f.destroy();
+    });
+  }
+
   it("heals a misfit nested in a list", async () => {
     const f = createCollabEditor({ extensions: FULL_SCHEMA });
     f.remote((frag) => {
