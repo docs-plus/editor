@@ -11,7 +11,9 @@ since the previous tag.
 
 ### Added
 - **Rollout safety for the smart toolbar (release N).** Lets later releases
-  add marks and attributes without freezing or corrupting older clients. See
+  add new marks and nodes without corrupting older clients: a client that
+  meets a name it does not know freezes the document read-only by design and
+  asks for a reload, and never deletes it. See
   `docs/operations/schema-rollout-runbook.md`.
   - **Client version gate, log-only:** `HOCUS_MIN_CLIENT_SCHEMA` (default 0,
     no floor yet). Hocus logs per-minute `client_schema` counts and refuses
@@ -19,19 +21,27 @@ since the previous tag.
   - **`schema` and `build` socket parameters** sent by the client
     (`NEXT_PUBLIC_BUILD_ID`, default the git short SHA).
   - **Ingress name allowlist:** updates that introduce a node or mark name
-    outside the schema are refused with close 4422 (`schema_rejected`,
-    logged as `ws_unknown_schema_name`) and the client does not reconnect.
+    outside the schema (current names plus legacy `link`/`code`), or put
+    anything but an element at the top of a document, are refused: Hocus
+    closes that document's connection with 4422 (`schema_rejected`, logged
+    as `ws_unknown_schema_name`) and the client does not reconnect. The
+    toolbar's `textColor` and `fontSize` are refused until the release that
+    ships them deploys its server half first.
   - **Freeze on unknown, repair on misfit:** the editor goes read-only on an
-    unknown schema name or an outdated client, repairs known misfits, and
-    shows a notice (outdated: reload, device copy kept; failed repair:
-    `schema_repair_failed` event and banner).
+    unknown schema name or an outdated client and shows a notice (outdated:
+    reload, device copy kept; Reload waits at most 2 s for the copies). Any
+    misfit of known names is fitted to the schema instead (a missing title,
+    an emptied document, a top-level list item or hard break, a list holding
+    a bare paragraph), so one raw write cannot lock a document; a failed
+    repair shows a banner and sends `schema_repair_failed`.
   - **Offline `~s2` namespace** for device copies, with a transactional merge
     of legacy copies (the legacy key is deleted only after a successful
     save; IndexedDB writes now settle on commit).
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
-  - `E2E_BASE_URL` overrides the Playwright base URL.
+  - `E2E_BASE_URL` overrides the Playwright base URL. Hocus servers spawned
+    by tests (`spawnHocus()`) no longer outlive an interrupted test run.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
