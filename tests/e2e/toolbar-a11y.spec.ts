@@ -12,8 +12,9 @@ import { getPlaywrightModifierKey } from "./helpers/playwright-modifier-key";
 const toolbarButton = (page: Page, name: string) =>
   page.getByRole("toolbar").getByRole("button", { name, exact: true });
 
-/** Keyboard modality first, then focus the button directly. The toolbar's own
- * arrow index is not synced to focus, so arrowing from a neighbour lands elsewhere. */
+/** Keyboard modality first (so `:focus-visible` matches), then focus the
+ * button directly. Arrowing from a neighbour would work too: the toolbar
+ * syncs its arrow index to the focused item. */
 async function focusByKeyboard(page: Page, name: string) {
   const button = toolbarButton(page, name);
   await page.keyboard.press("Shift");
@@ -48,6 +49,9 @@ async function makeBoldPressed(page: Page) {
       .setTextSelection({ from: to - paragraph.content.size, to })
       .run();
   });
+  // Tiptap's focus() waits a frame; until then a toolbar button may still
+  // hold focus and would swallow the shortcut.
+  await expect(page.locator(".tiptap")).toBeFocused();
   await page.keyboard.press(`${getPlaywrightModifierKey()}+b`);
   const bold = toolbarButton(page, "Bold");
   await expect(bold).toHaveAttribute("aria-pressed", "true");
