@@ -36,13 +36,39 @@ const NOTICES: Record<string, string> = {
 
 const RELOAD_REASONS = new Set([CLIENT_OUTDATED_REASON, GUARD_OUTDATED]);
 
+/** How long Reload waits for device copies before reloading anyway. */
+const RELOAD_FLUSH_TIMEOUT_MS = 2000;
+
+/**
+ * Flushes the device copies, then reloads, after `timeoutMs` at the latest
+ * and also when the flush fails: a stuck IndexedDB must not trap the user
+ * on an outdated bundle.
+ */
+export async function reloadAfterFlush(
+  flush: () => Promise<void>,
+  reload: () => void,
+  timeoutMs = RELOAD_FLUSH_TIMEOUT_MS,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([flush(), timeout]);
+  } catch (error) {
+    console.warn("Saving device copies before reload failed:", error);
+  } finally {
+    clearTimeout(timer);
+  }
+  reload();
+}
+
 /** Saves pending device copies, then loads the newer bundle. */
 function ReloadButton() {
   const [reloading, setReloading] = useState(false);
-  const reload = async () => {
+  const reload = () => {
     setReloading(true);
-    await flushAllLocalCopies();
-    location.reload();
+    return reloadAfterFlush(flushAllLocalCopies, () => location.reload());
   };
   return (
     <Button
