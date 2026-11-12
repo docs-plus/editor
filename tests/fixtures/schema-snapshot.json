@@ -1,0 +1,461 @@
+{
+  "nodes": {
+    "audio": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "autoplay",
+        "caption",
+        "clear",
+        "controls",
+        "display",
+        "float",
+        "height",
+        "justifyContent",
+        "keyId",
+        "loop",
+        "margin",
+        "muted",
+        "preload",
+        "src",
+        "width"
+      ]
+    },
+    "blockquote": {
+      "content": "block+",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "bulletList": {
+      "content": "listItem+",
+      "group": "block list",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "codeBlock": {
+      "content": "text*",
+      "group": "block",
+      "marks": "",
+      "inline": false,
+      "atom": false,
+      "attrs": ["language"]
+    },
+    "doc": {
+      "content": "heading block*",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "hardBreak": {
+      "content": "",
+      "group": "inline",
+      "marks": "_",
+      "inline": true,
+      "atom": true,
+      "attrs": []
+    },
+    "heading": {
+      "content": "inline*",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["data-toc-id", "id", "level", "textAlign"]
+    },
+    "horizontalRule": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": []
+    },
+    "image": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "alt",
+        "caption",
+        "clear",
+        "display",
+        "float",
+        "height",
+        "keyId",
+        "margin",
+        "src",
+        "title",
+        "width"
+      ]
+    },
+    "imageUpload": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": ["accept", "limit", "maxSize"]
+    },
+    "listItem": {
+      "content": "paragraph block*",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "loom": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "allow",
+        "allowfullscreen",
+        "autoplay",
+        "caption",
+        "clear",
+        "display",
+        "float",
+        "frameborder",
+        "height",
+        "hideEmbedTopBar",
+        "hideOwner",
+        "hideShare",
+        "hideTitle",
+        "justifyContent",
+        "keyId",
+        "margin",
+        "muted",
+        "scrolling",
+        "src",
+        "width"
+      ]
+    },
+    "orderedList": {
+      "content": "listItem+",
+      "group": "block list",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["start", "type"]
+    },
+    "paragraph": {
+      "content": "inline*",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["textAlign"]
+    },
+    "soundcloud": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "allow",
+        "auto_play",
+        "buying",
+        "caption",
+        "clear",
+        "color",
+        "display",
+        "download",
+        "float",
+        "frameborder",
+        "height",
+        "hide_related",
+        "justifyContent",
+        "keyId",
+        "margin",
+        "scrolling",
+        "sharing",
+        "show_artwork",
+        "show_comments",
+        "show_playcount",
+        "show_reposts",
+        "show_user",
+        "single_active",
+        "src",
+        "start_track",
+        "visual",
+        "width"
+      ]
+    },
+    "spotify": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "allow",
+        "allowfullscreen",
+        "caption",
+        "clear",
+        "display",
+        "float",
+        "frameborder",
+        "height",
+        "justifyContent",
+        "keyId",
+        "margin",
+        "src",
+        "theme",
+        "width"
+      ]
+    },
+    "table": {
+      "content": "tableRow+",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "tableCell": {
+      "content": "block+",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["align", "colspan", "colwidth", "rowspan"]
+    },
+    "tableHeader": {
+      "content": "block+",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["align", "colspan", "colwidth", "rowspan"]
+    },
+    "tableRow": {
+      "content": "(tableCell | tableHeader)*",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "taskItem": {
+      "content": "paragraph block*",
+      "group": "",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": ["checked"]
+    },
+    "taskList": {
+      "content": "taskItem+",
+      "group": "block list",
+      "marks": "_",
+      "inline": false,
+      "atom": false,
+      "attrs": []
+    },
+    "text": {
+      "content": "",
+      "group": "inline",
+      "marks": "_",
+      "inline": true,
+      "atom": true,
+      "attrs": []
+    },
+    "video": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "autoplay",
+        "caption",
+        "clear",
+        "controls",
+        "display",
+        "float",
+        "height",
+        "justifyContent",
+        "keyId",
+        "loop",
+        "margin",
+        "muted",
+        "poster",
+        "preload",
+        "src",
+        "width"
+      ]
+    },
+    "vimeo": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "allow",
+        "allowfullscreen",
+        "autopause",
+        "autoplay",
+        "background",
+        "byline",
+        "caption",
+        "clear",
+        "color",
+        "controls",
+        "display",
+        "dnt",
+        "endTime",
+        "float",
+        "frameborder",
+        "height",
+        "justifyContent",
+        "keyId",
+        "keyboard",
+        "loop",
+        "margin",
+        "muted",
+        "pip",
+        "playsinline",
+        "portrait",
+        "quality",
+        "speed",
+        "src",
+        "start",
+        "texttrack",
+        "title",
+        "transparent",
+        "width"
+      ]
+    },
+    "x": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "align",
+        "caption",
+        "clear",
+        "display",
+        "dnt",
+        "float",
+        "hide_media",
+        "hide_thread",
+        "justifyContent",
+        "keyId",
+        "lang",
+        "margin",
+        "maxwidth",
+        "src",
+        "theme"
+      ]
+    },
+    "youtube": {
+      "content": "",
+      "group": "block",
+      "marks": "_",
+      "inline": false,
+      "atom": true,
+      "attrs": [
+        "allow",
+        "allowfullscreen",
+        "autoplay",
+        "caption",
+        "ccLanguage",
+        "ccLoadPolicy",
+        "clear",
+        "color",
+        "controls",
+        "disableKBcontrols",
+        "display",
+        "enableIFrameApi",
+        "endTime",
+        "float",
+        "frameborder",
+        "fs",
+        "height",
+        "interfaceLanguage",
+        "ivLoadPolicy",
+        "justifyContent",
+        "keyId",
+        "list",
+        "listType",
+        "loop",
+        "margin",
+        "modestbranding",
+        "nocookie",
+        "origin",
+        "playlist",
+        "playsinline",
+        "rel",
+        "src",
+        "start",
+        "width"
+      ]
+    }
+  },
+  "marks": {
+    "bold": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "highlight": {
+      "attrs": ["color"],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "hyperlink": {
+      "attrs": ["class", "href", "image", "rel", "target", "title"],
+      "inclusive": false,
+      "excludes": "_"
+    },
+    "inlineCode": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "italic": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "strike": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "subscript": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "superscript": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "underline": {
+      "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    }
+  }
+}
