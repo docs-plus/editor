@@ -45,7 +45,10 @@ import {
 } from "@/components/app-skeleton";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
-import { countToolbarCommit } from "@/components/document-editor/toolbar-test-hooks";
+import {
+  countToolbarCommit,
+  useToolbarOffForTests,
+} from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
 import {
   FilterBar,
@@ -218,37 +221,40 @@ function DocumentEditorContent({
   });
 
   const effectiveMobileView = isMobile ? mobileView : "main";
+  const toolbarOff = useToolbarOffForTests();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
       <EditorContext.Provider value={{ editor }}>
-        <Toolbar
-          ref={toolbarRef}
-          style={{
-            ...(isMobile
-              ? {
-                  bottom: `calc(100% - ${height - rect.y}px)`,
-                }
-              : {}),
-          }}
-        >
-          <Profiler id="toolbar" onRender={countToolbarCommit}>
-            {effectiveMobileView === "main" ? (
-              <MainToolbarContent
-                onHighlighterClick={() => setMobileView("highlighter")}
-                onTocToggle={() => setTocVisible((v) => !v)}
-                onFilterToggle={headingFilter.toggleBar}
-                isMobile={isMobile}
-                tocVisible={tocVisible}
-                filterActive={
-                  headingFilter.isBarOpen || headingFilter.hasActiveFilters
-                }
-              />
-            ) : (
-              <MobileToolbarContent onBack={() => setMobileView("main")} />
-            )}
-          </Profiler>
-        </Toolbar>
+        {!toolbarOff && (
+          <Toolbar
+            ref={toolbarRef}
+            style={{
+              ...(isMobile
+                ? {
+                    bottom: `calc(100% - ${height - rect.y}px)`,
+                  }
+                : {}),
+            }}
+          >
+            <Profiler id="toolbar" onRender={countToolbarCommit}>
+              {effectiveMobileView === "main" ? (
+                <MainToolbarContent
+                  onHighlighterClick={() => setMobileView("highlighter")}
+                  onTocToggle={() => setTocVisible((v) => !v)}
+                  onFilterToggle={headingFilter.toggleBar}
+                  isMobile={isMobile}
+                  tocVisible={tocVisible}
+                  filterActive={
+                    headingFilter.isBarOpen || headingFilter.hasActiveFilters
+                  }
+                />
+              ) : (
+                <MobileToolbarContent onBack={() => setMobileView("main")} />
+              )}
+            </Profiler>
+          </Toolbar>
+        )}
 
         <FilterBar {...headingFilter} />
 

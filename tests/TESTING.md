@@ -169,6 +169,11 @@ make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
 |----------|---------|-------------|
 | `PERF_HEADINGS` | `10,50` | Comma-separated heading counts to test |
 | `PERF_SHAPE` | `flat` | Document hierarchy: `flat` (all H2), `deep` (cycling H2–H6), `mixed` (random H2–H6) |
+| `PERF_ROUNDS` | `3` | A/B rounds per heading count (toolbar off vs on, alternating order); the median p95 of each arm is compared |
+| `PERF_CPU_THROTTLE` | `4` | CDP `Emulation.setCPUThrottlingRate` applied before typing |
+| `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run |
+
+`performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke is timed from the keydown `timeStamp` to a `MessageChannel` message posted from a capture-phase `input` listener (Event Timing has a 16 ms floor and `requestAnimationFrame` quantizes to ~16.7 ms). Nightly or manual runs can pass `PERF_HEADINGS=50,500`.
 
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 
