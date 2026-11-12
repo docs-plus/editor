@@ -183,6 +183,31 @@ describe("schema guard", () => {
     expect(onRepairFailed).not.toHaveBeenCalled();
   });
 
+  it("repairs once an offline_budget refusal clears", async () => {
+    const { f, guard, setWritable, onRepairFailed } = setup();
+    setWritable(false); // the offline_budget pause
+    f.remote(paragraphFirst);
+    await settle();
+    expect(f.binding()?.invalidContentError).not.toBeNull();
+    setWritable(true);
+    guard.onWritable();
+    await settle();
+    expect(guard.getState()).toBe("ok");
+    expect(f.binding()?.invalidContentError).toBeNull();
+    const first = f.server.getXmlFragment("default").get(0) as Y.XmlElement;
+    expect(first.nodeName).toBe("heading");
+    expect(onRepairFailed).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when writes resume with nothing deferred", async () => {
+    const { f, guard } = setup();
+    const sent = f.outgoing.length;
+    guard.onWritable();
+    await settle();
+    expect(f.outgoing.length).toBe(sent);
+    expect(guard.getState()).toBe("ok");
+  });
+
   it("evaluates content that was already invalid when it binds", async () => {
     const server = new Y.Doc();
     const frag = server.getXmlFragment("default");

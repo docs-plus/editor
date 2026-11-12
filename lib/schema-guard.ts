@@ -25,6 +25,8 @@ export type SchemaGuard = {
   onInvalidContent(error: Error): void;
   /** Starts evaluating against `editor`; returns the cleanup. */
   bind(target: GuardTarget): () => void;
+  /** Call when `canWrite()` turns true: runs an evaluation it deferred. */
+  onWritable(): void;
   getState(): SchemaGuardState;
   subscribe(listener: () => void): () => void;
 };
@@ -136,9 +138,10 @@ export function createSchemaGuard(
     evaluateTimer = undefined;
     const current = binding();
     if (!target || !current) return;
-    pending = false;
     const next = judge(target, current);
+    // Deferred until the document is writable again (`onWritable`).
     if (next === null) return;
+    pending = false;
     setState(next);
     if (next !== "unrepairable" || reportedFailure) return;
     reportedFailure = true;
@@ -164,6 +167,9 @@ export function createSchemaGuard(
         evaluateTimer = undefined;
         watch(false);
       };
+    },
+    onWritable() {
+      if (pending) schedule();
     },
     getState: () => state,
     subscribe(listener) {

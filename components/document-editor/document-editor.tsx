@@ -154,7 +154,9 @@ function DocumentEditorContent({
   const canWriteRef = useRef(rejectedReason === null);
   useEffect(() => {
     canWriteRef.current = rejectedReason === null;
-  }, [rejectedReason]);
+    // A repair deferred while refused (offline budget) runs now.
+    if (rejectedReason === null) schemaGuard.onWritable();
+  }, [rejectedReason, schemaGuard]);
 
   // `useEditor` compares its options on every render and, when any differ,
   // calls `editor.setOptions`: a full view update that also re-syncs the
