@@ -47,7 +47,8 @@ since the previous tag.
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
-  - Hocus servers spawned by tests (`spawnHocus()`) no longer outlive an interrupted test run.
+  - Hocus servers spawned by tests (`spawnHocus()`) no longer outlive an
+    interrupted test run.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
