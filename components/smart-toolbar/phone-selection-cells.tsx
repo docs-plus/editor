@@ -7,11 +7,17 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { useActionView } from "@/hooks/use-editor-context";
 import { availability, runAction } from "@/lib/editor-actions/registry";
+import { colorLabel } from "@/lib/editor-actions/surface-actions";
 import { repeatApplyAction } from "@/lib/editor-actions/v11-actions";
 // Installs the E action bodies (lazy half of v11-actions) with this chunk.
 import "@/lib/editor-actions/v11-engine";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { CloseIcon, RepeatIcon } from "@/lib/icons";
+import {
+  HIGHLIGHT_CHOICE,
+  TEXT_COLOR_CHOICE,
+  useRememberedChoice,
+} from "@/lib/remembered-choice";
 
 import { ActionButton } from "./action-button";
 import type { SurfaceProps } from "./types";
@@ -71,6 +77,33 @@ function RepeatCell({ editor }: { editor: Editor }) {
 }
 
 /**
+ * Text colour and highlight apply the colour last used (M3), like the
+ * row's split face; the Aa sheet keeps the full palette.
+ */
+function ColorCells({ editor }: { editor: Editor }) {
+  const text = useRememberedChoice(TEXT_COLOR_CHOICE).last;
+  const highlight = useRememberedChoice(HIGHLIGHT_CHOICE).last;
+  return (
+    <>
+      <ActionButton
+        id="color.text.apply"
+        editor={editor}
+        variant="phone"
+        arg={text}
+        label={`Apply text colour: ${colorLabel(text)}`}
+      />
+      <ActionButton
+        id="color.highlight.apply"
+        editor={editor}
+        variant="phone"
+        arg={highlight}
+        label={`Apply highlight: ${colorLabel(highlight)}`}
+      />
+    </>
+  );
+}
+
+/**
  * After ✕ the cells unmount under focus. Once the bar re-renders its
  * normal cells, focus its first enabled one, so focus never drops to
  * `<body>` (spec §6.6). Does nothing if focus already moved elsewhere.
@@ -104,6 +137,11 @@ export const PHONE_SELECTION_CELL_IDS = [
   "repeat.apply",
 ] as const;
 
+const COLOR_CELL_IDS = new Set<string>([
+  "color.text.apply",
+  "color.highlight.apply",
+]);
+
 /**
  * Mobile selection swap (spec §4.7): B I U S, text colour, highlight,
  * link, clear, ↻ Repeat, then ✕ "Back to all tools". Rendered by D2's
@@ -127,7 +165,9 @@ export function PhoneSelectionCells({
       {PHONE_SELECTION_CELL_IDS.map((id) =>
         id === repeatApplyAction.id ? (
           <RepeatCell key={id} editor={editor} />
-        ) : (
+        ) : id === "color.text.apply" ? (
+          <ColorCells key={id} editor={editor} />
+        ) : COLOR_CELL_IDS.has(id) ? null : (
           <ActionButton key={id} id={id} editor={editor} variant="phone" />
         ),
       )}
