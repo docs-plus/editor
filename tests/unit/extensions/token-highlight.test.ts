@@ -72,4 +72,93 @@ describe("TokenHighlight", () => {
     ).toBeNull();
     expect(highlightTokenFromValue(null)).toBeNull();
   });
+
+  describe("token values (B4)", () => {
+    const P = 8;
+    const make = () =>
+      createTestEditor({
+        content: {
+          type: "doc",
+          content: [
+            {
+              type: "heading",
+              attrs: { level: 1 },
+              content: [{ type: "text", text: "Title" }],
+            },
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "hello world" }],
+            },
+          ],
+        },
+      });
+    const colors = (editor: ReturnType<typeof make>) => {
+      const out: unknown[] = [];
+      editor.state.doc.descendants((node) => {
+        for (const m of node.marks)
+          if (m.type.name === "highlight") out.push(m.attrs.color);
+      });
+      return out;
+    };
+
+    it("stores legacy values as tokens", () => {
+      const editor = make();
+      editor
+        .chain()
+        .setTextSelection({ from: P, to: P + 5 })
+        .setHighlight({ color: "var(--tt-color-highlight-red)" })
+        .run();
+      expect(colors(editor)).toEqual(["red"]);
+    });
+
+    it("defaults to yellow for toggleHighlight() and ==x==", () => {
+      const editor = make();
+      editor
+        .chain()
+        .setTextSelection({ from: P, to: P + 5 })
+        .toggleHighlight()
+        .run();
+      expect(colors(editor)).toEqual(["yellow"]);
+      editor.commands.setTextSelection(P + 11);
+      editor.view.pasteText(" ==hi== ");
+      expect(colors(editor)).toEqual(["yellow", "yellow"]);
+    });
+
+    it("refuses non-token values and changes nothing", () => {
+      const editor = make();
+      editor.commands.setTextSelection({ from: P, to: P + 5 });
+      for (const v of ["#ff0", "var(--background)", "red;x", "__proto__"]) {
+        expect(editor.commands.setHighlight({ color: v })).toBe(false);
+        expect(editor.commands.toggleHighlight({ color: v })).toBe(false);
+      }
+      expect(colors(editor)).toEqual([]);
+    });
+
+    it("toggles off a highlight set with the legacy form", () => {
+      const editor = make();
+      const legacy = { color: "var(--tt-color-highlight-blue)" };
+      editor
+        .chain()
+        .setTextSelection({ from: P, to: P + 5 })
+        .toggleHighlight(legacy)
+        .toggleHighlight(legacy)
+        .run();
+      expect(colors(editor)).toEqual([]);
+    });
+
+    it("parses own tokens (N and N+1 copies) and drops foreign backgrounds", () => {
+      const editor = make();
+      editor.commands.setContent(
+        '<h1>t</h1><p><mark data-highlight="teal">a</mark><mark data-color="var(--tt-color-highlight-red)">b</mark><mark style="background-color: red">c</mark><span style="background-color:#ff0">d</span><mark>e</mark></p>',
+      );
+      expect(colors(editor)).toEqual(["teal", "red"]);
+      expect(editor.getText()).toContain("abcde");
+    });
+
+    it("renders the token, not the raw legacy value, in data-color", () => {
+      expect(html("var(--tt-color-highlight-red)")).toContain(
+        'data-color="red"',
+      );
+    });
+  });
 });
