@@ -59,6 +59,7 @@ import {
   repeatApplyAction,
   type V11Engine,
 } from "@/lib/editor-actions/v11-actions";
+import { V11_ENGINE_LANDED } from "@/lib/editor-actions/v11-engine-ready";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   getMermaidTemplate,
@@ -370,3 +371,7 @@ export const v11Engine: V11Engine = {
 };
 
 installV11Engine(v11Engine);
+// Mounted surfaces whose own load failed learn of this one (Retry).
+if (typeof window !== "undefined") {
+  window.dispatchEvent(new Event(V11_ENGINE_LANDED));
+}

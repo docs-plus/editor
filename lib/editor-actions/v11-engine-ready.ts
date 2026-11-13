@@ -10,22 +10,31 @@ import { useEffect, useState } from "react";
 import { getV11Engine, loadV11Engine } from "@/lib/editor-actions/v11-actions";
 
 /**
+ * Fired on `window` by `v11-engine.ts` as it installs, whichever load
+ * brought it: after a failed fetch, a later one (the pill's Retry) is not
+ * the promise a mounted surface waited on.
+ */
+export const V11_ENGINE_LANDED = "tinydocy:v11-engine";
+
+/**
  * Whether the engine is installed; re-renders when it lands. If it is not,
  * waits on the one load (editors start it on create, so this usually
- * joins that fetch). A failed fetch (offline) stays "not ready" until the
- * next mount retries; the E actions keep their loading reason meanwhile.
+ * joins that fetch). After a failed fetch (offline) it stays "not ready"
+ * until the engine lands from a later load (Retry, another surface).
  */
 export function useV11EngineReady(): boolean {
   const [ready, setReady] = useState(() => getV11Engine() !== null);
   useEffect(() => {
     if (ready) return;
     let live = true;
-    loadV11Engine().then(
-      () => live && setReady(true),
-      () => undefined,
-    );
+    const landed = () => {
+      if (live) setReady(true);
+    };
+    loadV11Engine().then(landed, () => undefined);
+    window.addEventListener(V11_ENGINE_LANDED, landed);
     return () => {
       live = false;
+      window.removeEventListener(V11_ENGINE_LANDED, landed);
     };
   }, [ready]);
   return ready;
