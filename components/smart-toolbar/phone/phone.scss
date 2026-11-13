@@ -1,0 +1,112 @@
+// Phone bar and Aa sheet styles (spec §4.7). Imported only by the lazy
+// phone bar chunk (`mobile-toolbar-content.tsx`, contract A9), so desktop
+// never downloads them.
+
+// ── Phone bar (`mobile-toolbar-content.tsx`, spec §4.7) ──────────────────
+// A constant 44px; the cells share its width, each at least 44×44 with or
+// without touch. Insert drops its label so seven cells fit 320px.
+[data-slot="toolbar"][data-variant="docked"] {
+  [data-toolbar-item] {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 4.5rem;
+    padding-inline: 0;
+  }
+
+  .st-insert-label {
+    display: none;
+  }
+}
+
+// Eight 44px cells fit 360px; below it Redo moves to the sheet's More
+// section, and above it the sheet does not repeat it.
+@media (max-width: 359.98px) {
+  [data-slot="toolbar"][data-variant="docked"] [data-action-id="history.redo"] {
+    display: none;
+  }
+}
+
+@media (min-width: 360px) {
+  [data-format-sheet] [data-action-id="history.redo"] {
+    display: none;
+  }
+}
+
+.st-phone-aa {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+// ── Format sheet (`phone/format-sheet.tsx`) ──────────────────────────────
+.st-format-sheet {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.st-sheet-done {
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 0.75rem;
+  font-weight: 600;
+}
+
+.st-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 0.25rem 1rem 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.st-sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.st-sheet-heading {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.st-sheet-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.125rem;
+
+  button {
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 44px;
+    padding-inline: 0.75rem;
+  }
+}
+
+.st-sheet-grid {
+  display: flex;
+  gap: 0.25rem;
+
+  button {
+    flex: 1 1 0;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.st-format-sheet {
+  .st-stepper {
+    align-self: flex-start;
+  }
+
+  .st-stepper button,
+  .st-stepper-value {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

@@ -101,11 +101,10 @@ are decided (below).
   44×44 cells: Undo, Redo (from 360px; narrower phones find it in the sheet),
   Aa, Bold, Italic, List, Indent and Insert. Toggles show their state with
   `aria-pressed`. It hides in a read-only document. The caret and
-  `scroll-padding-bottom` stay clear of the bar and the keyboard. The bar is
-  its own lazy chunk, loaded only below 768px, so desktop never fetches it
-  (contract A9).
-- **Aa "Text format" sheet** (its own lazy chunk, fetched on Aa's touch,
-  hover or focus): Style (Normal, H1–H6; locked in the title), Size (the
+  `scroll-padding-bottom` stay clear of the bar and the keyboard. The bar
+  and its sheet are one lazy chunk, loaded only below 768px, so desktop
+  never fetches them (contract A9).
+- **Aa "Text format" sheet**: Style (Normal, H1–H6; locked in the title), Size (the
   XS–XL stepper, disabled in headings), Colours (the colour popover's panel:
   text, highlight, Recent, low-contrast dimming), Align and More (redo below
   360px, outdent, underline, strikethrough, superscript, subscript, inline
