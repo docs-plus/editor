@@ -232,6 +232,27 @@ test.describe("palette follow-ups", () => {
     });
   }
 
+  test("typing keeps the highlighted row in view as groups reorder", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await select(page, "beta");
+    await openPalette(page);
+    // "for" highlights a row further down ("Forget my choices"); "format"
+    // then moves Format's Paint format to the top as its group sorts first.
+    for (const key of "format") {
+      await page.keyboard.type(key);
+      const selected = page.locator(
+        `${PALETTE} [cmdk-item][data-selected="true"]`,
+      );
+      await expect(selected).toBeInViewport({ ratio: 1 });
+    }
+    await expect(
+      page.locator(`${PALETTE} [cmdk-item][data-selected="true"]`),
+    ).toHaveAttribute("data-action-id", "repeat.copy");
+    await page.keyboard.press("Escape");
+  });
+
   test("Repeat formatting is named alone, with what it applies as its second line", async ({
     page,
   }) => {
