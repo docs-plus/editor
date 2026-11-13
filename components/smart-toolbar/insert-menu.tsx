@@ -1,7 +1,7 @@
 "use client";
 
 import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import {
@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import type { InsertStepKind as Step } from "./insert/insert-step";
+import { lazySurface, loadInsertStep, preloadSurfaces } from "./lazy-surface";
 import type { SurfaceProps } from "./types";
 import "./smart-toolbar.scss";
 
@@ -35,9 +36,8 @@ import "./smart-toolbar.scss";
  * fetched when the Insert button gets hover or focus, or when a step is
  * asked for, and rendered only once a step opens.
  */
-const loadInsertStep = () => import("./insert/insert-step");
-const InsertStep = lazy(() =>
-  loadInsertStep().then((module) => ({ default: module.InsertStep })),
+const InsertStep = lazySurface(() =>
+  loadInsertStep().then((module) => module.InsertStep),
 );
 
 /** "insert.codeBlock" → "codeBlock", the M10 kind. */
@@ -108,7 +108,7 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
       if (intent.type !== "insert.open") return false;
       if (intent.kind !== "table" && intent.kind !== "embed") return false;
       const kind = intent.kind;
-      void loadInsertStep().catch(() => undefined);
+      preloadSurfaces();
       // Let the menu close and hand focus back first.
       requestAnimationFrame(() => setStep(kind));
       return true;
@@ -140,8 +140,8 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
               aria-label="Insert"
               tooltip="Insert"
               onMouseDown={(event) => event.preventDefault()}
-              onPointerEnter={loadInsertStep}
-              onFocus={loadInsertStep}
+              onPointerEnter={preloadSurfaces}
+              onFocus={preloadSurfaces}
             />
           }
         >
@@ -170,14 +170,14 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           finalFocus={triggerRef}
         >
           {step ? (
-            <Suspense fallback={null}>
+            <SurfaceBoundary onError={InsertStep.retry}>
               <InsertStep
                 step={step}
                 editor={editor}
                 tableSize={tableSize.last}
                 onDone={() => setStep(null)}
               />
-            </Suspense>
+            </SurfaceBoundary>
           ) : null}
         </PopoverContent>
       </Popover>

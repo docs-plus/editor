@@ -1,7 +1,7 @@
 "use client";
 
 import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import {
   Popover,
@@ -22,13 +22,14 @@ import {
 } from "@/lib/remembered-choice";
 
 import { type Swatch, swatchStyle } from "./color/swatch";
+import { lazySurface, loadColorPanel, preloadSurfaces } from "./lazy-surface";
 import type { SurfaceProps } from "./types";
 import "./smart-toolbar.scss";
 
 /** Popover body: its own chunk, fetched on first hover, focus or open. */
-const loadColorPanel = () => import("./color/color-panel");
-const ColorPanel = lazy(() =>
-  loadColorPanel().then((module) => ({ default: module.ColorPanel })),
+const ColorPanel = lazySurface(
+  () => loadColorPanel().then((module) => module.ColorPanel),
+  <div className="st-color-panel-fallback" />,
 );
 
 type ColorKind = "text" | "highlight";
@@ -96,8 +97,8 @@ export function ColorPopoverButton({
             aria-haspopup="dialog"
             disabled={reason !== undefined}
             disabledReason={reason}
-            onPointerEnter={loadColorPanel}
-            onFocus={loadColorPanel}
+            onPointerEnter={preloadSurfaces}
+            onFocus={preloadSurfaces}
             onPointerDown={(event) =>
               setOpenedByTouch(event.pointerType === "touch")
             }
@@ -121,14 +122,12 @@ export function ColorPopoverButton({
               ) ?? true)
         }
       >
-        <Suspense fallback={<div className="st-color-panel-fallback" />}>
-          <ColorPanel
-            editor={editor}
-            recent={recent.recent}
-            focusKind={focusKind}
-            focusOnMount={!openedByTouch}
-          />
-        </Suspense>
+        <ColorPanel
+          editor={editor}
+          recent={recent.recent}
+          focusKind={focusKind}
+          focusOnMount={!openedByTouch}
+        />
       </PopoverContent>
     </Popover>
   );
