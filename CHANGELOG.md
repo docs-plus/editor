@@ -9,6 +9,23 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Editor leak on tab switch (fix/editor-tab-leak)
+
+Not specific to the smart toolbar: `main` has leaked since `@tiptap/markdown`
+was added, so this fix can ship to `main` on its own.
+
+#### Fixed
+- **Destroyed editors stayed in memory.** `@tiptap/markdown` registered each
+  editor's tokenizers on the module-wide `marked` instance and never removed
+  them, which kept every closed editor reachable: 20 tab switches left 7
+  extra live editors and 6 MB more heap, without limit. Each editor now gets
+  its own `Marked` instance (`marked` is now a direct dependency, at the
+  version already installed), and `tests/e2e/editor-leak.spec.ts` checks
+  that 20 switches return to the baseline.
+- Known, not fixed here: while a Playground image request is still pending,
+  Chromium keeps the `<img>` alive and, through the media resize gripper's
+  listeners, its closed editor. They are released once the request settles.
+
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
