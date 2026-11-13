@@ -1,1 +1,1 @@
-export { TokenHighlight } from "./token-highlight";
+export { DEFAULT_HIGHLIGHT_TOKEN, TokenHighlight } from "./token-highlight";
