@@ -11,11 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useEditorContext } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
@@ -132,10 +128,10 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           if (!open) setStep(null);
         }}
       >
-        <PopoverTrigger
-          render={<span aria-hidden="true" className="st-insert-anchor" />}
-        />
+        {/* No trigger: the step anchors to the Insert button itself, so no
+            hidden focusable element joins the toolbar's roving set. */}
         <PopoverContent
+          anchor={triggerRef}
           aria-label={step ? STEP_LABEL[step] : undefined}
           align="start"
           className={step === "embed" ? "w-80" : undefined}
