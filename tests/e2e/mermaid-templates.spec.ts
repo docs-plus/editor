@@ -83,6 +83,11 @@ test.describe("Mermaid templates (M17b)", () => {
     await expect(
       page.getByRole("menuitem", { name: "Insert diagram" }),
     ).toHaveCount(0);
+    // A fresh profile has used no template: nothing is marked Last used.
+    await templatesItem(page).hover();
+    await expect(
+      page.getByRole("menuitem", { name: "Flowchart", exact: true }),
+    ).not.toHaveAccessibleDescription("Last used");
   });
 
   for (const [label, keyword] of TEMPLATES) {

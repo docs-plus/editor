@@ -62,6 +62,7 @@ import {
   lastMermaidTemplate,
   MERMAID_TEMPLATES,
   rememberMermaidTemplate,
+  usedMermaidTemplate,
 } from "@/lib/mermaid-templates";
 import {
   FORMAT_REASONS,
@@ -364,7 +365,7 @@ export const v11Engine: V11Engine = {
           ? true
           : { reason: "Diagrams cannot go here." },
       options: () => {
-        const last = lastMermaidTemplate();
+        const last = usedMermaidTemplate();
         return MERMAID_TEMPLATES.map((template) => ({
           value: template.id,
           label: template.label,

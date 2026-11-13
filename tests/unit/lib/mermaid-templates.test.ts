@@ -6,7 +6,9 @@ import {
   MERMAID_TEMPLATE_CHOICE,
   MERMAID_TEMPLATES,
   rememberMermaidTemplate,
+  usedMermaidTemplate,
 } from "@/lib/mermaid-templates";
+import { forgetChoices } from "@/lib/remembered-choice";
 
 const KEYWORDS: Record<string, string> = {
   flowchart: "flowchart",
@@ -44,5 +46,15 @@ describe("mermaid templates", () => {
   it("remembers the last template in the page", () => {
     rememberMermaidTemplate("sequence");
     expect(lastMermaidTemplate()).toBe("sequence");
+  });
+
+  it("reports a used template only after a real use (no Last used on a fresh profile)", () => {
+    forgetChoices();
+    expect(usedMermaidTemplate()).toBeNull();
+    expect(lastMermaidTemplate()).toBe("flowchart");
+    rememberMermaidTemplate("pie");
+    expect(usedMermaidTemplate()).toBe("pie");
+    forgetChoices();
+    expect(usedMermaidTemplate()).toBeNull();
   });
 });
