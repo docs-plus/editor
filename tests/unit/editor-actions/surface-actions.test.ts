@@ -347,3 +347,134 @@ describe("forget my choices", () => {
     expect(readChoice(TEXT_COLOR_CHOICE).last).toBe("red");
   });
 });
+
+describe("selection mark walk (typing-perf path)", () => {
+  const PARAGRAPHS = 1000;
+  const SELECTION_VIEWS = [
+    "color.text.apply",
+    "color.highlight.apply",
+    "size.set",
+  ] as const;
+
+  function largeEditor(first: object[]) {
+    return createTestEditor({
+      extensions: WITH_MARKS,
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          { type: "paragraph", content: first },
+          ...Array.from({ length: PARAGRAPHS }, (_, i) => ({
+            type: "paragraph",
+            content: [{ type: "text", text: `p${i}` }],
+          })),
+        ],
+      },
+    });
+  }
+
+  /** Every field the store computes for the colour and size views. */
+  function readViews(target: Editor) {
+    const ctx = computeContext(target);
+    for (const id of SELECTION_VIEWS) {
+      const action = getAction(id);
+      action.isActive?.(ctx);
+      action.isMixed?.(ctx);
+      action.value?.(ctx);
+    }
+  }
+
+  /** Counts `nodesBetween` callbacks on the current doc while reading. */
+  function countCallbacks(target: Editor): number {
+    const doc = target.state.doc;
+    const original = doc.nodesBetween.bind(doc);
+    let calls = 0;
+    doc.nodesBetween = (from, to, f, start) =>
+      original(
+        from,
+        to,
+        (...args) => {
+          calls += 1;
+          return f(...args);
+        },
+        start,
+      );
+    try {
+      readViews(target);
+    } finally {
+      delete (doc as { nodesBetween?: unknown }).nodesBetween;
+    }
+    return calls;
+  }
+
+  it("walks a plain select-all once for all three mark types", () => {
+    const big = largeEditor([{ type: "text", text: "plain" }]);
+    big.commands.setTextSelection({ from: 1, to: big.state.doc.content.size });
+    // One full walk: every block plus its text node.
+    const oneWalk = 2 * (PARAGRAPHS + 2);
+    expect(countCallbacks(big)).toBeLessThanOrEqual(oneWalk + 10);
+    big.destroy();
+  });
+
+  it("stops descending once every type is mixed near the start", () => {
+    const big = largeEditor([
+      {
+        type: "text",
+        text: "a",
+        marks: [
+          { type: "textColor", attrs: { color: "red" } },
+          { type: "highlight", attrs: { color: "yellow" } },
+          { type: "fontSize", attrs: { size: "lg" } },
+        ],
+      },
+      { type: "text", text: "b" },
+    ]);
+    big.commands.setTextSelection({ from: 1, to: big.state.doc.content.size });
+    // Top-level blocks are still visited, but none is descended into.
+    expect(countCallbacks(big)).toBeLessThanOrEqual(PARAGRAPHS + 20);
+    const ctx = computeContext(big);
+    expect(getAction("color.text.apply").isMixed?.(ctx)).toBe(true);
+    expect(getAction("color.highlight.apply").isMixed?.(ctx)).toBe(true);
+    expect(getAction("size.set").isMixed?.(ctx)).toBe(true);
+    big.destroy();
+  });
+
+  it("ignores text whose parent cannot hold the mark (code blocks)", () => {
+    const mixedWithCode = createTestEditor({
+      extensions: WITH_MARKS,
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "red",
+                marks: [{ type: "textColor", attrs: { color: "red" } }],
+              },
+            ],
+          },
+          { type: "codeBlock", content: [{ type: "text", text: "code" }] },
+        ],
+      },
+    });
+    mixedWithCode.commands.setTextSelection({
+      from: 8,
+      to: mixedWithCode.state.doc.content.size - 1,
+    });
+    const ctx = computeContext(mixedWithCode);
+    expect(getAction("color.text.apply").isMixed?.(ctx)).toBe(false);
+    expect(getAction("color.text.apply").value?.(ctx)).toBe("Red");
+    mixedWithCode.destroy();
+  });
+});
