@@ -157,6 +157,7 @@ export function UserIdentityButton() {
           "flex items-center gap-4 p-1 text-xs",
         )}
         data-state={connection}
+        data-collab-status=""
       >
         <div
           className={cn(

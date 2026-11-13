@@ -61,6 +61,26 @@ body {
   scroll-padding-top: var(--tt-toolbar-height);
 }
 
+// Phones: the docked bar (and the keyboard under it) replaces the sticky
+// row. `--mobile-bar-clearance` (bar + keyboard inset) is set by
+// `mobile-toolbar-content.tsx`, and ProseMirror gets the same value through
+// `SCROLL_CLEARANCE` (spec §6.8).
+@media (max-width: 767.98px) {
+  .document-editor-wrapper {
+    scroll-padding-top: 0;
+    scroll-padding-bottom: var(--mobile-bar-clearance, 0px);
+  }
+
+  .editor-with-toc {
+    padding-bottom: var(--mobile-bar-clearance, 0px);
+  }
+
+  // The connection chip floats above the bar, never over its cells.
+  .document-editor-wrapper [data-collab-status] {
+    bottom: calc(var(--mobile-bar-clearance, 0px) + 0.5rem);
+  }
+}
+
 .editor-with-toc {
   // The outline overlay (< 950px) positions itself against this box.
   position: relative;
