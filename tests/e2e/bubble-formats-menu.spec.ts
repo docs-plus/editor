@@ -75,7 +75,7 @@ async function selectInBubble(page: Page, word: string) {
 async function focusFormats(page: Page) {
   await page.keyboard.press("Alt+F10");
   await expect(
-    bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+    bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
   ).toBeFocused();
   for (let step = 0; step < 12; step += 1) {
     const done = await formatsButton(page).evaluate(
@@ -194,7 +194,7 @@ test.describe("bubble Formats menu", () => {
     await expect(
       menu(page)
         .getByRole("group", { name: "Your formats" })
-        .getByRole("menuitem", { name: "Callout" }),
+        .getByRole("menuitem", { name: "Callout", exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
   });
