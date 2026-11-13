@@ -241,7 +241,7 @@ span[data-collapse-standin] {
   // Below AA on the selection's colours (O3): dimmed with a dotted border,
   // unlike disabled (solid, not-allowed), because it still applies.
   &[data-low-contrast] {
-    opacity: 0.4;
+    opacity: 0.6;
     border-style: dotted;
     border-color: color-mix(in srgb, var(--foreground) 55%, transparent);
   }
