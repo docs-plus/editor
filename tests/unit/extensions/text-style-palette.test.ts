@@ -31,7 +31,7 @@ function scssPalette(name: string): Record<string, ThemedColor> {
   if (!block) throw new Error(`$${name} not found`);
   const entries = [
     ...block.matchAll(
-      /([a-z]+):\s*\(\s*light:\s*(#[0-9a-f]{6}),\s*dark:\s*(#[0-9a-f]{6}),?\s*\)/gi,
+      /"([a-z]+)":\s*\(\s*light:\s*(#[0-9a-f]{6}),\s*dark:\s*(#[0-9a-f]{6}),?\s*\)/gi,
     ),
   ];
   return Object.fromEntries(
@@ -55,7 +55,7 @@ describe("text style palette (Appendix A)", () => {
 
   it("the SCSS size steps match FONT_SIZE_EM", () => {
     for (const token of FONT_SIZE_TOKENS) {
-      expect(SCSS).toContain(`${token}: ${FONT_SIZE_EM[token]}em`);
+      expect(SCSS).toContain(`"${token}": ${FONT_SIZE_EM[token]}em`);
     }
   });
 

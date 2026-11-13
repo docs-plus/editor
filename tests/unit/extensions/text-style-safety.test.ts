@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { AnyExtension } from "@tiptap/core";
+import type { AnyExtension, JSONContent } from "@tiptap/core";
 import { DOMSerializer, type Schema } from "@tiptap/pm/model";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
@@ -19,6 +19,11 @@ import {
 import { getEditorSchema } from "@/tests/helpers/editor-schema";
 
 const schema = getEditorSchema();
+
+/** Marks of the first text node in the second top-level block. */
+const firstBodyMarks = (ydoc: Y.Doc) =>
+  (yDocToProsemirrorJSON(ydoc, "default") as JSONContent).content?.[1]
+    ?.content?.[0]?.marks;
 
 function render(target: Schema, markName: string, attrs: object): string {
   const node = target.text("x", [target.marks[markName].create(attrs)]);
@@ -129,9 +134,7 @@ describe("Yjs", () => {
 
   it("the new marks survive a Yjs round trip", () => {
     const ydoc = prosemirrorJSONToYDoc(schema, doc, "default");
-    const back = yDocToProsemirrorJSON(ydoc, "default");
-    const marks = back.content[1].content[0].marks;
-    expect(marks).toEqual(
+    expect(firstBodyMarks(ydoc)).toEqual(
       expect.arrayContaining([
         { type: "fontSize", attrs: { size: "sm" } },
         { type: "textColor", attrs: { color: "teal" } },
@@ -165,9 +168,7 @@ describe("Yjs", () => {
     Y.applyUpdate(a, Y.encodeStateAsUpdate(b));
     Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
     for (const d of [a, b]) {
-      const marks = yDocToProsemirrorJSON(d, "default").content[1].content[0]
-        .marks;
-      expect(marks).toEqual(
+      expect(firstBodyMarks(d)).toEqual(
         expect.arrayContaining([
           { type: "textColor", attrs: { color: "red" } },
           { type: "fontSize", attrs: { size: "lg" } },
