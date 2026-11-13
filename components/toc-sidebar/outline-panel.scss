@@ -7,7 +7,7 @@
 
   // Before hydration the mode is unknown and the outline renders docked;
   // never let it push the page aside where it will be an overlay.
-  @media (max-width: 949.98px) {
+  @media (max-width: 949px) {
     display: none;
   }
 }
@@ -23,8 +23,18 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
   animation: outline-panel-in 200ms ease-out;
 
+  // Stick below the sticky toolbar (same scroll container), so neither the
+  // header nor a focused item ever sits under it (WCAG 2.4.11).
   .toc-sidebar {
+    top: calc(var(--tt-toolbar-height) + 0.5rem);
     width: 100%;
+    max-height: calc(100dvh - 38px - var(--tt-toolbar-height) - 1rem);
+  }
+
+  // The overlay sits on the page background, where the docked header's
+  // faint grey falls below 4.5:1.
+  .toc-sidebar-header {
+    color: var(--muted-foreground);
   }
 
   @media (prefers-reduced-motion: reduce) {
