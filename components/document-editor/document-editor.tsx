@@ -96,7 +96,6 @@ type DocumentEditorContentProps = DocumentEditorProps & {
 };
 
 const getServerGuardState = (): SchemaGuardState => "ok";
-const noop = () => {};
 
 /** The outline sidebar, re-rendered on its own when the items change. */
 function DocumentOutline({
@@ -289,10 +288,8 @@ function DocumentEditorContent({
           <Toolbar ref={toolbarRef} onEscape={returnToEditor}>
             <Profiler id="toolbar" onRender={countToolbarCommit}>
               <MainToolbarContent
-                onHighlighterClick={noop}
                 onTocToggle={() => setOutlineOpen((open) => !open)}
                 onFilterToggle={headingFilter.toggleBar}
-                isMobile={false}
                 tocVisible={outlineOpen}
                 outlineOverlay={outlineView.mode === "overlay"}
                 filterActive={
