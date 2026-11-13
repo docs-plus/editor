@@ -13,21 +13,68 @@ since the previous tag.
 
 Branch `perf/toolbar-followups-engine`. No deploy steps.
 
+#### Added
+- **Diagram ▸ templates in the Insert menu (M17b):** a "▸" item beside
+  Diagram opens the five Mermaid templates; the last used one is
+  described "Last used" and focused first. Diagram itself still inserts
+  with one click. E's `template.mermaid` no longer shows up as a second,
+  icon-less "Insert diagram" row. The submenu rides in the insert step's
+  preloaded chunk.
+- **Remove a saved format:** each entry under "Your formats" in the
+  bubble's Formats menu has a Remove item ("Remove format 'X'"),
+  confirmed in place and announced, so the 20-format cap can be acted
+  on.
+- **Formats cell on the phone selection bar:** Copy formatting, Save as
+  format…, Your formats and In this doc, which Repeat's reason points at.
+- **Announcements** through one polite live region (`lib/announce.ts`):
+  "Repeated Bold, Italic", "Copied formatting: Bold", "Applied …",
+  "Saved format 'X'" / "Replaced format 'X'", "Removed format 'X'", and
+  the reason when the Repeat key cannot run (the key is then handled,
+  not passed on).
+
 #### Fixed
 - The Formats menu in the selection bubble's Repeat split now stays open:
   focus moving into the menu (portalled to `body`) hid the bubble and the
   menu with it.
+- The bubble's Repeat face and Formats items show why they are
+  unavailable (e.g. "Code has no formatting." on inline code) instead of
+  failing silently. The face is sized to its text, capped at 10ch, so it
+  no longer runs over Link and the chevron.
+- Repeat's face, menu item and phone cell carry Mod+Alt+V (plus F4 off
+  macOS) in `aria-keyshortcuts` and are named for what they repeat
+  ("Repeat Bold, Italic").
+- A tap on the unavailable phone Repeat cell shows its reason above the
+  bar. The phone selection cells scroll in their own container with edge
+  fades, and Back sits beside it, so no cell is under Back at 320px, at
+  rest or focused. Back dismisses the cells for that selection only.
+- Copy formatting on plain text no longer remembers a clear-only "Repeat
+  Plain"; it says "Nothing to copy".
+- The Repeat extend session merges into its own bundle, not the shared
+  memory another tab may have replaced (bold here plus red here no
+  longer repeats as the other tab's italic plus red); "Forget my choices"
+  ends the session.
+- Saved formats stay fresh across tabs with no component mounted (the
+  palette no longer lists or applies a format another tab deleted).
+- Format names also lose the soft hyphen, the Arabic letter mark, the
+  word joiner and the invisible operators.
+- Alt+/ no longer takes Option-hyphen (en dash) on German and Swiss Mac
+  layouts: it needs a key that types "/" (or "÷" on US-like Mac
+  layouts); Alt+Shift+Z stays the fallback.
+- While the engine loads, remote and meta-only transactions no longer
+  push the user's own out of the capped buffer, and every engine use
+  records the buffer first.
 
 #### Changed
 - PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
   in one lazy chunk. The selection bubble and the phone selection cells
   reach it through `getV11Engine()` / `loadV11Engine()` like the palette,
-  instead of each carrying a copy. Production build: the bubble's chunks
-  13.0 → 10.6 KB gz, the phone cells' chunk 10.6 → 6.9 KB gz; the editor
-  chunk group is unchanged (+22.9 KB of 23.5 KB). Until the engine lands,
-  the Repeat face and the Formats menu items are disabled with
-  "Formatting tools are still loading." and turn live without a reopen. A
-  unit test fails on any static import of the engine from app code.
+  instead of each carrying a copy (about 5 KB gz each). A unit test
+  fails on any static import of the engine from app code.
+- The selection-wide code check runs once per snapshot and stops at the
+  first formattable character.
+- E's palette keywords ride with the engine, and the eager shell drops
+  its listener set, to keep the editor chunk flat: it ends at +23.1 KB
+  of 23.5 KB (+152 B gz over the start of this branch).
 
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
