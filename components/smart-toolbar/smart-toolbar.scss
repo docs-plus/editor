@@ -57,6 +57,14 @@ span[data-collapse-standin] {
         }
       }
 
+      // Below T3 the slot's stand-in renders nothing in the title either.
+      @if $tier == t3 {
+        [data-toolbar-group="slot"]:has(> [data-collapse-standin]:empty)
+          + [data-slot="toolbar-separator"] {
+          display: none;
+        }
+      }
+
       // T5: the style menu shows a short value; separators go.
       @if $tier == t5 {
         [data-toolbar-group="style"] [data-toolbar-item] {
@@ -96,6 +104,13 @@ span[data-collapse-standin] {
       padding-inline: 0.25rem;
     }
   }
+}
+
+// An empty slot (paragraphs, lists) keeps its width but not a second
+// separator, so the row never shows `│ │`.
+[data-toolbar-group="slot"]:has([data-slot="context-slot"][aria-hidden])
+  + [data-slot="toolbar-separator"] {
+  display: none;
 }
 
 .st-color-controls,
