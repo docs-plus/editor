@@ -32,6 +32,8 @@ const ColorPanel = lazy(() =>
 );
 
 type ColorKind = "text" | "highlight";
+/** Where the colour popover opens; the bubble opens it away from the text. */
+type PopoverSide = "top" | "bottom";
 
 const faceSwatch = (kind: ColorKind, token: Swatch["token"]): Swatch =>
   kind === "text" ? { kind, token } : { kind, token };
@@ -58,6 +60,7 @@ interface ColorPopoverButtonProps {
   label: string;
   className?: string;
   reason?: string;
+  side?: PopoverSide;
   children: ReactNode;
 }
 
@@ -71,6 +74,7 @@ export function ColorPopoverButton({
   label,
   className,
   reason,
+  side,
   children,
 }: ColorPopoverButtonProps) {
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
@@ -108,6 +112,7 @@ export function ColorPopoverButton({
         ref={popupRef}
         aria-label={focusKind === "text" ? "Text colours" : "Highlight colours"}
         className="st-color-popover"
+        side={side}
         initialFocus={(openType) =>
           openType === "touch" || openedByTouch
             ? false
@@ -133,10 +138,11 @@ export function ColorPopoverButton({
  * One split control (spec §4.5, M1/M2): the face reapplies the remembered
  * colour ("Apply text colour: Red"); the chevron opens the colour popover.
  */
-function ColorSplit({
+export function ColorSplit({
   kind,
   editor: providedEditor,
-}: SurfaceProps & { kind: ColorKind }) {
+  popoverSide,
+}: SurfaceProps & { kind: ColorKind; popoverSide?: PopoverSide }) {
   const { editor: contextEditor } = useCurrentEditor();
   const editor = providedEditor ?? contextEditor ?? null;
   const copy = COPY[kind];
@@ -178,6 +184,7 @@ function ColorSplit({
         label={copy.more}
         className="st-split-chevron"
         reason={reason}
+        side={popoverSide}
       >
         <ChevronDownIcon aria-hidden="true" />
       </ColorPopoverButton>
