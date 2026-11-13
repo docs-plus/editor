@@ -397,10 +397,9 @@ async function openHighlightDialog(page: Page) {
   return { dialog, highlights };
 }
 
-const LOW_NOTE =
-  "Some highlights are low contrast with the current text colour";
+const LOW_NOTE = "Dotted: hard to read with Teal text";
 
-test("M1: a visible note under Highlight while swatches are dimmed", async ({
+test("M1: a visible note under Highlight names the text colour while swatches are dotted", async ({
   page,
 }) => {
   await setTheme(page, "light");
@@ -409,7 +408,7 @@ test("M1: a visible note under Highlight while swatches are dimmed", async ({
   await selectWord(page);
 
   let { dialog } = await openHighlightDialog(page);
-  await expect(dialog.getByText(LOW_NOTE)).toHaveCount(0);
+  await expect(dialog.getByText(/^Dotted:/)).toHaveCount(0);
   const width = await settledWidth(dialog);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();

@@ -38,9 +38,10 @@ import "./color-panel.scss";
  * but `aria-disabled`, described by the reason. Applying keeps the popover
  * open with focus on the swatch, so writers can try colours; Esc closes it.
  * Highlight swatches that would put the current text colour below AA
- * (Appendix A, O3) are dimmed and described "Low contrast", with one
- * visible line under Highlight, but stay selectable. Lazy chunk: loaded on
- * first open.
+ * (Appendix A, O3) get a dotted border and the description "Low
+ * contrast", with one visible line under Highlight naming the text colour
+ * (design pass §11), but stay selectable and undimmed. Lazy chunk: loaded
+ * on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -126,9 +127,16 @@ function swatchTitle(name: string, reason: string, low: boolean): string {
 }
 
 const LOW_CONTRAST = "Low contrast with the current text colour";
-/** The visible line under Highlight while any of its swatches dims. */
-const LOW_CONTRAST_NOTE =
-  "Some highlights are low contrast with the current text colour";
+
+/**
+ * The visible line under Highlight while any swatch is dotted: "Dotted:
+ * hard to read with Red text" (design pass §11).
+ */
+function lowContrastNote(text: string | null | undefined): string {
+  const token = paletteToken(text);
+  const name = token ? swatchName({ kind: "text", token }) : "default text";
+  return `Dotted: hard to read with ${name}`;
+}
 
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
   const id =
@@ -348,7 +356,7 @@ export function ColorPanel({
           </div>
           {row.label === "Highlight" && anyLow ? (
             <p className="w-0 min-w-full text-xs text-muted-foreground">
-              {LOW_CONTRAST_NOTE}
+              {lowContrastNote(currentText)}
             </p>
           ) : null}
         </div>
