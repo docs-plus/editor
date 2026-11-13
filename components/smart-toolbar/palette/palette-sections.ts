@@ -8,6 +8,7 @@
  * React.
  */
 import type { Swatch } from "@/components/smart-toolbar/color/swatch";
+import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
 import { availability } from "@/lib/editor-actions/registry";
 import type {
   ActionGroup,
@@ -114,6 +115,8 @@ export interface PaletteItem {
   icon?: IconComponent;
   /** A colour chip for the leading slot instead (colour rows). */
   swatch?: Swatch;
+  /** A saved format's chip for the leading slot (Your formats rows). */
+  bundle?: FormatBundle;
   /** The selection already has this choice (style and align groups). */
   current?: true;
 }
@@ -152,6 +155,7 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
       keywords: [...keywords, ...(option.keywords ?? [])],
       shortcut: undefined,
       swatch: swatchOf(action, option.value),
+      bundle: option.bundle,
     }));
   }
   const value =

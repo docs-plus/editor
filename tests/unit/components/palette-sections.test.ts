@@ -21,6 +21,11 @@ import {
 } from "@/lib/editor-actions/types";
 import { v11Actions } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import {
+  removeFormat,
+  resetSavedFormatsCacheForTests,
+  saveFormat,
+} from "@/lib/saved-formats";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 // The E action bodies are a lazy chunk in the app; install them here.
@@ -204,6 +209,26 @@ describe("buildPaletteSections", () => {
     );
     // Registry icons fill the leading slot.
     expect(items.find((i) => i.actionId === "mark.bold")?.icon).toBeDefined();
+  });
+
+  it("gives each Your formats row its bundle for the chip", () => {
+    const saved = saveFormat("Warning", { bold: true, textColor: "red" });
+    if (!saved.ok) throw new Error(saved.reason);
+    try {
+      const ed = setup();
+      ed.commands.setTextSelection({ from: 18, to: 23 });
+      const yours = buildPaletteSections({
+        ctx: computeContext(ed),
+        actions: v11Actions,
+        recentKeys: [],
+      }).find((s) => s.heading === "Your formats");
+      const row = yours?.items.find((i) => i.label === "Warning");
+      expect(row?.bundle).toEqual({ bold: true, textColor: "red" });
+      expect(row?.swatch).toBeUndefined();
+    } finally {
+      removeFormat(saved.format.id);
+      resetSavedFormatsCacheForTests();
+    }
   });
 
   it("keeps disabled entries with their reason", () => {

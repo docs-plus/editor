@@ -720,6 +720,46 @@ test.describe("palette design pass (§7, §8)", () => {
     expect(await bold.evaluate(height)).toBe(32);
     await page.keyboard.press("Escape");
   });
+
+  test("Your formats rows show the format as a chip", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [
+            {
+              id: "w",
+              name: "Warning",
+              bundle: { bold: true, textColor: "red", highlight: "yellow" },
+            },
+          ],
+        }),
+      );
+    });
+    await openDoc(page);
+    await select(page, "alpha");
+    await page.keyboard.press("Alt+Slash");
+    await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
+    const row = page
+      .locator(PALETTE)
+      .getByRole("group", { name: "Your formats" })
+      .getByRole("option", { name: /^Warning/ });
+    const chip = row.locator(".st-chip .st-format-preview");
+    await expect(chip).toHaveText("A");
+    const style = await chip.evaluate((el) => {
+      const computed = getComputedStyle(el);
+      return {
+        weight: computed.fontWeight,
+        color: computed.color,
+        fill: computed.backgroundColor,
+      };
+    });
+    expect(style.weight).toBe("700");
+    expect(style.color).toBe("rgb(220, 38, 38)");
+    expect(style.fill).not.toBe("rgba(0, 0, 0, 0)");
+    await page.keyboard.press("Escape");
+  });
 });
 
 test.describe("palette accessibility", () => {

@@ -40,6 +40,7 @@ import { CheckIcon } from "@/lib/icons";
 import "./command-palette.scss";
 import { isMac } from "@/lib/shortcuts";
 
+import { FormatPreview } from "../formats/format-preview";
 import { readPaletteRecent, rememberPaletteRecent } from "./palette-recent";
 import {
   buildPaletteSections,
@@ -157,15 +158,19 @@ function readSections(editor: Editor, _engineReady: boolean) {
 }
 
 /**
- * The row's leading `size-4` slot: the colour's chip, else the registry
- * icon (design pass §8). Empty slots keep the labels aligned.
+ * The row's leading `size-4` slot: a saved format's or colour's chip, else
+ * the registry icon (design pass §8). Empty slots keep the labels aligned.
  */
 function Lead({ item }: { item: PaletteItem }) {
   const Icon = item.icon;
-  const swatch = item.swatch;
+  const { swatch, bundle } = item;
   return (
     <span aria-hidden="true" className="flex size-4 shrink-0 items-center">
-      {swatch ? (
+      {bundle ? (
+        <span className="st-chip">
+          <FormatPreview bundle={bundle}>A</FormatPreview>
+        </span>
+      ) : swatch ? (
         <span
           className={`st-chip st-chip--${swatch.kind}`}
           data-token={swatch.token ?? "none"}

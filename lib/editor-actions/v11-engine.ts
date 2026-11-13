@@ -324,6 +324,7 @@ export const v11Engine: V11Engine = {
           value: format.id,
           label: format.name,
           keywords: [bundleLabel(format.bundle)],
+          bundle: format.bundle,
         })),
       run: (editor, id) => {
         const format = savedFormat(id);
