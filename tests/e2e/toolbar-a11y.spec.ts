@@ -292,6 +292,34 @@ test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger"
   await expect(trigger).toBeFocused();
 });
 
+test("highlight dialog: a Mod-Shift-H highlight shows as the pressed Yellow swatch", async ({
+  page,
+}) => {
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  await page.keyboard.press(`${getPlaywrightModifierKey()}+Shift+KeyH`);
+  // Stored as the bare token; the popover's swatch value is the legacy form.
+  expect(
+    await page.evaluate(
+      () => window.__tiptap_editor?.getAttributes("highlight").color,
+    ),
+  ).toBe("yellow");
+
+  await page
+    .getByRole("toolbar")
+    .getByRole("button", { name: /highlight/i })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const yellow = dialog.getByRole("button", { name: "Yellow highlight" });
+  await expect(yellow).toHaveAttribute("aria-pressed", "true");
+  await expect(yellow.locator("svg")).toHaveCount(1);
+  await expect(
+    dialog.getByRole("button", { name: "Green highlight" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await closeWithEscape(page, dialog);
+});
+
 const SWATCHES = ["Green", "Blue", "Red", "Purple", "Yellow"] as const;
 
 for (const mode of ["light", "dark", "forced colours"] as const) {

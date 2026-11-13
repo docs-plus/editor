@@ -1,5 +1,12 @@
-import { type Attribute, markInputRule, markPasteRule } from "@tiptap/core";
+import {
+  type Attribute,
+  getMarkAttributes,
+  isMarkActive,
+  markInputRule,
+  markPasteRule,
+} from "@tiptap/core";
 import { Highlight, inputRegex, pasteRegex } from "@tiptap/extension-highlight";
+import type { EditorState } from "@tiptap/pm/state";
 
 import { highlightTokenFromValue } from "@/lib/highlight-tokens";
 import { HIGHLIGHT_ATTR, type HighlightToken } from "@/lib/text-style-tokens";
@@ -13,18 +20,31 @@ const tokenOf = (element: HTMLElement): HighlightToken | null =>
   highlightTokenFromValue(element.getAttribute("data-color"));
 
 /**
- * The value a command stores, or null to refuse. A missing colour is the
- * default token. A token or the exact legacy `var(--tt-color-highlight-X)` is
- * stored as given, so the release N popover (D2-owned, replaced in v1) keeps
- * its pressed state; both forms render the same token. Anything else
- * (hex, `var(--background)`, hostile strings) is refused.
+ * The token a command stores, or null to refuse. A missing colour is the
+ * default token. A token or the legacy `var(--tt-color-highlight-X)` is stored
+ * as the token X (release N renders both). Anything else (hex,
+ * `var(--background)`, hostile strings) is refused.
  */
-const commandColor = (attributes?: { color?: unknown }): string | null => {
-  if (attributes?.color === undefined) return DEFAULT_HIGHLIGHT_TOKEN;
-  return highlightTokenFromValue(attributes.color)
-    ? (attributes.color as string)
-    : null;
-};
+const commandToken = (attributes?: {
+  color?: unknown;
+}): HighlightToken | null =>
+  attributes?.color === undefined
+    ? DEFAULT_HIGHLIGHT_TOKEN
+    : highlightTokenFromValue(attributes.color);
+
+/**
+ * The palette token of the highlight on the selection (stored marks on an
+ * empty selection), with legacy values mapped to their token. Null when the
+ * selection has no highlight, or one with an unknown value. Pressed states
+ * compare this, never the raw stored string.
+ */
+export function activeHighlightToken(
+  state: EditorState,
+): HighlightToken | null {
+  const type = state.schema.marks.highlight;
+  if (!type || !isMarkActive(state, type)) return null;
+  return highlightTokenFromValue(getMarkAttributes(state, type).color);
+}
 
 /**
  * Stock Highlight with token values (spec §3, B4). The attribute key stays
@@ -34,8 +54,9 @@ const commandColor = (attributes?: { color?: unknown }): string | null => {
  *   anything else renders no style at all.
  * - Parse: only our own `<mark>` with a token; foreign `<mark>` and
  *   `background-color` paste as plain text.
- * - Commands take a token (or the legacy form, stored as given), default to
- *   yellow, and refuse everything else.
+ * - Commands take a token (or the legacy form, stored as its token), default
+ *   to yellow, and refuse everything else. Toggling compares tokens, so a
+ *   legacy value toggles off like its token.
  */
 export const TokenHighlight = Highlight.extend({
   addAttributes() {
@@ -68,14 +89,25 @@ export const TokenHighlight = Highlight.extend({
       setHighlight:
         (attributes) =>
         ({ commands }) => {
-          const color = commandColor(attributes);
+          const color = commandToken(attributes);
           return color ? commands.setMark(this.name, { color }) : false;
         },
+      // Stock toggleMark compares raw attribute strings; compare tokens so a
+      // legacy value counts as its token. No colour (Mod-Shift-H) removes any
+      // highlight, as stock does, else sets the default.
       toggleHighlight:
         (attributes) =>
-        ({ commands }) => {
-          const color = commandColor(attributes);
-          return color ? commands.toggleMark(this.name, { color }) : false;
+        ({ state, commands }) => {
+          if (attributes?.color === undefined) {
+            return isMarkActive(state, this.type)
+              ? commands.unsetMark(this.name)
+              : commands.setMark(this.name, { color: DEFAULT_HIGHLIGHT_TOKEN });
+          }
+          const color = commandToken(attributes);
+          if (!color) return false;
+          return activeHighlightToken(state) === color
+            ? commands.unsetMark(this.name)
+            : commands.setMark(this.name, { color });
         },
       unsetHighlight:
         () =>
