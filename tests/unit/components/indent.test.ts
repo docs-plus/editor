@@ -2,10 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
 
-import {
-  applyIndent,
-  canApplyIndent,
-} from "@/components/tiptap-ui/indent-button/indent-button";
+import { applyIndent, canApplyIndent } from "@/lib/editor-actions/core/blocks";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 import { doc, h1, p, posInside } from "../../helpers/document-builders";
