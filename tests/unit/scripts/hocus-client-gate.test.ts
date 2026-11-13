@@ -155,7 +155,11 @@ describe("hocus-server client schema gate", () => {
     TIMEOUT_MS,
   );
 
-  for (const env of [{}, { HOCUS_MIN_CLIENT_SCHEMA: "0" }]) {
+  const drillEnvs: Record<string, string>[] = [
+    {},
+    { HOCUS_MIN_CLIENT_SCHEMA: "0" },
+  ];
+  for (const env of drillEnvs) {
     it(
       `env ${JSON.stringify(env)} → effective min 2: refuses schema < 2, keeps tabs exempt, logs counts (staging drill)`,
       async () => {
