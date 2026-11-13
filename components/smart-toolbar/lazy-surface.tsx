@@ -35,9 +35,11 @@ interface SurfaceBoundaryProps {
 }
 
 /**
- * Suspense for a lazy surface that renders nothing instead of throwing when
- * the chunk does not load (or the surface throws), so the editor and the
- * rest of the page stay mounted.
+ * Suspense for a lazy surface that never throws when the chunk does not
+ * load (or the surface throws), so the editor and the rest of the page stay
+ * mounted. It says so in place of the surface, shown only inside a popup
+ * (a dialog), where reopening is the retry: the bubble and the
+ * palette just stay away.
  */
 export class SurfaceBoundary extends Component<
   SurfaceBoundaryProps,
@@ -53,7 +55,11 @@ export class SurfaceBoundary extends Component<
 
   render() {
     const { fallback, children } = this.props;
-    return "error" in this.state ? null : (
+    return "error" in this.state ? (
+      <p className="hidden text-xs [[role=dialog]_&]:block" role="status">
+        Couldn’t load. Close and try again.
+      </p>
+    ) : (
       <Suspense fallback={fallback}>{children}</Suspense>
     );
   }

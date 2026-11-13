@@ -31,6 +31,8 @@ const settle = () =>
     for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
   });
 
+const HINT = "Couldn’t load. Close and try again.";
+
 describe("lazySurface", () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -65,11 +67,13 @@ describe("lazySurface", () => {
     expect(host.textContent).toBe("loaded");
   });
 
-  it("renders nothing when the chunk fails, without refetching in a loop", async () => {
+  it("renders only the failure hint when the chunk fails, without refetching in a loop", async () => {
     const loader = flakyLoader(Number.POSITIVE_INFINITY);
     mount(surface(loader.load));
     await settle();
-    expect(host.textContent).toBe("");
+    // Shown only inside a popup (a dialog); hidden elsewhere by its classes.
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(HINT);
+    expect(host.textContent).toBe(HINT);
     expect(loader.calls).toBe(1);
   });
 
@@ -78,7 +82,7 @@ describe("lazySurface", () => {
     const Surface = surface(loader.load);
     mount(Surface);
     await settle();
-    expect(host.textContent).toBe("");
+    expect(host.textContent).toBe(HINT);
 
     act(() => root.render(null));
     mount(Surface);

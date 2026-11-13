@@ -1,7 +1,8 @@
 /**
  * Lazy surface chunks that fail to load (offline, or a deploy replaced
- * them) leave the editor and the tab strip mounted and typing working; the
- * next open fetches the chunk again.
+ * them) leave the editor and the tab strip mounted and typing working; a
+ * popup says so in place of its body, and the next open fetches the chunk
+ * again.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -15,6 +16,12 @@ const row = (page: Page) =>
 /** Fails the chunk that defines `marker` with a 404 until the returned call. */
 const failChunk = (page: Page, marker: string) =>
   interceptChunk(page, marker, (route) => route.fulfill({ status: 404 }));
+
+const HINT = "Couldn’t load. Close and try again.";
+
+/** No failure hint on screen: the bubble and the palette just stay away. */
+const expectNoVisibleHint = (page: Page) =>
+  expect(page.getByText(HINT).filter({ visible: true })).toHaveCount(0);
 
 /** The page survived: editor and tabs mounted, and typing reaches the doc. */
 async function expectEditorAlive(page: Page, word: string) {
@@ -49,10 +56,11 @@ test.describe("lazy surface chunks", () => {
 
     await chevron.click();
     await expect(dialog).toBeVisible();
-    // The loading placeholder goes, and no swatch ever arrives.
+    // The loading placeholder goes for a short hint; no swatch arrives.
     await expect(dialog.locator(".st-color-panel-fallback")).toHaveCount(0, {
       timeout: 10_000,
     });
+    await expect(dialog.getByRole("status")).toHaveText(HINT);
     await expect(dialog.getByRole("button")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -62,6 +70,7 @@ test.describe("lazy surface chunks", () => {
     await restore();
     await chevron.click();
     await expect(dialog.getByRole("button").first()).toBeVisible();
+    await expect(dialog.getByText(HINT)).toHaveCount(0);
   });
 
   test("an Insert step chunk that 404s leaves the editor working", async ({
@@ -92,7 +101,9 @@ test.describe("lazy surface chunks", () => {
     };
 
     await openGrid();
-    await page.waitForTimeout(1_500);
+    await expect(dialog.getByRole("status")).toHaveText(HINT, {
+      timeout: 10_000,
+    });
     await expect(dialog.getByRole("button")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -114,6 +125,7 @@ test.describe("lazy surface chunks", () => {
     await page.keyboard.press("Shift+Home");
     await page.waitForTimeout(1_500);
     await expect(page.locator("[data-smart-bubble]")).toHaveCount(0);
+    await expectNoVisibleHint(page);
     await expectEditorAlive(page, "afterBubble");
   });
   test("a palette chunk that 404s leaves the editor working; the next Alt+/ loads it", async ({
@@ -125,6 +137,7 @@ test.describe("lazy surface chunks", () => {
     await page.keyboard.press("Alt+Slash");
     await page.waitForTimeout(1_500);
     await expect(palette).toHaveCount(0);
+    await expectNoVisibleHint(page);
     // Focus never left the document.
     await expect(page.locator(".tiptap")).toBeFocused();
     await expectEditorAlive(page, "afterPalette");
