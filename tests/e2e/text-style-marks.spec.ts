@@ -208,6 +208,39 @@ test.describe("text style marks", () => {
     expect(spanSize).toBe(headingSize);
   });
 
+  test("turning a sized paragraph into a heading drops the size in one Yjs undo step", async ({
+    page,
+  }) => {
+    const editor = await openDoc(page);
+    await editor.setContent({
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Undo")] },
+        paragraph(text("big", [{ type: "fontSize", attrs: { size: "lg" } }])),
+      ],
+    });
+    // Past the Yjs UndoManager capture window, so setContent is its own step.
+    await page.waitForTimeout(700);
+    await page.evaluate(() => {
+      window.__tiptap_editor
+        ?.chain()
+        .focus()
+        .setTextSelection(8)
+        .toggleHeading({ level: 2 })
+        .run();
+    });
+    await expect(page.locator(".tiptap h2")).toHaveText("big");
+    await expect(page.locator(".tiptap [data-font-size]")).toHaveCount(0);
+
+    // Tiptap's focus() lands a frame later; Mod-Z before it is lost.
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await editor.undo();
+    await expect(
+      page.locator('.tiptap p span[data-font-size="lg"]'),
+    ).toHaveText("big");
+    await expect(page.locator(".tiptap h2")).toHaveCount(0);
+  });
+
   test("tab-to-tab paste keeps colour, size and highlight tokens", async ({
     page,
     context,
