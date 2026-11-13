@@ -69,8 +69,9 @@ export class SurfaceBoundary extends Component<
     if (!this.state.error) {
       return <Suspense fallback={fallback}>{children}</Suspense>;
     }
+    // No padding of its own: the popover around it has it (design pass §12).
     return name ? (
-      <p className="flex items-center gap-2 p-3 text-sm" role="status">
+      <p className="flex items-center gap-2 text-sm" role="status">
         <CircleAlertIcon
           aria-hidden="true"
           className="size-4 shrink-0 text-muted-foreground"
