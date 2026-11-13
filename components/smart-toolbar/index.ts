@@ -18,7 +18,5 @@ export { FontSizeStepper } from "./font-size-stepper";
 export { InsertMenu } from "./insert-menu";
 export { ListControl } from "./list-control";
 export { PhoneBar } from "./phone-bar";
-export { PhoneSelectionCells } from "./phone-selection-cells";
-export { RepeatSplitButton } from "./repeat-split-button";
 export { SelectionBubble } from "./selection-bubble";
 export type { SurfaceProps } from "./types";
