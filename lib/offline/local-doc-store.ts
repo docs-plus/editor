@@ -84,6 +84,8 @@ function isCurrent(doc: StoredDoc, now: number): boolean {
 export class LocalDocStore {
   /** Per document, the last queued save, retirement or removal. */
   private readonly tails = new Map<string, Promise<unknown>>();
+  /** Per document, how many removals were queued (see `generation`). */
+  private readonly removals = new Map<string, number>();
 
   constructor(
     private readonly backend: DocStoreBackend,
@@ -140,18 +142,35 @@ export class LocalDocStore {
     );
   }
 
-  save(name: string, update: Uint8Array): Promise<void> {
-    return this.serialize(name, () =>
-      this.backend.put({
+  /**
+   * Bumped by every `remove(name)`. A binding captures it when it is made
+   * and saves with it, so once a copy is removed, a binding that existed
+   * before (a releasing session no tab close or deletion could reach)
+   * never writes it back.
+   */
+  generation(name: string): number {
+    return this.removals.get(name) ?? 0;
+  }
+
+  /** Saves `update`, unless `name` was removed since `generation`. */
+  save(
+    name: string,
+    update: Uint8Array,
+    generation = this.generation(name),
+  ): Promise<void> {
+    return this.serialize(name, async () => {
+      if (generation !== this.generation(name)) return;
+      await this.backend.put({
         key: storeKey(this.serverHost, name),
         name,
         update,
         updatedAt: this.now(),
-      }),
-    );
+      });
+    });
   }
 
   remove(name: string): Promise<void> {
+    this.removals.set(name, this.generation(name) + 1);
     return this.serialize(name, async () => {
       await this.backend.delete(storeKey(this.serverHost, name));
       await this.backend.delete(legacyStoreKey(this.serverHost, name));
@@ -253,12 +272,15 @@ export function bindLocalCopy(
   let destroyed = false;
   let disabled = false;
   let migration: Promise<void> | undefined;
+  // Saves made after a removal of `name` are dropped, even if nothing
+  // destroyed this binding.
+  const generation = store.generation(name);
 
   const write = async () => {
     timer = undefined;
     if (disabled || destroyed) return;
     try {
-      await store.save(name, Y.encodeStateAsUpdate(doc));
+      await store.save(name, Y.encodeStateAsUpdate(doc), generation);
     } catch {
       disabled = true;
     }
@@ -277,7 +299,7 @@ export function bindLocalCopy(
   const migrate = async (legacy: StoredDoc, merged: Uint8Array) => {
     if (destroyed) return;
     try {
-      await store.save(name, merged);
+      await store.save(name, merged, generation);
     } catch {
       disabled = true;
       return;

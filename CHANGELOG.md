@@ -38,7 +38,9 @@ since the previous tag.
     of legacy copies (the legacy key is deleted only after a successful
     save; IndexedDB writes now settle on commit). Saves and removals of one
     document run in order, so a merge still in flight when its tab closes or
-    the document is deleted never writes the copy back.
+    the document is deleted never writes the copy back, and a removal drops
+    every later save from a binding made before it (a session still
+    flushing on release, which a tab close cannot reach).
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
