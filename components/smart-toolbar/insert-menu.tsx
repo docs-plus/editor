@@ -40,27 +40,39 @@ const InsertStep = lazySurface(() =>
   loadInsertStep().then((module) => module.InsertStep),
 );
 
-/** "insert.codeBlock" → "codeBlock", the M10 kind. */
-const kindOf = (action: AnyAction) => action.id.slice("insert.".length);
+/**
+ * "▸" beside Diagram: the Mermaid templates (M17b,
+ * `insert/diagram-templates.tsx`). It rides in the insert step's chunk,
+ * which the Insert button preloads on hover and focus (editor-chunk
+ * budget); until it loads, or if it fails, Diagram stands alone.
+ */
+const DiagramTemplates = lazySurface(() =>
+  loadInsertStep().then((module) => module.DiagramTemplates),
+);
+
+/** "insert.codeBlock" → "codeBlock", the M10 kind ("" for other groups). */
+const kindOf = (action: AnyAction) =>
+  action.id.startsWith("insert.") ? action.id.slice(7) : "";
 
 /**
  * The menu items: mounted only while the menu is open, so the snapshot
- * subscription costs nothing while typing.
+ * subscription costs nothing while typing. E's `template.*` actions are
+ * no rows of their own: they fill Diagram's submenu.
  */
 function InsertMenuItems({ editor }: { editor: Editor }) {
   const ctx = useEditorContext(editor);
   const lastKind = useRememberedChoice(INSERT_KIND_CHOICE);
   return editorActions.list({ group: "insert" }).map((action) => {
+    const kind = kindOf(action);
+    if (!kind) return null;
     const enabled = ctx ? availability(action, ctx) : true;
     const reason = enabled === true ? undefined : enabled.reason;
     const Icon = action.icon;
-    return (
+    const item = (
       <DropdownMenuItem
         key={action.id}
         data-action-id={action.id}
-        data-last={
-          lastKind.ready && kindOf(action) === lastKind.last ? "" : undefined
-        }
+        data-last={lastKind.ready && kind === lastKind.last ? "" : undefined}
         disabled={reason !== undefined}
         title={reason}
         onClick={() => runAction(editor, action)}
@@ -69,6 +81,14 @@ function InsertMenuItems({ editor }: { editor: Editor }) {
         <span>{action.label}</span>
         {reason ? <span className="sr-only">({reason})</span> : null}
       </DropdownMenuItem>
+    );
+    return kind === "mermaid" ? (
+      <div key={kind} className="flex items-center *:first:flex-1">
+        {item}
+        <DiagramTemplates editor={editor} ctx={ctx} />
+      </div>
+    ) : (
+      item
     );
   });
 }

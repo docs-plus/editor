@@ -363,12 +363,15 @@ export const v11Engine: V11Engine = {
         ctx.can("insertMermaid", canInsertMermaid)
           ? true
           : { reason: "Diagrams cannot go here." },
-      options: () =>
-        MERMAID_TEMPLATES.map((template) => ({
+      options: () => {
+        const last = lastMermaidTemplate();
+        return MERMAID_TEMPLATES.map((template) => ({
           value: template.id,
           label: template.label,
           keywords: [template.id],
-        })),
+          note: template.id === last ? "Last used" : undefined,
+        }));
+      },
       run: (editor, arg) => {
         if (!hasMermaid(editor)) return false;
         const id = isMermaidTemplateId(arg) ? arg : lastMermaidTemplate();
