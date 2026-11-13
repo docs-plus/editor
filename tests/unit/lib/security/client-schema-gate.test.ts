@@ -8,8 +8,10 @@ import {
   classifyClientSchema,
   clientOutdatedError,
   createClientSchemaCounter,
+  effectiveMinClientSchema,
   isClientOutdated,
   isGateExempt,
+  SCHEMA_FLOOR,
   shouldDropOutdatedFrame,
 } from "@/lib/security/client-schema-gate";
 import {
@@ -53,6 +55,24 @@ describe("readFrameHeader", () => {
     expect(readFrameHeader(Uint8Array.of(3, 97))).toBeNull();
     expect(readFrameHeader(frame("doc", SYNC).subarray(0, 4))).toBeNull();
     expect(readFrameHeader(new Uint8Array())).toBeNull();
+  });
+});
+
+describe("SCHEMA_FLOOR", () => {
+  it("is 2 and never refuses the current client", () => {
+    expect(SCHEMA_FLOOR).toBe(2);
+    expect(SCHEMA_FLOOR).toBeLessThanOrEqual(CLIENT_SCHEMA);
+  });
+  it("the env can raise the effective minimum, never lower it", () => {
+    expect([0, 1, 2, 3, 7].map(effectiveMinClientSchema)).toEqual([
+      2, 2, 2, 3, 7,
+    ]);
+  });
+  it("the effective minimum always refuses a missing or old schema", () => {
+    const min = effectiveMinClientSchema(0);
+    for (const raw of [null, "", "abc", "0", "1"])
+      expect(isClientOutdated(raw, min)).toBe(true);
+    expect(isClientOutdated("2", min)).toBe(false);
   });
 });
 
