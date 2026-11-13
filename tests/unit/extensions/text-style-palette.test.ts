@@ -86,4 +86,59 @@ describe("text style palette (Appendix A)", () => {
       }
     });
   }
+
+  /**
+   * Coloured text on a highlight is an open decision (Appendix A, "Text
+   * colour on a highlight"): these pairs fall below 4.5:1 today. Pinned so a
+   * palette change, or a fix such as a scoped darker variant inside
+   * `mark[data-highlight]`, has to update this list on purpose.
+   */
+  const ALL = HIGHLIGHT_TOKENS.join(" ");
+  const BELOW_AA_ON_HIGHLIGHT: Record<
+    "light" | "dark",
+    Record<string, string>
+  > = {
+    light: {
+      gray: "",
+      brown: "",
+      red: ALL,
+      orange: ALL,
+      yellow: ALL,
+      green: ALL,
+      teal: "gray brown red orange teal blue purple pink",
+      blue: ALL,
+      purple: "gray brown red orange green teal blue purple pink",
+      pink: ALL,
+    },
+    dark: {
+      gray: "gray orange yellow green teal",
+      brown: "orange yellow green",
+      red: ALL,
+      orange: "orange yellow green",
+      yellow: "",
+      green: "",
+      teal: "yellow",
+      blue: "gray orange yellow green teal purple pink",
+      purple: ALL,
+      pink: ALL,
+    },
+  };
+
+  for (const theme of ["light", "dark"] as const) {
+    it(`text colour on a ${theme} highlight: pairs below 4.5:1 are the pinned open set`, () => {
+      const below = Object.fromEntries(
+        TEXT_COLOR_TOKENS.map((text) => [
+          text,
+          HIGHLIGHT_TOKENS.filter(
+            (highlight) =>
+              contrastRatio(
+                TEXT_COLOR_PALETTE[text][theme],
+                HIGHLIGHT_PALETTE[highlight][theme],
+              ) < 4.5,
+          ).join(" "),
+        ]),
+      );
+      expect(below).toEqual(BELOW_AA_ON_HIGHLIGHT[theme]);
+    });
+  }
 });
