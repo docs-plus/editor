@@ -6,6 +6,13 @@ import type { HighlightToken, TextColorToken } from "@/lib/text-style-tokens";
  * API. SKELETON: the exported names, slots and keys are the contract; D2
  * replaces the bodies (versioned payload, try/catch around every storage
  * call, read-merge-write on every write, unknown versions discarded).
+ *
+ * One write path (contract §6): `rememberChoice` is called only inside an
+ * action's `run()` after its command returned true, so the row, bubble,
+ * phone bar, palette and shortcuts all remember the same way. Surfaces
+ * only read. Two named exceptions: `outlineOpen` (the shell's
+ * `setOutlineOpen`) and `paletteRecent` (the palette host, after
+ * `runAction` returned true).
  */
 
 /** localStorage keys. "Forget my choices" clears only `choices`. */
@@ -58,8 +65,6 @@ export interface RememberedChoice<T> {
   last: T;
   /** Newest first, ≤ maxRecent, deduplicated. */
   recent: readonly T[];
-  /** Call only after a successful `run()`. */
-  remember: (value: T) => void;
 }
 
 /** M3 entries: one mixed row of text and highlight colours. */
@@ -85,20 +90,30 @@ export function readChoice<T>(spec: ChoiceSpec<T>): {
   return { last: spec.fallback, recent: [] };
 }
 
-/** Synchronous write for non-React callers (actions after `run()`). */
+/**
+ * Synchronous write, only from an action's `run()` after its command
+ * returned true (plus the two exceptions above). Notifies `subscribeChoices`
+ * listeners in this tab; other tabs hear the `storage` event.
+ */
 export function rememberChoice<T>(_spec: ChoiceSpec<T>, _value: T): void {}
 
-/** "Forget my choices": clears `tinydocy-choices` only. */
+/** "Forget my choices": clears `tinydocy-choices` only; notifies like a write. */
 export function forgetChoices(): void {}
 
-/** React binding; reads in `useEffect` behind `ready`. */
+/**
+ * Change feed for this tab's writes and Forget, plus other tabs' `storage`
+ * events (which never fire in the writing tab). D2 implements it with an
+ * in-module listener set; `useRememberedChoice` reads through it in the
+ * `useSyncExternalStore` style, so a face updates right after its action
+ * runs.
+ */
+export function subscribeChoices(_listener: () => void): () => void {
+  return () => {};
+}
+
+/** React binding, read only; reads in `useEffect` behind `ready`. */
 export function useRememberedChoice<T>(
   spec: ChoiceSpec<T>,
 ): RememberedChoice<T> {
-  return {
-    ready: false,
-    last: spec.fallback,
-    recent: [],
-    remember: (value) => rememberChoice(spec, value),
-  };
+  return { ready: false, last: spec.fallback, recent: [] };
 }

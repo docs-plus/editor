@@ -8,9 +8,14 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import type { Editor } from "@tiptap/core";
 
+import {
+  ActionButton,
+  type ActionButtonProps,
+} from "@/components/smart-toolbar";
 import { editorActions } from "@/lib/editor-actions";
 import { coreActions } from "@/lib/editor-actions/core-actions";
 import {
+  availability,
   canRun,
   createRegistry,
   runAction,
@@ -22,6 +27,7 @@ import {
   CONTEXT_KINDS,
   type Ctx,
   defineAction,
+  READ_ONLY_REASON,
 } from "@/lib/editor-actions/types";
 import { emitUiIntent, onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { v11Actions } from "@/lib/editor-actions/v11-actions";
@@ -33,6 +39,7 @@ import {
   readChoice,
   STORAGE_KEYS,
   STORAGE_VERSION,
+  subscribeChoices,
 } from "@/lib/remembered-choice";
 import { SCHEMA_MARK_NAMES } from "@/lib/schema-names";
 import {
@@ -84,6 +91,22 @@ function fakeAction(overrides: Partial<AnyAction> = {}): AnyAction {
     run: () => true,
     ...overrides,
   };
+}
+
+/** Makes `editorActions.get` also resolve `actions` while `body` runs. */
+async function withInjected(
+  actions: readonly AnyAction[],
+  body: () => void | Promise<void>,
+): Promise<void> {
+  const registry = await import("@/lib/editor-actions");
+  const original = registry.editorActions.get;
+  registry.editorActions.get = (id: string) =>
+    actions.find((action) => action.id === id) ?? original(id);
+  try {
+    await body();
+  } finally {
+    registry.editorActions.get = original;
+  }
 }
 
 let editor: Editor | undefined;
@@ -148,7 +171,6 @@ describe("text style tokens (PR C)", () => {
 describe("action types (PR D1)", () => {
   it("lists context kinds in precedence order", () => {
     expect(CONTEXT_KINDS).toEqual([
-      "readonly",
       "media",
       "mermaid",
       "code",
@@ -228,6 +250,30 @@ describe("registry (PR D1)", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  // `shortcut` is display-only; each key has one binding, so no two
+  // actions may advertise the same combo (Repeat must run once).
+  it("never gives one key combo to two actions", () => {
+    const combos = editorActions
+      .list()
+      .flatMap((action) => (action.shortcut ? [action.shortcut] : []));
+    expect(new Set(combos).size).toBe(combos.length);
+  });
+
+  it("refuses mutating actions centrally in a read-only document", () => {
+    const target = setupEditor();
+    const run = vi.fn(() => true);
+    const mutating = fakeAction({ run });
+    const viewOnly = fakeAction({ id: "view.test", mutates: false, run });
+    target.setEditable(false);
+    const ctx = computeContext(target);
+    expect(availability(mutating, ctx)).toEqual({ reason: READ_ONLY_REASON });
+    expect(runAction(target, mutating)).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+    expect(availability(viewOnly, ctx)).toBe(true);
+    expect(runAction(target, viewOnly)).toBe(true);
+    expect(ctx.kind).not.toBe("readonly" as never);
+  });
+
   it("runs only offered, enabled actions against the live document", () => {
     const target = setupEditor();
     const run = vi.fn(() => true);
@@ -253,6 +299,60 @@ describe("context store (PR D1)", () => {
     expect(getEditorContextStore(editor as Editor)).toBe(store);
   });
 
+  it("keeps two cache tiers: per snapshot and per doc", () => {
+    const target = setupEditor();
+    const first = computeContext(target);
+    target.commands.setTextSelection(2);
+    const second = computeContext(target);
+    expect(second.state.doc).toBe(first.state.doc);
+    expect(first.memo("m", () => 1)).toBe(1);
+    expect(second.memo("m", () => 2)).toBe(2);
+    expect(first.docMemo("d", () => 1)).toBe(1);
+    expect(second.docMemo("d", () => 2)).toBe(1);
+    const check = vi.fn(() => true);
+    expect(first.can("toggleBulletList", check)).toBe(true);
+    expect(first.can("toggleBulletList", check)).toBe(true);
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledWith(target);
+  });
+
+  it("is never stale without a subscriber", () => {
+    const target = setupEditor();
+    const store = getEditorContextStore(target);
+    const before = store.getContext();
+    expect(store.getContext()).toBe(before);
+    target.commands.setTextSelection(2);
+    const moved = store.getContext();
+    expect(moved).not.toBe(before);
+    expect(moved.state).toBe(target.state);
+    target.setEditable(false);
+    expect(store.getContext().editable).toBe(false);
+  });
+
+  it("computes a view once per snapshot", async () => {
+    const enabled = vi.fn(() => true as const);
+    const action = fakeAction({ id: "mark.counted", enabled });
+    await withInjected([action], () => {
+      const store = getEditorContextStore(setupEditor());
+      const unsubscribe = store.subscribe(() => {});
+      const view = store.getView(action.id);
+      expect(store.getView(action.id)).toBe(view);
+      expect(store.getView(action.id)).toBe(view);
+      expect(enabled).toHaveBeenCalledTimes(1);
+      unsubscribe();
+    });
+  });
+
+  it("shows the read-only reason before the offered-elsewhere reason", async () => {
+    const action = fakeAction({ id: "mark.tableOnly", contexts: ["table"] });
+    await withInjected([action], () => {
+      const target = setupEditor();
+      target.setEditable(false);
+      const view = getEditorContextStore(target).getView(action.id);
+      expect(view?.enabled).toEqual({ reason: READ_ONLY_REASON });
+    });
+  });
+
   it("returns null views for unknown ids", () => {
     const store = getEditorContextStore(setupEditor());
     expect(store.getView("nope.nothing")).toBeNull();
@@ -273,6 +373,22 @@ describe("context store (PR D1)", () => {
     releaseB();
     expect(store.getSlotContext()).toBe(store.getContext());
     expect(store.getContext()).not.toBe(frozen);
+    unsubscribe();
+  });
+
+  it("notifies subscribers on the final release when the slot moved", () => {
+    const target = setupEditor();
+    const store = getEditorContextStore(target);
+    const listener = vi.fn();
+    const unsubscribe = store.subscribe(listener);
+    const release = store.hold();
+    target.commands.setTextSelection(2);
+    listener.mockClear();
+    release();
+    expect(listener).toHaveBeenCalledTimes(1);
+    const quiet = store.hold();
+    quiet();
+    expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();
   });
 });
@@ -313,6 +429,20 @@ describe("ui intents (PR D1)", () => {
     expect(emitUiIntent(target, { type: "outline.toggle" })).toBe(false);
     expect(seen).toEqual(["outline.toggle"]);
   });
+
+  it("counts only an explicit true as handled", () => {
+    const target = setupEditor();
+    const offIgnore = onUiIntent(target, () => false);
+    expect(emitUiIntent(target, { type: "palette.open" })).toBe(false);
+    const offOwner = onUiIntent(
+      target,
+      (intent) => intent.type === "outline.toggle",
+    );
+    expect(emitUiIntent(target, { type: "palette.open" })).toBe(false);
+    expect(emitUiIntent(target, { type: "outline.toggle" })).toBe(true);
+    offIgnore();
+    offOwner();
+  });
 });
 
 describe("memory layer (PR D2)", () => {
@@ -349,5 +479,25 @@ describe("memory layer (PR D2)", () => {
       fallback: "red" as const,
     };
     expect(readChoice(spec)).toEqual({ last: "red", recent: [] });
+  });
+
+  it("offers an in-tab change feed", () => {
+    const unsubscribe = subscribeChoices(() => {});
+    expect(typeof unsubscribe).toBe("function");
+    unsubscribe();
+  });
+});
+
+describe("action button (PR D1)", () => {
+  it("pins the frozen signature", () => {
+    const props: ActionButtonProps = {
+      id: "mark.bold",
+      editor: null,
+      variant: "bubble",
+      showLabel: true,
+      arg: "red",
+    };
+    expect(typeof ActionButton).toBe("function");
+    expect(props.variant).toBe("bubble");
   });
 });

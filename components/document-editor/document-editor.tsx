@@ -140,7 +140,10 @@ function DocumentEditorContent({
   const toolbarHeight = useToolbarHeight(toolbarRef);
   const tocStore = useTocItemsStore();
 
-  const [tocVisible, setTocVisible] = useState(true);
+  // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`; D2
+  // swaps only this line for M6 memory, keeping the name and the
+  // `(next: boolean | ((open: boolean) => boolean)) => void` signature.
+  const [outlineOpen, setOutlineOpen] = useState(true);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
@@ -262,10 +265,10 @@ function DocumentEditorContent({
               {effectiveMobileView === "main" ? (
                 <MainToolbarContent
                   onHighlighterClick={() => setMobileView("highlighter")}
-                  onTocToggle={() => setTocVisible((v) => !v)}
+                  onTocToggle={() => setOutlineOpen((open) => !open)}
                   onFilterToggle={headingFilter.toggleBar}
                   isMobile={isMobile}
-                  tocVisible={tocVisible}
+                  tocVisible={outlineOpen}
                   filterActive={
                     headingFilter.isBarOpen || headingFilter.hasActiveFilters
                   }
@@ -282,7 +285,7 @@ function DocumentEditorContent({
         <FilterBar {...headingFilter} />
 
         <div className="editor-with-toc">
-          {tocVisible && !isMobile && (
+          {outlineOpen && !isMobile && (
             <DocumentOutline
               tocStore={tocStore}
               editor={editor}

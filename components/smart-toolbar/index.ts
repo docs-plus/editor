@@ -1,4 +1,9 @@
 export {
+  ActionButton,
+  type ActionButtonProps,
+  type ActionButtonVariant,
+} from "./action-button";
+export {
   AaCollapseMenu,
   ColorCollapseButton,
   ParagraphCollapseMenu,

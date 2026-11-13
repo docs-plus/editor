@@ -1,23 +1,32 @@
 import type { Editor } from "@tiptap/core";
+import type { EditorState } from "@tiptap/pm/state";
 
 import { getEditorVersionStore } from "@/hooks/use-tiptap-editor";
 import { editorActions } from "@/lib/editor-actions";
-import { isOfferedIn } from "@/lib/editor-actions/registry";
+import { availability } from "@/lib/editor-actions/registry";
 import type { ActionView, Ctx, Enabled } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
 
 /**
  * Per-editor context store (spec §2, §4.2). Wraps `getEditorVersionStore`
  * (same version, same timing: immediate for selection, settled for doc
- * changes, `TOOLBAR_MAX_WAIT_MS` cap) and memoizes by its version.
+ * changes, `TOOLBAR_MAX_WAIT_MS` cap for remote changes only).
  * Contract deviation from the spec text: the API lives here, not on the
  * version store itself, so `hooks/use-tiptap-editor.ts` stays unchanged.
- * SKELETON: PR D1 owns and may rewrite the body; the API is the contract.
+ * SKELETON: PR D1 owns and may rewrite the body; the API and the freshness,
+ * caching and notify rules below are the contract (pinned by the test).
  */
 export interface EditorContextStore {
+  /** Own listener set; wraps the version store and adds hold-release notifies. */
   subscribe(listener: () => void): () => void;
   getVersion(): number;
-  /** Live snapshot, memoized by version. */
+  /**
+   * Live snapshot. While subscribed: memoized by store version (lags doc
+   * changes by the settle window, by design). With no subscriber the version
+   * does not move, so it is memoized by `(editor.state, editor.isEditable)`
+   * instead and is never stale (palette on open, `hold()` before mount,
+   * `__TOOLBAR_OFF`).
+   */
   getContext(): Ctx;
   /**
    * Snapshot that drives the context slot's *contents*: frozen while any
@@ -25,11 +34,16 @@ export interface EditorContextStore {
    * updating through `getView`.
    */
   getSlotContext(): Ctx;
-  /** Same object while its fields are unchanged; null for an unknown id. */
+  /**
+   * Computed once per snapshot (cached by `getContext()` identity), so the
+   * repeated `getSnapshot` calls of `useSyncExternalStore` cost a map read.
+   * Same object while its fields are unchanged; null for an unknown id.
+   */
   getView(id: string): ActionView | null;
   /**
    * Freezes slot contents while focus is in the toolbar. Ref-counted; the
-   * returned release is idempotent and must also run on unmount.
+   * returned release is idempotent and must also run on unmount. The final
+   * release notifies subscribers when the slot snapshot changed.
    */
   hold(): () => void;
 }
@@ -45,28 +59,64 @@ const sameView = (a: ActionView, b: ActionView) =>
   a.value === b.value &&
   sameEnabled(a.enabled, b.enabled);
 
-const OFFERED_ELSEWHERE: Enabled = { reason: "Not available here" };
+interface CachedContext {
+  /** Subscription epoch; bumps when the first listener arrives. */
+  epoch: number;
+  version: number;
+  state: EditorState;
+  editable: boolean;
+  ctx: Ctx;
+}
 
 export function getEditorContextStore(editor: Editor): EditorContextStore {
   const existing = stores.get(editor);
   if (existing) return existing;
 
   const versions = getEditorVersionStore(editor);
-  let cached: { version: number; ctx: Ctx } | null = null;
+  const listeners = new Set<() => void>();
+  let stopVersions: (() => void) | null = null;
+  let epoch = 0;
+  let cached: CachedContext | null = null;
   let held: Ctx | null = null;
   let holds = 0;
-  const views = new Map<string, ActionView>();
+  const views = new Map<string, { ctx: Ctx; view: ActionView }>();
+
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+
+  const isFresh = (entry: CachedContext): boolean =>
+    listeners.size > 0
+      ? entry.epoch === epoch && entry.version === versions.getVersion()
+      : entry.state === editor.state && entry.editable === editor.isEditable;
 
   const getContext = (): Ctx => {
-    const version = versions.getVersion();
-    if (cached?.version !== version) {
-      cached = { version, ctx: computeContext(editor) };
-    }
+    if (cached && isFresh(cached)) return cached.ctx;
+    cached = {
+      epoch,
+      version: versions.getVersion(),
+      state: editor.state,
+      editable: editor.isEditable,
+      ctx: computeContext(editor),
+    };
     return cached.ctx;
   };
 
   const store: EditorContextStore = {
-    subscribe: versions.subscribe,
+    subscribe(listener) {
+      if (listeners.size === 0) {
+        // The version did not move while unsubscribed; never trust a
+        // version-keyed entry from before.
+        epoch += 1;
+        stopVersions = versions.subscribe(notify);
+      }
+      listeners.add(listener);
+      return () => {
+        if (!listeners.delete(listener) || listeners.size > 0) return;
+        stopVersions?.();
+        stopVersions = null;
+      };
+    },
     getVersion: versions.getVersion,
     getContext,
     getSlotContext: () => held ?? getContext(),
@@ -74,19 +124,19 @@ export function getEditorContextStore(editor: Editor): EditorContextStore {
       const action = editorActions.get(id);
       if (!action) return null;
       const ctx = getContext();
+      const previous = views.get(id);
+      if (previous?.ctx === ctx) return previous.view;
       const next: ActionView = {
         id,
-        enabled: isOfferedIn(action, ctx.kind)
-          ? action.enabled(ctx)
-          : OFFERED_ELSEWHERE,
+        enabled: availability(action, ctx),
         active: action.isActive?.(ctx) ?? false,
         mixed: action.isMixed?.(ctx) ?? false,
         value: action.value?.(ctx) ?? null,
       };
-      const previous = views.get(id);
-      if (previous && sameView(previous, next)) return previous;
-      views.set(id, next);
-      return next;
+      const view =
+        previous && sameView(previous.view, next) ? previous.view : next;
+      views.set(id, { ctx, view });
+      return view;
     },
     hold() {
       if (holds === 0) held = getContext();
@@ -96,7 +146,10 @@ export function getEditorContextStore(editor: Editor): EditorContextStore {
         if (released) return;
         released = true;
         holds -= 1;
-        if (holds === 0) held = null;
+        if (holds > 0) return;
+        const frozen = held;
+        held = null;
+        if (frozen !== getContext()) notify();
       };
     },
   };

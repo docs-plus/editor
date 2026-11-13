@@ -14,7 +14,13 @@ export type UiIntent =
   | { type: "insert.open"; kind: "table" | "image" | "embed" }
   | { type: "media.options" };
 
-type Listener = (intent: UiIntent) => boolean | undefined;
+/**
+ * Return `true` only for an intent this listener handled. D1, D2 and E all
+ * listen on one editor; anything else (including a `switch` that falls
+ * through) must return `false`.
+ */
+export type UiIntentListener = (intent: UiIntent) => boolean;
+type Listener = UiIntentListener;
 
 const listeners = new WeakMap<Editor, Set<Listener>>();
 
@@ -31,11 +37,11 @@ export function onUiIntent(editor: Editor, listener: Listener): () => void {
   };
 }
 
-/** True when a listener handled the intent (returned anything but false). */
+/** True when some listener returned exactly `true`. */
 export function emitUiIntent(editor: Editor, intent: UiIntent): boolean {
   let handled = false;
   for (const listener of listeners.get(editor) ?? []) {
-    if (listener(intent) !== false) handled = true;
+    if (listener(intent) === true) handled = true;
   }
   return handled;
 }
