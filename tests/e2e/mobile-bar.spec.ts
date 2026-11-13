@@ -1004,6 +1004,84 @@ test.describe("selection cells at 320px (design pass §6, WCAG 2.4.11)", () => {
   });
 });
 
+for (const width of [320, 375]) {
+  test.describe(`the Aa sheet's Your formats at ${width}px (design pass §6, §10)`, () => {
+    test.use({ viewport: { width, height: 700 } });
+
+    test("no sideways scroll with the Remove list open; Save's reason shows", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem(
+          "tinydocy-formats",
+          JSON.stringify({
+            v: 1,
+            formats: [
+              { id: "fnote", name: "Note", bundle: { italic: true } },
+              {
+                id: "fwarn",
+                name: "A very long warning format name",
+                bundle: { bold: true, textColor: "red" },
+              },
+            ],
+          }),
+        );
+      });
+      await openDoc(page);
+      await selectNewParagraph(page, "alpha");
+      await openSheet(page);
+      const section = sheet(page).getByRole("region", {
+        name: "Your formats",
+      });
+      const toggle = section.getByRole("button", { name: "Remove a format" });
+      await toggle.tap();
+      const list = section.getByRole("list", { name: "Remove a format" });
+      await expect(list).toBeVisible();
+      const body = sheet(page).locator(".st-sheet-body");
+      await section.scrollIntoViewIfNeeded();
+      // Nothing wider than the sheet, even without its overflow-x net.
+      await body.evaluate((el) => {
+        (el as HTMLElement).style.overflowX = "auto";
+      });
+      expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(
+        0,
+      );
+      // Save and Remove span the width; the list sits under the toggle,
+      // inset, never among the formats.
+      const [saveBox, toggleBox, listBox, noteBox] = await Promise.all([
+        section
+          .getByRole("button", { name: "Save selection as format…" })
+          .boundingBox(),
+        toggle.boundingBox(),
+        list.boundingBox(),
+        section
+          .getByRole("button", { name: "Note", exact: true })
+          .boundingBox(),
+      ]);
+      if (!saveBox || !toggleBox || !listBox || !noteBox) {
+        throw new Error("Your formats controls missing");
+      }
+      expect(Math.round(saveBox.width)).toBe(Math.round(toggleBox.width));
+      expect(saveBox.width).toBeGreaterThan(noteBox.width * 1.5);
+      expect(listBox.y).toBeGreaterThanOrEqual(toggleBox.y + toggleBox.height);
+      const removeBox = await list.getByRole("button").first().boundingBox();
+      expect(removeBox?.x ?? 0).toBeGreaterThan(toggleBox.x + 8);
+      // Plain "alpha": nothing to save, and the reason is a visible line
+      // (phones have no tooltips), read once as the description.
+      const save = section.getByRole("button", {
+        name: "Save selection as format…",
+      });
+      await expect(save).toHaveAttribute("aria-disabled", "true");
+      await expect(save).toHaveAccessibleDescription(
+        "Select formatted text to save it.",
+      );
+      await expect(
+        section.getByText("Select formatted text to save it."),
+      ).toBeVisible();
+    });
+  });
+}
+
 test.describe("selection cells at 375px (design pass §6)", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 

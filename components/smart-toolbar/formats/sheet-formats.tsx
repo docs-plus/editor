@@ -27,11 +27,12 @@ const focusSoon = (button: HTMLButtonElement | null) => {
 function SheetFormat({
   editor,
   format,
-  reason,
+  reasonId,
 }: {
   editor: Editor;
   format: SavedFormat;
-  reason: string | undefined;
+  /** The visible note saying why formats cannot apply, when they cannot. */
+  reasonId: string | undefined;
 }) {
   const id = useId();
   return (
@@ -41,9 +42,8 @@ function SheetFormat({
         data-saved-format=""
         data-surface="phone"
         size="sm"
-        aria-describedby={reason ? undefined : id}
-        disabled={reason !== undefined}
-        disabledReason={reason}
+        aria-describedby={reasonId ?? id}
+        disabled={reasonId !== undefined}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() =>
           runWithEngine(editor, () =>
@@ -53,7 +53,7 @@ function SheetFormat({
       >
         <FormatPreview bundle={format.bundle}>{format.name}</FormatPreview>
       </ToolbarButton>
-      {reason ? null : (
+      {reasonId ? null : (
         <span id={id} hidden>
           {bundleSetLabel(format.bundle)}
         </span>
@@ -62,13 +62,25 @@ function SheetFormat({
   );
 }
 
+/** Why a sheet control cannot run, as a visible line (design pass §10). */
+function SheetReason({ id, text }: { id: string; text: string | undefined }) {
+  return text ? (
+    <p id={id} className="st-sheet-reason text-xs text-muted-foreground">
+      {text}
+    </p>
+  ) : null;
+}
+
 /**
  * Your formats in the phone's Aa sheet (design pass §6): the same
  * previews as the style dropdown, then "Save selection as format…",
  * which closes the sheet before the palette's save view opens over the
- * page, and "Remove a format", which lists the names: a tap removes at
- * once with Undo on the pill, as in the dropdown (§4). A pick keeps the
- * sheet open, like the colours.
+ * page, and "Remove a format", which opens the names as a list of their
+ * own, inset under it: a tap removes at once with Undo on the pill, as
+ * in the dropdown (§4). A pick keeps the sheet open, like the colours.
+ * Phones show no tooltips, so why a control is unavailable is a visible
+ * line under it (§10). Save, Remove and the list span the grid's width,
+ * so a long label never pushes the sheet wider than the screen.
  */
 export function SheetFormats({
   editor,
@@ -86,6 +98,9 @@ export function SheetFormats({
   const save = useEActionReason(formatsSaveAction, editor);
   const [removing, setRemoving] = useState(startRemoving);
   const removeId = useId();
+  const applyReasonId = useId();
+  const saveReasonId = useId();
+  const applyReason = saved.length > 0 ? apply : undefined;
   return (
     <div className="st-sheet-list">
       {saved.map((format) => (
@@ -93,40 +108,49 @@ export function SheetFormats({
           key={format.id}
           editor={editor}
           format={format}
-          reason={apply}
+          reasonId={applyReason ? applyReasonId : undefined}
         />
       ))}
-      <ToolbarButton
-        type="button"
-        data-surface="phone"
-        size="sm"
-        disabled={save !== undefined}
-        disabledReason={save}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          onClose();
-          openPalette(editor, "save-format");
-        }}
-      >
-        Save selection as format…
-      </ToolbarButton>
+      <SheetReason id={applyReasonId} text={applyReason} />
+      <div className="st-sheet-wide">
+        <ToolbarButton
+          type="button"
+          data-surface="phone"
+          size="sm"
+          aria-describedby={save ? saveReasonId : undefined}
+          disabled={save !== undefined}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            onClose();
+            openPalette(editor, "save-format");
+          }}
+        >
+          <span className="min-w-0 truncate">Save selection as format…</span>
+        </ToolbarButton>
+        <SheetReason id={saveReasonId} text={save} />
+      </div>
       {saved.length > 0 ? (
         <ToolbarButton
           type="button"
           data-surface="phone"
           size="sm"
+          className="st-sheet-wide"
           aria-expanded={removing}
           aria-controls={removeId}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setRemoving(!removing)}
         >
-          Remove a format
+          <span className="min-w-0 truncate">Remove a format</span>
         </ToolbarButton>
       ) : null}
       {removing && saved.length > 0 ? (
-        <ul id={removeId} aria-label="Remove a format" className="contents">
+        <ul
+          id={removeId}
+          aria-label="Remove a format"
+          className="st-sheet-list st-sheet-wide ps-3"
+        >
           {saved.map((format, index) => (
-            <li key={format.id} className="contents">
+            <li key={format.id} className="min-w-0">
               <ToolbarButton
                 ref={index === 0 && startRemoving ? focusSoon : undefined}
                 type="button"

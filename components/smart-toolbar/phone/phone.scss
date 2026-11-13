@@ -158,6 +158,9 @@
   min-height: 0;
   padding: 0.25rem 1rem 1rem;
   overflow-y: auto;
+  // A safety net only: every row fits (labels truncate), so the sheet
+  // never scrolls sideways at 320px.
+  overflow-x: hidden;
   overscroll-behavior: contain;
 }
 
@@ -198,9 +201,37 @@
   button {
     justify-content: flex-start;
     width: 100%;
+    min-width: 0;
     min-height: 44px;
     padding-inline: 0.75rem;
+    overflow: hidden;
   }
+
+  // Labels truncate inside their cell instead of widening the sheet.
+  button > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+// Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle and
+// the Remove list take the full width, under the formats, never between
+// them; the list is a grid of its own (`ps-3` insets it).
+.st-sheet-wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+ul.st-sheet-list {
+  margin: 0;
+  list-style: none;
+}
+
+// Why a control is unavailable: phones have no tooltips (design pass §10).
+.st-sheet-reason {
+  margin: 0;
+  padding: 0 0.75rem 0.25rem;
 }
 
 // The slot's language picker (below 360px): a native select, 44px tall.
