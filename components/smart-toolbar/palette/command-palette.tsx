@@ -37,6 +37,7 @@ import {
 } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { CheckIcon } from "@/lib/icons";
+import "./command-palette.scss";
 import { isMac } from "@/lib/shortcuts";
 
 import { readPaletteRecent, rememberPaletteRecent } from "./palette-recent";
@@ -155,6 +156,86 @@ function readSections(editor: Editor, _engineReady: boolean) {
   });
 }
 
+/**
+ * The row's leading `size-4` slot: the colour's chip, else the registry
+ * icon (design pass §8). Empty slots keep the labels aligned.
+ */
+function Lead({ item }: { item: PaletteItem }) {
+  const Icon = item.icon;
+  const swatch = item.swatch;
+  return (
+    <span aria-hidden="true" className="flex size-4 shrink-0 items-center">
+      {swatch ? (
+        <span
+          className={`st-chip st-chip--${swatch.kind}`}
+          data-token={swatch.token ?? "none"}
+        >
+          {swatch.kind === "text" ? "A" : null}
+        </span>
+      ) : Icon ? (
+        <Icon />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * One option. An unavailable one keeps its label at full contrast, with
+ * its reason as a muted second line and no shortcut (design pass §8).
+ */
+function PaletteRow({
+  item,
+  mac,
+  onSelect,
+}: {
+  item: PaletteItem;
+  mac: boolean;
+  onSelect: () => void;
+}) {
+  const reason = item.disabledReason;
+  const second = reason ?? item.detail;
+  const shortcut = reason ? undefined : item.shortcut;
+  return (
+    <CommandItem
+      value={item.key}
+      keywords={[item.label, ...item.keywords]}
+      data-action-id={item.actionId}
+      data-unavailable={reason ? "" : undefined}
+      // The glyph is hidden; the option announces the keys.
+      aria-keyshortcuts={shortcut ? ariaKeyShortcuts(shortcut, mac) : undefined}
+      className={second ? "min-h-12" : "min-h-8"}
+      onSelect={onSelect}
+    >
+      <Lead item={item} />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">
+          {item.label}
+          {/* cmdk forces aria-disabled="false" on items it keeps
+              navigable (spec §6.5), so the state is part of the name. */}
+          {item.current ? <span className="sr-only">, current</span> : null}
+          {reason ? <span className="sr-only">, unavailable</span> : null}
+        </span>
+        {second ? (
+          <span className="truncate text-xs text-muted-foreground in-data-[selected=true]:text-foreground/70">
+            {second}
+          </span>
+        ) : null}
+      </span>
+      {item.current ? (
+        <CheckIcon aria-hidden="true" data-current="" className="ml-auto" />
+      ) : null}
+      {shortcut ? (
+        <CommandShortcut
+          aria-hidden="true"
+          className={item.current ? "ml-0" : undefined}
+        >
+          {formatKeyCombo(shortcut, mac)}
+        </CommandShortcut>
+      ) : null}
+    </CommandItem>
+  );
+}
+
 export function CommandPalette({
   editor,
   mode,
@@ -268,60 +349,12 @@ export function CommandPalette({
               {sections.map((section) => (
                 <CommandGroup key={section.heading} heading={section.heading}>
                   {section.items.map((item) => (
-                    <CommandItem
+                    <PaletteRow
                       key={item.key}
-                      value={item.key}
-                      keywords={[item.label, ...item.keywords]}
-                      data-action-id={item.actionId}
-                      data-unavailable={item.disabledReason ? "" : undefined}
-                      // The glyph is hidden; the option announces the keys.
-                      aria-keyshortcuts={
-                        item.shortcut
-                          ? ariaKeyShortcuts(item.shortcut, mac)
-                          : undefined
-                      }
-                      className={
-                        item.disabledReason
-                          ? "text-muted-foreground"
-                          : undefined
-                      }
+                      item={item}
+                      mac={mac}
                       onSelect={() => select(item)}
-                    >
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate">
-                          {item.label}
-                          {/* cmdk forces aria-disabled="false" on items it
-                              keeps navigable (spec §6.5), so the state is
-                              part of the name. */}
-                          {item.current ? (
-                            <span className="sr-only">, current</span>
-                          ) : null}
-                          {item.disabledReason ? (
-                            <span className="sr-only">, unavailable</span>
-                          ) : null}
-                        </span>
-                        {item.disabledReason ? (
-                          <span className="truncate text-xs">
-                            {item.disabledReason}
-                          </span>
-                        ) : null}
-                      </span>
-                      {item.current ? (
-                        <CheckIcon
-                          aria-hidden="true"
-                          data-current=""
-                          className="ml-auto"
-                        />
-                      ) : null}
-                      {item.shortcut ? (
-                        <CommandShortcut
-                          aria-hidden="true"
-                          className={item.current ? "ml-0" : undefined}
-                        >
-                          {formatKeyCombo(item.shortcut, mac)}
-                        </CommandShortcut>
-                      ) : null}
-                    </CommandItem>
+                    />
                   ))}
                 </CommandGroup>
               ))}

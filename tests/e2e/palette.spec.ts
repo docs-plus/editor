@@ -303,11 +303,14 @@ test.describe("action palette", () => {
     await expect.poll(() => html(page)).not.toContain("<em>gamma</em>");
     expect(await html(page)).toContain("<strong><em>alpha</em></strong>");
 
-    // From the palette, where it is suggested with its face.
+    // From the palette, where it is suggested, with what it applies as
+    // its second line.
     await select(page, "delta");
     await page.keyboard.press("Alt+Slash");
     await expect(
-      page.getByRole("option", { name: /Repeat formatting: B · I/ }).first(),
+      page
+        .getByRole("group", { name: "Suggested here" })
+        .getByRole("option", { name: /^Repeat formatting/ }),
     ).toBeVisible();
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("repeat formatting");
@@ -438,7 +441,14 @@ test.describe("action palette", () => {
     await expect(page.locator(PALETTE)).toHaveCount(0);
 
     await select(page, "gamma");
-    await runFromPalette(page, "apply format callout");
+    await page.keyboard.press("Alt+Slash");
+    await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
+    await page.keyboard.type("callout");
+    await page
+      .getByRole("group", { name: "Your formats" })
+      .getByRole("option", { name: /^Callout/ })
+      .click();
+    await expect(page.locator(PALETTE)).toHaveCount(0);
     await expect
       .poll(() => html(page))
       .toContain("<strong><u>gamma</u></strong>");
@@ -448,12 +458,12 @@ test.describe("action palette", () => {
     await page.keyboard.press("Alt+Slash");
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("callout");
-    // D2's memory layer keeps Recent across the reload too, so look in the
-    // Format group, where saved formats always appear.
+    // D2's memory layer keeps Recent across the reload too, so look in
+    // Your formats, where saved formats always appear, by name.
     await expect(
       page
-        .getByRole("group", { name: "Format" })
-        .getByRole("option", { name: /Apply format: Callout/ }),
+        .getByRole("group", { name: "Your formats" })
+        .getByRole("option", { name: /^Callout/ }),
     ).toBeVisible();
   });
 
@@ -470,7 +480,7 @@ test.describe("action palette", () => {
   });
 });
 
-test.describe("palette design pass (§7)", () => {
+test.describe("palette design pass (§7, §8)", () => {
   test.skip(process.env.PALETTE_BUDGET === "1", "budget run only");
 
   test("the Save dialog previews the format and keeps Save disabled until named", async ({
@@ -561,6 +571,96 @@ test.describe("palette design pass (§7)", () => {
       dialog.getByRole("button", { name: "Save", exact: true }),
     ).toBeEnabled();
     await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  });
+
+  test("rows: leading icons and chips, bare colour names, reasons on a second line, Suggested once", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // A remembered bundle and a selection: Repeat is suggested here.
+    await select(page, "alpha");
+    await page.keyboard.press("ControlOrMeta+b");
+    await select(page, "beta");
+    await page.keyboard.press("Alt+Slash");
+    await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
+    const palette = page.locator(PALETTE);
+    const suggested = palette.getByRole("group", { name: "Suggested here" });
+    await expect(suggested).toBeVisible();
+    const suggestedIds = await suggested
+      .getByRole("option")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("data-action-id")));
+    expect(suggestedIds).toContain("repeat.apply");
+    expect(suggestedIds.length).toBeLessThanOrEqual(4);
+    for (const id of suggestedIds) {
+      // Shown once: Suggested here (and Recent, if picked before) only.
+      await expect(
+        palette.locator(
+          `[cmdk-group]:not(:has([cmdk-group-heading]:text-is("Suggested here"))):not(:has([cmdk-group-heading]:text-is("Recent"))) [data-action-id="${id}"]`,
+        ),
+      ).toHaveCount(0);
+    }
+
+    // Colour rows: "Orange text", with a chip in the leading slot.
+    await page.keyboard.type("orange text");
+    const orange = palette.getByRole("option", { name: /^Orange text/ });
+    await expect(orange).toBeVisible();
+    await expect(
+      palette.getByRole("option", { name: /^Text colour: Orange/ }),
+    ).toHaveCount(0);
+    await expect(orange.locator('.st-chip[data-token="orange"]')).toBeVisible();
+
+    // An unavailable row: label at full contrast, reason muted, 48px tall.
+    await page.keyboard.press("Escape");
+    await expect(palette).toHaveCount(0);
+    // A caret: Repeat needs a selection.
+    await page.evaluate(() => {
+      const editor = (window as EditorWindow).__tiptap_editor;
+      const end = editor?.state.selection.to ?? 1;
+      editor?.commands.setTextSelection({ from: end, to: end });
+    });
+    await page.keyboard.press("Alt+Slash");
+    await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
+    await page.keyboard.type("repeat formatting");
+    const repeat = palette.locator(
+      '[cmdk-item][data-action-id="repeat.apply"]',
+    );
+    await expect(repeat).toHaveAttribute("data-unavailable", "");
+    // Layout height (the dialog's zoom-in would scale a bounding box).
+    const height = (el: HTMLElement) => el.offsetHeight;
+    expect(await repeat.evaluate(height)).toBe(48);
+    const colours = await repeat.evaluate((el) => {
+      const label = el.querySelector(".truncate") as HTMLElement;
+      const reason = label.nextElementSibling as HTMLElement;
+      const style = getComputedStyle(el);
+      return {
+        label: getComputedStyle(label).color,
+        reason: getComputedStyle(reason).color,
+        item: style.color,
+        bg: style.backgroundColor,
+        selected: el.getAttribute("data-selected"),
+      };
+    });
+    expect(colours.label).toBe(colours.item);
+    expect(colours.reason).not.toBe(colours.label);
+    if (colours.selected === "true") {
+      expect(
+        contrastRatio(
+          await resolveRgb(page, colours.reason),
+          await resolveRgb(page, colours.bg),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    // No shortcut glyph on an unavailable row.
+    await expect(repeat.locator('[data-slot="command-shortcut"]')).toHaveCount(
+      0,
+    );
+    // A runnable single-line row is 32px, with its icon in the slot.
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type("bold");
+    const bold = palette.locator('[cmdk-item][data-action-id="mark.bold"]');
+    await expect(bold.locator("svg").first()).toBeVisible();
+    expect(await bold.evaluate(height)).toBe(32);
     await page.keyboard.press("Escape");
   });
 });

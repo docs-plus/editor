@@ -165,22 +165,26 @@ test.describe("palette follow-ups", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("Format opens with Repeat and Copy formatting; Undo and Redo have their own group", async ({
+  test("Repeat is suggested, not repeated in Format, which opens with Copy formatting; Undo and Redo have their own group", async ({
     page,
   }) => {
     await openDoc(page);
     await boldAlpha(page);
     await select(page, "beta");
     await openPalette(page);
+    const suggested = page.getByRole("group", { name: "Suggested here" });
+    await expect(suggested.getByRole("option").first()).toHaveAttribute(
+      "data-action-id",
+      "repeat.apply",
+    );
     const format = page.getByRole("group", { name: "Format" });
     const formatRows = format.getByRole("option");
     await expect(formatRows.nth(0)).toHaveAttribute(
       "data-action-id",
-      "repeat.apply",
-    );
-    await expect(formatRows.nth(1)).toHaveAttribute(
-      "data-action-id",
       "repeat.copy",
+    );
+    await expect(format.locator('[data-action-id="repeat.apply"]')).toHaveCount(
+      0,
     );
     await expect(
       page
