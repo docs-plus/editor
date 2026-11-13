@@ -243,7 +243,11 @@ span[data-collapse-standin] {
   // `outline` stays the focus ring.
   @media (forced-colors: active) {
     forced-color-adjust: none;
-    border-color: ButtonText;
+
+    &,
+    &:hover {
+      border-color: ButtonText;
+    }
 
     // Beats the global forced-colours rule that paints every pressed
     // button Highlight (`globals.css`), which would erase the colour.

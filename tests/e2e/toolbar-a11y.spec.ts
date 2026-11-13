@@ -259,60 +259,62 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
     before,
   );
 
-  // Enter applies and closes the popover; focus goes back to the trigger.
-  await highlights(dialog)
-    .getByRole("button", { name: "Blue highlight" })
-    .focus();
+  // Arrows follow the token order (spec Appendix A).
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    highlights(dialog).getByRole("button", { name: "Brown highlight" }),
+  ).toBeFocused();
+
+  // Enter applies and keeps the popover open, focus on the swatch.
+  const blue = highlights(dialog).getByRole("button", {
+    name: "Blue highlight",
+  });
+  await blue.focus();
   await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
+  await expect(blue).toHaveAttribute("aria-pressed", "true");
+  await expect(blue.locator("svg")).toHaveCount(1);
+  await expect(dialog).toBeVisible();
+  await expect(blue).toBeFocused();
   expect(
     await page.evaluate(
       () => window.__tiptap_editor?.getAttributes("highlight").color,
     ),
   ).toBe("blue");
-  await expect(trigger).toBeFocused();
+  await expect(none).toHaveAttribute("aria-pressed", "false");
 
-  // Reopen: Blue is pressed, focused and carries a check glyph.
+  // Esc returns focus to the trigger; reopening focuses the applied swatch.
+  await closeWithEscape(page, dialog);
+  await expect(trigger).toBeFocused();
   await page.keyboard.press("Enter");
-  const blue = highlights(dialog).getByRole("button", {
-    name: "Blue highlight",
-  });
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-pressed", "true");
-  await expect(blue.locator("svg")).toHaveCount(1);
   await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 });
 
-test("highlight dialog: No highlight removes it, Esc returns focus to the trigger", async ({
+test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  let dialog = await openHighlightDialog(page);
-  await highlights(dialog)
-    .getByRole("button", { name: "Green highlight" })
-    .focus();
-  await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
-
-  dialog = await openHighlightDialog(page);
+  const dialog = await openHighlightDialog(page);
   const green = highlights(dialog).getByRole("button", {
     name: "Green highlight",
   });
+  await green.focus();
+  await page.keyboard.press("Enter");
   await expect(green).toHaveAttribute("aria-pressed", "true");
   await expect(green).toBeFocused();
+
   const none = highlights(dialog).getByRole("button", { name: "No highlight" });
   await none.focus();
   await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
+  await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(none).toHaveAttribute("aria-pressed", "true");
   expect(
     await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
   ).toBe(false);
-
-  dialog = await openHighlightDialog(page);
-  await expect(none).toHaveAttribute("aria-pressed", "true");
-  await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(none).toBeFocused();
   await closeWithEscape(page, dialog);
   await expect(highlightTrigger(page)).toBeFocused();
 });
@@ -354,16 +356,12 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     await openToolbarTestDoc(page);
     await selectWord(page);
 
-    let dialog = await openHighlightDialog(page);
+    const dialog = await openHighlightDialog(page);
     for (const name of SWATCHES) {
-      await highlights(dialog)
-        .getByRole("button", { name: `${name} highlight` })
-        .click();
-      await expect(dialog).toBeHidden();
-      dialog = await openHighlightDialog(page);
       const swatch = highlights(dialog).getByRole("button", {
         name: `${name} highlight`,
       });
+      await swatch.click();
       await expect(swatch).toHaveAttribute("aria-pressed", "true");
       // PR A's per-swatch forced-colours check, on D2's swatch: forced
       // colours keep the swatch's own colour and outline it in a system

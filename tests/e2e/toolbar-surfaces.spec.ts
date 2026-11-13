@@ -105,9 +105,12 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
   ).toBeFocused();
   await page.keyboard.press("ArrowRight");
   expect(await lastHighlight(page)).toBeNull();
+  // Applying keeps the popover open (spec §4.5, O4); Esc closes it.
   await blue.click();
-  await expect(dialog).toBeHidden();
+  await expect(blue).toHaveAttribute("aria-pressed", "true");
   expect(await lastHighlight(page)).toBe("blue");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
 
   // M2: the face now names and reapplies blue.
   const face = toolbar(page).getByRole("button", {
@@ -207,8 +210,6 @@ test("colour swatches keep their colours in forced colours", async ({
   await more.click();
   const dialog = page.getByRole("dialog", { name: "Highlight colours" });
   await dialog.getByRole("button", { name: "Blue highlight" }).click();
-  await expect(dialog).toBeHidden();
-  await more.click();
   const highlights = dialog.getByRole("group", { name: "Highlight" });
   const blue = highlights.getByRole("button", { name: "Blue highlight" });
   await expect(blue).toHaveAttribute("aria-pressed", "true");
