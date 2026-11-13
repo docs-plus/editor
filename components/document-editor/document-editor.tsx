@@ -61,10 +61,9 @@ import {
 import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
-import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
-import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
+import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
@@ -74,7 +73,6 @@ import {
   type TocItemsStore,
   useTocItems,
   useTocItemsStore,
-  useToolbarHeight,
 } from "./use-document-editor-ui-state";
 import "@/components/document-editor/document-editor.scss";
 import "@/extensions/text-style-marks/text-style-marks.scss";
@@ -97,6 +95,7 @@ type DocumentEditorContentProps = DocumentEditorProps & {
 };
 
 const getServerGuardState = (): SchemaGuardState => "ok";
+const noop = () => {};
 
 /** The outline sidebar, re-rendered on its own when the items change. */
 function DocumentOutline({
@@ -109,8 +108,6 @@ function DocumentOutline({
   return <TocSidebar items={items} {...props} />;
 }
 
-const SCROLL_CLEARANCE = { top: 52, bottom: 8, left: 0, right: 0 };
-
 const EDITOR_PROPS = {
   attributes: {
     autocomplete: "off",
@@ -120,7 +117,8 @@ const EDITOR_PROPS = {
     class: "document-editor",
   },
   // ProseMirror ignores CSS scroll-padding when it scrolls the caret, so keep
-  // it clear of the sticky toolbar here: 52 = --tt-toolbar-height (44) + 8px air.
+  // it clear of the sticky row, or of the phone bar and keyboard (live
+  // getters: the object's identity never changes, so no `setOptions`).
   scrollMargin: SCROLL_CLEARANCE,
   scrollThreshold: SCROLL_CLEARANCE,
 };
@@ -136,11 +134,8 @@ function DocumentEditorContent({
   serverSynced,
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
-  const { height } = useWindowSize();
-  const [mobileView, setMobileView] = useState<"main" | "highlighter">("main");
   const toolbarRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef("");
-  const toolbarHeight = useToolbarHeight(toolbarRef);
   const tocStore = useTocItemsStore();
 
   // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
@@ -272,46 +267,37 @@ function DocumentEditorContent({
     editor?.view.focus();
   }, [editor]);
 
-  const rect = useCursorVisibility({
-    editor,
-    overlayHeight: toolbarHeight,
-  });
-
-  const effectiveMobileView = isMobile ? mobileView : "main";
   const toolbarOff = useToolbarOffForTests();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
       <EditorContext.Provider value={{ editor }}>
-        {!toolbarOff && (
-          <Toolbar
-            ref={toolbarRef}
-            onEscape={returnToEditor}
-            style={{
-              ...(isMobile
-                ? {
-                    bottom: `calc(100% - ${height - rect.y}px)`,
-                  }
-                : {}),
-            }}
-          >
+        {/* Phones (< 768px) get the docked bar instead of the row (spec
+            §4.7): one role="toolbar" either way, both reached by Alt+F10. */}
+        {!toolbarOff && !isMobile && (
+          <Toolbar ref={toolbarRef} onEscape={returnToEditor}>
             <Profiler id="toolbar" onRender={countToolbarCommit}>
-              {effectiveMobileView === "main" ? (
-                <MainToolbarContent
-                  onHighlighterClick={() => setMobileView("highlighter")}
-                  onTocToggle={() => setOutlineOpen((open) => !open)}
-                  onFilterToggle={headingFilter.toggleBar}
-                  isMobile={isMobile}
-                  tocVisible={outlineOpen}
-                  filterActive={
-                    headingFilter.isBarOpen || headingFilter.hasActiveFilters
-                  }
-                />
-              ) : (
-                <MobileToolbarContent onBack={() => setMobileView("main")} />
-              )}
+              <MainToolbarContent
+                onHighlighterClick={noop}
+                onTocToggle={() => setOutlineOpen((open) => !open)}
+                onFilterToggle={headingFilter.toggleBar}
+                isMobile={false}
+                tocVisible={outlineOpen}
+                filterActive={
+                  headingFilter.isBarOpen || headingFilter.hasActiveFilters
+                }
+              />
             </Profiler>
           </Toolbar>
+        )}
+        {!toolbarOff && isMobile && (
+          <Profiler id="toolbar" onRender={countToolbarCommit}>
+            <MobileToolbarContent
+              ref={toolbarRef}
+              editor={editor}
+              onEscape={returnToEditor}
+            />
+          </Profiler>
         )}
 
         {!toolbarOff && <EditorSurfaces editor={editor} />}

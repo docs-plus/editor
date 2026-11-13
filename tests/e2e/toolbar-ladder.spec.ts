@@ -2,7 +2,7 @@
  * Responsive ladder (spec §4.6, §8 D go criterion): the fixed row fits its
  * width (`scrollWidth <= clientWidth` ±1px) at every tier, in each slot
  * context, for mouse and touch; collapsed groups leave the roving order;
- * phones keep 44×44 targets with the text style entry on screen.
+ * phones get the docked bar instead (44×44 cells, Aa on screen).
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -113,20 +113,21 @@ test.describe("touch", () => {
     await sweep(page, TOUCH_WIDTHS, "touch");
   });
 
-  test("phone: 44px row targets, text style entry on screen", async ({
+  test("phone: the docked bar replaces the row, 44px cells, Aa on screen", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openToolbarTestDoc(page);
-    const entry = row(page).getByRole("button", {
-      name: "Text style and colour",
-    });
+    await expect(page.getByRole("toolbar")).toHaveCount(1);
+    const bar = page.getByRole("toolbar", { name: "Formatting" });
+    await expect(bar).toHaveAttribute("data-variant", "docked");
+    const entry = bar.getByRole("button", { name: "Text format" });
     await expect(entry).toBeVisible();
     const box = await entry.boundingBox();
     expect(box?.x ?? 0).toBeGreaterThanOrEqual(0);
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
 
-    const small = await row(page).evaluate((el) =>
+    const small = await bar.evaluate((el) =>
       Array.from(el.querySelectorAll<HTMLElement>("[data-toolbar-item]"))
         .filter((item) => item.checkVisibility())
         .map((item) => ({
@@ -136,16 +137,16 @@ test.describe("touch", () => {
         .filter((rect) => rect.width < 44 || rect.height < 44)
         .map((rect) => `${rect.name} ${rect.width}×${rect.height}`),
     );
-    expect(small, "every phone row target is 44×44").toEqual([]);
-
-    // Overflow scrolls with a visible scrollbar rather than hiding controls.
+    expect(small, "every phone bar cell is 44×44").toEqual([]);
     expect(
-      await row(page).evaluate((el) => getComputedStyle(el).scrollbarWidth),
-    ).not.toBe("none");
+      await bar.evaluate((el) => el.scrollWidth - el.clientWidth),
+    ).toBeLessThanOrEqual(1);
 
     await entry.tap();
     await expect(
-      page.getByRole("button", { name: "More highlight colours" }),
+      page
+        .getByRole("dialog", { name: "Text format" })
+        .getByRole("button", { name: "Red text" }),
     ).toBeVisible();
   });
 });

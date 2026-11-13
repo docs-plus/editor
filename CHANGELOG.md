@@ -21,13 +21,13 @@ days.
 
 **What v1 has:** the sorted row, the context slot, the colour popover with
 split faces, the size stepper, List and Insert menus, the memory layer with
-Forget, and the responsive ladder below.
+Forget, the responsive ladder below, and the docked phone bar with the Aa
+("Text format") sheet.
 
 **Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
-selection bubble (desktop), the docked phone bar with the Aa sheet, the
-outline overlay below 950px, M4, the M10 face, M17a, and the mobile
-selection swap and Repeat split button (PR E). Phones reach size, text colour
-and highlight through the "Text style and colour" panel. The bubble-in-row
+selection bubble (desktop), the outline overlay below 950px, M4, the M10
+face, M17a, the phone bar's context slot cell, and the mobile selection swap
+and Repeat split button (PR E). The bubble-in-row
 matrix and Alt+F10-to-bubble tests stay pending until the bubble lands.
 
 **Open before `main`** (contract §10, O1–O4): the editor chunk is +16.1 KB gz
@@ -47,13 +47,26 @@ listed under Changed.
   it so the row keeps one Tab stop. `toolbar-ladder.spec.ts` asserts the fit
   at every tier.
 
+- **Docked phone bar** (spec §4.7, contract A6): below 768px the sticky row
+  gives way to one 44px `role="toolbar"` docked above the on-screen keyboard
+  (`visualViewport`, reset when focus leaves editable content, for iOS), with
+  44×44 cells: Undo, Aa, Bold, Italic, List, Indent and Insert. Toggles show
+  their state with `aria-pressed`. It hides in a read-only document. The
+  caret and `scroll-padding-bottom` stay clear of the bar and the keyboard.
+- **Aa "Text format" sheet** (lazy): Style (Normal, H1–H6; locked in the
+  title), Size (the XS–XL stepper, disabled in headings), Colours (the colour
+  popover's panel: text, highlight, Recent), Align and More (underline,
+  strikethrough, superscript, subscript, inline code, clear formatting,
+  Forget my choices, theme), all registry actions with their reasons. Picks
+  keep the sheet open; Done returns focus to Aa.
+
 #### Changed
-- The row's scrollbar is no longer hidden: where it still overflows (phones),
-  the clipped controls can be found.
+- The row's scrollbar is no longer hidden: where it still overflows, the
+  clipped controls can be found.
 - On touch every row target is 44×44.
-- Phones get a **Text style and colour** button next to Undo and Redo in
-  place of the off-screen "Highlight text" button, which also opened size and
-  text colour.
+- Phones lose the sideways-scrolling row and its **Text style and colour**
+  panel: the docked bar and the Aa sheet replace both. Redo, outdent and link
+  have no phone cell yet (the selection swap brings link).
 - **Colour popover keyboard behaviour (needs owner sign-off, O4):** Enter on a
   swatch applies it and closes the popover, where PR A's dialog stayed open;
   focus opens on the pressed swatch ("No highlight" when none, PR A: Green);
