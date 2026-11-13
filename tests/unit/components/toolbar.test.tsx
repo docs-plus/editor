@@ -220,6 +220,82 @@ describe("Toolbar roving tabindex", () => {
     expect(escaped).toBe(1);
   });
 
+  it("leaves Esc to an item whose own handler took it (open tooltip)", async () => {
+    let escaped = 0;
+    const container = mountWith(
+      [
+        button("A", {
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === "Escape") event.preventDefault();
+          },
+        }),
+        button("B"),
+      ],
+      {
+        onEscape: () => {
+          escaped += 1;
+        },
+      },
+    );
+    await settle();
+    act(() => byLabel(container, "A")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(0);
+    act(() => byLabel(container, "B")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(1);
+  });
+
+  it("ignores keys bubbling from a React portal (an open menu)", async () => {
+    const { createPortal } = await import("react-dom");
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    let escaped = 0;
+    const portalled = createPortal(
+      createElement("button", {
+        type: "button",
+        "aria-label": "In menu",
+        key: "menu",
+      }),
+      outside,
+    );
+    mountWith([button("A"), portalled], {
+      onEscape: () => {
+        escaped += 1;
+      },
+    });
+    await settle();
+    const inMenu = outside.querySelector<HTMLElement>("button");
+    act(() => inMenu?.focus());
+    keydown("Escape");
+    keydown("ArrowRight");
+    expect(escaped).toBe(0);
+    expect(document.activeElement).toBe(inMenu);
+    outside.remove();
+  });
+
+  it("keeps one tab stop when items mount while focus is elsewhere", async () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    const render = (labels: string[]) =>
+      act(() => {
+        root.render(
+          createElement(Toolbar, null, ...labels.map((l) => button(l))),
+        );
+      });
+    render(["A", "B"]);
+    await settle();
+    input.focus();
+    render(["A", "X", "Y"]);
+    await settle();
+    expect(tabindexes(container, ["A", "X", "Y"])).toEqual(["0", "-1", "-1"]);
+    input.remove();
+  });
+
   it("focusRovingItem focuses the tab stop", async () => {
     const { focusRovingItem } = await import("@/components/ui/toolbar");
     const container = mountWith([button("A"), button("B")]);
