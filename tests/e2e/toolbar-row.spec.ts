@@ -280,9 +280,7 @@ test.describe("context slot", () => {
     };
     try {
       const a = await openUser("slot-a");
-      await a.evaluate((doc) => {
-        window.__tiptap_editor?.commands.setContent(doc);
-      }, DOC);
+      await new EditorPage(a).setContent(DOC);
       const b = await openUser("slot-b");
       await expect(b.locator(".tiptap h2", { hasText: "Beta" })).toBeVisible();
       await caretIn(b, "Beta");

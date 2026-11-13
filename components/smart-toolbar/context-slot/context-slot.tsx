@@ -16,8 +16,12 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
 import { CODE_LANGUAGES } from "@/lib/editor-actions/core/slot";
 import { runAction } from "@/lib/editor-actions/registry";
-import { type ContextKind, READ_ONLY_REASON } from "@/lib/editor-actions/types";
-import { LockIcon } from "@/lib/icons";
+import {
+  type ContextKind,
+  type IconComponent,
+  READ_ONLY_REASON,
+} from "@/lib/editor-actions/types";
+import { Columns3Icon, LockIcon, Rows3Icon } from "@/lib/icons";
 
 import { useSlotTarget, useToolbarHold } from "./use-slot-target";
 
@@ -83,10 +87,12 @@ function ItemsMenu({
   label,
   ids,
   editor,
+  icon: Icon,
 }: {
   label: string;
   ids: readonly string[];
   editor: Editor;
+  icon: IconComponent;
 }) {
   const view = useActionView(ids[0], editor);
   const menu = useMenuFocus(editor);
@@ -98,6 +104,8 @@ function ItemsMenu({
       label={label}
       tooltip={label}
       readOnly={readOnly}
+      icon={<Icon aria-hidden="true" />}
+      showLabel={false}
       open={menu.open}
       onOpenChange={menu.onOpenChange}
       finalFocus={menu.finalFocus}
@@ -169,11 +177,13 @@ function SlotContents({
         <>
           <ItemsMenu
             label="Row"
+            icon={Rows3Icon}
             editor={editor}
             ids={["table.addRowBefore", "table.addRowAfter", "table.deleteRow"]}
           />
           <ItemsMenu
             label="Column"
+            icon={Columns3Icon}
             editor={editor}
             ids={[
               "table.addColumnBefore",
