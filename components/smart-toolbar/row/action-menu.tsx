@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuReason,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -144,11 +145,20 @@ export function ToolbarMenu({
   );
 }
 
-function Reason({ id, reason }: { id: string; reason?: string }) {
+/** The visible reason line (design pass §10), indented past an icon. */
+function Reason({
+  id,
+  reason,
+  indent,
+}: {
+  id: string;
+  reason?: string;
+  indent?: boolean;
+}) {
   return reason ? (
-    <span id={id} hidden>
+    <DropdownMenuReason id={id} className={indent ? "ps-5.5" : undefined}>
       {reason}
-    </span>
+    </DropdownMenuReason>
   ) : null;
 }
 
@@ -200,7 +210,7 @@ export function ActionMenuItem({
           {formatKeyCombo(shortcut, mac)}
         </DropdownMenuShortcut>
       ) : null}
-      <Reason id={reasonId} reason={reason} />
+      <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </>
   );
   return checkbox ? (
