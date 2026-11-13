@@ -84,7 +84,8 @@ Minors left by the a11y review of the smart toolbar (contract §10).
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
   resize hid the tab stop.
 
-Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
+The editor chunk ends at +23.4 KB of the 23.5 KB budget (112 B left); the
+budget is unchanged.
 
 #### Added
 - **Diagram ▸ templates in the Insert menu (M17b):** a "▸" item beside
@@ -132,8 +133,7 @@ Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
 - The selection-wide code check runs once per snapshot and stops at the
   first formattable character.
 - E's palette keywords ride with the engine, and the eager shell drops
-  its listener set, to keep the editor chunk flat: it ends at +23.1 KB
-  of 23.5 KB (+148 B gz over the start of this branch).
+  its listener set, to keep the editor chunk near flat (+148 B gz).
 
 ### Smart toolbar later-phase plans (docs)
 
