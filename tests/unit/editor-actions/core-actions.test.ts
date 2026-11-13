@@ -92,6 +92,24 @@ describe("core action list", () => {
     }
   });
 
+  it("marks exactly the contract's view-only ids mutates:false (§3.1, §4)", () => {
+    // section.fold is per-viewer view state (plugin meta, no doc change), so
+    // it keeps working in a read-only document (contract amendment A1).
+    expect(
+      coreActions
+        .filter((each) => each.mutates === false)
+        .map((each) => each.id)
+        .sort(),
+    ).toEqual([
+      "code.copy",
+      "mermaid.copySource",
+      "section.fold",
+      "view.filter",
+      "view.outline",
+      "view.theme",
+    ]);
+  });
+
   it("refuses every mutating action in a read-only document", () => {
     const target = make(para(t("x")));
     target.setEditable(false);
