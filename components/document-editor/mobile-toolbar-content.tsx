@@ -134,18 +134,24 @@ export function MobileToolbarContent({
     [],
   );
 
+  // Set by a close that hands focus on (Link opens its popover over the
+  // page): the sheet must not pull focus back to Aa after its exit.
+  const keepFocusOnCloseRef = useRef(false);
+
   const onSheetOpenChange = useCallback(
     (open: boolean) => {
+      if (open) keepFocusOnCloseRef.current = false;
       setPageInert(editor, open);
       setSheetOpen(open);
     },
     [editor],
   );
 
-  const closeSheet = useCallback(
-    () => onSheetOpenChange(false),
-    [onSheetOpenChange],
-  );
+  /** Closes the sheet for an action that moves focus elsewhere itself. */
+  const closeSheet = useCallback(() => {
+    keepFocusOnCloseRef.current = true;
+    onSheetOpenChange(false);
+  }, [onSheetOpenChange]);
 
   useEffect(() => {
     if (readOnly) onSheetOpenChange(false);
@@ -153,8 +159,15 @@ export function MobileToolbarContent({
 
   useEffect(() => () => setPageInert(editor, false), [editor]);
 
-  /** Back to Aa, or to the document when the bar just hid. */
+  /**
+   * Back to Aa; to the document when the bar just hid; nowhere when the
+   * close came from an action that focused its own popover (Link).
+   */
   const finalFocus = useCallback(() => {
+    if (keepFocusOnCloseRef.current) {
+      keepFocusOnCloseRef.current = false;
+      return false;
+    }
     if (!readOnly || !editor) return true;
     return documentFocusTarget(editor);
   }, [readOnly, editor]);

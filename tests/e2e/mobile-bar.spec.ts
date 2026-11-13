@@ -455,7 +455,12 @@ test("Link in the sheet closes it and opens the Hyperlink create popover", async
   await expect(sheet(page)).toBeHidden();
   const popover = page.locator(".hyperlink-create-popover");
   await expect(popover).toBeVisible();
-  await popover.locator("input").first().fill("https://example.com");
+  // The sheet's close must not pull focus back to Aa after its exit.
+  const input = popover.locator("input").first();
+  await expect(input).toBeFocused();
+  await page.waitForTimeout(400);
+  await expect(input).toBeFocused();
+  await input.fill("https://example.com");
   await page.keyboard.press("Enter");
   await expect
     .poll(() => lastMark(page, "hyperlink", "href"))
