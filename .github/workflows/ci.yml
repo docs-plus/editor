@@ -81,7 +81,8 @@ jobs:
       - name: Production build
         run: bun run build
 
-      # Spec §7: the lazy editor chunk may grow ≤ 6 KB gz over 58a9d22.
+      # The lazy editor chunk may grow ≤ 19 KB gz over 58a9d22 (owner
+      # decision O1, contract §10 A9; spec §7 said 6 KB).
       - name: Editor chunk size
         run: bun scripts/check-editor-chunk-size.ts
 

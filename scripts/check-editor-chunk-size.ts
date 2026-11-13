@@ -20,8 +20,14 @@ import { join } from "node:path";
 
 /** Gzipped bytes of the editor chunk group at `58a9d22`. */
 export const EDITOR_CHUNK_BASELINE_BYTES = 377_888;
-/** Allowed growth for the whole smart toolbar v1 (spec §7: +6 KB gz). */
-export const EDITOR_CHUNK_BUDGET_BYTES = 6 * 1024;
+/**
+ * Allowed growth for the whole smart toolbar v1. Spec §7 said +6 KB gz;
+ * owner decision O1 (contract §10 A9) lazy-loads every surface that is
+ * not on screen at first paint and sets the budget to the measured
+ * remainder (18.66 KB on the r2 integration), rounded up to the next
+ * 0.5 KB. Raising it again needs a new contract amendment.
+ */
+export const EDITOR_CHUNK_BUDGET_BYTES = 19 * 1024;
 
 /** Only `document-editor.tsx` renders this string. */
 const EDITOR_MARKER = "Main content area, start typing to enter text.";
