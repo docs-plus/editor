@@ -73,7 +73,7 @@ the design pass of PR E's surfaces
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
   resize hid the tab stop.
 
-The editor chunk ends at +24,033 B of the 23.5 KB budget (31 B left,
+The editor chunk ends at +24,037 B of the 23.5 KB budget (27 B left,
 from 112 B before the design pass); the budget is unchanged.
 
 #### Added
