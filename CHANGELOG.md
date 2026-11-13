@@ -29,12 +29,17 @@ since the previous tag.
 - **Context slot** (spec §4.2): a fixed 168px group before Insert with
   section tools (fold, move up, move down), the title lock, the code or
   diagram language and copy, table row and column menus, header row and
-  merge or split, and Media options… (keyboard access to the media
-  toolbar). Contents hold while focus is in the toolbar; a section move
+  merge or split, and Media options… (opens the media kit's toolbar with
+  focus on its first control; Esc closes it and returns to the slot
+  button). Contents hold while focus is in the toolbar; a section move
   carries the held heading id and refuses when a collaborator deleted it.
+  The slot never clips focus outlines, and a long language name truncates
+  (full name in the tooltip) instead of overflowing under WCAG 1.4.12 text
+  spacing.
 - **Keyboard model:** one Tab stop with a roving tabindex owned by the
   toolbar, Alt+F10 to the toolbar, Esc back to the document with its
-  selection.
+  selection. With a focus tooltip open, the first Esc closes the tooltip
+  and keeps focus (WCAG 1.4.13); the next returns to the document.
 - **Clear formatting** (`Mod-\`, #392): removes every inline mark except
   links in one undo step; never touches block type, alignment or indent;
   disabled in code.
@@ -52,6 +57,14 @@ since the previous tag.
   catch-up render per burst in a 500-heading document and writes it to the
   perf report.
 - Disabled reasons are full sentences ending in a period.
+- Text style applies to a mixed range (the Style menu reads "Mixed") and
+  keeps the range selected; a range that starts in the title is disabled
+  with "Title is always H1."
+- The toolbar's roving tabindex does no layout reads while focus is in the
+  document, so slot swaps on arrow keys stay cheap; mark state for a range
+  comes from one selection walk. `toolbar-row.spec.ts` reports arrow and
+  Shift+Arrow p95 in a 500-heading document with and without the toolbar.
+- `sanitizeCodeLanguage` moved to `lib/code-language.ts`.
 
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
