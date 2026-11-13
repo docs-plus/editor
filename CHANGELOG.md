@@ -38,11 +38,12 @@ since the previous tag.
   three days. `bunfig.toml` still holds back releases younger than 3 days.
 
 ### Fixed
-- **Focus outline and pressed bar on every button:** `Button`
-  (`components/ui/button.tsx`) draws a 2px solid focus outline and a 2px
-  pressed bar (`aria-pressed`), so the new look applies app-wide, not only
-  in the toolbar. Both stay visible in dark mode and in Windows High
-  Contrast (forced colours).
+- **Focus outline and pressed underline on every button:** `Button`
+  (`components/ui/button.tsx`) draws a 2px solid focus outline and, while
+  `aria-pressed` is true, a short centred underline (12px wide, 2px tall, 3px
+  above the bottom edge, at least 3:1), so the new look applies app-wide, not
+  only in the toolbar. Both stay visible in dark mode and in Windows High
+  Contrast (forced colours, where the underline uses `HighlightText`).
 - **Disabled toolbar controls stay focusable** and say why they are disabled.
 - **Style and list menus are named by value** ("Normal text", "No list") and
   use radio items; picking the checked item does nothing. They close after a
