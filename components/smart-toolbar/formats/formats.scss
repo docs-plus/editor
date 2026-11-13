@@ -1,0 +1,28 @@
+// Saved format previews (design pass §4, §6): a format's name in its own
+// formatting. Lazy: imported by the style dropdown's formats section and
+// the Aa sheet, never by the editor chunk.
+.st-format-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--preview-light, inherit);
+  background: var(--preview-fill, transparent);
+  border-radius: 2px;
+  // Larger sizes stay inside a 32px row.
+  line-height: 1.25;
+  max-height: 1.5rem;
+
+  :is(.dark *) & {
+    color: var(--preview-dark, inherit);
+  }
+}
+
+// Forced colours: the system colour replaces the token (the name stays
+// readable); the description still says what the format is.
+@media (forced-colors: active) {
+  .st-format-preview {
+    color: inherit;
+    background: none;
+  }
+}
