@@ -146,3 +146,31 @@ export function percentile(values: number[], p: number): number {
 export function median(values: number[]): number {
   return percentile(values, 50);
 }
+
+/**
+ * Resolves once the page's main thread has had `streak` idle periods in a
+ * row of at least `minIdleMs` each (`requestIdleCallback`), so a timing run
+ * starts after load, sync and render work has drained instead of after a
+ * fixed sleep that a slow or throttled machine can overrun.
+ */
+export async function waitForMainThreadIdle(
+  page: Page,
+  { streak = 2, minIdleMs = 40, timeoutMs = 15_000 } = {},
+): Promise<void> {
+  await page.evaluate(
+    ({ streak, minIdleMs, timeoutMs }) =>
+      new Promise<void>((resolve, reject) => {
+        const giveUp = performance.now() + timeoutMs;
+        let idle = 0;
+        const tick = (deadline: IdleDeadline) => {
+          idle = deadline.timeRemaining() >= minIdleMs ? idle + 1 : 0;
+          if (idle >= streak) resolve();
+          else if (performance.now() > giveUp)
+            reject(new Error(`main thread not idle after ${timeoutMs} ms`));
+          else requestIdleCallback(tick);
+        };
+        requestIdleCallback(tick);
+      }),
+    { streak, minIdleMs, timeoutMs },
+  );
+}
