@@ -57,6 +57,14 @@ span[data-collapse-standin] {
         }
       }
 
+      // Below T3 the slot's stand-in renders nothing in the title either.
+      @if $tier == t3 {
+        [data-toolbar-group="slot"]:has(> [data-collapse-standin]:empty)
+          + [data-slot="toolbar-separator"] {
+          display: none;
+        }
+      }
+
       // T5: the style menu shows a short value; separators go.
       @if $tier == t5 {
         [data-toolbar-group="style"] [data-toolbar-item] {
@@ -96,6 +104,13 @@ span[data-collapse-standin] {
       padding-inline: 0.25rem;
     }
   }
+}
+
+// An empty slot (paragraphs, lists) keeps its width but not a second
+// separator, so the row never shows `│ │`.
+[data-toolbar-group="slot"]:has([data-slot="context-slot"][aria-hidden])
+  + [data-slot="toolbar-separator"] {
+  display: none;
 }
 
 .st-color-controls,
@@ -224,7 +239,8 @@ span[data-collapse-standin] {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  // ≥ 3:1 on the popover in both themes (WCAG 1.4.11).
+  border: 1px solid color-mix(in srgb, var(--foreground) 50%, transparent);
   --swatch-bg: var(--background);
   --swatch-fg: var(--foreground);
   background: var(--swatch-bg);
@@ -237,7 +253,7 @@ span[data-collapse-standin] {
   }
 
   &:hover {
-    border-color: color-mix(in srgb, var(--foreground) 45%, transparent);
+    border-color: color-mix(in srgb, var(--foreground) 80%, transparent);
   }
 
   &:focus-visible {

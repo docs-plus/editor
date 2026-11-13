@@ -179,9 +179,18 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
     };
 
     const onFocusOut = (event: FocusEvent) => {
-      (event.target as HTMLElement).removeAttribute?.("data-focus-visible");
+      const target = event.target as HTMLElement;
+      target.removeAttribute?.("data-focus-visible");
       const next = event.relatedTarget;
-      if (next instanceof Node && !toolbar.contains(next)) lastFocus = null;
+      // Blurring to nothing while still shown is a real blur; an item a
+      // tier hid or a render removed keeps `lastFocus` for the repair.
+      if (
+        next instanceof Node
+          ? !toolbar.contains(next)
+          : target.checkVisibility?.()
+      ) {
+        lastFocus = null;
+      }
     };
 
     /**
@@ -197,13 +206,26 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
       lastWidth = toolbar.clientWidth;
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
-        const focused = document.activeElement;
-        const hadFocus =
-          focused instanceof HTMLElement && toolbar.contains(focused);
         const items = normalize();
-        if (hadFocus && !items.includes(focused as HTMLElement)) {
-          items[Math.min(stopIndex, items.length - 1)]?.focus();
+        const last = lastFocus;
+        const active = document.activeElement;
+        // Chromium blurs an item a tier hides (display: none), so focus is
+        // usually on <body> by now: hand it to that group's stand-in.
+        if (
+          !last ||
+          items.includes(last.el) ||
+          (active && active !== document.body && active !== last.el)
+        ) {
+          return;
         }
+        const tier = last.el.closest<HTMLElement>("[data-collapse-tier]");
+        const standIn = tier?.parentElement?.querySelector<HTMLElement>(
+          `[data-collapse-standin="${tier.dataset.collapseTier}"] [data-toolbar-item]`,
+        );
+        (standIn && items.includes(standIn)
+          ? standIn
+          : items[Math.min(last.index, items.length - 1)]
+        )?.focus();
       });
     });
 
