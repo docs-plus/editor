@@ -168,6 +168,15 @@ button[aria-pressed="mixed"]::after {
   }
 }
 
+/* No zoom or slide when menus and popovers open or close. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="popover-content"] {
+    animation: none;
+  }
+}
+
 /* Forced colours drop background colours, so the pressed underline cannot
    carry state there. Pressed uses system colours instead (Highlight fill, a
    HighlightText underline) and mixed a dashed border; the focus outline is a
