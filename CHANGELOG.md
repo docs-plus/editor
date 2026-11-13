@@ -46,10 +46,14 @@ sheet.
 bar's context slot cell, and the mobile selection swap and Repeat split
 button (PR E).
 
-**Open before `main`** (contract §10): O7 (listed as O5 until 2026-11-13),
-the perf typing budget in the combined CI run and the owner's acceptance of
-the ladder thresholds (A5). O1, O3, O4 and O6 are decided (below), and O2,
-the arrow-key p95 budget, is decided as log-only in v1 (2026-11-13). The
+**Open before `main`** (contract §10): the owner's acceptance of the ladder
+thresholds (A5), plus the release gates: release N deployed, the N+1
+adoption reading, one manual Nightly run of the soaks on the integration
+branch (A10) and a Linux CI chunk measurement. O1 to O4, O6, O8 and O9 are
+decided: O2 (arrow-key p95) is log-only in v1, O8 waives the collab typing
+comparison, and O9 accepts production's 2 MiB cap as the limit for
+format-toggle growth (2026-11-13). O7, the perf typing budget, is closed by
+the combined run (toolbar on 4.6/5.4 ms vs off 4.8/5.8 ms median p95). The
 owner's O5, the palette budget, is E's A7 on `feat/smart-toolbar-e-v11` and
 not part of v1.
 
@@ -120,6 +124,12 @@ not part of v1.
   toolbar that replaces it (same action when it shows one) instead of
   dropping it to the page.
 
+- **Schema soaks in Nightly** (contract A10): a 50,000-toggle colour, highlight
+  and size soak across three clients (convergence, stored copy, schema and
+  size checks) and a mixed-version soak (pre-N clients refused, a release N
+  editor freezes, nothing lost). `bun run test:soak:color` and
+  `bun run test:soak:mixed-version`; see `tests/TESTING.md`.
+
 #### Changed
 - Mouse T2 starts below 1264px (was 1232px, contract A6): the widest M10
   face ("Code block") overflowed the T1 row by 31px. Touch is unchanged.
@@ -141,6 +151,9 @@ not part of v1.
   Appendix A): a highlight that would put the current text colour below
   4.5:1 is dimmed and described "Low contrast", but stays selectable; the
   focus ring keeps full strength. Text swatches never dim.
+- **Editor chunk budget raised to 20 KB** (owner, contract A11): the r2
+  fixes are eager and the budget had 16 B left; the combined branch measures
+  +18.8 KB.
 - **Editor chunk budget** (owner decision O1, contract A9): the Insert
   menu's table grid and embed form now load as their own chunk, on the
   Insert button's hover or focus (the colour popover and the bubble already
@@ -185,6 +198,26 @@ not part of v1.
 - `tests/e2e/editor-leak.spec.ts` also opens and closes the bubble and its
   colour popover 100 times and checks that the `document` and `window`
   listener counts (per event type, through CDP) return to the baseline.
+- **Focus fell to the page when the ladder hid the focused control** (for
+  example Underline at 850px, or browser zoom). It now moves to the same
+  tier's stand-in, or the nearest visible item.
+- **Crossing 768px with focus in the toolbar lost it.** Focus moves to the
+  other toolbar, on the same action when it shows one.
+- **The phone format sheet was not modal.** Tab escaped to the tab strip and
+  the covered bar; the app shell is now inert while it is open, the popup is
+  `aria-modal` and Tab wraps inside it. Link from the sheet leaves focus in
+  the link popover.
+- **A mixed state looked off.** `aria-pressed="mixed"` (bold on half a word)
+  now shows a 6×2px half bar (≥3:1); in forced colours it is a dashed border,
+  so the focus ring stays visible.
+- **Menu items were 28px tall on touch.** On a coarse pointer they are at
+  least 44px; mouse sizes are unchanged.
+- **Colour popover polish:** a visible note under Highlight when swatches
+  are dimmed for contrast, swatch borders at ≥3:1, and the roving focus
+  follows a clicked swatch.
+- **Reduced motion** turns off menu and popover animations, and the phone
+  sheet's, not only the bubble's.
+- An empty context slot no longer leaves two separators side by side.
 
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 
