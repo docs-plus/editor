@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "bun:test";
 
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 
 import { headingFoldPluginKey } from "@/extensions/heading-fold";
@@ -200,6 +201,43 @@ describe("HeadingFold plugin state", () => {
       expect(state?.animating.has("sec-a")).toBe(false);
       expect(state?.foldedIds.has("sec-a")).toBe(true);
       second.destroy();
+      editor.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends a running fold animation when the plugin set changes mid-animation", () => {
+    // Registering a plugin (the lazily mounted selection bubble) makes
+    // ProseMirror rebuild every plugin view; the old view's timer dies.
+    vi.useFakeTimers();
+    try {
+      const editor = createTestEditor({ content: FOLD_CONTENT });
+      const view = new EditorView(document.createElement("div"), {
+        state: editor.state,
+      });
+      view.dispatch(
+        view.state.tr.setMeta(headingFoldPluginKey, {
+          type: "toggle",
+          id: "sec-a",
+          contentHeight: 100,
+        }),
+      );
+      view.updateState(
+        view.state.reconfigure({
+          plugins: [
+            ...view.state.plugins,
+            new Plugin({ key: new PluginKey("midFold") }),
+          ],
+        }),
+      );
+
+      vi.advanceTimersByTime(1000);
+
+      const state = headingFoldPluginKey.getState(view.state);
+      expect(state?.animating.has("sec-a")).toBe(false);
+      expect(state?.foldedIds.has("sec-a")).toBe(true);
+      view.destroy();
       editor.destroy();
     } finally {
       vi.useRealTimers();

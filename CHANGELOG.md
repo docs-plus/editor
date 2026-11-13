@@ -46,10 +46,12 @@ sheet.
 bar's context slot cell, and the mobile selection swap and Repeat split
 button (PR E).
 
-**Open before `main`** (contract §10): O2, the arrow-key p95 budget (logged,
-not asserted, in v1), and O5, the perf typing budget in the combined CI run
-and the owner's acceptance of the ladder thresholds (A5). O1, O3, O4 and O6
-are decided (below).
+**Open before `main`** (contract §10): O7 (listed as O5 until 2026-11-13),
+the perf typing budget in the combined CI run and the owner's acceptance of
+the ladder thresholds (A5). O1, O3, O4 and O6 are decided (below), and O2,
+the arrow-key p95 budget, is decided as log-only in v1 (2026-11-13). The
+owner's O5, the palette budget, is E's A7 on `feat/smart-toolbar-e-v11` and
+not part of v1.
 
 #### Added
 - **Selection bubble** (spec §4.3, desktop only): selecting text with a fine
@@ -145,6 +147,44 @@ are decided (below).
   did). The CI gate's budget is now +18.5 KB gz over the `58a9d22` baseline
   (measured +18.43 KB; spec §7 said +6 KB). Lazy slot controls and menu
   items were tried and reverted (contract A9).
+
+#### Fixed
+- **A lazy chunk that fails to load no longer crashes the page** (contract
+  A9). If the colour popover body, an Insert step or the selection bubble
+  cannot be fetched (offline, or a deploy replaced it), the popover stays
+  empty or the bubble does not show; the editor and the tabs stay mounted
+  and typing works. The next open fetches the chunk again. The colour and
+  Insert chunks are now also fetched when the browser is idle after the
+  first server sync, so the service worker caches them for offline use.
+- **The selection bubble could vanish while open.** When its chunk arrived
+  after the selection, the bubble was shown and then detached a frame later
+  without closing, and it did not come back until the selection changed. It
+  showed up as the intermittent `selection-bubble.spec.ts` failures under
+  three e2e workers (contract A9 has the cause).
+- **A selection change with focus inside the bubble threw.** Collapsing the
+  selection programmatically (for example a remote edit) while a bubble
+  button had focus made the bubble's hide run twice inside one transaction,
+  and the second removal threw from the dispatch. Focus now returns to the
+  editor instead.
+- **Tab past the last bubble item dropped focus on the page.** It now
+  returns to the editor with the selection intact, and the bubble stays
+  away until a new selection, as after Esc.
+- **The Insert face could undo a quote.** At T1 the remembered kind's face
+  read as a "Quote" toggle, and a click with the caret in a quote unwrapped
+  it. Faces are now named with a verb ("Insert quote"; the visible text is
+  unchanged) and never show a pressed state, and Quote only inserts: inside
+  a quote it is unavailable ("Already in a quote.").
+- **A fold could stay half-animated.** Registering any editor plugin while
+  a section was folding (the selection bubble mounts its plugin lazily)
+  rebuilt the plugin views and dropped the timer that ends the animation,
+  so the section stayed mid-fold until the next edit. The rebuilt view now
+  finishes it.
+- **Menu items read their shortcut as part of the name** ("Superscript⌘.").
+  The hint is hidden from assistive technology and the item announces its
+  keys through `aria-keyshortcuts`.
+- `tests/e2e/editor-leak.spec.ts` also opens and closes the bubble and its
+  colour popover 100 times and checks that the `document` and `window`
+  listener counts (per event type, through CDP) return to the baseline.
 
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 

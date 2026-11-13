@@ -9,8 +9,11 @@ import {
 } from "./helpers/a11y";
 import { getPlaywrightModifierKey } from "./helpers/playwright-modifier-key";
 
+/** A row button: a text selection also shows the bubble's B · I · U. */
 const toolbarButton = (page: Page, name: string) =>
-  page.getByRole("toolbar").getByRole("button", { name, exact: true });
+  page
+    .getByRole("toolbar", { name: "Formatting", exact: true })
+    .getByRole("button", { name, exact: true });
 
 /** Keyboard modality first (so `:focus-visible` matches), then focus the
  * button directly. Arrowing from a neighbour would work too: the toolbar
@@ -174,7 +177,9 @@ test("forced colours keep the focus outline and mark pressed with Highlight", as
   );
 
   await testInfo.attach("toolbar-forced-colors", {
-    body: await page.getByRole("toolbar").screenshot(),
+    body: await page
+      .getByRole("toolbar", { name: "Formatting", exact: true })
+      .screenshot(),
     contentType: "image/png",
   });
 });

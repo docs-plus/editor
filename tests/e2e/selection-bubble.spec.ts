@@ -14,6 +14,7 @@ import {
   setTheme,
 } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
+import { CHUNK_MARKERS, interceptChunk } from "./helpers/lazy-chunk";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
 
@@ -483,11 +484,36 @@ test.describe("selection bubble", () => {
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
 
-    await selectText(page, "some words");
+    // A new selection by the user (Tab out suppresses it, like Esc). Not a
+    // drag from inside the current one, which would drag the text.
+    await dragSelect(page, "First line");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await row(page).getByRole("button", { name: "Undo" }).focus();
     await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("Tab past the last item returns to the editor with the selection", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const before = await selectionRange(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+    ).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Tab");
+    await expect(bubble(page)).toHaveCount(0);
+    await expect(page.locator(".ProseMirror")).toBeFocused();
+    expect(await selectionRange(page)).toEqual(before);
+    // It stays away on that focus, as after Esc, until a new selection.
+    await page.waitForTimeout(400);
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.press("Shift+ArrowRight");
+    await expectBubbleOpen(page);
   });
 
   test("Tab out of the colour dialog leaves the bubble too", async ({
@@ -700,6 +726,34 @@ test.describe("selection bubble", () => {
         ),
       )
       .toBe(true);
+  });
+
+  test("shows for a selection made before its chunk arrived", async ({
+    page,
+  }) => {
+    // Under load the bubble chunk can land after the selection. Dev
+    // StrictMode then registers the plugin twice with one root, and the
+    // first cleanup's deferred removal used to detach the shown bubble.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await interceptChunk(
+      page,
+      CHUNK_MARKERS.bubble,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expect(bubble(page)).toHaveCount(0);
+    release();
+    await expectBubbleOpen(page);
+    // Past the deferred removal (one frame) and the 250 ms update debounce.
+    await page.waitForTimeout(400);
+    await expectBubbleOpen(page);
   });
 
   for (const theme of ["light", "dark"] as const) {

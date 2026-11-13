@@ -229,6 +229,14 @@ test.describe("sorted row", () => {
       "aria-pressed",
       /.*/,
     );
+    // Menu items too, with the visible hint kept out of the name.
+    await toolbarButton(page, "More formatting").click();
+    const sup = page.getByRole("menuitemcheckbox", {
+      name: "Superscript",
+      exact: true,
+    });
+    await expect(sup).toHaveAttribute("aria-keyshortcuts", /\+\.$/);
+    await page.keyboard.press("Escape");
   });
 });
 
