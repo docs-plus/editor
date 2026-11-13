@@ -116,6 +116,7 @@ export function ToolbarMenu({
         finalFocus={finalFocus}
         data-toolbar-popup=""
         aria-label={contentLabel}
+        className="min-w-52"
       >
         {children}
       </DropdownMenuContent>
