@@ -16,6 +16,10 @@ const PHONE = { width: 390, height: 844 };
 /** A small touch phone: coarse pointer, 360px wide. */
 const TOUCH_PHONE = { width: 360, height: 740 };
 const SCREENS = ".superpowers/screens-D2";
+/** Phone-track evidence (spec §4.7): light, dark and forced colours. */
+const PHONE_SCREENS = ".superpowers/screens-r2-phone";
+/** The narrowest common phone (iPhone SE / mini class). */
+const PHONE_375 = { width: 375, height: 812 };
 
 async function selectNewParagraph(page: Page, text = "colour me") {
   await page.evaluate((value) => {
@@ -65,6 +69,22 @@ async function openPhonePanel(page: Page, { touch = false } = {}) {
 }
 
 const toolbar = (page: Page) => page.getByRole("toolbar");
+
+/** Every visible control in `scope` with its box, for the 44px rule. */
+const smallTargets = (page: Page, selector: string) =>
+  page.locator(selector).evaluateAll((els) =>
+    els
+      .filter((el) => (el as HTMLElement).offsetParent !== null)
+      .map((el) => {
+        const box = el.getBoundingClientRect();
+        return {
+          name: el.getAttribute("aria-label") ?? el.textContent ?? "",
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        };
+      })
+      .filter((box) => box.width < 44 || box.height < 44),
+  );
 
 test("phone panel reaches text colour, highlight and size", async ({
   page,
@@ -349,22 +369,6 @@ for (const theme of ["light", "dark"] as const) {
 test.describe("on a touch phone (coarse pointer, 360px)", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: TOUCH_PHONE });
 
-  /** Every visible control in `scope` with its box, for the 44px rule. */
-  const smallTargets = (page: Page, selector: string) =>
-    page.locator(selector).evaluateAll((els) =>
-      els
-        .filter((el) => (el as HTMLElement).offsetParent !== null)
-        .map((el) => {
-          const box = el.getBoundingClientRect();
-          return {
-            name: el.getAttribute("aria-label") ?? el.textContent ?? "",
-            width: Math.round(box.width),
-            height: Math.round(box.height),
-          };
-        })
-        .filter((box) => box.width < 44 || box.height < 44),
-    );
-
   test("targets are 44×44 and nothing scrolls sideways", async ({ page }) => {
     expect(
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
@@ -432,4 +436,90 @@ test.describe("on a touch phone (coarse pointer, 360px)", () => {
         .locator('[data-col="6"]'),
     ).toBeFocused();
   });
+});
+
+/**
+ * v1 phone minimum (contract §1.3, D2 KEEP): at 375px on touch, the existing
+ * mobile panel reaches text colour, highlight and size with 44×44 targets.
+ * This pins the current panel only: it opens it through the old "Text style
+ * and colour" entry and finds the controls in `role="toolbar"`. When the
+ * docked bar and Aa sheet (a dialog) replace `MobileToolbarContent`, move
+ * this block to the sheet in the same change; it does not prove parity on
+ * its own.
+ */
+test.describe("on a 375px touch phone", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: PHONE_375 });
+
+  /** Mark attribute on the last paragraph's text, or null. */
+  const lastMark = (page: Page, mark: string, attr: string) =>
+    page.evaluate(
+      ([name, key]) => {
+        const doc = window.__tiptap_editor?.state.doc;
+        const found = doc?.lastChild?.firstChild?.marks.find(
+          (m) => m.type.name === name,
+        );
+        return (found?.attrs[key] as string | undefined) ?? null;
+      },
+      [mark, attr] as const,
+    );
+
+  for (const mode of ["light", "dark", "forced"] as const) {
+    test(`colour and size apply with 44×44 targets (${mode})`, async ({
+      page,
+    }) => {
+      if (mode === "forced")
+        await page.emulateMedia({ forcedColors: "active" });
+      else await setTheme(page, mode);
+      await openPhonePanel(page, { touch: true });
+
+      const controls =
+        '[role="toolbar"] button, [role="toolbar"] [role="spinbutton"]';
+      expect(await smallTargets(page, controls)).toEqual([]);
+      expect(
+        await toolbar(page).evaluate((el) => el.scrollWidth - el.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+      await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
+
+      const textFace = toolbar(page).getByRole("button", {
+        name: /^Apply text colour: /,
+      });
+      const highlightFace = toolbar(page).getByRole("button", {
+        name: /^Apply highlight: /,
+      });
+      // The faces name the colour they apply ("Apply text colour: Red").
+      const faceToken = async (face: typeof textFace) =>
+        ((await face.getAttribute("aria-label")) ?? "")
+          .replace(/^.*: /, "")
+          .toLowerCase();
+      const textToken = await faceToken(textFace);
+      const highlightToken = await faceToken(highlightFace);
+
+      await textFace.tap();
+      await highlightFace.tap();
+      await toolbar(page)
+        .getByRole("button", { name: "Increase font size" })
+        .tap();
+      await expect
+        .poll(() => lastMark(page, "textColor", "color"))
+        .toBe(textToken);
+      await expect.poll(() => lastHighlight(page)).toBe(highlightToken);
+      await expect.poll(() => lastMark(page, "fontSize", "size")).toBe("lg");
+      // What is on screen and exposed to assistive tech follows the mark
+      // (WCAG 4.1.2); this also waits out the toolbar settle delay.
+      const stepper = toolbar(page).getByRole("spinbutton", {
+        name: "Font size",
+      });
+      await expect(stepper).toHaveAttribute("aria-valuetext", /^Large/);
+      await expect(stepper).toHaveText("L");
+
+      await page.screenshot({
+        path: `${PHONE_SCREENS}/phone-panel-${mode}.png`,
+      });
+    });
+  }
 });
