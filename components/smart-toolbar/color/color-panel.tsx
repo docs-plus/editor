@@ -16,7 +16,12 @@ import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import { BanIcon, CheckIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
-import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
+import { type ColorTheme, isLowContrastPair } from "@/lib/text-style-contrast";
+import {
+  HIGHLIGHT_TOKENS,
+  isTextColorToken,
+  TEXT_COLOR_TOKENS,
+} from "@/lib/text-style-tokens";
 import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
@@ -29,8 +34,11 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
  * keys move without applying. ↑/↓ follow the visual lines: on touch each
  * section wraps at `COARSE_COLUMNS` 44px swatches so the popover fits a
  * 360px phone. A kind that cannot apply here keeps its swatches focusable
- * but `aria-disabled`, described by the reason. Lazy chunk: loaded on
- * first open.
+ * but `aria-disabled`, described by the reason. Applying keeps the popover
+ * open with focus on the swatch, so writers can try colours; Esc closes it.
+ * Highlight swatches that would put the current text colour below AA
+ * (Appendix A, O3) are dimmed and described "Low contrast", but stay
+ * selectable. Lazy chunk: loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -70,8 +78,6 @@ export interface ColorPanelProps {
   recent: readonly RecentColor[];
   /** Which section takes initial focus. */
   focusKind: "text" | "highlight";
-  /** Called after a swatch applied (the popover closes). */
-  onApplied: () => void;
   /**
    * Move focus to the active swatch on mount. False when a tap opened the
    * popover, so the editor keeps focus and the phone keyboard stays up.
@@ -90,6 +96,35 @@ const HIGHLIGHT_ROW: Swatch[] = [
 
 const tokenOf = (value: string | null) => value?.toLowerCase() ?? null;
 
+/** The token a view shows; null when none, mixed or not a palette token. */
+function paletteToken(value: string | null | undefined) {
+  return isTextColorToken(value) ? value : null;
+}
+
+/** The theme is a class on <html> (`lib/theme.ts`); this chunk is client-only. */
+const currentTheme = (): ColorTheme =>
+  document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+/** O3: true when a highlight swatch would put the current text below AA. */
+function isLowContrast(
+  swatch: Swatch,
+  text: string | null | undefined,
+  theme: ColorTheme,
+): boolean {
+  return (
+    swatch.kind === "highlight" &&
+    isLowContrastPair(paletteToken(text), swatch.token, theme)
+  );
+}
+
+/** Tooltip: the disabled reason wins over the low-contrast note. */
+function swatchTitle(name: string, reason: string, low: boolean): string {
+  if (reason) return `${name}: ${reason}`;
+  return low ? `${name}: low contrast` : name;
+}
+
+const LOW_CONTRAST = "Low contrast with the current text colour";
+
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
   const id =
     swatch.kind === "text"
@@ -107,7 +142,6 @@ export function ColorPanel({
   editor,
   recent,
   focusKind,
-  onApplied,
   focusOnMount = true,
 }: ColorPanelProps) {
   const textView = useActionView("color.text.apply", editor);
@@ -141,6 +175,7 @@ export function ColorPanel({
     isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
   );
   const lines = toLines(rows, columns);
+  const theme = currentTheme();
 
   const firstRow = rows.findIndex(
     (row) => row.label === (focusKind === "text" ? "Text colour" : "Highlight"),
@@ -224,13 +259,16 @@ export function ColorPanel({
       data-roving-group=""
       onKeyDown={onKeyDown}
     >
-      {(["text", "highlight"] as const).map((kind) =>
-        reasons[kind] ? (
-          <span key={kind} id={`${idPrefix}-${kind}-reason`} hidden>
-            {reasons[kind]}
-          </span>
-        ) : null,
-      )}
+      {(["text", "highlight"] as const).map((kind) => (
+        <span key={kind} hidden>
+          {reasons[kind] ? (
+            <span id={`${idPrefix}-${kind}-reason`}>{reasons[kind]}</span>
+          ) : null}
+          {kind === "highlight" ? (
+            <span id={`${idPrefix}-${kind}-low`}>{LOW_CONTRAST}</span>
+          ) : null}
+        </span>
+      ))}
       {rows.map((row, rowIndex) => (
         <div key={row.label} className="st-color-row">
           <span
@@ -248,6 +286,13 @@ export function ColorPanel({
               const pressed = isPressed(swatch);
               const name = swatchName(swatch);
               const reason = reasons[swatch.kind];
+              const low = isLowContrast(swatch, currentText, theme);
+              const describedBy = [
+                reason && `${idPrefix}-${swatch.kind}-reason`,
+                low && `${idPrefix}-${swatch.kind}-low`,
+              ]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <button
                   key={`${swatch.kind}-${swatch.token ?? "none"}`}
@@ -257,12 +302,11 @@ export function ColorPanel({
                   data-col={colIndex}
                   data-token={swatch.token ?? "none"}
                   aria-label={name}
-                  title={reason ? `${name}: ${reason}` : name}
+                  title={swatchTitle(name, reason, low)}
                   aria-pressed={pressed}
                   aria-disabled={reason ? true : undefined}
-                  aria-describedby={
-                    reason ? `${idPrefix}-${swatch.kind}-reason` : undefined
-                  }
+                  aria-describedby={describedBy || undefined}
+                  data-low-contrast={low ? "" : undefined}
                   tabIndex={
                     active.row === rowIndex && active.col === colIndex ? 0 : -1
                   }
@@ -270,8 +314,7 @@ export function ColorPanel({
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    if (reason) return;
-                    if (applySwatch(editor, swatch)) onApplied();
+                    if (!reason) applySwatch(editor, swatch);
                   }}
                 >
                   {swatch.token === null ? (

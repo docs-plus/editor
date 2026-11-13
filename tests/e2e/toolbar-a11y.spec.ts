@@ -259,60 +259,62 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
     before,
   );
 
-  // Enter applies and closes the popover; focus goes back to the trigger.
-  await highlights(dialog)
-    .getByRole("button", { name: "Blue highlight" })
-    .focus();
+  // Arrows follow the token order (spec Appendix A).
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    highlights(dialog).getByRole("button", { name: "Brown highlight" }),
+  ).toBeFocused();
+
+  // Enter applies and keeps the popover open, focus on the swatch.
+  const blue = highlights(dialog).getByRole("button", {
+    name: "Blue highlight",
+  });
+  await blue.focus();
   await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
+  await expect(blue).toHaveAttribute("aria-pressed", "true");
+  await expect(blue.locator("svg")).toHaveCount(1);
+  await expect(dialog).toBeVisible();
+  await expect(blue).toBeFocused();
   expect(
     await page.evaluate(
       () => window.__tiptap_editor?.getAttributes("highlight").color,
     ),
   ).toBe("blue");
-  await expect(trigger).toBeFocused();
+  await expect(none).toHaveAttribute("aria-pressed", "false");
 
-  // Reopen: Blue is pressed, focused and carries a check glyph.
+  // Esc returns focus to the trigger; reopening focuses the applied swatch.
+  await closeWithEscape(page, dialog);
+  await expect(trigger).toBeFocused();
   await page.keyboard.press("Enter");
-  const blue = highlights(dialog).getByRole("button", {
-    name: "Blue highlight",
-  });
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-pressed", "true");
-  await expect(blue.locator("svg")).toHaveCount(1);
   await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 });
 
-test("highlight dialog: No highlight removes it, Esc returns focus to the trigger", async ({
+test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  let dialog = await openHighlightDialog(page);
-  await highlights(dialog)
-    .getByRole("button", { name: "Green highlight" })
-    .focus();
-  await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
-
-  dialog = await openHighlightDialog(page);
+  const dialog = await openHighlightDialog(page);
   const green = highlights(dialog).getByRole("button", {
     name: "Green highlight",
   });
+  await green.focus();
+  await page.keyboard.press("Enter");
   await expect(green).toHaveAttribute("aria-pressed", "true");
   await expect(green).toBeFocused();
+
   const none = highlights(dialog).getByRole("button", { name: "No highlight" });
   await none.focus();
   await page.keyboard.press("Enter");
-  await expect(dialog).toBeHidden();
+  await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(none).toHaveAttribute("aria-pressed", "true");
   expect(
     await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
   ).toBe(false);
-
-  dialog = await openHighlightDialog(page);
-  await expect(none).toHaveAttribute("aria-pressed", "true");
-  await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(none).toBeFocused();
   await closeWithEscape(page, dialog);
   await expect(highlightTrigger(page)).toBeFocused();
 });
@@ -354,16 +356,12 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     await openToolbarTestDoc(page);
     await selectWord(page);
 
-    let dialog = await openHighlightDialog(page);
+    const dialog = await openHighlightDialog(page);
     for (const name of SWATCHES) {
-      await highlights(dialog)
-        .getByRole("button", { name: `${name} highlight` })
-        .click();
-      await expect(dialog).toBeHidden();
-      dialog = await openHighlightDialog(page);
       const swatch = highlights(dialog).getByRole("button", {
         name: `${name} highlight`,
       });
+      await swatch.click();
       await expect(swatch).toHaveAttribute("aria-pressed", "true");
       // PR A's per-swatch forced-colours check, on D2's swatch: forced
       // colours keep the swatch's own colour and outline it in a system
@@ -408,6 +406,130 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     await dialog.screenshot({
       path: testInfo.outputPath(`highlight-dialog-${mode.split(" ")[0]}.png`),
     });
+    await closeWithEscape(page, dialog);
+  });
+}
+
+const SCREENS = ".superpowers/screens-r2-popover";
+
+/**
+ * O3 (Appendix A): with teal text selected, a highlight that puts it below
+ * 4.5:1 is dimmed and described "Low contrast" but still applies. Only
+ * highlight swatches dim: the text row never does, even on a highlight.
+ */
+const LOW_CONTRAST_CASES = {
+  // Teal on gray is below AA in light only; teal on yellow in dark only.
+  light: { low: "Gray", ok: "Yellow" },
+  dark: { low: "Yellow", ok: "Gray" },
+} as const;
+
+for (const mode of ["light", "dark", "forced colours"] as const) {
+  test(`colour popover dims low-contrast swatches, still selectable (${mode})`, async ({
+    page,
+  }) => {
+    const forced = mode === "forced colours";
+    const theme = forced ? "light" : mode;
+    if (forced) await page.emulateMedia({ forcedColors: "active" });
+    await setTheme(page, theme);
+    await openToolbarTestDoc(page);
+    await selectWord(page);
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setTextColor("teal"),
+    );
+
+    const dialog = await openHighlightDialog(page);
+    const { low, ok } = LOW_CONTRAST_CASES[theme];
+    const dimmed = highlights(dialog).getByRole("button", {
+      name: `${low} highlight`,
+    });
+    const clear = highlights(dialog).getByRole("button", {
+      name: `${ok} highlight`,
+    });
+    await expect(dimmed).toHaveAttribute("data-low-contrast", "");
+    await expect(dimmed).toHaveAccessibleDescription(
+      "Low contrast with the current text colour",
+    );
+    await expect(dimmed).not.toHaveAttribute("aria-disabled", /.*/);
+    await expect(clear).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(clear).not.toHaveAccessibleDescription(/Low contrast/);
+    // Default text and "No highlight" never dim.
+    await expect(
+      highlights(dialog).getByRole("button", { name: "No highlight" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
+
+    const style = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        opacity: Number(cs.opacity),
+        borderStyle: cs.borderTopStyle,
+        borderWidth: cs.borderTopWidth,
+      };
+    });
+    expect(style.opacity).toBeLessThan(1);
+    // Not colour-only: a dotted border, also in forced colours.
+    expect(style.borderStyle).toBe("dotted");
+    expect(style.borderWidth).toBe("1px");
+
+    // Dimming must not fade the focus ring: opacity also paints the
+    // outline, so composite it at the swatch's opacity over the popover.
+    await page.keyboard.press("Shift");
+    await dimmed.focus();
+    const ring = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(":focus-visible"),
+        outline: cs.outlineColor,
+        opacity: Number(cs.opacity),
+        bg: getComputedStyle(el.closest("[role=dialog]") as Element)
+          .backgroundColor,
+      };
+    });
+    expect(ring.focusVisible).toBe(true);
+    const ringRgb = await page.evaluate(({ outline, opacity, bg }) => {
+      const ctx = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = outline;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b] as [number, number, number];
+    }, ring);
+    expect(
+      contrastRatio(ringRgb, await resolveRgb(page, ring.bg)),
+      "focus ring on a dimmed swatch",
+    ).toBeGreaterThanOrEqual(3);
+
+    await expectNoSeriousA11yViolations(page, [
+      '[role="dialog"][aria-label="Highlight colours"]',
+    ]);
+    if (!forced) {
+      await dialog.screenshot({
+        path: `${SCREENS}/colour-low-contrast-${theme}.png`,
+      });
+    }
+
+    // Still selectable: it applies and the popover stays open. The text
+    // row stays undimmed although teal is now below AA on this highlight.
+    await dimmed.click();
+    await expect(dimmed).toHaveAttribute("aria-pressed", "true");
+    expect(
+      await page.evaluate(
+        () => window.__tiptap_editor?.getAttributes("highlight").color,
+      ),
+    ).toBe(low.toLowerCase());
+    const teal = dialog
+      .getByRole("group", { name: "Text colour", exact: true })
+      .getByRole("button", { name: "Teal text" });
+    await expect(teal).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(teal).not.toHaveAccessibleDescription(/Low contrast/);
+    await expect(
+      dialog
+        .getByRole("group", { name: "Text colour", exact: true })
+        .getByRole("button", { name: "Default text" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
     await closeWithEscape(page, dialog);
   });
 }

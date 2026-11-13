@@ -238,12 +238,31 @@ span[data-collapse-standin] {
     cursor: not-allowed;
   }
 
+  // Below AA on the selection's colours (O3): dimmed with a dotted border,
+  // unlike disabled (solid, not-allowed), because it still applies.
+  &[data-low-contrast] {
+    opacity: 0.6;
+    border-style: dotted;
+    border-color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  }
+
+  // Opacity also fades the outline: a focused swatch drops the dimming so
+  // its ring keeps 3:1 (WCAG 1.4.11) and the writer sees the real colour.
+  &[aria-disabled="true"]:focus-visible,
+  &[data-low-contrast]:focus-visible {
+    opacity: 1;
+  }
+
   // Forced colours: the swatch's own colours are its meaning, so keep them,
   // with a system border. Pressed is a Highlight ring plus the check badge;
   // `outline` stays the focus ring.
   @media (forced-colors: active) {
     forced-color-adjust: none;
-    border-color: ButtonText;
+
+    &,
+    &:hover {
+      border-color: ButtonText;
+    }
 
     // Beats the global forced-colours rule that paints every pressed
     // button Highlight (`globals.css`), which would erase the colour.
@@ -259,6 +278,11 @@ span[data-collapse-standin] {
 
     &[aria-disabled="true"] {
       border-style: dashed;
+    }
+
+    &[data-low-contrast] {
+      border-color: ButtonText;
+      border-style: dotted;
     }
   }
 }
