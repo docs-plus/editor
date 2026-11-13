@@ -63,3 +63,12 @@
   animation: st-bubble-out 90ms ease-in forwards;
   pointer-events: none;
 }
+
+// Paint format is armed (design pass §2, `paint-format.ts`): the class sits
+// on the editor's `EditorContent` element, since ProseMirror owns the
+// class of its own root. Here, not in the editor chunk: only pointers
+// that show a cursor load the bubble's chunk.
+.is-painting .tiptap,
+.is-painting .tiptap * {
+  cursor: copy;
+}

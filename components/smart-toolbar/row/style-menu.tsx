@@ -6,6 +6,7 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { TEXT_STYLE_LABELS } from "@/lib/editor-actions/core/blocks";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 
+import { lazySurface } from "../lazy-surface";
 import {
   ActionRadioItem,
   DropdownMenuRadioGroup,
@@ -24,6 +25,11 @@ const STYLE_IDS = [
   ["style.heading6", "heading-6"],
 ] as const;
 
+/** Your formats (design pass §4): a lazy chunk, fetched on first open. */
+const StyleFormats = lazySurface(() =>
+  import("../formats/style-formats").then((module) => module.StyleFormats),
+);
+
 const VALUE_BY_LABEL = new Map(
   Object.entries(TEXT_STYLE_LABELS).map(([value, label]) => [label, value]),
 );
@@ -36,7 +42,7 @@ const shortStyle = (label: string) =>
  * Text style ▾ (spec §4.1): named by the current style ("Normal text",
  * "Heading 2", "Title", "Mixed"), shortened at T5. In the title every item
  * is disabled with "Title is always H1." Items are the `style.*` registry
- * actions.
+ * actions, then Your formats (`StyleFormats`).
  */
 export function StyleMenu({ editor: provided }: { editor?: Editor | null }) {
   const editor = useSurfaceEditor(provided);
@@ -68,6 +74,7 @@ export function StyleMenu({ editor: provided }: { editor?: Editor | null }) {
           />
         ))}
       </DropdownMenuRadioGroup>
+      <StyleFormats editor={editor} onPicked={menu.markPicked} />
     </ToolbarMenu>
   );
 }

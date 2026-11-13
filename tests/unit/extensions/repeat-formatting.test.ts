@@ -355,27 +355,34 @@ describe("RepeatFormatting: applying", () => {
       expect(reason.endsWith(".")).toBe(true);
   });
 
-  it("the copy and apply commands write no memory; their actions do (contract §6)", () => {
+  it("the apply command writes no memory; the actions do (contract §6)", () => {
     rememberBundle({ underline: true });
     sel("hello");
-    expect(editor.commands.copyFormatting()).toBe(true);
     expect(editor.commands.applyFormatBundle({ italic: true })).toBe(true);
     expect(marksOf("hello")).toContain("italic");
     expect(getRememberedBundle()).toEqual({ underline: true });
 
     sel("world");
-    expect(runAction(editor, formatsApplyAction, "doc:missing")).toBe(false);
+    expect(runAction(editor, formatsApplyAction, "missing")).toBe(false);
     expect(getRememberedBundle()).toEqual({ underline: true });
     editor.commands.toggleItalic();
     expect(runAction(editor, repeatCopyAction)).toBe(true);
     expect(getRememberedBundle()).toMatchObject({ bold: false, italic: true });
   });
 
-  it("copy formatting on plain text remembers nothing (no clear-only Repeat)", () => {
+  it("Paint format on plain text picks up plain, as in Docs", () => {
     rememberBundle({ underline: true });
     sel("world");
-    expect(runAction(editor, repeatCopyAction)).toBe(false);
-    expect(getRememberedBundle()).toEqual({ underline: true });
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    expect(getRememberedBundle()).toEqual({
+      bold: false,
+      italic: false,
+      underline: false,
+      strike: false,
+      textColor: null,
+      highlight: null,
+      fontSize: null,
+    });
   });
 
   it("Save as format is unavailable, with the reason, without formatting", () => {
@@ -387,11 +394,13 @@ describe("RepeatFormatting: applying", () => {
     expect(availability(formatsSaveAction, computeContext(editor))).toBe(true);
   });
 
-  it("copy formatting remembers the full read, then clears with it", () => {
+  it("Paint format remembers the full read, then clears with it", () => {
     sel("hello");
     editor.commands.toggleBold();
     setRed();
     sel("hello");
+    runAction(editor, repeatCopyAction);
+    // The brush again on the same selection cancels without painting.
     runAction(editor, repeatCopyAction);
     expect(getRememberedBundle()).toEqual({
       bold: true,

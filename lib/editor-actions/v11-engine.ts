@@ -3,11 +3,12 @@
  * `v11-actions.ts` (contract §10, editor-chunk budget A11). Loaded by the
  * `RepeatFormatting` extension as soon as an editor is created. Only
  * `loadV11Engine()` imports this module, so its code lives in exactly one
- * chunk: E's surfaces (palette, Repeat split button, phone cells) reach it
- * through `getV11Engine()` / `loadV11Engine()` and show
- * `ENGINE_LOADING_REASON` until it lands (`v11-engine-ready.ts`).
- * Evaluating this module installs it and makes the registry's E actions
- * live.
+ * chunk: E's surfaces (palette, Paint format brushes, style dropdown,
+ * phone cells) reach it through `getV11Engine()` / `loadV11Engine()`;
+ * until it lands the E actions queue their runs (design pass,
+ * "loading is not a state the user sees"). Evaluating this module
+ * installs it and makes the registry's E actions live. Paint format's
+ * state lives in `paint-format.ts`, imported only from here.
  *
  * Import rule (contract §4): never the registry index or the context store.
  */
@@ -25,10 +26,8 @@ import {
   repeatDisabledReason,
 } from "@/extensions/repeat-formatting/apply-bundle";
 import {
-  bundleFace,
-  bundleFromKey,
-  bundleKey,
   bundleLabel,
+  bundleSetLabel,
   type FormatBundle,
   isEmptyBundle,
   readBundleAt,
@@ -45,11 +44,16 @@ import {
   toSessionRange,
 } from "@/extensions/repeat-formatting/relative-range";
 import { announce } from "@/lib/announce";
-import { scanDocFormats } from "@/lib/doc-format-scan";
+import {
+  applyPaint,
+  cancelPaint,
+  isPainting,
+  subscribePaint,
+  togglePaint,
+} from "@/lib/editor-actions/paint-format";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { ActionOption, Ctx, Enabled } from "@/lib/editor-actions/types";
 import {
-  DOC_FORMAT_PREFIX,
   installV11Engine,
   type RepeatSession,
   repeatApplyAction,
@@ -75,12 +79,6 @@ import {
 const enabledFrom = (reason: string | null): Enabled =>
   reason === null ? true : { reason };
 
-/** "Bold, Italic": what was set; a clear-only bundle reads as its clears. */
-function spoken(bundle: FormatBundle): string {
-  const set = setEntries(bundle);
-  return bundleLabel(isEmptyBundle(set) ? bundle : set);
-}
-
 /** The selection-wide code walk, once per snapshot for every E action. */
 const codeOnlyOf = (ctx: Ctx) => () =>
   ctx.memo("repeat.onlyCode", () => onlyCode(ctx.state));
@@ -96,19 +94,8 @@ const hasSetFormatting = (ctx: Ctx): boolean =>
     () => !isEmptyBundle(setEntries(readBundleAt(ctx.state))),
   );
 
-function docBundles(ctx: Ctx): readonly FormatBundle[] {
-  return ctx.docMemo("formats.docScan", () => scanDocFormats(ctx.state.doc))
-    .bundles;
-}
-
-function resolveFormat(id: unknown): FormatBundle | null {
-  if (typeof id !== "string") return null;
-  if (id.startsWith(DOC_FORMAT_PREFIX)) {
-    const bundle = bundleFromKey(id.slice(DOC_FORMAT_PREFIX.length));
-    return bundle ? setEntries(bundle) : null;
-  }
-  return readSavedFormats().find((format) => format.id === id)?.bundle ?? null;
-}
+const savedFormat = (id: unknown) =>
+  readSavedFormats().find((format) => format.id === id);
 
 const hasMermaid = (editor: Editor) => "insertMermaid" in editor.commands;
 
@@ -225,9 +212,13 @@ function formatSaveReason(editor: Editor, name: string): string | null {
   return null;
 }
 
-/** Repeats with the key, or says why not; the key is always handled. */
+/**
+ * Repeats with the key, or says why not; the key is always handled. While
+ * Paint format is armed the key paints instead (design pass §2).
+ */
 function repeatKey(editor: Editor): true {
-  if (!runAction(editor, repeatApplyAction)) {
+  if (isPainting(editor)) applyPaint(editor);
+  else if (!runAction(editor, repeatApplyAction)) {
     const enabled = availability(repeatApplyAction, computeContext(editor));
     if (enabled !== true) announce(enabled.reason);
   }
@@ -238,6 +229,7 @@ export const v11Engine: V11Engine = {
   record,
   formatSaveReason,
   repeatKey,
+  paint: { isPainting, subscribe: subscribePaint, toggle: togglePaint },
   commands: {
     repeatFormatting: (props) => {
       const bundle = getRememberedBundle();
@@ -251,7 +243,8 @@ export const v11Engine: V11Engine = {
   },
   actions: {
     "repeat.apply": {
-      keywords: ["format painter", "again", "f4", "paste formatting"],
+      // "format painter" is Paint format's (design pass §8).
+      keywords: ["again", "f4", "paste formatting"],
       enabled: (ctx) =>
         enabledFrom(
           repeatDisabledReason(
@@ -260,40 +253,35 @@ export const v11Engine: V11Engine = {
             codeOnlyOf(ctx),
           ),
         ),
+      // The long label from set fields only: "Bold, Yellow highlight".
       value: () => {
         const bundle = getRememberedBundle();
-        return bundle ? bundleFace(bundle) : null;
+        return bundle ? bundleSetLabel(bundle) : null;
       },
       run: (editor) => {
         const bundle = getRememberedBundle();
         if (!bundle || !editor.commands.repeatFormatting()) return false;
-        announce(`Repeated ${spoken(bundle)}`);
+        cancelPaint(editor);
+        announce(`Repeated ${bundleSetLabel(bundle)}`, { done: true });
         return true;
       },
     },
     "repeat.copy": {
-      keywords: ["format painter", "pick up", "copy style"],
+      keywords: [
+        "copy formatting",
+        "format painter",
+        "brush",
+        "pick up",
+        "copy style",
+      ],
       enabled: (ctx) =>
         ctx.nodeSelectionType !== null
-          ? { reason: "Select text to copy its formatting." }
+          ? { reason: "Select text to pick up its formatting." }
           : isCodeOnly(ctx)
             ? { reason: REPEAT_REASONS.code }
             : true,
-      run: (editor) => {
-        // The full read (cleared fields too), so Repeat also removes what
-        // the source lacks. Plain text would make a Repeat that only
-        // clears: nothing is copied instead.
-        const read = readBundleAt(editor.state);
-        const set = setEntries(read);
-        if (isEmptyBundle(set)) {
-          announce("Nothing to copy");
-          return false;
-        }
-        if (!editor.commands.copyFormatting()) return false;
-        rememberBundle(read);
-        announce(`Copied formatting: ${spoken(set)}`);
-        return true;
-      },
+      // Arg "touch": the brush was tapped (its pill says tap it again).
+      run: (editor, arg) => togglePaint(editor, arg === "touch"),
     },
     "formats.save": {
       keywords: ["style", "preset", "your formats"],
@@ -312,14 +300,15 @@ export const v11Engine: V11Engine = {
           result.replaced === undefined
             ? `Saved format ‘${result.format.name}’`
             : `Replaced format ‘${result.replaced}’`,
+          { done: true },
         );
         return true;
       },
     },
     "formats.apply": {
-      keywords: ["your formats", "in this doc", "style", "preset"],
+      keywords: ["your formats", "style", "preset"],
       enabled: (ctx) => {
-        if (readSavedFormats().length === 0 && docBundles(ctx).length === 0) {
+        if (readSavedFormats().length === 0) {
           return { reason: "Save a format first." };
         }
         return enabledFrom(
@@ -330,24 +319,18 @@ export const v11Engine: V11Engine = {
               : null,
         );
       },
-      options: (ctx): readonly ActionOption<unknown>[] => [
-        ...readSavedFormats().map((format) => ({
+      options: (): readonly ActionOption<unknown>[] =>
+        readSavedFormats().map((format) => ({
           value: format.id,
           label: format.name,
-          keywords: [bundleFace(format.bundle)],
+          keywords: [bundleLabel(format.bundle)],
         })),
-        ...docBundles(ctx).map((bundle) => ({
-          value: `${DOC_FORMAT_PREFIX}${bundleKey(bundle)}`,
-          label: `${bundleFace(bundle)} (in this doc)`,
-          keywords: ["in this doc"],
-        })),
-      ],
       run: (editor, id) => {
-        const bundle = resolveFormat(id);
-        if (!bundle || isEmptyBundle(bundle)) return false;
-        if (!editor.commands.applyFormatBundle(bundle)) return false;
-        rememberBundle(bundle);
-        announce(`Applied ${spoken(bundle)}`);
+        const format = savedFormat(id);
+        if (!format || isEmptyBundle(format.bundle)) return false;
+        if (!editor.commands.applyFormatBundle(format.bundle)) return false;
+        rememberBundle(format.bundle);
+        announce(`Applied ‘${format.name}’`, { done: true });
         return true;
       },
     },

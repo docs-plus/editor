@@ -105,14 +105,15 @@ function ListCell({ editor }: { editor: Editor }) {
  * empty. Media has one tool, so it is a direct "Media options…" button,
  * as in the row's slot: the kit toolbar it opens takes focus, which a
  * menu's close would hand back to the editor. Below 360px the cell is
- * hidden and the sheet carries its tools.
+ * hidden and the sheet carries its tools. `data-kind` picks the cell's
+ * kind icon in `phone.scss` (lazy), so no icon is added here.
  */
 function SlotCell({ editor }: { editor: Editor }) {
   const ref = useRef<HTMLSpanElement>(null);
   const { kind } = useSlotTarget(editor);
   useToolbarHold(editor, ref);
   return (
-    <span ref={ref} className="contents" data-phone-slot="">
+    <span ref={ref} className="contents" data-phone-slot="" data-kind={kind}>
       {kind === "media" ? (
         <ActionButton id="media.options" editor={editor} variant="phone" />
       ) : (

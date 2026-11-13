@@ -6,8 +6,6 @@ import { EditorPage } from "./helpers/editor-page";
  * HoE gate for PR E: window/document listeners and the heap return to
  * their baseline after 20 tab switches and 100 palette cycles, and the
  * palette owns exactly one capture `keydown` listener on `window`.
- * (The bubble half of the cycle joins when PR D2's bubble mounts
- * `RepeatSplitButton`.)
  */
 
 const PALETTE = "[data-command-palette]";

@@ -202,13 +202,23 @@ const foldAction: AnyAction = {
 const LANGUAGE_LABELS = new Map(
   CODE_LANGUAGES.map((option) => [option.value, option.label]),
 );
+/** Common short names, so `js` reads (and checks) as JavaScript. */
+const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  js: "javascript",
+  ts: "typescript",
+  py: "python",
+  sh: "bash",
+  yml: "yaml",
+  md: "markdown",
+  html: "xml",
+};
 const NO_CODE = "No code block here.";
 
 /** Visible language name; unknown but safe names show as typed. */
 export function languageLabel(language: string | null): string {
   if (!language) return "Plain text";
   return (
-    LANGUAGE_LABELS.get(language) ??
+    LANGUAGE_LABELS.get(LANGUAGE_ALIASES[language] ?? language) ??
     sanitizeCodeLanguage(language) ??
     "Plain text"
   );

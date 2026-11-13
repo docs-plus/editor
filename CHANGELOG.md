@@ -11,22 +11,16 @@ since the previous tag.
 
 ### Smart toolbar follow-ups
 
-Minors left by the a11y review of the smart toolbar (contract §10).
+Minors left by the a11y review of the smart toolbar (contract §10), and
+the design pass of PR E's surfaces
+(`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
+
+The editor chunk ends at +23,936 B of the 23.5 KB budget (128 B left);
+the budget is unchanged.
 
 #### Fixed
-- The bubble's Repeat face and Formats items show why they are
-  unavailable (e.g. "Code has no formatting." on inline code) instead of
-  failing silently. The face is sized to its text, capped at 10ch, so it
-  no longer runs over Link and the chevron.
-- Repeat's face, menu item and phone cell carry Mod+Alt+V (plus F4 off
-  macOS) in `aria-keyshortcuts` and are named for what they repeat
-  ("Repeat Bold, Italic").
-- A tap on the unavailable phone Repeat cell shows its reason above the
-  bar. The phone selection cells scroll in their own container with edge
-  fades, and Back sits beside it, so no cell is under Back at 320px, at
-  rest or focused. Back dismisses the cells for that selection only.
-- Copy formatting on plain text no longer remembers a clear-only "Repeat
-  Plain"; it says "Nothing to copy".
+- Back on the phone selection bar dismisses the cells for that
+  selection only.
 - The Repeat extend session merges into its own bundle, not the shared
   memory another tab may have replaced (bold here plus red here no
   longer repeats as the other tab's italic plus red); "Forget my choices"
@@ -41,22 +35,21 @@ Minors left by the a11y review of the smart toolbar (contract §10).
 - While the engine loads, remote and meta-only transactions no longer
   push the user's own out of the capped buffer, and every engine use
   records the buffer first.
-- **Selection bubble:** the Formats menu (the Repeat split's chevron) no
-  longer closes the moment it opens and drops keyboard focus on the page.
-  The bubble now stays while any of its popups is open (the menu, its
-  submenus and the colour dialog); Esc in the menu returns to the chevron,
-  and "Save as format…" hands focus straight to the name field.
+- **Selection bubble:** the bubble stays while any of its popups is open
+  (the colour dialog).
 - **Action palette:** no zoom under reduced motion. Esc in the save view
   goes back to the list, with focus in the search field; a second Esc
   closes. The format name is capped at 40 characters (it was cut silently
   at 40 after accepting 160) with a visible "Up to 40 characters" hint,
   saving announces "Saved format ‘name’", and the same error or an
   unavailable action's reason is read again on every try.
-- **Palette order:** Format opens with Repeat formatting, Copy formatting
-  and Your formats; Undo and Redo moved to their own History group. A
-  search for "repeat" ranks Repeat formatting above Copy formatting.
-- New `lib/announce.ts` (`announce(message)`): one polite, visually hidden
-  status node for messages that outlive the control that sent them.
+- **Palette order:** Repeat formatting is suggested once a bundle exists
+  and Format opens with Paint format; saved formats have their own Your
+  formats group; Undo and Redo moved to their own History group. A search
+  for "repeat" ranks Repeat formatting above Paint format.
+- New `lib/announce.ts` (`announce(message, options)`): one polite,
+  visually hidden status node for messages that outlive the control that
+  sent them, which also feeds the status pill.
 - **Phone List menu:** tapping the list type that is already checked kept
   removing the list; it now only closes the menu, as on desktop.
 - **One Esc leaves the row (M3):** Esc on a row, bubble or phone-bar item
@@ -87,9 +80,6 @@ Minors left by the a11y review of the smart toolbar (contract §10).
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
   resize hid the tab stop.
 
-The editor chunk ends at +23.4 KB of the 23.5 KB budget (125 B left after
-the design pass surfaces, 112 B before); the budget is unchanged. The
-palette's first Alt+/ loads 20,460 B gz of its 20,480 B budget.
 - **Typing budget flipped between runs, partly addressed**
   (`performance.spec.ts`). Every trial generated its own random document,
   so the two arms typed into different documents; at 50 headings that
@@ -140,6 +130,7 @@ palette's first Alt+/ loads 20,460 B gz of its 20,480 B budget.
   a larger document only, more rounds, or another measure of the
   toolbar's per-keystroke cost) change the gate and are the owner's call.
 
+
 #### Added
 - **Diagram ▸ templates in the Insert menu (M17b, design pass §9):**
   Diagram is one standard submenu row (hover, click, Enter or →) with the
@@ -151,26 +142,50 @@ palette's first Alt+/ loads 20,460 B gz of its 20,480 B budget.
   E's `template.mermaid` no longer shows up as a second, icon-less
   "Insert diagram" row. The submenu rides in the insert step's preloaded
   chunk; until it lands, Diagram is one item that inserts.
-- **Remove a saved format:** each entry under "Your formats" in the
-  bubble's Formats menu has a Remove item ("Remove format 'X'"),
-  confirmed in place and announced, so the 20-format cap can be acted
-  on.
-- **Formats cell on the phone selection bar:** Copy formatting, Save as
-  format…, Your formats and In this doc, which Repeat's reason points at.
+- **Paint format (design pass §1–2)** replaces Copy formatting: a brush
+  after a separator in the selection bubble (28×28, `aria-pressed` while
+  armed), "Paint format" in ⋯ and the palette. It picks up the formatting
+  at the selection or caret (plain text picks up plain) as the remembered
+  Repeat bundle. While armed the editor shows a copy cursor; the next
+  mouse selection paints it as one undo step; on the keyboard, Alt+F10 to
+  the brush, Esc back to the text, select, then ⌘⌥V (Ctrl+Alt+V or F4)
+  or the brush again; on touch, tap the brush, select, tap it again
+  (never on its own). Esc in the text, the brush on the same selection, a
+  document switch or read-only cancel it.
+- **Status pill (§5):** every announcement also shows as a short pill,
+  8px under the sticky row on desktop and 8px above the phone bar (beside
+  its cells, never in a masked element; the presence and Privacy chips
+  sit under the bar's layer). It closes after 2.5 s (5 s with Undo or
+  Retry), stays while hovered or focused, and Esc closes it. Repeat with
+  nothing remembered says "Nothing to repeat yet. Format some text or use
+  Paint format."; Repeat confirms "Repeated Bold, Yellow highlight".
+- **Your formats in the text style dropdown (§4):** after the styles,
+  each saved format named in its own formatting (described by its long
+  label), "Save selection as format…" (the palette's save view) and
+  "Remove a format ▸", which removes at once with Undo on the pill. The
+  section is a lazy chunk loaded with the dropdown. The Aa sheet has the
+  same Your formats section, with Remove a format.
+- **Phone selection bar (§6):** eight 44px cells, B I U A▁ ✎▁ 🔗 🖌 ✕,
+  with no scroll or edge fades (U moves to the sheet below 360px; strike
+  and clear formatting are in the sheet). The colour cells show the
+  remembered colour as a bar; ✕ has a left divider.
 - **Announcements** through one polite live region (`lib/announce.ts`):
-  "Repeated Bold, Italic", "Copied formatting: Bold", "Applied …",
-  "Saved format 'X'" / "Replaced format 'X'", "Removed format 'X'", and
-  the reason when the Repeat key cannot run (the key is then handled,
-  not passed on).
+  "Repeated Bold, Italic", "Picked up Bold. Select text to apply.",
+  "Formatting applied", "Applied 'X'", "Saved format 'X'" / "Replaced
+  format 'X'", "Removed 'X'", and the reason when the Repeat key cannot
+  run (the key is then handled, not passed on).
 - **Phone context slot cell:** the docked bar shows the current block's
   tools as one 44×44 cell between Indent and Insert (spec §4.7): section
   fold and moves, code language and copy, table rows and columns, and
   media options (a direct button, as in the row), from the same registry
   actions as the row's slot. It is held
   while focus is in the bar or its menu, so another writer's edit never
-  removes it under focus. From 360 to 403px Redo moves to the sheet while
-  the cell shows; below 360px the cell's tools move into the sheet (the
-  language as a native select).
+  removes it under focus. Below 404px Redo lives in the sheet, so the cell
+  never shifts the others; below 360px the cell's tools move into the
+  sheet (the language as a native select). The cell shows its kind
+  (heading, code, table or image icon) beside its chevron, and the code
+  menu has a "Language" group after a separator, with the current
+  language checked, aliases included (`js` checks JavaScript).
 - **Safe areas:** `viewport-fit=cover`. The tab strip and the loading
   skeleton clear the status bar and notch, the shell keeps clear of
   landscape notches, the phone bar keeps its cells above the home
@@ -212,6 +227,18 @@ palette's first Alt+/ loads 20,460 B gz of its 20,480 B budget.
     their dotted border is 60% foreground (≥ 5:1), and the note names the
     colour: "Dotted: hard to read with Red text". The popover body and the
     table grid styles load with their own chunks, off the editor chunk.
+- **Loading is not a state the user sees:** before the formatting engine
+  lands, its actions are available and a click waits for it, as the
+  Repeat key does; "Formatting tools are still loading." is gone. A
+  failed load says "Couldn’t load formatting tools." on the pill, with
+  Retry.
+- "In this doc" formats left the menus and the palette, and the short
+  "B · I · Red" notation is gone from all UI text.
+- **Touch:** no tooltips and no shortcut glyphs on a coarse pointer; a
+  tap on an unavailable phone cell or sheet row shows its reason on the
+  pill instead, and a focused phone cell keeps its ring inside the bar.
+  The Aa sheet's sections and row labels have a clear hierarchy, and its
+  swatches fill the width.
 - PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
   in one lazy chunk. The selection bubble and the phone selection cells
   reach it through `getV11Engine()` / `loadV11Engine()` like the palette,

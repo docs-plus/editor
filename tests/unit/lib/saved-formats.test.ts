@@ -8,6 +8,7 @@ import {
   readSavedFormats,
   removeFormat,
   resetSavedFormatsCacheForTests,
+  restoreFormat,
   sanitizeFormatName,
   saveFormat,
   subscribeSavedFormats,
@@ -193,6 +194,27 @@ describe("saved formats", () => {
     expect(readSavedFormats()).toEqual([]);
     expect(calls).toBe(2);
     off();
+  });
+
+  it("restores a removed format at its place (Undo), once", () => {
+    saveFormat("One", { bold: true });
+    const two = saveFormat("Two", { italic: true });
+    saveFormat("Three", { underline: true });
+    if (!two.ok) throw new Error("not saved");
+    removeFormat(two.format.id);
+    expect(readSavedFormats().map((format) => format.name)).toEqual([
+      "One",
+      "Three",
+    ]);
+    expect(restoreFormat(two.format, 1)).toBe(true);
+    expect(readSavedFormats().map((format) => format.name)).toEqual([
+      "One",
+      "Two",
+      "Three",
+    ]);
+    // Already back (or its name taken): nothing doubles.
+    expect(restoreFormat(two.format, 1)).toBe(false);
+    expect(readSavedFormats()).toHaveLength(3);
   });
 
   it("survives clearing the choices key (Forget my choices)", () => {

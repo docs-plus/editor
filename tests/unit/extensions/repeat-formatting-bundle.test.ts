@@ -4,10 +4,10 @@ import type { Editor, JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 
 import {
-  bundleFace,
   bundleFromKey,
   bundleKey,
   bundleLabel,
+  bundleSetLabel,
   isEmptyBundle,
   readBundleAt,
   setEntries,
@@ -85,12 +85,14 @@ describe("bundle keys and labels", () => {
     expect(bundleFromKey("")).toBeNull();
   });
 
-  it("bundleFace lists set entries", () => {
-    expect(bundleFace({ bold: true, textColor: "red", fontSize: "lg" })).toBe(
-      "B · Red · L",
+  it("bundleSetLabel names set entries only, never a clear", () => {
+    expect(
+      bundleSetLabel({ bold: true, highlight: "yellow", fontSize: null }),
+    ).toBe("Bold, Yellow highlight");
+    expect(bundleSetLabel({ textColor: "red", fontSize: "lg" })).toBe(
+      "Red text, Large",
     );
-    expect(bundleFace({ highlight: "yellow" })).toBe("Yellow highlight");
-    expect(bundleFace({ bold: false })).toBe("Plain");
+    expect(bundleSetLabel({ bold: false })).toBe("Plain");
   });
 
   it("bundleLabel names sets and clears", () => {

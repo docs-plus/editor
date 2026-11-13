@@ -17,8 +17,6 @@ declare module "@tiptap/core" {
     repeatFormatting: {
       /** Applies the remembered bundle to the selection: one undo step. */
       repeatFormatting: () => ReturnType;
-      /** Closes the extend session; `repeat.copy` remembers the read. */
-      copyFormatting: () => ReturnType;
       /** Applies `bundle` (a saved or in-doc format); `formats.apply` remembers it. */
       applyFormatBundle: (bundle: FormatBundle) => ReturnType;
     };
@@ -66,16 +64,18 @@ function drain(storage: RepeatFormattingStorage): V11Engine | null {
 }
 
 /**
- * Repeat formatting and Copy formatting (spec §5 M7). The extension is
- * the eager shell: it binds Mod-Alt-v (and F4 off macOS), and it hands
- * every transaction to the engine (`lib/editor-actions/v11-engine.ts`),
+ * Repeat formatting and Paint format (spec §5 M7, design pass §2). The
+ * extension is the eager shell: it binds Mod-Alt-v (and F4 off macOS),
+ * and it hands every transaction to the engine
+ * (`lib/editor-actions/v11-engine.ts`),
  * which records a bundle from local mark-only transactions (contract §6,
  * exception 3), keeps the "extend" session as Yjs relative positions and
  * applies a bundle as one undo step that sets marks (never toggles). The
  * engine chunk starts loading when the editor is created; transactions
  * before it lands are recorded in order once it does, and the commands
  * return false until then. In an editable editor the key is always
- * handled: it repeats, or announces why it cannot.
+ * handled: it repeats (paints, while Paint format is armed), or
+ * announces why it cannot.
  */
 export const RepeatFormatting = Extension.create<
   Record<string, never>,
@@ -91,16 +91,10 @@ export const RepeatFormatting = Extension.create<
     return {
       repeatFormatting: () => (props) =>
         drain(this.storage)?.commands.repeatFormatting(props) ?? false,
-      applyFormatBundle: (bundle) => (props) =>
-        drain(this.storage)?.commands.applyFormatBundle(bundle, props) ?? false,
       // Memory is written by the actions' run(), after these return true
       // (contract §6); the commands only touch the editor.
-      copyFormatting:
-        () =>
-        ({ dispatch }) => {
-          if (dispatch) this.storage.session.range = null;
-          return true;
-        },
+      applyFormatBundle: (bundle) => (props) =>
+        drain(this.storage)?.commands.applyFormatBundle(bundle, props) ?? false,
     };
   },
 

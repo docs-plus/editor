@@ -6,7 +6,9 @@
  * the bundle recorder live in `v11-engine.ts`, a lazy chunk the
  * `RepeatFormatting` extension starts loading when an editor is created
  * (editor-chunk budget, contract A11 and E's A8). Until it lands, the E
- * actions are unavailable with `ENGINE_LOADING_REASON` and run nothing.
+ * actions are available and queue their runs, which go through
+ * `runAction` once it lands if the selection has not moved (design pass:
+ * loading is not a state the user sees).
  * `loadV11Engine()` is the engine's only importer: a static import from a
  * surface would put a second copy of it in that surface's chunk.
  *
@@ -19,6 +21,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 
 import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
 import type { SessionRange } from "@/extensions/repeat-formatting/relative-range";
+import { runAction } from "@/lib/editor-actions/registry";
 import {
   type Action,
   type ActionOption,
@@ -29,10 +32,10 @@ import {
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
-/** Arg prefix of an "In this doc" format: `doc:<bundleKey>`. */
-export const DOC_FORMAT_PREFIX = "doc:";
-
-/** Reason of every E action while its chunk is still loading. */
+/**
+ * Kept for the palette's save view, which loads after the engine; no E
+ * action shows it any more (design pass §6, principle 4).
+ */
 export const ENGINE_LOADING_REASON = "Formatting tools are still loading.";
 
 /** The Repeat "extend" session of one editor (memory only). */
@@ -83,10 +86,17 @@ export interface V11Engine {
   /** Why the selection cannot be saved under `name` now, or null. */
   formatSaveReason(editor: Editor, name: string): string | null;
   /**
-   * The Repeat key in an editable editor: repeats, or announces why it
-   * cannot. Always handles the key.
+   * The Repeat key in an editable editor: repeats (or paints, while Paint
+   * format is armed), or announces why it cannot. Always handles the key.
    */
   repeatKey(editor: Editor): true;
+  /** Paint format (design pass §2), for the brushes. */
+  paint: {
+    isPainting(editor: Editor): boolean;
+    subscribe(listener: () => void): () => void;
+    /** Arms; armed, applies to a new selection or cancels. */
+    toggle(editor: Editor, touch?: boolean): boolean;
+  };
 }
 
 let engine: V11Engine | null = null;
@@ -126,39 +136,53 @@ export function resetV11EngineForTests(): void {
   loading = null;
 }
 
-const LOADING: Enabled = { reason: ENGINE_LOADING_REASON };
-
 /**
  * An E action whose behaviour comes from the engine once it is loaded.
  * `value` and `options` always exist (null and [] without a body): the
  * same to every reader as leaving them out, and smaller. Its keywords are
  * the engine's too: only the palette searches them, and it loads after
- * the engine (editor-chunk budget).
+ * the engine (editor-chunk budget). Before the engine lands it is
+ * available, and a run waits for it, then runs through `runAction` (which
+ * rechecks) if the selection has not moved, as the Repeat key does.
  */
 function engineAction<Arg>(
   meta: Omit<Action<Arg>, "enabled" | "value" | "options" | "run" | "keywords">,
 ): Action<Arg> {
   const id = meta.id as EngineActionId;
   const body = () => engine?.actions[id];
-  return defineAction<Arg>({
+  const action: Action<Arg> = defineAction<Arg>({
     ...meta,
     get keywords() {
       return body()?.keywords;
     },
-    enabled: (ctx) => body()?.enabled(ctx) ?? LOADING,
+    enabled: (ctx) => body()?.enabled(ctx) ?? true,
     value: (ctx) => body()?.value?.(ctx) ?? null,
     options: (ctx) =>
       (body()?.options?.(ctx) ?? []) as readonly ActionOption<Arg>[],
-    run: (editor, arg) => body()?.run(editor, arg) ?? false,
+    run(editor, arg) {
+      const loaded = body();
+      if (loaded) return loaded.run(editor, arg);
+      const { selection } = editor.state;
+      loadV11Engine().then(
+        () => {
+          if (!editor.isDestroyed && editor.state.selection.eq(selection)) {
+            runAction(editor, action as AnyAction, arg);
+          }
+        },
+        () => undefined,
+      );
+      return true;
+    },
   });
+  return action;
 }
 
+/** No keywords: the palette never lists itself (editor-chunk budget). */
 export const paletteOpenAction = defineAction({
   id: "palette.open",
   label: "All actions…",
   group: "view",
   contexts: "any",
-  keywords: ["command", "palette", "search", "actions"],
   shortcut: "Alt-/",
   mutates: false,
   enabled: () => true,
@@ -173,9 +197,10 @@ export const repeatApplyAction = engineAction({
   shortcut: "Mod-Alt-v",
 });
 
-export const repeatCopyAction = engineAction({
+/** Paint format (design pass §2); arg "touch" from a tapped brush. */
+export const repeatCopyAction = engineAction<string | undefined>({
   id: "repeat.copy",
-  label: "Copy formatting",
+  label: "Paint format",
   group: "format",
   contexts: "any",
 });
@@ -188,7 +213,7 @@ export const formatsSaveAction = engineAction<string>({
   contexts: "any",
 });
 
-/** Arg: a saved format id, or `doc:<bundleKey>` for an "In this doc" one. */
+/** Arg: a saved format id. */
 export const formatsApplyAction = engineAction<string>({
   id: "formats.apply",
   label: "Apply format",

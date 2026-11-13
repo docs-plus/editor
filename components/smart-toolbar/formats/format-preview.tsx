@@ -24,8 +24,9 @@ export function formatPreviewStyle(bundle: FormatBundle): CSSProperties {
 }
 
 /**
- * `children` rendered in `bundle`'s formatting. Tokens only, never stored
- * CSS, so a tampered bundle cannot inject a value.
+ * `children` rendered in `bundle`'s formatting: a saved format's name in
+ * the style dropdown and the Aa sheet, and the Save view's sample. Tokens
+ * only, never stored CSS, so a tampered bundle cannot inject a value.
  */
 export function FormatPreview({
   bundle,

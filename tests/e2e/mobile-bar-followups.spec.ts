@@ -194,7 +194,7 @@ test.describe("context slot cell", () => {
     }
   }
 
-  test("paragraphs show no slot cell, and Redo stays on the bar from 360px", async ({
+  test("paragraphs show no slot cell, and below 404px Redo stays in the sheet", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
@@ -212,9 +212,7 @@ test.describe("context slot cell", () => {
         .run();
       editor.commands.setTextSelection(editor.state.doc.content.size - 2);
     });
-    await expect
-      .poll(() => cellNames(page))
-      .toEqual(["Undo", "Redo", ...BASE_CELLS.slice(1), "Insert"]);
+    await expect.poll(() => cellNames(page)).toEqual([...BASE_CELLS, "Insert"]);
   });
 
   test("heading: the cell's menu moves the section; a pick returns to the document, Esc to the cell", async ({
@@ -264,8 +262,28 @@ test.describe("context slot cell", () => {
   test("code: the cell picks the language", async ({ page }) => {
     await openDoc(page);
     await caretIn(page, "code");
-    await bar(page).getByRole("button", { name: "Code block tools" }).tap();
+    // An alias checks its language: `js` is JavaScript.
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.updateAttributes("codeBlock", {
+        language: "js",
+      }),
+    );
+    const cell = bar(page).getByRole("button", { name: "Code block tools" });
+    // The cell shows its kind (CodeXml, drawn as a mask), not the sliders.
+    expect(
+      await cell.evaluate((el) => ({
+        sliders: getComputedStyle(el.querySelector("svg") as Element).display,
+        mask: getComputedStyle(el, "::before").maskImage,
+      })),
+    ).toEqual({
+      sliders: "none",
+      mask: expect.stringContaining("data:image/svg"),
+    });
+    await cell.tap();
     const menu = page.getByRole("menu", { name: "Code block tools" });
+    // Copy code, a separator, then the "Language" group.
+    await expect(menu.getByRole("separator")).toHaveCount(1);
+    await expect(menu.getByRole("group", { name: "Language" })).toBeVisible();
     await expect(
       menu.getByRole("menuitemradio", { name: "JavaScript" }),
     ).toHaveAttribute("aria-checked", "true");

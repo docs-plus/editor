@@ -32,7 +32,7 @@ export const MAX_FORMAT_NAME = 40;
 export const FORMAT_REASONS = {
   name: "Use 1–40 characters.",
   cap: "You can keep up to 20 formats. Remove one first.",
-  empty: "Select formatted text to save it as a format.",
+  empty: "Select formatted text to save it.",
 } as const;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
@@ -209,6 +209,26 @@ export function removeFormat(id: string): void {
   cache = null;
   const formats = readSavedFormats().filter((format) => format.id !== id);
   write(formats);
+}
+
+/**
+ * Undo of a removal: puts `format` back at `index`, unless its name or id
+ * came back meanwhile (another tab) or the cap is reached.
+ */
+export function restoreFormat(format: SavedFormat, index: number): boolean {
+  cache = null;
+  const formats = [...readSavedFormats()];
+  const name = format.name.toLowerCase();
+  if (
+    formats.length >= MAX_SAVED_FORMATS ||
+    formats.some(
+      (kept) => kept.id === format.id || kept.name.toLowerCase() === name,
+    )
+  ) {
+    return false;
+  }
+  formats.splice(Math.min(Math.max(index, 0), formats.length), 0, format);
+  return write(formats);
 }
 
 /** In-tab writes and other tabs' `storage` events. */

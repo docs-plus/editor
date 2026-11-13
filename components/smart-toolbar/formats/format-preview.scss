@@ -1,11 +1,21 @@
 @use "../../../extensions/text-style-marks/text-style-marks" as marks;
 @use "sass:map";
 
-// A saved format's preview (`format-preview.tsx`), from the document's own
-// token maps, so a preview matches the text it formats in both themes.
+// A saved format's preview (`format-preview.tsx`, design pass §4, §6, §7),
+// from the document's own token maps, so a preview matches the text it
+// formats in both themes. Lazy: imported by the style dropdown's formats
+// section, the Aa sheet and the palette's save view, never by the editor
+// chunk.
 .st-format-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border-radius: 2px;
   padding-inline: 1px;
+  // Larger sizes stay inside a 32px row.
+  line-height: 1.25;
+  max-height: 1.5rem;
 }
 
 @each $token, $value in marks.$text-colors {
@@ -33,3 +43,6 @@
     font-size: $size;
   }
 }
+
+// Forced colours need no rule: the system replaces `color` and the
+// background colour, and the description still says what the format is.

@@ -1,6 +1,6 @@
 /**
- * The formatting bundle (spec §5, M7/M12/M14): what Repeat formatting,
- * Copy formatting, Your formats and "In this doc" hold. Tokens and mark
+ * The formatting bundle (spec §5, M7/M14): what Repeat formatting, Paint
+ * format and Your formats hold. Tokens and mark
  * names only, never free text or CSS, so a tampered stored bundle can
  * never write an unknown value into the document.
  *
@@ -178,23 +178,11 @@ export function bundleFromKey(key: string): FormatBundle | null {
 const capitalize = (token: string) =>
   token.charAt(0).toUpperCase() + token.slice(1);
 
-const SIZE_FACE: Readonly<Record<FontSizeToken, string>> = {
-  xs: "XS",
-  sm: "S",
-  lg: "L",
-  xl: "XL",
-};
 const SIZE_LABEL: Readonly<Record<FontSizeToken, string>> = {
   xs: "Extra small",
   sm: "Small",
   lg: "Large",
   xl: "Extra large",
-};
-const BOOLEAN_FACE: Readonly<Record<BooleanField, string>> = {
-  bold: "B",
-  italic: "I",
-  underline: "U",
-  strike: "S",
 };
 const BOOLEAN_LABEL: Readonly<Record<BooleanField, string>> = {
   bold: "Bold",
@@ -211,18 +199,6 @@ const CLEAR_LABEL: Readonly<Record<BundleField, string>> = {
   highlight: "no highlight",
   fontSize: "default size",
 };
-
-/** Short visible form: `"B · Red · L"`; `"Plain"` when nothing is set. */
-export function bundleFace(bundle: FormatBundle): string {
-  const parts: string[] = [];
-  for (const field of BOOLEAN_FIELDS) {
-    if (bundle[field] === true) parts.push(BOOLEAN_FACE[field]);
-  }
-  if (bundle.textColor) parts.push(capitalize(bundle.textColor));
-  if (bundle.highlight) parts.push(`${capitalize(bundle.highlight)} highlight`);
-  if (bundle.fontSize) parts.push(SIZE_FACE[bundle.fontSize]);
-  return parts.length > 0 ? parts.join(" · ") : "Plain";
-}
 
 /** Accessible form: `"Bold, Yellow highlight, default size"`. */
 export function bundleLabel(bundle: FormatBundle): string {
@@ -244,6 +220,14 @@ export function bundleLabel(bundle: FormatBundle): string {
   }
   return parts.length > 0 ? parts.join(", ") : "Plain";
 }
+
+/**
+ * What a bundle sets, as UI text ("Bold, Yellow highlight"): its clears
+ * are left out, so it never says "default size"; "Plain" when it sets
+ * nothing (design pass §3).
+ */
+export const bundleSetLabel = (bundle: FormatBundle): string =>
+  bundleLabel(setEntries(bundle));
 
 /** Every field from a set of marks: a missing mark gives `false` / `null`. */
 export function bundleOfMarks(marks: readonly Mark[]): Required<FormatBundle> {
@@ -268,7 +252,7 @@ export function bundleOfMarks(marks: readonly Mark[]): Required<FormatBundle> {
 }
 
 /**
- * The formatting at the selection (Copy formatting's source): the marks of
+ * The formatting at the selection (Paint format's source): the marks of
  * the first text node inside the selection, or the stored / caret marks of
  * an empty selection.
  */

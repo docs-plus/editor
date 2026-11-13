@@ -8,6 +8,7 @@ import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { ColorPanel } from "@/components/smart-toolbar/color/color-panel";
 import { useSlotTarget } from "@/components/smart-toolbar/context-slot/use-slot-target";
 import { FontSizeStepper } from "@/components/smart-toolbar/font-size-stepper";
+import { SheetFormats } from "@/components/smart-toolbar/formats/sheet-formats";
 import { useActionView } from "@/hooks/use-editor-context";
 import { CODE_LANGUAGES } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
@@ -192,10 +193,11 @@ function SlotSection({
 }
 
 /**
- * Body of the phone "Text format" sheet (spec §4.7): Colours first, so the
- * swatches show without scrolling, then the slot's tools (below 360px),
- * Style, Size, Align and More (Redo when the bar has no room for it,
- * Outdent, Link). Every control is a registry action (`ActionButton`,
+ * Body of the phone "Text format" sheet (spec §4.7, design pass §6):
+ * Colours first, so the swatches show without scrolling, then the slot's
+ * tools (below 360px), Style, Your formats, Size, Align and More (Redo
+ * below 404px, Outdent, underline, strikethrough, clear formatting,
+ * Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
  * reasons (title, headings, code, read-only) and `aria-pressed` states are
  * the row's. Part of the phone bar's lazy chunk (contract A9).
@@ -235,6 +237,9 @@ export function FormatSheetBody({
             />
           ))}
         </div>
+      </Section>
+      <Section title="Your formats">
+        <SheetFormats editor={editor} onClose={onClose} />
       </Section>
       <Section title="Size">
         <FontSizeStepper editor={editor} />

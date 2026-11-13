@@ -189,27 +189,54 @@ test.describe("lazy surface chunks", () => {
     await expect(dialog.getByRole("status")).toHaveCount(0);
   });
 
+  test("a brush click whose engine chunk 404s says so, with Retry", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.engine);
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "paint me");
+    await page.keyboard.press("Shift+Home");
+    const brush = page
+      .getByRole("toolbar", { name: "Selection formatting" })
+      .getByRole("button", { name: "Paint format" });
+    await brush.click();
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Couldn’t load formatting tools.");
+    await expect(page.getByText("still loading")).toHaveCount(0);
+
+    // Back online: Retry fetches the engine and runs the click.
+    await restore();
+    await pill.getByRole("button", { name: /^Retry/ }).click();
+    // The click kept the editor's focus and selection, and the bubble.
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".document-editor-content")).toHaveClass(
+      /is-painting/,
+    );
+  });
+
   test("an E engine chunk that 404s leaves the editor and the palette working", async ({
     page,
   }) => {
     const restore = await failChunk(page, CHUNK_MARKERS.engine);
     await openToolbarTestDoc(page);
     await expectEditorAlive(page, "afterEngine");
-    const repeatRow = page.locator(
-      '[data-command-palette] [cmdk-item][data-action-id="repeat.apply"]',
-    );
+    const repeatRow = page
+      .locator(
+        '[data-command-palette] [cmdk-item][data-action-id="repeat.apply"]',
+      )
+      .last();
     await page.keyboard.press("Alt+Slash");
     await page.keyboard.type("repeat formatting");
-    await expect(repeatRow).toContainText(
-      "Formatting tools are still loading.",
-    );
+    // Loading is never a state the user sees (design pass §6).
+    await expect(repeatRow).toBeVisible();
+    await expect(repeatRow).not.toContainText("still loading");
     await page.keyboard.press("Escape");
 
     // Back online: the next palette open fetches the engine again.
     await restore();
     await page.keyboard.press("Alt+Slash");
     await page.keyboard.type("repeat formatting");
-    await expect(repeatRow).toContainText("Format some text first");
+    await expect(repeatRow).toContainText("Nothing to repeat yet");
     await page.keyboard.press("Escape");
   });
 });

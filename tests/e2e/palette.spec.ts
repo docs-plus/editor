@@ -375,7 +375,7 @@ test.describe("action palette", () => {
     });
   }
 
-  test("Copy formatting then Repeat clears formatting it lacks", async ({
+  test("Paint format then Repeat clears formatting it lacks", async ({
     page,
   }) => {
     await openDoc(page);
@@ -383,10 +383,13 @@ test.describe("action palette", () => {
     await page.keyboard.press("ControlOrMeta+b");
     await select(page, "gamma");
     await page.keyboard.press("ControlOrMeta+i");
-    await runFromPalette(page, "copy formatting");
+    // Its keyword "brush": cmdk's fuzzy match also finds "paint format"
+    // in Repeat's "Repeat formatting: Italic", which leads the list from
+    // Suggested here.
+    await runFromPalette(page, "brush");
     await select(page, "alpha");
     await page.keyboard.press(repeatKey);
-    // Italic, and no bold: the copied read clears what gamma lacks.
+    // Italic, and no bold: the picked-up read clears what gamma lacks.
     await expect.poll(() => html(page)).toContain("<em>alpha</em>");
     await expect.poll(() => html(page)).not.toContain("<strong>");
   });
@@ -401,7 +404,7 @@ test.describe("action palette", () => {
     // cmdk keeps items navigable with aria-disabled="false", so the state
     // is in the name, and the reason is read once.
     await expect(repeat).toHaveAccessibleName(
-      /^Repeat formatting ?, unavailable Format some text first, or use Copy formatting\./,
+      /^Repeat formatting ?, unavailable Nothing to repeat yet\. Format some text or use Paint format\./,
     );
     await expect(repeat).not.toHaveAttribute("aria-describedby", /.+/);
     // The default highlight is one Enter can run.

@@ -151,21 +151,21 @@ test.describe("palette follow-ups", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator(PALETTE)).toBeVisible();
     await expect(status).toHaveText(
-      /^Repeat formatting: Format some text first, or use Copy formatting\.$/,
+      /^Repeat formatting: Nothing to repeat yet\. Format some text or use Paint format\.$/,
     );
     await page.waitForTimeout(400);
-    await expect(status).toContainText("Format some text first");
+    await expect(status).toContainText("Nothing to repeat yet");
     const first = await status.textContent();
     await page.keyboard.press("Enter");
     // Changed (a no-break space toggles), so it is read again.
     await expect
       .poll(() => status.evaluate((el) => el.textContent))
       .not.toBe(first);
-    await expect(status).toContainText("Format some text first");
+    await expect(status).toContainText("Nothing to repeat yet");
     await page.keyboard.press("Escape");
   });
 
-  test("Repeat is suggested, not repeated in Format, which opens with Copy formatting; Undo and Redo have their own group", async ({
+  test("Repeat is suggested, not repeated in Format, which opens with Paint format; Undo and Redo have their own group", async ({
     page,
   }) => {
     await openDoc(page);
@@ -208,9 +208,9 @@ test.describe("palette follow-ups", () => {
         "data-action-id",
         "repeat.apply",
       );
-      // Copy formatting still matches, below it.
+      // Paint format (`repeat.copy`) still matches, below it.
       await expect(
-        page.getByRole("option", { name: /^Copy formatting/ }).first(),
+        page.getByRole("option", { name: /^Paint format/ }).first(),
       ).toBeVisible();
       await page.keyboard.press("Escape");
     });
