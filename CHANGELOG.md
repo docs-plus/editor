@@ -9,6 +9,50 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar v1, PR D1: action registry, sorted row and context slot
+
+#### Added
+- **Action registry** (`lib/editor-actions/core-actions.ts`, bodies in
+  `lib/editor-actions/core/`): every toolbar command is one action with a
+  label, icon, display shortcut, markdown hint, contexts and a reason when it
+  cannot run. History reads the Yjs UndoManager stack; section moves, lists,
+  tables and indent compute a real `can()` once per selection snapshot.
+- **Context snapshot** (`lib/editor-context/snapshot.ts`): one O(depth) walk
+  gives the kind (media, Mermaid, code, table, title, heading, list,
+  paragraph), ancestor flags and the marks across the selection.
+- **Sorted row** (spec §4.1): history, text style, size, B I U S, colour,
+  link, Align ▾, List ▾, outdent and indent, the context slot, Insert and
+  ⋯ More formatting (superscript, subscript, inline code, clear formatting).
+  Controls never move or disappear: in a read-only document each says "This
+  document is read-only." Group roots carry `data-toolbar-group` and
+  collapsible items `data-collapse-tier` for the responsive ladder.
+- **Context slot** (spec §4.2): a fixed 168px group before Insert with
+  section tools (fold, move up, move down), the title lock, the code or
+  diagram language and copy, table row and column menus, header row and
+  merge or split, and Media options… (keyboard access to the media
+  toolbar). Contents hold while focus is in the toolbar; a section move
+  carries the held heading id and refuses when a collaborator deleted it.
+- **Keyboard model:** one Tab stop with a roving tabindex owned by the
+  toolbar, Alt+F10 to the toolbar, Esc back to the document with its
+  selection.
+- **Clear formatting** (`Mod-\`, #392): removes every inline mark except
+  links in one undo step; never touches block type, alignment or indent;
+  disabled in code.
+- **Shortcut hints** with `aria-keyshortcuts` on every toolbar action (#612).
+- **Tests:** `toolbar-row.spec.ts` (row order, one Tab stop, Alt+F10 and Esc,
+  slot per context, remote heading deletion while the slot has focus, clear
+  formatting keeps links, read-only keeps focus, catch-up render budget,
+  light and dark screenshots); unit tests for the snapshot, key combos, the
+  core actions and the keymap.
+
+#### Changed
+- Indent and outdent mirror Tab (`sinkListItem`, then text indent).
+- The toolbar Profiler records each update's `actualDuration`
+  (`window.__toolbarRenderMs`, dev only); `toolbar-row.spec.ts` logs the
+  catch-up render per burst in a 500-heading document and writes it to the
+  perf report.
+- Disabled reasons are full sentences ending in a period.
+
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
