@@ -24,13 +24,11 @@ import { FilterToolbarButton } from "@/components/tiptap-ui/heading-filter";
 import { Spacer } from "@/components/ui/spacer";
 import { ToolbarGroup, ToolbarSeparator } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { BaselineIcon, PanelLeftIcon } from "@/lib/icons";
+import { PanelLeftIcon } from "@/lib/icons";
 
 interface MainToolbarContentProps {
-  onHighlighterClick: () => void;
   onTocToggle: () => void;
   onFilterToggle: () => void;
-  isMobile: boolean;
   tocVisible: boolean;
   /** The outline is an overlay (< 950px): opening it moves focus into it. */
   outlineOverlay?: boolean;
@@ -66,22 +64,6 @@ function StandIn({ tier, children }: { tier: Tier; children: ReactNode }) {
 }
 
 /**
- * Phones: one named entry to the secondary panel (size, text colour,
- * highlight), placed in the first screenful of the row.
- */
-function PhoneTextStyleButton({ onClick }: { onClick: () => void }) {
-  return (
-    <ToolbarButton
-      onClick={onClick}
-      aria-label="Text style and colour"
-      tooltip="Text style and colour"
-    >
-      <BaselineIcon />
-    </ToolbarButton>
-  );
-}
-
-/**
  * The sorted row (spec §4.1). It never reorders: every control stays in
  * place in every context, disabled with a reason when it cannot run.
  *
@@ -91,43 +73,39 @@ function PhoneTextStyleButton({ onClick }: { onClick: () => void }) {
  * Each group root carries `data-toolbar-group` for D2's responsive ladder.
  */
 export function MainToolbarContent({
-  onHighlighterClick,
   onTocToggle,
   onFilterToggle,
-  isMobile,
   tocVisible,
   outlineOverlay = false,
   filterActive,
 }: MainToolbarContentProps) {
   return (
     <>
-      {!isMobile && (
-        <ToolbarGroup data-toolbar-group="view" aria-label="View">
-          <Collapse tier="t4">
-            <ToolbarButton
-              onClick={onTocToggle}
-              aria-label="Toggle outline"
-              tooltip="Toggle outline"
-              isActive={tocVisible}
-            >
-              <PanelLeftIcon />
-            </ToolbarButton>
-            <FilterToolbarButton
-              onClick={onFilterToggle}
-              isActive={filterActive}
-            />
-          </Collapse>
-          <StandIn tier="t4">
-            <ViewCollapseMenu
-              onTocToggle={onTocToggle}
-              onFilterToggle={onFilterToggle}
-              tocVisible={tocVisible}
-              outlineOverlay={outlineOverlay}
-              filterActive={filterActive}
-            />
-          </StandIn>
-        </ToolbarGroup>
-      )}
+      <ToolbarGroup data-toolbar-group="view" aria-label="View">
+        <Collapse tier="t4">
+          <ToolbarButton
+            onClick={onTocToggle}
+            aria-label="Toggle outline"
+            tooltip="Toggle outline"
+            isActive={tocVisible}
+          >
+            <PanelLeftIcon />
+          </ToolbarButton>
+          <FilterToolbarButton
+            onClick={onFilterToggle}
+            isActive={filterActive}
+          />
+        </Collapse>
+        <StandIn tier="t4">
+          <ViewCollapseMenu
+            onTocToggle={onTocToggle}
+            onFilterToggle={onFilterToggle}
+            tocVisible={tocVisible}
+            outlineOverlay={outlineOverlay}
+            filterActive={filterActive}
+          />
+        </StandIn>
+      </ToolbarGroup>
 
       <Spacer />
 
@@ -136,27 +114,19 @@ export function MainToolbarContent({
         <ActionButton id="history.redo" />
       </ToolbarGroup>
 
-      {isMobile && (
-        <ToolbarGroup data-toolbar-group="phone-style" aria-label="Text style">
-          <PhoneTextStyleButton onClick={onHighlighterClick} />
-        </ToolbarGroup>
-      )}
-
       <ToolbarSeparator />
 
       <ToolbarGroup data-toolbar-group="style" aria-label="Text style">
         <StyleMenu />
       </ToolbarGroup>
-      {!isMobile && (
-        <ToolbarGroup data-toolbar-group="size" aria-label="Text size">
-          <Collapse tier="t2">
-            <FontSizeStepper />
-          </Collapse>
-          <StandIn tier="t2">
-            <SizeCollapseMenu />
-          </StandIn>
-        </ToolbarGroup>
-      )}
+      <ToolbarGroup data-toolbar-group="size" aria-label="Text size">
+        <Collapse tier="t2">
+          <FontSizeStepper />
+        </Collapse>
+        <StandIn tier="t2">
+          <SizeCollapseMenu />
+        </StandIn>
+      </ToolbarGroup>
 
       <ToolbarSeparator />
 
@@ -171,16 +141,14 @@ export function MainToolbarContent({
           <AaCollapseMenu />
         </StandIn>
       </ToolbarGroup>
-      {!isMobile && (
-        <ToolbarGroup data-toolbar-group="color" aria-label="Colour">
-          <Collapse tier="t4">
-            <ColorControls />
-          </Collapse>
-          <StandIn tier="t4">
-            <ColorCollapseButton />
-          </StandIn>
-        </ToolbarGroup>
-      )}
+      <ToolbarGroup data-toolbar-group="color" aria-label="Colour">
+        <Collapse tier="t4">
+          <ColorControls />
+        </Collapse>
+        <StandIn tier="t4">
+          <ColorCollapseButton />
+        </StandIn>
+      </ToolbarGroup>
       <ToolbarGroup data-toolbar-group="link" aria-label="Link">
         <ActionButton id="mark.link" />
       </ToolbarGroup>
@@ -224,8 +192,6 @@ export function MainToolbarContent({
       </ToolbarGroup>
 
       <Spacer />
-
-      {isMobile && <ToolbarSeparator />}
 
       <ToolbarGroup data-toolbar-group="theme" aria-label="Theme">
         <Collapse tier="t2">
