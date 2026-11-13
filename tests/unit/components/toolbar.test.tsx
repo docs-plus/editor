@@ -149,3 +149,185 @@ describe("Toolbar focus repair", () => {
     expect(await press("ArrowLeft")).toBe("B");
   });
 });
+
+describe("Toolbar roving tabindex", () => {
+  function mountWith(
+    children: React.ReactNode[],
+    props: Record<string, unknown> = {},
+  ) {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    act(() => {
+      root.render(createElement(Toolbar, props, ...children));
+    });
+    return container;
+  }
+  const button = (label: string, extra: Record<string, unknown> = {}) =>
+    createElement(ToolbarButton, { key: label, "aria-label": label, ...extra });
+  const tabindexes = (container: HTMLElement, labels: string[]) =>
+    labels.map((label) => byLabel(container, label)?.getAttribute("tabindex"));
+  const keydown = (key: string) =>
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    });
+
+  it("makes exactly one item tabbable", async () => {
+    const container = mountWith([button("A"), button("B"), button("C")]);
+    await settle();
+    expect(tabindexes(container, ["A", "B", "C"])).toEqual(["0", "-1", "-1"]);
+  });
+
+  it("moves the tab stop with focus and arrows from the focused item", async () => {
+    const container = mountWith([button("A"), button("B"), button("C")]);
+    await settle();
+    // Focus C without an arrow press: the next arrow starts from C.
+    act(() => byLabel(container, "C")?.focus());
+    expect(tabindexes(container, ["A", "B", "C"])).toEqual(["-1", "-1", "0"]);
+    keydown("ArrowRight");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("A");
+    keydown("End");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("C");
+    keydown("ArrowLeft");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("B");
+  });
+
+  it("skips data-roving-skip items", async () => {
+    const container = mountWith([
+      button("A"),
+      button("B", { "data-roving-skip": "" }),
+      button("C"),
+    ]);
+    await settle();
+    act(() => byLabel(container, "A")?.focus());
+    keydown("ArrowRight");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("C");
+  });
+
+  it("calls onEscape for Esc on an item", async () => {
+    let escaped = 0;
+    const container = mountWith([button("A")], {
+      onEscape: () => {
+        escaped += 1;
+      },
+    });
+    await settle();
+    act(() => byLabel(container, "A")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(1);
+  });
+
+  it("leaves Esc to an item whose own handler took it (open tooltip)", async () => {
+    let escaped = 0;
+    const container = mountWith(
+      [
+        button("A", {
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === "Escape") event.preventDefault();
+          },
+        }),
+        button("B"),
+      ],
+      {
+        onEscape: () => {
+          escaped += 1;
+        },
+      },
+    );
+    await settle();
+    act(() => byLabel(container, "A")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(0);
+    act(() => byLabel(container, "B")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(1);
+  });
+
+  it("ignores keys bubbling from a React portal (an open menu)", async () => {
+    const { createPortal } = await import("react-dom");
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    let escaped = 0;
+    const portalled = createPortal(
+      createElement("button", {
+        type: "button",
+        "aria-label": "In menu",
+        key: "menu",
+      }),
+      outside,
+    );
+    mountWith([button("A"), portalled], {
+      onEscape: () => {
+        escaped += 1;
+      },
+    });
+    await settle();
+    const inMenu = outside.querySelector<HTMLElement>("button");
+    act(() => inMenu?.focus());
+    keydown("Escape");
+    keydown("ArrowRight");
+    expect(escaped).toBe(0);
+    expect(document.activeElement).toBe(inMenu);
+    outside.remove();
+  });
+
+  it("keeps one tab stop when items mount while focus is elsewhere", async () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    const render = (labels: string[]) =>
+      act(() => {
+        root.render(
+          createElement(Toolbar, null, ...labels.map((l) => button(l))),
+        );
+      });
+    render(["A", "B"]);
+    await settle();
+    input.focus();
+    render(["A", "X", "Y"]);
+    await settle();
+    expect(tabindexes(container, ["A", "X", "Y"])).toEqual(["0", "-1", "-1"]);
+    input.remove();
+  });
+
+  it("keeps one tab stop when a hidden item is shown while focus is elsewhere", async () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const container = mountWith([
+      button("A"),
+      createElement(
+        "div",
+        { key: "wrap", hidden: true, "data-testid": "wrap" },
+        button("B"),
+      ),
+      button("C"),
+    ]);
+    await settle();
+    input.focus();
+    act(() => {
+      container
+        .querySelector('[data-testid="wrap"]')
+        ?.removeAttribute("hidden");
+    });
+    await settle();
+    expect(tabindexes(container, ["A", "B", "C"])).toEqual(["0", "-1", "-1"]);
+    input.remove();
+  });
+
+  it("focusRovingItem focuses the tab stop", async () => {
+    const { focusRovingItem } = await import("@/components/ui/toolbar");
+    const container = mountWith([button("A"), button("B")]);
+    await settle();
+    act(() => byLabel(container, "B")?.focus());
+    act(() => (document.activeElement as HTMLElement).blur());
+    const toolbar = container.querySelector<HTMLElement>('[role="toolbar"]');
+    expect(focusRovingItem(toolbar)).toBe(true);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("B");
+  });
+});

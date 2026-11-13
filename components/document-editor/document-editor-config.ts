@@ -42,6 +42,7 @@ import {
   IMAGE_UPLOAD_LIMIT,
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
+import { EditorActionShortcuts } from "@/extensions/editor-action-shortcuts";
 import { HeadingDrag } from "@/extensions/heading-drag";
 import {
   HeadingFilter,
@@ -235,5 +236,6 @@ export function buildDocumentEditorExtensions({
     // After every existing mark, so their ranks stay put (spec §3).
     TextColor,
     FontSize,
+    EditorActionShortcuts,
   ];
 }

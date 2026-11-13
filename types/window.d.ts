@@ -6,6 +6,8 @@ declare global {
     __tiptap_editor?: Editor;
     /** Dev-only Playwright hook: React commits that re-rendered the toolbar. */
     __toolbarCommits?: number;
+    /** Dev-only Playwright hook: Profiler `actualDuration` of each toolbar update. */
+    __toolbarRenderMs?: number[];
     /** Dev-only Playwright hook: set before boot to render without the toolbar. */
     __TOOLBAR_OFF?: boolean;
   }

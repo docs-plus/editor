@@ -1,23 +1,26 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { ThemeToggle } from "@/components/document-editor/theme-toggle";
-import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
-import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
 import {
-  ColorHighlightPopover,
-  ColorHighlightPopoverButton,
-} from "@/components/tiptap-ui/color-highlight-popover";
-import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu";
+  AaCollapseMenu,
+  ActionButton,
+  ColorCollapseButton,
+  ColorControls,
+  FontSizeStepper,
+  InsertMenu,
+  ListControl,
+  ParagraphCollapseMenu,
+  SlotCollapseButton,
+  ViewCollapseMenu,
+} from "@/components/smart-toolbar";
+import { ContextSlot } from "@/components/smart-toolbar/context-slot/context-slot";
+import { AlignMenu } from "@/components/smart-toolbar/row/align-menu";
+import { OverflowMenu } from "@/components/smart-toolbar/row/overflow-menu";
+import { StyleMenu } from "@/components/smart-toolbar/row/style-menu";
+import { ColorHighlightPopoverButton } from "@/components/tiptap-ui/color-highlight-popover";
 import { FilterToolbarButton } from "@/components/tiptap-ui/heading-filter";
-import { HyperlinkButton } from "@/components/tiptap-ui/hyperlink-button";
-import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
-import { IndentButton } from "@/components/tiptap-ui/indent-button";
-import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
-import { MarkButton } from "@/components/tiptap-ui/mark-button";
-import { MediaEmbedPopover } from "@/components/tiptap-ui/media-embed-popover";
-import { MermaidButton } from "@/components/tiptap-ui/mermaid-button";
-import { TextAlignButton } from "@/components/tiptap-ui/text-align-button";
-import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
 import { Spacer } from "@/components/ui/spacer";
 import { ToolbarGroup, ToolbarSeparator } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
@@ -32,6 +35,30 @@ interface MainToolbarContentProps {
   filterActive: boolean;
 }
 
+type Tier = "t2" | "t3" | "t4" | "t5";
+
+/**
+ * Marks an item with the responsive tier at which it hides (contract
+ * §5.3). `display: contents`, so the wrapper never changes layout or the
+ * roving order; D2's container queries hide it by this attribute.
+ */
+function Collapse({ tier, children }: { tier: Tier; children: ReactNode }) {
+  return (
+    <span data-collapse-tier={tier} className="contents">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The sorted row (spec §4.1). It never reorders: every control stays in
+ * place in every context, disabled with a reason when it cannot run.
+ *
+ * `[Outline Filter] │ ↶ ↷ │ Style ▾ · Size │ B I U S · colour · link │
+ * Align ▾ · List ▾ · ⇤ ⇥ │ [slot] │ + Insert ▾ · ⋯ │ … Theme`
+ *
+ * Each group root carries `data-toolbar-group` for D2's responsive ladder.
+ */
 export function MainToolbarContent({
   onHighlighterClick,
   onTocToggle,
@@ -43,91 +70,108 @@ export function MainToolbarContent({
   return (
     <>
       {!isMobile && (
-        <ToolbarGroup>
-          <ToolbarButton
-            onClick={onTocToggle}
-            aria-label="Toggle outline"
-            tooltip="Toggle outline"
-            isActive={tocVisible}
-          >
-            <PanelLeftIcon />
-          </ToolbarButton>
-          <FilterToolbarButton
-            onClick={onFilterToggle}
-            isActive={filterActive}
-          />
+        <ToolbarGroup data-toolbar-group="view" aria-label="View">
+          <Collapse tier="t4">
+            <ToolbarButton
+              onClick={onTocToggle}
+              aria-label="Toggle outline"
+              tooltip="Toggle outline"
+              isActive={tocVisible}
+            >
+              <PanelLeftIcon />
+            </ToolbarButton>
+            <FilterToolbarButton
+              onClick={onFilterToggle}
+              isActive={filterActive}
+            />
+          </Collapse>
+          <ViewCollapseMenu />
         </ToolbarGroup>
       )}
 
       <Spacer />
 
-      <ToolbarGroup>
-        <UndoRedoButton action="undo" />
-        <UndoRedoButton action="redo" />
+      <ToolbarGroup data-toolbar-group="history" aria-label="History">
+        <ActionButton id="history.undo" />
+        <ActionButton id="history.redo" />
       </ToolbarGroup>
 
       <ToolbarSeparator />
 
-      <ToolbarGroup>
-        <HeadingDropdownMenu levels={[1, 2, 3, 4, 5, 6]} />
-        <ListDropdownMenu types={["bulletList", "orderedList", "taskList"]} />
-        <BlockquoteButton />
-        <CodeBlockButton />
-        <MermaidButton />
+      <ToolbarGroup data-toolbar-group="style" aria-label="Text style">
+        <StyleMenu />
+      </ToolbarGroup>
+      <ToolbarGroup data-toolbar-group="size" aria-label="Text size">
+        <FontSizeStepper />
       </ToolbarGroup>
 
       <ToolbarSeparator />
 
-      <ToolbarGroup>
-        <MarkButton type="bold" />
-        <MarkButton type="italic" />
-        <MarkButton type="strike" />
-        <MarkButton type="inlineCode" />
-        <MarkButton type="underline" />
-        {!isMobile ? (
-          <ColorHighlightPopover />
-        ) : (
+      <ToolbarGroup data-toolbar-group="marks" aria-label="Formatting">
+        <ActionButton id="mark.bold" />
+        <ActionButton id="mark.italic" />
+        <Collapse tier="t5">
+          <ActionButton id="mark.underline" />
+          <ActionButton id="mark.strike" />
+        </Collapse>
+        <AaCollapseMenu />
+      </ToolbarGroup>
+      <ToolbarGroup data-toolbar-group="color" aria-label="Colour">
+        {isMobile ? (
           <ColorHighlightPopoverButton onClick={onHighlighterClick} />
+        ) : (
+          <Collapse tier="t4">
+            <ColorControls />
+          </Collapse>
         )}
-        <HyperlinkButton />
+        <ColorCollapseButton />
+      </ToolbarGroup>
+      <ToolbarGroup data-toolbar-group="link" aria-label="Link">
+        <ActionButton id="mark.link" />
       </ToolbarGroup>
 
       <ToolbarSeparator />
 
-      <ToolbarGroup>
-        <MarkButton type="superscript" />
-        <MarkButton type="subscript" />
+      <ToolbarGroup data-toolbar-group="paragraph" aria-label="Paragraph">
+        <Collapse tier="t3">
+          <AlignMenu />
+        </Collapse>
+        <div data-toolbar-group="list" className="contents">
+          <ListControl />
+        </div>
+        <Collapse tier="t3">
+          <ActionButton id="indent.outdent" />
+          <ActionButton id="indent.indent" />
+        </Collapse>
+        <ParagraphCollapseMenu />
       </ToolbarGroup>
 
       <ToolbarSeparator />
 
-      <ToolbarGroup>
-        <TextAlignButton align="left" />
-        <TextAlignButton align="center" />
-        <TextAlignButton align="right" />
-        <TextAlignButton align="justify" />
-      </ToolbarGroup>
+      <div data-toolbar-group="slot" className="contents">
+        <Collapse tier="t3">
+          <ContextSlot />
+        </Collapse>
+        <SlotCollapseButton />
+      </div>
 
       <ToolbarSeparator />
 
-      <ToolbarGroup>
-        <IndentButton action="outdent" />
-        <IndentButton action="indent" />
+      <ToolbarGroup data-toolbar-group="insert" aria-label="Insert">
+        <InsertMenu />
       </ToolbarGroup>
-
-      <ToolbarSeparator />
-
-      <ToolbarGroup>
-        <ImageUploadButton text="Add" size="sm" />
-        <MediaEmbedPopover />
+      <ToolbarGroup data-toolbar-group="more" aria-label="More">
+        <OverflowMenu />
       </ToolbarGroup>
 
       <Spacer />
 
       {isMobile && <ToolbarSeparator />}
 
-      <ToolbarGroup>
-        <ThemeToggle />
+      <ToolbarGroup data-toolbar-group="theme" aria-label="Theme">
+        <Collapse tier="t2">
+          <ThemeToggle />
+        </Collapse>
       </ToolbarGroup>
     </>
   );
