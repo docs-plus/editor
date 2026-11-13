@@ -9,6 +9,77 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar schema (PR C, release N+1)
+
+Release N+1's data layer for the smart toolbar. No toolbar UI. Merge and
+deploy **only after the N+1 ship gates pass** (runbook: ≥ 95% `schema=2` over
+24 h held ≥ 48 h, the refused-client and mixed-version soaks, the staging
+drill).
+
+#### Added
+- **`textColor` and `fontSize` marks** (`extensions/text-style-marks/`):
+  standalone, inclusive like bold, one token attribute each (`color`: the ten
+  palette names; `size`: `xs sm lg xl`, the default size has no mark). They
+  render only `data-text-color` / `data-font-size` for a known token, never
+  inline style; anything else renders as plain text.
+- **Commands for the toolbar:** `setTextColor`, `unsetTextColor`,
+  `setFontSize`, `unsetFontSize`. Each is one transaction, an empty selection
+  sets a stored mark, and an invalid token returns false. `setFontSize`
+  refuses headings and the title.
+- **Appendix A palette** in `extensions/text-style-marks/text-style-marks.scss`
+  for light and dark, with a contrast test (text ≥ 4.5:1 on the page, page
+  text ≥ 7:1 on every highlight) and a test that the SCSS matches
+  `lib/text-style-tokens.ts`.
+
+#### Changed
+- **Highlights store tokens:** `setHighlight` / `toggleHighlight` accept a
+  palette token (or the release N `var(--tt-color-highlight-X)` form, stored as
+  given so the current popover keeps working) and refuse anything else, so the
+  old "Default background" swatch is a no-op. `toggleHighlight()`,
+  Mod-Shift-H and `==x==` now use yellow instead of an invisible mark.
+- **Paste keeps only our own styling:** our `data-text-color`,
+  `data-font-size` and `data-highlight` (and release N's `data-color`) survive
+  a paste between tabs; foreign colour, font size and background (Google Docs,
+  Word, any `<mark>` without a token) paste as plain text. The Docs and Word
+  tests use synthetic clipboard fixtures, not checked against a real
+  clipboard.
+- **Sizes stay out of headings:** a local edit that puts `fontSize` in a
+  heading or the title (turning a sized paragraph into a heading, paste, drop)
+  drops the size in the same undo step; sized text that reaches a heading
+  remotely renders at the heading's size.
+
+#### Security
+- **Client schema floor in code:** `SCHEMA_FLOOR = 2`
+  (`lib/security/client-schema-gate.ts`). Hocus enforces
+  `max(HOCUS_MIN_CLIENT_SCHEMA, 2)`, so the gate is never log-only again and
+  the env can only raise it. The startup line prints the effective minimum.
+- **Ingress allowlist:** `textColor` and `fontSize` are allowed (this
+  release's server half). Unknown names are still refused with 4422.
+
+#### Deploy
+Only after the N+1 ship gates pass, at low traffic. Hocus runs from source and
+Next serves a prebuilt `.next`, so the server half goes live first.
+1. **Build into a separate directory**, so the running Next keeps serving the
+   release N bundle until step 4: for example a fresh checkout of this commit
+   next to the live one (`bun install --frozen-lockfile && bun run build`).
+   Building in place was not proven safe for the still-running Next process.
+   No dependency changes.
+2. **Restart Hocus first** from the new code:
+   `bunx pm2@6.0.14 restart editor-hocus --update-env`.
+3. **Confirm** `[hocus] client schema gate: min=2 (floor 2, env 0)` in its log,
+   and within a minute a `client_schema` line: `ok` counts release N clients,
+   `refused` counts any pre-N bundles (`client_outdated`; 0 is fine if none
+   are left).
+4. **Then switch Next to the new build** and restart it:
+   `bunx pm2@6.0.14 restart editor-next --update-env`.
+5. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
+   and never lower the floor.** Before rolling Hocus back below this release,
+   roll Next back first and set `HOCUS_MIN_CLIENT_SCHEMA=2` (release N's code
+   has no floor); N+1 tabs still open then get 4422 on the new marks until
+   they reload. See the runbook.
+
+### Release N (smart toolbar accessibility and rollout safety)
+
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
