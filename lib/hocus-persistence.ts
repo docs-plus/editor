@@ -9,7 +9,7 @@ import type { GuardrailDecision } from "@/lib/security/ws-guardrails";
  * Same table as `@hocuspocus/extension-sqlite` (v3 and v4), so existing
  * `db.sqlite` files load unchanged.
  */
-const DOCUMENTS_SCHEMA = `
+export const DOCUMENTS_SCHEMA = `
   CREATE TABLE IF NOT EXISTS "documents" (
     "name" varchar(255) NOT NULL,
     "data" blob NOT NULL,

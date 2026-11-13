@@ -7,6 +7,7 @@ import {
 } from "@playwright/test";
 
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
+import { storedCopies } from "./helpers/offline-store";
 
 /** Closes the collab WebSocket on demand (Next's HMR socket is left alone). */
 class CollabSocket {
@@ -43,26 +44,6 @@ class CollabSocket {
     this.open = true;
     await this.context.setOffline(false);
   }
-}
-
-/** Document names with an offline copy in this browser (never creates the DB). */
-function storedCopies(page: Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    if (!dbs.some((db) => db.name === "tinydocy-offline")) return [];
-    return new Promise<string[]>((resolve, reject) => {
-      const req = indexedDB.open("tinydocy-offline");
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains("docs")) return resolve([]);
-        const all = db.transaction("docs").objectStore("docs").getAll();
-        all.onsuccess = () =>
-          resolve((all.result as Array<{ name: string }>).map((d) => d.name));
-        all.onerror = () => reject(all.error);
-      };
-    });
-  });
 }
 
 async function openDoc(page: Page, socket: CollabSocket): Promise<string> {

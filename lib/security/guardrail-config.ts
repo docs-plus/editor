@@ -135,6 +135,16 @@ export const HOCUS_ALLOWED_ORIGINS = (process.env.HOCUS_ALLOWED_ORIGINS ?? "")
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
+/**
+ * Lowest client `schema` (sent on the socket URL) allowed to open gated
+ * documents. `0` (default) refuses nothing and only logs per-minute counts.
+ */
+export const HOCUS_MIN_CLIENT_SCHEMA = parseEnvInt(
+  process.env.HOCUS_MIN_CLIENT_SCHEMA,
+  0,
+  0,
+);
+
 /** Interface Hocuspocus binds to (default all interfaces). */
 export const HOCUS_HOST = parseEnvString(process.env.HOCUS_HOST, "0.0.0.0");
 

@@ -20,7 +20,6 @@ import {
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { JSONContent } from "@tiptap/core";
 import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
-import { Highlight } from "@tiptap/extension-highlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
@@ -57,6 +56,7 @@ import {
 } from "@/extensions/render-once";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { TitleDocument } from "@/extensions/title-document";
+import { TokenHighlight } from "@/extensions/token-highlight";
 import { lowlight } from "@/lib/lowlight";
 
 import { SafeCodeBlock } from "./safe-code-block";
@@ -114,6 +114,11 @@ interface BuildDocumentEditorExtensionsOptions {
   onFoldChange: (foldedIds: Set<string>) => void;
   onFilterChange: (state: HeadingFilterCallbackState) => void;
   onTocUpdate: (anchors: TableOfContentData) => void;
+  /**
+   * Called when the shared document stops fitting the schema (the editor
+   * freezes). Runs inside the sync binding: record only, never write.
+   */
+  onInvalidContent?: (error: Error) => void;
 }
 
 function createHeadingFilterFoldAdapter() {
@@ -142,6 +147,7 @@ export function buildDocumentEditorExtensions({
   onFoldChange,
   onFilterChange,
   onTocUpdate,
+  onInvalidContent,
 }: BuildDocumentEditorExtensionsOptions) {
   return [
     StarterKit.configure({
@@ -189,6 +195,7 @@ export function buildDocumentEditorExtensions({
     }),
     CollaborationRenderOnce.configure({
       document: ydoc,
+      ...(onInvalidContent ? { ySyncOptions: { onInvalidContent } } : {}),
     }),
     NodeViewsRenderOnce,
     CaretBlockVisible,
@@ -199,7 +206,7 @@ export function buildDocumentEditorExtensions({
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Highlight.configure({ multicolor: true }),
+    TokenHighlight.configure({ multicolor: true }),
     HyperMultimediaKit,
     Typography,
     Superscript,

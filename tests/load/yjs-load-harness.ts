@@ -21,6 +21,7 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 
+import { withClientVersion } from "@/lib/schema-version";
 import { formatBytes } from "@/lib/utils";
 import { parseEnvFloat, parseEnvNumber } from "@/tests/helpers/env-parsers";
 import { writeReport } from "@/tests/helpers/report-writer";
@@ -315,7 +316,7 @@ function createClients(config: YjsLoadHarnessConfig): {
     for (let i = 0; i < config.clients; i++) {
       const doc = new Y.Doc();
       const provider = new HocuspocusProvider({
-        url: config.url,
+        url: withClientVersion(config.url),
         name: config.doc,
         document: doc,
         token: `load-client-${i}-${config.doc}`,

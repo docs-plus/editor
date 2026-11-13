@@ -6,18 +6,44 @@ import type {
   Extension,
   onChangePayload,
 } from "@hocuspocus/server";
+import { isTransactionOrigin } from "@hocuspocus/server";
+import * as decoding from "lib0/decoding";
 import * as Y from "yjs";
 
+import {
+  isAllowedMarkKey,
+  isAllowedNodeName,
+  markNameFromKey,
+} from "@/lib/schema-names";
 import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { getPinnedClientIp } from "@/lib/security/client-ip";
 import { isTabsDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  isNonElementContent,
+  type RootSweep,
+  sweepEditorRoot,
+  watchEditorRoot,
+} from "@/lib/security/editor-root-sweep";
+import {
+  decodeFrameHeader,
+  HOCUS_SYNC_MESSAGE_TYPES,
+} from "@/lib/security/hocus-frame";
 import { repairTabsArray } from "@/lib/security/tabs-doc-repair";
+import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 /** Close code for an update that would push a document past its cap. */
 export const DOCUMENT_TOO_LARGE = {
   code: 4413,
   reason: "document_too_large",
 } as const;
+
+/** Close for an update naming a node or mark outside the schema allowlist. */
+export const SCHEMA_REJECTED = {
+  code: 4422,
+  reason: "schema_rejected",
+} as const;
+
+const MAX_LOGGED_NAME_LENGTH = 40;
 
 type DocumentGuardOptions = {
   /** Byte cap for a document's encoded state. */
@@ -28,41 +54,53 @@ type DocumentGuardOptions = {
   maxAwarenessStateBytes: number;
   /** Delay before repairing a tab list after a change (coalesces bursts). */
   tabsRepairDelayMs?: number;
+  /** One `editor_root_swept` update line per document per window (default 1 min). */
+  sweepLogWindowMs?: number;
+  /** Clock for the sweep log window (tests). */
+  now?: () => number;
 };
+
+/** Sweeps of one document since its last logged line, not logged one by one. */
+type SweepLogWindow = {
+  since: number;
+  sweeps: number;
+  removed: number;
+  types: Set<string>;
+};
+
+const SWEEP_LOG_WINDOW_MS = 60_000;
 
 type SizeEstimate = { stored: number; pending: number };
 
-const MESSAGE_SYNC = 0;
 const SYNC_STEP_1 = 0;
+const SYNC_STEP_2 = 1;
+const SYNC_UPDATE = 2;
 /** An encoded Yjs update with no structs and no deletions is `[0, 0]`. */
 const EMPTY_UPDATE_BYTES = 2;
 
-/** Reads a lib0 varUint at `offset`; returns [value, nextOffset] or null. */
-function readVarUint(
-  bytes: Uint8Array,
-  offset: number,
-): [number, number] | null {
-  let value = 0;
-  let shift = 0;
-  for (let i = offset; i < bytes.length && shift < 35; i++) {
-    const byte = bytes[i] ?? 0;
-    value += (byte & 0x7f) * 2 ** shift;
-    if (byte < 0x80) return [value, i + 1];
-    shift += 7;
-  }
-  return null;
-}
+/** A sync frame whose body cannot be decoded; it must never be applied. */
+const MALFORMED = Symbol("malformed-sync-frame");
 
-/** The Yjs update carried by a Sync step 2 or update frame, else null. */
-function readSyncUpdate(frame: Uint8Array): Uint8Array | null {
-  const nameLength = readVarUint(frame, 0);
-  if (!nameLength) return null;
-  const messageType = readVarUint(frame, nameLength[1] + nameLength[0]);
-  if (!messageType || messageType[0] !== MESSAGE_SYNC) return null;
-  const syncType = readVarUint(frame, messageType[1]);
-  if (!syncType || syncType[0] === SYNC_STEP_1) return null;
-  const length = readVarUint(frame, syncType[1]);
-  return length ? frame.subarray(length[1], length[1] + length[0]) : null;
+/**
+ * The Yjs update carried by a Sync / SyncReply step 2 or update frame.
+ * Null for frames that carry none (awareness, auth, step 1, stateless).
+ * `MALFORMED` for a sync frame that does not decode. Decoded with lib0, as
+ * Hocuspocus does, so padded varints and out-of-range lengths cannot make
+ * the guard and the server disagree about what a frame contains.
+ */
+function readSyncUpdate(
+  frame: Uint8Array,
+): Uint8Array | null | typeof MALFORMED {
+  try {
+    const { decoder, messageType } = decodeFrameHeader(frame);
+    if (!HOCUS_SYNC_MESSAGE_TYPES.has(messageType)) return null;
+    const syncType = decoding.readVarUint(decoder);
+    if (syncType === SYNC_STEP_1) return null;
+    if (syncType !== SYNC_STEP_2 && syncType !== SYNC_UPDATE) return MALFORMED;
+    return decoding.readVarUint8Array(decoder);
+  } catch {
+    return MALFORMED;
+  }
 }
 
 /**
@@ -74,7 +112,11 @@ function readSyncUpdate(frame: Uint8Array): Uint8Array | null {
  */
 export function isDocumentUpdateFrame(frame: Uint8Array): boolean {
   const update = readSyncUpdate(frame);
-  return update !== null && update.byteLength > EMPTY_UPDATE_BYTES;
+  return (
+    update !== null &&
+    update !== MALFORMED &&
+    update.byteLength > EMPTY_UPDATE_BYTES
+  );
 }
 
 /**
@@ -90,6 +132,194 @@ export function addsNoItems(update: Uint8Array, document: Y.Doc): boolean {
   } catch {
     return false;
   }
+}
+
+/** Reported for content stored directly in the editor fragment. */
+const ROOT_CONTENT_NAME = "#text";
+
+/** A root type's name, `null` inside a nested type, `undefined` if not known yet. */
+type RootName = string | null | undefined;
+
+/**
+ * Finds the root type each item of an update lands in. An item encodes its
+ * parent only when it has no origin; otherwise it inherits the parent of its
+ * left (or right) origin, found among the update's own items or, failing
+ * that, in the server's document.
+ */
+function createRootResolver(
+  structs: readonly Y.Item[],
+  document: Y.Doc | undefined,
+): (item: Y.Item) => RootName {
+  const byClient = new Map<number, Y.Item[]>();
+  for (const struct of structs) {
+    const items = byClient.get(struct.id.client) ?? [];
+    items.push(struct);
+    byClient.set(struct.id.client, items);
+  }
+  const memo = new Map<Y.Item, RootName>();
+
+  /** Items of one client arrive in clock order: binary search the range. */
+  function findInUpdate(id: Y.ID): Y.Item | undefined {
+    const items = byClient.get(id.client);
+    if (!items) return undefined;
+    let low = 0;
+    let high = items.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >> 1;
+      const item = items[middle];
+      if (id.clock < item.id.clock) high = middle - 1;
+      else if (id.clock >= item.id.clock + item.length) low = middle + 1;
+      else return item;
+    }
+    return undefined;
+  }
+
+  function findInDocument(id: Y.ID): RootName {
+    if (!document) return undefined;
+    let found: Y.AbstractStruct;
+    try {
+      found = Y.getItem(document.store, id);
+    } catch {
+      return undefined;
+    }
+    // Yjs discards an item whose origin was garbage collected.
+    if (!(found instanceof Y.Item)) return null;
+    const parent = found.parent;
+    if (!(parent instanceof Y.AbstractType)) return null;
+    return parent._item === null ? Y.findRootTypeKey(parent) : null;
+  }
+
+  return (item) => {
+    const path: Y.Item[] = [];
+    // A Set, not `path.includes`: a hostile chain would make that quadratic.
+    const seen = new Set<Y.Item>();
+    let current = item;
+    let root: RootName;
+    for (;;) {
+      if (memo.has(current)) {
+        root = memo.get(current);
+        break;
+      }
+      const parent = current.parent as unknown;
+      if (typeof parent === "string") {
+        root = parent;
+        break;
+      }
+      // An ID: the parent is an item, so a nested type.
+      if (parent !== null) {
+        root = null;
+        break;
+      }
+      path.push(current);
+      seen.add(current);
+      const origin = current.origin ?? current.rightOrigin;
+      const next = origin ? findInUpdate(origin) : undefined;
+      if (!origin || next === undefined || seen.has(next)) {
+        root = origin ? findInDocument(origin) : undefined;
+        break;
+      }
+      current = next;
+    }
+    for (const visited of path) memo.set(visited, root);
+    return root;
+  };
+}
+
+/**
+ * Node and mark names in `update` that the schema allowlist does not know, at
+ * most `limit` of them (truncated for logging). Null when the update cannot
+ * be decoded, so callers fail closed.
+ *
+ * Content placed directly in the editor fragment (`default`) that is not an
+ * element is reported as `#text`: y-tiptap cannot project it and throws. Its
+ * position is resolved against `document`, the server's copy. Content whose
+ * position is not there yet is allowed: a client resuming from its device
+ * copy types before its sync step 2 arrives, and Yjs holds such content
+ * pending. If a later update releases it into the fragment, the server sweep
+ * (`watchEditorRoot`) deletes it in the same broadcast; the client repair
+ * cannot, because y-tiptap throws before reporting invalid content.
+ *
+ * Known gap: element attribute keys and marks on inline atom nodes are not
+ * checked. y-prosemirror stores no marks on elements, and Tiptap drops
+ * unknown attributes.
+ */
+export function findDisallowedSchemaNames(
+  update: Uint8Array,
+  limit = 3,
+  document?: Y.Doc,
+): string[] | null {
+  const found: string[] = [];
+  // A format run emits a start and an end item with the same key.
+  const report = (name: string) => {
+    const shown = name.slice(0, MAX_LOGGED_NAME_LENGTH);
+    if (!found.includes(shown)) found.push(shown);
+  };
+  try {
+    const items = Y.decodeUpdate(update).structs.filter(
+      (struct): struct is Y.Item => struct instanceof Y.Item,
+    );
+    const rootOf = createRootResolver(items, document);
+    for (const item of items) {
+      if (found.length >= limit) break;
+      const { content } = item;
+      if (content instanceof Y.ContentType) {
+        if (
+          content.type instanceof Y.XmlElement &&
+          !isAllowedNodeName(content.type.nodeName)
+        )
+          report(content.type.nodeName);
+      } else if (
+        content instanceof Y.ContentFormat &&
+        !isAllowedMarkKey(content.key)
+      ) {
+        report(markNameFromKey(content.key));
+      }
+      if (!isNonElementContent(item)) continue;
+      const root = rootOf(item);
+      if (root === EDITOR_FRAGMENT_NAME) report(ROOT_CONTENT_NAME);
+    }
+  } catch {
+    return null;
+  }
+  return found;
+}
+
+/**
+ * One abuse line for a sweep that removed something. `ip` is the sender of
+ * the update that let the content land, which for content Yjs held pending
+ * is not necessarily the client that wrote it (an attacker can arrange for it
+ * to be an innocent client).
+ */
+function logRootSweep(
+  documentName: string,
+  phase: "load" | "update",
+  { removed, types }: RootSweep,
+  origin?: unknown,
+): void {
+  if (removed === 0) return;
+  const ip =
+    isTransactionOrigin(origin) && origin.source === "connection"
+      ? getPinnedClientIp(origin.connection.request.headers)
+      : undefined;
+  logAbuseEvent("editor_root_swept", {
+    documentName,
+    phase,
+    removed,
+    types,
+    ...(ip ? { ip } : {}),
+  });
+}
+
+/** The sweeps a window held back, as one line without an `ip`. */
+function logHeldSweeps(documentName: string, window: SweepLogWindow): void {
+  if (window.sweeps === 0) return;
+  logAbuseEvent("editor_root_swept", {
+    documentName,
+    phase: "update",
+    sweeps: window.sweeps,
+    removed: window.removed,
+    types: [...window.types],
+  });
 }
 
 /**
@@ -110,6 +340,7 @@ export class DocumentGuard implements Extension {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly sweepLogs = new Map<string, SweepLogWindow>();
 
   constructor(private readonly options: DocumentGuardOptions) {}
 
@@ -130,6 +361,13 @@ export class DocumentGuard implements Extension {
       if (removed > 0) {
         logAbuseEvent("tabs_doc_repaired", { documentName, removed });
       }
+    } else {
+      // Before any client syncs: a stored document poisoned before this
+      // release could not be mounted by anyone.
+      logRootSweep(documentName, "load", sweepEditorRoot(document));
+      watchEditorRoot(document, (sweep, origin) =>
+        this.logUpdateSweep(documentName, sweep, origin),
+      );
     }
     this.recordStored(documentName, Y.encodeStateAsUpdate(document).byteLength);
   }
@@ -140,16 +378,52 @@ export class DocumentGuard implements Extension {
     requestHeaders,
     document,
   }: beforeHandleMessagePayload): Promise<void> {
-    const size = this.sizes.get(documentName);
-    if (!size || !isDocumentUpdateFrame(update)) return;
-    const limit = this.options.maxDocumentBytes(documentName);
-    if (size.stored + size.pending + update.byteLength <= limit) return;
     const payload = readSyncUpdate(update);
-    if (payload && addsNoItems(payload, document)) return;
+    if (payload === null) return;
+    if (payload === MALFORMED) {
+      this.refuseSchema(requestHeaders, documentName, null);
+    }
+    if (payload.byteLength <= EMPTY_UPDATE_BYTES) return;
+    // Size first: arithmetic, and a delete-only update decodes to no structs.
+    this.refuseOverCap(payload, update, document, documentName, requestHeaders);
+    const names = findDisallowedSchemaNames(payload, undefined, document);
+    if (names === null || names.length > 0) {
+      this.refuseSchema(requestHeaders, documentName, names);
+    }
+  }
+
+  /** Closes with `schema_rejected`; undecodable input logs `names: []`. */
+  private refuseSchema(
+    requestHeaders: beforeHandleMessagePayload["requestHeaders"],
+    documentName: string,
+    names: string[] | null,
+  ): never {
+    logAbuseEvent("ws_unknown_schema_name", {
+      ip: getPinnedClientIp(requestHeaders),
+      documentName,
+      names: names ?? [],
+    });
+    throw SCHEMA_REJECTED;
+  }
+
+  /** Closes with `document_too_large` when `payload` would pass the cap. */
+  private refuseOverCap(
+    payload: Uint8Array,
+    frame: Uint8Array,
+    document: Y.Doc,
+    documentName: string,
+    requestHeaders: beforeHandleMessagePayload["requestHeaders"],
+  ): void {
+    const size = this.sizes.get(documentName);
+    if (!size) return;
+    const limit = this.options.maxDocumentBytes(documentName);
+    const estimatedBytes = size.stored + size.pending + frame.byteLength;
+    if (estimatedBytes <= limit) return;
+    if (addsNoItems(payload, document)) return;
     logAbuseEvent("ws_update_too_large", {
       ip: getPinnedClientIp(requestHeaders),
       documentName,
-      estimatedBytes: size.stored + size.pending + update.byteLength,
+      estimatedBytes,
       limit,
     });
     throw DOCUMENT_TOO_LARGE;
@@ -186,6 +460,9 @@ export class DocumentGuard implements Extension {
   async afterUnloadDocument({
     documentName,
   }: afterUnloadDocumentPayload): Promise<void> {
+    const sweepLog = this.sweepLogs.get(documentName);
+    if (sweepLog) logHeldSweeps(documentName, sweepLog);
+    this.sweepLogs.delete(documentName);
     this.sizes.delete(documentName);
     clearTimeout(this.repairTimers.get(documentName));
     this.repairTimers.delete(documentName);
@@ -194,6 +471,40 @@ export class DocumentGuard implements Extension {
   async onDestroy(): Promise<void> {
     for (const timer of this.repairTimers.values()) clearTimeout(timer);
     this.repairTimers.clear();
+    for (const [documentName, sweepLog] of this.sweepLogs) {
+      logHeldSweeps(documentName, sweepLog);
+    }
+    this.sweepLogs.clear();
+  }
+
+  /**
+   * Logs the first sweep of a document per window and counts the rest, so a
+   * client sending stray content in a loop cannot flood the log. The count
+   * is logged when the next window opens, or when the document unloads.
+   * Keyed by document only: per IP, rotating addresses would bypass it.
+   */
+  private logUpdateSweep(
+    documentName: string,
+    sweep: RootSweep,
+    origin: unknown,
+  ): void {
+    const now = (this.options.now ?? Date.now)();
+    const windowMs = this.options.sweepLogWindowMs ?? SWEEP_LOG_WINDOW_MS;
+    const current = this.sweepLogs.get(documentName);
+    if (current && now - current.since < windowMs) {
+      current.sweeps += 1;
+      current.removed += sweep.removed;
+      for (const type of sweep.types) current.types.add(type);
+      return;
+    }
+    if (current) logHeldSweeps(documentName, current);
+    logRootSweep(documentName, "update", sweep, origin);
+    this.sweepLogs.set(documentName, {
+      since: now,
+      sweeps: 0,
+      removed: 0,
+      types: new Set(),
+    });
   }
 
   private scheduleTabsRepair(documentName: string, document: Y.Doc): void {
