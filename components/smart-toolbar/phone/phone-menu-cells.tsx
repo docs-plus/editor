@@ -5,17 +5,37 @@ import type { Editor } from "@tiptap/react";
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
 import {
-  ActionMenuItem,
+  ActionRadioItem,
+  DropdownMenuRadioGroup,
   ToolbarMenu,
   useMenuFocus,
 } from "@/components/smart-toolbar/row/action-menu";
+import { setListType } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
+import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
+import { useActionView } from "@/hooks/use-editor-context";
 import { ListIcon } from "@/lib/icons";
 
+const NO_LIST = "none";
 const LIST_IDS = ["list.bullet", "list.ordered", "list.task"];
 
-/** List ▾ as one cell: the registry's list toggles in a menu. */
+/** The current list action, or "none": the radio group's value. */
+function useListValue(editor: Editor): string {
+  const bullet = useActionView("list.bullet", editor);
+  const ordered = useActionView("list.ordered", editor);
+  const task = useActionView("list.task", editor);
+  if (bullet?.active) return "list.bullet";
+  if (ordered?.active) return "list.ordered";
+  if (task?.active) return "list.task";
+  return NO_LIST;
+}
+
+/**
+ * List ▾ as one cell: a radio menu like the row's (`menuitemradio`, one
+ * checked), "No list" then the registry's list actions.
+ */
 function ListCell({ editor }: { editor: Editor }) {
   const menu = useMenuFocus(editor);
+  const value = useListValue(editor);
   return (
     <ToolbarMenu
       label="List"
@@ -28,15 +48,27 @@ function ListCell({ editor }: { editor: Editor }) {
       finalFocus={menu.finalFocus}
       contentLabel="List"
     >
-      {LIST_IDS.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkbox
-          onPicked={menu.markPicked}
-        />
-      ))}
+      <DropdownMenuRadioGroup value={value}>
+        <DropdownMenuRadioItem
+          value={NO_LIST}
+          closeOnClick
+          onClick={() => {
+            menu.markPicked();
+            setListType(editor, NO_LIST);
+          }}
+        >
+          No list
+        </DropdownMenuRadioItem>
+        {LIST_IDS.map((id) => (
+          <ActionRadioItem
+            key={id}
+            id={id}
+            value={id}
+            editor={editor}
+            onPicked={menu.markPicked}
+          />
+        ))}
+      </DropdownMenuRadioGroup>
     </ToolbarMenu>
   );
 }

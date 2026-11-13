@@ -502,3 +502,25 @@ test("the sheet is modal: Tab never leaves it, and the page behind is inert", as
     bar(page).getByRole("button", { name: "Text format" }),
   ).toBeFocused();
 });
+
+test("List is a radio menu like the row's", async ({ page }) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await bar(page).getByRole("button", { name: "List" }).tap();
+  const menu = page.getByRole("menu", { name: "List" });
+  await expect(menu.getByRole("menuitemradio")).toHaveCount(4);
+  await expect(
+    menu.getByRole("menuitemradio", { name: "No list" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await menu.getByRole("menuitemradio", { name: /bullet/i }).tap();
+  await expect(menu).toBeHidden();
+  await expect
+    .poll(async () => (await lastBlock(page)).type)
+    .toBe("bulletList");
+  await bar(page).getByRole("button", { name: "List" }).tap();
+  await expect(
+    page
+      .getByRole("menu", { name: "List" })
+      .getByRole("menuitemradio", { name: /bullet/i }),
+  ).toHaveAttribute("aria-checked", "true");
+});
