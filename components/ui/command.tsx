@@ -113,6 +113,11 @@ function CommandItem({
       data-slot="command-item"
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        // The active option is never colour-only (WCAG 1.4.11): an
+        // inline-start bar in the foreground colour, and in forced colours
+        // a Highlight fill (backgrounds are dropped there).
+        "data-[selected=true]:before:absolute data-[selected=true]:before:inset-y-1 data-[selected=true]:before:start-0 data-[selected=true]:before:w-0.5 data-[selected=true]:before:rounded-full data-[selected=true]:before:bg-foreground data-[selected=true]:before:content-['']",
+        "forced-colors:outline-none forced-colors:data-[selected=true]:forced-color-adjust-none forced-colors:data-[selected=true]:bg-[Highlight] forced-colors:data-[selected=true]:text-[HighlightText] forced-colors:data-[selected=true]:before:bg-[HighlightText]",
         className,
       )}
       {...props}
@@ -128,7 +133,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground",
+        "ml-auto text-xs tracking-widest text-muted-foreground in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]",
         className,
       )}
       {...props}

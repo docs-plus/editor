@@ -148,6 +148,21 @@ describe("buildPaletteSections", () => {
     expect(larger?.disabledReason).toBe("Headings scale automatically.");
   });
 
+  it("lists runnable entries before unavailable ones in every group, so the default highlight runs", () => {
+    const sections = sectionsAt(10, ["size.increase", "mark.bold"]);
+    expect(sections[0]?.heading).toBe("Recent");
+    expect(sections[0]?.items.map((i) => i.actionId)).toEqual([
+      "mark.bold",
+      "size.increase",
+    ]);
+    for (const section of sections) {
+      const flags = section.items.map((i) => Boolean(i.disabledReason));
+      expect(flags).toEqual([...flags].sort((a, b) => Number(a) - Number(b)));
+    }
+    const first = sections[0]?.items[0];
+    expect(first?.disabledReason).toBeUndefined();
+  });
+
   it("refuses mutating actions in a read-only document but keeps view actions", () => {
     const ed = setup();
     ed.setEditable(false);
