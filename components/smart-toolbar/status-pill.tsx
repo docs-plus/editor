@@ -25,24 +25,61 @@ const ACTION_PILL_MS = 5000;
 const STICKY_ROW = '.document-editor-wrapper > [data-slot="toolbar"]';
 const PAGE_COLUMN = ".document-editor-content";
 
+const BUBBLE_PANEL = '[data-smart-bubble][data-state="open"] .st-bubble-panel';
+/** `PAINTING_CLASS` (`paint-format.ts`, the lazy engine: never imported here). */
+const PAINTING = ".is-painting";
+const GAP = 8;
+
 const getNoNotice = () => null;
 
 export type PillPlacement = "desktop" | "phone";
 
+type Box = Pick<DOMRect, "top" | "right" | "bottom" | "left">;
+
+const overlaps = (a: Box, b: Box) =>
+  a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/**
+ * Where the pill goes when its place under the sticky row would cover the
+ * selection bubble (near the top of the page): 8px right of the bubble,
+ * level with it, when that fits the viewport, else 8px below it. Never
+ * over the bubble, so the armed brush stays clickable. `null`: no clash.
+ */
+export function besideBubble(
+  pill: Box,
+  bubble: Box | undefined,
+  viewportWidth: number,
+): { top: number; left: number } | null {
+  if (!bubble || !overlaps(pill, bubble)) return null;
+  const width = pill.right - pill.left;
+  return bubble.right + GAP + width <= viewportWidth - GAP
+    ? { top: bubble.top, left: bubble.right + GAP }
+    : { top: bubble.bottom + GAP, left: pill.left };
+}
+
 /**
  * Desktop: fixed 8px under the sticky row, centred over the page column,
- * measured when the notice shows (it lasts seconds).
+ * beside the bubble when it would cover it (`besideBubble`). Measured when
+ * the notice shows (it lasts seconds): the default first, applied to the
+ * pill so its own width is known.
  */
-function desktopPosition(): CSSProperties {
+function desktopPosition(pill: HTMLElement): CSSProperties {
   const row = document.querySelector(STICKY_ROW)?.getBoundingClientRect();
   const column = document.querySelector(PAGE_COLUMN)?.getBoundingClientRect();
-  return {
+  const centred = {
     position: "fixed",
-    top: (row?.bottom ?? 0) + 8,
-    left: column ? column.left + column.width / 2 : "50%",
+    top: `${(row?.bottom ?? 0) + GAP}px`,
+    left: column ? `${column.left + column.width / 2}px` : "50%",
     // `translate`, not `transform`: the enter animation owns `transform`.
     translate: "-50% 0",
-  };
+  } as const;
+  Object.assign(pill.style, centred);
+  const moved = besideBubble(
+    pill.getBoundingClientRect(),
+    document.querySelector(BUBBLE_PANEL)?.getBoundingClientRect(),
+    window.innerWidth,
+  );
+  return moved ? { position: "fixed", ...moved, translate: "none" } : centred;
 }
 
 function Pill({
@@ -75,7 +112,9 @@ function Pill({
   }, []);
   const [position, setPosition] = useState<CSSProperties>();
   useLayoutEffect(() => {
-    if (placement === "desktop") setPosition(desktopPosition());
+    if (placement === "desktop" && ref.current) {
+      setPosition(desktopPosition(ref.current));
+    }
   }, [placement]);
   useEffect(() => {
     if (held) return;
@@ -86,8 +125,13 @@ function Pill({
     return () => clearTimeout(timer);
   }, [notice, held]);
   useEffect(() => {
+    // While Paint format is armed Esc never closes the pill on its own:
+    // only Esc in the text cancels painting (and closes it), so the pill
+    // stays as long as a drag would still paint (design pass §5).
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dismissNotice(notice.id);
+      if (event.key === "Escape" && !document.querySelector(PAINTING)) {
+        dismissNotice(notice.id);
+      }
     };
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
@@ -144,9 +188,10 @@ function Pill({
 /**
  * The status pill (design pass §5): one per editor, the sighted twin of
  * `announce()`, which feeds it. Closes after 2.5 s (5 s with an action
- * such as Undo), stays while hovered or focused, and Esc closes it.
- * Desktop: mounted by the selection bubble's chunk, portalled under the
- * sticky row. Phone: inside the docked bar, beside its cells (never in a
+ * such as Undo), stays while hovered or focused, and Esc closes it
+ * (unless Paint format is armed). Desktop: mounted by the selection
+ * bubble's chunk, portalled under the sticky row, beside the bubble when
+ * it would cover it. Phone: inside the docked bar, beside its cells (never in a
  * masked or scrolling element), 8px above it.
  */
 export function StatusPill({ placement }: { placement: PillPlacement }) {

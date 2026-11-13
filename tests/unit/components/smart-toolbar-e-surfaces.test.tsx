@@ -8,7 +8,10 @@ import {
   nextMobileBarMode,
   PhoneSelectionCells,
 } from "@/components/smart-toolbar/phone-selection-cells";
-import { StatusPill } from "@/components/smart-toolbar/status-pill";
+import {
+  besideBubble,
+  StatusPill,
+} from "@/components/smart-toolbar/status-pill";
 import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import {
   getRememberedBundle,
@@ -324,5 +327,57 @@ describe("PhoneSelectionCells Back", () => {
     act(() => back?.click());
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(document.activeElement?.id).toBe("aa");
+  });
+});
+
+describe("besideBubble (desktop pill placement)", () => {
+  const box = (left: number, top: number, width: number, height: number) => ({
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+  });
+
+  it("leaves the pill alone when the bubble is closed or elsewhere", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, undefined, 1440)).toBeNull();
+    expect(besideBubble(pill, box(400, 300, 260, 40), 1440)).toBeNull();
+  });
+
+  it("moves it 8px right of the bubble, level with it, when that fits", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, box(380, 50, 260, 40), 1440)).toEqual({
+      top: 50,
+      left: 648,
+    });
+  });
+
+  it("else 8px below the bubble", () => {
+    const pill = box(100, 60, 240, 36);
+    expect(besideBubble(pill, box(80, 50, 260, 40), 500)).toEqual({
+      top: 98,
+      left: 100,
+    });
+  });
+});
+
+describe("StatusPill Esc", () => {
+  it("closes it, unless Paint format is armed", () => {
+    const el = mount(createElement(StatusPill, { placement: "phone" }));
+    const painting = document.createElement("div");
+    painting.className = "is-painting";
+    document.body.appendChild(painting);
+    act(() => announce("Picked up Bold.", { pill: "Select text to paint" }));
+    const esc = () =>
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      });
+    esc();
+    expect(el.querySelector("[data-status-pill]")).not.toBeNull();
+    painting.remove();
+    esc();
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
   });
 });

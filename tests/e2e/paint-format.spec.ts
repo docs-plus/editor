@@ -227,6 +227,113 @@ test.describe("Paint format", () => {
     );
   });
 
+  test("on the first line the pill stays clear of the bubble, so the brush again cancels", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openDoc(page);
+    // A long page scrolled a little: the bubble over the first body line
+    // then sits where the pill goes, 8px under the sticky row.
+    await page.evaluate((doc) => {
+      const filler = Array.from({ length: 40 }, (_, i) => ({
+        type: "paragraph",
+        content: [{ type: "text", text: `Filler line ${i + 1}` }],
+      }));
+      const [title, first, ...rest] = doc.content;
+      window.__tiptap_editor?.commands.setContent({
+        ...doc,
+        content: [
+          title,
+          {
+            ...first,
+            content: [
+              ...(first.content ?? []),
+              { type: "text", text: " and more words across the page" },
+            ],
+          },
+          ...rest,
+          ...filler,
+        ],
+      });
+    }, DOC);
+    await page.locator(".document-editor-wrapper").evaluate((el) => {
+      el.scrollTop = 30;
+    });
+    // Six characters under the page column's centre, on the first body
+    // line: the bubble centres on them, as the pill centres on the column.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const column = document
+        .querySelector(".document-editor-content")
+        ?.getBoundingClientRect();
+      const line = document.querySelector(".tiptap p")?.getBoundingClientRect();
+      if (!editor || !column || !line) throw new Error("editor missing");
+      const at = editor.view.posAtCoords({
+        left: column.left + column.width / 2,
+        top: line.top + line.height / 2,
+      });
+      if (!at) throw new Error("no position under the column's centre");
+      editor
+        .chain()
+        .focus()
+        .setTextSelection({ from: at.pos - 3, to: at.pos + 3 })
+        .run();
+    });
+    const panel = page.locator(
+      '[data-smart-bubble][data-state="open"] .st-bubble-panel',
+    );
+    await expect(panel).toBeVisible();
+    // Where the pill would have gone: centred 8px under the sticky row.
+    const clash = await panel.evaluate((el) => {
+      const row = document
+        .querySelector('.document-editor-wrapper > [data-slot="toolbar"]')
+        ?.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      return box.top < (row?.bottom ?? 0) + 8 + 36;
+    });
+    expect(clash).toBe(true);
+    await brush(page).click();
+    await expect(pill(page)).toHaveText("Select text to paint · Esc to cancel");
+    const [a, b] = await Promise.all([
+      pill(page).boundingBox(),
+      panel.boundingBox(),
+    ]);
+    if (!a || !b) throw new Error("pill or bubble missing");
+    const apart =
+      a.x >= b.x + b.width ||
+      b.x >= a.x + a.width ||
+      a.y >= b.y + b.height ||
+      b.y >= a.y + a.height;
+    expect(apart).toBe(true);
+    // A real click: it would fail if the pill covered the brush.
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("Esc on the toolbar keeps the pill while armed; Esc in the text cancels and closes it", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(pill(page)).toBeVisible();
+    // Hovered: the pill outlasts its timer while the test runs.
+    await pill(page).hover();
+    await page.keyboard.press("Alt+F10");
+    await expect(page.locator(".tiptap")).not.toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await expect(page.locator(".document-editor-content")).toHaveClass(
+      /is-painting/,
+    );
+    await expect(pill(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".document-editor-content")).not.toHaveClass(
+      /is-painting/,
+    );
+    await expect(pill(page)).toHaveCount(0);
+  });
+
   test("⋯ → Paint format arms it too", async ({ page }) => {
     await openDoc(page);
     await select(page, "source");
