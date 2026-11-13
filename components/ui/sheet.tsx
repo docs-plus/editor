@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * A bottom sheet (shadcn `Sheet`, on Base UI `Dialog` like `dialog.tsx`):
- * modal, focus-trapped, Esc and backdrop close it, focus returns on close.
+ * modal (`aria-modal`), focus-trapped, Esc and backdrop close it, focus
+ * returns on close. The caller makes the page behind it `inert`.
  * Only the bottom side, the one the phone format sheet uses.
  */
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -22,23 +23,54 @@ function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
 }
 
+const TABBABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tab and Shift+Tab wrap inside the sheet. Base UI's focus guards sit
+ * outside the portalled popup and let Tab reach them and `body`.
+ */
+function wrapTab(event: React.KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "Tab" || event.defaultPrevented) return;
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(TABBABLE),
+  ).filter(
+    (el) =>
+      el.tabIndex >= 0 && !el.matches(":disabled") && el.checkVisibility(),
+  );
+  if (items.length === 0) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  const edge = event.shiftKey ? first : last;
+  if (active !== edge && event.currentTarget.contains(active)) return;
+  event.preventDefault();
+  (event.shiftKey ? last : first).focus();
+}
+
 function SheetContent({
   className,
   children,
+  onKeyDown,
   ...props
 }: SheetPrimitive.Popup.Props) {
   return (
     <SheetPrimitive.Portal data-slot="sheet-portal">
       <SheetPrimitive.Backdrop
         data-slot="sheet-overlay"
-        className="fixed inset-0 z-50 bg-black/20 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none"
+        className="fixed inset-0 z-50 bg-black/20 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
       />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
+        aria-modal="true"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:animate-none",
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
           className,
         )}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          wrapTab(event);
+        }}
         {...props}
       >
         {children}

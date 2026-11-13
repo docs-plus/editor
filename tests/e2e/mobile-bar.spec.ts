@@ -461,3 +461,39 @@ test("Link in the sheet closes it and opens the Hyperlink create popover", async
     .poll(() => lastMark(page, "hyperlink", "href"))
     .toBe("https://example.com");
 });
+
+test("the sheet is modal: Tab never leaves it, and the page behind is inert", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await openSheet(page);
+  await expect(sheet(page)).toHaveAttribute("aria-modal", "true");
+  expect(
+    await page.evaluate(
+      () => document.querySelector<HTMLElement>(".app-shell")?.inert,
+    ),
+  ).toBe(true);
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab");
+    expect(
+      await page.evaluate(
+        () =>
+          document
+            .querySelector("[data-format-sheet]")
+            ?.contains(document.activeElement) ?? false,
+      ),
+      `Tab ${i + 1} stays in the sheet`,
+    ).toBe(true);
+  }
+  await sheet(page).getByRole("button", { name: "Done" }).tap();
+  await expect(sheet(page)).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.querySelector<HTMLElement>(".app-shell")?.inert,
+    ),
+  ).toBe(false);
+  await expect(
+    bar(page).getByRole("button", { name: "Text format" }),
+  ).toBeFocused();
+});
