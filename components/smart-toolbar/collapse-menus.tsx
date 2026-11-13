@@ -1,6 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import { useCallback, useRef } from "react";
 
 import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
@@ -249,6 +250,8 @@ interface ViewCollapseMenuProps {
   onTocToggle: () => void;
   onFilterToggle: () => void;
   tocVisible: boolean;
+  /** Opening the outline overlay moves focus into it, not back here. */
+  outlineOverlay?: boolean;
   filterActive: boolean;
 }
 
@@ -257,9 +260,16 @@ export function ViewCollapseMenu({
   onTocToggle,
   onFilterToggle,
   tocVisible,
+  outlineOverlay = false,
   filterActive,
 }: ViewCollapseMenuProps) {
   const menu = useMenuFocus(null);
+  const openingOverlay = useRef(false);
+  const finalFocus = useCallback(() => {
+    if (!openingOverlay.current) return menu.finalFocus();
+    openingOverlay.current = false;
+    return false;
+  }, [menu.finalFocus]);
   return (
     <ToolbarMenu
       label="View"
@@ -269,13 +279,16 @@ export function ViewCollapseMenu({
       showLabel={false}
       open={menu.open}
       onOpenChange={menu.onOpenChange}
-      finalFocus={menu.finalFocus}
+      finalFocus={finalFocus}
       contentLabel="View"
     >
       <ViewToggleItem
         label="Outline"
         checked={tocVisible}
-        onToggle={onTocToggle}
+        onToggle={() => {
+          openingOverlay.current = outlineOverlay && !tocVisible;
+          onTocToggle();
+        }}
       />
       <ViewToggleItem
         label="Filter document"
