@@ -49,6 +49,7 @@ documents, so don't type anything private.
 | **Outline** | Table of contents sidebar: click to jump, drag to move whole sections. |
 | **Real-time collaboration** | Live cursors and presence, conflict-free merging with Yjs CRDTs, and synced tabs shared by every visitor. |
 | **Rich content** | Lists, task lists, tables, blockquotes, code blocks with highlighting, live Mermaid diagrams and charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom, SoundCloud, Spotify, X). |
+| **Action palette and formatting memory** | Alt+/ (or Alt+Shift+Z) lists every toolbar action with search, Recent and Suggested here. Repeat formatting (⌘⌥V, Ctrl+Alt+V or F4) applies the last formatting you used as one undo step; Copy formatting, Your formats and In this doc reuse formatting; diagrams start from five templates. Choices stay on the device. |
 | **Installable app** | Web app manifest, install button, offline page, and a service worker that never touches documents or the live connection. |
 | **Offline editing** | Documents open from the device before the server answers. Offline edits sync on reconnect, and deleted documents never come back. |
 | **Fast with large documents** | Skeleton on first paint, code-split editor, and a single render on mount, so a 1,200-block document shows in about 1 s on desktop. |

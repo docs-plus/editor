@@ -10,6 +10,23 @@ since the previous tag.
 ## [Unreleased]
 
 ### Added
+- **Smart toolbar v1.1 (PR E; merges only after PR D's metrics hold 14 days
+  in production).**
+  - **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list
+    of every registry action, grouped Recent, Suggested here, Format, Insert,
+    Section and View; unavailable entries stay listed with their reason. The
+    palette (cmdk 1.1.1) is a lazy chunk loaded on the first open; one
+    capture-phase key listener serves every tab.
+  - **Repeat formatting and Copy formatting:** Mod+Alt+V (and F4 off macOS)
+    applies the last formatting as one undo step, setting marks rather than
+    toggling them; Copy formatting picks up the selection's formatting.
+  - **Your formats** (saved in `tinydocy-formats`, kept by "Forget my
+    choices"), **In this doc** (formats the document already uses, scanned
+    on demand and never stored) and **Mermaid templates** (flowchart,
+    sequence, state, mind map, pie).
+  - Repeat split button and phone selection cells for the selection bubble
+    and phone bar.
+  - No schema, server or environment change; no Deploy step.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
   light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),
