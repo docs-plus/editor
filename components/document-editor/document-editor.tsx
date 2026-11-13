@@ -45,6 +45,7 @@ import {
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
 import { DocumentNotice } from "@/components/document-editor/document-notice";
+import { EditorSurfaces } from "@/components/smart-toolbar/editor-surfaces";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
 import {
@@ -275,6 +276,8 @@ function DocumentEditorContent({
             </Profiler>
           </Toolbar>
         )}
+
+        {!toolbarOff && <EditorSurfaces editor={editor} />}
 
         <FilterBar {...headingFilter} />
 
