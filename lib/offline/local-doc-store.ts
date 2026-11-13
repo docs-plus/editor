@@ -143,10 +143,11 @@ export class LocalDocStore {
   }
 
   /**
-   * Bumped by every `remove(name)`. A binding captures it when it is made
-   * and saves with it, so once a copy is removed, a binding that existed
-   * before (a releasing session no tab close or deletion could reach)
-   * never writes it back.
+   * Bumped by every `remove(name)`. A binding saves with the generation of
+   * its session (captured before the copy is read), so once a copy is
+   * removed, a binding of an older session (a releasing one no tab close or
+   * deletion could reach, or one rebound after the hydrate timeout) never
+   * writes it back.
    */
   generation(name: string): number {
     return this.removals.get(name) ?? 0;
@@ -262,19 +263,23 @@ export function bindLocalCopy(
   {
     debounceMs = 750,
     hydrate = true,
+    generation = store.generation(name),
   }: {
     debounceMs?: number;
     /** False to only save (the copy was not read in time). */
     hydrate?: boolean;
+    /**
+     * The store's generation when the session began (default: now). Saves
+     * are dropped once `name` is removed after it, even if nothing
+     * destroyed this binding.
+     */
+    generation?: number;
   } = {},
 ): LocalBinding {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let destroyed = false;
   let disabled = false;
   let migration: Promise<void> | undefined;
-  // Saves made after a removal of `name` are dropped, even if nothing
-  // destroyed this binding.
-  const generation = store.generation(name);
 
   const write = async () => {
     timer = undefined;

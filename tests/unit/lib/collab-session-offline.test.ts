@@ -199,3 +199,64 @@ describe("offline copy of a releasing session", () => {
     expect(text).toContain("late update");
   });
 });
+
+/** Memory backend whose reads wait until `open()`, so hydration stays pending. */
+function slowReadBackend() {
+  const memory = offline.createMemoryBackend();
+  const gate = Promise.withResolvers<void>();
+  const backend: offline.DocStoreBackend = {
+    ...memory,
+    get: async (key) => {
+      await gate.promise;
+      return memory.get(key);
+    },
+  };
+  return { backend, memory, open: () => gate.resolve() };
+}
+
+/**
+ * Opens a session whose copy is still being read, removes the copy, and
+ * lets the hydrate timeout connect it without the copy.
+ */
+async function forgetDuringHydration() {
+  const { backend, memory, open } = slowReadBackend();
+  store = new offline.LocalDocStore(backend, HOST, NOW);
+  const name = unique();
+  vi.useFakeTimers();
+  const session = acquireCollabSession(name);
+  const provider = created.at(-1) as FakeProvider;
+  await settle();
+  expect(provider.attach).not.toHaveBeenCalled();
+
+  forgetLocalCopy(name);
+  await settle();
+  vi.advanceTimersByTime(1000); // the hydrate timeout
+  expect(provider.attach).toHaveBeenCalledOnce();
+  receive(session, provider, "after removal");
+  vi.advanceTimersByTime(1000);
+  await drain(open);
+  return { backend, memory, name };
+}
+
+describe("offline copy removed while the session hydrates", () => {
+  it("leaves no copy after the hydrate timeout connects the session", async () => {
+    const { memory } = await forgetDuringHydration();
+    expect(await memory.all()).toEqual([]);
+  });
+
+  it("saves again once the document is reopened in a new session", async () => {
+    const { backend, name } = await forgetDuringHydration();
+    releaseCollabSession(name);
+    vi.advanceTimersByTime(5000);
+    expect(liveSessionNames().has(name)).toBe(false);
+
+    const reopened = acquireCollabSession(name);
+    const provider = created.at(-1) as FakeProvider;
+    await settle();
+    expect(provider.attach).toHaveBeenCalledOnce();
+    receive(reopened, provider, "reopened");
+    vi.advanceTimersByTime(1000);
+    await settle();
+    expect(await storedText(backend, name)).toBe("reopened");
+  });
+});
