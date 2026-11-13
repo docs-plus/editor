@@ -134,7 +134,7 @@ export function ColorPopoverButton({
  * One split control (spec §4.5, M1/M2): the face reapplies the remembered
  * colour ("Apply text colour: Red"); the chevron opens the colour popover.
  */
-function ColorSplit({
+export function ColorSplit({
   kind,
   editor: providedEditor,
 }: SurfaceProps & { kind: ColorKind }) {

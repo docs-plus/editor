@@ -24,11 +24,10 @@ split faces, the size stepper, List and Insert menus, the memory layer with
 Forget, and the responsive ladder below.
 
 **Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
-selection bubble (desktop), the docked phone bar with the Aa sheet, the
+docked phone bar with the Aa sheet, the
 outline overlay below 950px, M4, the M10 face, M17a, and the mobile
 selection swap and Repeat split button (PR E). Phones reach size, text colour
-and highlight through the "Text style and colour" panel. The bubble-in-row
-matrix and Alt+F10-to-bubble tests stay pending until the bubble lands.
+and highlight through the "Text style and colour" panel.
 
 **Open before `main`** (contract §10, O1–O4): the editor chunk is +16.1 KB gz
 against a +6 KB budget, so the CI size gate fails; the arrow-key p95 budget;
@@ -36,6 +35,16 @@ text colour on a highlight contrast; and the colour popover keyboard changes
 listed under Changed.
 
 #### Added
+- **Selection bubble** (spec §4.3, desktop only): selecting text with a fine
+  pointer shows B · I · U │ text colour split │ link above the selection
+  (below it when the sticky toolbar or a collaborator's caret label is in
+  the way). Every bubble action is also in the row. Typing, a node
+  selection, code and Mermaid blocks, a selection inside one link and a
+  read-only document hide it; Esc fades it out (90 ms) and keeps the
+  selection; Alt+F10 focuses it when it shows, else the row. The colour
+  popover opens from the bubble and keeps it attached. The bubble is its own
+  lazy chunk (owner decision O1); touch devices and phone widths never load
+  it.
 - **Responsive ladder** (spec §4.6): the fixed row is a size container and
   fits its width from 1440px down to 768px, mouse and touch, in paragraph,
   heading, code and table contexts. Tiers hide groups and show stand-ins:
