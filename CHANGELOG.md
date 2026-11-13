@@ -38,13 +38,13 @@ days.
 
 **What v1 has:** the sorted row, the context slot, the colour popover with
 split faces, the size stepper, List and Insert menus, the memory layer with
-Forget, the responsive ladder, the desktop selection bubble and the outline
-overlay below 950px.
+Forget, the responsive ladder, the desktop selection bubble, the outline
+overlay below 950px, and the docked phone bar with the Aa ("Text format")
+sheet.
 
-**Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
-docked phone bar with the Aa sheet, and the mobile selection swap and Repeat
-split button (PR E). Phones reach size, text colour and highlight through the
-"Text style and colour" panel.
+**Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the phone
+bar's context slot cell, and the mobile selection swap and Repeat split
+button (PR E).
 
 **Open before `main`** (contract §10): O2, the arrow-key p95 budget (logged,
 not asserted, in v1), and O5, the perf typing budget in the combined CI run
@@ -95,6 +95,23 @@ are decided (below).
   (contract A5). Hidden items leave the roving order, and a resize re-stamps
   it so the row keeps one Tab stop. `toolbar-ladder.spec.ts` asserts the fit
   at every tier.
+- **Docked phone bar** (spec §4.7, contract A6): below 768px the sticky row
+  gives way to one 44px `role="toolbar"` docked above the on-screen keyboard
+  (`visualViewport`, reset when focus leaves editable content, for iOS), with
+  44×44 cells: Undo, Redo (from 360px; narrower phones find it in the sheet),
+  Aa, Bold, Italic, List, Indent and Insert. Toggles show their state with
+  `aria-pressed`. It hides in a read-only document. The caret and
+  `scroll-padding-bottom` stay clear of the bar and the keyboard. The bar is
+  its own lazy chunk, loaded only below 768px, so desktop never fetches it
+  (contract A9).
+- **Aa "Text format" sheet** (its own lazy chunk, fetched on Aa's touch,
+  hover or focus): Style (Normal, H1–H6; locked in the title), Size (the
+  XS–XL stepper, disabled in headings), Colours (the colour popover's panel:
+  text, highlight, Recent, low-contrast dimming), Align and More (redo below
+  360px, outdent, underline, strikethrough, superscript, subscript, inline
+  code, clear formatting, Forget my choices, link, theme), all registry
+  actions with their reasons. Picks keep the sheet open; Link closes it so
+  the link popover opens over the page; Done returns focus to Aa.
 
 #### Changed
 - Mouse T2 starts below 1264px (was 1232px, contract A6): the widest M10
@@ -102,12 +119,11 @@ are decided (below).
 - The `list.*` actions use the list menu's in-place toggle (a list of
   another type is retyped in one step, nested lists too) and refuse the
   title; `toggleList` reports success only when the document changed.
-- The row's scrollbar is no longer hidden: where it still overflows (phones),
-  the clipped controls can be found.
+- The row's scrollbar is no longer hidden: where it still overflows, the
+  clipped controls can be found.
 - On touch every row target is 44×44.
-- Phones get a **Text style and colour** button next to Undo and Redo in
-  place of the off-screen "Highlight text" button, which also opened size and
-  text colour.
+- Phones lose the sideways-scrolling row and its **Text style and colour**
+  panel: the docked bar and the Aa sheet replace both.
 - **Colour popover keeps open after a pick** (owner decision O4, spec
   §4.5): Enter or a click applies the swatch and keeps the popover open with
   focus on it, so writers can try several colours; Esc returns focus to the
