@@ -9,6 +9,57 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar v1 integration (PR C + D1 + D2)
+
+**Release order:** this must not merge to `main` before
+`integrate/smart-toolbar-ab` (PR A + B) has shipped as release N on its own,
+and the N+1 ship gates have passed in production (contract §1.2). Then deploy
+it with PR C's Deploy note: Hocus first, confirm `min=2 (floor 2, env 0)` and
+the refusals, then Next. PR E (palette, Repeat formatting, saved formats) is
+**not** part of v1: it stays on its own branch until D's metrics hold for 14
+days.
+
+**What v1 has:** the sorted row, the context slot, the colour popover with
+split faces, the size stepper, List and Insert menus, the memory layer with
+Forget, and the responsive ladder below.
+
+**Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
+selection bubble (desktop), the docked phone bar with the Aa sheet, the
+outline overlay below 950px, M4, the M10 face, M17a, and the mobile
+selection swap and Repeat split button (PR E). Phones reach size, text colour
+and highlight through the "Text style and colour" panel. The bubble-in-row
+matrix and Alt+F10-to-bubble tests stay pending until the bubble lands.
+
+**Open before `main`** (contract §10, O1–O4): the editor chunk is +15.9 KB gz
+against a +6 KB budget, so the CI size gate fails; the arrow-key p95 budget;
+text colour on a highlight contrast; and the colour popover keyboard changes
+listed under Changed.
+
+#### Added
+- **Responsive ladder** (spec §4.6): the fixed row is a size container and
+  fits its width from 1440px down to 768px, mouse and touch, in paragraph,
+  heading, code and table contexts. Tiers hide groups and show stand-ins:
+  T2 size stepper to "M ▾", Insert icon only, Theme into ⋯; T3 align and
+  indent to a ¶ menu, the slot to one button; T4 the colour pair to one
+  button, Outline and Filter to View ▾; T5 U and S to an Aa menu, a short
+  style value and no separators. Thresholds are the measured row widths
+  (contract A5). Hidden items leave the roving order, and a resize re-stamps
+  it so the row keeps one Tab stop. `toolbar-ladder.spec.ts` asserts the fit
+  at every tier.
+
+#### Changed
+- The row's scrollbar is no longer hidden: where it still overflows (phones),
+  the clipped controls can be found.
+- On touch every row target is 44×44.
+- Phones get a **Text style and colour** button next to Undo and Redo in
+  place of the off-screen "Highlight text" button, which also opened size and
+  text colour.
+- **Colour popover keyboard behaviour (needs owner sign-off, O4):** Enter on a
+  swatch applies it and closes the popover, where PR A's dialog stayed open;
+  focus opens on the pressed swatch ("No highlight" when none, PR A: Green);
+  arrows follow the token order; the check glyph sits on its own badge. PR
+  A's per-swatch forced-colours border check still runs on D2's swatches.
+
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 
 #### Added
