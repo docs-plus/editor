@@ -15,8 +15,9 @@ Minors left by the a11y review of the smart toolbar (contract §10), and
 the design pass of PR E's surfaces
 (`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
 
-The editor chunk ends at +23,936 B of the 23.5 KB budget (128 B left);
-the budget is unchanged.
+The editor chunk ends at +23,995 B of the 23.5 KB budget (69 B left);
+the budget is unchanged. The palette's first Alt+/ loads 20,459 B gz of
+its 20,480 B budget.
 
 #### Fixed
 - Back on the phone selection bar dismisses the cells for that
@@ -73,8 +74,19 @@ the budget is unchanged.
   table picker.") with a muted alert icon and a Retry button that fetches
   the chunk again in place (design pass §12); reopening also retries. A
   palette that cannot load says "Couldn’t open actions. Check your
-  connection and try again." for 5 s instead of staying silent. The
-  bubble still just stays away.
+  connection and try again." on the status pill, with Retry, instead of
+  staying silent. The bubble still just stays away.
+- **Palette ranking:** groups sort by their best match again (a cmdk
+  1.1.1 bug looked groups up by a value they never had, so any weak match
+  under Suggested here beat a strong one in Format): "paint format",
+  "format painter" and "brush" find Paint format first, "repeat" still
+  finds Repeat formatting.
+- **Saving a format** announces once, as a confirmation ("Saved format
+  ‘X’" or "Replaced format ‘X’"); the palette said it a second time.
+- **Aa sheet colours:** ↑/↓ follow the swatch lines as the sheet lays
+  them out (its grid fills the width), so they keep the column.
+- **Touch tablets:** tooltips and shortcut glyphs are hidden on a coarse
+  pointer at any width, not only with the phone bar.
 - **Alt+F10 at 800px:** no longer reproducible on `main` (62 runs of the
   old repro pass); the 768px handoff test drives Alt+F10 again, and a new
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
@@ -163,8 +175,13 @@ the budget is unchanged.
   each saved format named in its own formatting (described by its long
   label), "Save selection as format…" (the palette's save view) and
   "Remove a format ▸", which removes at once with Undo on the pill. The
-  section is a lazy chunk loaded with the dropdown. The Aa sheet has the
-  same Your formats section, with Remove a format.
+  section is a lazy chunk loaded with the dropdown. A disabled item says
+  why on a visible second line. The Aa sheet has the same Your formats
+  section, with "Remove a format" (a tap removes, Undo on the pill, which
+  sits above the open sheet). The Save dialog's "Remove a format" link
+  at the cap opens the dropdown, or the sheet on a phone, at that list.
+- **Format chips in the palette (§8):** Your formats rows show "A" in
+  the format in their leading slot.
 - **Phone selection bar (§6):** eight 44px cells, B I U A▁ ✎▁ 🔗 🖌 ✕,
   with no scroll or edge fades (U moves to the sheet below 360px; strike
   and clear formatting are in the sheet). The colour cells show the
@@ -204,8 +221,7 @@ the budget is unchanged.
     label, an empty name with the placeholder "e.g. Warning", and Save
     disabled until the name is non-blank. Saving over a name says
     "Replaces your format ‘X’." first; at 20 formats the dialog says so
-    with a "Remove a format" link (`formats.remove` UI intent, answered
-    by the style dropdown). The view is its own chunk, loaded when it
+    with a "Remove a format" link (`formats.remove` UI intent). The view is its own chunk, loaded when it
     opens, so the palette chunk could take the row changes.
   - **Palette rows:** a leading `size-4` slot with the registry icon or a
     colour chip; 32 px rows, 48 px with a second line. Colour rows are
@@ -230,8 +246,8 @@ the budget is unchanged.
 - **Loading is not a state the user sees:** before the formatting engine
   lands, its actions are available and a click waits for it, as the
   Repeat key does; "Formatting tools are still loading." is gone. A
-  failed load says "Couldn’t load formatting tools." on the pill, with
-  Retry.
+  failed load (a brush, Your formats, the Repeat key or a palette row)
+  says "Couldn’t load formatting tools." on the pill, with Retry.
 - "In this doc" formats left the menus and the palette, and the short
   "B · I · Red" notation is gone from all UI text.
 - **Touch:** no tooltips and no shortcut glyphs on a coarse pointer; a
