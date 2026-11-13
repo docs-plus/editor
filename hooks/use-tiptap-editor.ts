@@ -1,5 +1,6 @@
 "use client";
 
+import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import type { Transaction } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
@@ -14,9 +15,11 @@ import { useSyncExternalStore } from "react";
 export const TOOLBAR_SETTLE_MS = 150;
 
 /**
- * The longest toolbar state may trail the document while changes never
- * pause, such as a collaborator who keeps typing: the toolbar catches up at
- * least this often instead of waiting for {@link TOOLBAR_SETTLE_MS} of quiet.
+ * The longest toolbar state may trail the document while remote changes
+ * never pause, such as a collaborator who keeps typing: the toolbar catches
+ * up at least this often instead of waiting for {@link TOOLBAR_SETTLE_MS} of
+ * quiet. Local typing is exempt: the user's own keystrokes would force a
+ * toolbar commit about once a second, a long task the settle timer avoids.
  */
 export const TOOLBAR_MAX_WAIT_MS = 1000;
 
@@ -45,7 +48,8 @@ function changesToolbarContext(tr: Transaction): boolean {
  * A version number per editor that moves when its toolbar may need to
  * re-render: at once for selection, stored-mark, focus and editable
  * changes; after {@link TOOLBAR_SETTLE_MS} of quiet for document changes,
- * or {@link TOOLBAR_MAX_WAIT_MS} after the first change of a burst.
+ * or, for remote changes, {@link TOOLBAR_MAX_WAIT_MS} after the first change
+ * of a burst.
  */
 export function getEditorVersionStore(editor: Editor): EditorVersionStore {
   const existing = stores.get(editor);
@@ -78,7 +82,9 @@ export function getEditorVersionStore(editor: Editor): EditorVersionStore {
     if (applied.some((tr) => tr.docChanged)) {
       clearTimeout(settleTimer);
       settleTimer = setTimeout(notify, TOOLBAR_SETTLE_MS);
-      maxWaitTimer ??= setTimeout(notify, TOOLBAR_MAX_WAIT_MS);
+      if (applied.some(isChangeOrigin)) {
+        maxWaitTimer ??= setTimeout(notify, TOOLBAR_MAX_WAIT_MS);
+      }
     } else if (applied.some(changesToolbarContext)) {
       notify();
     }

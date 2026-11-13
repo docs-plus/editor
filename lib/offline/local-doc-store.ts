@@ -84,6 +84,8 @@ function isCurrent(doc: StoredDoc, now: number): boolean {
 export class LocalDocStore {
   /** Per document, the last queued save, retirement or removal. */
   private readonly tails = new Map<string, Promise<unknown>>();
+  /** Per document, how many removals were queued (see `generation`). */
+  private readonly removals = new Map<string, number>();
 
   constructor(
     private readonly backend: DocStoreBackend,
@@ -140,18 +142,36 @@ export class LocalDocStore {
     );
   }
 
-  save(name: string, update: Uint8Array): Promise<void> {
-    return this.serialize(name, () =>
-      this.backend.put({
+  /**
+   * Bumped by every `remove(name)`. A binding saves with the generation of
+   * its session (captured before the copy is read), so once a copy is
+   * removed, a binding of an older session (a releasing one no tab close or
+   * deletion could reach, or one rebound after the hydrate timeout) never
+   * writes it back.
+   */
+  generation(name: string): number {
+    return this.removals.get(name) ?? 0;
+  }
+
+  /** Saves `update`, unless `name` was removed since `generation`. */
+  save(
+    name: string,
+    update: Uint8Array,
+    generation = this.generation(name),
+  ): Promise<void> {
+    return this.serialize(name, async () => {
+      if (generation !== this.generation(name)) return;
+      await this.backend.put({
         key: storeKey(this.serverHost, name),
         name,
         update,
         updatedAt: this.now(),
-      }),
-    );
+      });
+    });
   }
 
   remove(name: string): Promise<void> {
+    this.removals.set(name, this.generation(name) + 1);
     return this.serialize(name, async () => {
       await this.backend.delete(storeKey(this.serverHost, name));
       await this.backend.delete(legacyStoreKey(this.serverHost, name));
@@ -243,10 +263,17 @@ export function bindLocalCopy(
   {
     debounceMs = 750,
     hydrate = true,
+    generation = store.generation(name),
   }: {
     debounceMs?: number;
     /** False to only save (the copy was not read in time). */
     hydrate?: boolean;
+    /**
+     * The store's generation when the session began (default: now). Saves
+     * are dropped once `name` is removed after it, even if nothing
+     * destroyed this binding.
+     */
+    generation?: number;
   } = {},
 ): LocalBinding {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -258,7 +285,7 @@ export function bindLocalCopy(
     timer = undefined;
     if (disabled || destroyed) return;
     try {
-      await store.save(name, Y.encodeStateAsUpdate(doc));
+      await store.save(name, Y.encodeStateAsUpdate(doc), generation);
     } catch {
       disabled = true;
     }
@@ -277,7 +304,7 @@ export function bindLocalCopy(
   const migrate = async (legacy: StoredDoc, merged: Uint8Array) => {
     if (destroyed) return;
     try {
-      await store.save(name, merged);
+      await store.save(name, merged, generation);
     } catch {
       disabled = true;
       return;
