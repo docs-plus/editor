@@ -197,7 +197,7 @@ export function defineAction<Arg = undefined>(action: Action<Arg>): Action<Arg>;
 
 **Read-only (#308, `document_too_large` / `document_deleted`):**
 - Every action with `mutates !== false` is refused centrally, with the one `READ_ONLY_REASON`. Its `enabled()` need not check `editable`.
-- `mutates: false` is only for actions that never change the doc: `view.*`, `code.copy`, `mermaid.copySource`, `palette.open`.
+- `mutates: false` is only for actions that never change the doc: `view.*`, `code.copy`, `mermaid.copySource`, `section.fold` (amendment A1), `palette.open`.
 - This gate, not each author, keeps read-only safe, because Tiptap commands still dispatch on a non-editable editor.
 
 **Cache tiers (spec §7):**
@@ -283,7 +283,8 @@ export function ariaKeyShortcuts(combo: KeyCombo, mac: boolean): string; // "Met
 export type UiIntent =
   | { type: "outline.toggle" } | { type: "filter.toggle" } | { type: "theme.toggle" }
   | { type: "palette.open" } | { type: "colors.open"; kind: "text" | "highlight" }
-  | { type: "insert.open"; kind: "table" | "image" | "embed" } | { type: "media.options" };
+  | { type: "insert.open"; kind: "table" | "image" | "embed" }
+  | { type: "toolbar.focus" };   // A2: media.options removed, toolbar.focus added
 export type UiIntentListener = (intent: UiIntent) => boolean;   // true ONLY for an intent it handled
 export function onUiIntent(editor: Editor, listener: UiIntentListener): () => void;
 export function emitUiIntent(editor: Editor, intent: UiIntent): boolean;  // true iff some listener returned === true
@@ -349,7 +350,7 @@ Each track adds actions **only** to its own file. Ids are `<prefix>.<name>`, and
   - **list:** `list.bullet` `list.ordered` `list.task`
   - **align:** `align.left` `align.center` `align.right` `align.justify`
   - **indent:** `indent.indent` `indent.outdent` (mirrors Tab: `sinkListItem` → `indent`)
-  - **section:** `section.fold` `section.moveUp` `section.moveDown`
+  - **section:** `section.fold`* `section.moveUp` `section.moveDown`
   - **table:** `table.addRowBefore` `table.addRowAfter` `table.deleteRow` `table.addColumnBefore` `table.addColumnAfter` `table.deleteColumn` `table.toggleHeaderRow` `table.mergeOrSplit`
   - **code and mermaid:** `code.language` `code.copy`* `mermaid.language` `mermaid.copySource`*
   - **media:** `media.options`
@@ -374,7 +375,7 @@ Each track adds actions **only** to its own file. Ids are `<prefix>.<name>`, and
 \* `mutates: false`. These ids stay available in a read-only document.
 
 Rules:
-- **Import rule:** `core-actions.ts`, `surface-actions.ts` and `v11-actions.ts` never import `@/lib/editor-actions` (the index) or `lib/editor-context/store.ts`. Both import the action files, and a top-level use would leave `editorActions` undefined. Action files import only types, `registry.ts` helpers, `snapshot.ts`, `ui-intents.ts`, tokens and `remembered-choice.ts`.
+- **Import rule:** `core-actions.ts`, `surface-actions.ts` and `v11-actions.ts` never import `@/lib/editor-actions` (the index) or `lib/editor-context/store.ts`. Both import the action files, and a top-level use would leave `editorActions` undefined. Action files import only types, `registry.ts` helpers, `snapshot.ts`, `ui-intents.ts`, tokens and `remembered-choice.ts`, plus the extension modules listed in amendment A3. They never import `components/**`.
 - **M4 depends on D2:** D1 wires code-language memory through `readChoice`/`rememberChoice`, which stay no-ops until D2 merges. M4 is deferred in this window (§1.3).
 - Labels use sentence case. Disabled reasons are full sentences ending in a period.
 - Memory is written only as §6 says: inside `run()`, after the command returned true.
@@ -636,3 +637,18 @@ E keeps saved formats in `lib/saved-formats.ts` under `STORAGE_KEYS.formats`, wi
   - `setOutlineOpen`.
 
 **Every track starts from the tip of `integrate/smart-toolbar-v1`.** The four track branches were fast-forwarded to it. A track that started earlier runs `git rebase integrate/smart-toolbar-v1`. When `integrate/smart-toolbar-ab` moves again, the integration owner merges it into v1 first, then the tracks rebase.
+
+## 10. Amendments
+
+Recorded by the owner of the files they touch. Each one names what changed and why.
+
+- **A1 (D1): `section.fold` is `mutates: false`.** `toggleFold` only sets fold-plugin meta (per-viewer view state, persisted locally) and never changes the doc, so folding keeps working in a read-only document like the other view actions. `tests/unit/editor-actions/core-actions.test.ts` pins the exact `mutates: false` list of the core actions (`contract.test.ts` stays frozen).
+- **A2 (D1): `{ type: "media.options" }` removed from `UiIntent`; `{ type: "toolbar.focus" }` added (Alt+F10).** `media.options` runs in the action itself: it opens the kit toolbar through `openMediaToolbar`, focuses its first control and wires Esc back to the slot button. No other track used the variant.
+- **A3 (D1): extension imports allowed in D1's action bodies (`lib/editor-actions/core/*`).** Pure modules only, never `components/**`:
+  - `@/extensions/heading-fold/heading-fold-plugin` (`headingFoldPluginKey`; the plugin file, not the extension index);
+  - `@/extensions/shared/compute-section`;
+  - `@docs.plus/extension-hyperlink` (`openPreviewHyperlink`, `buildPreviewOptionsFromAnchor`);
+  - `@docs.plus/extension-hypermultimedia` (`openMediaToolbar`, `closeMediaToolbar`);
+  - `@/lib/code-language` (`sanitizeCodeLanguage`, moved out of `components/document-editor/safe-code-block.ts`).
+
+  The editor chunk already contains all of them. Any registry consumer outside it (E's palette chunk, unit tests) loads them too. D2 measures the editor-chunk delta against the `58a9d22` baseline before its +6 KB gz gate lands.
