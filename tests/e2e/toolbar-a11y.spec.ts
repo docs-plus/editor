@@ -177,7 +177,9 @@ test("forced colours keep the focus outline and mark pressed with Highlight", as
   );
 
   await testInfo.attach("toolbar-forced-colors", {
-    body: await page.getByRole("toolbar").screenshot(),
+    body: await page
+      .getByRole("toolbar", { name: "Formatting", exact: true })
+      .screenshot(),
     contentType: "image/png",
   });
 });
