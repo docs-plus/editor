@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
@@ -18,7 +19,8 @@ import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
 import { ActionButton } from "../action-button";
 import { ColorSplit } from "../color-controls";
-import { RepeatSplitButton } from "../repeat-split-button";
+import { PaintFormatButton } from "../formats/paint-format-button";
+import { StatusPill } from "../status-pill";
 import {
   BUBBLE_OFFSET,
   type BubblePlacement,
@@ -55,9 +57,38 @@ interface SelectionBubbleViewProps {
   scrollTarget: HTMLElement;
 }
 
+const FINE_POINTER = "(pointer: fine)";
+
+function subscribeFinePointer(onChange: () => void): () => void {
+  const query = window.matchMedia(FINE_POINTER);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
 /**
- * The desktop selection bubble (spec §4.3): B · I · U │ text colour split │
- * link (│ Repeat, E). A `BubbleMenu` registered once per editor with stable
+ * The desktop surfaces of an editor wider than the phone bar: the
+ * selection bubble (a fine pointer only; touch selects with its own
+ * handles and uses the row) and the status pill (design pass §5), which
+ * every desktop gets.
+ */
+export function SelectionBubbleView(props: SelectionBubbleViewProps) {
+  const fine = useSyncExternalStore(
+    subscribeFinePointer,
+    () => window.matchMedia(FINE_POINTER).matches,
+    () => false,
+  );
+  return (
+    <>
+      {fine ? <BubbleView {...props} /> : null}
+      <StatusPill placement="desktop" />
+    </>
+  );
+}
+
+/**
+ * The desktop selection bubble (spec §4.3, design pass §1): B · I · U │
+ * text colour split │ link │ Paint format. A `BubbleMenu` registered once
+ * per editor with stable
  * props; its items mount only while it shows, so typing with no bubble
  * runs no bubble code past `shouldShowBubble`'s empty-selection exit.
  *
@@ -65,10 +96,7 @@ interface SelectionBubbleViewProps {
  * `data-smart-bubble` and `data-state="open" | "closed"`, with one
  * `role="toolbar"` inside.
  */
-export function SelectionBubbleView({
-  editor,
-  scrollTarget,
-}: SelectionBubbleViewProps) {
+function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
   const [shown, setShown] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const suppressedRef = useRef(false);
@@ -226,7 +254,7 @@ export function SelectionBubbleView({
   // While shown: hide on read-only (`setEditable` changes neither the
   // selection nor the document, so the plugin never re-checks) and when
   // focus moves anywhere but the editor, the bubble or its popups (colour
-  // dialog, Formats menu), from the editor or from the bubble (the stock
+  // dialog), from the editor or from the bubble (the stock
   // blur check keeps it for anything inside its parent, the whole editor
   // shell, and never sees a blur from the bubble itself). Track whether
   // focus is in the bubble or a popup.
@@ -369,7 +397,8 @@ export function SelectionBubbleView({
           <ColorSplit kind="text" editor={editor} popoverSide={placement} />
           <ToolbarSeparator />
           <ActionButton id="mark.link" editor={editor} variant="bubble" />
-          <RepeatSplitButton editor={editor} />
+          <ToolbarSeparator />
+          <PaintFormatButton editor={editor} />
         </Toolbar>
       ) : null}
     </BubbleMenu>

@@ -27,7 +27,7 @@ export const REPEAT_META = "repeatFormatting";
 
 /** Disabled reasons (full sentences, contract §4). */
 export const REPEAT_REASONS = {
-  noBundle: "Format some text first, or use Copy formatting.",
+  noBundle: "Nothing to repeat yet. Format some text or use Paint format.",
   noText: "Select text to repeat formatting.",
   code: "Code has no formatting.",
   heading: "Headings scale automatically.",

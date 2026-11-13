@@ -22,6 +22,7 @@ import {
   PhoneSelectionCells,
   SELECTION_BAR_LABEL,
 } from "@/components/smart-toolbar/phone-selection-cells";
+import { StatusPill } from "@/components/smart-toolbar/status-pill";
 import {
   Sheet,
   SheetClose,
@@ -108,7 +109,8 @@ interface MobileToolbarContentProps {
 /**
  * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, with 44px of
  * cells, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, redo (where it fits; the sheet carries it otherwise), Aa (the
+ * undo, redo (from 404px; below, the sheet carries it, so the slot cell
+ * never shifts the others), Aa (the
  * "Text format" sheet: style, size, colours, align, more), B, I, then
  * `menuCells` (list, indent, the context slot, Insert). Toggles show their
  * state with `aria-pressed` (#269). Hidden in a read-only document (#308),
@@ -116,8 +118,9 @@ interface MobileToolbarContentProps {
  * `PhoneSelectionCells` (PR E, spec §4.7), never while focus is in the bar
  * or the sheet is open; ✕ keeps the normal cells until the selection
  * collapses. Clear of the home indicator while the keyboard is closed
- * (`data-keyboard`, `phone.scss`). Its own lazy chunk with the sheet,
- * loaded only below 768px (contract A9).
+ * (`data-keyboard`, `phone.scss`). The status pill (design pass §5) sits
+ * 8px above it, a sibling of the cells, never in a masked element. Its own
+ * lazy chunk with the sheet, loaded only below 768px (contract A9).
  */
 export function MobileToolbarContent({
   editor,
@@ -307,6 +310,7 @@ export function MobileToolbarContent({
           {menuCells}
         </>
       )}
+      <StatusPill placement="phone" />
     </Toolbar>
   );
 }

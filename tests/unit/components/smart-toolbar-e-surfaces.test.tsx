@@ -8,15 +8,20 @@ import {
   nextMobileBarMode,
   PhoneSelectionCells,
 } from "@/components/smart-toolbar/phone-selection-cells";
-import { RepeatSplitButton } from "@/components/smart-toolbar/repeat-split-button";
+import { StatusPill } from "@/components/smart-toolbar/status-pill";
+import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import {
-  rememberBundle,
+  getRememberedBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
-// The surfaces no longer import the engine; install it as an editor would.
-import "@/lib/editor-actions/v11-engine";
+import { announce, dismissNotice, getNotice } from "@/lib/announce";
+// The surfaces never import the engine; install it as an editor would.
+import { v11Engine } from "@/lib/editor-actions/v11-engine";
 
-import { createTestEditor } from "../../helpers/create-test-editor";
+import {
+  createTestEditor,
+  DEFAULT_EXTENSIONS,
+} from "../../helpers/create-test-editor";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -42,6 +47,7 @@ afterEach(() => {
   container = null;
   editor = null;
   resetBundleMemoryForTests();
+  dismissNotice();
 });
 
 describe("nextMobileBarMode", () => {
@@ -108,7 +114,7 @@ describe("nextMobileBarMode", () => {
 });
 
 describe("PhoneSelectionCells", () => {
-  it("always offers Back to all tools and calls onBack", () => {
+  it("renders the eight cells in order and calls onBack", () => {
     editor = createTestEditor();
     let backs = 0;
     const el = mount(
@@ -119,34 +125,55 @@ describe("PhoneSelectionCells", () => {
         },
       }),
     );
+    // Colour cells are named for the remembered colour: drop it here.
+    const names = Array.from(el.querySelectorAll("button"), (button) =>
+      button.getAttribute("aria-label")?.replace(/:.*/, ""),
+    );
+    expect(names).toEqual([
+      "Bold",
+      "Italic",
+      "Underline",
+      "Apply text colour",
+      "Apply highlight",
+      "Link",
+      "Paint format",
+      "Back to all tools",
+    ]);
+    // No Repeat or Formats cell, no scroller (design pass §6).
+    expect(el.querySelector('[data-action-id="repeat.apply"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Formats"]')).toBeNull();
+    expect(el.querySelector("[data-phone-selection-cells]")).toBeNull();
     const back = el.querySelector<HTMLButtonElement>(
       '[aria-label="Back to all tools"]',
     );
-    expect(back).not.toBeNull();
     act(() => back?.click());
     expect(backs).toBe(1);
-    // repeat.apply is registered (E); D1/D2 ids render once they land.
-    expect(el.querySelector('[data-action-id="repeat.apply"]')).not.toBeNull();
   });
 });
 
-describe("PhoneSelectionCells Repeat cell", () => {
-  it("enables as soon as a bundle is remembered, without a selection change", () => {
-    editor = createTestEditor({
-      content: {
-        type: "doc",
+describe("Paint format brush", () => {
+  const doc = {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Title" }],
+      },
+      {
+        type: "paragraph",
         content: [
-          {
-            type: "heading",
-            attrs: { level: 1 },
-            content: [{ type: "text", text: "Title" }],
-          },
-          {
-            type: "paragraph",
-            content: [{ type: "text", text: "hello world" }],
-          },
+          { type: "text", text: "hello", marks: [{ type: "bold" }] },
+          { type: "text", text: " world" },
         ],
       },
+    ],
+  };
+
+  it("arms (pressed), remembers the bundle, and a second press cancels", () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
     });
     editor.commands.setTextSelection({ from: 8, to: 13 });
     const el = mount(
@@ -155,73 +182,120 @@ describe("PhoneSelectionCells Repeat cell", () => {
         onBack: () => {},
       }),
     );
-    const cell = () =>
-      el.querySelector<HTMLButtonElement>('[data-action-id="repeat.apply"]');
-    expect(cell()?.getAttribute("aria-disabled")).toBe("true");
-    act(() => rememberBundle({ bold: true }));
-    expect(cell()?.getAttribute("aria-disabled")).not.toBe("true");
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("true");
+    expect(getRememberedBundle()).toMatchObject({ bold: true });
+    expect(getNotice()?.text).toBe("Select text to paint · Esc to cancel");
+    // Same selection again: cancels without applying.
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
   });
-});
 
-describe("Repeat face availability", () => {
-  it("is disabled with the reason on inline code, like the palette", async () => {
+  it("applies to a new selection on the second press, as one step", () => {
     editor = createTestEditor({
-      content: {
-        type: "doc",
-        content: [
-          {
-            type: "heading",
-            attrs: { level: 1 },
-            content: [{ type: "text", text: "Title" }],
-          },
-          {
-            type: "paragraph",
-            content: [{ type: "text", text: "hello world" }],
-          },
-        ],
-      },
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
     });
-    act(() => rememberBundle({ bold: true }));
     editor.commands.setTextSelection({ from: 8, to: 13 });
     const el = mount(
-      createElement(RepeatSplitButton, { editor: editor as never }),
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
     );
-    const face = () =>
-      el.querySelector<HTMLElement>('[data-action-id="repeat.apply"]');
-    expect(face()?.hasAttribute("disabled")).toBe(false);
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    act(() => brush()?.click());
+    act(() => {
+      editor?.commands.setTextSelection({ from: 14, to: 19 });
+    });
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    expect(editor.state.doc.textBetween(14, 19)).toBe("world");
+    expect(editor.isActive("bold")).toBe(true);
+    expect(getNotice()).toMatchObject({
+      text: "Formatting applied",
+      done: true,
+    });
+  });
+
+  it("is disabled with the reason on inline code, unless armed", async () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    editor.commands.setTextSelection({ from: 14, to: 19 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLElement>('[aria-label="Paint format"]');
+    expect(brush()?.getAttribute("aria-disabled")).not.toBe("true");
     act(() => {
       editor?.commands.setMark("inlineCode");
     });
     // Doc changes reach the toolbar after the settle window.
     await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
-    const reasonId = face()
+    const reasonId = brush()
       ?.getAttribute("aria-describedby")
       ?.split(" ")
       .find((id) => document.getElementById(id)?.textContent);
-    expect(face()?.getAttribute("aria-disabled")).toBe("true");
+    expect(brush()?.getAttribute("aria-disabled")).toBe("true");
     expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
       "Code has no formatting.",
     );
   });
 });
 
-describe("PhoneSelectionCells Repeat cell, unavailable", () => {
-  it("stays tappable and shows its reason on a tap", () => {
-    editor = createTestEditor();
-    const el = mount(
-      createElement(PhoneSelectionCells, {
-        editor: editor as never,
-        onBack: () => {},
+describe("Repeat key with nothing remembered", () => {
+  it("shows the reason on the pill", () => {
+    editor = createTestEditor({
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+        ],
+      },
+    });
+    editor.commands.setTextSelection({ from: 8, to: 13 });
+    v11Engine.repeatKey(editor);
+    expect(getNotice()?.text).toBe(
+      "Nothing to repeat yet. Format some text or use Paint format.",
+    );
+  });
+});
+
+describe("StatusPill", () => {
+  it("shows announce()'s text, hidden from assistive tech, with its action", () => {
+    let undone = 0;
+    const el = mount(createElement(StatusPill, { placement: "phone" }));
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
+    act(() =>
+      announce("Removed ‘Warning’", {
+        done: true,
+        action: { label: "Undo", run: () => (undone += 1) },
       }),
     );
-    const cell = el.querySelector<HTMLButtonElement>(
-      '[data-action-id="repeat.apply"]',
-    );
-    expect(cell?.getAttribute("aria-disabled")).toBe("true");
-    act(() => cell?.click());
-    expect(el.querySelector("[data-phone-reason]")?.textContent).toBe(
-      "Format some text first, or use Copy formatting.",
-    );
+    const pill = el.querySelector("[data-status-pill]");
+    expect(pill?.textContent).toContain("Removed ‘Warning’");
+    expect(pill?.getAttribute("role")).toBeNull();
+    expect(pill?.hasAttribute("data-roving-skip")).toBe(true);
+    const undo = pill?.querySelector("button");
+    expect(undo?.textContent).toBe("Undo");
+    act(() => undo?.click());
+    expect(undone).toBe(1);
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
   });
 });
 
@@ -250,28 +324,5 @@ describe("PhoneSelectionCells Back", () => {
     act(() => back?.click());
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(document.activeElement?.id).toBe("aa");
-  });
-});
-
-describe("RepeatSplitButton", () => {
-  it("renders nothing without a bundle, then names the bundle", () => {
-    editor = createTestEditor();
-    const el = mount(
-      createElement(RepeatSplitButton, { editor: editor as never }),
-    );
-    expect(el.querySelector("[data-repeat-split]")).toBeNull();
-    act(() => rememberBundle({ bold: true, highlight: "yellow" }));
-    const face = el.querySelector('[data-action-id="repeat.apply"]');
-    // The name spells out what it repeats; the compact face is the text.
-    expect(face?.getAttribute("aria-label")).toBe(
-      "Repeat Bold, Yellow highlight",
-    );
-    expect(face?.textContent).toContain("B · Yellow highlight");
-    // Mod+Alt+V (+ F4 off macOS), like ActionButton.
-    expect(face?.getAttribute("aria-keyshortcuts")).toMatch(
-      /^(Meta|Control)\+Alt\+v( F4)?$/i,
-    );
-    const chevron = el.querySelector('[aria-label="Formats"]');
-    expect(chevron?.getAttribute("aria-haspopup")).toBe("menu");
   });
 });

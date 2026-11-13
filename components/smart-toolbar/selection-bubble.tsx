@@ -17,8 +17,11 @@ const SelectionBubbleView = lazySurface(() =>
   ),
 );
 
-/** Desktop only: a fine pointer and a viewport wider than the phone bar's. */
-const DESKTOP_QUERY = "(min-width: 768px) and (pointer: fine)";
+/**
+ * Wider than the phone bar's viewport. The view shows the bubble only for
+ * a fine pointer; every desktop gets its status pill.
+ */
+const DESKTOP_QUERY = "(min-width: 768px)";
 const SCROLL_CONTAINER = ".document-editor-wrapper";
 
 /** Read after hydration (a ready flag, never at first render). */
@@ -70,9 +73,10 @@ function useScrollTarget(editor: Editor | null): HTMLElement | null {
 }
 
 /**
- * Desktop selection bubble (spec §4.3): B · I · U │ colour split │ link │
- * `RepeatSplitButton` (E). Mounted once per editor by `EditorSurfaces`.
- * Touch and phone widths get none (the phone bar swaps in place instead).
+ * Desktop selection bubble (spec §4.3, design pass §1): B · I · U │
+ * colour split │ link │ Paint format, plus the desktop status pill (§5).
+ * Mounted once per editor by `EditorSurfaces`. Phone widths get neither
+ * (the phone bar swaps in place and carries its own pill).
  */
 export function SelectionBubble({ editor: providedEditor }: SurfaceProps) {
   const { editor: contextEditor } = useCurrentEditor();

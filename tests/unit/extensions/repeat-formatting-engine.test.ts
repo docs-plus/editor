@@ -22,7 +22,6 @@ import {
 import { TextColor } from "@/extensions/text-style-marks";
 import { availability } from "@/lib/editor-actions/registry";
 import {
-  ENGINE_LOADING_REASON,
   getV11Engine,
   installV11Engine,
   loadV11Engine,
@@ -179,9 +178,8 @@ describe("RepeatFormatting: before the engine lands", () => {
   it("records the buffer when the load resolves, before readers look", async () => {
     sel("hello");
     editor.commands.toggleBold();
-    expect(availability(repeatApplyAction, computeContext(editor))).toEqual({
-      reason: ENGINE_LOADING_REASON,
-    });
+    // Loading is not a state the user sees: available, the run waits.
+    expect(availability(repeatApplyAction, computeContext(editor))).toBe(true);
     installV11Engine(v11Engine); // the chunk evaluates during the load
     const loaded = await loadV11Engine();
     expect(loaded).toBe(v11Engine);
@@ -267,7 +265,8 @@ describe("RepeatFormatting: the key", () => {
   it("announces why it cannot repeat, and keeps the key", async () => {
     sel("hello");
     expect(v11Engine.repeatKey(editor)).toBe(true);
-    const reason = "Format some text first, or use Copy formatting.";
+    const reason =
+      "Nothing to repeat yet. Format some text or use Paint format.";
     expect(await announced(reason)).toContain(reason);
   });
 

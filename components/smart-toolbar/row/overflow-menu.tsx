@@ -22,9 +22,15 @@ import {
 const TOGGLES = ["mark.superscript", "mark.subscript", "mark.inlineCode"];
 /**
  * Later tracks' ids are listed here and skipped until they land
- * (contract §3.2): Forget my choices (D2), All actions… (E).
+ * (contract §3.2): Paint format and All actions… (E), Forget my choices
+ * (D2).
  */
-const COMMANDS = ["format.clear", "memory.forget", "palette.open"];
+const COMMANDS = [
+  "format.clear",
+  "repeat.copy",
+  "memory.forget",
+  "palette.open",
+];
 
 /**
  * ⋯ More formatting: superscript, subscript, inline code, clear

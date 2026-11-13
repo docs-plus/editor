@@ -141,7 +141,7 @@ describe("buildPaletteSections", () => {
     });
     const suggested = sections.find((s) => s.heading === "Suggested here");
     expect(suggested?.items.map((i) => i.label)).toContain(
-      "Repeat formatting: B",
+      "Repeat formatting: Bold",
     );
   });
 
