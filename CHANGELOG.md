@@ -29,14 +29,24 @@ drill).
 - **Appendix A palette** in `extensions/text-style-marks/text-style-marks.scss`
   for light and dark, with a contrast test (text ≥ 4.5:1 on the page, page
   text ≥ 7:1 on every highlight) and a test that the SCSS matches
-  `lib/text-style-tokens.ts`.
+  `lib/text-style-tokens.ts`. Palette text on a palette highlight is often
+  below 4.5:1 (77/100 light, 49/100 dark pairs): an open decision for PR D
+  (spec Appendix A), with the failing set pinned in the palette test.
 
 #### Changed
 - **Highlights store tokens:** `setHighlight` / `toggleHighlight` accept a
-  palette token (or the release N `var(--tt-color-highlight-X)` form, stored as
-  given so the current popover keeps working) and refuse anything else, so the
-  old "Default background" swatch is a no-op. `toggleHighlight()`,
-  Mod-Shift-H and `==x==` now use yellow instead of an invisible mark.
+  palette token or the release N `var(--tt-color-highlight-X)` form (stored as
+  the token X) and refuse anything else, so the old "Default background"
+  swatch is a no-op. `toggleHighlight()`, Mod-Shift-H and `==x==` now use
+  yellow instead of an invisible mark; Mod-Shift-H on any highlight removes it
+  in one press. Toggling and the popover's pressed state compare tokens
+  (`activeHighlightToken`), so a legacy value counts as its token.
+- **Hocus rewrites stored legacy highlight colours** to their token on load
+  (`afterLoadDocument`, alongside the `link`/`code` rename in
+  `lib/yjs-mark-migration.ts`); tokens and unknown values are left alone.
+  Release N tabs still open on a rewritten document show no pressed swatch
+  for those highlights, and their swatch re-sets instead of removing on the
+  first click (cosmetic, gone on reload).
 - **Paste keeps only our own styling:** our `data-text-color`,
   `data-font-size` and `data-highlight` (and release N's `data-color`) survive
   a paste between tabs; foreign colour, font size and background (Google Docs,
@@ -67,13 +77,26 @@ it restarts, so pulling without building puts the server half live first.
    and within a minute a `client_schema` line: `ok` counts release N clients,
    `refused` counts any pre-N bundles (`client_outdated`; 0 is fine if none
    are left).
-4. **Then build and restart Next back to back:** `bun run build`, then
-   `bunx pm2@6.0.14 restart editor-next --update-env`. The floor and the
-   allowlist are already live, so no N+1 bundle exists before the server
-   half. Whether the running Next keeps serving N pages while the build
-   rewrites `.next` was **not** checked (contract §2.3 builder check); expect
-   possible page-load failures between the build and the restart, which is
-   why they run back to back at low traffic.
+4. **Then build in a second checkout and swap it in.** Do not build in the
+   live checkout: measured on spare ports (contract §2.3 builder check), an
+   in-place `next build` under a running `next start` makes every chunk
+   return 500 for a moment during the build and every changed chunk return
+   500 until the restart, while the old HTML still points at them, so page
+   loads fail for the whole build. A `.next` built in another checkout and
+   moved in served every page and chunk after the restart (checked locally,
+   not on the live host). From `/opt/projects/editor.docs.plus`:
+   ```sh
+   git worktree add --detach ../editor-build HEAD
+   cp .env.production ../editor-build/   # build-time NEXT_PUBLIC_* values
+   (cd ../editor-build && bun install --frozen-lockfile && bun run build)
+   rm -rf .next.prev && mv .next .next.prev && mv ../editor-build/.next .next \
+     && bunx pm2@6.0.14 restart editor-next --update-env
+   git worktree remove --force ../editor-build
+   ```
+   The floor and the allowlist are already live, so no N+1 bundle exists
+   before the server half. Only the second between the `mv` and the restart
+   can serve a missing chunk. To roll Next back, swap `.next.prev` back the
+   same way; delete it once N+1 is healthy.
 5. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
    and never lower the floor.** Before rolling Hocus back below this release,
    roll Next back first and set `HOCUS_MIN_CLIENT_SCHEMA=2` (release N's code
