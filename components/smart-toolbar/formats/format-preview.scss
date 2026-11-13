@@ -1,0 +1,35 @@
+@use "../../../extensions/text-style-marks/text-style-marks" as marks;
+@use "sass:map";
+
+// A saved format's preview (`format-preview.tsx`), from the document's own
+// token maps, so a preview matches the text it formats in both themes.
+.st-format-preview {
+  border-radius: 2px;
+  padding-inline: 1px;
+}
+
+@each $token, $value in marks.$text-colors {
+  .st-format-preview[data-text-color="#{$token}"] {
+    color: map.get($value, light);
+
+    :is(.dark *) & {
+      color: map.get($value, dark);
+    }
+  }
+}
+
+@each $token, $value in marks.$highlight-colors {
+  .st-format-preview[data-highlight="#{$token}"] {
+    background: map.get($value, light);
+
+    :is(.dark *) & {
+      background: map.get($value, dark);
+    }
+  }
+}
+
+@each $token, $size in marks.$font-sizes {
+  .st-format-preview[data-font-size="#{$token}"] {
+    font-size: $size;
+  }
+}

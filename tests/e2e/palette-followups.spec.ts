@@ -103,18 +103,31 @@ test.describe("palette follow-ups", () => {
     await page.keyboard.type("y".repeat(50));
     await expect(name).toHaveValue("y".repeat(40));
 
-    await name.fill("");
+    // A blank name cannot be submitted: Save stays disabled (§7).
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    await name.fill("   ");
+    await expect(save).toBeDisabled();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+
+    // A storage failure is the error left to show.
+    await page.evaluate(() => {
+      Storage.prototype.setItem = () => {
+        throw new Error("QuotaExceededError");
+      };
+    });
+    await name.fill("Callout");
     await page.keyboard.press("Enter");
     const alert = page.getByRole("alert");
-    await expect(alert).toHaveText("Use 1–40 characters.");
+    await expect(alert).toHaveText("This format could not be saved.");
     await expect(name).toHaveAccessibleDescription(
-      "Up to 40 characters Use 1–40 characters.",
+      "Up to 40 characters This format could not be saved.",
     );
     await alert.evaluate((el) => {
       (el as HTMLElement & { __seen?: true }).__seen = true;
     });
     await page.keyboard.press("Enter");
-    await expect(alert).toHaveText("Use 1–40 characters.");
+    await expect(alert).toHaveText("This format could not be saved.");
     // A new alert node, so assistive tech reads the same text again.
     expect(
       await alert.evaluate(

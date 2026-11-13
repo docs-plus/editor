@@ -91,6 +91,18 @@ async function runFromPalette(page: Page, query: string): Promise<void> {
   await expect(page.locator(PALETTE)).toHaveCount(0);
 }
 
+/** Opens the palette's Save view from the list, once the search has focus. */
+async function openSaveView(page: Page): Promise<void> {
+  await page.keyboard.press("Alt+Slash");
+  await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
+  await page.keyboard.type("save as format");
+  await page
+    .locator(`${PALETTE} [cmdk-item][data-action-id="formats.save"]`)
+    .first()
+    .click();
+  await expect(page.getByLabel("Name")).toBeFocused();
+}
+
 test.describe("action palette", () => {
   test.skip(process.env.PALETTE_BUDGET === "1", "budget run only");
 
@@ -417,8 +429,10 @@ test.describe("action palette", () => {
     ).toBeVisible();
     const name = page.getByLabel("Name");
     await expect(name).toHaveValue("");
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("alert")).toHaveText("Use 1–40 characters.");
+    await expect(name).toHaveAttribute("placeholder", "e.g. Warning");
+    await expect(
+      page.getByRole("button", { name: "Save", exact: true }),
+    ).toBeDisabled();
     await name.fill("Callout");
     await page.keyboard.press("Enter");
     await expect(page.locator(PALETTE)).toHaveCount(0);
@@ -453,6 +467,101 @@ test.describe("action palette", () => {
       timeout: 10_000,
     });
     expect(await html(page)).toContain("pie title Share of time");
+  });
+});
+
+test.describe("palette design pass (§7)", () => {
+  test.skip(process.env.PALETTE_BUDGET === "1", "budget run only");
+
+  test("the Save dialog previews the format and keeps Save disabled until named", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await select(page, "alpha");
+    await page.keyboard.press("ControlOrMeta+b");
+    await page.keyboard.press("ControlOrMeta+i");
+    await openSaveView(page);
+    const dialog = page.locator(PALETTE);
+    await expect(
+      dialog.getByText("Reuse this style anywhere. Saved on this device."),
+    ).toBeVisible();
+    const preview = dialog.locator("[data-format-preview]");
+    await expect(preview).toContainText("Sample text");
+    await expect(preview).toContainText("Bold, Italic");
+    const sample = await preview.getByText("Sample text").evaluate((el) => ({
+      weight: getComputedStyle(el).fontWeight,
+      style: getComputedStyle(el).fontStyle,
+    }));
+    expect(sample).toEqual({ weight: "700", style: "italic" });
+    const name = page.getByLabel("Name");
+    await expect(name).toBeFocused();
+    await expect(name).toHaveAttribute("placeholder", "e.g. Warning");
+    await expect(dialog.getByText("Up to 40 characters")).toBeVisible();
+    const save = dialog.getByRole("button", { name: "Save", exact: true });
+    await expect(save).toBeDisabled();
+    await name.fill("  ");
+    await expect(save).toBeDisabled();
+    await name.fill("Warning");
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".tiptap")).toBeFocused();
+    expect(await selection(page)).not.toBeNull();
+
+    // Saving over the name says so first.
+    await select(page, "beta");
+    await page.keyboard.press("ControlOrMeta+u");
+    await openSaveView(page);
+    await name.fill("warning");
+    await expect(
+      dialog.getByText("Replaces your format ‘Warning’."),
+    ).toBeVisible();
+    await expect(name).toHaveAccessibleDescription(
+      "Up to 40 characters Replaces your format ‘Warning’.",
+    );
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  });
+
+  test("at 20 formats the Save dialog asks to remove one, with a link", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const formats = Array.from({ length: 20 }, (_, i) => ({
+        id: `f${i}`,
+        name: `Format ${i}`,
+        bundle: { bold: true },
+      }));
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({ v: 1, formats }),
+      );
+    });
+    await openDoc(page);
+    await select(page, "alpha");
+    await page.keyboard.press("ControlOrMeta+b");
+    await openSaveView(page);
+    const dialog = page.locator(PALETTE);
+    await page.getByLabel("Name").fill("Another");
+    await expect(
+      dialog.getByText("You can keep up to 20 formats. Remove one first."),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Remove a format" }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Save", exact: true }),
+    ).toBeDisabled();
+    // An existing name replaces, so the cap does not apply.
+    await page.getByLabel("Name").fill("Format 3");
+    await expect(
+      dialog.getByText("Replaces your format ‘Format 3’."),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Save", exact: true }),
+    ).toBeEnabled();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
   });
 });
 
@@ -502,8 +611,9 @@ test.describe("palette accessibility", () => {
       await page.keyboard.type("save as format");
       await page.keyboard.press("Enter");
       await expect(page.getByLabel("Name")).toBeFocused();
-      await page.keyboard.press("Enter");
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("[data-format-preview]")).toBeVisible();
+      await expectNoSeriousA11yViolations(page, [PALETTE]);
+      await page.keyboard.type("Callout");
       await expectNoSeriousA11yViolations(page, [PALETTE]);
       await page.keyboard.press("Escape");
     });

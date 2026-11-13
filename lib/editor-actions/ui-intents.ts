@@ -13,7 +13,13 @@ export type UiIntent =
   | { type: "colors.open"; kind: "text" | "highlight" }
   | { type: "insert.open"; kind: "table" | "image" | "embed" }
   /** Alt+F10: focus the open selection bubble's toolbar, else the row. */
-  | { type: "toolbar.focus" };
+  | { type: "toolbar.focus" }
+  /**
+   * Open the style dropdown at "Remove a format ▸" (design pass §7, from
+   * the Save dialog at the 20-format cap). The listener returns `true` at
+   * once and opens its menu in the next frame, after the palette closes.
+   */
+  | { type: "formats.remove" };
 
 /**
  * Return `true` only for an intent this listener handled. D1, D2 and E all

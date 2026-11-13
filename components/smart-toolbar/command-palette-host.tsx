@@ -3,7 +3,7 @@
 import { useCurrentEditor } from "@tiptap/react";
 import { lazy, useEffect, useState, useSyncExternalStore } from "react";
 
-import { onUiIntent } from "@/lib/editor-actions/ui-intents";
+import { emitUiIntent, onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
 
 import { SurfaceBoundary } from "./lazy-surface";
@@ -105,6 +105,7 @@ export function CommandPaletteHost({ editor: provided }: SurfaceProps) {
         editor={editor}
         mode={state.mode}
         onClose={closePalette}
+        onRemoveFormat={() => emitUiIntent(editor, { type: "formats.remove" })}
       />
     </SurfaceBoundary>
   );
