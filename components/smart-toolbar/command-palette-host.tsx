@@ -1,11 +1,12 @@
 "use client";
 
 import { useCurrentEditor } from "@tiptap/react";
-import dynamic from "next/dynamic";
-import { useEffect, useSyncExternalStore } from "react";
+import { lazy, useEffect, useSyncExternalStore } from "react";
 
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
+import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
 
+import { SurfaceBoundary } from "./lazy-surface";
 import {
   closePalette,
   getPaletteState,
@@ -16,11 +17,28 @@ import {
 } from "./palette/palette-store";
 import type { SurfaceProps } from "./types";
 
-/** The palette chunk (cmdk included): loaded on the first open only. */
-const CommandPalette = dynamic(
-  () => import("./palette/command-palette").then((m) => m.CommandPalette),
-  { ssr: false },
-);
+/**
+ * The palette chunk (cmdk included), after the E engine it reads through
+ * `getV11Engine()` (usually there already: editors load it on create).
+ */
+const loadPalette = () =>
+  loadV11Engine()
+    .then(() => import("./palette/command-palette"))
+    .then((module) => ({ default: module.CommandPalette }));
+
+/** Loaded on the first open only. */
+let CommandPalette = lazy(loadPalette);
+
+/**
+ * The chunk did not load (offline, or a deploy replaced it): close the
+ * palette, so the next Alt+/ is a fresh open, and swap in a fresh `lazy()`
+ * so that open fetches again (React keeps a rejected one for good). Focus
+ * never left the editor: the dialog had not rendered.
+ */
+function onPaletteError() {
+  CommandPalette = lazy(loadPalette);
+  closePalette();
+}
 
 /**
  * Alt+/ (fallback Alt+Shift+Z) palette host (spec §4.4). Mounted once per
@@ -54,6 +72,12 @@ export function CommandPaletteHost({ editor: provided }: SurfaceProps) {
 
   if (!editor || state.editor !== editor) return null;
   return (
-    <CommandPalette editor={editor} mode={state.mode} onClose={closePalette} />
+    <SurfaceBoundary onError={onPaletteError}>
+      <CommandPalette
+        editor={editor}
+        mode={state.mode}
+        onClose={closePalette}
+      />
+    </SurfaceBoundary>
   );
 }
