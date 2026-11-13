@@ -161,6 +161,13 @@ button[aria-pressed="mixed"]::after {
   pointer-events: none;
 }
 
+/* Touch: menu items are 44px tall (spec §6.7); fine pointers keep 28px. */
+@media (pointer: coarse) {
+  [role="menu"] [role^="menuitem"] {
+    min-height: 44px;
+  }
+}
+
 /* Forced colours drop background colours, so the pressed underline cannot
    carry state there. Pressed uses system colours instead (Highlight fill, a
    HighlightText underline) and mixed a dashed border; the focus outline is a
