@@ -9,6 +9,13 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Added
+- **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
+  sorted toolbar, colour and font-size tokens, a memory layer that remembers
+  your choices, a context slot, responsive tiers, and a five-PR rollout with
+  a client version gate. The research sources and rollout experiments sit
+  alongside it. Docs only, no runtime change.
+
 ### Changed
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
 - **Nightly runs twice a day:** 03:41 UTC (night) and 08:00 UTC (morning).
