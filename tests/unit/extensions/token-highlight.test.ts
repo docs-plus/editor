@@ -101,14 +101,22 @@ describe("TokenHighlight", () => {
       return out;
     };
 
-    it("stores legacy values as tokens", () => {
+    it("stores tokens, and the legacy form as given (the N popover's pressed state)", () => {
       const editor = make();
       editor
         .chain()
         .setTextSelection({ from: P, to: P + 5 })
-        .setHighlight({ color: "var(--tt-color-highlight-red)" })
+        .setHighlight({ color: "red" })
         .run();
       expect(colors(editor)).toEqual(["red"]);
+      editor.commands.setHighlight({ color: "var(--tt-color-highlight-red)" });
+      expect(colors(editor)).toEqual(["var(--tt-color-highlight-red)"]);
+      expect(
+        editor.isActive("highlight", {
+          color: "var(--tt-color-highlight-red)",
+        }),
+      ).toBe(true);
+      expect(editor.getHTML()).toContain('data-highlight="red"');
     });
 
     it("defaults to yellow for toggleHighlight() and ==x==", () => {

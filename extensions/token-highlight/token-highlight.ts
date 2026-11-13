@@ -12,11 +12,19 @@ const tokenOf = (element: HTMLElement): HighlightToken | null =>
   highlightTokenFromValue(element.getAttribute(HIGHLIGHT_ATTR)) ??
   highlightTokenFromValue(element.getAttribute("data-color"));
 
-/** The token a command stores, or null to refuse. A missing colour is the default. */
-const commandToken = (attributes?: { color?: unknown }) =>
-  attributes?.color === undefined
-    ? DEFAULT_HIGHLIGHT_TOKEN
-    : highlightTokenFromValue(attributes.color);
+/**
+ * The value a command stores, or null to refuse. A missing colour is the
+ * default token. A token or the exact legacy `var(--tt-color-highlight-X)` is
+ * stored as given, so the release N popover (D2-owned, replaced in v1) keeps
+ * its pressed state; both forms render the same token. Anything else
+ * (hex, `var(--background)`, hostile strings) is refused.
+ */
+const commandColor = (attributes?: { color?: unknown }): string | null => {
+  if (attributes?.color === undefined) return DEFAULT_HIGHLIGHT_TOKEN;
+  return highlightTokenFromValue(attributes.color)
+    ? (attributes.color as string)
+    : null;
+};
 
 /**
  * Stock Highlight with token values (spec §3, B4). The attribute key stays
@@ -26,7 +34,8 @@ const commandToken = (attributes?: { color?: unknown }) =>
  *   anything else renders no style at all.
  * - Parse: only our own `<mark>` with a token; foreign `<mark>` and
  *   `background-color` paste as plain text.
- * - Commands store tokens, normalize legacy values, refuse everything else.
+ * - Commands take a token (or the legacy form, stored as given), default to
+ *   yellow, and refuse everything else.
  */
 export const TokenHighlight = Highlight.extend({
   addAttributes() {
@@ -59,13 +68,13 @@ export const TokenHighlight = Highlight.extend({
       setHighlight:
         (attributes) =>
         ({ commands }) => {
-          const color = commandToken(attributes);
+          const color = commandColor(attributes);
           return color ? commands.setMark(this.name, { color }) : false;
         },
       toggleHighlight:
         (attributes) =>
         ({ commands }) => {
-          const color = commandToken(attributes);
+          const color = commandColor(attributes);
           return color ? commands.toggleMark(this.name, { color }) : false;
         },
       unsetHighlight:
