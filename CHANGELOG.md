@@ -9,65 +9,6 @@ since the previous tag.
 
 ## [Unreleased]
 
-### Smart toolbar v1.1, PR E: action palette and repeat formatting
-
-#### Added
-- **Smart toolbar v1.1 (PR E; merges only after PR D's metrics hold 14 days
-  in production).**
-  - **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list
-    of every registry action, grouped Recent, Suggested here, Format, Insert,
-    Section and View; unavailable entries stay listed with their reason. The
-    palette (cmdk 1.1.1) is a lazy chunk loaded on the first open; one
-    capture-phase key listener serves every tab.
-  - **Repeat formatting and Copy formatting:** Mod+Alt+V (and F4 off macOS)
-    applies the last formatting as one undo step, setting marks rather than
-    toggling them; Copy formatting picks up the selection's formatting.
-  - **Your formats** (saved in `tinydocy-formats`, kept by "Forget my
-    choices"), **In this doc** (formats the document already uses, scanned
-    on demand and never stored) and **Mermaid templates** (flowchart,
-    sequence, state, mind map, pie).
-  - Repeat split button and phone selection cells, built for the selection
-    bubble and phone bar. They mount once PR D2's bubble and phone bar land;
-    until then they render nowhere.
-  - Remembered choices (the Repeat bundle, Recent, the last diagram
-    template) persist across reloads in PR D2's memory layer
-    (`tinydocy-choices`, cleared by "Forget my choices"). Your formats are
-    kept separately.
-  - No schema, server or environment change; no Deploy step.
-
-### Smart toolbar v1, PR D2: surfaces and memory
-
-#### Added
-- **Smart toolbar surfaces and memory (v1, PR D2).** Not deployable on its
-  own: it ships with PR C's marks and PR D1's row, after the N+1 ship gates.
-  - **Memory layer** (`lib/remembered-choice.ts`): versioned local storage
-    under `tinydocy-choices` (cleared by the new **Forget my choices**
-    action) and `tinydocy-ui` (outline open state, kept by Forget). Every
-    read is re-validated against an allowlist; hostile, oversized or
-    other-version payloads fall back to defaults. Written only by actions
-    after their command succeeds. `NEXT_PUBLIC_REMEMBER_CHOICES=0` turns it
-    off.
-  - **Registry actions** `color.*`, `size.*`, `insert.*` and
-    `memory.forget` (`lib/editor-actions/surface-actions.ts`).
-  - **Colour split pair** with remembered faces ("Apply text colour: Red")
-    and a lazily loaded popover: Recent (five mixed colours, frozen while
-    open), text colours and highlights as named `aria-pressed` swatches in
-    a roving grid.
-  - **Size stepper** (`spinbutton`, disabled in headings with a reason),
-    **Insert menu** listing the registry's insert actions with a table size
-    grid that opens at the last size and an embed link step, and a
-    remembered **list face** for D1's list actions.
-  - **Phones** reach text colour, highlight and size from the colour panel.
-    On touch every target is 44×44: the panel wraps to a second line at
-    360px instead of scrolling sideways, popover swatches wrap at six per
-    line (arrow keys follow the lines), the table grid caps at 6×6, and a
-    tap opens the colour popover without taking focus.
-  - Swatches of a colour kind that can't apply here stay focusable but are
-    `aria-disabled` with the reason. Forced colours keep each swatch's
-    colour and show pressed as a ring, separate from the focus outline.
-  - **Bundle gate:** `scripts/check-editor-chunk-size.ts` (CI step) keeps
-    the editor chunk group within 6 KB gz of the `58a9d22` baseline.
-
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 
 #### Added
@@ -226,6 +167,35 @@ it restarts, so pulling without building puts the server half live first.
    they reload. See the runbook.
 
 ### Added
+- **Smart toolbar surfaces and memory (v1, PR D2).** Not deployable on its
+  own: it ships with PR C's marks and PR D1's row, after the N+1 ship gates.
+  - **Memory layer** (`lib/remembered-choice.ts`): versioned local storage
+    under `tinydocy-choices` (cleared by the new **Forget my choices**
+    action) and `tinydocy-ui` (outline open state, kept by Forget). Every
+    read is re-validated against an allowlist; hostile, oversized or
+    other-version payloads fall back to defaults. Written only by actions
+    after their command succeeds. `NEXT_PUBLIC_REMEMBER_CHOICES=0` turns it
+    off.
+  - **Registry actions** `color.*`, `size.*`, `insert.*` and
+    `memory.forget` (`lib/editor-actions/surface-actions.ts`).
+  - **Colour split pair** with remembered faces ("Apply text colour: Red")
+    and a lazily loaded popover: Recent (five mixed colours, frozen while
+    open), text colours and highlights as named `aria-pressed` swatches in
+    a roving grid.
+  - **Size stepper** (`spinbutton`, disabled in headings with a reason),
+    **Insert menu** listing the registry's insert actions with a table size
+    grid that opens at the last size and an embed link step, and a
+    remembered **list face** for D1's list actions.
+  - **Phones** reach text colour, highlight and size from the colour panel.
+    On touch every target is 44×44: the panel wraps to a second line at
+    360px instead of scrolling sideways, popover swatches wrap at six per
+    line (arrow keys follow the lines), the table grid caps at 6×6, and a
+    tap opens the colour popover without taking focus.
+  - Swatches of a colour kind that can't apply here stay focusable but are
+    `aria-disabled` with the reason. Forced colours keep each swatch's
+    colour and show pressed as a ring, separate from the focus outline.
+  - **Bundle gate:** `scripts/check-editor-chunk-size.ts` (CI step) keeps
+    the editor chunk group within 6 KB gz of the `58a9d22` baseline.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
   light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),
