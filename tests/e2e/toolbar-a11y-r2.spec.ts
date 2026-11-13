@@ -410,7 +410,7 @@ test("M1: a visible note under Highlight while swatches are dimmed", async ({
 
   let { dialog } = await openHighlightDialog(page);
   await expect(dialog.getByText(LOW_NOTE)).toHaveCount(0);
-  const width = (await dialog.boundingBox())?.width ?? 0;
+  const width = await settledWidth(dialog);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
@@ -420,8 +420,16 @@ test("M1: a visible note under Highlight while swatches are dimmed", async ({
   ({ dialog } = await openHighlightDialog(page));
   await expect(dialog.getByText(LOW_NOTE)).toBeVisible();
   // The note wraps inside the swatch grid's width.
-  expect((await dialog.boundingBox())?.width ?? 0).toBeCloseTo(width, 0);
+  expect(await settledWidth(dialog)).toBeCloseTo(width, 0);
 });
+
+/** Width after the popover's open (zoom-in) animation has finished. */
+async function settledWidth(dialog: Locator) {
+  await dialog.evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
+  return (await dialog.boundingBox())?.width ?? 0;
+}
 
 test("M2: a mouse pick moves the roving stop and focus to the swatch", async ({
   page,
