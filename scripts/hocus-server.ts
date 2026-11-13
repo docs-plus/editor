@@ -13,8 +13,10 @@ import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
   clientOutdatedError,
   createClientSchemaCounter,
+  effectiveMinClientSchema,
   isClientOutdated,
   isGateExempt,
+  SCHEMA_FLOOR,
   shouldDropOutdatedFrame,
 } from "../lib/security/client-schema-gate";
 import {
@@ -45,13 +47,16 @@ import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 /** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+/** The gate's minimum: the env can raise `SCHEMA_FLOOR`, never lower it. */
+const MIN_CLIENT_SCHEMA = effectiveMinClientSchema(HOCUS_MIN_CLIENT_SCHEMA);
+
 type SocketData = {
   request: Request;
   ip: string;
   connection?: ReturnType<Hocuspocus["handleConnection"]>;
   authTimer?: ReturnType<typeof setTimeout>;
   /**
-   * The socket URL's `schema` is below `HOCUS_MIN_CLIENT_SCHEMA`, so every
+   * The socket URL's `schema` is below `MIN_CLIENT_SCHEMA`, so every
    * gated document on it is refused. Judged once at upgrade (the URL cannot
    * change) and freed with the socket.
    */
@@ -153,7 +158,7 @@ const hocuspocus = new Hocuspocus({
     if (!isGateExempt(documentName)) {
       const outdated = isClientOutdated(
         requestParameters.get("schema"),
-        HOCUS_MIN_CLIENT_SCHEMA,
+        MIN_CLIENT_SCHEMA,
       );
       clientSchemaCounter.record(requestParameters, outdated);
       if (outdated) throw clientOutdatedError();
@@ -227,7 +232,7 @@ const server = Bun.serve<SocketData>({
         ip,
         outdated: isClientOutdated(
           new URL(request.url).searchParams.get("schema"),
-          HOCUS_MIN_CLIENT_SCHEMA,
+          MIN_CLIENT_SCHEMA,
         ),
       };
       if (server.upgrade(request, { data })) {
@@ -284,7 +289,7 @@ const server = Bun.serve<SocketData>({
 });
 
 console.log(
-  `[hocus] client schema gate: min=${HOCUS_MIN_CLIENT_SCHEMA}${HOCUS_MIN_CLIENT_SCHEMA === 0 ? " (log only)" : ""}`,
+  `[hocus] client schema gate: min=${MIN_CLIENT_SCHEMA} (floor ${SCHEMA_FLOOR}, env ${HOCUS_MIN_CLIENT_SCHEMA})`,
 );
 console.log(`Hocuspocus listening on ws://${server.hostname}:${server.port}`);
 

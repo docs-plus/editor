@@ -155,44 +155,59 @@ describe("hocus-server client schema gate", () => {
     TIMEOUT_MS,
   );
 
-  it(
-    "accepts everything in log-only mode and logs bucketed counts",
-    async () => {
-      const server = await start();
-      const outcomes = await Promise.all(
-        [null, "abc", "1"].map(
-          (schema) =>
-            attach(openSocket(server, schema), crypto.randomUUID()).outcome,
-        ),
-      );
-      expect(outcomes).toEqual(["synced", "synced", "synced"]);
-      expect(server.logs()).toContain("client schema gate: min=0 (log only)");
-      await server.stop();
-      const line = server
-        .logs()
-        .split("\n")
-        .find((entry) => entry.includes('"client_schema"'));
-      expect(line).toBeDefined();
-      expect(JSON.parse(line ?? "{}")).toMatchObject({
-        type: "hocus",
-        event: "client_schema",
-        missing: 1,
-        invalid: 1,
-        low: 1,
-        ok: 0,
-        refused: 0,
-      });
-      expect(line).not.toContain("abc");
-    },
-    TIMEOUT_MS,
-  );
+  for (const env of [{}, { HOCUS_MIN_CLIENT_SCHEMA: "0" }]) {
+    it(
+      `env ${JSON.stringify(env)} → effective min 2: refuses schema < 2, keeps tabs exempt, logs counts (staging drill)`,
+      async () => {
+        const server = await start(env);
+        const outcomes = await Promise.all(
+          [null, "abc", "1", "2"].map(
+            (schema) =>
+              attach(openSocket(server, schema), crypto.randomUUID()).outcome,
+          ),
+        );
+        expect(outcomes).toEqual([
+          "client_outdated",
+          "client_outdated",
+          "client_outdated",
+          "synced",
+        ]);
+        const tabs = await attach(
+          openSocket(server, null),
+          `global-tabs-${crypto.randomUUID()}`,
+        ).outcome;
+        expect(tabs).toBe("synced");
+        expect(server.logs()).toContain(
+          "client schema gate: min=2 (floor 2, env 0)",
+        );
+        await server.stop();
+        const line = server
+          .logs()
+          .split("\n")
+          .find((entry) => entry.includes('"client_schema"'));
+        expect(line).toBeDefined();
+        const counts = JSON.parse(line ?? "{}");
+        expect(counts).toMatchObject({
+          type: "hocus",
+          event: "client_schema",
+          missing: 1,
+          invalid: 1,
+          low: 1,
+          ok: 1,
+        });
+        expect(counts.refused).toBeGreaterThanOrEqual(3);
+        expect(line).not.toContain("abc");
+      },
+      TIMEOUT_MS,
+    );
+  }
 
   it(
     "never lets a refused client grow the queue into a socket reset",
     async () => {
-      // Read after stop: a caller-owned DB outlives the server.
+      // Read after stop: a caller-owned DB outlives the server. No env
+      // minimum: the built-in floor alone refuses (refused-client soak).
       const server = await start({
-        HOCUS_MIN_CLIENT_SCHEMA: "2",
         HOCUS_THROTTLE: "1",
         DB_PATH: createTempDbPath(),
       });
