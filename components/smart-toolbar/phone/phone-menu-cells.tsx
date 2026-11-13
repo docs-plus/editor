@@ -13,6 +13,7 @@ import {
 import { setListType } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
 import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
+import { editorActions } from "@/lib/editor-actions";
 import { ListIcon } from "@/lib/icons";
 
 const NO_LIST = "none";
@@ -59,15 +60,29 @@ function ListCell({ editor }: { editor: Editor }) {
         >
           No list
         </DropdownMenuRadioItem>
-        {LIST_IDS.map((id) => (
-          <ActionRadioItem
-            key={id}
-            id={id}
-            value={id}
-            editor={editor}
-            onPicked={menu.markPicked}
-          />
-        ))}
+        {LIST_IDS.map((id) =>
+          // Re-tapping the checked type only closes the menu, as the row's
+          // menu does (its radio group reports changes only): a toggle here
+          // would remove the list.
+          id === value ? (
+            <DropdownMenuRadioItem
+              key={id}
+              value={id}
+              closeOnClick
+              data-action-id={id}
+            >
+              {editorActions.get(id)?.label}
+            </DropdownMenuRadioItem>
+          ) : (
+            <ActionRadioItem
+              key={id}
+              id={id}
+              value={id}
+              editor={editor}
+              onPicked={menu.markPicked}
+            />
+          ),
+        )}
       </DropdownMenuRadioGroup>
     </ToolbarMenu>
   );
