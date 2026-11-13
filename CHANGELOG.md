@@ -65,6 +65,10 @@ raised the editor-chunk budget to 23.5 KB for E (contract A12; growth
 - `palette-leaks.spec.ts` logs tab-switch heap and live editors.
 
 #### Fixed
+- **Repeat pressed before the engine chunk loaded did nothing.** On a slow
+  network or a busy device the shortcut could arrive first; the key is now
+  taken and Repeat runs once the engine lands, if the selection has not
+  moved.
 - The palette's search field keeps `aria-activedescendant` on the
   highlighted option on open, after arrow keys, while filtering, and drops
   it when nothing matches (WCAG 4.1.2); `patches/cmdk@1.1.1.patch` re-syncs
