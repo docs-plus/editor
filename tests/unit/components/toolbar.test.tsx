@@ -296,6 +296,30 @@ describe("Toolbar roving tabindex", () => {
     input.remove();
   });
 
+  it("keeps one tab stop when a hidden item is shown while focus is elsewhere", async () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const container = mountWith([
+      button("A"),
+      createElement(
+        "div",
+        { key: "wrap", hidden: true, "data-testid": "wrap" },
+        button("B"),
+      ),
+      button("C"),
+    ]);
+    await settle();
+    input.focus();
+    act(() => {
+      container
+        .querySelector('[data-testid="wrap"]')
+        ?.removeAttribute("hidden");
+    });
+    await settle();
+    expect(tabindexes(container, ["A", "B", "C"])).toEqual(["0", "-1", "-1"]);
+    input.remove();
+  });
+
   it("focusRovingItem focuses the tab stop", async () => {
     const { focusRovingItem } = await import("@/components/ui/toolbar");
     const container = mountWith([button("A"), button("B")]);
