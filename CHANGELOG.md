@@ -15,7 +15,7 @@ Minors left by the a11y review of the smart toolbar (contract §10), and
 the design pass of PR E's surfaces
 (`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
 
-The editor chunk ends at +23,993 B of the 23.5 KB budget (71 B left);
+The editor chunk ends at +23,994 B of the 23.5 KB budget (70 B left);
 the budget is unchanged. The palette's first Alt+/ loads 20,472 B gz of
 its 20,480 B budget.
 
