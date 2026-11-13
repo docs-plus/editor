@@ -261,9 +261,16 @@ export function SelectionBubbleView({
     };
     // Tab past the last stop (or a click on nothing) drops focus on `body`,
     // which fires no `focusin`. Not a window switch: that keeps the bubble.
+    // `focusInsideRef` stays set, so `onHide` hands focus back to the editor
+    // with its selection, and the bubble stays away until a new selection
+    // (as after Esc) instead of reopening on that focus.
     const onFocusOut = (event: FocusEvent) => {
       if (event.relatedTarget !== null || !document.hasFocus()) return;
-      focusInsideRef.current = false;
+      // The plugin's own `hide()` (it sets opacity 0, then removes the
+      // root) blurs a focused item mid-dispatch: a nested hide here would
+      // make its `remove()` throw. `onHide` restores focus as above.
+      if (root?.style.opacity === "0") return;
+      suppressedRef.current = true;
       dispatchMeta("hide");
     };
     // `hide: true` hides the root (inline `visibility`) when the selection
