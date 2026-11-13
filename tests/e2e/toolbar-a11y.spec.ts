@@ -685,3 +685,49 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("crossing 768px keeps focus in the toolbar that replaces the other", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await openToolbarTestDoc(page);
+  await page.addStyleTag({
+    content: "nextjs-portal { display: none !important; }",
+  });
+  // Into the row on its tab stop, then five items along. (Not Alt+F10:
+  // at T4 it can land on View ▾ and the next arrow drops to the editor,
+  // a ladder issue that predates the phone bar.)
+  await page
+    .getByRole("toolbar", { name: "Formatting" })
+    .getByRole("button", { name: "Undo" })
+    .focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+  const inToolbar = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      const toolbar = active?.closest('[role="toolbar"]');
+      return toolbar ? (toolbar.getAttribute("data-variant") ?? "") : null;
+    });
+  expect(await inToolbar()).not.toBeNull();
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(page.locator("[data-mobile-bar]")).toBeVisible();
+  await expect.poll(inToolbar).toBe("docked");
+
+  // And back: the row takes it, on the same action when it shows one.
+  await page.keyboard.press("ArrowLeft");
+  const id = await page.evaluate(
+    () =>
+      document.activeElement
+        ?.closest<HTMLElement>("[data-action-id]")
+        ?.getAttribute("data-action-id") ?? null,
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator("[data-mobile-bar]")).toHaveCount(0);
+  await expect.poll(inToolbar).toBe("fixed");
+  if (id) {
+    await expect(
+      page.locator(`[role="toolbar"] [data-action-id="${id}"]`).first(),
+    ).toBeFocused();
+  }
+});
