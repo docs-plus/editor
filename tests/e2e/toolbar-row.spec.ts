@@ -101,7 +101,11 @@ async function caretIn(page: Page, needle: string): Promise<void> {
 async function rowNames(page: Page): Promise<string[]> {
   return toolbar(page).evaluate((root) =>
     Array.from(root.querySelectorAll<HTMLElement>("[data-toolbar-item]"))
-      .filter((el) => !el.closest('[data-slot="context-slot"]'))
+      // Stand-ins of collapsed tiers are in the DOM but not on screen.
+      .filter(
+        (el) =>
+          el.checkVisibility() && !el.closest('[data-slot="context-slot"]'),
+      )
       .map(
         (el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "?",
       ),
@@ -614,7 +618,10 @@ test.describe("toolbar keys", () => {
       toolbar(page).evaluate(
         (el) =>
           Array.from(el.querySelectorAll<HTMLElement>("button")).filter(
-            (b) => b.tabIndex >= 0 && b.getAttribute("tabindex") !== "-1",
+            (b) =>
+              b.checkVisibility() &&
+              b.tabIndex >= 0 &&
+              b.getAttribute("tabindex") !== "-1",
           ).length,
       );
     await caretIn(page, "Alpha");

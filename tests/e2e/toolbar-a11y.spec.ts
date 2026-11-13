@@ -420,7 +420,7 @@ test("mobile colour panel: one arrow press moves one swatch", async ({
   await selectWord(page);
   await page
     .getByRole("toolbar")
-    .getByRole("button", { name: "Highlight text" })
+    .getByRole("button", { name: "Text style and colour" })
     .click();
   await page
     .getByRole("toolbar")
@@ -533,7 +533,7 @@ async function openPopup(page: Page, popup: Popup) {
     await openHighlightDialog(page);
     return;
   }
-  const menus = toolbar.locator('button[aria-haspopup="menu"]');
+  const menus = toolbar.locator('button[aria-haspopup="menu"]:visible');
   await menus.nth(popup === "text style menu" ? 0 : 1).click();
   await expect(page.getByRole("menu")).toBeVisible();
 }

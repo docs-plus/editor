@@ -59,7 +59,7 @@ async function openPhonePanel(page: Page, { touch = false } = {}) {
   await selectNewParagraph(page);
   const entry = page
     .getByRole("toolbar")
-    .getByRole("button", { name: "Highlight text" });
+    .getByRole("button", { name: "Text style and colour" });
   if (touch) await entry.tap();
   else await entry.click();
 }
