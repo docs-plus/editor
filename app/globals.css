@@ -167,10 +167,17 @@ button[aria-pressed="mixed"]::after {
   pointer-events: none;
 }
 
-/* Touch: menu items are 44px tall (spec §6.7); fine pointers keep 28px. */
+/* Touch: menu items are 44px tall (spec §6.7); fine pointers keep 28px.
+   No tooltips (the status pill replaces them) and no shortcut glyphs at
+   any width, phones and touch tablets alike (design pass §6). */
 @media (pointer: coarse) {
   [role="menu"] [role^="menuitem"] {
     min-height: 44px;
+  }
+
+  [data-slot="tooltip-content"],
+  [data-slot="dropdown-menu-shortcut"] {
+    display: none;
   }
 }
 

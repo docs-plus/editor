@@ -378,6 +378,44 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test.describe("on a touch tablet (coarse pointer, 1024px)", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 1024, height: 768 },
+  });
+
+  test("no tooltips and no shortcut glyphs, as on phones (design pass §6)", async ({
+    page,
+  }) => {
+    await openToolbarTestDoc(page);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    const row = page.getByRole("toolbar", { name: "Formatting", exact: true });
+    await expect(row).toBeVisible();
+    // A focus tooltip opens (Base UI marks its trigger) but never shows.
+    await page.keyboard.press("Alt+F10");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(":focus")).toHaveAttribute("data-popup-open", "");
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-slot="tooltip-content"]:visible'),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    // A menu whose items have shortcuts shows none of the glyphs.
+    await row.getByRole("button", { name: "More formatting" }).tap();
+    const menu = page.getByRole("menu").first();
+    await expect(menu).toBeVisible();
+    await expect(
+      menu.locator('[data-slot="dropdown-menu-shortcut"]').first(),
+    ).toBeAttached();
+    await expect(
+      menu.locator('[data-slot="dropdown-menu-shortcut"]:visible'),
+    ).toHaveCount(0);
+  });
+});
+
 test.describe("on a touch phone (coarse pointer, 360px)", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: TOUCH_PHONE });
 

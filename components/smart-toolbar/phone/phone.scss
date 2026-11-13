@@ -123,14 +123,10 @@
   }
 }
 
-// Touch (design pass §6): no tooltips (the status pill replaces them) and
-// no shortcut glyphs. A focused cell keeps its ring inside the bar.
+// Touch: a focused cell keeps its ring inside the bar (design pass §6).
+// No tooltips or shortcut glyphs on touch: `app/globals.css`, so touch
+// tablets (≥ 768px, no phone bar) get them too.
 @media (pointer: coarse) {
-  [data-slot="tooltip-content"],
-  [data-slot="dropdown-menu-shortcut"] {
-    display: none;
-  }
-
   [data-slot="toolbar"][data-variant="docked"] [data-toolbar-item] {
     outline-offset: -2px;
   }
