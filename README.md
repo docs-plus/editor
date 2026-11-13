@@ -161,6 +161,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` | unset | Data controller and contact on `/privacy`. Set both before enabling analytics. |
 | `NEXT_PUBLIC_SERVICE_WORKER` | on | `0` unregisters the worker and deletes its caches. See the [service worker runbook](docs/operations/service-worker-runbook.md). |
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
+| `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |
 | `NEXT_PUBLIC_DISCORD_INVITE_URL`, `NEXT_PUBLIC_GITHUB_REPO_URL` | project links | Community links in the status strip. |
@@ -183,6 +184,7 @@ operational guidance is in the
 | `DOC_CREATION_RATE_LIMIT`, `MAX_TOTAL_DOCUMENTS` | 10/h, 2000 | Document creation limits. |
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |
 | `HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS` | on, on, off | Optional Hocuspocus extensions. |
+| `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Minimum client schema. `0` only logs; `1`+ refuses older bundles. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
 | `HOCUS_ALLOW_ISOLATED_TABS_DOCS` | off | `1` in dev and tests only. The server refuses to start with it in production. |
 
 ## Deploying
@@ -265,6 +267,7 @@ approve pull requests" in the repository's Actions settings.
 |---|---|
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release, with deploy steps. |
 | [Abuse guardrails runbook](docs/operations/abuse-guardrails-runbook.md) | Limits, abuse events, alerts, scheduled jobs, content takedown. |
+| [Schema rollout runbook](docs/operations/schema-rollout-runbook.md) | Client version gate, ingress allowlist, release order, rollback rules, update banners. |
 | [Service worker runbook](docs/operations/service-worker-runbook.md) | Caching rules, kill switch, deployment checks. |
 | [Analytics runbook](docs/operations/analytics-runbook.md) | GA4 setup, privacy settings, event list. |
 | [tests/TESTING.md](tests/TESTING.md) | Test layers and how to run them. |

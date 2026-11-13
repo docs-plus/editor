@@ -34,6 +34,7 @@ export interface AnalyticsEventMap {
   collab_peers: { peers_bucket: PeersBucket };
   outbound_click: { target: "github" | "discord" };
   pwa_install: { outcome: "accepted" | "dismissed" };
+  schema_repair_failed: Record<string, never>;
 }
 
 type PrivacyAwareNavigator = Navigator & { globalPrivacyControl?: boolean };

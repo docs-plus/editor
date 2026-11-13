@@ -17,7 +17,14 @@ export async function typeInNewParagraphAtEnd(
 export class EditorPage {
   constructor(private page: Page) {}
 
-  async goto(docId?: string): Promise<void> {
+  /**
+   * Opens `docId` (or a fresh test document). `waitForEditor: false` skips
+   * the `.tiptap` waits, for clients that never render an editor (refused).
+   */
+  async goto(
+    docId?: string,
+    { waitForEditor = true }: { waitForEditor?: boolean } = {},
+  ): Promise<void> {
     const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const id = docId ?? `test-${nonce}`;
     const tabsState =
@@ -49,10 +56,12 @@ export class EditorPage {
     await this.page.goto("/");
 
     if (id === "playground") {
-      await this.page.waitForSelector(".tiptap", {
-        state: "visible",
-        timeout: 15000,
-      });
+      if (waitForEditor) {
+        await this.page.waitForSelector(".tiptap", {
+          state: "visible",
+          timeout: 15000,
+        });
+      }
       return;
     }
 
@@ -75,6 +84,7 @@ export class EditorPage {
       });
     }
 
+    if (!waitForEditor) return;
     await this.page.waitForSelector(".tiptap", {
       state: "visible",
       timeout: 10000,

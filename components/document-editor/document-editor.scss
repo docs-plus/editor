@@ -176,7 +176,7 @@ html:root {
   --hm-caption-fg: var(--muted-foreground);
 }
 
-// Shown when the server refuses this document's updates (size cap).
+// Shown when edits are refused: by the server, or by the schema guard.
 .document-size-notice {
   position: fixed;
   top: 6rem;
@@ -189,4 +189,31 @@ html:root {
   color: var(--primary-foreground);
   font-size: 0.875rem;
   z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+// Token highlights (data-highlight set by TokenHighlight); palette lives in
+// styles/_variables.scss and switches with .dark.
+$highlight-tokens: gray, brown, red, orange, yellow, green, teal, blue, purple,
+  pink;
+
+// Unknown, hex, var(--background) or hostile values render as plain text.
+.tiptap mark:not([data-highlight]) {
+  background-color: transparent;
+  color: inherit;
+}
+
+@each $token in $highlight-tokens {
+  .tiptap mark[data-highlight="#{$token}"] {
+    background-color: var(--tt-color-highlight-#{$token});
+    color: inherit;
+  }
 }

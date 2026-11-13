@@ -17,6 +17,43 @@ since the previous tag.
   assertion in `performance.spec.ts` (p95 with the toolbar within 10% of
   toolbar off, per-keystroke timer, `PERF_ROUNDS` default 5).
   `E2E_BASE_URL` overrides the Playwright base URL.
+- **Rollout safety for the smart toolbar (release N).** Lets later releases
+  add new marks and nodes without corrupting older clients: a client that
+  meets a name it does not know freezes the document read-only by design and
+  asks for a reload, and never deletes it. See
+  `docs/operations/schema-rollout-runbook.md`.
+  - **Client version gate, log-only:** `HOCUS_MIN_CLIENT_SCHEMA` (default 0,
+    no floor yet). Hocus logs per-minute `client_schema` counts and refuses
+    nothing until an operator raises it.
+  - **`schema` and `build` socket parameters** sent by the client
+    (`NEXT_PUBLIC_BUILD_ID`, default the git short SHA).
+  - **Ingress name allowlist:** updates that introduce a node or mark name
+    outside the schema (current names plus legacy `link`/`code`), or put
+    anything but an element at the top of a document, are refused: Hocus
+    closes that document's connection with 4422 (`schema_rejected`, logged
+    as `ws_unknown_schema_name`) and the client does not reconnect. The
+    toolbar's `textColor` and `fontSize` are refused until the release that
+    ships them deploys its server half first.
+  - **Freeze on unknown, repair on misfit:** the editor goes read-only on an
+    unknown schema name or an outdated client and shows a notice (outdated:
+    reload, device copy kept; Reload waits at most 2 s for the copies). Any
+    misfit of known names is fitted to the schema instead (a missing title,
+    an emptied document, a top-level list item or hard break, a list holding
+    a bare paragraph), so one raw write cannot lock a document; a failed
+    repair shows a banner and sends `schema_repair_failed`.
+  - **Offline `~s2` namespace** for device copies, with a transactional merge
+    of legacy copies (the legacy key is deleted only after a successful
+    save; IndexedDB writes now settle on commit). Saves and removals of one
+    document run in order, so a merge still in flight when its tab closes or
+    the document is deleted never writes the copy back, and a removal drops
+    every later save of a session opened before it (one still flushing on
+    release, which a tab close cannot reach, or one connected without its
+    copy after the hydrate timeout).
+  - **Token-aware highlight rendering** (attribute key stays `color`) and a
+    teal highlight variable. The playground seed uses tokens.
+  - **Schema snapshot test** and **schema rollout runbook**.
+  - Hocus servers spawned by tests (`spawnHocus()`) no longer outlive an
+    interrupted test run.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
@@ -33,6 +70,9 @@ since the previous tag.
   typing still waits for a pause, so it never forces a toolbar commit.
 - **Toolbar controls derive visibility in render,** so they hide at once when
   a document turns read-only, and per-keystroke listener work is gone.
+- **Highlights with an unknown value render as plain text:** a highlight
+  whose value is not a known token (old hex highlights, the old "Default
+  background") renders without an inline style. Stored values are untouched.
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
 - **Nightly runs twice a day:** 03:41 UTC (night) and 08:00 UTC (morning).
 - **docs.plus extension refresh runs daily** at 04:17 UTC instead of every
@@ -69,6 +109,31 @@ since the previous tag.
 - **Focus no longer drops to the page** when a toolbar control disappears.
 - **Undo no longer wipes a new document:** the empty-document seed is kept
   out of the undo history.
+### Security
+- **Top-level content can no longer lock a document:** content other than an
+  element directly in a document's editor fragment made y-tiptap throw before
+  the client repair could run, so no client could open that document and open
+  editors could later overwrite it from a stale view. Ingress refuses it when
+  it can place it, but a client could slip it past by sending it before the
+  block it follows (and before this release, with a single update). Hocus now
+  deletes such content after every change to the fragment's top level, in the
+  same broadcast that delivers it whatever its size (Hocuspocus no longer
+  flushes its broadcast queue early at 1 MiB), and cleans stored documents
+  when they load (`editor_root_swept` abuse event, at most one line per
+  document per minute plus a count).
+- **Size-cap bypass closed:** the update-size guard decoded frames by hand
+  and could be bypassed with SyncReply frames or padded varints. It now
+  decodes with lib0 exactly as Hocuspocus does, so the cap and the new name
+  allowlist see every update.
+
+### Deploy
+1. Pull, `bun install --frozen-lockfile`, then `bun run build`.
+2. Restart Hocus first: `bunx pm2@6.0.14 restart editor-hocus --update-env`.
+   Confirm `[hocus] client schema gate: min=0 (log only)` in its log.
+3. Then restart Next: `bunx pm2@6.0.14 restart editor-next --update-env`.
+4. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. Read the `client_schema` counts.
+5. From now on, never roll back below this release, and never lower the gate
+   once raised (see the runbook). `NEXT_PUBLIC_BUILD_ID` is optional.
 
 ## 2026-11-11 · #23 Unit tests on bun test, advisory gate in CI
 

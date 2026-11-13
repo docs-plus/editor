@@ -43,6 +43,11 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `HOCUS_ALLOW_ISOLATED_TABS_DOCS=1`: **dev and tests only** (`make dev`, Playwright).
   Allows per-test `global-tabs-<id>` documents. The server refuses to start with it in
   production.
+- `HOCUS_MIN_CLIENT_SCHEMA=0`: minimum `schema` a client must send. `0` only logs the
+  per-minute `client_schema` aggregate; `1` or more refuses older bundles with
+  `client_outdated`. Never set it above the highest schema any shipped bundle sends
+  (currently 2), or release N clients are refused too. Never set it below a value it has had in production; see the
+  [schema rollout runbook](schema-rollout-runbook.md).
 - `RETENTION_DAYS=30` (idle documents are deleted and tombstoned)
 - `TOMBSTONE_RETENTION_DAYS=90`: how long a deleted or expired document name stays
   blocked. It must outlive any offline copy a browser may still hold; otherwise that
@@ -67,7 +72,7 @@ Redis deployment notes:
 - **P1**: total document cap reached, users cannot create new docs
 - **P2**: sustained throttle spike (`429`, `ws_guardrail_rejected`,
   `ws_upgrade_rejected` or `ws_throttle_ban`) for 5+ minutes, or any
-  `tabs_doc_repaired`
+  `tabs_doc_repaired` or `editor_root_swept` with `phase: "update"`
 - **P3**: retention purge failure
 
 ## Detection and Triage
@@ -90,8 +95,27 @@ Search logs for these JSON event names:
   `ws_server_full`, `ws_upgrade_rate`
 - `ws_throttle_ban` (Throttle banned an IP), `ws_auth_timeout`
 - `ws_update_too_large`, `ws_awareness_too_large`
+- `ws_unknown_schema_name` (an update or frame named a node or mark outside
+  `lib/schema-names.ts`, put non-element content at the top of a document
+  (`#text`), or could not be decoded, with `names: []`; that document's
+  connection is closed with `4422` `schema_rejected`, while the socket and its
+  other documents stay open). Alert at more than a handful per hour or any
+  multi-IP burst after a deploy; see the [schema rollout runbook](schema-rollout-runbook.md).
 - `tabs_doc_repaired` (malformed entries removed from a shared tab list; repeated
   events point to a client writing bad data)
+- `editor_root_swept` (Hocus deleted content that is not an element from the
+  top of a document's editor fragment, which no client could otherwise open;
+  `removed` counts entries, `types` uses fixed labels such as `text` and never
+  content). `phase: "load"` cleaned a document stored before the sweep
+  existed. `phase: "update"` means a client sent the content ahead of the block
+  it follows, so ingress could not place it. `ip` is the connection whose
+  update released the content, not necessarily the one that sent it: an
+  attacker can arrange for it to be an innocent client's, so never ban or
+  block on the IP alone. Update lines are logged at most once per document per
+  minute; the sweeps in between are counted in one later line with `sweeps`
+  (and no `ip`), written when the next minute's first sweep or the document's
+  unload comes. Treat any `update` event as P2; see the
+  [schema rollout runbook](schema-rollout-runbook.md).
 
 Hocuspocus Logger output is one JSON line per message (`{"type":"hocus",...}`), so
 client-chosen document names cannot forge log lines.

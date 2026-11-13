@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, mock, vi } from "bun:test";
 import * as hocuspocusProvider from "@hocuspocus/provider";
 import * as Y from "yjs";
 
+import * as serverGate from "@/lib/security/client-schema-gate";
+import { SCHEMA_REJECTED } from "@/lib/security/hocus-document-guard";
+
 const created: FakeProvider[] = [];
 
 class FakeProvider {
@@ -34,11 +37,15 @@ mock.module("@hocuspocus/provider", () => ({
 // Loaded after the mock: static imports are hoisted above `mock.module`.
 const {
   acquireCollabSession,
+  CLIENT_OUTDATED_REASON,
   DOCUMENT_DELETED_REASON,
   DOCUMENT_TOO_LARGE_REASON,
   hasUnsyncedCollabChanges,
+  liveSessionNames,
+  OFFLINE_BUDGET_REASON,
   onSynced,
   releaseCollabSession,
+  SCHEMA_REJECTED_REASON,
   subscribeUnsyncedChanges,
 } = await import("@/lib/collab-session");
 
@@ -211,5 +218,64 @@ describe("unsynced edits", () => {
     provider.emit("authenticationFailed", { reason: DOCUMENT_DELETED_REASON });
     expect(session.rejectedReason).toBe(DOCUMENT_DELETED_REASON);
     expect(provider.detach).toHaveBeenCalledOnce();
+  });
+});
+
+describe("schema refusals", () => {
+  it("detaches but keeps the copy when the client is outdated", () => {
+    const session = acquireCollabSession(unique());
+    const provider = created[0] as FakeProvider;
+    provider.emit("authenticationFailed", { reason: CLIENT_OUTDATED_REASON });
+    expect(provider.detach).toHaveBeenCalledOnce();
+    expect(provider.destroy).not.toHaveBeenCalled();
+    expect(session.rejectedReason).toBe(CLIENT_OUTDATED_REASON);
+    session.doc.getText("t").insert(0, "x");
+    expect(hasUnsyncedCollabChanges()).toBe(false);
+  });
+
+  it("keeps an outdated client's unsynced edits protected", () => {
+    vi.useFakeTimers();
+    const name = unique();
+    const session = acquireCollabSession(name);
+    const provider = created[0] as FakeProvider;
+    session.doc.getText("t").insert(0, "typed offline");
+    provider.emit("authenticationFailed", { reason: CLIENT_OUTDATED_REASON });
+    // Still unsynced: the reloaded bundle uploads them from the device copy.
+    expect(hasUnsyncedCollabChanges()).toBe(true);
+    releaseCollabSession(name);
+    vi.advanceTimersByTime(60_000);
+    expect(provider.destroy).not.toHaveBeenCalled();
+    expect(liveSessionNames().has(name)).toBe(true);
+  });
+
+  it("stops syncing after a schema_rejected close", () => {
+    const session = acquireCollabSession(unique());
+    const provider = created[0] as FakeProvider;
+    session.doc.getText("t").insert(0, "x");
+    provider.emit("close", {
+      event: { code: SCHEMA_REJECTED.code, reason: SCHEMA_REJECTED_REASON },
+    });
+    provider.emit("close", {
+      event: { code: SCHEMA_REJECTED.code, reason: SCHEMA_REJECTED_REASON },
+    });
+    expect(provider.detach).toHaveBeenCalledOnce();
+    expect(provider.destroy).not.toHaveBeenCalled();
+    expect(session.rejectedReason).toBe(SCHEMA_REJECTED_REASON);
+    expect(hasUnsyncedCollabChanges()).toBe(false);
+  });
+
+  it("stops syncing after a schema_rejected close while paused offline", () => {
+    const session = acquireCollabSession(unique());
+    const provider = created[0] as FakeProvider;
+    session.doc.getText("t").insert(0, "x".repeat(600 * 1024));
+    expect(session.rejectedReason).toBe(OFFLINE_BUDGET_REASON);
+    provider.emit("close", { event: { reason: SCHEMA_REJECTED_REASON } });
+    expect(provider.detach).toHaveBeenCalledOnce();
+    expect(session.rejectedReason).toBe(SCHEMA_REJECTED_REASON);
+  });
+
+  it("shares reason strings with the server", () => {
+    expect(CLIENT_OUTDATED_REASON).toBe(serverGate.CLIENT_OUTDATED_REASON);
+    expect(SCHEMA_REJECTED_REASON).toBe(SCHEMA_REJECTED.reason);
   });
 });

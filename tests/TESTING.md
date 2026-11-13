@@ -205,6 +205,13 @@ Two tests with distinct strategies:
 
 Each user gets a unique identity via `window.__HOCUS_TOKEN` injected through `page.addInitScript()`.
 
+### Schema Safety Tests (`schema-safety.spec.ts`)
+
+Covers the rollout guards in `docs/operations/schema-rollout-runbook.md`: outdated clients, ingress refusal (`4422` `schema_rejected`) and schema repair. It spawns its own Hocus with `HOCUS_MIN_CLIENT_SCHEMA=2` through `spawnHocus()` (`tests/helpers/spawn-hocus.ts`), which starts `bun run hocus` on a random port with a temp `DB_PATH`, the e2e socket limits and Throttle/Logger off, and returns `{ url, dbPath, pid, logs(), stop() }`. Unit tests use the same helper. `stop()` sends SIGTERM, SIGKILLs after 12 s and removes the temp DB (pass your own `DB_PATH` to read it afterwards). Servers never outlive the test process: they are killed on its exit, SIGINT or SIGTERM, and each exits when its stdin pipe closes (`HOCUS_EXIT_ON_STDIN_EOF=1`, set only by this helper), which covers a SIGKILLed runner.
+
+- `window.__HOCUS_SCHEMA` (set in `page.addInitScript()`) overrides the `schema` value the client sends, to impersonate an older bundle.
+- `E2E_BASE_URL` (default `http://localhost:3000`) points Playwright at a dev server on another port. `E2E_HOCUS_URL` (default `ws://127.0.0.1:1234`) is read only by `global-tabs-poison.spec.ts`, which talks to the dev Hocus directly.
+
 ### PWA Tests
 
 Every Playwright project runs with `serviceWorkers: "block"` except `pwa`, so caches never leak into other tests.
