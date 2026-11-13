@@ -72,10 +72,7 @@ export function focusRovingItem(toolbar: HTMLElement | null): boolean {
  * at keydown (never a stale index). A removed focused item passes focus to
  * its neighbour at the same index.
  */
-function useRovingTabindex(
-  toolbarRef: React.RefObject<HTMLDivElement | null>,
-  onEscapeRef: React.RefObject<(() => void) | undefined>,
-) {
+function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
@@ -107,12 +104,56 @@ function useRovingTabindex(
       if (focusLost) items[Math.min(last.index, items.length - 1)]?.focus();
     };
 
-    const onMutation = () => repairFocus(normalize());
+    /** Marks items mounted while focus is elsewhere: no layout reads. */
+    const stampInactive = (el: Element) => {
+      if (!(el instanceof HTMLElement) || el === stop) return;
+      if (el.closest(ROVING_GROUP_SELECTOR)) return;
+      setTabIndex(el, "-1");
+    };
 
-    const itemOf = (target: EventTarget | null): HTMLElement | null => {
-      if (!(target instanceof HTMLElement)) return null;
-      if (target.closest(ROVING_GROUP_SELECTOR)) return null;
-      return target.closest<HTMLElement>("[data-toolbar-item]");
+    const needsFullPass = (records: MutationRecord[]): boolean => {
+      if (lastFocus || !stop || !stop.isConnected) return true;
+      if (toolbar.contains(document.activeElement)) return true;
+      const current = stop;
+      return records.some(
+        (record) =>
+          record.type === "attributes" &&
+          record.attributeName !== "tabindex" &&
+          record.target.contains(current),
+      );
+    };
+
+    /**
+     * Full pass (visibility reads) only while focus is in the toolbar, the
+     * focused item just went away, or the stop changed. Otherwise the
+     * context slot swapping its buttons on an arrow key in the editor only
+     * stamps the new items `-1`, so the toolbar stays one Tab stop.
+     */
+    const onMutation = (records: MutationRecord[]) => {
+      if (needsFullPass(records)) {
+        repairFocus(normalize());
+        return;
+      }
+      for (const record of records) {
+        if (record.type === "attributes") {
+          if (
+            record.attributeName === "tabindex" &&
+            record.target instanceof HTMLElement &&
+            record.target !== stop &&
+            record.target.getAttribute("tabindex") === "0"
+          ) {
+            stampInactive(record.target);
+          }
+          continue;
+        }
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          if (node.matches(ITEM_SELECTOR)) stampInactive(node);
+          for (const el of node.querySelectorAll(ITEM_SELECTOR)) {
+            stampInactive(el);
+          }
+        }
+      }
     };
 
     const onFocusIn = (event: FocusEvent) => {
@@ -120,7 +161,7 @@ function useRovingTabindex(
       if (toolbar.contains(target)) {
         target.setAttribute("data-focus-visible", "true");
       }
-      const item = itemOf(target);
+      const item = rovingItemOf(target);
       if (!item || !toolbar.contains(item)) return;
       const items = collectToolbarItems(toolbar);
       const index = items.indexOf(item);
@@ -137,26 +178,6 @@ function useRovingTabindex(
       if (next instanceof Node && !toolbar.contains(next)) lastFocus = null;
     };
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      const item = itemOf(event.target);
-      if (!item) return;
-      if (event.key === "Escape") {
-        if (!onEscapeRef.current) return;
-        event.preventDefault();
-        onEscapeRef.current();
-        return;
-      }
-      const move = MOVES[event.key];
-      if (!move || event.altKey || event.ctrlKey || event.metaKey) return;
-      const items = collectToolbarItems(toolbar);
-      if (items.length === 0) return;
-      const current = items.indexOf(item);
-      const next = move(current < 0 ? 0 : current, items.length - 1);
-      event.preventDefault();
-      items[(next + items.length) % items.length].focus();
-    };
-
     normalize();
     const observer = new MutationObserver(onMutation);
     observer.observe(toolbar, {
@@ -167,23 +188,65 @@ function useRovingTabindex(
     });
     toolbar.addEventListener("focusin", onFocusIn);
     toolbar.addEventListener("focusout", onFocusOut);
-    toolbar.addEventListener("keydown", onKeyDown);
     return () => {
       observer.disconnect();
       toolbar.removeEventListener("focusin", onFocusIn);
       toolbar.removeEventListener("focusout", onFocusOut);
-      toolbar.removeEventListener("keydown", onKeyDown);
     };
-  }, [toolbarRef, onEscapeRef]);
+  }, [toolbarRef]);
+}
+
+function rovingItemOf(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
+  if (target.closest(ROVING_GROUP_SELECTOR)) return null;
+  return target.closest<HTMLElement>("[data-toolbar-item]");
+}
+
+/**
+ * Arrow/Home/End/Esc on a toolbar item. Runs as React `onKeyDown` on the
+ * toolbar, so it bubbles after the items' own React handlers: an item that
+ * handles a key (prevents its default or stops it) keeps it, so the first
+ * Esc closes an open tooltip and the second returns to the editor. Events
+ * bubbling through React portals (open menus) are ignored.
+ */
+function handleRovingKeyDown(
+  event: React.KeyboardEvent<HTMLDivElement>,
+  onEscape: (() => void) | undefined,
+) {
+  const toolbar = event.currentTarget;
+  if (!toolbar.contains(event.target as Node)) return;
+  const item = rovingItemOf(event.target);
+  if (!item) return;
+  // Base UI prevents the default of every key but Tab on a focusable
+  // disabled button (to block activation); that must not trap the arrows.
+  // A tooltip's Esc dismiss also stops propagation, so it never gets here.
+  if (event.defaultPrevented && item.getAttribute("aria-disabled") !== "true") {
+    return;
+  }
+  if (event.key === "Escape") {
+    if (!onEscape) return;
+    event.preventDefault();
+    onEscape();
+    return;
+  }
+  const move = MOVES[event.key];
+  if (!move || event.altKey || event.ctrlKey || event.metaKey) return;
+  const items = collectToolbarItems(toolbar);
+  if (items.length === 0) return;
+  const current = items.indexOf(item);
+  const next = move(Math.max(current, 0), items.length - 1);
+  event.preventDefault();
+  items[(next + items.length) % items.length].focus();
 }
 
 const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
-  ({ children, className, variant = "fixed", onEscape, ...props }, ref) => {
+  (
+    { children, className, variant = "fixed", onEscape, onKeyDown, ...props },
+    ref,
+  ) => {
     const toolbarRef = useRef<HTMLDivElement>(null);
     const composedRef = useComposedRef(toolbarRef, ref);
-    const onEscapeRef = useRef(onEscape);
-    onEscapeRef.current = onEscape;
-    useRovingTabindex(toolbarRef, onEscapeRef);
+    useRovingTabindex(toolbarRef);
 
     return (
       <div
@@ -203,6 +266,10 @@ const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
           className,
         )}
         {...props}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          handleRovingKeyDown(event, onEscape);
+        }}
       >
         {children}
       </div>
