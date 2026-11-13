@@ -161,6 +161,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` | unset | Data controller and contact on `/privacy`. Set both before enabling analytics. |
 | `NEXT_PUBLIC_SERVICE_WORKER` | on | `0` unregisters the worker and deletes its caches. See the [service worker runbook](docs/operations/service-worker-runbook.md). |
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
+| `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size): it shows the defaults and writes nothing. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`) and never reach the document, the server, URLs or analytics. |
 | `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |

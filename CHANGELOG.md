@@ -10,6 +10,28 @@ since the previous tag.
 ## [Unreleased]
 
 ### Added
+- **Smart toolbar surfaces and memory (v1, PR D2).** Not deployable on its
+  own: it ships with PR C's marks and PR D1's row, after the N+1 ship gates.
+  - **Memory layer** (`lib/remembered-choice.ts`): versioned local storage
+    under `tinydocy-choices` (cleared by the new **Forget my choices**
+    action) and `tinydocy-ui` (outline open state, kept by Forget). Every
+    read is re-validated against an allowlist; hostile, oversized or
+    other-version payloads fall back to defaults. Written only by actions
+    after their command succeeds. `NEXT_PUBLIC_REMEMBER_CHOICES=0` turns it
+    off.
+  - **Registry actions** `color.*`, `size.*`, `insert.*` and
+    `memory.forget` (`lib/editor-actions/surface-actions.ts`).
+  - **Colour split pair** with remembered faces ("Apply text colour: Red")
+    and a lazily loaded popover: Recent (five mixed colours, frozen while
+    open), text colours and highlights as named `aria-pressed` swatches in
+    a roving grid.
+  - **Size stepper** (`spinbutton`, disabled in headings with a reason),
+    **Insert menu** listing the registry's insert actions with a table size
+    grid that opens at the last size and an embed link step, and a
+    remembered **list face** for D1's list actions.
+  - **Phones** reach text colour, highlight and size from the colour panel.
+  - **Bundle gate:** `scripts/check-editor-chunk-size.ts` (CI step) keeps
+    the editor chunk group within 6 KB gz of the `58a9d22` baseline.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
   light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),
