@@ -147,8 +147,12 @@ test.describe("editor lifetime", () => {
       type: "editors / heap",
       description: `${before.editors} → ${after.editors}, ${before.heap} → ${after.heap} bytes`,
     });
+    // The editor count is the precise check. Heap is a backstop: it still
+    // warms up for a while without a leak (about 5% after 20 switches,
+    // levelling off near 10% after 50), while the marked leak added about
+    // 17% after 20 switches and kept growing.
     expect(after.editors).toBeLessThanOrEqual(before.editors + 1);
-    expect(after.heap).toBeLessThanOrEqual(before.heap * 1.05);
+    expect(after.heap).toBeLessThanOrEqual(before.heap * 1.1);
   });
 
   test("opening and closing the bubble and colour popover leaves no listeners", async ({

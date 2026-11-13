@@ -25,16 +25,30 @@ was added, so this fix can ship to `main` on its own.
 - Known, not fixed here: while a Playground image request is still pending,
   Chromium keeps the `<img>` alive and, through the media resize gripper's
   listeners, its closed editor. They are released once the request settles.
+- **Tab-cap e2e timed out in CI.** `tabs.spec.ts` "create tab is blocked
+  when cap is reached" slept 120 ms after each of its 48 clicks; on `main` it
+  had grown from 16 s to 30 s in CI and already failed once there. It now
+  waits for each new tab instead (about 9.8 s to 5.5 s locally), checks the
+  tab count equals the cap in the button title, and allows 60 s for the 49
+  editor mounts. The leak fix did not slow tab creation (about 80 ms per tab
+  before and after).
+- **Leak spec heap bound.** Heap still grows about 5% over 20 switches
+  without a leak (it levels off near 10%), so the 5% bound in
+  `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
+  added about 17%, and the live-editor count stays the main check.
+
 
 ### Smart toolbar v1 integration (PR C + D1 + D2, r2 surfaces)
 
-**Release order:** this must not merge to `main` before
-`integrate/smart-toolbar-ab` (PR A + B) has shipped as release N on its own,
-and the N+1 ship gates have passed in production (contract §1.2). Then deploy
-it with PR C's Deploy note: Hocus first, confirm `min=2 (floor 2, env 0)` and
-the refusals, then Next. PR E (palette, Repeat formatting, saved formats) is
-**not** part of v1: it stays on its own branch until D's metrics hold for 14
-days.
+**Release order (owner override O10, 2026-11-13):** the owner chose to merge
+v1 to `main` before release N (PR A + B) was deployed and before the N+1
+adoption reading. The next deploy therefore goes from pre-N straight to N+1:
+follow PR B's Deploy note and then PR C's in one window (Hocus first,
+confirm `min=2 (floor 2, env 0)` and the refusals, then Next). Tabs still
+open on the old build are refused per document (`client_outdated`) until
+they reload; the mixed-version soak shows no content lost and no throttle
+bans. PR E (palette, Repeat formatting, saved formats) is **not** part of
+v1: it stays on its own branch until D's metrics hold for 14 days.
 
 **What v1 has:** the sorted row, the context slot, the colour popover with
 split faces, the size stepper, List and Insert menus, the memory layer with
@@ -46,10 +60,10 @@ sheet.
 bar's context slot cell, and the mobile selection swap and Repeat split
 button (PR E).
 
-**Open before `main`** (contract §10): the owner's acceptance of the ladder
-thresholds (A5), plus the release gates: release N deployed, the N+1
-adoption reading, one manual Nightly run of the soaks on the integration
-branch (A10) and a Linux CI chunk measurement. O1 to O4, O6, O8 and O9 are
+**Gates** (contract §10): the Nightly soaks (A10) and the Linux CI chunk
+measurement (+18.9 KB of 20 KB) passed on the integration branch; release N
+and the adoption reading are waived by the owner (O10), and the ladder
+thresholds (A5) ship as measured. O1 to O4, O6, O8 and O9 are
 decided: O2 (arrow-key p95) is log-only in v1, O8 waives the collab typing
 comparison, and O9 accepts production's 2 MiB cap as the limit for
 format-toggle growth (2026-11-13). O7, the perf typing budget, is closed by
