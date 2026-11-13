@@ -82,12 +82,15 @@ test.describe("M10: Insert face", () => {
     await page.getByRole("menuitem", { name: "Code block" }).click();
     expect(await countNodes(page, "codeBlock")).toBe(1);
 
+    // Named with a verb, so it never reads as a "Code block" toggle; the
+    // visible text stays the kind. Never a pressed toggle.
     const codeFace = insertGroup(page).getByRole("button", {
-      name: "Code block",
+      name: "Insert code block",
       exact: true,
     });
     await expect(codeFace).toBeVisible();
     await expect(codeFace).toContainText("Code block");
+    await expect(codeFace).not.toHaveAttribute("aria-pressed");
     // The trigger is only the face's chevron at T1.
     await expect(insertGroup(page).locator(".st-insert-label")).toBeHidden();
 

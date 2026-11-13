@@ -522,12 +522,15 @@ const insertQuote = defineAction({
   keywords: ["blockquote", "citation"],
   icon: BlockquoteIcon,
   markdownHint: "> ",
-  isActive: (ctx) => ctx.inBlockquote,
+  // Insert only (no toggle, no `isActive`): inside a quote it is refused,
+  // so a click on the Insert face never unwraps the writer's quote.
   enabled: (ctx) =>
-    insertEnabled(ctx, "toggleBlockquote", (editor) =>
-      editor.can().toggleBlockquote(),
-    ),
-  run: (editor) => inserted("quote", editor.chain().toggleBlockquote().run()),
+    ctx.inBlockquote
+      ? { reason: "Already in a quote." }
+      : insertEnabled(ctx, "setBlockquote", (editor) =>
+          editor.can().setBlockquote(),
+        ),
+  run: (editor) => inserted("quote", editor.chain().setBlockquote().run()),
 });
 
 const insertCodeBlock = defineAction({

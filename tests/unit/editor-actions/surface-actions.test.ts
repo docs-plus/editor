@@ -289,6 +289,17 @@ describe("insert", () => {
     expect(readChoice(INSERT_KIND_CHOICE).last).toBe("quote");
   });
 
+  it("never unwraps a quote: refused inside one, and no pressed state", () => {
+    editor.commands.setTextSelection(10);
+    expect(run("insert.quote")).toBe(true);
+    const quote = getAction("insert.quote");
+    expect(quote.isActive).toBeUndefined();
+    const inside = availability(quote, computeContext(editor));
+    expect(inside).toEqual({ reason: "Already in a quote." });
+    expect(run("insert.quote")).toBe(false);
+    expect(editor.state.doc.child(1).type.name).toBe("blockquote");
+  });
+
   it("is not offered in the title", () => {
     editor.commands.setTextSelection(3);
     expect(

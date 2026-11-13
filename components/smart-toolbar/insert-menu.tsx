@@ -123,7 +123,12 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
         // M10 face, T1 only: the tier hides it from T2 on, where the plain
         // menu (with the kind pre-highlighted) remains.
         <span data-collapse-tier="t2" className="contents">
-          <ActionButton id={faceId} editor={editor} showLabel />
+          <ActionButton
+            id={faceId}
+            editor={editor}
+            showLabel
+            label={`Insert ${editorActions.get(faceId)?.label.toLowerCase()}`}
+          />
         </span>
       ) : null}
       <DropdownMenu>
@@ -170,14 +175,12 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           finalFocus={triggerRef}
         >
           {step ? (
-            <SurfaceBoundary onError={InsertStep.retry}>
-              <InsertStep
-                step={step}
-                editor={editor}
-                tableSize={tableSize.last}
-                onDone={() => setStep(null)}
-              />
-            </SurfaceBoundary>
+            <InsertStep
+              step={step}
+              editor={editor}
+              tableSize={tableSize.last}
+              onDone={() => setStep(null)}
+            />
           ) : null}
         </PopoverContent>
       </Popover>
