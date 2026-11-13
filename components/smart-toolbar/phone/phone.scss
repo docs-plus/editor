@@ -6,6 +6,9 @@
 // A constant 44px; the cells share its width, each at least 44×44 with or
 // without touch. Insert drops its label so seven cells fit 320px.
 [data-slot="toolbar"][data-variant="docked"] {
+  padding-inline: calc(0.25rem + var(--safe-area-left))
+    calc(0.25rem + var(--safe-area-right));
+
   [data-toolbar-item] {
     flex: 1 1 0;
     justify-content: center;
@@ -18,6 +21,14 @@
   .st-insert-label {
     display: none;
   }
+}
+
+// The home indicator: while the keyboard is closed the bar grows by the
+// bottom safe area and keeps its 44px of cells above it. With the keyboard
+// open the bar rides on the keyboard, where there is no inset to clear.
+[data-slot="toolbar"][data-variant="docked"]:not([data-keyboard]) {
+  height: calc(2.75rem + var(--safe-area-bottom));
+  padding-bottom: var(--safe-area-bottom);
 }
 
 // Selection cells (PR E, `phone-selection-cells.tsx`): nine cells and the
@@ -87,7 +98,8 @@
 
 // ── Format sheet (`phone/format-sheet.tsx`) ──────────────────────────────
 .st-format-sheet {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding: 0 var(--safe-area-right) var(--safe-area-bottom)
+    var(--safe-area-left);
 }
 
 .st-sheet-done {

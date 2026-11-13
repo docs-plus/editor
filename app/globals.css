@@ -7,6 +7,12 @@
 :root {
   /* @docs.plus extension skins resolve light-dark() from color-scheme. */
   color-scheme: light;
+  /* Safe areas (viewport-fit=cover): read through one token each, so a test
+     can stand in a notch where Chromium reports 0. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
