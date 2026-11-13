@@ -1,25 +1,7 @@
 "use client";
 
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
-import type { RefObject } from "react";
-import { useEffect, useState, useSyncExternalStore } from "react";
-
-export function useToolbarHeight(toolbarRef: RefObject<HTMLDivElement | null>) {
-  const [toolbarHeight, setToolbarHeight] = useState(0);
-
-  useEffect(() => {
-    if (!toolbarRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setToolbarHeight(entry.contentRect.height);
-      }
-    });
-    ro.observe(toolbarRef.current);
-    return () => ro.disconnect();
-  }, [toolbarRef]);
-
-  return toolbarHeight;
-}
+import { useState, useSyncExternalStore } from "react";
 
 export interface TocItemsStore {
   set: (items: TableOfContentData) => void;
