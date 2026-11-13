@@ -495,6 +495,12 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     await expect(teal).toHaveAccessibleDescription(
       "Low contrast on the current highlight",
     );
+    if (!forced) {
+      await page.mouse.move(0, 0);
+      await dialog.screenshot({
+        path: `${SCREENS}/colour-low-contrast-text-${theme}.png`,
+      });
+    }
     await expect(
       dialog
         .getByRole("group", { name: "Text colour", exact: true })
