@@ -5,6 +5,7 @@ import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
 import { TextSelection } from "@tiptap/pm/state";
 
+import { headingFoldPluginKey } from "@/extensions/heading-fold/heading-fold-plugin";
 import { editorActions } from "@/lib/editor-actions";
 import { coreActions } from "@/lib/editor-actions/core-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
@@ -328,6 +329,19 @@ describe("sections", () => {
       heading(2, "Beta", "b"),
       para(t("b body")),
     );
+
+  it("folds in a read-only document without changing it (amendment A1)", () => {
+    const target = doc();
+    select(target, posInside(target, "Beta"));
+    target.setEditable(false);
+    const fold = action("section.fold");
+    expect(availability(fold, computeContext(target))).toBe(true);
+    const before = target.state.doc;
+    expect(runAction(target, fold, "b")).toBe(true);
+    expect(target.state.doc).toBe(before);
+    const state = headingFoldPluginKey.getState(target.state);
+    expect(state?.foldedIds.has("b") || state?.animating.has("b")).toBe(true);
+  });
 
   it("moves a section up past a deeper subsection, in one undo step", () => {
     const target = doc();
