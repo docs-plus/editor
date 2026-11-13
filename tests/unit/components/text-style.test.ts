@@ -2,15 +2,15 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor } from "@tiptap/core";
 
-import {
-  getTextStyleValue,
-  setTextStyle,
-} from "@/components/tiptap-ui/heading-dropdown-menu/use-heading-dropdown-menu";
 import { toggleList } from "@/components/tiptap-ui/list-button";
 import {
   getListValue,
   setListType,
 } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
+import {
+  getTextStyleValue,
+  setTextStyle,
+} from "@/lib/editor-actions/core/blocks";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 import {

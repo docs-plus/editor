@@ -9,6 +9,63 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar v1, PR D1: action registry, sorted row and context slot
+
+#### Added
+- **Action registry** (`lib/editor-actions/core-actions.ts`, bodies in
+  `lib/editor-actions/core/`): every toolbar command is one action with a
+  label, icon, display shortcut, markdown hint, contexts and a reason when it
+  cannot run. History reads the Yjs UndoManager stack; section moves, lists,
+  tables and indent compute a real `can()` once per selection snapshot.
+- **Context snapshot** (`lib/editor-context/snapshot.ts`): one O(depth) walk
+  gives the kind (media, Mermaid, code, table, title, heading, list,
+  paragraph), ancestor flags and the marks across the selection.
+- **Sorted row** (spec §4.1): history, text style, size, B I U S, colour,
+  link, Align ▾, List ▾, outdent and indent, the context slot, Insert and
+  ⋯ More formatting (superscript, subscript, inline code, clear formatting).
+  Controls never move or disappear: in a read-only document each says "This
+  document is read-only." Group roots carry `data-toolbar-group` and
+  collapsible items `data-collapse-tier` for the responsive ladder.
+- **Context slot** (spec §4.2): a fixed 168px group before Insert with
+  section tools (fold, move up, move down), the title lock, the code or
+  diagram language and copy, table row and column menus, header row and
+  merge or split, and Media options… (opens the media kit's toolbar with
+  focus on its first control; Esc closes it and returns to the slot
+  button). Contents hold while focus is in the toolbar; a section move
+  carries the held heading id and refuses when a collaborator deleted it.
+  The slot never clips focus outlines, and a long language name truncates
+  (full name in the tooltip) instead of overflowing under WCAG 1.4.12 text
+  spacing.
+- **Keyboard model:** one Tab stop with a roving tabindex owned by the
+  toolbar, Alt+F10 to the toolbar, Esc back to the document with its
+  selection. With a focus tooltip open, the first Esc closes the tooltip
+  and keeps focus (WCAG 1.4.13); the next returns to the document.
+- **Clear formatting** (`Mod-\`, #392): removes every inline mark except
+  links in one undo step; never touches block type, alignment or indent;
+  disabled in code.
+- **Shortcut hints** with `aria-keyshortcuts` on every toolbar action (#612).
+- **Tests:** `toolbar-row.spec.ts` (row order, one Tab stop, Alt+F10 and Esc,
+  slot per context, remote heading deletion while the slot has focus, clear
+  formatting keeps links, read-only keeps focus, catch-up render budget,
+  light and dark screenshots); unit tests for the snapshot, key combos, the
+  core actions and the keymap.
+
+#### Changed
+- Indent and outdent mirror Tab (`sinkListItem`, then text indent).
+- The toolbar Profiler records each update's `actualDuration`
+  (`window.__toolbarRenderMs`, dev only); `toolbar-row.spec.ts` logs the
+  catch-up render per burst in a 500-heading document and writes it to the
+  perf report.
+- Disabled reasons are full sentences ending in a period.
+- Text style applies to a mixed range (the Style menu reads "Mixed") and
+  keeps the range selected; a range that starts in the title is disabled
+  with "Title is always H1."
+- The toolbar's roving tabindex does no layout reads while focus is in the
+  document, so slot swaps on arrow keys stay cheap; mark state for a range
+  comes from one selection walk. `toolbar-row.spec.ts` reports arrow and
+  Shift+Arrow p95 in a 500-heading document with and without the toolbar.
+- `sanitizeCodeLanguage` moved to `lib/code-language.ts`.
+
 ### Smart toolbar schema (PR C, release N+1)
 
 Release N+1's data layer for the smart toolbar. No toolbar UI. Merge and
