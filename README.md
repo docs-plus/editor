@@ -185,6 +185,7 @@ operational guidance is in the
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |
 | `HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS` | on, on, off | Optional Hocuspocus extensions. |
 | `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Raises the minimum client schema above the built-in floor of 2 (`SCHEMA_FLOOR`); lower values have no effect. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
+| `HOCUS_REWRITE_LEGACY_HIGHLIGHTS` | off | `1` rewrites stored legacy highlight colours (`var(--tt-color-highlight-X)`) to their token on load. Turn it on only once release N tabs are gone. |
 | `HOCUS_ALLOW_ISOLATED_TABS_DOCS` | off | `1` in dev and tests only. The server refuses to start with it in production. |
 
 ## Deploying
