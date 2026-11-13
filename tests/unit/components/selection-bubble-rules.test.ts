@@ -167,11 +167,29 @@ describe("shouldShowBubble", () => {
     select(editor, from, from + 5);
     const el = root();
     const trigger = document.createElement("button");
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-expanded", "true");
     trigger.setAttribute("data-popup-open", "");
     el.appendChild(trigger);
     expect(
       shouldShowBubble(viewFor(editor, { focused: false }), el, false),
     ).toBe(true);
+  });
+
+  it("does not stay for an open tooltip alone", () => {
+    editor = createTestEditor({ content: DOC });
+    const from = posOf(editor, "plain");
+    select(editor, from, from + 5);
+    const el = root();
+    // Base UI marks a tooltip trigger `data-popup-open` too.
+    const trigger = document.createElement("button");
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("data-popup-open", "");
+    el.appendChild(trigger);
+    expect(
+      shouldShowBubble(viewFor(editor, { focused: false }), el, false),
+    ).toBe(false);
   });
 
   it("hides for a node selection", () => {
