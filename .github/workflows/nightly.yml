@@ -2,7 +2,7 @@ name: Nightly
 
 # The test layers CI skips on pull requests, twice a day on main:
 #   pwa    service worker and offline tests against a production build,
-#          then the palette budget (contract A6) on the same build
+#          then the palette budget (contract A7) on the same build
 #   soak   Yjs reconnection soak, a quick multi-user soak and a 5-minute
 #          single-user soak against next dev
 #   load   the Yjs load harness (100 clients, both scenarios) against
@@ -87,7 +87,7 @@ jobs:
           PWA_BASE_URL=http://localhost:3847 CI=
           bun playwright test --project=pwa --trace retain-on-failure
 
-      # Contract A6: the palette chunk plus cmdk that the first Alt+/ loads
+      # Contract A7: the palette chunk plus cmdk that the first Alt+/ loads
       # stays within 20 KB gz. Only a production build measures it.
       - name: Palette budget
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}

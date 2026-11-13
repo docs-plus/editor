@@ -18,7 +18,10 @@ import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
  */
 
 const PALETTE = "[data-command-palette]";
-/** Owner decision (2026-11-13): palette chunk plus cmdk ≤ 20 KB gz (spec: 15). */
+/**
+ * Contract A7 (owner decision O5, 2026-11-13): palette chunk plus cmdk
+ * ≤ 20 KB gz (spec: 15). Measured 19,981 B on the r2 rebuild.
+ */
 const PALETTE_BUDGET_BYTES = 20 * 1024;
 const repeatKey = process.platform === "darwin" ? "Meta+Alt+KeyV" : "F4";
 
