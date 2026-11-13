@@ -270,7 +270,7 @@ export function isRecentColor(value: unknown): value is RecentColor {
 }
 
 /** Largest table the grid offers (and the largest size remembered). */
-export const MAX_TABLE_SIZE = 10;
+export const MAX_TABLE_SIZE = 8;
 
 const isTableDimension = (value: unknown) =>
   Number.isInteger(value) &&
