@@ -261,6 +261,14 @@ describe("RepeatFormatting: the key", () => {
       "Format some text first, or use Copy formatting.",
     );
   });
+
+  it("announces what it repeated", async () => {
+    rememberBundle({ bold: true, italic: true });
+    sel("world");
+    expect(v11Engine.repeatKey(editor)).toBe(true);
+    expect(editor.getHTML()).toContain("world");
+    expect(await announced()).toBe("Repeated Bold, Italic");
+  });
 });
 
 describe("onlyCode", () => {

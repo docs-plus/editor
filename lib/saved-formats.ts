@@ -22,7 +22,8 @@ export interface SavedFormat {
 }
 
 export type SaveFormatResult =
-  | { ok: true; format: SavedFormat }
+  /** `replaced`: the name of the format this save overwrote, if any. */
+  | { ok: true; format: SavedFormat; replaced?: string }
   | { ok: false; reason: string };
 
 export const FORMATS_STORAGE_KEY = STORAGE_KEYS.formats;
@@ -187,7 +188,9 @@ export function saveFormat(
     (format) => format.name.toLowerCase() === cleanName.toLowerCase(),
   );
   let format: SavedFormat;
+  let replaced: string | undefined;
   if (index >= 0) {
+    replaced = formats[index].name;
     format = { id: formats[index].id, name: cleanName, bundle: kept };
     formats[index] = format;
   } else {
@@ -198,7 +201,7 @@ export function saveFormat(
     formats.push(format);
   }
   return write(formats)
-    ? { ok: true, format }
+    ? { ok: true, format, ...(replaced === undefined ? {} : { replaced }) }
     : { ok: false, reason: "Formats cannot be saved in this browser." };
 }
 

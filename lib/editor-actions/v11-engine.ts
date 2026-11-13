@@ -262,7 +262,12 @@ export const v11Engine: V11Engine = {
         const bundle = getRememberedBundle();
         return bundle ? bundleFace(bundle) : null;
       },
-      run: (editor) => editor.commands.repeatFormatting(),
+      run: (editor) => {
+        const bundle = getRememberedBundle();
+        if (!bundle || !editor.commands.repeatFormatting()) return false;
+        announce(`Repeated ${spoken(bundle)}`);
+        return true;
+      },
     },
     "repeat.copy": {
       enabled: (ctx) =>
@@ -272,8 +277,18 @@ export const v11Engine: V11Engine = {
             ? { reason: REPEAT_REASONS.code }
             : true,
       run: (editor) => {
+        // The full read (cleared fields too), so Repeat also removes what
+        // the source lacks. Plain text would make a Repeat that only
+        // clears: nothing is copied instead.
+        const read = readBundleAt(editor.state);
+        const set = setEntries(read);
+        if (isEmptyBundle(set)) {
+          announce("Nothing to copy");
+          return false;
+        }
         if (!editor.commands.copyFormatting()) return false;
-        rememberBundle(readBundleAt(editor.state));
+        rememberBundle(read);
+        announce(`Copied formatting: ${spoken(set)}`);
         return true;
       },
     },
@@ -287,7 +302,14 @@ export const v11Engine: V11Engine = {
       run: (editor, name) => {
         const bundle = setEntries(readBundleAt(editor.state));
         if (isEmptyBundle(bundle)) return false;
-        return saveFormat(name, bundle).ok;
+        const result = saveFormat(name, bundle);
+        if (!result.ok) return false;
+        announce(
+          result.replaced === undefined
+            ? `Saved format ‘${result.format.name}’`
+            : `Replaced format ‘${result.replaced}’`,
+        );
+        return true;
       },
     },
     "formats.apply": {
@@ -320,6 +342,7 @@ export const v11Engine: V11Engine = {
         if (!bundle || isEmptyBundle(bundle)) return false;
         if (!editor.commands.applyFormatBundle(bundle)) return false;
         rememberBundle(bundle);
+        announce(`Applied ${spoken(bundle)}`);
         return true;
       },
     },

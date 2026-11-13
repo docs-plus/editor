@@ -366,8 +366,16 @@ describe("RepeatFormatting: applying", () => {
     sel("world");
     expect(runAction(editor, formatsApplyAction, "doc:missing")).toBe(false);
     expect(getRememberedBundle()).toEqual({ underline: true });
+    editor.commands.toggleItalic();
     expect(runAction(editor, repeatCopyAction)).toBe(true);
-    expect(getRememberedBundle()).toMatchObject({ bold: false, italic: false });
+    expect(getRememberedBundle()).toMatchObject({ bold: false, italic: true });
+  });
+
+  it("copy formatting on plain text remembers nothing (no clear-only Repeat)", () => {
+    rememberBundle({ underline: true });
+    sel("world");
+    expect(runAction(editor, repeatCopyAction)).toBe(false);
+    expect(getRememberedBundle()).toEqual({ underline: true });
   });
 
   it("Save as format is unavailable, with the reason, without formatting", () => {
@@ -395,10 +403,11 @@ describe("RepeatFormatting: applying", () => {
       fontSize: null,
     });
     sel("world");
+    editor.commands.toggleItalic();
     runAction(editor, repeatCopyAction);
     sel("hello");
     editor.commands.repeatFormatting();
-    expect(marksOf("hello")).toEqual([]);
+    expect(marksOf("hello")).toEqual(["italic"]);
   });
 
   it("refuses in a read-only editor, and the registry gate returns false", () => {

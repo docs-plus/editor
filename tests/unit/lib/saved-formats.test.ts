@@ -152,6 +152,9 @@ describe("saved formats", () => {
     expect(formats).toHaveLength(1);
     expect(formats[0].bundle).toEqual({ italic: true });
     if (first.ok) expect(formats[0].id).toBe(first.format.id);
+    // The caller learns which name it overwrote; a new name replaces nothing.
+    expect(second.ok && second.replaced).toBe("Warning");
+    expect(first.ok && first.replaced).toBeUndefined();
   });
 
   it("drops its cache on another tab's write, with no subscriber", () => {
