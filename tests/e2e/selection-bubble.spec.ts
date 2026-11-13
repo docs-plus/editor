@@ -484,11 +484,36 @@ test.describe("selection bubble", () => {
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
 
-    await selectText(page, "some words");
+    // A new selection by the user (Tab out suppresses it, like Esc). Not a
+    // drag from inside the current one, which would drag the text.
+    await dragSelect(page, "First line");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await row(page).getByRole("button", { name: "Undo" }).focus();
     await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("Tab past the last item returns to the editor with the selection", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const before = await selectionRange(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+    ).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Tab");
+    await expect(bubble(page)).toHaveCount(0);
+    await expect(page.locator(".ProseMirror")).toBeFocused();
+    expect(await selectionRange(page)).toEqual(before);
+    // It stays away on that focus, as after Esc, until a new selection.
+    await page.waitForTimeout(400);
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.press("Shift+ArrowRight");
+    await expectBubbleOpen(page);
   });
 
   test("Tab out of the colour dialog leaves the bubble too", async ({
