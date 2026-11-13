@@ -8,36 +8,36 @@
 // contrast.
 
 $text-colors: (
-  gray: (light: #57534e, dark: #a8a29e),
-  brown: (light: #8a4b2a, dark: #d0a284),
-  red: (light: #dc2626, dark: #f87171),
-  orange: (light: #c2410c, dark: #fb923c),
-  yellow: (light: #a16207, dark: #facc15),
-  green: (light: #15803d, dark: #4ade80),
-  teal: (light: #0f766e, dark: #2dd4bf),
-  blue: (light: #2563eb, dark: #60a5fa),
-  purple: (light: #9333ea, dark: #c084fc),
-  pink: (light: #db2777, dark: #f472b6)
+  "gray": (light: #57534e, dark: #a8a29e),
+  "brown": (light: #8a4b2a, dark: #d0a284),
+  "red": (light: #dc2626, dark: #f87171),
+  "orange": (light: #c2410c, dark: #fb923c),
+  "yellow": (light: #a16207, dark: #facc15),
+  "green": (light: #15803d, dark: #4ade80),
+  "teal": (light: #0f766e, dark: #2dd4bf),
+  "blue": (light: #2563eb, dark: #60a5fa),
+  "purple": (light: #9333ea, dark: #c084fc),
+  "pink": (light: #db2777, dark: #f472b6)
 );
 
 $highlight-colors: (
-  gray: (light: #e7e5e4, dark: #3f3f46),
-  brown: (light: #eddcd0, dark: #4a3228),
-  red: (light: #fecaca, dark: #5c2a2e),
-  orange: (light: #fed7aa, dark: #5c3b23),
-  yellow: (light: #fef08a, dark: #574f12),
-  green: (light: #bbf7d0, dark: #1f4a30),
-  teal: (light: #99f6e4, dark: #174542),
-  blue: (light: #bfdbfe, dark: #1e3a5f),
-  purple: (light: #e9d5ff, dark: #45305e),
-  pink: (light: #fbcfe8, dark: #5a2945)
+  "gray": (light: #e7e5e4, dark: #3f3f46),
+  "brown": (light: #eddcd0, dark: #4a3228),
+  "red": (light: #fecaca, dark: #5c2a2e),
+  "orange": (light: #fed7aa, dark: #5c3b23),
+  "yellow": (light: #fef08a, dark: #574f12),
+  "green": (light: #bbf7d0, dark: #1f4a30),
+  "teal": (light: #99f6e4, dark: #174542),
+  "blue": (light: #bfdbfe, dark: #1e3a5f),
+  "purple": (light: #e9d5ff, dark: #45305e),
+  "pink": (light: #fbcfe8, dark: #5a2945)
 );
 
 $font-sizes: (
-  xs: 0.75em,
-  sm: 0.875em,
-  lg: 1.25em,
-  xl: 1.5em
+  "xs": 0.75em,
+  "sm": 0.875em,
+  "lg": 1.25em,
+  "xl": 1.5em
 );
 
 @mixin palette-vars($theme) {
