@@ -314,6 +314,13 @@ export function ColorPanel({
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    // The roving stop follows the pick. Focus moves only
+                    // when it is in the grid: a tap-opened popover leaves
+                    // it in the editor, so the phone keyboard stays up.
+                    setActive({ row: rowIndex, col: colIndex });
+                    if (gridRef.current?.contains(document.activeElement)) {
+                      focusCell(rowIndex, colIndex);
+                    }
                     if (!reason) applySwatch(editor, swatch);
                   }}
                 >
