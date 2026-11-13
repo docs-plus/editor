@@ -6,7 +6,6 @@ import {
   getV11Engine,
   loadV11Engine,
   type RepeatSession,
-  subscribeV11Engine,
   type V11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { isMac } from "@/lib/shortcuts";
@@ -34,8 +33,6 @@ export interface RepeatFormattingStorage {
   session: RepeatSession;
   /** Transactions seen before the engine landed, recorded once it does. */
   pending: { tr: Transaction; state: EditorState }[];
-  /** Stops waiting for the engine (set while it is on its way). */
-  unwait: (() => void) | null;
 }
 
 /**
@@ -87,11 +84,7 @@ export const RepeatFormatting = Extension.create<
   name: "repeatFormatting",
 
   addStorage() {
-    return {
-      session: { range: null, bundle: null },
-      pending: [],
-      unwait: null,
-    };
+    return { session: { range: null }, pending: [] };
   },
 
   addCommands() {
@@ -143,25 +136,21 @@ export const RepeatFormatting = Extension.create<
 
   onCreate() {
     const { storage } = this;
-    if (drain(storage)) return;
-    // Waits for the engine from any importer (this load, or a retry by
-    // the palette after this one failed offline) and records the buffer
-    // at once, so the remembered bundle is current when the surfaces
-    // subscribed to the landing (`useV11EngineReady`) re-render.
-    storage.unwait = subscribeV11Engine(() => {
-      storage.unwait?.();
-      storage.unwait = null;
-      drain(storage);
-    });
-    // Offline or a replaced chunk: E's actions stay unavailable and the
-    // buffer stays capped; the next load retries the fetch.
-    loadV11Engine().catch(() => undefined);
+    // Records the buffer as soon as the engine lands, so the remembered
+    // bundle is current when the surfaces waiting on the same load
+    // (`useV11EngineReady`) re-render. Offline or a replaced chunk: E's
+    // actions stay unavailable and the buffer stays capped; a later load
+    // (the palette retries) lands it, and the next use drains it.
+    if (!drain(storage)) {
+      loadV11Engine().then(
+        () => drain(storage),
+        () => undefined,
+      );
+    }
   },
 
   onDestroy() {
     const { storage } = this;
-    storage.unwait?.();
-    storage.unwait = null;
     storage.session.range = null;
     storage.pending.length = 0;
   },

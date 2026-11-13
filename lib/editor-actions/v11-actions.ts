@@ -43,7 +43,7 @@ export interface RepeatSession {
    * into the shared remembered bundle, which another tab may have
    * replaced in the meantime.
    */
-  bundle: FormatBundle | null;
+  bundle?: FormatBundle;
 }
 
 type CommandProps = {
@@ -54,6 +54,8 @@ type CommandProps = {
 };
 
 interface EngineAction {
+  /** Search keywords: palette-only, so they ride with the engine. */
+  keywords: readonly string[];
   enabled(ctx: Ctx): Enabled;
   value?(ctx: Ctx): string | null;
   options?(ctx: Ctx): readonly ActionOption<unknown>[];
@@ -89,23 +91,18 @@ export interface V11Engine {
 
 let engine: V11Engine | null = null;
 let loading: Promise<V11Engine> | null = null;
-const installed = new Set<() => void>();
 
 /** The loaded engine, or null while its chunk is on its way. */
 export const getV11Engine = (): V11Engine | null => engine;
 
-/** Calls `listener` when the engine installs (`useSyncExternalStore` shape). */
-export function subscribeV11Engine(listener: () => void): () => void {
-  installed.add(listener);
-  return () => {
-    installed.delete(listener);
-  };
-}
-
-/** Called once by `v11-engine.ts` when it is evaluated; tells subscribers. */
+/**
+ * Called once by `v11-engine.ts` when it is evaluated. Only
+ * `loadV11Engine()` imports that module, so its promise is the landing
+ * notice: the editors' buffers, `useV11EngineReady()` and the palette all
+ * wait on it (no listener set here: the eager chunk has no room).
+ */
 export function installV11Engine(loaded: V11Engine): void {
   engine = loaded;
-  for (const listener of [...installed]) listener();
 }
 
 /**
@@ -123,7 +120,7 @@ export function loadV11Engine(): Promise<V11Engine> {
   return loading;
 }
 
-/** Test hook: back to before the chunk landed (listeners are kept). */
+/** Test hook: back to before the chunk landed. */
 export function resetV11EngineForTests(): void {
   engine = null;
   loading = null;
@@ -131,20 +128,27 @@ export function resetV11EngineForTests(): void {
 
 const LOADING: Enabled = { reason: ENGINE_LOADING_REASON };
 
-/** An E action whose behaviour comes from the engine once it is loaded. */
+/**
+ * An E action whose behaviour comes from the engine once it is loaded.
+ * `value` and `options` always exist (null and [] without a body): the
+ * same to every reader as leaving them out, and smaller. Its keywords are
+ * the engine's too: only the palette searches them, and it loads after
+ * the engine (editor-chunk budget).
+ */
 function engineAction<Arg>(
-  meta: Omit<Action<Arg>, "enabled" | "value" | "options" | "run">,
-  extras: { value?: true; options?: true } = {},
+  meta: Omit<Action<Arg>, "enabled" | "value" | "options" | "run" | "keywords">,
 ): Action<Arg> {
   const id = meta.id as EngineActionId;
   const body = () => engine?.actions[id];
   return defineAction<Arg>({
     ...meta,
+    get keywords() {
+      return body()?.keywords;
+    },
     enabled: (ctx) => body()?.enabled(ctx) ?? LOADING,
-    value: extras.value ? (ctx) => body()?.value?.(ctx) ?? null : undefined,
-    options: extras.options
-      ? (ctx) => (body()?.options?.(ctx) ?? []) as readonly ActionOption<Arg>[]
-      : undefined,
+    value: (ctx) => body()?.value?.(ctx) ?? null,
+    options: (ctx) =>
+      (body()?.options?.(ctx) ?? []) as readonly ActionOption<Arg>[],
     run: (editor, arg) => body()?.run(editor, arg) ?? false,
   });
 }
@@ -161,24 +165,19 @@ export const paletteOpenAction = defineAction({
   run: (editor) => emitUiIntent(editor, { type: "palette.open" }),
 });
 
-export const repeatApplyAction = engineAction(
-  {
-    id: "repeat.apply",
-    label: "Repeat formatting",
-    group: "format",
-    contexts: "any",
-    keywords: ["format painter", "again", "f4", "paste formatting"],
-    shortcut: "Mod-Alt-v",
-  },
-  { value: true },
-);
+export const repeatApplyAction = engineAction({
+  id: "repeat.apply",
+  label: "Repeat formatting",
+  group: "format",
+  contexts: "any",
+  shortcut: "Mod-Alt-v",
+});
 
 export const repeatCopyAction = engineAction({
   id: "repeat.copy",
   label: "Copy formatting",
   group: "format",
   contexts: "any",
-  keywords: ["format painter", "pick up", "copy style"],
 });
 
 /** Arg: the format name. Saves the selection's set entries (M14). */
@@ -187,32 +186,23 @@ export const formatsSaveAction = engineAction<string>({
   label: "Save as format…",
   group: "format",
   contexts: "any",
-  keywords: ["style", "preset", "your formats"],
 });
 
 /** Arg: a saved format id, or `doc:<bundleKey>` for an "In this doc" one. */
-export const formatsApplyAction = engineAction<string>(
-  {
-    id: "formats.apply",
-    label: "Apply format",
-    group: "format",
-    contexts: "any",
-    keywords: ["your formats", "in this doc", "style", "preset"],
-  },
-  { options: true },
-);
+export const formatsApplyAction = engineAction<string>({
+  id: "formats.apply",
+  label: "Apply format",
+  group: "format",
+  contexts: "any",
+});
 
 /** Arg: a template id; defaults to the last one used (M17b). */
-export const templateMermaidAction = engineAction<string | undefined>(
-  {
-    id: "template.mermaid",
-    label: "Insert diagram",
-    group: "insert",
-    contexts: ["paragraph", "heading", "list", "table"],
-    keywords: ["mermaid", "chart", "flowchart", "sequence", "mind map", "pie"],
-  },
-  { options: true },
-);
+export const templateMermaidAction = engineAction<string | undefined>({
+  id: "template.mermaid",
+  label: "Insert diagram",
+  group: "insert",
+  contexts: ["paragraph", "heading", "list", "table"],
+});
 
 export const v11Actions: readonly AnyAction[] = [
   paletteOpenAction,

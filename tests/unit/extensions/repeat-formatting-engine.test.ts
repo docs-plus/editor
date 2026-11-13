@@ -25,9 +25,9 @@ import {
   ENGINE_LOADING_REASON,
   getV11Engine,
   installV11Engine,
+  loadV11Engine,
   repeatApplyAction,
   resetV11EngineForTests,
-  subscribeV11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { v11Engine } from "@/lib/editor-actions/v11-engine";
 import { computeContext } from "@/lib/editor-context/snapshot";
@@ -112,9 +112,10 @@ describe("RepeatFormatting: before the engine lands", () => {
     setRed();
     expect(getV11Engine()).toBeNull();
     expect(getRememberedBundle()).toBeNull();
-    await settle(); // create ran: this editor waits for the engine
-    // The chunk evaluates (the test reset keeps the module cached).
+    // The chunk evaluates (the test reset keeps the module cached), then
+    // the editor's create and the load's resolution drain the buffer.
     installV11Engine(v11Engine);
+    await settle();
     expect(getV11Engine()).not.toBeNull();
     expect(storage().pending).toHaveLength(0);
     // Same selection throughout: one extended bundle, in order.
@@ -159,13 +160,13 @@ describe("RepeatFormatting: before the engine lands", () => {
   });
 
   it("drains before a command uses the engine", async () => {
-    await settle(); // create ran
-    installV11Engine(v11Engine); // this editor's wait ends here
+    installV11Engine(v11Engine);
+    await settle(); // create ran, nothing to wait for
     resetV11EngineForTests();
     sel("hello");
     editor.commands.toggleBold();
-    // Landed with nobody waiting (this editor's wait ended at the first
-    // landing): the buffer is still there until something uses the engine.
+    // Landed with nobody waiting (this editor's create had the engine):
+    // the buffer is still there until something uses the engine.
     installV11Engine(v11Engine);
     expect(storage().pending).toHaveLength(2);
     expect(editor.commands.repeatFormatting()).toBe(true);
@@ -175,24 +176,22 @@ describe("RepeatFormatting: before the engine lands", () => {
     expect(editor.getHTML()).toContain("<strong>world</strong>");
   });
 
-  it("tells subscribers once, with the buffer already recorded", async () => {
-    await settle(); // create ran: this editor waits too
+  it("records the buffer when the load resolves, before readers look", async () => {
     sel("hello");
     editor.commands.toggleBold();
-    const seen: unknown[] = [];
-    const stop = subscribeV11Engine(() => seen.push(getRememberedBundle()));
     expect(availability(repeatApplyAction, computeContext(editor))).toEqual({
       reason: ENGINE_LOADING_REASON,
     });
-    installV11Engine(v11Engine);
-    // The editor subscribed first (at create), so it drained first.
-    expect(seen).toEqual([{ bold: true }]);
+    installV11Engine(v11Engine); // the chunk evaluates during the load
+    const loaded = await loadV11Engine();
+    expect(loaded).toBe(v11Engine);
+    await settle();
     expect(storage().pending).toHaveLength(0);
+    expect(getRememberedBundle()).toEqual({ bold: true });
     expect(availability(repeatApplyAction, computeContext(editor))).toBe(true);
-    stop();
   });
 
-  it("clears the buffer and stops waiting on destroy", async () => {
+  it("clears the buffer on destroy", async () => {
     sel("hello");
     editor.commands.toggleBold();
     await new Promise((resolve) => setTimeout(resolve, 0)); // create ran
@@ -201,7 +200,6 @@ describe("RepeatFormatting: before the engine lands", () => {
     f?.destroy();
     f = null;
     expect(kept.pending).toHaveLength(0);
-    expect(kept.unwait).toBeNull();
     // Landing later touches no destroyed editor.
     expect(() => installV11Engine(v11Engine)).not.toThrow();
   });

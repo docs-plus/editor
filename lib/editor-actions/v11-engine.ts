@@ -250,6 +250,7 @@ export const v11Engine: V11Engine = {
   },
   actions: {
     "repeat.apply": {
+      keywords: ["format painter", "again", "f4", "paste formatting"],
       enabled: (ctx) =>
         enabledFrom(
           repeatDisabledReason(
@@ -270,6 +271,7 @@ export const v11Engine: V11Engine = {
       },
     },
     "repeat.copy": {
+      keywords: ["format painter", "pick up", "copy style"],
       enabled: (ctx) =>
         ctx.nodeSelectionType !== null
           ? { reason: "Select text to copy its formatting." }
@@ -293,6 +295,7 @@ export const v11Engine: V11Engine = {
       },
     },
     "formats.save": {
+      keywords: ["style", "preset", "your formats"],
       enabled: (ctx) =>
         isCodeOnly(ctx)
           ? { reason: REPEAT_REASONS.code }
@@ -313,6 +316,7 @@ export const v11Engine: V11Engine = {
       },
     },
     "formats.apply": {
+      keywords: ["your formats", "in this doc", "style", "preset"],
       enabled: (ctx) => {
         if (readSavedFormats().length === 0 && docBundles(ctx).length === 0) {
           return { reason: "Save a format first." };
@@ -347,6 +351,14 @@ export const v11Engine: V11Engine = {
       },
     },
     "template.mermaid": {
+      keywords: [
+        "mermaid",
+        "chart",
+        "flowchart",
+        "sequence",
+        "mind map",
+        "pie",
+      ],
       enabled: (ctx) =>
         ctx.can("insertMermaid", canInsertMermaid)
           ? true
