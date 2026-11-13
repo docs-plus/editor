@@ -1,7 +1,7 @@
 "use client";
 
-import { useCurrentEditor } from "@tiptap/react";
-import { lazy, Suspense, useRef, useState } from "react";
+import { type Editor, useCurrentEditor } from "@tiptap/react";
+import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
 
 import {
   Popover,
@@ -51,6 +51,85 @@ const COPY = {
   },
 } as const;
 
+interface ColorPopoverButtonProps {
+  editor: Editor;
+  /** The swatch row that takes focus when the popover opens. */
+  focusKind: ColorKind;
+  label: string;
+  className?: string;
+  reason?: string;
+  children: ReactNode;
+}
+
+/**
+ * A trigger that opens the one colour popover (spec §4.5): the split
+ * chevrons and the T4 stand-in that replaces the pair (spec §4.6).
+ */
+export function ColorPopoverButton({
+  editor,
+  focusKind,
+  label,
+  className,
+  reason,
+  children,
+}: ColorPopoverButtonProps) {
+  const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
+  const [open, setOpen] = useState(false);
+  // A tap keeps the editor focused, so the phone keyboard (and the toolbar
+  // docked on it) stays put; keyboard and mouse opens focus a swatch.
+  const [openedByTouch, setOpenedByTouch] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        disabled={reason !== undefined}
+        render={
+          <ToolbarButton
+            type="button"
+            className={className}
+            aria-label={label}
+            tooltip={label}
+            aria-haspopup="dialog"
+            disabled={reason !== undefined}
+            disabledReason={reason}
+            onPointerEnter={loadColorPanel}
+            onFocus={loadColorPanel}
+            onPointerDown={(event) =>
+              setOpenedByTouch(event.pointerType === "touch")
+            }
+            onKeyDown={() => setOpenedByTouch(false)}
+            onMouseDown={(event) => event.preventDefault()}
+          />
+        }
+      >
+        {children}
+      </PopoverTrigger>
+      <PopoverContent
+        ref={popupRef}
+        aria-label={focusKind === "text" ? "Text colours" : "Highlight colours"}
+        className="st-color-popover"
+        initialFocus={(openType) =>
+          openType === "touch" || openedByTouch
+            ? false
+            : (popupRef.current?.querySelector<HTMLElement>(
+                'button[tabindex="0"]',
+              ) ?? true)
+        }
+      >
+        <Suspense fallback={<div className="st-color-panel-fallback" />}>
+          <ColorPanel
+            editor={editor}
+            recent={recent.recent}
+            focusKind={focusKind}
+            focusOnMount={!openedByTouch}
+            onApplied={() => setOpen(false)}
+          />
+        </Suspense>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * One split control (spec §4.5, M1/M2): the face reapplies the remembered
  * colour ("Apply text colour: Red"); the chevron opens the colour popover.
@@ -66,12 +145,6 @@ function ColorSplit({
   const remembered = useRememberedChoice(
     kind === "text" ? TEXT_COLOR_CHOICE : HIGHLIGHT_CHOICE,
   );
-  const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
-  const [open, setOpen] = useState(false);
-  // A tap keeps the editor focused, so the phone keyboard (and the toolbar
-  // docked on it) stays put; keyboard and mouse opens focus a swatch.
-  const [openedByTouch, setOpenedByTouch] = useState(false);
-  const popupRef = useRef<HTMLDivElement>(null);
 
   if (!editor || !view) return null;
   const reason = view.enabled === true ? undefined : view.enabled.reason;
@@ -100,53 +173,15 @@ function ColorSplit({
           style={swatchStyle(faceSwatch(kind, remembered.last))}
         />
       </ToolbarButton>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          disabled={reason !== undefined}
-          render={
-            <ToolbarButton
-              type="button"
-              className="st-split-chevron"
-              aria-label={copy.more}
-              tooltip={copy.more}
-              aria-haspopup="dialog"
-              disabled={reason !== undefined}
-              disabledReason={reason}
-              onPointerEnter={loadColorPanel}
-              onFocus={loadColorPanel}
-              onPointerDown={(event) =>
-                setOpenedByTouch(event.pointerType === "touch")
-              }
-              onKeyDown={() => setOpenedByTouch(false)}
-              onMouseDown={(event) => event.preventDefault()}
-            />
-          }
-        >
-          <ChevronDownIcon aria-hidden="true" />
-        </PopoverTrigger>
-        <PopoverContent
-          ref={popupRef}
-          aria-label={kind === "text" ? "Text colours" : "Highlight colours"}
-          className="st-color-popover"
-          initialFocus={(openType) =>
-            openType === "touch" || openedByTouch
-              ? false
-              : (popupRef.current?.querySelector<HTMLElement>(
-                  'button[tabindex="0"]',
-                ) ?? true)
-          }
-        >
-          <Suspense fallback={<div className="st-color-panel-fallback" />}>
-            <ColorPanel
-              editor={editor}
-              recent={recent.recent}
-              focusKind={kind}
-              focusOnMount={!openedByTouch}
-              onApplied={() => setOpen(false)}
-            />
-          </Suspense>
-        </PopoverContent>
-      </Popover>
+      <ColorPopoverButton
+        editor={editor}
+        focusKind={kind}
+        label={copy.more}
+        className="st-split-chevron"
+        reason={reason}
+      >
+        <ChevronDownIcon aria-hidden="true" />
+      </ColorPopoverButton>
     </div>
   );
 }

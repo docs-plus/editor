@@ -179,7 +179,31 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
       if (next instanceof Node && !toolbar.contains(next)) lastFocus = null;
     };
 
+    /**
+     * The responsive ladder hides and shows items with container queries,
+     * which no MutationObserver sees: on a width change, re-collect so a
+     * revealed stand-in is stamped `-1` and a hidden stop (or focused item)
+     * hands over to a visible one (spec §4.6, focus repair only).
+     */
+    let resizeFrame = 0;
+    let lastWidth = toolbar.clientWidth;
+    const resizeObserver = new ResizeObserver(() => {
+      if (toolbar.clientWidth === lastWidth) return;
+      lastWidth = toolbar.clientWidth;
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        const focused = document.activeElement;
+        const hadFocus =
+          focused instanceof HTMLElement && toolbar.contains(focused);
+        const items = normalize();
+        if (hadFocus && !items.includes(focused as HTMLElement)) {
+          items[Math.min(stopIndex, items.length - 1)]?.focus();
+        }
+      });
+    });
+
     normalize();
+    resizeObserver.observe(toolbar);
     const observer = new MutationObserver(onMutation);
     observer.observe(toolbar, {
       childList: true,
@@ -191,6 +215,8 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
     toolbar.addEventListener("focusout", onFocusOut);
     return () => {
       observer.disconnect();
+      resizeObserver.disconnect();
+      cancelAnimationFrame(resizeFrame);
       toolbar.removeEventListener("focusin", onFocusIn);
       toolbar.removeEventListener("focusout", onFocusOut);
     };
@@ -259,7 +285,7 @@ const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
         className={cn(
           "flex items-center gap-1",
           variant === "fixed" &&
-            "sticky top-0 z-10 w-full min-h-11 bg-background border-b border-border px-2 overflow-x-auto overscroll-x-contain scrollbar-none",
+            "sticky top-0 z-10 w-full min-h-11 bg-background border-b border-border px-2 overflow-x-auto overscroll-x-contain",
           // overflow-visible: a clipped container would cut the 2px focus
           // outline of the first and last items.
           variant === "floating" &&

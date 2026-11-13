@@ -197,11 +197,16 @@ export function ActionRadioItem({
   editor,
   value,
   onPicked,
+  arg,
+  label,
 }: {
   id: string;
   editor: Editor;
   value: string;
   onPicked: () => void;
+  /** Passed to the action's run, such as a language for `code.language`. */
+  arg?: unknown;
+  label?: string;
 }) {
   const view = useActionView(id, editor);
   const reasonId = useId();
@@ -218,10 +223,10 @@ export function ActionRadioItem({
       onClick={() => {
         if (reason) return;
         onPicked();
-        runAction(editor, action);
+        runAction(editor, action, arg);
       }}
     >
-      <span>{action.label}</span>
+      <span>{label ?? action.label}</span>
       <Reason id={reasonId} reason={reason} />
     </DropdownMenuRadioItem>
   );
