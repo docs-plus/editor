@@ -249,11 +249,18 @@ describe("RepeatFormatting: the key", () => {
   });
 
   const announced = async () => {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    // Any polite status region: the announcer's markup is not the contract.
-    return [...document.querySelectorAll('[role="status"]')]
-      .map((node) => node.textContent)
-      .join("|");
+    // Any polite status region: the announcer's markup and its delay (it
+    // clears, then sets the text, so a repeat is read again) are not the
+    // contract. Wait until some region has text, up to a second.
+    const read = () =>
+      [...document.querySelectorAll('[role="status"]')]
+        .map((node) => node.textContent)
+        .join("|");
+    for (let waited = 0; waited < 1000 && !read().replace(/\|/g, ""); ) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      waited += 25;
+    }
+    return read();
   };
 
   it("announces why it cannot repeat, and keeps the key", async () => {
