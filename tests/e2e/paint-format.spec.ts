@@ -95,6 +95,25 @@ async function dragSelect(page: Page, needle: string) {
   await page.mouse.up();
 }
 
+/** Waits until `locator`'s box holds still for two frames (animation, flips). */
+async function settle(locator: ReturnType<Page["locator"]>) {
+  await expect
+    .poll(() =>
+      locator.evaluate(
+        (el) =>
+          new Promise<boolean>((resolve) => {
+            const first = JSON.stringify(el.getBoundingClientRect());
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() =>
+                resolve(JSON.stringify(el.getBoundingClientRect()) === first),
+              ),
+            );
+          }),
+      ),
+    )
+    .toBe(true);
+}
+
 /** Mark names on the first text node of `needle`. */
 const marksOf = (page: Page, needle: string) =>
   page.evaluate(async (target) => {
@@ -283,6 +302,7 @@ test.describe("Paint format", () => {
       '[data-smart-bubble][data-state="open"] .st-bubble-panel',
     );
     await expect(panel).toBeVisible();
+    await settle(panel);
     // Where the pill would have gone: centred 8px under the sticky row.
     const clash = await panel.evaluate((el) => {
       const row = document
@@ -294,11 +314,16 @@ test.describe("Paint format", () => {
     expect(clash).toBe(true);
     await brush(page).click();
     await expect(pill(page)).toHaveText("Select text to paint · Esc to cancel");
-    const [a, b] = await Promise.all([
+    await settle(panel);
+    await settle(pill(page));
+    const [a, b, rowBox] = await Promise.all([
       pill(page).boundingBox(),
       panel.boundingBox(),
+      row(page).boundingBox(),
     ]);
-    if (!a || !b) throw new Error("pill or bubble missing");
+    if (!a || !b || !rowBox) throw new Error("pill, bubble or row missing");
+    // Never under the sticky row, which the bubble can slide beneath.
+    expect(a.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height + 7.5);
     const apart =
       a.x >= b.x + b.width ||
       b.x >= a.x + a.width ||

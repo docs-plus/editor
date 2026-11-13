@@ -365,21 +365,29 @@ describe("besideBubble (desktop pill placement)", () => {
 
   it("leaves the pill alone when the bubble is closed or elsewhere", () => {
     const pill = box(400, 60, 240, 36);
-    expect(besideBubble(pill, undefined, 1440)).toBeNull();
-    expect(besideBubble(pill, box(400, 300, 260, 40), 1440)).toBeNull();
+    expect(besideBubble(pill, undefined, 1440, 60)).toBeNull();
+    expect(besideBubble(pill, box(400, 300, 260, 40), 1440, 60)).toBeNull();
   });
 
   it("moves it 8px right of the bubble, level with it, when that fits", () => {
     const pill = box(400, 60, 240, 36);
-    expect(besideBubble(pill, box(380, 50, 260, 40), 1440)).toEqual({
-      top: 50,
+    expect(besideBubble(pill, box(380, 70, 260, 40), 1440, 60)).toEqual({
+      top: 70,
+      left: 648,
+    });
+  });
+
+  it("never above 8px under the sticky row, where the bubble can slide", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, box(380, 40, 260, 40), 1440, 60)).toEqual({
+      top: 60,
       left: 648,
     });
   });
 
   it("else 8px below the bubble", () => {
     const pill = box(100, 60, 240, 36);
-    expect(besideBubble(pill, box(80, 50, 260, 40), 500)).toEqual({
+    expect(besideBubble(pill, box(80, 50, 260, 40), 500, 60)).toEqual({
       top: 98,
       left: 100,
     });

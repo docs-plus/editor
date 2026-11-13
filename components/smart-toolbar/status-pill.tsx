@@ -42,18 +42,21 @@ const overlaps = (a: Box, b: Box) =>
 /**
  * Where the pill goes when its place under the sticky row would cover the
  * selection bubble (near the top of the page): 8px right of the bubble,
- * level with it, when that fits the viewport, else 8px below it. Never
- * over the bubble, so the armed brush stays clickable. `null`: no clash.
+ * level with it but never above `minTop` (8px under the sticky row, which
+ * the bubble can slide under), when that fits the viewport, else 8px
+ * below it. Never over the bubble, so the armed brush stays clickable.
+ * `null`: no clash.
  */
 export function besideBubble(
   pill: Box,
   bubble: Box | undefined,
   viewportWidth: number,
+  minTop: number,
 ): { top: number; left: number } | null {
   if (!bubble || !overlaps(pill, bubble)) return null;
   const width = pill.right - pill.left;
   return bubble.right + GAP + width <= viewportWidth - GAP
-    ? { top: bubble.top, left: bubble.right + GAP }
+    ? { top: Math.max(bubble.top, minTop), left: bubble.right + GAP }
     : { top: bubble.bottom + GAP, left: pill.left };
 }
 
@@ -66,9 +69,10 @@ export function besideBubble(
 function desktopPosition(pill: HTMLElement): CSSProperties {
   const row = document.querySelector(STICKY_ROW)?.getBoundingClientRect();
   const column = document.querySelector(PAGE_COLUMN)?.getBoundingClientRect();
+  const top = (row?.bottom ?? 0) + GAP;
   const centred = {
     position: "fixed",
-    top: `${(row?.bottom ?? 0) + GAP}px`,
+    top: `${top}px`,
     left: column ? `${column.left + column.width / 2}px` : "50%",
     // `translate`, not `transform`: the enter animation owns `transform`.
     translate: "-50% 0",
@@ -78,6 +82,7 @@ function desktopPosition(pill: HTMLElement): CSSProperties {
     pill.getBoundingClientRect(),
     document.querySelector(BUBBLE_PANEL)?.getBoundingClientRect(),
     window.innerWidth,
+    top,
   );
   return moved ? { position: "fixed", ...moved, translate: "none" } : centred;
 }
