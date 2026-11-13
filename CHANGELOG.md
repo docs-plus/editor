@@ -57,28 +57,28 @@ drill).
   release's server half). Unknown names are still refused with 4422.
 
 #### Deploy
-Only after the N+1 ship gates pass, at low traffic. Hocus runs from source and
-Next serves a prebuilt `.next`, so the server half goes live first.
-1. **Build into a separate directory**, so the running Next keeps serving the
-   release N bundle until step 4: for example a fresh checkout of this commit
-   next to the live one (`bun install --frozen-lockfile && bun run build`).
-   Building in place was not proven safe for the still-running Next process.
-   No dependency changes.
-2. **Restart Hocus first** from the new code:
-   `bunx pm2@6.0.14 restart editor-hocus --update-env`.
+Only after the N+1 ship gates pass, at low traffic. Hocus runs TypeScript from
+source and the running `next start` keeps serving its existing `.next` until
+it restarts, so pulling without building puts the server half live first.
+1. In the live checkout: pull, then `bun install --frozen-lockfile` (no
+   dependency changes in this release). **Do not build yet.**
+2. **Restart Hocus first:** `bunx pm2@6.0.14 restart editor-hocus --update-env`.
 3. **Confirm** `[hocus] client schema gate: min=2 (floor 2, env 0)` in its log,
    and within a minute a `client_schema` line: `ok` counts release N clients,
    `refused` counts any pre-N bundles (`client_outdated`; 0 is fine if none
    are left).
-4. **Then switch Next to the new build** and restart it:
-   `bunx pm2@6.0.14 restart editor-next --update-env`.
+4. **Then build and restart Next back to back:** `bun run build`, then
+   `bunx pm2@6.0.14 restart editor-next --update-env`. The floor and the
+   allowlist are already live, so no N+1 bundle exists before the server
+   half. Whether the running Next keeps serving N pages while the build
+   rewrites `.next` was **not** checked (contract §2.3 builder check); expect
+   possible page-load failures between the build and the restart, which is
+   why they run back to back at low traffic.
 5. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
    and never lower the floor.** Before rolling Hocus back below this release,
    roll Next back first and set `HOCUS_MIN_CLIENT_SCHEMA=2` (release N's code
    has no floor); N+1 tabs still open then get 4422 on the new marks until
    they reload. See the runbook.
-
-### Release N (smart toolbar accessibility and rollout safety)
 
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an

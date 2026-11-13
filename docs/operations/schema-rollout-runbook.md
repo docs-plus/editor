@@ -131,8 +131,8 @@ names are `editor-hocus` and `editor-next`.
 
 1. **Deploy release N** — client + server; gate log-only; server ingress allowlist is the current schema plus legacy `link`/`code`. `textColor` and `fontSize` are **not** allowed yet: they ship with PR C's server half in step 3. Allowed earlier, anyone could write `textColor` and freeze any document for every N client. (N clients that meet them freeze read-only by design, never delete.)
 2. **Wait** for the N+1 ship gates (adoption above).
-3. **Server-only step (release N+1, PR C): restart Hocus *before* Next.** It adds `textColor` and `fontSize` to the ingress allowlist and sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. Build the new client into a separate directory first (building in place was not proven safe for the still-running Next). The owner runs `bunx pm2@6.0.14 restart editor-hocus --update-env` and confirms `min=2 (floor 2, env 0)` and the `client_schema` counts in the log (`refused` counts pre-N bundles; 0 is fine if none are left). The exact steps are PR C's CHANGELOG Deploy note.
-4. **Switch Next to the new build and restart it** (`bunx pm2@6.0.14 restart editor-next --update-env`) to serve the new marks.
+3. **Server-only step (release N+1, PR C): restart Hocus *before* Next.** It adds `textColor` and `fontSize` to the ingress allowlist and sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. Pull and `bun install --frozen-lockfile` in the live checkout but **do not build**: Hocus runs from source, and the running Next keeps serving its existing `.next`. The owner runs `bunx pm2@6.0.14 restart editor-hocus --update-env` and confirms `min=2 (floor 2, env 0)` and the `client_schema` counts in the log (`refused` counts pre-N bundles; 0 is fine if none are left). The exact steps are PR C's CHANGELOG Deploy note.
+4. **Build and restart Next back to back** (`bun run build`, then `bunx pm2@6.0.14 restart editor-next --update-env`) to serve the new marks. Whether an in-place build disturbs the still-running Next was not checked; pages may fail to load between the two commands.
 
 Never serve the new client before step 3 completes. Deploy at low traffic.
 
@@ -213,4 +213,7 @@ attributes styled by `extensions/text-style-marks/text-style-marks.scss`.
 Unknown values from a raw client render as plain text. Highlights written by
 release N as `var(--tt-color-highlight-X)` render as the same token and are
 not rewritten in storage yet: the server rewrite in `lib/yjs-mark-migration.ts`
-is deferred (cleanup only).
+is deferred (cleanup only). It must land only after the toolbar's new colour
+popover (PR D2) writes tokens: the release N popover writes and compares the
+legacy form, so rewriting stored values earlier would drop its pressed state
+on every reloaded document.
