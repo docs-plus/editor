@@ -30,8 +30,9 @@ since the previous tag.
     bubble and phone bar. They mount once PR D2's bubble and phone bar land;
     until then they render nowhere.
   - Remembered choices (the Repeat bundle, Recent, the last diagram
-    template) persist across reloads only once PR D2's memory layer lands;
-    before that they last for the page. Your formats persist already.
+    template) persist across reloads in PR D2's memory layer
+    (`tinydocy-choices`, cleared by "Forget my choices"). Your formats are
+    kept separately.
   - No schema, server or environment change; no Deploy step.
 
 ### Smart toolbar v1, PR D2: surfaces and memory
