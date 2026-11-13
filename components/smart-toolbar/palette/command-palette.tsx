@@ -23,7 +23,6 @@ import {
   useCommandState,
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import {
   ariaKeyShortcuts,
@@ -297,10 +296,9 @@ export function CommandPalette({
 
   const save = (name: string) => {
     if (!runAction(editor, formatsSaveAction, name)) return false;
+    // The action announced "Saved format ‘X’" (or "Replaced…") already.
     rememberPaletteRecent(formatsSaveAction.id);
     close();
-    // After the dialog (which hides the rest of the page) is gone.
-    announce(`Saved format ‘${name}’`);
     return true;
   };
 

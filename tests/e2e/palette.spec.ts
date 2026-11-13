@@ -516,8 +516,31 @@ test.describe("palette design pass (§7, §8)", () => {
     await expect(save).toBeDisabled();
     await name.fill("Warning");
     await expect(save).toBeEnabled();
+    // Counts the pills shown from here on: one notice each.
+    await page.evaluate(() => {
+      const shown: string[] = [];
+      (window as unknown as { __pills: string[] }).__pills = shown;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            if (node instanceof HTMLElement && node.dataset.statusPill) {
+              shown.push(node.textContent ?? "");
+            }
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     await save.click();
     await expect(dialog).toHaveCount(0);
+    // Announced once, as a confirmation (check icon).
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toHaveText("Saved format ‘Warning’");
+    await expect(pill.locator("svg.lucide-check")).toHaveCount(1);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __pills: string[] }).__pills,
+      ),
+    ).toEqual(["Saved format ‘Warning’"]);
     await expect(page.locator(".tiptap")).toBeFocused();
     expect(await selection(page)).not.toBeNull();
 
