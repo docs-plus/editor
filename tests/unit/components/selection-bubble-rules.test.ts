@@ -9,6 +9,7 @@ import {
   chooseBubblePlacement,
   clearsBubbleSuppression,
   isBubbleDismissKey,
+  POPOVER_CONTENT,
   shouldShowBubble,
 } from "@/components/smart-toolbar/bubble/bubble-rules";
 import { editorActions } from "@/lib/editor-actions";
@@ -161,19 +162,35 @@ describe("shouldShowBubble", () => {
     }
   });
 
-  it("stays while the bubble's own popover is open (it portals to body)", () => {
-    editor = createTestEditor({ content: DOC });
-    const from = posOf(editor, "plain");
-    select(editor, from, from + 5);
-    const el = root();
-    const trigger = document.createElement("button");
-    trigger.setAttribute("aria-haspopup", "dialog");
-    trigger.setAttribute("aria-expanded", "true");
-    trigger.setAttribute("data-popup-open", "");
-    el.appendChild(trigger);
-    expect(
-      shouldShowBubble(viewFor(editor, { focused: false }), el, false),
-    ).toBe(true);
+  for (const popup of ["dialog", "menu"]) {
+    it(`stays while the bubble's own ${popup} is open (it portals to body)`, () => {
+      editor = createTestEditor({ content: DOC });
+      const from = posOf(editor, "plain");
+      select(editor, from, from + 5);
+      const el = root();
+      const trigger = document.createElement("button");
+      trigger.setAttribute("aria-haspopup", popup);
+      trigger.setAttribute("aria-expanded", "true");
+      trigger.setAttribute("data-popup-open", "");
+      el.appendChild(trigger);
+      expect(
+        shouldShowBubble(viewFor(editor, { focused: false }), el, false),
+      ).toBe(true);
+    });
+  }
+
+  it("matches the colour popover and the Formats menu (and submenus) as popups", () => {
+    for (const slot of [
+      "popover-content",
+      "dropdown-menu-content",
+      "dropdown-menu-sub-content",
+    ]) {
+      const popup = document.createElement("div");
+      popup.dataset.slot = slot;
+      const item = document.createElement("button");
+      popup.appendChild(item);
+      expect(item.closest(POPOVER_CONTENT)).toBe(popup);
+    }
   });
 
   it("does not stay for an open tooltip alone", () => {
