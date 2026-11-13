@@ -54,6 +54,7 @@ import {
   CollaborationRenderOnce,
   NodeViewsRenderOnce,
 } from "@/extensions/render-once";
+import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
@@ -199,6 +200,7 @@ export function buildDocumentEditorExtensions({
     }),
     NodeViewsRenderOnce,
     CaretBlockVisible,
+    RepeatFormatting,
     CollaborationCaret.configure({
       provider,
     }),
