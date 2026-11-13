@@ -1,6 +1,8 @@
 import type { Editor } from "@tiptap/core";
+import type { Selection } from "@tiptap/pm/state";
 
 import type { AnyAction, Ctx, IconComponent } from "@/lib/editor-actions/types";
+import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   BLOCK_CONVERTIBLE_TYPES,
   prepareBlockToggle,
@@ -105,17 +107,24 @@ function canSetTextStyle(editor: Editor, level?: HeadingLevel): boolean {
   return direct || editor.can().clearNodes();
 }
 
+/** True when the selection starts in the title, which is always H1. */
+function startsInTitle(selection: Selection): boolean {
+  return selection.$from.index(0) === 0;
+}
+
 /**
- * Sets the text style of the selected block. Unlike `toggleHeading`, picking
- * the current style does nothing.
+ * Sets the text style of the selected blocks. Unlike `toggleHeading`,
+ * picking the style every selected block already has does nothing; a mixed
+ * range is converted. A range that starts in the title is refused.
  */
 export function setTextStyle(
   editor: Editor | null,
   value: Exclude<TextStyleValue, "title">,
 ): boolean {
   if (!editor?.isEditable) return false;
-  const current = getTextStyleValue(editor);
-  if (current === "title" || current === value) return false;
+  const { selection } = editor.state;
+  if (startsInTitle(selection)) return false;
+  if (textStyleOf(computeContext(editor)) === value) return false;
   const level =
     value === "paragraph"
       ? undefined
@@ -127,7 +136,9 @@ export function setTextStyle(
       ? chain.setNode("heading", { level })
       : chain.setNode("paragraph")
     ).run();
-    editor.chain().focus().selectTextblockEnd().run();
+    // A caret moves to the end of its block; a range stays selected.
+    const next = editor.chain().focus();
+    (selection.empty ? next.selectTextblockEnd() : next).run();
     return true;
   } catch {
     return false;
@@ -161,7 +172,9 @@ function styleAction(
     shortcut,
     markdownHint: level ? `${"#".repeat(level)} ` : undefined,
     enabled(ctx) {
-      if (ctx.isTitle) return { reason: TITLE_STYLE_REASON };
+      if (ctx.isTitle || startsInTitle(ctx.state.selection)) {
+        return { reason: TITLE_STYLE_REASON };
+      }
       if (ctx.nodeSelectionType) return { reason: "Select text to style." };
       return ctx.can(`textStyle:${value}`, (editor) =>
         canSetTextStyle(editor, level),
