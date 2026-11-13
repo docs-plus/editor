@@ -68,6 +68,8 @@ interface MenuTriggerProps {
   finalFocus: () => HTMLElement | boolean;
   children: ReactNode;
   contentLabel?: string;
+  /** Extra trigger classes, such as letting a long value shrink and truncate. */
+  triggerClassName?: string;
 }
 
 /**
@@ -86,6 +88,7 @@ export function ToolbarMenu({
   finalFocus,
   children,
   contentLabel,
+  triggerClassName,
 }: MenuTriggerProps) {
   const handleOpenChange = (next: boolean) => {
     if (next && readOnly) return;
@@ -102,13 +105,14 @@ export function ToolbarMenu({
             aria-label={label}
             tooltip={tooltip}
             size="sm"
+            className={triggerClassName}
             disabled={readOnly}
             disabledReason={readOnly ? READ_ONLY_REASON : undefined}
           />
         }
       >
         {icon}
-        {showLabel ? <span className="truncate">{label}</span> : null}
+        {showLabel ? <span className="min-w-0 truncate">{label}</span> : null}
         <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
