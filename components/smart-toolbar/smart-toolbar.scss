@@ -1,0 +1,280 @@
+// Smart toolbar surfaces owned by PR D2: colour split pair, colour popover,
+// size stepper, Insert steps. Container-query ladder (spec §4.6) lands here
+// once the row (PR D1) marks its groups with `data-collapse-tier`.
+
+.st-color-controls,
+.st-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.st-split {
+  display: inline-flex;
+  align-items: center;
+}
+
+.st-split-face {
+  position: relative;
+}
+
+// The chevron is the second half of a split; ≥ 24px wide (a11y #7).
+.st-split-chevron {
+  width: 1.5rem;
+  min-width: 1.5rem;
+}
+
+.st-face-bar {
+  position: absolute;
+  // Forced colours would erase the background that *is* the colour.
+  forced-color-adjust: none;
+  left: 50%;
+  bottom: 4px;
+  width: 0.875rem;
+  height: 3px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.st-face-bar--text {
+  background: var(--swatch-light, currentColor);
+
+  :is(.dark *) & {
+    background: var(--swatch-dark, currentColor);
+  }
+}
+
+.st-face-bar--highlight {
+  background: var(--swatch, transparent);
+  outline: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+}
+
+// The face's own pressed bar would collide with the colour bar.
+.st-split-face[aria-pressed="true"]::after {
+  display: none;
+}
+
+.st-stepper-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+  }
+}
+
+// Colour popover body (lazy chunk).
+.st-color-popover {
+  padding: 0.625rem;
+}
+
+.st-color-panel-fallback {
+  width: 18rem;
+  height: 7.5rem;
+}
+
+.st-color-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.st-color-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.st-color-row-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--popover-foreground);
+}
+
+// `--swatch-cols` comes from `color-panel.tsx`, whose ↑/↓ follow these lines.
+.st-color-swatches {
+  --swatch-size: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(var(--swatch-cols, 11), var(--swatch-size));
+  gap: 0.25rem;
+}
+
+.st-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  --swatch-bg: var(--background);
+  --swatch-fg: var(--foreground);
+  background: var(--swatch-bg);
+  color: var(--swatch-fg);
+  cursor: pointer;
+
+  svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  // Forced colours: the swatch's own colours are its meaning, so keep them,
+  // with a system border. Pressed is a Highlight ring plus the check badge;
+  // `outline` stays the focus ring.
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+
+    // Beats the global forced-colours rule that paints every pressed
+    // button Highlight (`globals.css`), which would erase the colour.
+    &[aria-pressed="true"] {
+      background: var(--swatch-bg);
+      color: var(--swatch-fg);
+      box-shadow: 0 0 0 2px Highlight;
+    }
+
+    &:focus-visible {
+      outline-color: Highlight;
+    }
+
+    &[aria-disabled="true"] {
+      border-style: dashed;
+    }
+  }
+}
+
+.st-swatch--text {
+  --swatch-fg: var(--swatch-light, var(--foreground));
+
+  :is(.dark *) & {
+    --swatch-fg: var(--swatch-dark, var(--foreground));
+  }
+}
+
+.st-swatch--highlight {
+  --swatch-bg: var(--swatch, var(--background));
+}
+
+.st-swatch-glyph {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.st-swatch-check {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+  padding: 1px;
+  border-radius: 999px;
+  background: var(--foreground);
+  color: var(--background);
+  forced-color-adjust: auto;
+}
+
+// Table size grid (M17a): 24px cells (WCAG 2.5.8), 44px on touch.
+.st-table-grid {
+  --cell: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  gap: 2px;
+}
+
+.st-table-cell {
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
+  background: var(--background);
+  cursor: pointer;
+
+  &[data-in-range="true"] {
+    background: color-mix(in srgb, var(--primary) 22%, var(--background));
+    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+}
+
+.st-table-size {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--popover-foreground);
+  text-align: center;
+}
+
+// Phone panel (`mobile-toolbar-content.tsx`): wraps to a second line
+// rather than scrolling sideways when 44px targets do not fit one line.
+.st-phone-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+// Touch: every target is at least 44×44 (spec §6.7, §4.7).
+@media (pointer: coarse) {
+  .st-phone-back,
+  .st-split-face,
+  .st-split-chevron,
+  .st-stepper button,
+  .st-stepper-value,
+  .st-swatch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .st-color-swatches {
+    --swatch-size: 44px;
+  }
+
+  .st-table-grid {
+    --cell: 44px;
+  }
+
+  // A wrapped separator would dangle at the end of a line.
+  .st-phone-panel > [data-slot="toolbar-separator"] {
+    display: none;
+  }
+
+  .st-phone-panel {
+    padding-block: 0.125rem;
+  }
+}
