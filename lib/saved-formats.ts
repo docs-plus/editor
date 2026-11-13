@@ -111,6 +111,18 @@ let cache: SavedFormat[] | null = null;
 const listeners = new Set<() => void>();
 let storageListening = false;
 
+/**
+ * Other tabs' writes drop the cache. Attached once, on the first read or
+ * subscription, and never removed (it holds no editor), so the cache is
+ * fresh even while no component is subscribed (palette rows, apply, the
+ * cap reason).
+ */
+function listenToStorage(): void {
+  if (storageListening || typeof window === "undefined") return;
+  window.addEventListener("storage", onStorage);
+  storageListening = true;
+}
+
 function notify(): void {
   for (const listener of listeners) listener();
 }
@@ -123,6 +135,7 @@ function onStorage(event: StorageEvent): void {
 
 /** Valid saved formats, at most 20, names unique (first wins). */
 export function readSavedFormats(): readonly SavedFormat[] {
+  listenToStorage();
   if (cache) return cache;
   let raw: string | null = null;
   try {
@@ -197,17 +210,10 @@ export function removeFormat(id: string): void {
 
 /** In-tab writes and other tabs' `storage` events. */
 export function subscribeSavedFormats(listener: () => void): () => void {
-  if (!storageListening && typeof window !== "undefined") {
-    window.addEventListener("storage", onStorage);
-    storageListening = true;
-  }
+  listenToStorage();
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0 && storageListening) {
-      window.removeEventListener("storage", onStorage);
-      storageListening = false;
-    }
   };
 }
 

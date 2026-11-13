@@ -154,6 +154,32 @@ describe("saved formats", () => {
     if (first.ok) expect(formats[0].id).toBe(first.format.id);
   });
 
+  it("drops its cache on another tab's write, with no subscriber", () => {
+    saveFormat("Mine", { bold: true });
+    expect(readSavedFormats().map((format) => format.name)).toEqual(["Mine"]);
+    // Another tab removed it (the storage event never fires in the writer).
+    localStorage.setItem(
+      FORMATS_STORAGE_KEY,
+      JSON.stringify({ v: 1, formats: [] }),
+    );
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: FORMATS_STORAGE_KEY }),
+    );
+    expect(readSavedFormats()).toEqual([]);
+  });
+
+  it("keeps listening after the last subscriber leaves", () => {
+    const off = subscribeSavedFormats(() => {});
+    off();
+    saveFormat("Theirs", { italic: true });
+    localStorage.setItem(
+      FORMATS_STORAGE_KEY,
+      JSON.stringify({ v: 1, formats: [] }),
+    );
+    window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    expect(readSavedFormats()).toEqual([]);
+  });
+
   it("removes a format and notifies subscribers", () => {
     let calls = 0;
     const off = subscribeSavedFormats(() => {
