@@ -145,7 +145,7 @@ describe("buildPaletteSections", () => {
     const repeat = suggested?.items.find((i) => i.actionId === "repeat.apply");
     // Named by the action alone; what it applies is the second line.
     expect(repeat?.label).toBe("Repeat formatting");
-    expect(repeat?.detail).toBeTruthy();
+    expect(repeat?.detail).toBe("Bold");
   });
 
   it("never repeats a suggested action in its home group", () => {

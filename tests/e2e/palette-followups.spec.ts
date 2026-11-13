@@ -215,4 +215,38 @@ test.describe("palette follow-ups", () => {
       await page.keyboard.press("Escape");
     });
   }
+
+  for (const query of ["paint format", "format painter", "brush"]) {
+    test(`"${query}" ranks Paint format first, above Repeat formatting`, async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await boldAlpha(page);
+      await select(page, "beta");
+      await openPalette(page);
+      await page.keyboard.type(query);
+      const first = options(page).first();
+      await expect(first).toHaveAttribute("data-action-id", "repeat.copy");
+      await expect(first).toHaveAttribute("aria-selected", "true");
+      await page.keyboard.press("Escape");
+    });
+  }
+
+  test("Repeat formatting is named alone, with what it applies as its second line", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await boldAlpha(page);
+    await select(page, "beta");
+    await openPalette(page);
+    const repeat = page
+      .getByRole("group", { name: "Suggested here" })
+      .locator('[data-action-id="repeat.apply"]');
+    await expect(repeat).toContainText("Repeat formatting");
+    await expect(repeat.locator("span.truncate").first()).toHaveText(
+      "Repeat formatting",
+    );
+    await expect(repeat.locator("span.truncate").nth(1)).toHaveText("Bold");
+    await page.keyboard.press("Escape");
+  });
 });
