@@ -36,9 +36,9 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
  * 360px phone. A kind that cannot apply here keeps its swatches focusable
  * but `aria-disabled`, described by the reason. Applying keeps the popover
  * open with focus on the swatch, so writers can try colours; Esc closes it.
- * Swatches that would put text below AA on its highlight (Appendix A, O3)
- * are dimmed and described "Low contrast", but stay selectable. Lazy chunk:
- * loaded on first open.
+ * Highlight swatches that would put the current text colour below AA
+ * (Appendix A, O3) are dimmed and described "Low contrast", but stay
+ * selectable. Lazy chunk: loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -105,16 +105,16 @@ function paletteToken(value: string | null | undefined) {
 const currentTheme = (): ColorTheme =>
   document.documentElement.classList.contains("dark") ? "dark" : "light";
 
-/** True when the swatch would put text below AA on the selection's colours. */
+/** O3: true when a highlight swatch would put the current text below AA. */
 function isLowContrast(
   swatch: Swatch,
   text: string | null | undefined,
-  highlight: string | null | undefined,
   theme: ColorTheme,
 ): boolean {
-  return swatch.kind === "text"
-    ? isLowContrastPair(swatch.token, paletteToken(highlight), theme)
-    : isLowContrastPair(paletteToken(text), swatch.token, theme);
+  return (
+    swatch.kind === "highlight" &&
+    isLowContrastPair(paletteToken(text), swatch.token, theme)
+  );
 }
 
 /** Tooltip: the disabled reason wins over the low-contrast note. */
@@ -123,10 +123,7 @@ function swatchTitle(name: string, reason: string, low: boolean): string {
   return low ? `${name}: low contrast` : name;
 }
 
-const LOW_CONTRAST = {
-  text: "Low contrast on the current highlight",
-  highlight: "Low contrast with the current text colour",
-} as const;
+const LOW_CONTRAST = "Low contrast with the current text colour";
 
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
   const id =
@@ -267,7 +264,9 @@ export function ColorPanel({
           {reasons[kind] ? (
             <span id={`${idPrefix}-${kind}-reason`}>{reasons[kind]}</span>
           ) : null}
-          <span id={`${idPrefix}-${kind}-low`}>{LOW_CONTRAST[kind]}</span>
+          {kind === "highlight" ? (
+            <span id={`${idPrefix}-${kind}-low`}>{LOW_CONTRAST}</span>
+          ) : null}
         </span>
       ))}
       {rows.map((row, rowIndex) => (
@@ -287,12 +286,7 @@ export function ColorPanel({
               const pressed = isPressed(swatch);
               const name = swatchName(swatch);
               const reason = reasons[swatch.kind];
-              const low = isLowContrast(
-                swatch,
-                currentText,
-                currentHighlight,
-                theme,
-              );
+              const low = isLowContrast(swatch, currentText, theme);
               const describedBy = [
                 reason && `${idPrefix}-${swatch.kind}-reason`,
                 low && `${idPrefix}-${swatch.kind}-low`,
