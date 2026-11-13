@@ -25,6 +25,8 @@ make dev
 | `make test-soak-collab-quick` | Multi-user soak (30s, 3 users, 10 headings) | ~50s |
 | `make test-soak` | Full soak suite (single + multi-user, 30 min) | ~35 min |
 | `make test-yjs-soak` | Yjs reconnection + rapid tab switch | ~20s |
+| `bun run test:soak:color` | Alternating colour soak (3,000 toggles; nightly 50,000) against a running Hocuspocus | ~8s (50k: ~1 min) |
+| `bun run test:soak:mixed-version` | Mixed-version soak (N+1, N and pre-N clients on one document) against a running Hocuspocus | ~7s (300 rounds: ~20s) |
 
 ## Test Architecture
 
@@ -80,7 +82,11 @@ tests/
 │       ├── reconnection.spec.ts          # Kill/restart Hocuspocus mid-session
 │       └── rapid-tab-switch.spec.ts      # Mount/unmount Yjs providers via tab switching
 └── load/
-    └── yjs-load-harness.ts               # Standalone Bun script: N-client Yjs convergence test
+    ├── yjs-load-harness.ts               # Standalone Bun script: N-client Yjs convergence test
+    ├── color-mark-soak.ts                # Standalone: alternating textColor/highlight/fontSize toggles
+    ├── mixed-version-soak.ts             # Standalone: N+1, N and pre-N clients on one document
+    ├── soak-shared.ts                    # Clients, convergence, verifier, schema check, server log scan
+    └── soak-dom.ts                       # happy-dom window for scripts that run Tiptap (keeps Bun's WebSocket)
 ```
 
 ## Test Reports (`test-reports/`)
@@ -100,6 +106,8 @@ All test layers write reports when run via Make targets:
 | `soak-collab-report-{ts}.json` | `make test-soak-collab-quick` | Users, actions, errors |
 | `*-playwright-report.json` | soak targets | Playwright JSON for soak runs |
 | `yjs-soak-report.json` | `make test-yjs-soak` | Playwright JSON for yjs-soak |
+| `color-soak-report-{ts}.json` | `bun run test:soak:color` | Toggles, size samples, final and stored state size, growth per toggle, refusals, verdict |
+| `mixed-version-soak-report-{ts}.json` | `bun run test:soak:mixed-version` | Per-client outcome, N freeze and updates sent, blocks, surviving marks, verdict |
 
 ## Layer 1: Unit Tests (`bun test`)
 
@@ -293,6 +301,73 @@ Spawns a dedicated Hocuspocus instance on port 1235 (`bun run hocus`), types con
 
 Creates multiple tabs via the tab bar UI, switches between them 20 times, types in each, and verifies content persists. Exercises the Y.Doc cache lifecycle in `useYjsDocument`.
 
+### Schema soaks (standalone Bun scripts)
+
+Two smart toolbar ship gates, run nightly (`color-soak` and `mixed-version`
+jobs). They need no browser and no Next.js: start Hocuspocus first
+(`make dev-hocus`, or `bun run hocus` on another port with
+`HOCUS_ALLOW_ISOLATED_TABS_DOCS=1`), then run the script. With
+`SOAK_HOCUS_LOG` pointing at the server's log, each also fails on any
+`ws_unknown_schema_name`, `ws_update_too_large`, `document_store_rejected`,
+`ws_throttle_ban` or `editor_root_swept` line written during the run.
+
+```bash
+make dev-hocus > hocus.log 2>&1 &
+SOAK_HOCUS_LOG=hocus.log bun run test:soak:color            # 3,000 toggles
+COLOR_SOAK_TOGGLES=50000 MAX_DOC_SIZE_BYTES=2097152 bun run test:soak:color
+SOAK_HOCUS_LOG=hocus.log bun run test:soak:mixed-version    # 30 rounds per phase
+```
+
+**Alternating colour soak (`color-mark-soak.ts`, spec §7 abuse soak).**
+Three clients toggle `textColor`, `highlight` and `fontSize` on and off
+(token values only, the Yjs format calls y-prosemirror makes) on
+overlapping ranges of four shared paragraphs. It fails unless every client
+and a late-joining verifier (after the document unloads, so it reads the
+stored copy) hold identical state; no document was refused (`4422`
+`schema_rejected`, `4413` `document_too_large`); the document fits the real
+editor schema and the mark allowlist; the state stays under
+`MAX_DOC_SIZE_BYTES` at every checkpoint; and growth per toggle in the
+second half is at most 1.5× the first half's. Yjs keeps a tombstone for each
+removed format run, so the state grows linearly, about 20–23 B per toggle:
+50,000 toggles reach about 1.1 MB, past the 1 MiB default cap, so the
+nightly job runs server and script at production's 2 MiB
+(`MAX_DOC_SIZE_BYTES=2097152`). The cap is the only bound on this growth.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COLOR_SOAK_TOGGLES` | `3000` | Total toggles (nightly: `50000`) |
+| `COLOR_SOAK_CLIENTS` | `3` | Concurrent clients (at least 2) |
+| `COLOR_SOAK_BATCH` | `5` | Toggles per Yjs transaction |
+| `COLOR_SOAK_RATE` | `1000` | Toggles per second, all clients (`0` = unpaced) |
+| `COLOR_SOAK_SEED` | time | PRNG seed, printed; set it to replay a run |
+| `COLOR_SOAK_URL` | `ws://127.0.0.1:1234` | Hocuspocus WebSocket URL |
+| `MAX_DOC_SIZE_BYTES` | `1048576` | Size cap; give the server the same value |
+
+**Mixed-version soak (`mixed-version-soak.ts`, spec §3.1 N+1 ship gate).**
+`HOCUS_MIN_CLIENT_SCHEMA` stays unset (log-only by env), but the built-in
+`SCHEMA_FLOOR = 2` makes the effective minimum 2, so the script encodes the
+behaviour the design specifies for that:
+
+- **pre-N** clients (no `schema` parameter, and `schema=1`; no new marks)
+  get `client_outdated` on the document while the tab list on the same
+  socket still syncs. They keep typing and deleting blocks in their device
+  copy; none of it may reach the server, and their socket may not be reset
+  (`4205`).
+- a **release N** editor (`schema=2`, schema without `textColor`/`fontSize`)
+  is admitted and must stay editable through the text phase (no unexpected
+  freeze), then freeze (`onInvalidContent`, schema guard `outdated`) when the
+  N+1 marks arrive and send nothing more.
+- the **N+1** editor types and writes colour and size, and never freezes.
+
+The stored copy must keep every seeded block, all text typed before the
+freeze and the N+1 marks, contain nothing from the pre-N or frozen N
+clients, and fit the editor schema. The nightly job runs it with throttle on.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MIXED_SOAK_ROUNDS` | `30` | Edit rounds per phase, text then marks (nightly: `300`) |
+| `MIXED_SOAK_URL` | `ws://127.0.0.1:1234` | Hocuspocus WebSocket URL |
+
 ## Layer 5: Load Harness (standalone Bun script)
 
 Headless N-client Yjs convergence test — no browser required. Clients use Bun's built-in `WebSocket`. CLI args override env vars (industry pattern: k6 `K6_*`, Benchmark `BENCHMARK_*`).
@@ -333,7 +408,8 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   `e2e-results` artifact.
 - **Nightly, not per PR:** `.github/workflows/nightly.yml` runs the `pwa`
   project against a production build, the Yjs soak, the quick multi- and
-  single-user soaks and the load harness (both scenarios) every day at 03:41
+  single-user soaks, the load harness (both scenarios) and the two schema
+  soaks (50,000 colour toggles; mixed versions) every day at 03:41
   and 08:00 UTC, or from Actions → Nightly → Run workflow. Run the layer locally before
   merging a change it covers.
 - **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
