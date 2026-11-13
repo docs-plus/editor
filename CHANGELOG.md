@@ -74,7 +74,7 @@ Branch `perf/toolbar-followups-engine`. No deploy steps.
   first formattable character.
 - E's palette keywords ride with the engine, and the eager shell drops
   its listener set, to keep the editor chunk flat: it ends at +23.1 KB
-  of 23.5 KB (+152 B gz over the start of this branch).
+  of 23.5 KB (+148 B gz over the start of this branch).
 
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
