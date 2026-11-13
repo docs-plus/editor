@@ -37,13 +37,17 @@ import "@/components/smart-toolbar/phone/phone.scss";
 export const MOBILE_BAR_HEIGHT = 44;
 
 /**
- * Registry actions end in `editor.chain().focus()`. While the sheet is
- * open the editor is `inert`, so a pick applies without pulling focus out
- * of the sheet (on a phone that would raise the keyboard over it).
+ * While the sheet is open the page behind it is `inert` (the sheet is
+ * portalled to `body`, outside it): Tab and screen readers stay in the
+ * sheet, and the registry actions' `editor.chain().focus()` cannot pull
+ * focus out of it (on a phone that would raise the keyboard over it).
+ * Commands still apply.
  */
-function setEditorInert(editor: Editor | null, inert: boolean) {
+function setPageInert(editor: Editor | null, inert: boolean) {
   if (!editor || editor.isDestroyed) return;
-  (editor.view.dom as HTMLElement).inert = inert;
+  const dom = editor.view.dom as HTMLElement;
+  const page = dom.closest<HTMLElement>(".app-shell") ?? dom;
+  page.inert = inert;
 }
 
 /**
@@ -132,7 +136,7 @@ export function MobileToolbarContent({
 
   const onSheetOpenChange = useCallback(
     (open: boolean) => {
-      setEditorInert(editor, open);
+      setPageInert(editor, open);
       setSheetOpen(open);
     },
     [editor],
@@ -147,7 +151,7 @@ export function MobileToolbarContent({
     if (readOnly) onSheetOpenChange(false);
   }, [readOnly, onSheetOpenChange]);
 
-  useEffect(() => () => setEditorInert(editor, false), [editor]);
+  useEffect(() => () => setPageInert(editor, false), [editor]);
 
   /** Back to Aa, or to the document when the bar just hid. */
   const finalFocus = useCallback(() => {
