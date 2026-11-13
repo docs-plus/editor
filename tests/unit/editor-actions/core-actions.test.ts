@@ -207,6 +207,48 @@ describe("text style", () => {
     });
   });
 
+  it("converts a mixed heading and paragraph range (Mixed label)", () => {
+    const target = make(heading(2, "Head", "a"), para(t("Body")));
+    const from = posInside(target, "Head");
+    const to = posInside(target, "Body") + 2;
+    select(target, from, to);
+    expect(enabledIn(target, "style.heading2")).toBe(true);
+    expect(runAction(target, action("style.heading2"))).toBe(true);
+    const types: string[] = [];
+    target.state.doc.forEach((node) => {
+      if (node.textContent) {
+        types.push(`${node.type.name}${node.attrs.level ?? ""}`);
+      }
+    });
+    expect(types).toEqual(["heading1", "heading2", "heading2"]);
+    // The range stays selected after the conversion.
+    expect(target.state.selection.empty).toBe(false);
+  });
+
+  it("does nothing when every selected block already has the style", () => {
+    const target = make(heading(2, "One", "a"), heading(2, "Two", "b"));
+    select(target, posInside(target, "One"), posInside(target, "Two") + 2);
+    const before = target.state.doc;
+    expect(runAction(target, action("style.heading2"))).toBe(false);
+    expect(target.state.doc).toBe(before);
+  });
+
+  it("is disabled for a range that starts in the title", () => {
+    const target = make(para(t("Body")));
+    select(target, posInside(target, "Title"), posInside(target, "Body") + 2);
+    expect(enabledIn(target, "style.heading2")).toEqual({
+      reason: "Title is always H1.",
+    });
+    // Head in the title, anchor in the body: the range still starts there.
+    select(target, posInside(target, "Body") + 2, posInside(target, "Title"));
+    expect(enabledIn(target, "style.paragraph")).toEqual({
+      reason: "Title is always H1.",
+    });
+    const before = target.state.doc;
+    expect(runAction(target, action("style.paragraph"))).toBe(false);
+    expect(target.state.doc).toBe(before);
+  });
+
   it("sets a heading level in one step", () => {
     const target = make(para(t("Body")));
     select(target, posInside(target, "Body"));
