@@ -41,12 +41,12 @@ drill).
   yellow instead of an invisible mark; Mod-Shift-H on any highlight removes it
   in one press. Toggling and the popover's pressed state compare tokens
   (`activeHighlightToken`), so a legacy value counts as its token.
-- **Hocus rewrites stored legacy highlight colours** to their token on load
-  (`afterLoadDocument`, alongside the `link`/`code` rename in
+- **Hocus can rewrite stored legacy highlight colours** to their token on
+  load (`afterLoadDocument`, alongside the `link`/`code` rename in
   `lib/yjs-mark-migration.ts`); tokens and unknown values are left alone.
-  Release N tabs still open on a rewritten document show no pressed swatch
-  for those highlights, and their swatch re-sets instead of removing on the
-  first click (cosmetic, gone on reload).
+  Off by default (`HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` turns it on): release
+  N's popover compares raw values, so on a rewritten highlight N tabs would
+  show no pressed swatch and need two clicks to remove it.
 - **Paste keeps only our own styling:** our `data-text-color`,
   `data-font-size` and `data-highlight` (and release N's `data-color`) survive
   a paste between tabs; foreign colour, font size and background (Google Docs,
@@ -79,12 +79,13 @@ it restarts, so pulling without building puts the server half live first.
    are left).
 4. **Then build in a second checkout and swap it in.** Do not build in the
    live checkout: measured on spare ports (contract §2.3 builder check), an
-   in-place `next build` under a running `next start` makes every chunk
-   return 500 for a moment during the build and every changed chunk return
-   500 until the restart, while the old HTML still points at them, so page
-   loads fail for the whole build. A `.next` built in another checkout and
-   moved in served every page and chunk after the restart (checked locally,
-   not on the live host). From `/opt/projects/editor.docs.plus`:
+   in-place `next build` under a running `next start` made the probed chunks
+   return 500 for a moment during the build, and every changed chunk return
+   500 from then until the restart while the old HTML still points at it, so
+   pages that need a changed chunk fail (about 3 s locally with a warm
+   Turbopack cache; longer on the live host). A `.next` built in another
+   checkout and moved in served every page and chunk after the restart
+   (checked locally, not on the live host). From `/opt/projects/editor.docs.plus`:
    ```sh
    git worktree add --detach ../editor-build HEAD
    cp .env.production ../editor-build/   # build-time NEXT_PUBLIC_* values
@@ -97,7 +98,12 @@ it restarts, so pulling without building puts the server half live first.
    before the server half. Only the second between the `mv` and the restart
    can serve a missing chunk. To roll Next back, swap `.next.prev` back the
    same way; delete it once N+1 is healthy.
-5. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
+5. **Later, once release N tabs are gone** (the `client_schema` line's
+   `builds` shows only the N+1 build id for a day), add
+   `HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` to the Hocus env and restart it with
+   `--update-env` at the next routine restart. It only tidies stored values;
+   N+1 reads both forms.
+6. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
    and never lower the floor.** Before rolling Hocus back below this release,
    roll Next back first and set `HOCUS_MIN_CLIENT_SCHEMA=2` (release N's code
    has no floor); N+1 tabs still open then get 4422 on the new marks until

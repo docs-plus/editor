@@ -47,6 +47,14 @@ import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 /** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+/**
+ * `1` rewrites stored legacy highlight colours to tokens on load. Leave it
+ * off until release N tabs are gone: N's popover compares raw values, so a
+ * rewritten highlight shows no pressed swatch there.
+ */
+const REWRITE_LEGACY_HIGHLIGHTS =
+  process.env.HOCUS_REWRITE_LEGACY_HIGHLIGHTS?.trim() === "1";
+
 /** The gate's minimum: the env can raise `SCHEMA_FLOOR`, never lower it. */
 const MIN_CLIENT_SCHEMA = effectiveMinClientSchema(HOCUS_MIN_CLIENT_SCHEMA);
 
@@ -200,7 +208,9 @@ const hocuspocus = new Hocuspocus({
   // Runs once per load, after persistence applies the stored state and before
   // any client syncs; the rewrite is persisted through the normal store path.
   async afterLoadDocument({ document, documentName }) {
-    const migrated = migrateLegacyMarks(document);
+    const migrated = migrateLegacyMarks(document, {
+      rewriteHighlights: REWRITE_LEGACY_HIGHLIGHTS,
+    });
     if (migrated > 0) {
       console.info(
         `[hocus] migrated ${migrated} legacy mark range(s) in ${JSON.stringify(documentName)}`,
