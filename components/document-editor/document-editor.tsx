@@ -72,6 +72,7 @@ import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
+import { useToolbarFocusHandoff } from "./use-toolbar-focus-handoff";
 import {
   type TocItemsStore,
   useTocItems,
@@ -148,6 +149,8 @@ function DocumentEditorContent({
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
   const toolbarRef = useRef<HTMLDivElement>(null);
+  // Crossing 768px keeps focus in the toolbar that replaces the other.
+  const setToolbarRef = useToolbarFocusHandoff(toolbarRef);
   const prevTitleRef = useRef("");
   const tocStore = useTocItemsStore();
 
@@ -298,7 +301,7 @@ function DocumentEditorContent({
         {/* Phones (< 768px) get the docked bar instead of the row (spec
             §4.7): one role="toolbar" either way, both reached by Alt+F10. */}
         {!toolbarOff && !isMobile && (
-          <Toolbar ref={toolbarRef} onEscape={returnToEditor}>
+          <Toolbar ref={setToolbarRef} onEscape={returnToEditor}>
             <Profiler id="toolbar" onRender={countToolbarCommit}>
               <MainToolbarContent
                 onTocToggle={() => setOutlineOpen((open) => !open)}
@@ -316,7 +319,7 @@ function DocumentEditorContent({
           <Suspense fallback={null}>
             <Profiler id="toolbar" onRender={countToolbarCommit}>
               <MobileToolbarContent
-                ref={toolbarRef}
+                ref={setToolbarRef}
                 editor={editor}
                 onEscape={returnToEditor}
                 menuCells={editor && <PhoneMenuCells editor={editor} />}
