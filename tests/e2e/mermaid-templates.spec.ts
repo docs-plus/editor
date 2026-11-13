@@ -8,7 +8,10 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 
-import { openToolbarTestDoc } from "./helpers/a11y";
+import {
+  expectNoSeriousA11yViolations,
+  openToolbarTestDoc,
+} from "./helpers/a11y";
 
 const TEMPLATES = [
   ["Flowchart", "flowchart LR"],
@@ -202,13 +205,24 @@ test.describe("Mermaid templates (M17b)", () => {
     await expect(table).toHaveAccessibleDescription(
       (await reason.textContent()) ?? "",
     );
-    // Only the label dims: the item and its reason stay at full opacity.
+    // Only the label (and icon) dims: the item and its reason stay at full
+    // opacity.
     expect(await table.evaluate((el) => getComputedStyle(el).opacity)).toBe(
       "1",
     );
     expect(await reason.evaluate((el) => getComputedStyle(el).opacity)).toBe(
       "1",
     );
+    const label = table.getByText("Table", { exact: true });
+    expect(await label.evaluate((el) => getComputedStyle(el).opacity)).toBe(
+      "0.5",
+    );
+    expect(
+      await table
+        .locator("svg")
+        .first()
+        .evaluate((el) => getComputedStyle(el).opacity),
+    ).toBe("0.5");
     await templatesItem(page).hover();
     const note = page.locator("[data-diagram-note]");
     await expect(note).toHaveText(
@@ -222,6 +236,9 @@ test.describe("Mermaid templates (M17b)", () => {
         "Can’t insert in the title. Move the cursor to a paragraph.",
       );
     }
+    await expectNoSeriousA11yViolations(page, [
+      '[data-slot="dropdown-menu-sub-content"]',
+    ]);
   });
 
   test("inside a diagram, the note names the diagram", async ({ page }) => {
