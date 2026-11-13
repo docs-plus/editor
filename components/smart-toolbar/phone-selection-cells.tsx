@@ -63,17 +63,19 @@ function RepeatCell({ editor }: { editor: Editor }) {
   const reason = enabled === true ? undefined : enabled.reason;
   const shortcut = useMemo(() => repeatShortcut(), []);
   const reasonId = useId();
-  const [shown, setShown] = useState<string | null>(null);
+  // The reason stays live while shown ("still loading" turns into the
+  // real reason when the engine lands).
+  const [shown, setShown] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
-    if (reason === undefined) setShown(null);
+    if (reason === undefined) setShown(false);
   }, [reason]);
   const showReason = (text: string) => {
-    setShown(text);
+    setShown(true);
     announce(text);
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setShown(null), REASON_MS);
+    timer.current = setTimeout(() => setShown(false), REASON_MS);
   };
   return (
     <>
@@ -100,13 +102,13 @@ function RepeatCell({ editor }: { editor: Editor }) {
           {reason}
         </span>
       )}
-      {shown ? (
+      {shown && reason !== undefined ? (
         <span
           className="pointer-events-none absolute inset-x-2 bottom-[calc(100%+6px)] rounded-md bg-popover px-2.5 py-1.5 text-sm text-popover-foreground shadow-md"
           data-phone-reason=""
           aria-hidden
         >
-          {shown}
+          {reason}
         </span>
       ) : null}
     </>
