@@ -457,11 +457,37 @@ export function createHeadingFoldPlugin(
     // Lifecycle state is per EditorView: views can be destroyed and recreated
     // for the same plugin (React StrictMode remounts, EditorContent remounts),
     // and a shared `destroyed` flag would silence every later view's timers.
-    view() {
+    view(editorView) {
       let destroyed = false;
       let prevFoldedIds = new Set(options.initialFoldedIds);
       let prevAnimating = new Map<string, "folding" | "unfolding">();
       const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+      const scheduleEnd = (view: EditorView, id: string) => {
+        if (pendingTimers.has(id)) clearTimeout(pendingTimers.get(id));
+        const timer = setTimeout(() => {
+          if (destroyed) return;
+          pendingTimers.delete(id);
+          const { tr } = view.state;
+          tr.setMeta(headingFoldPluginKey, {
+            type: "endAnimation",
+            id,
+          });
+          view.dispatch(tr);
+        }, FOLD_ANIMATION_MS + ANIMATION_SAFETY_MS);
+        pendingTimers.set(id, timer);
+      };
+
+      // Any plugin (un)registered mid-animation (a lazily mounted
+      // `BubbleMenu`, say) makes ProseMirror rebuild every plugin view, and
+      // the old view's timer dies with it. Finish what is already running.
+      const running = headingFoldPluginKey.getState(
+        editorView.state,
+      )?.animating;
+      if (running) {
+        for (const id of running.keys()) scheduleEnd(editorView, id);
+        prevAnimating = new Map(running);
+      }
 
       return {
         update(view) {
@@ -481,18 +507,7 @@ export function createHeadingFoldPlugin(
           for (const id of animating.keys()) {
             if (!prevAnimating.has(id)) {
               animChanged = true;
-              if (pendingTimers.has(id)) clearTimeout(pendingTimers.get(id));
-              const timer = setTimeout(() => {
-                if (destroyed) return;
-                pendingTimers.delete(id);
-                const { tr } = view.state;
-                tr.setMeta(headingFoldPluginKey, {
-                  type: "endAnimation",
-                  id,
-                });
-                view.dispatch(tr);
-              }, FOLD_ANIMATION_MS + ANIMATION_SAFETY_MS);
-              pendingTimers.set(id, timer);
+              scheduleEnd(view, id);
             }
           }
 
