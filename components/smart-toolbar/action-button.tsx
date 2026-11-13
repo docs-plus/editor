@@ -26,6 +26,11 @@ export interface ActionButtonProps {
   showLabel?: boolean;
   /** Argument passed to `runAction` (swatch token, size step…). */
   arg?: unknown;
+  /**
+   * Accessible name and tooltip in place of the action's label, e.g.
+   * "Insert quote" for the Insert face, whose visible text stays "Quote".
+   */
+  label?: string;
 }
 
 /** Keeps the editor selection: act on click, never move focus on press. */
@@ -48,6 +53,7 @@ export function ActionButton({
   variant = "row",
   showLabel = false,
   arg,
+  label,
 }: ActionButtonProps) {
   const { editor: contextEditor } = useCurrentEditor();
   const editor = providedEditor ?? contextEditor ?? null;
@@ -59,15 +65,16 @@ export function ActionButton({
   const reason = view.enabled === true ? undefined : view.enabled.reason;
   const toggle = action.isActive !== undefined;
   const mac = isMac();
+  const name = label ?? action.label;
   const tooltip = action.markdownHint ? (
     <span className="flex items-center gap-1.5">
-      {action.label}
+      {name}
       <span className="font-mono text-muted-foreground">
         {action.markdownHint.trim()}
       </span>
     </span>
   ) : (
-    action.label
+    name
   );
   const withLabel = showLabel || !Icon;
   return (
@@ -75,7 +82,7 @@ export function ActionButton({
       type="button"
       data-action-id={id}
       data-surface={variant}
-      aria-label={action.label}
+      aria-label={name}
       tooltip={tooltip}
       shortcutKeys={
         action.shortcut ? toShortcutKeys(action.shortcut) : undefined
