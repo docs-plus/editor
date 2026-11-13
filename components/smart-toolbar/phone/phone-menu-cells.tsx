@@ -5,7 +5,10 @@ import { useRef } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { SlotCollapseButton } from "@/components/smart-toolbar/collapse-menus";
-import { useToolbarHold } from "@/components/smart-toolbar/context-slot/use-slot-target";
+import {
+  useSlotTarget,
+  useToolbarHold,
+} from "@/components/smart-toolbar/context-slot/use-slot-target";
 import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
 import {
   ActionRadioItem,
@@ -99,14 +102,22 @@ function ListCell({ editor }: { editor: Editor }) {
  * slot while focus is in the bar or its popups: a collaborator's edit never
  * removes the cell (or its menu's return target) under focus. The wrapper
  * always renders, so the hold finds the toolbar even while the cell is
- * empty. Below 360px it is hidden and the sheet carries its tools.
+ * empty. Media has one tool, so it is a direct "Media options…" button,
+ * as in the row's slot: the kit toolbar it opens takes focus, which a
+ * menu's close would hand back to the editor. Below 360px the cell is
+ * hidden and the sheet carries its tools.
  */
 function SlotCell({ editor }: { editor: Editor }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const { kind } = useSlotTarget(editor);
   useToolbarHold(editor, ref);
   return (
     <span ref={ref} className="contents" data-phone-slot="">
-      <SlotCollapseButton editor={editor} />
+      {kind === "media" ? (
+        <ActionButton id="media.options" editor={editor} variant="phone" />
+      ) : (
+        <SlotCollapseButton editor={editor} />
+      )}
     </span>
   );
 }
