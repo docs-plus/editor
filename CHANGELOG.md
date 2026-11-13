@@ -109,7 +109,7 @@ raised the editor-chunk budget to 23.5 KB for E (contract A12; growth
 #### Added
 - **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list
   of every registry action, grouped Recent, Suggested here, Format, Insert,
-  Section and View; unavailable entries stay listed with their reason. The
+  Section, View and History; unavailable entries stay listed with their reason. The
   palette (cmdk 1.1.1) is a lazy chunk loaded on the first open, rendered
   in v1's `SurfaceBoundary`; one capture-phase key listener serves every
   tab.
