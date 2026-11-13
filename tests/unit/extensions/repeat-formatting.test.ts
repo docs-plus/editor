@@ -366,6 +366,10 @@ describe("RepeatFormatting: applying", () => {
     expect(runAction(editor, formatsApplyAction, "missing")).toBe(false);
     expect(getRememberedBundle()).toEqual({ underline: true });
     editor.commands.toggleItalic();
+    // Paint format remembers only what it applies.
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    expect(getRememberedBundle()).not.toHaveProperty("bold");
+    sel("hello");
     expect(runAction(editor, repeatCopyAction)).toBe(true);
     expect(getRememberedBundle()).toMatchObject({ bold: false, italic: true });
   });
@@ -373,6 +377,10 @@ describe("RepeatFormatting: applying", () => {
   it("Paint format on plain text picks up plain, as in Docs", () => {
     rememberBundle({ underline: true });
     sel("world");
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    // Picked up, not applied yet: Repeat keeps its bundle.
+    expect(getRememberedBundle()).toEqual({ underline: true });
+    sel("hello");
     expect(runAction(editor, repeatCopyAction)).toBe(true);
     expect(getRememberedBundle()).toEqual({
       bold: false,
@@ -394,29 +402,33 @@ describe("RepeatFormatting: applying", () => {
     expect(availability(formatsSaveAction, computeContext(editor))).toBe(true);
   });
 
-  it("Paint format remembers the full read, then clears with it", () => {
+  it("Paint format remembers the full read once applied, which clears", () => {
     sel("hello");
     editor.commands.toggleBold();
     setRed();
+    const formatted = getRememberedBundle();
     sel("hello");
     runAction(editor, repeatCopyAction);
-    // The brush again on the same selection cancels without painting.
+    // The brush again on the same selection cancels: nothing painted,
+    // nothing remembered.
     runAction(editor, repeatCopyAction);
-    expect(getRememberedBundle()).toEqual({
-      bold: true,
-      italic: false,
-      underline: false,
-      strike: false,
-      textColor: "red",
-      highlight: null,
-      fontSize: null,
-    });
+    expect(getRememberedBundle()).toEqual(formatted);
     sel("world");
     editor.commands.toggleItalic();
     runAction(editor, repeatCopyAction);
     sel("hello");
-    editor.commands.repeatFormatting();
+    runAction(editor, repeatCopyAction);
+    // The full read clears what "world" lacks.
     expect(marksOf("hello")).toEqual(["italic"]);
+    expect(getRememberedBundle()).toEqual({
+      bold: false,
+      italic: true,
+      underline: false,
+      strike: false,
+      textColor: null,
+      highlight: null,
+      fontSize: null,
+    });
   });
 
   it("refuses in a read-only editor, and the registry gate returns false", () => {

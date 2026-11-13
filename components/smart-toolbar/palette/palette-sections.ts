@@ -81,8 +81,12 @@ const formatRank = (action: AnyAction) => {
 /** Saved formats and saving one: the "Your formats" group. */
 const YOUR_FORMATS = new Set(["formats.apply", "formats.save"]);
 
-/** Shown in Suggested whenever they can run. */
-const ALWAYS_SUGGESTED = new Set(["repeat.apply"]);
+/**
+ * Repeat: its `value()` is the row's second line (what it would apply),
+ * and it shows in Suggested whenever it can run, unless what it would
+ * apply is plain (`PLAIN_SET_LABEL`: it would strip the formatting).
+ */
+const REPEAT = "repeat.apply";
 /**
  * Actions whose `value()` describes their own target, so it belongs in the
  * row's name ("Merge cells"). Others (style, align) return the selection's
@@ -90,8 +94,6 @@ const ALWAYS_SUGGESTED = new Set(["repeat.apply"]);
  * Normal text"; WCAG 2.4.6).
  */
 const VALUE_IN_LABEL = new Set(["table.mergeOrSplit"]);
-/** Whose `value()` is the row's second line: what Repeat would apply. */
-const VALUE_AS_DETAIL = new Set(["repeat.apply"]);
 /**
  * Groups whose option labels name themselves ("Orange text"), so the
  * action's label is not repeated before them (design pass §8).
@@ -159,7 +161,7 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
     }));
   }
   const value =
-    VALUE_IN_LABEL.has(action.id) || VALUE_AS_DETAIL.has(action.id)
+    VALUE_IN_LABEL.has(action.id) || action.id === REPEAT
       ? action.value?.(ctx)
       : null;
   const inLabel = value && VALUE_IN_LABEL.has(action.id);
@@ -217,7 +219,8 @@ export function buildPaletteSections(input: {
       action.contexts.includes(ctx.kind) &&
       SUGGESTED_GROUPS.includes(action.group);
     const always =
-      ALWAYS_SUGGESTED.has(action.id) && items.some((i) => !i.disabledReason);
+      action.id === REPEAT &&
+      items.some((i) => !i.disabledReason && !i.detail?.startsWith("Plain"));
     if (offeredHere || always) offered.push(...items);
   }
   // Only the runnable ones are worth suggesting; each shows once.

@@ -15,6 +15,7 @@ import {
 import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import {
   getRememberedBundle,
+  rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
 import { announce, dismissNotice, getNotice } from "@/lib/announce";
@@ -173,7 +174,7 @@ describe("Paint format brush", () => {
     ],
   };
 
-  it("arms (pressed), remembers the bundle, and a second press cancels", () => {
+  it("arms (pressed) and a second press cancels, leaving Repeat as it was", () => {
     editor = createTestEditor({
       content: doc,
       extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
@@ -190,11 +191,33 @@ describe("Paint format brush", () => {
     expect(brush()?.getAttribute("aria-pressed")).toBe("false");
     act(() => brush()?.click());
     expect(brush()?.getAttribute("aria-pressed")).toBe("true");
-    expect(getRememberedBundle()).toMatchObject({ bold: true });
     expect(getNotice()?.text).toBe("Select text to paint · Esc to cancel");
     // Same selection again: cancels without applying.
     act(() => brush()?.click());
     expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    // Picked up but never applied: not the Repeat bundle.
+    expect(getRememberedBundle()).toBeNull();
+  });
+
+  it("arming on plain text and cancelling keeps the Repeat bundle", () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    rememberBundle({ italic: true });
+    editor.commands.setTextSelection({ from: 14, to: 19 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("true");
+    act(() => brush()?.click());
+    expect(getRememberedBundle()).toEqual({ italic: true });
   });
 
   it("applies to a new selection on the second press, as one step", () => {
@@ -223,6 +246,8 @@ describe("Paint format brush", () => {
       text: "Formatting applied",
       done: true,
     });
+    // Applied: now it is the Repeat bundle.
+    expect(getRememberedBundle()).toMatchObject({ bold: true });
   });
 
   it("is disabled with the reason on inline code, unless armed", async () => {

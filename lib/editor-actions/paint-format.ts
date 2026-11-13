@@ -18,7 +18,6 @@ import {
   readBundleAt,
 } from "@/extensions/repeat-formatting/bundle";
 import { rememberBundle } from "@/extensions/repeat-formatting/bundle-memory";
-import type { RepeatFormattingStorage } from "@/extensions/repeat-formatting/repeat-formatting";
 import { announce, dismissNotice } from "@/lib/announce";
 
 /** On the editor's `EditorContent` element (ProseMirror owns `view.dom`'s class). */
@@ -66,8 +65,9 @@ export function cancelPaint(editor: Editor): void {
 
 /**
  * Paints the picked-up bundle onto the selection as one undo step (sets
- * marks, never toggles), then disarms. Unavailable (no text selected,
- * code): says why and stays armed.
+ * marks, never toggles), then disarms. Only now does the bundle become the
+ * remembered Repeat bundle: arming and cancelling leaves Repeat as it
+ * was. Unavailable (no text selected, code): says why and stays armed.
  */
 export function applyPaint(editor: Editor): boolean {
   const state = armed.get(editor);
@@ -78,6 +78,7 @@ export function applyPaint(editor: Editor): boolean {
     return false;
   }
   if (!editor.commands.applyFormatBundle(state.bundle)) return false;
+  rememberBundle(state.bundle);
   cancelPaint(editor);
   announce(PAINT_PILLS.applied, { done: true });
   return true;
@@ -149,16 +150,11 @@ function listen(editor: Editor): () => void {
 
 /**
  * Picks up the formatting at the selection or caret, the full read (plain
- * text picks up "plain", as in Docs), which also becomes the remembered
- * Repeat bundle.
+ * text picks up "plain", as in Docs). It becomes the remembered Repeat
+ * bundle only once applied (`applyPaint`).
  */
 function arm(editor: Editor, touch: boolean): void {
   const bundle = readBundleAt(editor.state);
-  rememberBundle(bundle);
-  const storage = (
-    editor.storage as { repeatFormatting?: RepeatFormattingStorage }
-  ).repeatFormatting;
-  if (storage) storage.session.range = null;
   const { from, to } = editor.state.selection;
   armed.set(editor, { bundle, from, to, stop: listen(editor) });
   emit();

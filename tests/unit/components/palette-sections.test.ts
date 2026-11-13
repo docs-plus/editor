@@ -314,6 +314,26 @@ describe("buildPaletteSections", () => {
     expect(sections.at(-1)?.heading).toBe("History");
   });
 
+  it("does not suggest Repeat when what it would apply is plain, and says so", () => {
+    const ed = setup();
+    rememberBundle({ bold: false, italic: false, textColor: null });
+    ed.commands.setTextSelection({ from: 18, to: 23 });
+    const sections = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...coreActions, ...v11Actions],
+      recentKeys: [],
+    });
+    const suggested = sections.find((s) => s.heading === "Suggested here");
+    expect(
+      suggested?.items.some((i) => i.actionId === "repeat.apply") ?? false,
+    ).toBe(false);
+    const repeat = sections
+      .find((s) => s.heading === "Format")
+      ?.items.find((i) => i.actionId === "repeat.apply");
+    expect(repeat?.disabledReason).toBeUndefined();
+    expect(repeat?.detail).toBe("Plain (removes formatting)");
+  });
+
   it("names style and align rows by their own target, marking the current one", () => {
     const ed = setup();
     ed.commands.setTextSelection(20);

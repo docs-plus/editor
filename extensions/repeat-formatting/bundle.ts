@@ -221,13 +221,18 @@ export function bundleLabel(bundle: FormatBundle): string {
   return parts.length > 0 ? parts.join(", ") : "Plain";
 }
 
+/** A bundle that only clears: applying it strips the formatting. */
+export const PLAIN_SET_LABEL = "Plain (removes formatting)";
+
 /**
  * What a bundle sets, as UI text ("Bold, Yellow highlight"): its clears
- * are left out, so it never says "default size"; "Plain" when it sets
- * nothing (design pass §3).
+ * are left out, so it never says "default size"; `PLAIN_SET_LABEL` when it
+ * sets nothing (design pass §3).
  */
-export const bundleSetLabel = (bundle: FormatBundle): string =>
-  bundleLabel(setEntries(bundle));
+export function bundleSetLabel(bundle: FormatBundle): string {
+  const set = setEntries(bundle);
+  return isEmptyBundle(set) ? PLAIN_SET_LABEL : bundleLabel(set);
+}
 
 /** Every field from a set of marks: a missing mark gives `false` / `null`. */
 export function bundleOfMarks(marks: readonly Mark[]): Required<FormatBundle> {

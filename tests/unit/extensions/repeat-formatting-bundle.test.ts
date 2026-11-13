@@ -92,7 +92,7 @@ describe("bundle keys and labels", () => {
     expect(bundleSetLabel({ textColor: "red", fontSize: "lg" })).toBe(
       "Red text, Large",
     );
-    expect(bundleSetLabel({ bold: false })).toBe("Plain");
+    expect(bundleSetLabel({ bold: false })).toBe("Plain (removes formatting)");
   });
 
   it("bundleLabel names sets and clears", () => {
