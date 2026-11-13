@@ -57,7 +57,9 @@ function LanguageMenu({
   return (
     <ToolbarMenu
       label={label}
-      tooltip={tooltip}
+      // The visible value may truncate; the tooltip keeps it whole.
+      tooltip={`${tooltip}: ${label}`}
+      triggerClassName="min-w-0 shrink max-w-[7.5rem]"
       readOnly={readOnly}
       open={menu.open}
       onOpenChange={menu.onOpenChange}
@@ -208,7 +210,9 @@ function SlotContents({
  * `role="group"` with a changing `aria-label` and no live region; empty for
  * paragraphs and lists, and then hidden from assistive tech. Contents are
  * frozen while focus is in the toolbar (`hold()`); enabled states keep
- * updating, and every run rechecks the live document.
+ * updating, and every run rechecks the live document. The slot never
+ * clips (no `overflow-hidden`): each control's 2px focus outline sits 2px
+ * outside it (WCAG 2.4.7, 2.4.11); a long language value shrinks instead.
  */
 export function ContextSlot({ editor: provided }: { editor?: Editor | null }) {
   const editor = useSurfaceEditor(provided);
@@ -236,7 +240,7 @@ export function ContextSlot({ editor: provided }: { editor?: Editor | null }) {
       aria-label={label}
       data-slot="context-slot"
       data-kind={kind}
-      className="flex items-center gap-0.5 overflow-hidden"
+      className="flex items-center gap-0.5 py-1"
       style={style}
     >
       <SlotContents kind={kind} headingId={headingId} editor={editor} />
