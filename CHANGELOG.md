@@ -30,6 +30,13 @@ since the previous tag.
     grid that opens at the last size and an embed link step, and a
     remembered **list face** for D1's list actions.
   - **Phones** reach text colour, highlight and size from the colour panel.
+    On touch every target is 44×44: the panel wraps to a second line at
+    360px instead of scrolling sideways, popover swatches wrap at six per
+    line (arrow keys follow the lines), the table grid caps at 6×6, and a
+    tap opens the colour popover without taking focus.
+  - Swatches of a colour kind that can't apply here stay focusable but are
+    `aria-disabled` with the reason. Forced colours keep each swatch's
+    colour and show pressed as a ring, separate from the focus outline.
   - **Bundle gate:** `scripts/check-editor-chunk-size.ts` (CI step) keeps
     the editor chunk group within 6 KB gz of the `58a9d22` baseline.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an

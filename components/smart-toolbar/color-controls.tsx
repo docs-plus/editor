@@ -68,6 +68,9 @@ function ColorSplit({
   );
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
   const [open, setOpen] = useState(false);
+  // A tap keeps the editor focused, so the phone keyboard (and the toolbar
+  // docked on it) stays put; keyboard and mouse opens focus a swatch.
+  const [openedByTouch, setOpenedByTouch] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
 
   if (!editor || !view) return null;
@@ -111,6 +114,10 @@ function ColorSplit({
               disabledReason={reason}
               onPointerEnter={loadColorPanel}
               onFocus={loadColorPanel}
+              onPointerDown={(event) =>
+                setOpenedByTouch(event.pointerType === "touch")
+              }
+              onKeyDown={() => setOpenedByTouch(false)}
               onMouseDown={(event) => event.preventDefault()}
             />
           }
@@ -121,10 +128,12 @@ function ColorSplit({
           ref={popupRef}
           aria-label={kind === "text" ? "Text colours" : "Highlight colours"}
           className="st-color-popover"
-          initialFocus={() =>
-            popupRef.current?.querySelector<HTMLElement>(
-              'button[tabindex="0"]',
-            ) ?? true
+          initialFocus={(openType) =>
+            openType === "touch" || openedByTouch
+              ? false
+              : (popupRef.current?.querySelector<HTMLElement>(
+                  'button[tabindex="0"]',
+                ) ?? true)
           }
         >
           <Suspense fallback={<div className="st-color-panel-fallback" />}>
@@ -132,6 +141,7 @@ function ColorSplit({
               editor={editor}
               recent={recent.recent}
               focusKind={kind}
+              focusOnMount={!openedByTouch}
               onApplied={() => setOpen(false)}
             />
           </Suspense>

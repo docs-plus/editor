@@ -19,14 +19,45 @@ import type { RecentColor } from "@/lib/remembered-choice";
 import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
 import { cn } from "@/lib/utils";
 
+import { isCoarsePointer } from "../coarse-pointer";
 import { type Swatch, swatchName, swatchStyle } from "./swatch";
 
 /**
  * The colour popover body (spec §4.5): Recent (M3, frozen while open),
  * Text (default + 10) and Highlight (none + 10). Swatches are named
  * `aria-pressed` buttons in a 2-D roving grid, never a radiogroup, so arrow
- * keys move without applying. Lazy chunk: loaded on first open.
+ * keys move without applying. ↑/↓ follow the visual lines: on touch each
+ * section wraps at `COARSE_COLUMNS` 44px swatches so the popover fits a
+ * 360px phone. A kind that cannot apply here keeps its swatches focusable
+ * but `aria-disabled`, described by the reason. Lazy chunk: loaded on
+ * first open.
  */
+
+/** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
+const COARSE_COLUMNS = 6;
+/** Every section fits one line with a mouse (11 × 24px + gaps). */
+const FINE_COLUMNS = 11;
+
+interface Line {
+  row: number;
+  start: number;
+  length: number;
+}
+
+/** Each section split into visual lines of at most `columns` swatches. */
+function toLines(rows: readonly Row[], columns: number): Line[] {
+  return rows.flatMap((row, index) => {
+    const lines: Line[] = [];
+    for (let start = 0; start < row.swatches.length; start += columns) {
+      lines.push({
+        row: index,
+        start,
+        length: Math.min(columns, row.swatches.length - start),
+      });
+    }
+    return lines;
+  });
+}
 
 interface Row {
   label: string;
@@ -41,6 +72,11 @@ export interface ColorPanelProps {
   focusKind: "text" | "highlight";
   /** Called after a swatch applied (the popover closes). */
   onApplied: () => void;
+  /**
+   * Move focus to the active swatch on mount. False when a tap opened the
+   * popover, so the editor keeps focus and the phone keyboard stays up.
+   */
+  focusOnMount?: boolean;
 }
 
 const TEXT_ROW: Swatch[] = [
@@ -72,6 +108,7 @@ export function ColorPanel({
   recent,
   focusKind,
   onApplied,
+  focusOnMount = true,
 }: ColorPanelProps) {
   const textView = useActionView("color.text.apply", editor);
   const highlightView = useActionView("color.highlight.apply", editor);
@@ -93,6 +130,17 @@ export function ColorPanel({
     : tokenOf(highlightView?.value ?? null);
   const isPressed = (swatch: Swatch) =>
     (swatch.kind === "text" ? currentText : currentHighlight) === swatch.token;
+  const reasons = {
+    text: textView && textView.enabled !== true ? textView.enabled.reason : "",
+    highlight:
+      highlightView && highlightView.enabled !== true
+        ? highlightView.enabled.reason
+        : "",
+  };
+  const [columns] = useState(() =>
+    isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
+  );
+  const lines = toLines(rows, columns);
 
   const firstRow = rows.findIndex(
     (row) => row.label === (focusKind === "text" ? "Text colour" : "Highlight"),
@@ -116,34 +164,46 @@ export function ColorPanel({
   // The chunk may arrive after the popover opened and focused itself:
   // move focus to the active swatch once, on mount.
   const initial = useRef(active);
+  const focusInitially = useRef(focusOnMount);
   useLayoutEffect(() => {
-    focusCell(initial.current.row, initial.current.col);
+    if (focusInitially.current) {
+      focusCell(initial.current.row, initial.current.col);
+    }
   }, [focusCell]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const { row, col } = active;
-    const width = (r: number) => rows[r].swatches.length;
-    let next: { row: number; col: number } | null = null;
+    const width = rows[row].swatches.length;
+    const lineIndex = lines.findIndex(
+      (line) =>
+        line.row === row && col >= line.start && col < line.start + line.length,
+    );
+    const onLine = (target: Line | undefined) =>
+      target && {
+        row: target.row,
+        col:
+          target.start +
+          Math.min(col - lines[lineIndex].start, target.length - 1),
+      };
+    let next: { row: number; col: number } | undefined;
     switch (event.key) {
       case "ArrowRight":
-        next = { row, col: Math.min(col + 1, width(row) - 1) };
+        next = { row, col: Math.min(col + 1, width - 1) };
         break;
       case "ArrowLeft":
         next = { row, col: Math.max(col - 1, 0) };
         break;
       case "ArrowDown":
-        if (row < rows.length - 1)
-          next = { row: row + 1, col: Math.min(col, width(row + 1) - 1) };
+        next = onLine(lines[lineIndex + 1]);
         break;
       case "ArrowUp":
-        if (row > 0)
-          next = { row: row - 1, col: Math.min(col, width(row - 1) - 1) };
+        next = onLine(lines[lineIndex - 1]);
         break;
       case "Home":
         next = { row, col: 0 };
         break;
       case "End":
-        next = { row, col: width(row) - 1 };
+        next = { row, col: width - 1 };
         break;
       default:
         return;
@@ -160,9 +220,17 @@ export function ColorPanel({
     <div
       ref={gridRef}
       className="st-color-panel"
+      style={{ "--swatch-cols": columns } as CSSProperties}
       data-roving-group=""
       onKeyDown={onKeyDown}
     >
+      {(["text", "highlight"] as const).map((kind) =>
+        reasons[kind] ? (
+          <span key={kind} id={`${idPrefix}-${kind}-reason`} hidden>
+            {reasons[kind]}
+          </span>
+        ) : null,
+      )}
       {rows.map((row, rowIndex) => (
         <div key={row.label} className="st-color-row">
           <span
@@ -179,6 +247,7 @@ export function ColorPanel({
             {row.swatches.map((swatch, colIndex) => {
               const pressed = isPressed(swatch);
               const name = swatchName(swatch);
+              const reason = reasons[swatch.kind];
               return (
                 <button
                   key={`${swatch.kind}-${swatch.token ?? "none"}`}
@@ -188,8 +257,12 @@ export function ColorPanel({
                   data-col={colIndex}
                   data-token={swatch.token ?? "none"}
                   aria-label={name}
-                  title={name}
+                  title={reason ? `${name}: ${reason}` : name}
                   aria-pressed={pressed}
+                  aria-disabled={reason ? true : undefined}
+                  aria-describedby={
+                    reason ? `${idPrefix}-${swatch.kind}-reason` : undefined
+                  }
                   tabIndex={
                     active.row === rowIndex && active.col === colIndex ? 0 : -1
                   }
@@ -197,6 +270,7 @@ export function ColorPanel({
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    if (reason) return;
                     if (applySwatch(editor, swatch)) onApplied();
                   }}
                 >
