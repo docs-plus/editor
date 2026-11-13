@@ -81,6 +81,11 @@ jobs:
       - name: Production build
         run: bun run build
 
+      # The lazy editor chunk may grow ≤ 18.5 KB gz over 58a9d22 (owner
+      # decision O1, contract §10 A9; spec §7 said 6 KB).
+      - name: Editor chunk size
+        run: bun scripts/check-editor-chunk-size.ts
+
   e2e:
     name: Playwright (Chromium)
     runs-on: ubuntu-latest

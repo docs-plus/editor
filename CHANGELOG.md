@@ -51,7 +51,397 @@ was added, so this fix can ship to `main` on its own.
   `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
   added about 17%, and the live-editor count stays the main check.
 
+
+### Smart toolbar v1 integration (PR C + D1 + D2, r2 surfaces)
+
+**Release order (owner override O10, 2026-11-13):** the owner chose to merge
+v1 to `main` before release N (PR A + B) was deployed and before the N+1
+adoption reading. The next deploy therefore goes from pre-N straight to N+1:
+follow PR B's Deploy note and then PR C's in one window (Hocus first,
+confirm `min=2 (floor 2, env 0)` and the refusals, then Next). Tabs still
+open on the old build are refused per document (`client_outdated`) until
+they reload; the mixed-version soak shows no content lost and no throttle
+bans. PR E (palette, Repeat formatting, saved formats) is **not** part of
+v1: it stays on its own branch until D's metrics hold for 14 days.
+
+**What v1 has:** the sorted row, the context slot, the colour popover with
+split faces, the size stepper, List and Insert menus, the memory layer with
+Forget, the responsive ladder, the desktop selection bubble, the outline
+overlay below 950px, and the docked phone bar with the Aa ("Text format")
+sheet.
+
+**Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the phone
+bar's context slot cell, and the mobile selection swap and Repeat split
+button (PR E).
+
+**Gates** (contract §10): the Nightly soaks (A10) and the Linux CI chunk
+measurement (+18.9 KB of 20 KB) passed on the integration branch; release N
+and the adoption reading are waived by the owner (O10), and the ladder
+thresholds (A5) ship as measured. O1 to O4, O6, O8 and O9 are
+decided: O2 (arrow-key p95) is log-only in v1, O8 waives the collab typing
+comparison, and O9 accepts production's 2 MiB cap as the limit for
+format-toggle growth (2026-11-13). O7, the perf typing budget, is closed by
+the combined run (toolbar on 4.6/5.4 ms vs off 4.8/5.8 ms median p95). The
+owner's O5, the palette budget, is E's A7 on `feat/smart-toolbar-e-v11` and
+not part of v1.
+
+#### Added
+- **Selection bubble** (spec §4.3, desktop only): selecting text with a fine
+  pointer shows B · I · U │ text colour split │ link above the selection
+  (below it when the sticky toolbar or a collaborator's caret label is in
+  the way). Every bubble action is also in the row. Typing, a node
+  selection, code and Mermaid blocks, a selection inside one link and a
+  read-only document hide it; Esc fades it out (90 ms) and keeps the
+  selection; Alt+F10 focuses it when it shows, else the row. The colour
+  popover opens from the bubble, away from the selection, and keeps it
+  attached. Focus leaving the editor or the bubble (Tab, another control)
+  hides it, and a click between its buttons keeps the editor focused. While
+  the selection is scrolled out of view, or the bubble is wholly under the
+  sticky row, it reads closed: Alt+F10 goes to the row and focus inside it
+  returns to the editor. The bubble is its own lazy chunk (owner decision
+  O1); touch devices and phone widths never load it.
+- **Outline overlay below 950px** (spec §4.6, D2 Decision 5): from 768 to
+  949px the outline slides over the page below the sticky toolbar instead of
+  pushing it aside. It is a non-modal "Outline" dialog with a "Close
+  outline" scrim; it focuses the active item when it opens, closes after a
+  heading pick (caret at the heading's end), and Esc or the scrim return
+  focus to the outline trigger (View ▾ at T4). Esc during a keyboard drag
+  only cancels the drag. Its open state is never remembered, so a
+  remembered "open" never covers the page on load; crossing 950px shows the
+  docked state (M6) and keeps focus, or moves it to "Toggle outline".
+- **More remembered choices** (spec §5, local only, cleared by Forget):
+  - M4: a new code block takes the language most code blocks in the doc
+    use (Mermaid excluded), else the last language you picked, else plain.
+  - M9: the list face follows the last list type from the face, the list
+    menu or a shortcut; the menu now runs the registry's `list.*` actions.
+  - M10: at T1 the last inserted kind gets a labelled face beside the Insert
+    menu; from T2 the plain menu pre-highlights it. A fresh profile keeps
+    "+ Insert" (the fallback was "table").
+  - M17a: the table grid reopens at your last size (now proven end to end,
+    across reloads and Forget).
+- **Responsive ladder** (spec §4.6): the fixed row is a size container and
+  fits its width from 1440px down to 768px, mouse and touch, in paragraph,
+  heading, code and table contexts. Tiers hide groups and show stand-ins:
+  T2 size stepper to "M ▾", Insert icon only, Theme into ⋯; T3 align and
+  indent to a ¶ menu, the slot to one button; T4 the colour pair to one
+  button, Outline and Filter to View ▾; T5 U and S to an Aa menu, a short
+  style value and no separators. Thresholds are the measured row widths
+  (contract A5). Hidden items leave the roving order, and a resize re-stamps
+  it so the row keeps one Tab stop. `toolbar-ladder.spec.ts` asserts the fit
+  at every tier.
+- **Docked phone bar** (spec §4.7, contract A6): below 768px the sticky row
+  gives way to one 44px `role="toolbar"` docked above the on-screen keyboard
+  (`visualViewport`, reset when focus leaves editable content, for iOS), with
+  44×44 cells: Undo, Redo (from 360px; narrower phones find it in the sheet),
+  Aa, Bold, Italic, List, Indent and Insert. Toggles show their state with
+  `aria-pressed`. It hides in a read-only document. The caret and
+  `scroll-padding-bottom` stay clear of the bar and the keyboard. The bar
+  and its sheet are one lazy chunk, loaded only below 768px, so desktop
+  never fetches them (contract A9).
+- **Aa "Text format" sheet**: Colours first (the colour popover's panel:
+  text, highlight, Recent, low-contrast dimming), then Style (Normal,
+  H1–H6; locked in the title), Size (the XS–XL stepper, disabled in
+  headings), Align and More (redo below 360px, outdent, underline,
+  strikethrough, superscript, subscript, inline code, clear formatting,
+  Forget my choices, link, a labelled theme switch), all registry actions
+  with their reasons. It is modal: the page behind it is inert, the popup
+  says `aria-modal` and Tab wraps inside it. Picks keep the sheet open;
+  Link closes it and leaves focus in the link popover; Done returns focus
+  to Aa. The bar's List menu is a radio menu like the row's.
+- Crossing 768px with focus in the row or the phone bar moves focus to the
+  toolbar that replaces it (same action when it shows one) instead of
+  dropping it to the page.
+
+- **Schema soaks in Nightly** (contract A10): a 50,000-toggle colour, highlight
+  and size soak across three clients (convergence, stored copy, schema and
+  size checks) and a mixed-version soak (pre-N clients refused, a release N
+  editor freezes, nothing lost). `bun run test:soak:color` and
+  `bun run test:soak:mixed-version`; see `tests/TESTING.md`.
+
+#### Changed
+- Mouse T2 starts below 1264px (was 1232px, contract A6): the widest M10
+  face ("Code block") overflowed the T1 row by 31px. Touch is unchanged.
+- The `list.*` actions use the list menu's in-place toggle (a list of
+  another type is retyped in one step, nested lists too) and refuse the
+  title; `toggleList` reports success only when the document changed.
+- The row's scrollbar is no longer hidden: where it still overflows, the
+  clipped controls can be found.
+- On touch every row target is 44×44.
+- Phones lose the sideways-scrolling row and its **Text style and colour**
+  panel: the docked bar and the Aa sheet replace both.
+- **Colour popover keeps open after a pick** (owner decision O4, spec
+  §4.5): Enter or a click applies the swatch and keeps the popover open with
+  focus on it, so writers can try several colours; Esc returns focus to the
+  trigger. Focus opens on the applied swatch, else the section's first;
+  arrows follow the token order; the check glyph sits on its own badge. PR
+  A's per-swatch forced-colours border check runs on D2's swatches.
+- **Low-contrast highlight swatches are dimmed** (owner decision O3, spec
+  Appendix A): a highlight that would put the current text colour below
+  4.5:1 is dimmed and described "Low contrast", but stays selectable; the
+  focus ring keeps full strength. Text swatches never dim.
+- **Editor chunk budget raised to 20 KB** (owner, contract A11): the r2
+  fixes are eager and the budget had 16 B left; the combined branch measures
+  +18.8 KB.
+- **Editor chunk budget** (owner decision O1, contract A9): the Insert
+  menu's table grid and embed form now load as their own chunk, on the
+  Insert button's hover or focus (the colour popover and the bubble already
+  did). The CI gate's budget is now +18.5 KB gz over the `58a9d22` baseline
+  (measured +18.43 KB; spec §7 said +6 KB). Lazy slot controls and menu
+  items were tried and reverted (contract A9).
+
+#### Fixed
+- **A lazy chunk that fails to load no longer crashes the page** (contract
+  A9). If the colour popover body, an Insert step or the selection bubble
+  cannot be fetched (offline, or a deploy replaced it), the popover stays
+  empty or the bubble does not show; the editor and the tabs stay mounted
+  and typing works. The next open fetches the chunk again. The colour and
+  Insert chunks are now also fetched when the browser is idle after the
+  first server sync, so the service worker caches them for offline use.
+- **The selection bubble could vanish while open.** When its chunk arrived
+  after the selection, the bubble was shown and then detached a frame later
+  without closing, and it did not come back until the selection changed. It
+  showed up as the intermittent `selection-bubble.spec.ts` failures under
+  three e2e workers (contract A9 has the cause).
+- **A selection change with focus inside the bubble threw.** Collapsing the
+  selection programmatically (for example a remote edit) while a bubble
+  button had focus made the bubble's hide run twice inside one transaction,
+  and the second removal threw from the dispatch. Focus now returns to the
+  editor instead.
+- **Tab past the last bubble item dropped focus on the page.** It now
+  returns to the editor with the selection intact, and the bubble stays
+  away until a new selection, as after Esc.
+- **The Insert face could undo a quote.** At T1 the remembered kind's face
+  read as a "Quote" toggle, and a click with the caret in a quote unwrapped
+  it. Faces are now named with a verb ("Insert quote"; the visible text is
+  unchanged) and never show a pressed state, and Quote only inserts: inside
+  a quote it is unavailable ("Already in a quote.").
+- **The Insert step took focus back after it closed.** Base UI returns
+  focus when the table grid or embed form unmounts, after its exit
+  animation, and it always moved focus to Insert. A menu opened in that
+  window (More formatting right after Esc on the grid, on a slow device)
+  lost focus and closed at once; it failed CI under three workers. Picking
+  a table size also ended with focus on Insert instead of in the new table.
+  The step now stays rendered until it has finished closing, and focus goes
+  back to Insert only when it is still inside the closing step.
+- **A fold could stay half-animated.** Registering any editor plugin while
+  a section was folding (the selection bubble mounts its plugin lazily)
+  rebuilt the plugin views and dropped the timer that ends the animation,
+  so the section stayed mid-fold until the next edit. The rebuilt view now
+  finishes it.
+- **Menu items read their shortcut as part of the name** ("Superscript⌘.").
+  The hint is hidden from assistive technology and the item announces its
+  keys through `aria-keyshortcuts`.
+- `tests/e2e/editor-leak.spec.ts` also opens and closes the bubble and its
+  colour popover 100 times and checks that the `document` and `window`
+  listener counts (per event type, through CDP) return to the baseline.
+- **Focus fell to the page when the ladder hid the focused control** (for
+  example Underline at 850px, or browser zoom). It now moves to the same
+  tier's stand-in, or the nearest visible item.
+- **Crossing 768px with focus in the toolbar lost it.** Focus moves to the
+  other toolbar, on the same action when it shows one.
+- **The phone format sheet was not modal.** Tab escaped to the tab strip and
+  the covered bar; the app shell is now inert while it is open, the popup is
+  `aria-modal` and Tab wraps inside it. Link from the sheet leaves focus in
+  the link popover.
+- **A mixed state looked off.** `aria-pressed="mixed"` (bold on half a word)
+  now shows a 6×2px half bar (≥3:1); in forced colours it is a dashed border,
+  so the focus ring stays visible.
+- **Menu items were 28px tall on touch.** On a coarse pointer they are at
+  least 44px; mouse sizes are unchanged.
+- **Colour popover polish:** a visible note under Highlight when swatches
+  are dimmed for contrast, swatch borders at ≥3:1, and the roving focus
+  follows a clicked swatch.
+- **Reduced motion** turns off menu and popover animations, and the phone
+  sheet's, not only the bubble's.
+- An empty context slot no longer leaves two separators side by side.
+
+### Smart toolbar v1, PR D1: action registry, sorted row and context slot
+
+#### Added
+- **Action registry** (`lib/editor-actions/core-actions.ts`, bodies in
+  `lib/editor-actions/core/`): every toolbar command is one action with a
+  label, icon, display shortcut, markdown hint, contexts and a reason when it
+  cannot run. History reads the Yjs UndoManager stack; section moves, lists,
+  tables and indent compute a real `can()` once per selection snapshot.
+- **Context snapshot** (`lib/editor-context/snapshot.ts`): one O(depth) walk
+  gives the kind (media, Mermaid, code, table, title, heading, list,
+  paragraph), ancestor flags and the marks across the selection.
+- **Sorted row** (spec §4.1): history, text style, size, B I U S, colour,
+  link, Align ▾, List ▾, outdent and indent, the context slot, Insert and
+  ⋯ More formatting (superscript, subscript, inline code, clear formatting).
+  Controls never move or disappear: in a read-only document each says "This
+  document is read-only." Group roots carry `data-toolbar-group` and
+  collapsible items `data-collapse-tier` for the responsive ladder.
+- **Context slot** (spec §4.2): a fixed 168px group before Insert with
+  section tools (fold, move up, move down), the title lock, the code or
+  diagram language and copy, table row and column menus, header row and
+  merge or split, and Media options… (opens the media kit's toolbar with
+  focus on its first control; Esc closes it and returns to the slot
+  button). Contents hold while focus is in the toolbar; a section move
+  carries the held heading id and refuses when a collaborator deleted it.
+  The slot never clips focus outlines, and a long language name truncates
+  (full name in the tooltip) instead of overflowing under WCAG 1.4.12 text
+  spacing.
+- **Keyboard model:** one Tab stop with a roving tabindex owned by the
+  toolbar, Alt+F10 to the toolbar, Esc back to the document with its
+  selection. With a focus tooltip open, the first Esc closes the tooltip
+  and keeps focus (WCAG 1.4.13); the next returns to the document.
+- **Clear formatting** (`Mod-\`, #392): removes every inline mark except
+  links in one undo step; never touches block type, alignment or indent;
+  disabled in code.
+- **Shortcut hints** with `aria-keyshortcuts` on every toolbar action (#612).
+- **Tests:** `toolbar-row.spec.ts` (row order, one Tab stop, Alt+F10 and Esc,
+  slot per context, remote heading deletion while the slot has focus, clear
+  formatting keeps links, read-only keeps focus, catch-up render budget,
+  light and dark screenshots); unit tests for the snapshot, key combos, the
+  core actions and the keymap.
+
+#### Changed
+- Indent and outdent mirror Tab (`sinkListItem`, then text indent).
+- The toolbar Profiler records each update's `actualDuration`
+  (`window.__toolbarRenderMs`, dev only); `toolbar-row.spec.ts` logs the
+  catch-up render per burst in a 500-heading document and writes it to the
+  perf report.
+- Disabled reasons are full sentences ending in a period.
+- Text style applies to a mixed range (the Style menu reads "Mixed") and
+  keeps the range selected; a range that starts in the title is disabled
+  with "Title is always H1."
+- The toolbar's roving tabindex does no layout reads while focus is in the
+  document, so slot swaps on arrow keys stay cheap; mark state for a range
+  comes from one selection walk. `toolbar-row.spec.ts` reports arrow and
+  Shift+Arrow p95 in a 500-heading document with and without the toolbar.
+- `sanitizeCodeLanguage` moved to `lib/code-language.ts`.
+
+### Smart toolbar schema (PR C, release N+1)
+
+Release N+1's data layer for the smart toolbar. No toolbar UI. Merge and
+deploy **only after the N+1 ship gates pass** (runbook: ≥ 95% `schema=2` over
+24 h held ≥ 48 h, the refused-client and mixed-version soaks, the staging
+drill).
+
+#### Added
+- **`textColor` and `fontSize` marks** (`extensions/text-style-marks/`):
+  standalone, inclusive like bold, one token attribute each (`color`: the ten
+  palette names; `size`: `xs sm lg xl`, the default size has no mark). They
+  render only `data-text-color` / `data-font-size` for a known token, never
+  inline style; anything else renders as plain text.
+- **Commands for the toolbar:** `setTextColor`, `unsetTextColor`,
+  `setFontSize`, `unsetFontSize`. Each is one transaction, an empty selection
+  sets a stored mark, and an invalid token returns false. `setFontSize`
+  refuses headings and the title.
+- **Appendix A palette** in `extensions/text-style-marks/text-style-marks.scss`
+  for light and dark, with a contrast test (text ≥ 4.5:1 on the page, page
+  text ≥ 7:1 on every highlight) and a test that the SCSS matches
+  `lib/text-style-tokens.ts`. Palette text on a palette highlight is often
+  below 4.5:1 (77/100 light, 49/100 dark pairs): an open decision for PR D
+  (spec Appendix A), with the failing set pinned in the palette test.
+
+#### Changed
+- **Highlights store tokens:** `setHighlight` / `toggleHighlight` accept a
+  palette token or the release N `var(--tt-color-highlight-X)` form (stored as
+  the token X) and refuse anything else, so the old "Default background"
+  swatch is a no-op. `toggleHighlight()`, Mod-Shift-H and `==x==` now use
+  yellow instead of an invisible mark; Mod-Shift-H on any highlight removes it
+  in one press. Toggling and the popover's pressed state compare tokens
+  (`activeHighlightToken`), so a legacy value counts as its token.
+- **Hocus can rewrite stored legacy highlight colours** to their token on
+  load (`afterLoadDocument`, alongside the `link`/`code` rename in
+  `lib/yjs-mark-migration.ts`); tokens and unknown values are left alone.
+  Off by default (`HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` turns it on): release
+  N's popover compares raw values, so on a rewritten highlight N tabs would
+  show no pressed swatch and need two clicks to remove it.
+- **Paste keeps only our own styling:** our `data-text-color`,
+  `data-font-size` and `data-highlight` (and release N's `data-color`) survive
+  a paste between tabs; foreign colour, font size and background (Google Docs,
+  Word, any `<mark>` without a token) paste as plain text. The Docs and Word
+  tests use synthetic clipboard fixtures, not checked against a real
+  clipboard.
+- **Sizes stay out of headings:** a local edit that puts `fontSize` in a
+  heading or the title (turning a sized paragraph into a heading, paste, drop)
+  drops the size in the same undo step; sized text that reaches a heading
+  remotely renders at the heading's size.
+
+#### Security
+- **Client schema floor in code:** `SCHEMA_FLOOR = 2`
+  (`lib/security/client-schema-gate.ts`). Hocus enforces
+  `max(HOCUS_MIN_CLIENT_SCHEMA, 2)`, so the gate is never log-only again and
+  the env can only raise it. The startup line prints the effective minimum.
+- **Ingress allowlist:** `textColor` and `fontSize` are allowed (this
+  release's server half). Unknown names are still refused with 4422.
+
+#### Deploy
+Only after the N+1 ship gates pass, at low traffic. Hocus runs TypeScript from
+source and the running `next start` keeps serving its existing `.next` until
+it restarts, so pulling without building puts the server half live first.
+1. In the live checkout: pull, then `bun install --frozen-lockfile` (no
+   dependency changes in this release). **Do not build yet.**
+2. **Restart Hocus first:** `bunx pm2@6.0.14 restart editor-hocus --update-env`.
+3. **Confirm** `[hocus] client schema gate: min=2 (floor 2, env 0)` in its log,
+   and within a minute a `client_schema` line: `ok` counts release N clients,
+   `refused` counts any pre-N bundles (`client_outdated`; 0 is fine if none
+   are left).
+4. **Then build in a second checkout and swap it in.** Do not build in the
+   live checkout: measured on spare ports (contract §2.3 builder check), an
+   in-place `next build` under a running `next start` made the probed chunks
+   return 500 for a moment during the build, and every changed chunk return
+   500 from then until the restart while the old HTML still points at it, so
+   pages that need a changed chunk fail (about 3 s locally with a warm
+   Turbopack cache; longer on the live host). A `.next` built in another
+   checkout and moved in served every page and chunk after the restart
+   (checked locally, not on the live host). From `/opt/projects/editor.docs.plus`:
+   ```sh
+   git worktree add --detach ../editor-build HEAD
+   cp .env.production ../editor-build/   # build-time NEXT_PUBLIC_* values
+   (cd ../editor-build && bun install --frozen-lockfile && bun run build)
+   rm -rf .next.prev && mv .next .next.prev && mv ../editor-build/.next .next \
+     && bunx pm2@6.0.14 restart editor-next --update-env
+   git worktree remove --force ../editor-build
+   ```
+   The floor and the allowlist are already live, so no N+1 bundle exists
+   before the server half. Only the second between the `mv` and the restart
+   can serve a missing chunk. To roll Next back, swap `.next.prev` back the
+   same way; delete it once N+1 is healthy.
+5. **Later, once release N tabs are gone** (the `client_schema` line's
+   `builds` shows only the N+1 build id for a day), add
+   `HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` to the Hocus env and restart it with
+   `--update-env` at the next routine restart. It only tidies stored values;
+   N+1 reads both forms.
+6. Leave `HOCUS_MIN_CLIENT_SCHEMA` unset. **Never roll back below release N,
+   and never lower the floor.** Before rolling Hocus back below this release,
+   roll Next back first and set `HOCUS_MIN_CLIENT_SCHEMA=2` (release N's code
+   has no floor); N+1 tabs still open then get 4422 on the new marks until
+   they reload. See the runbook.
+
 ### Added
+- **Smart toolbar surfaces and memory (v1, PR D2).** Not deployable on its
+  own: it ships with PR C's marks and PR D1's row, after the N+1 ship gates.
+  - **Memory layer** (`lib/remembered-choice.ts`): versioned local storage
+    under `tinydocy-choices` (cleared by the new **Forget my choices**
+    action) and `tinydocy-ui` (outline open state, kept by Forget). Every
+    read is re-validated against an allowlist; hostile, oversized or
+    other-version payloads fall back to defaults. Written only by actions
+    after their command succeeds. `NEXT_PUBLIC_REMEMBER_CHOICES=0` turns it
+    off.
+  - **Registry actions** `color.*`, `size.*`, `insert.*` and
+    `memory.forget` (`lib/editor-actions/surface-actions.ts`).
+  - **Colour split pair** with remembered faces ("Apply text colour: Red")
+    and a lazily loaded popover: Recent (five mixed colours, frozen while
+    open), text colours and highlights as named `aria-pressed` swatches in
+    a roving grid.
+  - **Size stepper** (`spinbutton`, disabled in headings with a reason),
+    **Insert menu** listing the registry's insert actions with a table size
+    grid that opens at the last size and an embed link step, and a
+    remembered **list face** for D1's list actions.
+  - **Phones** reach text colour, highlight and size from the colour panel.
+    On touch every target is 44×44: the panel wraps to a second line at
+    360px instead of scrolling sideways, popover swatches wrap at six per
+    line (arrow keys follow the lines), the table grid caps at 6×6, and a
+    tap opens the colour popover without taking focus.
+  - Swatches of a colour kind that can't apply here stay focusable but are
+    `aria-disabled` with the reason. Forced colours keep each swatch's
+    colour and show pressed as a ring, separate from the focus outline.
+  - **Bundle gate:** `scripts/check-editor-chunk-size.ts` (CI step) keeps
+    the editor chunk group within 6 KB gz of the `58a9d22` baseline.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
   light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),

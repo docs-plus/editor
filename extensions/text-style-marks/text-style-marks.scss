@@ -1,0 +1,79 @@
+@use "sass:map";
+
+// Text colour, highlight and font size tokens (spec §3, Appendix A).
+// The marks render `data-*` tokens only, never inline style; these rules are
+// the only place a token becomes a colour or a size. The maps mirror
+// `lib/text-style-tokens.ts` (TEXT_COLOR_PALETTE, HIGHLIGHT_PALETTE,
+// FONT_SIZE_EM); `text-style-palette.test.ts` keeps them equal and checks
+// contrast.
+
+$text-colors: (
+  "gray": (light: #57534e, dark: #a8a29e),
+  "brown": (light: #8a4b2a, dark: #d0a284),
+  "red": (light: #dc2626, dark: #f87171),
+  "orange": (light: #c2410c, dark: #fb923c),
+  "yellow": (light: #a16207, dark: #facc15),
+  "green": (light: #15803d, dark: #4ade80),
+  "teal": (light: #0f766e, dark: #2dd4bf),
+  "blue": (light: #2563eb, dark: #60a5fa),
+  "purple": (light: #9333ea, dark: #c084fc),
+  "pink": (light: #db2777, dark: #f472b6)
+);
+
+$highlight-colors: (
+  "gray": (light: #e7e5e4, dark: #3f3f46),
+  "brown": (light: #eddcd0, dark: #4a3228),
+  "red": (light: #fecaca, dark: #5c2a2e),
+  "orange": (light: #fed7aa, dark: #5c3b23),
+  "yellow": (light: #fef08a, dark: #574f12),
+  "green": (light: #bbf7d0, dark: #1f4a30),
+  "teal": (light: #99f6e4, dark: #174542),
+  "blue": (light: #bfdbfe, dark: #1e3a5f),
+  "purple": (light: #e9d5ff, dark: #45305e),
+  "pink": (light: #fbcfe8, dark: #5a2945)
+);
+
+$font-sizes: (
+  "xs": 0.75em,
+  "sm": 0.875em,
+  "lg": 1.25em,
+  "xl": 1.5em
+);
+
+@mixin palette-vars($theme) {
+  @each $token, $value in $text-colors {
+    --tt-text-color-#{$token}: #{map.get($value, $theme)};
+  }
+  // Highlights in the document use the Appendix A values; the global
+  // `--tt-color-highlight-*` variables stay for the existing popover swatches.
+  @each $token, $value in $highlight-colors {
+    --tt-color-highlight-#{$token}: #{map.get($value, $theme)};
+  }
+}
+
+.tiptap {
+  @include palette-vars(light);
+}
+
+.dark .tiptap {
+  @include palette-vars(dark);
+}
+
+@each $token, $_ in $text-colors {
+  .tiptap span[data-text-color="#{$token}"] {
+    color: var(--tt-text-color-#{$token});
+  }
+}
+
+@each $token, $size in $font-sizes {
+  .tiptap span[data-font-size="#{$token}"] {
+    font-size: $size;
+  }
+}
+
+// `fontSize` can reach a heading without a command (remote edits, old
+// documents, a paragraph turned into a heading elsewhere). Headings and the
+// title keep their own size; this outranks the size rules above.
+.tiptap :is(h1, h2, h3, h4, h5, h6) span[data-font-size] {
+  font-size: inherit;
+}

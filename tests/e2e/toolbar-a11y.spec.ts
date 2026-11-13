@@ -9,8 +9,11 @@ import {
 } from "./helpers/a11y";
 import { getPlaywrightModifierKey } from "./helpers/playwright-modifier-key";
 
+/** A row button: a text selection also shows the bubble's B · I · U. */
 const toolbarButton = (page: Page, name: string) =>
-  page.getByRole("toolbar").getByRole("button", { name, exact: true });
+  page
+    .getByRole("toolbar", { name: "Formatting", exact: true })
+    .getByRole("button", { name, exact: true });
 
 /** Keyboard modality first (so `:focus-visible` matches), then focus the
  * button directly. Arrowing from a neighbour would work too: the toolbar
@@ -174,7 +177,9 @@ test("forced colours keep the focus outline and mark pressed with Highlight", as
   );
 
   await testInfo.attach("toolbar-forced-colors", {
-    body: await page.getByRole("toolbar").screenshot(),
+    body: await page
+      .getByRole("toolbar", { name: "Formatting", exact: true })
+      .screenshot(),
     contentType: "image/png",
   });
 });
@@ -214,52 +219,80 @@ async function closeWithEscape(page: Page, dialog: Locator) {
   await expect(dialog).toBeHidden();
 }
 
+/** D2's colour split: the chevron opens the colour popover (spec §4.5). */
+const highlightTrigger = (page: Page) =>
+  page
+    .getByRole("toolbar")
+    .getByRole("button", { name: "More highlight colours" });
+
+/** The popover's Highlight row; Recent can repeat the same swatch names. */
+const highlights = (dialog: Locator) =>
+  dialog.getByRole("group", { name: "Highlight", exact: true });
+
+async function openHighlightDialog(page: Page): Promise<Locator> {
+  await highlightTrigger(page).click();
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  await expect(highlights(dialog)).toBeVisible();
+  return dialog;
+}
+
 test("highlight dialog: named swatches, focus on open, arrows move focus only", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const trigger = page
-    .getByRole("toolbar")
-    .getByRole("button", { name: /highlight/i })
-    .first();
+  const trigger = highlightTrigger(page);
   await expect(trigger).not.toHaveAttribute("aria-pressed", /.*/);
   await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const dialog = await openHighlightDialog(page);
   await expect(
-    dialog.getByRole("group", { name: "Highlight colours" }),
-  ).toBeVisible();
-  await expect(
-    dialog.locator('[role="menuitem"], [tabindex="0"]:not(button)'),
+    dialog.locator(
+      '[role="menuitem"], [role="radiogroup"], [tabindex="0"]:not(button)',
+    ),
   ).toHaveCount(0);
-  await expect(
-    dialog.getByRole("button", { name: "Green highlight" }),
-  ).toBeFocused();
+  // Nothing applied yet: focus starts on the pressed "No highlight".
+  const none = highlights(dialog).getByRole("button", { name: "No highlight" });
+  await expect(none).toBeFocused();
+  await expect(none).toHaveAttribute("aria-pressed", "true");
 
   const before = await page.evaluate(() => window.__tiptap_editor?.getJSON());
   await page.keyboard.press("ArrowRight");
   await expect(
-    dialog.getByRole("button", { name: "Blue highlight" }),
+    highlights(dialog).getByRole("button", { name: "Gray highlight" }),
   ).toBeFocused();
   expect(await page.evaluate(() => window.__tiptap_editor?.getJSON())).toEqual(
     before,
   );
 
-  await page.keyboard.press("Enter");
+  // Arrows follow the token order (spec Appendix A).
+  await page.keyboard.press("ArrowRight");
   await expect(
-    dialog.getByRole("button", { name: "Blue highlight" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await closeWithEscape(page, dialog);
-  await expect(trigger).toBeFocused();
+    highlights(dialog).getByRole("button", { name: "Brown highlight" }),
+  ).toBeFocused();
 
-  // Reopen: Blue is pressed, focused and carries a check glyph.
+  // Enter applies and keeps the popover open, focus on the swatch.
+  const blue = highlights(dialog).getByRole("button", {
+    name: "Blue highlight",
+  });
+  await blue.focus();
   await page.keyboard.press("Enter");
-  const blue = dialog.getByRole("button", { name: "Blue highlight" });
-  await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-pressed", "true");
   await expect(blue.locator("svg")).toHaveCount(1);
+  await expect(dialog).toBeVisible();
+  await expect(blue).toBeFocused();
+  expect(
+    await page.evaluate(
+      () => window.__tiptap_editor?.getAttributes("highlight").color,
+    ),
+  ).toBe("blue");
+  await expect(none).toHaveAttribute("aria-pressed", "false");
+
+  // Esc returns focus to the trigger; reopening focuses the applied swatch.
+  await closeWithEscape(page, dialog);
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(blue).toBeFocused();
+  await expect(blue).toHaveAttribute("aria-pressed", "true");
   await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 });
@@ -269,27 +302,51 @@ test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger"
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const trigger = page
-    .getByRole("toolbar")
-    .getByRole("button", { name: /highlight/i })
-    .first();
-  await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-  const green = dialog.getByRole("button", { name: "Green highlight" });
-  await expect(green).toBeFocused();
+  const dialog = await openHighlightDialog(page);
+  const green = highlights(dialog).getByRole("button", {
+    name: "Green highlight",
+  });
+  await green.focus();
   await page.keyboard.press("Enter");
   await expect(green).toHaveAttribute("aria-pressed", "true");
+  await expect(green).toBeFocused();
 
-  const none = dialog.getByRole("button", { name: "No highlight" });
+  const none = highlights(dialog).getByRole("button", { name: "No highlight" });
   await none.focus();
   await page.keyboard.press("Enter");
   await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(none).toHaveAttribute("aria-pressed", "true");
   expect(
     await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
   ).toBe(false);
   await expect(none).toBeFocused();
   await closeWithEscape(page, dialog);
-  await expect(trigger).toBeFocused();
+  await expect(highlightTrigger(page)).toBeFocused();
+});
+
+test("highlight dialog: a Mod-Shift-H highlight shows as the pressed Yellow swatch", async ({
+  page,
+}) => {
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  await page.keyboard.press(`${getPlaywrightModifierKey()}+Shift+KeyH`);
+  // Stored as the bare token.
+  expect(
+    await page.evaluate(
+      () => window.__tiptap_editor?.getAttributes("highlight").color,
+    ),
+  ).toBe("yellow");
+
+  const dialog = await openHighlightDialog(page);
+  const yellow = highlights(dialog).getByRole("button", {
+    name: "Yellow highlight",
+  });
+  await expect(yellow).toHaveAttribute("aria-pressed", "true");
+  await expect(yellow.locator("svg")).toHaveCount(1);
+  await expect(
+    highlights(dialog).getByRole("button", { name: "Green highlight" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await closeWithEscape(page, dialog);
 });
 
 const SWATCHES = ["Green", "Blue", "Red", "Purple", "Yellow"] as const;
@@ -303,49 +360,186 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     else await setTheme(page, mode);
     await openToolbarTestDoc(page);
     await selectWord(page);
-    await page
-      .getByRole("toolbar")
-      .getByRole("button", { name: /highlight/i })
-      .first()
-      .click();
-    const dialog = page.getByRole("dialog", { name: "Highlight colours" });
 
+    const dialog = await openHighlightDialog(page);
     for (const name of SWATCHES) {
-      const swatch = dialog.getByRole("button", { name: `${name} highlight` });
+      const swatch = highlights(dialog).getByRole("button", {
+        name: `${name} highlight`,
+      });
       await swatch.click();
       await expect(swatch).toHaveAttribute("aria-pressed", "true");
-      const dot = await swatch
-        .locator(".tiptap-button-highlight")
-        .evaluate((el) => {
-          const cs = getComputedStyle(el);
-          const check = el.querySelector("svg");
-          return {
-            adjust: cs.forcedColorAdjust,
-            border: cs.borderTopWidth,
-            bg: cs.backgroundColor,
-            check: check ? getComputedStyle(check).color : "",
-          };
-        });
-      // Forced colours keep the dot's colour and outline it in CanvasText;
-      // elsewhere the theme decides.
-      expect(dot.adjust).toBe(forced ? "none" : "auto");
-      expect(dot.border).toBe(forced ? "1px" : "0px");
+      // PR A's per-swatch forced-colours check, on D2's swatch: forced
+      // colours keep the swatch's own colour and outline it in a system
+      // colour; elsewhere the theme decides.
+      const border = await swatch.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const probe = document.createElement("div");
+        probe.style.color = "ButtonText";
+        document.body.appendChild(probe);
+        const system = getComputedStyle(probe).color;
+        probe.remove();
+        return {
+          adjust: cs.forcedColorAdjust,
+          width: cs.borderTopWidth,
+          color: cs.borderTopColor,
+          system,
+        };
+      });
+      expect(border.adjust, `${name} forced-color-adjust`).toBe(
+        forced ? "none" : "auto",
+      );
+      expect(border.width, `${name} border`).toBe("1px");
+      if (forced) {
+        expect(border.color, `${name} border in ButtonText`).toBe(
+          border.system,
+        );
+      }
+      const check = await swatch.locator(".st-swatch-check").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { color: cs.color, bg: cs.backgroundColor };
+      });
+      // The check sits on its own badge, so it reads on every swatch colour.
       expect(
         contrastRatio(
-          await resolveRgb(page, dot.check),
-          await resolveRgb(page, dot.bg),
+          await resolveRgb(page, check.color),
+          await resolveRgb(page, check.bg),
         ),
-        `${name} check on its swatch`,
+        `${name} check on its badge`,
       ).toBeGreaterThanOrEqual(3);
     }
 
     await dialog.screenshot({
       path: testInfo.outputPath(`highlight-dialog-${mode.split(" ")[0]}.png`),
     });
+    await closeWithEscape(page, dialog);
   });
 }
 
-test("mobile highlight panel: one arrow press moves one swatch", async ({
+const SCREENS = ".superpowers/screens-r2-popover";
+
+/**
+ * O3 (Appendix A): with teal text selected, a highlight that puts it below
+ * 4.5:1 is dimmed and described "Low contrast" but still applies. Only
+ * highlight swatches dim: the text row never does, even on a highlight.
+ */
+const LOW_CONTRAST_CASES = {
+  // Teal on gray is below AA in light only; teal on yellow in dark only.
+  light: { low: "Gray", ok: "Yellow" },
+  dark: { low: "Yellow", ok: "Gray" },
+} as const;
+
+for (const mode of ["light", "dark", "forced colours"] as const) {
+  test(`colour popover dims low-contrast swatches, still selectable (${mode})`, async ({
+    page,
+  }) => {
+    const forced = mode === "forced colours";
+    const theme = forced ? "light" : mode;
+    if (forced) await page.emulateMedia({ forcedColors: "active" });
+    await setTheme(page, theme);
+    await openToolbarTestDoc(page);
+    await selectWord(page);
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setTextColor("teal"),
+    );
+
+    const dialog = await openHighlightDialog(page);
+    const { low, ok } = LOW_CONTRAST_CASES[theme];
+    const dimmed = highlights(dialog).getByRole("button", {
+      name: `${low} highlight`,
+    });
+    const clear = highlights(dialog).getByRole("button", {
+      name: `${ok} highlight`,
+    });
+    await expect(dimmed).toHaveAttribute("data-low-contrast", "");
+    await expect(dimmed).toHaveAccessibleDescription(
+      "Low contrast with the current text colour",
+    );
+    await expect(dimmed).not.toHaveAttribute("aria-disabled", /.*/);
+    await expect(clear).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(clear).not.toHaveAccessibleDescription(/Low contrast/);
+    // Default text and "No highlight" never dim.
+    await expect(
+      highlights(dialog).getByRole("button", { name: "No highlight" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
+
+    const style = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        opacity: Number(cs.opacity),
+        borderStyle: cs.borderTopStyle,
+        borderWidth: cs.borderTopWidth,
+      };
+    });
+    expect(style.opacity).toBeLessThan(1);
+    // Not colour-only: a dotted border, also in forced colours.
+    expect(style.borderStyle).toBe("dotted");
+    expect(style.borderWidth).toBe("1px");
+
+    // Dimming must not fade the focus ring: opacity also paints the
+    // outline, so composite it at the swatch's opacity over the popover.
+    await page.keyboard.press("Shift");
+    await dimmed.focus();
+    const ring = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(":focus-visible"),
+        outline: cs.outlineColor,
+        opacity: Number(cs.opacity),
+        bg: getComputedStyle(el.closest("[role=dialog]") as Element)
+          .backgroundColor,
+      };
+    });
+    expect(ring.focusVisible).toBe(true);
+    const ringRgb = await page.evaluate(({ outline, opacity, bg }) => {
+      const ctx = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = outline;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b] as [number, number, number];
+    }, ring);
+    expect(
+      contrastRatio(ringRgb, await resolveRgb(page, ring.bg)),
+      "focus ring on a dimmed swatch",
+    ).toBeGreaterThanOrEqual(3);
+
+    await expectNoSeriousA11yViolations(page, [
+      '[role="dialog"][aria-label="Highlight colours"]',
+    ]);
+    if (!forced) {
+      await dialog.screenshot({
+        path: `${SCREENS}/colour-low-contrast-${theme}.png`,
+      });
+    }
+
+    // Still selectable: it applies and the popover stays open. The text
+    // row stays undimmed although teal is now below AA on this highlight.
+    await dimmed.click();
+    await expect(dimmed).toHaveAttribute("aria-pressed", "true");
+    expect(
+      await page.evaluate(
+        () => window.__tiptap_editor?.getAttributes("highlight").color,
+      ),
+    ).toBe(low.toLowerCase());
+    const teal = dialog
+      .getByRole("group", { name: "Text colour", exact: true })
+      .getByRole("button", { name: "Teal text" });
+    await expect(teal).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(teal).not.toHaveAccessibleDescription(/Low contrast/);
+    await expect(
+      dialog
+        .getByRole("group", { name: "Text colour", exact: true })
+        .getByRole("button", { name: "Default text" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
+    await closeWithEscape(page, dialog);
+  });
+}
+
+test("phone format sheet colours: one arrow press moves one swatch", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -353,16 +547,17 @@ test("mobile highlight panel: one arrow press moves one swatch", async ({
   await selectWord(page);
   await page
     .getByRole("toolbar")
-    .getByRole("button", { name: "Highlight text" })
+    .getByRole("button", { name: "Text format" })
     .click();
 
-  const group = page.getByRole("group", { name: "Highlight colours" });
+  const dialog = page.getByRole("dialog", { name: "Text format" });
+  const group = dialog.getByRole("group", { name: "Highlight" });
   await expect(group).toBeVisible();
   const green = group.getByRole("button", { name: "Green highlight" });
   await green.focus();
   await page.keyboard.press("ArrowRight");
   await expect(
-    group.getByRole("button", { name: "Blue highlight" }),
+    group.getByRole("button", { name: "Teal highlight" }),
   ).toBeFocused();
 });
 
@@ -458,16 +653,10 @@ async function openPopup(page: Page, popup: Popup) {
   const toolbar = page.getByRole("toolbar");
   if (popup === "highlight dialog") {
     await selectWord(page);
-    await toolbar
-      .getByRole("button", { name: /highlight/i })
-      .first()
-      .click();
-    await expect(
-      page.getByRole("dialog", { name: "Highlight colours" }),
-    ).toBeVisible();
+    await openHighlightDialog(page);
     return;
   }
-  const menus = toolbar.locator('button[aria-haspopup="menu"]');
+  const menus = toolbar.locator('button[aria-haspopup="menu"]:visible');
   await menus.nth(popup === "text style menu" ? 0 : 1).click();
   await expect(page.getByRole("menu")).toBeVisible();
 }
@@ -501,3 +690,49 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("crossing 768px keeps focus in the toolbar that replaces the other", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await openToolbarTestDoc(page);
+  await page.addStyleTag({
+    content: "nextjs-portal { display: none !important; }",
+  });
+  // Into the row on its tab stop, then five items along. (Not Alt+F10:
+  // at T4 it can land on View ▾ and the next arrow drops to the editor,
+  // a ladder issue that predates the phone bar.)
+  await page
+    .getByRole("toolbar", { name: "Formatting" })
+    .getByRole("button", { name: "Undo" })
+    .focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+  const inToolbar = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      const toolbar = active?.closest('[role="toolbar"]');
+      return toolbar ? (toolbar.getAttribute("data-variant") ?? "") : null;
+    });
+  expect(await inToolbar()).not.toBeNull();
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(page.locator("[data-mobile-bar]")).toBeVisible();
+  await expect.poll(inToolbar).toBe("docked");
+
+  // And back: the row takes it, on the same action when it shows one.
+  await page.keyboard.press("ArrowLeft");
+  const id = await page.evaluate(
+    () =>
+      document.activeElement
+        ?.closest<HTMLElement>("[data-action-id]")
+        ?.getAttribute("data-action-id") ?? null,
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator("[data-mobile-bar]")).toHaveCount(0);
+  await expect.poll(inToolbar).toBe("fixed");
+  if (id) {
+    await expect(
+      page.locator(`[role="toolbar"] [data-action-id="${id}"]`).first(),
+    ).toBeFocused();
+  }
+});

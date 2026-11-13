@@ -6,9 +6,20 @@ import { useEffect, useState } from "react";
  * that touches them, so e2e tests can assert how often typing re-renders the
  * toolbar. Production builds skip the count (and React drops `onRender`).
  */
-export function countToolbarCommit(): void {
+export function countToolbarCommit(
+  _id?: string,
+  phase?: "mount" | "update" | "nested-update",
+  actualDuration?: number,
+): void {
   if (process.env.NODE_ENV === "production") return;
   window.__toolbarCommits = (window.__toolbarCommits ?? 0) + 1;
+  // Catch-up render cost per commit (D1): the perf spec sums it per burst.
+  if (phase !== "mount" && actualDuration !== undefined) {
+    window.__toolbarRenderMs = [
+      ...(window.__toolbarRenderMs ?? []),
+      actualDuration,
+    ];
+  }
 }
 
 /**

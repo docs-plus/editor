@@ -417,6 +417,11 @@
       "inclusive": true,
       "excludes": "_"
     },
+    "fontSize": {
+      "attrs": ["size"],
+      "inclusive": true,
+      "excludes": "_"
+    },
     "highlight": {
       "attrs": ["color"],
       "inclusive": true,
@@ -449,6 +454,11 @@
     },
     "superscript": {
       "attrs": [],
+      "inclusive": true,
+      "excludes": "_"
+    },
+    "textColor": {
+      "attrs": ["color"],
       "inclusive": true,
       "excludes": "_"
     },

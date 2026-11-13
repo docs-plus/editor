@@ -1,5 +1,7 @@
 import { type CDPSession, expect, type Page, test } from "@playwright/test";
 
+import { EditorPage } from "./helpers/editor-page";
+
 /** Longer than collab-session's deferred release (1 s). */
 const SETTLE_MS = 2_000;
 const SWITCHES = 20;
@@ -37,6 +39,36 @@ async function liveEditors(cdp: CDPSession): Promise<number> {
     return result.value as number;
   } finally {
     // Handles held by the protocol would keep the editors alive themselves.
+    await cdp.send("Runtime.releaseObjectGroup", { objectGroup });
+  }
+}
+
+/**
+ * Event listeners on `document` and `window`, counted per target and type
+ * (`"document:keydown"`), so a failure names the listener that leaked.
+ */
+async function listenerCounts(
+  cdp: CDPSession,
+): Promise<Record<string, number>> {
+  const objectGroup = "listener-count";
+  const counts: Record<string, number> = {};
+  try {
+    for (const target of ["document", "window"]) {
+      const { result } = await cdp.send("Runtime.evaluate", {
+        expression: target,
+        objectGroup,
+      });
+      if (!result.objectId) throw new Error(`no ${target}`);
+      const { listeners } = await cdp.send("DOMDebugger.getEventListeners", {
+        objectId: result.objectId,
+      });
+      for (const { type } of listeners) {
+        const key = `${target}:${type}`;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  } finally {
     await cdp.send("Runtime.releaseObjectGroup", { objectGroup });
   }
 }
@@ -121,5 +153,79 @@ test.describe("editor lifetime", () => {
     // 17% after 20 switches and kept growing.
     expect(after.editors).toBeLessThanOrEqual(before.editors + 1);
     expect(after.heap).toBeLessThanOrEqual(before.heap * 1.1);
+  });
+
+  test("opening and closing the bubble and colour popover leaves no listeners", async ({
+    page,
+  }) => {
+    test.setTimeout(300_000);
+    const CYCLES = 100;
+    const editorPage = new EditorPage(page);
+    await editorPage.goto();
+    await editorPage.waitForSync();
+    await editorPage.setContent({
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Title" }],
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Select some words here" }],
+        },
+      ],
+    });
+    const bubble = page.locator("[data-smart-bubble]");
+    const toolbar = page.getByRole("toolbar", { name: "Selection formatting" });
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    /** Select "some words" (bubble opens), or collapse to a caret (closes). */
+    const select = (words: boolean) =>
+      page.evaluate((range) => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        let from = -1;
+        editor.state.doc.descendants((node, pos) => {
+          const at = node.isText
+            ? (node.text?.indexOf("some words") ?? -1)
+            : -1;
+          if (at >= 0) from = pos + at;
+          return from < 0;
+        });
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from, to: range ? from + 10 : from })
+          .run();
+      }, words);
+
+    const cycle = async () => {
+      await select(true);
+      await expect(bubble).toHaveAttribute("data-state", "open");
+      await toolbar.getByRole("button", { name: "More text colours" }).click();
+      // The panel is a lazy chunk: wait until it has focused a swatch.
+      await expect(dialog.locator("button:focus")).toHaveCount(1);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await select(false);
+      await expect(bubble).toHaveCount(0);
+    };
+
+    // Warm up: chunks loaded, tooltips and popover singletons created.
+    for (let i = 0; i < 3; i++) await cycle();
+    const cdp = await page.context().newCDPSession(page);
+    await page.waitForTimeout(500);
+    const before = await listenerCounts(cdp);
+
+    for (let i = 0; i < CYCLES; i++) await cycle();
+    await page.waitForTimeout(500);
+    const after = await listenerCounts(cdp);
+
+    test.info().annotations.push({
+      type: "document + window listeners",
+      description: `${JSON.stringify(before)} → ${JSON.stringify(after)}`,
+    });
+    expect(after).toEqual(before);
   });
 });

@@ -4,7 +4,9 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  lazy,
   Profiler,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -14,7 +16,7 @@ import {
 } from "react";
 import type * as Y from "yjs";
 
-import { Toolbar } from "@/components/ui/toolbar";
+import { focusRovingItem, Toolbar } from "@/components/ui/toolbar";
 import {
   type HeadingFilterCallbackState,
   readFilterUrl,
@@ -45,35 +47,39 @@ import {
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
 import { DocumentNotice } from "@/components/document-editor/document-notice";
+import { EditorSurfaces } from "@/components/smart-toolbar/editor-surfaces";
+import { PhoneMenuCells } from "@/components/smart-toolbar/phone/phone-menu-cells";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
-import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
 import {
   countToolbarCommit,
   useToolbarOffForTests,
 } from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
+import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import {
   FilterBar,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
 import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
-import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
+import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
+import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
-import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
+import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
+import { useToolbarFocusHandoff } from "./use-toolbar-focus-handoff";
 import {
   type TocItemsStore,
   useTocItems,
   useTocItemsStore,
-  useToolbarHeight,
 } from "./use-document-editor-ui-state";
 import "@/components/document-editor/document-editor.scss";
+import "@/extensions/text-style-marks/text-style-marks.scss";
 
 interface DocumentEditorProps {
   documentId?: string;
@@ -94,6 +100,17 @@ type DocumentEditorContentProps = DocumentEditorProps & {
 
 const getServerGuardState = (): SchemaGuardState => "ok";
 
+/**
+ * The phone bar and its Aa sheet are one lazy chunk (contract A9): only
+ * phones (< 768px) render it, so desktop never fetches it. Its menu cells
+ * (`PhoneMenuCells`) come from here, out of the editor chunk.
+ */
+const MobileToolbarContent = lazy(() =>
+  import("@/components/document-editor/mobile-toolbar-content").then(
+    (module) => ({ default: module.MobileToolbarContent }),
+  ),
+);
+
 /** The outline sidebar, re-rendered on its own when the items change. */
 function DocumentOutline({
   tocStore,
@@ -105,8 +122,6 @@ function DocumentOutline({
   return <TocSidebar items={items} {...props} />;
 }
 
-const SCROLL_CLEARANCE = { top: 52, bottom: 8, left: 0, right: 0 };
-
 const EDITOR_PROPS = {
   attributes: {
     autocomplete: "off",
@@ -116,7 +131,8 @@ const EDITOR_PROPS = {
     class: "document-editor",
   },
   // ProseMirror ignores CSS scroll-padding when it scrolls the caret, so keep
-  // it clear of the sticky toolbar here: 52 = --tt-toolbar-height (44) + 8px air.
+  // it clear of the sticky row, or of the phone bar and keyboard (live
+  // getters: the object's identity never changes, so no `setOptions`).
   scrollMargin: SCROLL_CLEARANCE,
   scrollThreshold: SCROLL_CLEARANCE,
 };
@@ -132,14 +148,16 @@ function DocumentEditorContent({
   serverSynced,
 }: DocumentEditorContentProps) {
   const isMobile = useIsBreakpoint();
-  const { height } = useWindowSize();
-  const [mobileView, setMobileView] = useState<"main" | "highlighter">("main");
   const toolbarRef = useRef<HTMLDivElement>(null);
+  // Crossing 768px keeps focus in the toolbar that replaces the other.
+  const setToolbarRef = useToolbarFocusHandoff(toolbarRef);
   const prevTitleRef = useRef("");
-  const toolbarHeight = useToolbarHeight(toolbarRef);
   const tocStore = useTocItemsStore();
 
-  const [tocVisible, setTocVisible] = useState(true);
+  // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
+  // M6: remembered locally (`tinydocy-ui`), same name and signature.
+  // Below 950px the outline is a transient overlay (A6).
+  const [outlineOpen, setOutlineOpen, outlineView] = useOutlineOpen();
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
@@ -215,6 +233,14 @@ function DocumentEditorContent({
 
   const headingFilter = useHeadingFilter({ editor, filterState });
 
+  // A heading pick closes the overlay; the editor already holds the
+  // selection, so focus it now (Tiptap's focus() waits a frame).
+  const closeOutline = outlineView.close;
+  const closeOutlineOnPick = useCallback(() => {
+    editor?.view.focus();
+    closeOutline();
+  }, [editor, closeOutline]);
+
   const handleToggleFold = useCallback(
     (id: string) => editor?.commands.toggleFold(id),
     [editor],
@@ -235,67 +261,102 @@ function DocumentEditorContent({
 
   useMediaFileUpload(editor);
 
-  const rect = useCursorVisibility({
-    editor,
-    overlayHeight: toolbarHeight,
-  });
+  // D1 (contract §5.2): shell intents from registry actions and Alt+F10.
+  const toggleFilterBar = headingFilter.toggleBar;
+  useEffect(() => {
+    if (!editor) return;
+    return onUiIntent(editor, (intent) => {
+      switch (intent.type) {
+        case "toolbar.focus": {
+          const bubble = document.querySelector<HTMLElement>(
+            '[data-smart-bubble][data-state="open"] [role="toolbar"]',
+          );
+          // A bubble that cannot take focus falls back to the row (A6).
+          return focusRovingItem(bubble) || focusRovingItem(toolbarRef.current);
+        }
+        case "outline.toggle":
+          setOutlineOpen((open) => !open);
+          return true;
+        case "filter.toggle":
+          toggleFilterBar();
+          return true;
+        default:
+          return false;
+      }
+    });
+  }, [editor, setOutlineOpen, toggleFilterBar]);
 
-  const effectiveMobileView = isMobile ? mobileView : "main";
+  // Esc on a toolbar item returns to the document with its selection.
+  // `view.focus()` restores the selection at once; Tiptap's `focus()` waits
+  // a frame, and a keystroke typed before it would land in the toolbar.
+  const returnToEditor = useCallback(() => {
+    editor?.view.focus();
+  }, [editor]);
+
   const toolbarOff = useToolbarOffForTests();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
       <EditorContext.Provider value={{ editor }}>
-        {!toolbarOff && (
-          <Toolbar
-            ref={toolbarRef}
-            style={{
-              ...(isMobile
-                ? {
-                    bottom: `calc(100% - ${height - rect.y}px)`,
-                  }
-                : {}),
-            }}
-          >
+        {/* Phones (< 768px) get the docked bar instead of the row (spec
+            §4.7): one role="toolbar" either way, both reached by Alt+F10. */}
+        {!toolbarOff && !isMobile && (
+          <Toolbar ref={setToolbarRef} onEscape={returnToEditor}>
             <Profiler id="toolbar" onRender={countToolbarCommit}>
-              {effectiveMobileView === "main" ? (
-                <MainToolbarContent
-                  onHighlighterClick={() => setMobileView("highlighter")}
-                  onTocToggle={() => setTocVisible((v) => !v)}
-                  onFilterToggle={headingFilter.toggleBar}
-                  isMobile={isMobile}
-                  tocVisible={tocVisible}
-                  filterActive={
-                    headingFilter.isBarOpen || headingFilter.hasActiveFilters
-                  }
-                />
-              ) : (
-                <MobileToolbarContent onBack={() => setMobileView("main")} />
-              )}
+              <MainToolbarContent
+                onTocToggle={() => setOutlineOpen((open) => !open)}
+                onFilterToggle={headingFilter.toggleBar}
+                tocVisible={outlineOpen}
+                outlineOverlay={outlineView.mode === "overlay"}
+                filterActive={
+                  headingFilter.isBarOpen || headingFilter.hasActiveFilters
+                }
+              />
             </Profiler>
           </Toolbar>
         )}
+        {!toolbarOff && isMobile && (
+          <Suspense fallback={null}>
+            <Profiler id="toolbar" onRender={countToolbarCommit}>
+              <MobileToolbarContent
+                ref={setToolbarRef}
+                editor={editor}
+                onEscape={returnToEditor}
+                menuCells={editor && <PhoneMenuCells editor={editor} />}
+              />
+            </Profiler>
+          </Suspense>
+        )}
+
+        {!toolbarOff && <EditorSurfaces editor={editor} />}
 
         <FilterBar {...headingFilter} />
 
         <div className="editor-with-toc">
-          {tocVisible && !isMobile && (
-            <DocumentOutline
-              tocStore={tocStore}
-              editor={editor}
-              foldedIds={foldedIds}
-              onToggleFold={handleToggleFold}
-              filteredIds={
-                headingFilter.hasActiveFilters
-                  ? filterState.matchedSectionIds
-                  : undefined
-              }
-              previewMatchIds={
-                headingFilter.query.trim().length > 0
-                  ? filterState.matchedSectionIds
-                  : undefined
-              }
-            />
+          {outlineOpen && !isMobile && (
+            <OutlinePanel mode={outlineView.mode} onClose={outlineView.close}>
+              <DocumentOutline
+                tocStore={tocStore}
+                editor={editor}
+                foldedIds={foldedIds}
+                onToggleFold={handleToggleFold}
+                onNavigate={
+                  outlineView.mode === "overlay"
+                    ? closeOutlineOnPick
+                    : undefined
+                }
+                filteredIds={
+                  headingFilter.hasActiveFilters
+                    ? filterState.matchedSectionIds
+                    : undefined
+                }
+                previewMatchIds={
+                  headingFilter.query.trim().length > 0
+                    ? filterState.matchedSectionIds
+                    : undefined
+                }
+              />
+            </OutlinePanel>
           )}
           <EditorContent
             editor={editor}

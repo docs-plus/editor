@@ -161,6 +161,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` | unset | Data controller and contact on `/privacy`. Set both before enabling analytics. |
 | `NEXT_PUBLIC_SERVICE_WORKER` | on | `0` unregisters the worker and deletes its caches. See the [service worker runbook](docs/operations/service-worker-runbook.md). |
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
+| `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size): it shows the defaults and writes nothing. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`) and never reach the document, the server, URLs or analytics. |
 | `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |
@@ -184,7 +185,8 @@ operational guidance is in the
 | `DOC_CREATION_RATE_LIMIT`, `MAX_TOTAL_DOCUMENTS` | 10/h, 2000 | Document creation limits. |
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |
 | `HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS` | on, on, off | Optional Hocuspocus extensions. |
-| `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Minimum client schema. `0` only logs; `1`+ refuses older bundles. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
+| `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Raises the minimum client schema above the built-in floor of 2 (`SCHEMA_FLOOR`); lower values have no effect. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
+| `HOCUS_REWRITE_LEGACY_HIGHLIGHTS` | off | `1` rewrites stored legacy highlight colours (`var(--tt-color-highlight-X)`) to their token on load. Turn it on only once release N tabs are gone. |
 | `HOCUS_ALLOW_ISOLATED_TABS_DOCS` | off | `1` in dev and tests only. The server refuses to start with it in production. |
 
 ## Deploying

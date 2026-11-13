@@ -5,8 +5,23 @@ import {
   readFrameHeader,
 } from "@/lib/security/hocus-frame";
 
-/** Refusal reason for a bundle below `HOCUS_MIN_CLIENT_SCHEMA`. */
+/** Refusal reason for a bundle below the effective minimum client schema. */
 export const CLIENT_OUTDATED_REASON = "client_outdated";
+
+/**
+ * Lowest client schema Hocus ever admits to gated documents (spec §3.1, B3).
+ * Bundles below it delete content they do not know, so the gate is never
+ * log-only again. It only ever goes up; never lower it, not even to roll back.
+ */
+export const SCHEMA_FLOOR = 2;
+
+/**
+ * The minimum the gate enforces: `HOCUS_MIN_CLIENT_SCHEMA` can raise the
+ * floor, never lower it.
+ */
+export function effectiveMinClientSchema(envMin: number): number {
+  return Math.max(envMin, SCHEMA_FLOOR);
+}
 
 export type ClientSchemaBucket = "missing" | "invalid" | "low" | "ok";
 

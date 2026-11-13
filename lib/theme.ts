@@ -2,6 +2,9 @@ import { THEME_COLOR, THEME_COLOR_DARK } from "@/lib/site-config";
 
 export const THEME_STORAGE_KEY = "tinydocy-theme";
 
+/** Fired on `window` after a control other than the row's toggle switches theme. */
+export const THEME_CHANGE_EVENT = "tinydocy-theme-change";
+
 /**
  * Our own theme-color meta, placed before the one Next renders from
  * `viewport.themeColor`. Browsers use the first match, and React never

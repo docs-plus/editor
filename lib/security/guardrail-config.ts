@@ -136,8 +136,10 @@ export const HOCUS_ALLOWED_ORIGINS = (process.env.HOCUS_ALLOWED_ORIGINS ?? "")
   .filter(Boolean);
 
 /**
- * Lowest client `schema` (sent on the socket URL) allowed to open gated
- * documents. `0` (default) refuses nothing and only logs per-minute counts.
+ * Raises the lowest client `schema` (sent on the socket URL) allowed to open
+ * gated documents. The gate enforces `max(this, SCHEMA_FLOOR)` (see
+ * `effectiveMinClientSchema`), so values below the floor of 2, including the
+ * default 0, have no effect.
  */
 export const HOCUS_MIN_CLIENT_SCHEMA = parseEnvInt(
   process.env.HOCUS_MIN_CLIENT_SCHEMA,

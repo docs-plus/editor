@@ -13,8 +13,10 @@ import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
   clientOutdatedError,
   createClientSchemaCounter,
+  effectiveMinClientSchema,
   isClientOutdated,
   isGateExempt,
+  SCHEMA_FLOOR,
   shouldDropOutdatedFrame,
 } from "../lib/security/client-schema-gate";
 import {
@@ -45,13 +47,24 @@ import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
 /** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+/**
+ * `1` rewrites stored legacy highlight colours to tokens on load. Leave it
+ * off until release N tabs are gone: N's popover compares raw values, so a
+ * rewritten highlight shows no pressed swatch there.
+ */
+const REWRITE_LEGACY_HIGHLIGHTS =
+  process.env.HOCUS_REWRITE_LEGACY_HIGHLIGHTS?.trim() === "1";
+
+/** The gate's minimum: the env can raise `SCHEMA_FLOOR`, never lower it. */
+const MIN_CLIENT_SCHEMA = effectiveMinClientSchema(HOCUS_MIN_CLIENT_SCHEMA);
+
 type SocketData = {
   request: Request;
   ip: string;
   connection?: ReturnType<Hocuspocus["handleConnection"]>;
   authTimer?: ReturnType<typeof setTimeout>;
   /**
-   * The socket URL's `schema` is below `HOCUS_MIN_CLIENT_SCHEMA`, so every
+   * The socket URL's `schema` is below `MIN_CLIENT_SCHEMA`, so every
    * gated document on it is refused. Judged once at upgrade (the URL cannot
    * change) and freed with the socket.
    */
@@ -153,7 +166,7 @@ const hocuspocus = new Hocuspocus({
     if (!isGateExempt(documentName)) {
       const outdated = isClientOutdated(
         requestParameters.get("schema"),
-        HOCUS_MIN_CLIENT_SCHEMA,
+        MIN_CLIENT_SCHEMA,
       );
       clientSchemaCounter.record(requestParameters, outdated);
       if (outdated) throw clientOutdatedError();
@@ -195,7 +208,9 @@ const hocuspocus = new Hocuspocus({
   // Runs once per load, after persistence applies the stored state and before
   // any client syncs; the rewrite is persisted through the normal store path.
   async afterLoadDocument({ document, documentName }) {
-    const migrated = migrateLegacyMarks(document);
+    const migrated = migrateLegacyMarks(document, {
+      rewriteHighlights: REWRITE_LEGACY_HIGHLIGHTS,
+    });
     if (migrated > 0) {
       console.info(
         `[hocus] migrated ${migrated} legacy mark range(s) in ${JSON.stringify(documentName)}`,
@@ -227,7 +242,7 @@ const server = Bun.serve<SocketData>({
         ip,
         outdated: isClientOutdated(
           new URL(request.url).searchParams.get("schema"),
-          HOCUS_MIN_CLIENT_SCHEMA,
+          MIN_CLIENT_SCHEMA,
         ),
       };
       if (server.upgrade(request, { data })) {
@@ -284,7 +299,7 @@ const server = Bun.serve<SocketData>({
 });
 
 console.log(
-  `[hocus] client schema gate: min=${HOCUS_MIN_CLIENT_SCHEMA}${HOCUS_MIN_CLIENT_SCHEMA === 0 ? " (log only)" : ""}`,
+  `[hocus] client schema gate: min=${MIN_CLIENT_SCHEMA} (floor ${SCHEMA_FLOOR}, env ${HOCUS_MIN_CLIENT_SCHEMA})`,
 );
 console.log(`Hocuspocus listening on ws://${server.hostname}:${server.port}`);
 

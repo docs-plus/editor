@@ -76,7 +76,8 @@
       "!*.min.js",
       "!*.min.css",
       "!**/*.md",
-      "!**/*.scss"
+      "!**/*.scss",
+      "!tests/fixtures/clipboard"
     ]
   },
   "overrides": [

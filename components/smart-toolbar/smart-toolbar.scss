@@ -1,0 +1,401 @@
+// Smart toolbar surfaces owned by PR D2: colour split pair, colour popover,
+// size stepper, Insert steps, and the responsive ladder (spec §4.6).
+
+// ── Responsive ladder ────────────────────────────────────────────────────
+// Pure container queries on the fixed row. Each tier hides the groups the
+// row marks `data-collapse-tier="tN"` and shows the stand-ins marked
+// `data-collapse-standin="tN"`; hidden items fail `checkVisibility()`, so
+// roving focus skips them. The thresholds are the row's measured widths
+// (mouse, then touch with 44px targets), so `scrollWidth <= clientWidth`
+// holds at every width down to the phone layout; `toolbar-ladder.spec.ts`
+// asserts it. Spec §4.6's numbers were estimates for a narrower row.
+// Each tier starts where the row above it stops fitting, with room for the
+// widest context (a slot stand-in appears from T3 on). Mouse T2 also leaves
+// room for the widest M10 Insert face at T1 ("Code block", contract A6).
+$ladder-mouse: (
+  t2: 1264px,
+  t3: 1128px,
+  t4: 950px,
+  t5: 866px,
+);
+$ladder-touch: (
+  t2: 1560px,
+  t3: 1388px,
+  t4: 1180px,
+  t5: 1012px,
+);
+
+[data-slot="toolbar"][data-variant="fixed"] {
+  container: smart-toolbar / inline-size;
+  // Never hide overflow: a clipped control must stay discoverable.
+  scrollbar-width: thin;
+}
+
+span[data-collapse-standin] {
+  display: none;
+}
+
+@mixin ladder($tiers) {
+  @each $tier, $width in $tiers {
+    @container smart-toolbar (width < #{$width}) {
+      span[data-collapse-tier="#{$tier}"] {
+        display: none;
+      }
+
+      span[data-collapse-standin="#{$tier}"] {
+        display: contents;
+      }
+
+      @if $tier == t2 {
+        .st-insert-label {
+          display: none;
+        }
+
+        // M10: the face is gone, so the menu trigger shows its "+" again.
+        [data-slot="toolbar"] .st-insert-trigger--split .st-insert-plus {
+          display: block;
+        }
+      }
+
+      // Below T3 the slot's stand-in renders nothing in the title either.
+      @if $tier == t3 {
+        [data-toolbar-group="slot"]:has(> [data-collapse-standin]:empty)
+          + [data-slot="toolbar-separator"] {
+          display: none;
+        }
+      }
+
+      // T5: the style menu shows a short value; separators go.
+      @if $tier == t5 {
+        [data-toolbar-group="style"] [data-toolbar-item] {
+          max-width: 3.75rem;
+        }
+
+        [data-slot="toolbar-separator"] {
+          display: none;
+        }
+      }
+    }
+  }
+}
+
+@media (pointer: fine), (pointer: none) {
+  @include ladder($ladder-mouse);
+}
+
+@media (pointer: coarse) {
+  @include ladder($ladder-touch);
+
+  // Every row target is at least 44×44 on touch (spec §6.7, §4.7). The
+  // targets already space the row, so it drops its gaps and menu padding.
+  [data-slot="toolbar"][data-variant="fixed"] {
+    gap: 0;
+
+    [data-slot="toolbar-group"] {
+      gap: 0;
+    }
+
+    [data-toolbar-item] {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    [data-toolbar-item][aria-haspopup] {
+      padding-inline: 0.25rem;
+    }
+  }
+}
+
+// An empty slot (paragraphs, lists) keeps its width but not a second
+// separator, so the row never shows `│ │`.
+[data-toolbar-group="slot"]:has([data-slot="context-slot"][aria-hidden])
+  + [data-slot="toolbar-separator"] {
+  display: none;
+}
+
+.st-color-controls,
+.st-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+// M10 at T1: the face carries the label, the trigger is just its chevron.
+.st-insert-trigger--split .st-insert-plus,
+.st-insert-trigger--split .st-insert-label {
+  display: none;
+}
+
+.st-split {
+  display: inline-flex;
+  align-items: center;
+}
+
+.st-split-face {
+  position: relative;
+}
+
+// The chevron is the second half of a split; ≥ 24px wide (a11y #7).
+.st-split-chevron {
+  width: 1.5rem;
+  min-width: 1.5rem;
+}
+
+.st-face-bar {
+  position: absolute;
+  // Forced colours would erase the background that *is* the colour.
+  forced-color-adjust: none;
+  left: 50%;
+  bottom: 4px;
+  width: 0.875rem;
+  height: 3px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.st-face-bar--text {
+  background: var(--swatch-light, currentColor);
+
+  :is(.dark *) & {
+    background: var(--swatch-dark, currentColor);
+  }
+}
+
+.st-face-bar--highlight {
+  background: var(--swatch, transparent);
+  outline: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+}
+
+// The face's own pressed bar would collide with the colour bar.
+.st-split-face[aria-pressed="true"]::after {
+  display: none;
+}
+
+.st-stepper-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+  }
+}
+
+// Colour popover body (lazy chunk).
+.st-color-popover {
+  padding: 0.625rem;
+}
+
+.st-color-panel-fallback {
+  width: 18rem;
+  height: 7.5rem;
+}
+
+.st-color-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.st-color-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.st-color-row-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--popover-foreground);
+}
+
+// `--swatch-cols` comes from `color-panel.tsx`, whose ↑/↓ follow these lines.
+.st-color-swatches {
+  --swatch-size: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(var(--swatch-cols, 11), var(--swatch-size));
+  gap: 0.25rem;
+}
+
+.st-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.375rem;
+  // ≥ 3:1 on the popover in both themes (WCAG 1.4.11).
+  border: 1px solid color-mix(in srgb, var(--foreground) 50%, transparent);
+  --swatch-bg: var(--background);
+  --swatch-fg: var(--foreground);
+  background: var(--swatch-bg);
+  color: var(--swatch-fg);
+  cursor: pointer;
+
+  svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--foreground) 80%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  // Below AA on the selection's colours (O3): dimmed with a dotted border,
+  // unlike disabled (solid, not-allowed), because it still applies.
+  &[data-low-contrast] {
+    opacity: 0.6;
+    border-style: dotted;
+    border-color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  }
+
+  // Opacity also fades the outline: a focused swatch drops the dimming so
+  // its ring keeps 3:1 (WCAG 1.4.11) and the writer sees the real colour.
+  &[aria-disabled="true"]:focus-visible,
+  &[data-low-contrast]:focus-visible {
+    opacity: 1;
+  }
+
+  // Forced colours: the swatch's own colours are its meaning, so keep them,
+  // with a system border. Pressed is a Highlight ring plus the check badge;
+  // `outline` stays the focus ring.
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+
+    &,
+    &:hover {
+      border-color: ButtonText;
+    }
+
+    // Beats the global forced-colours rule that paints every pressed
+    // button Highlight (`globals.css`), which would erase the colour.
+    &[aria-pressed="true"] {
+      background: var(--swatch-bg);
+      color: var(--swatch-fg);
+      box-shadow: 0 0 0 2px Highlight;
+    }
+
+    &:focus-visible {
+      outline-color: Highlight;
+    }
+
+    &[aria-disabled="true"] {
+      border-style: dashed;
+    }
+
+    &[data-low-contrast] {
+      border-color: ButtonText;
+      border-style: dotted;
+    }
+  }
+}
+
+.st-swatch--text {
+  --swatch-fg: var(--swatch-light, var(--foreground));
+
+  :is(.dark *) & {
+    --swatch-fg: var(--swatch-dark, var(--foreground));
+  }
+}
+
+.st-swatch--highlight {
+  --swatch-bg: var(--swatch, var(--background));
+}
+
+.st-swatch-glyph {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.st-swatch-check {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+  padding: 1px;
+  border-radius: 999px;
+  background: var(--foreground);
+  color: var(--background);
+  forced-color-adjust: auto;
+}
+
+// Table size grid (M17a): 24px cells (WCAG 2.5.8), 44px on touch.
+.st-table-grid {
+  --cell: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  gap: 2px;
+}
+
+.st-table-cell {
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
+  background: var(--background);
+  cursor: pointer;
+
+  &[data-in-range="true"] {
+    background: color-mix(in srgb, var(--primary) 22%, var(--background));
+    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+}
+
+.st-table-size {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--popover-foreground);
+  text-align: center;
+}
+
+// Touch: every target is at least 44×44 (spec §6.7, §4.7).
+@media (pointer: coarse) {
+  .st-split-face,
+  .st-split-chevron,
+  .st-stepper button,
+  .st-stepper-value,
+  .st-swatch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .st-color-swatches {
+    --swatch-size: 44px;
+  }
+
+  .st-table-grid {
+    --cell: 44px;
+  }
+}

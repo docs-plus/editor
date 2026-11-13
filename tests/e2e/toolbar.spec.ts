@@ -115,7 +115,7 @@ test.describe("toolbar focus and disabled controls", () => {
             .filter(Boolean),
         ),
       )
-      .toContain("Nothing to undo");
+      .toContain("Nothing to undo.");
   });
 
   test("an aria-disabled menu trigger stays closed", async ({ page }) => {
@@ -195,7 +195,7 @@ test.describe("toolbar focus and disabled controls", () => {
     await expect(items).toHaveCount(7);
     for (const item of await items.all()) {
       await expect(item).toHaveAttribute("aria-disabled", "true");
-      await expect(item).toHaveAccessibleDescription("Title is always H1");
+      await expect(item).toHaveAccessibleDescription("Title is always H1.");
     }
     await page.keyboard.press("Escape");
     await expect(toolbarButton(page, "Title")).toBeVisible();
