@@ -89,27 +89,48 @@ for (const theme of ["light", "dark"] as const) {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  test(`pressed state has a 2px bar at >=3:1 (${theme})`, async ({ page }) => {
+  test(`pressed state has a short centred underline at >=3:1 (${theme})`, async ({
+    page,
+  }) => {
     await setTheme(page, theme);
     await openToolbarTestDoc(page);
     const bold = await makeBoldPressed(page);
     const style = await bold.evaluate((el) => {
-      const bar = getComputedStyle(el.closest("[role=toolbar]") as Element);
+      const after = getComputedStyle(el, "::after");
+      const own = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      const bar = el.closest("[role=toolbar]") as Element;
       return {
-        boxShadow: getComputedStyle(el).boxShadow,
-        bg: bar.backgroundColor,
+        underline: after.backgroundColor,
+        width: Number.parseFloat(after.width),
+        height: Number.parseFloat(after.height),
+        left: Number.parseFloat(after.left),
+        boxWidth: box.width,
+        fill: own.backgroundColor,
+        barBg: getComputedStyle(bar).backgroundColor,
       };
     });
-    // The computed list ends with "<colour> 0px -2px 0px 0px inset".
-    const match = style.boxShadow.match(
-      /([a-z]+\([^)]*\))\s+0px\s+-2px\s+0px\s+0px\s+inset$/,
+    expect(style.width).toBeLessThanOrEqual(16);
+    expect(style.height).toBe(2);
+    // left:50% plus translateX(-50%) centres it; 50% of the box is the offset.
+    expect(Math.abs(style.left - style.boxWidth / 2)).toBeLessThanOrEqual(1);
+    // The data-active tint is translucent, so composite it over the toolbar.
+    const bg = await page.evaluate(
+      ({ barBg, fill }) => {
+        const ctx = document.createElement("canvas").getContext("2d", {
+          willReadFrequently: true,
+        }) as CanvasRenderingContext2D;
+        ctx.fillStyle = barBg;
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return [r, g, b] as [number, number, number];
+      },
+      { barBg: style.barBg, fill: style.fill },
     );
-    expect(match, style.boxShadow).not.toBeNull();
     expect(
-      contrastRatio(
-        await resolveRgb(page, match?.[1] ?? ""),
-        await resolveRgb(page, style.bg),
-      ),
+      contrastRatio(await resolveRgb(page, style.underline), bg),
     ).toBeGreaterThanOrEqual(3);
   });
 }

@@ -145,8 +145,9 @@
   }
 }
 
-/* Forced colours drop box-shadows and background colours, so the pressed bar
-   cannot carry state there. Pressed uses system colours instead; the focus
+/* Forced colours drop background colours, so the pressed underline cannot
+   carry state there. Pressed uses system colours instead (Highlight fill, a
+   HighlightText underline); the focus
    outline is a real outline and survives. Selectors use `button[...]`, not
    `[data-slot="button"]`: a tooltip trigger overrides data-slot. */
 @media (forced-colors: active) {
@@ -154,6 +155,10 @@
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
+  }
+
+  button[aria-pressed="true"]::after {
+    background: HighlightText;
   }
 
   button[aria-pressed="mixed"] {
