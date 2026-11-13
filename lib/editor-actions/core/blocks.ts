@@ -25,6 +25,12 @@ import {
   ListOrderedIcon,
   ListTodoIcon,
 } from "@/lib/icons";
+import { canToggleList, toggleList } from "@/lib/list-commands";
+import {
+  LIST_TYPE_CHOICE,
+  type ListType,
+  rememberChoice,
+} from "@/lib/remembered-choice";
 
 // --- Text style ----------------------------------------------------------
 
@@ -190,7 +196,7 @@ function styleAction(
 
 // --- Lists ---------------------------------------------------------------
 
-export type ListType = "bulletList" | "orderedList" | "taskList";
+export type { ListType } from "@/lib/remembered-choice";
 
 /** The nearest list's type at the head, or null outside a list. */
 export function listTypeOf(ctx: Ctx): ListType | null {
@@ -210,12 +216,6 @@ export function listTypeOf(ctx: Ctx): ListType | null {
   });
 }
 
-const LIST_COMMANDS = {
-  bulletList: "toggleBulletList",
-  orderedList: "toggleOrderedList",
-  taskList: "toggleTaskList",
-} as const;
-
 function listAction(
   id: string,
   type: ListType,
@@ -224,7 +224,6 @@ function listAction(
   icon: IconComponent,
   markdownHint: string,
 ): AnyAction {
-  const command = LIST_COMMANDS[type];
   return {
     id,
     label,
@@ -234,18 +233,28 @@ function listAction(
     shortcut,
     markdownHint,
     enabled(ctx) {
+      if (ctx.isTitle || startsInTitle(ctx.state.selection)) {
+        return { reason: "Not available in the title." };
+      }
       if (ctx.inCodeBlock || ctx.nodeSelectionType) {
         return { reason: "Lists can't go here." };
       }
       if (!ctx.state.schema.nodes[type]) {
         return { reason: "Not available in this version." };
       }
-      return ctx.can(command, (editor) => editor.can()[command]())
+      // Same check as the list menu, so a heading can become a list.
+      return ctx.can(`list:${type}`, (editor) => canToggleList(editor, type))
         ? true
         : { reason: "Lists can't go here." };
     },
     isActive: (ctx) => listTypeOf(ctx) === type,
-    run: (editor) => editor.chain().focus()[command]().run(),
+    // The list menu's in-place toggle: a list of another type is retyped
+    // in one step (nested lists too), so the face, menu and shortcuts agree.
+    run(editor) {
+      const ok = toggleList(editor, type);
+      if (ok) rememberChoice(LIST_TYPE_CHOICE, type); // M9
+      return ok;
+    },
   };
 }
 
