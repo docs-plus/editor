@@ -235,6 +235,26 @@ test.describe("lazy surface chunks", () => {
     );
   });
 
+  test("the Repeat key whose engine chunk 404s says so, with Retry", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.engine);
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "repeat me");
+    await page.keyboard.press("Shift+Home");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+Alt+KeyV" : "F4",
+    );
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Couldn’t load formatting tools.");
+    await expect(page.getByText("still loading")).toHaveCount(0);
+
+    // Back online: Retry fetches the engine and runs the key.
+    await restore();
+    await pill.getByRole("button", { name: /^Retry/ }).click();
+    await expect(pill).toContainText("Nothing to repeat yet");
+  });
+
   test("an E engine chunk that 404s leaves the editor and the palette working", async ({
     page,
   }) => {
@@ -251,6 +271,11 @@ test.describe("lazy surface chunks", () => {
     // Loading is never a state the user sees (design pass §6).
     await expect(repeatRow).toBeVisible();
     await expect(repeatRow).not.toContainText("still loading");
+    // Running it says the tools did not load, once the palette closes.
+    await page.keyboard.press("Enter");
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Couldn’t load formatting tools.");
+    await expect(pill.getByRole("button", { name: /^Retry/ })).toBeVisible();
     await page.keyboard.press("Escape");
 
     // Back online: the next palette open fetches the engine again.

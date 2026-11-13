@@ -7,11 +7,12 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 import {
   getV11Engine,
   repeatCopyAction,
+  runWithEngine,
 } from "@/lib/editor-actions/v11-actions";
 import { PaintbrushIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
-import { runWithEngine, useEActionReason, usePainting } from "./use-e-action";
+import { useEActionReason, usePainting } from "./use-e-action";
 
 const TOOLTIP = (
   <span className="flex flex-col">

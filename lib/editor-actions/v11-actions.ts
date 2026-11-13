@@ -21,6 +21,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 
 import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
 import type { SessionRange } from "@/extensions/repeat-formatting/relative-range";
+import { announceLater } from "@/lib/announce-later";
 import { runAction } from "@/lib/editor-actions/registry";
 import {
   type Action,
@@ -130,6 +131,29 @@ export function loadV11Engine(): Promise<V11Engine> {
   return loading;
 }
 
+/**
+ * Runs `run` now when the engine is in; otherwise once it lands, if the
+ * selection has not moved. Loading itself is never shown (design pass,
+ * principle 4); a failed load (offline, a replaced chunk) says so on the
+ * pill with Retry, which tries again (§5).
+ */
+export function runWithEngine(editor: Editor, run: () => void): void {
+  if (engine) {
+    run();
+    return;
+  }
+  const { selection } = editor.state;
+  loadV11Engine().then(
+    () => {
+      if (!editor.isDestroyed && editor.state.selection.eq(selection)) run();
+    },
+    () =>
+      announceLater("Couldn’t load formatting tools.", {
+        action: { label: "Retry", run: () => runWithEngine(editor, run) },
+      }),
+  );
+}
+
 /** Test hook: back to before the chunk landed. */
 export function resetV11EngineForTests(): void {
   engine = null;
@@ -142,8 +166,8 @@ export function resetV11EngineForTests(): void {
  * same to every reader as leaving them out, and smaller. Its keywords are
  * the engine's too: only the palette searches them, and it loads after
  * the engine (editor-chunk budget). Before the engine lands it is
- * available, and a run waits for it, then runs through `runAction` (which
- * rechecks) if the selection has not moved, as the Repeat key does.
+ * available, and a run waits for it (`runWithEngine`), then runs through
+ * `runAction` (which rechecks), as the Repeat key does.
  */
 function engineAction<Arg>(
   meta: Omit<Action<Arg>, "enabled" | "value" | "options" | "run" | "keywords">,
@@ -162,15 +186,7 @@ function engineAction<Arg>(
     run(editor, arg) {
       const loaded = body();
       if (loaded) return loaded.run(editor, arg);
-      const { selection } = editor.state;
-      loadV11Engine().then(
-        () => {
-          if (!editor.isDestroyed && editor.state.selection.eq(selection)) {
-            runAction(editor, action as AnyAction, arg);
-          }
-        },
-        () => undefined,
-      );
+      runWithEngine(editor, () => runAction(editor, action as AnyAction, arg));
       return true;
     },
   });

@@ -9,16 +9,13 @@ import { runAction } from "@/lib/editor-actions/registry";
 import {
   formatsApplyAction,
   formatsSaveAction,
+  runWithEngine,
 } from "@/lib/editor-actions/v11-actions";
 import type { SavedFormat } from "@/lib/saved-formats";
 
 import { openPalette } from "../palette/palette-store";
 import { FormatPreview } from "./format-preview";
-import {
-  runWithEngine,
-  useEActionReason,
-  useSavedFormats,
-} from "./use-e-action";
+import { useEActionReason, useSavedFormats } from "./use-e-action";
 
 function SheetFormat({
   editor,

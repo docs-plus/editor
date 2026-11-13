@@ -6,6 +6,7 @@ import {
   getV11Engine,
   loadV11Engine,
   type RepeatSession,
+  runWithEngine,
   type V11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { isMac } from "@/lib/shortcuts";
@@ -106,20 +107,9 @@ export const RepeatFormatting = Extension.create<
       if (engine) return engine.repeatKey(editor);
       // The engine chunk is still loading (slow network, busy device):
       // take the key and repeat once it lands, if the selection has not
-      // moved. The buffered transactions are recorded first, so the
-      // bundle is current.
-      const { from, to } = editor.state.selection;
-      loadV11Engine().then(
-        () => {
-          if (editor.isDestroyed) return;
-          const loaded = drain(storage);
-          const now = editor.state.selection;
-          if (loaded && now.from === from && now.to === to) {
-            loaded.repeatKey(editor);
-          }
-        },
-        () => undefined,
-      );
+      // moved; a failed load says so with Retry. The buffered
+      // transactions are recorded first, so the bundle is current.
+      runWithEngine(editor, () => drain(storage)?.repeatKey(editor));
       return true;
     };
     const keys: Record<string, () => boolean> = { "Mod-Alt-v": repeat };

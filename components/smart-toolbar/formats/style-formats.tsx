@@ -16,17 +16,14 @@ import { runAction } from "@/lib/editor-actions/registry";
 import {
   formatsApplyAction,
   formatsSaveAction,
+  runWithEngine,
 } from "@/lib/editor-actions/v11-actions";
 
 import { openPalette } from "../palette/palette-store";
 import { DescribedItem } from "./described-item";
 import { FormatPreview } from "./format-preview";
 import { removeFormatWithUndo } from "./remove-format";
-import {
-  runWithEngine,
-  useEActionReason,
-  useSavedFormats,
-} from "./use-e-action";
+import { useEActionReason, useSavedFormats } from "./use-e-action";
 
 /** Focuses the first format to remove once the opening menu settles. */
 const focusSoon = (item: HTMLElement | null) => {
