@@ -5,6 +5,7 @@
  * Crossing 950px keeps focus. The docked state (M6) survives reload and
  * "Forget my choices".
  */
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 import { EditorPage } from "./helpers/editor-page";
@@ -164,6 +165,85 @@ test.describe("outline overlay below 950px", () => {
     await page.keyboard.press("Space");
     await page.keyboard.press("Escape");
     await expect(dialog(page)).toBeVisible();
+  });
+
+  test("opens on a scrolled page without moving it or hiding focus", async ({
+    page,
+  }) => {
+    await open(page, 900);
+    await page
+      .locator(".tiptap h2", { hasText: /^Heading 25$/ })
+      .evaluate((el) => el.scrollIntoView({ block: "start" }));
+    const scroller = page.locator(".document-editor-wrapper");
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
+
+    await viewMenu(page).click();
+    const item = page.getByRole("menuitemcheckbox", { name: "Outline" });
+    await expect(item).toBeVisible();
+    // Blocks off screen use estimated heights, so let the page settle first.
+    await page.waitForTimeout(300);
+    const before = await scroller.evaluate((el) => el.scrollTop);
+    await item.click();
+    await expect(dialog(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document.activeElement?.classList.contains("toc-sidebar-item"),
+        ),
+      )
+      .toBe(true);
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBe(before);
+
+    const toolbarBottom = await page
+      .locator('[role="toolbar"][data-variant="fixed"]')
+      .evaluate((el) => el.getBoundingClientRect().bottom);
+    const focused = await page.evaluate(() =>
+      document.activeElement?.getBoundingClientRect().toJSON(),
+    );
+    expect(focused.top).toBeGreaterThanOrEqual(toolbarBottom);
+    // The outline header is not under the toolbar either.
+    const header = await dialog(page)
+      .locator(".toc-sidebar-header")
+      .boundingBox();
+    expect(header?.y ?? 0).toBeGreaterThanOrEqual(toolbarBottom);
+  });
+
+  test("keyboard: View menu opens it, focus is inside, axe passes", async ({
+    page,
+  }) => {
+    await open(page, 900);
+    await viewMenu(page).focus();
+    await page.keyboard.press("Enter");
+    const item = page.getByRole("menuitemcheckbox", { name: "Outline" });
+    await expect(item).toBeVisible();
+    await item.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(document.activeElement?.closest('[role="dialog"]')),
+        ),
+      )
+      .toBe(true);
+    // target-size on the outline's treeitem rows is pre-existing: the
+    // docked outline reports the same row (TocSidebar markup, not the frame).
+    const { violations } = await new AxeBuilder({ page })
+      .include('[role="dialog"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .disableRules(["target-size"])
+      .analyze();
+    expect(
+      violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map(
+          (v) =>
+            `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`,
+        ),
+    ).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(viewMenu(page)).toBeFocused();
   });
 
   test("crossing 950 keeps focus", async ({ page }) => {
