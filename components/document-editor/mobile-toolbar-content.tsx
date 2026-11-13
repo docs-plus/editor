@@ -108,15 +108,15 @@ interface MobileToolbarContentProps {
 /**
  * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, a constant
  * 44px tall, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, redo (360px and up; the sheet carries it below), Aa (the "Text
- * format" sheet: style, size, colours, align, more), B, I, then
- * `menuCells` (list, indent, Insert). Toggles show their state with `aria-pressed`
- * (#269). Hidden in a read-only document (#308), which also closes the
- * sheet. While text is selected it swaps to `PhoneSelectionCells` (PR E,
- * spec §4.7), never while focus is in the bar or the sheet is open; ✕
- * keeps the normal cells until the selection collapses. Follow-up: the
- * context slot cell. Its own lazy chunk with the sheet, loaded only below
- * 768px (contract A9).
+ * undo, redo (where it fits; the sheet carries it otherwise), Aa (the
+ * "Text format" sheet: style, size, colours, align, more), B, I, then
+ * `menuCells` (list, indent, the context slot, Insert). Toggles show their
+ * state with `aria-pressed` (#269). Hidden in a read-only document (#308),
+ * which also closes the sheet. While text is selected it swaps to
+ * `PhoneSelectionCells` (PR E, spec §4.7), never while focus is in the bar
+ * or the sheet is open; ✕ keeps the normal cells until the selection
+ * collapses. Its own lazy chunk with the sheet, loaded only below 768px
+ * (contract A9).
  */
 export function MobileToolbarContent({
   editor,

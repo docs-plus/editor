@@ -6,7 +6,13 @@ import { type ReactNode, useId } from "react";
 import { ThemeToggle } from "@/components/document-editor/theme-toggle";
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { ColorPanel } from "@/components/smart-toolbar/color/color-panel";
+import { useSlotTarget } from "@/components/smart-toolbar/context-slot/use-slot-target";
 import { FontSizeStepper } from "@/components/smart-toolbar/font-size-stepper";
+import { useActionView } from "@/hooks/use-editor-context";
+import { CODE_LANGUAGES } from "@/lib/code-language";
+import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
+import type { ContextKind } from "@/lib/editor-actions/types";
 import type { RecentColor } from "@/lib/remembered-choice";
 
 /** Style rows (the title's own reason, "Title is always H1.", locks them). */
@@ -42,10 +48,52 @@ const MORE_IDS = [
   "memory.forget",
 ];
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * The slot cell's tools by context, named like the cell (the row's T3
+ * stand-in). Kept here: importing them from the row's slot modules would
+ * split those into a shared chunk of the editor group (contract A9).
+ */
+const SLOT_TOOLS: Partial<
+  Record<ContextKind, { label: string; ids: readonly string[] }>
+> = {
+  heading: {
+    label: "Section tools",
+    ids: ["section.fold", "section.moveUp", "section.moveDown"],
+  },
+  code: { label: "Code block tools", ids: ["code.copy"] },
+  mermaid: { label: "Diagram tools", ids: ["mermaid.copySource"] },
+  table: {
+    label: "Table tools",
+    ids: [
+      "table.addRowBefore",
+      "table.addRowAfter",
+      "table.deleteRow",
+      "table.addColumnBefore",
+      "table.addColumnAfter",
+      "table.deleteColumn",
+      "table.toggleHeaderRow",
+      "table.mergeOrSplit",
+    ],
+  },
+  media: { label: "Media tools", ids: ["media.options"] },
+};
+
+const LANGUAGE_ACTION: Partial<
+  Record<ContextKind, "code.language" | "mermaid.language">
+> = { code: "code.language", mermaid: "mermaid.language" };
+
+function Section({
+  title,
+  children,
+  className = "st-sheet-section",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const id = useId();
   return (
-    <section className="st-sheet-section" aria-labelledby={id}>
+    <section className={className} aria-labelledby={id}>
       <h3 id={id} className="st-sheet-heading">
         {title}
       </h3>
@@ -70,9 +118,84 @@ function LinkRow({ editor, onClose }: { editor: Editor; onClose: () => void }) {
 }
 
 /**
+ * The language picker as a native select: the phone's own list picker,
+ * one 44px control, named by its label. A pick runs the registry action.
+ */
+function LanguageSelect({
+  id,
+  editor,
+}: {
+  id: "code.language" | "mermaid.language";
+  editor: Editor;
+}) {
+  const view = useActionView(id, editor);
+  const action = editorActions.get(id);
+  if (!view || !action) return null;
+  const current = CODE_LANGUAGES.find((option) => option.label === view.value);
+  return (
+    <label className="st-sheet-select">
+      <span>
+        {id === "code.language" ? "Code language" : "Diagram language"}
+      </span>
+      <select
+        value={current?.value ?? "plaintext"}
+        disabled={view.enabled !== true}
+        onChange={(event) => runAction(editor, action, event.target.value)}
+      >
+        {CODE_LANGUAGES.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * Below 360px the bar has no room for the context slot cell, so the sheet
+ * carries its tools (shown by `phone.scss` only there), named like the
+ * cell ("Section tools", "Table tools"…). Media options opens the kit's
+ * toolbar over the page, so it closes the sheet first, like Link.
+ */
+function SlotSection({
+  editor,
+  onClose,
+}: {
+  editor: Editor;
+  onClose: () => void;
+}) {
+  const { kind, headingId } = useSlotTarget(editor);
+  const tools = SLOT_TOOLS[kind];
+  const language = LANGUAGE_ACTION[kind];
+  if (!tools) return null;
+  return (
+    <Section title={tools.label} className="st-sheet-section st-sheet-slot">
+      {language ? <LanguageSelect id={language} editor={editor} /> : null}
+      <div
+        className="st-sheet-list"
+        onClickCapture={kind === "media" ? onClose : undefined}
+      >
+        {tools.ids.map((id) => (
+          <ActionButton
+            key={id}
+            id={id}
+            editor={editor}
+            variant="phone"
+            showLabel
+            arg={kind === "heading" ? headingId : undefined}
+          />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+/**
  * Body of the phone "Text format" sheet (spec §4.7): Colours first, so the
- * swatches show without scrolling, then Style, Size, Align and More (Redo
- * below 360px, Outdent, Link). Every control is a registry action (`ActionButton`,
+ * swatches show without scrolling, then the slot's tools (below 360px),
+ * Style, Size, Align and More (Redo when the bar has no room for it,
+ * Outdent, Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
  * reasons (title, headings, code, read-only) and `aria-pressed` states are
  * the row's. Part of the phone bar's lazy chunk (contract A9).
@@ -99,6 +222,7 @@ export function FormatSheetBody({
           focusOnMount={false}
         />
       </Section>
+      <SlotSection editor={editor} onClose={onClose} />
       <Section title="Style">
         <div className="st-sheet-list">
           {STYLE_IDS.map((id) => (

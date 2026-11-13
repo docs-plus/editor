@@ -1,8 +1,11 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import { useRef } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
+import { SlotCollapseButton } from "@/components/smart-toolbar/collapse-menus";
+import { useToolbarHold } from "@/components/smart-toolbar/context-slot/use-slot-target";
 import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
 import {
   ActionRadioItem,
@@ -89,7 +92,28 @@ function ListCell({ editor }: { editor: Editor }) {
 }
 
 /**
- * The phone bar's last cells (spec §4.7): List ▾, Indent and Insert ▾.
+ * The context slot as one cell (spec §4.7): the row's T3 stand-in, a menu
+ * of the current block's tools (section, code language, table row and
+ * column, media options), absent for paragraphs, lists and the title. The
+ * row's `ContextSlot` is not mounted on a phone, so this cell holds the
+ * slot while focus is in the bar or its popups: a collaborator's edit never
+ * removes the cell (or its menu's return target) under focus. The wrapper
+ * always renders, so the hold finds the toolbar even while the cell is
+ * empty. Below 360px it is hidden and the sheet carries its tools.
+ */
+function SlotCell({ editor }: { editor: Editor }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useToolbarHold(editor, ref);
+  return (
+    <span ref={ref} className="contents" data-phone-slot="">
+      <SlotCollapseButton editor={editor} />
+    </span>
+  );
+}
+
+/**
+ * The phone bar's last cells (spec §4.7): List ▾, Indent, the context
+ * slot and Insert ▾.
  * They reuse the row's menus, which the editor chunk already holds, so the
  * editor shell renders them and hands them to the lazy bar
  * (`mobile-toolbar-content.tsx`). Importing the menus from the bar's own
@@ -101,6 +125,7 @@ export function PhoneMenuCells({ editor }: { editor: Editor }) {
     <>
       <ListCell editor={editor} />
       <ActionButton id="indent.indent" editor={editor} variant="phone" />
+      <SlotCell editor={editor} />
       <InsertMenu editor={editor} />
     </>
   );
