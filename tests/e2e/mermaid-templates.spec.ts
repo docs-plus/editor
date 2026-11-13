@@ -149,6 +149,9 @@ test.describe("Mermaid templates (M17b)", () => {
   }) => {
     await openDoc(page);
     await openInsertMenu(page);
+    // Until the insert step's chunk lands, Diagram is one item that
+    // inserts; wait for the submenu trigger it brings.
+    await expect(templatesItem(page)).toHaveAttribute("aria-haspopup", "menu");
     await templatesItem(page).focus();
     await page.keyboard.press("Enter");
     const flowchart = page.getByRole("menuitem", {
