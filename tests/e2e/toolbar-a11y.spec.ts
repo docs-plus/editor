@@ -470,6 +470,38 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     expect(style.borderStyle).toBe("dotted");
     expect(style.borderWidth).toBe("1px");
 
+    // Dimming must not fade the focus ring: opacity also paints the
+    // outline, so composite it at the swatch's opacity over the popover.
+    await page.keyboard.press("Shift");
+    await dimmed.focus();
+    const ring = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(":focus-visible"),
+        outline: cs.outlineColor,
+        opacity: Number(cs.opacity),
+        bg: getComputedStyle(el.closest("[role=dialog]") as Element)
+          .backgroundColor,
+      };
+    });
+    expect(ring.focusVisible).toBe(true);
+    const ringRgb = await page.evaluate(({ outline, opacity, bg }) => {
+      const ctx = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle = outline;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b] as [number, number, number];
+    }, ring);
+    expect(
+      contrastRatio(ringRgb, await resolveRgb(page, ring.bg)),
+      "focus ring on a dimmed swatch",
+    ).toBeGreaterThanOrEqual(3);
+
     await expectNoSeriousA11yViolations(page, [
       '[role="dialog"][aria-label="Highlight colours"]',
     ]);
