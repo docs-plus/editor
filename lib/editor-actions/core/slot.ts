@@ -6,9 +6,9 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 
-import { sanitizeCodeLanguage } from "@/components/document-editor/safe-code-block";
-import { headingFoldPluginKey } from "@/extensions/heading-fold";
+import { headingFoldPluginKey } from "@/extensions/heading-fold/heading-fold-plugin";
 import { computeSection } from "@/extensions/shared/compute-section";
+import { sanitizeCodeLanguage } from "@/lib/code-language";
 import type {
   ActionOption,
   AnyAction,

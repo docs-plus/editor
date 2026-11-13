@@ -5,10 +5,8 @@ import { Editor, type Extension, type JSONContent } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
 import { StarterKit } from "@tiptap/starter-kit";
 
-import {
-  SafeCodeBlock,
-  sanitizeCodeLanguage,
-} from "@/components/document-editor/safe-code-block";
+import { SafeCodeBlock } from "@/components/document-editor/safe-code-block";
+import { sanitizeCodeLanguage } from "@/lib/code-language";
 import { lowlight } from "@/lib/lowlight";
 
 import {
