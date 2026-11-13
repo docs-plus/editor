@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar later-phase plans (docs)
+
+Docs only, no runtime change.
+
+#### Added
+- Implementation plans for the features spec §8 item 6 lists as "Later",
+  in `docs/superpowers/plans/2026-11-13-smart-toolbar-later-*.md`:
+  Continue where you left off (M15), the "/" menu, hover preview and the
+  progressive-disclosure toggle. Each plan is grounded in `main` at
+  `7abadc1` and states that it needs no schema or protocol change. Each
+  also gives its WCAG 2.2 AA requirements, its performance and test plan,
+  and its share of the editor-chunk headroom left under contract A12. The
+  four allocations, plus Turbopack's split cost for new lazy chunks, add up
+  to more than that headroom, so expect an owner budget amendment. The
+  progressive-disclosure toggle is the cheapest and should be measured
+  first.
+- No plan for Document styles (M14b): its `styleRef` allowlist entry must
+  ship in a deploy before the mark (spec §3.1), and nothing has been
+  deployed yet. The "/" menu plan records why under "Not in scope".
+
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
 Rebuilt on `main` after v1 (#32), branch `feat/smart-toolbar-e`.
