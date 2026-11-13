@@ -11,6 +11,7 @@ import {
   rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
+import { coreActions } from "@/lib/editor-actions/core-actions";
 import {
   ACTION_GROUPS,
   type AnyAction,
@@ -190,5 +191,23 @@ describe("buildPaletteSections", () => {
     expect(all.some((i) => i.actionId === "palette.open")).toBe(false);
     const keys = all.map((i) => i.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("names style and align rows by their own target, marking the current one", () => {
+    const ed = setup();
+    ed.commands.setTextSelection(20);
+    const items = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: coreActions,
+      recentKeys: [],
+    }).flatMap((s) => s.items);
+    const byKey = (key: string) => items.find((i) => i.key === key);
+    expect(byKey("style.heading1")?.label).toBe("Heading 1");
+    expect(byKey("style.heading1")?.current).toBeUndefined();
+    expect(byKey("style.paragraph")?.label).toBe("Normal text");
+    expect(byKey("style.paragraph")?.current).toBe(true);
+    expect(byKey("align.center")?.label).toBe("Align center");
+    expect(byKey("align.center")?.current).toBeUndefined();
+    expect(byKey("align.left")?.current).toBe(true);
   });
 });

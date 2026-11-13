@@ -38,6 +38,7 @@ import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
 import { formatsSaveAction } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { CheckIcon } from "@/lib/icons";
 import {
   FORMAT_REASONS,
   MAX_SAVED_FORMATS,
@@ -229,6 +230,9 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                           {/* cmdk forces aria-disabled="false" on items it
                               keeps navigable (spec §6.5), so the state is
                               part of the name. */}
+                          {item.current ? (
+                            <span className="sr-only">, current</span>
+                          ) : null}
                           {item.disabledReason ? (
                             <span className="sr-only">, unavailable</span>
                           ) : null}
@@ -239,8 +243,17 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                           </span>
                         ) : null}
                       </span>
+                      {item.current ? (
+                        <CheckIcon
+                          aria-hidden="true"
+                          data-current=""
+                          className="ml-auto"
+                        />
+                      ) : null}
                       {item.shortcut ? (
-                        <CommandShortcut>
+                        <CommandShortcut
+                          className={item.current ? "ml-0" : undefined}
+                        >
                           {formatKeyCombo(item.shortcut, mac)}
                         </CommandShortcut>
                       ) : null}

@@ -59,6 +59,15 @@ export const MAX_SUGGESTED = 6;
 const HIDDEN_IDS = new Set(["palette.open"]);
 /** Shown in Suggested whenever they can run. */
 const ALWAYS_SUGGESTED = new Set(["repeat.apply"]);
+/**
+ * Actions whose `value()` describes their own target, so it belongs in the
+ * row's name ("Repeat formatting: B"). Others (style, align) return the
+ * selection's current state, which would misname every row of the group
+ * ("Heading 1: Normal text"; WCAG 2.4.6).
+ */
+const VALUE_IN_LABEL = new Set(["repeat.apply", "table.mergeOrSplit"]);
+/** Groups of mutually exclusive choices: the active row is marked current. */
+const CURRENT_GROUPS: ReadonlySet<ActionGroup> = new Set(["style", "align"]);
 
 export interface PaletteItem {
   /** Unique per palette; also what Recent remembers. */
@@ -69,6 +78,8 @@ export interface PaletteItem {
   keywords: string[];
   shortcut?: string;
   disabledReason?: string;
+  /** The selection already has this choice (style and align groups). */
+  current?: true;
 }
 
 export interface PaletteSection {
@@ -96,13 +107,16 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
       shortcut: undefined,
     }));
   }
-  const value = action.value?.(ctx);
+  const value = VALUE_IN_LABEL.has(action.id) ? action.value?.(ctx) : null;
+  const current =
+    CURRENT_GROUPS.has(action.group) && action.isActive?.(ctx) === true;
   return [
     {
       ...base,
       key: action.id,
       label: value ? `${action.label}: ${value}` : action.label,
       keywords,
+      ...(current ? { current: true as const } : {}),
     },
   ];
 }
