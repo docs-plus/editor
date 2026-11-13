@@ -226,7 +226,19 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
+    <Dialog
+      open
+      onOpenChange={(open, details) => {
+        if (open) return;
+        // Esc in the save view goes back to the list; Esc there closes.
+        if (details.reason === "escape-key" && view === "save-format") {
+          details.cancel();
+          setView("actions");
+          return;
+        }
+        close();
+      }}
+    >
       <DialogContent
         data-command-palette=""
         showCloseButton={false}
@@ -307,7 +319,8 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             value={value}
             onValueChange={setValue}
           >
-            <CommandInput placeholder="Search actions…" />
+            {/* Back from the save view: focus returns here. */}
+            <CommandInput autoFocus placeholder="Search actions…" />
             <ResultStatus notice={notice} />
             <CommandList label="Actions">
               <CommandEmpty>No matching actions.</CommandEmpty>
