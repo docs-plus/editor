@@ -44,10 +44,13 @@ export const SCHEMA_NODE_NAMES: ReadonlySet<string> = new Set([
  * Every mark the editor schema can write, plus legacy marks. New marks are
  * added with the server half of the release that ships them, deployed
  * before its clients: allowing a name earlier lets anyone freeze documents
- * for every client that does not know it.
+ * for every client that does not know it. `textColor` and `fontSize` shipped
+ * with the server half of release N+1 (spec §3.1), together with
+ * `SCHEMA_FLOOR = 2`, so no client that drops them can connect.
  */
 export const SCHEMA_MARK_NAMES: ReadonlySet<string> = new Set([
   "bold",
+  "fontSize",
   "highlight",
   "hyperlink",
   "inlineCode",
@@ -55,6 +58,7 @@ export const SCHEMA_MARK_NAMES: ReadonlySet<string> = new Set([
   "strike",
   "subscript",
   "superscript",
+  "textColor",
   "underline",
   ...LEGACY_MARK_NAMES,
 ]);
