@@ -11,6 +11,7 @@
 import type { Editor } from "@tiptap/core";
 import { useId, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -20,9 +21,14 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
-  bundleFace,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
   isEmptyBundle,
   readBundleAt,
   setEntries,
@@ -71,9 +77,7 @@ function saveReason(editor: Editor, name: string): string | null {
 export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   const reasonPrefix = useId();
   const [view, setView] = useState<PaletteMode>(mode);
-  const [name, setName] = useState(() =>
-    bundleFace(setEntries(readBundleAt(editor.state))),
-  );
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const mac = useMemo(() => isMac(), []);
   const sections = useMemo(
@@ -84,6 +88,14 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
         recentKeys: readPaletteRecent(),
       }),
     [editor],
+  );
+  // cmdk highlights its first item on open; make that one Enter can run.
+  const firstRunnable = useMemo(
+    () =>
+      sections
+        .flatMap((section) => section.items)
+        .find((item) => !item.disabledReason)?.key,
+    [sections],
   );
 
   const close = () => {
@@ -127,9 +139,9 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
         className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg"
         finalFocus={false}
       >
-        <DialogTitle className="sr-only">
-          {view === "save-format" ? "Save as format" : "All actions"}
-        </DialogTitle>
+        {view === "save-format" ? null : (
+          <DialogTitle className="sr-only">All actions</DialogTitle>
+        )}
         {view === "save-format" ? (
           <form
             className="flex flex-col gap-2 p-4"
@@ -138,13 +150,18 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
               save();
             }}
           >
+            <DialogTitle>Save as format</DialogTitle>
+            <DialogDescription>
+              Saves the selection&apos;s marks, colour, highlight and size under
+              a name, on this device.
+            </DialogDescription>
             <label
               htmlFor={`${reasonPrefix}-name`}
-              className="text-sm font-medium"
+              className="pt-2 text-sm font-medium"
             >
               Name
             </label>
-            <input
+            <Input
               id={`${reasonPrefix}-name`}
               autoFocus
               maxLength={160}
@@ -155,74 +172,68 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                 setName(event.target.value);
                 setError(null);
               }}
-              className="h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
             />
             {error ? (
               <p
                 id={`${reasonPrefix}-error`}
+                role="alert"
                 className="text-sm text-destructive"
               >
                 {error}
               </p>
             ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                className="h-8 rounded-md px-3 text-sm hover:bg-accent"
-                onClick={close}
-              >
+              <Button type="button" variant="ghost" onClick={close}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                className="h-8 rounded-md bg-primary px-3 text-sm text-primary-foreground"
-              >
-                Save
-              </button>
+              </Button>
+              <Button type="submit">Save</Button>
             </div>
           </form>
         ) : (
-          <Command loop>
+          <Command loop label="Search actions" defaultValue={firstRunnable}>
             <CommandInput placeholder="Search actions…" />
-            <CommandList>
+            <CommandList label="Actions">
               <CommandEmpty>No matching actions.</CommandEmpty>
               {sections.map((section) => (
                 <CommandGroup key={section.heading} heading={section.heading}>
-                  {section.items.map((item) => {
-                    const reasonId = item.disabledReason
-                      ? `${reasonPrefix}-${item.key.replace(/[^\w-]/g, "_")}`
-                      : undefined;
-                    return (
-                      <CommandItem
-                        key={item.key}
-                        value={item.key}
-                        keywords={[item.label, ...item.keywords]}
-                        data-action-id={item.actionId}
-                        data-unavailable={item.disabledReason ? "" : undefined}
-                        aria-describedby={reasonId}
-                        className={
-                          item.disabledReason
-                            ? "text-muted-foreground"
-                            : undefined
-                        }
-                        onSelect={() => select(item)}
-                      >
-                        <span className="flex min-w-0 flex-col">
-                          <span className="truncate">{item.label}</span>
+                  {section.items.map((item) => (
+                    <CommandItem
+                      key={item.key}
+                      value={item.key}
+                      keywords={[item.label, ...item.keywords]}
+                      data-action-id={item.actionId}
+                      data-unavailable={item.disabledReason ? "" : undefined}
+                      className={
+                        item.disabledReason
+                          ? "text-muted-foreground"
+                          : undefined
+                      }
+                      onSelect={() => select(item)}
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">
+                          {item.label}
+                          {/* cmdk forces aria-disabled="false" on items it
+                              keeps navigable (spec §6.5), so the state is
+                              part of the name. */}
                           {item.disabledReason ? (
-                            <span id={reasonId} className="truncate text-xs">
-                              {item.disabledReason}
-                            </span>
+                            <span className="sr-only">, unavailable</span>
                           ) : null}
                         </span>
-                        {item.shortcut ? (
-                          <CommandShortcut>
-                            {formatKeyCombo(item.shortcut, mac)}
-                          </CommandShortcut>
+                        {item.disabledReason ? (
+                          <span className="truncate text-xs">
+                            {item.disabledReason}
+                          </span>
                         ) : null}
-                      </CommandItem>
-                    );
-                  })}
+                      </span>
+                      {item.shortcut ? (
+                        <CommandShortcut>
+                          {formatKeyCombo(item.shortcut, mac)}
+                        </CommandShortcut>
+                      ) : null}
+                    </CommandItem>
+                  ))}
                 </CommandGroup>
               ))}
             </CommandList>

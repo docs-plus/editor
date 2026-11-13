@@ -2,6 +2,12 @@ import { gzipSync } from "node:zlib";
 
 import { expect, type Page, test } from "@playwright/test";
 
+import {
+  contrastRatio,
+  expectNoSeriousA11yViolations,
+  resolveRgb,
+  setTheme,
+} from "./helpers/a11y";
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
 
 /**
@@ -195,9 +201,19 @@ test.describe("action palette", () => {
     await page.locator(".tiptap").click();
     await page.keyboard.press("Alt+Slash");
     const repeat = page.getByRole("option", { name: /^Repeat formatting/ });
-    await expect(repeat).toHaveAccessibleDescription(
-      "Format some text first, or use Copy formatting.",
+    // cmdk keeps items navigable with aria-disabled="false", so the state
+    // is in the name, and the reason is read once.
+    await expect(repeat).toHaveAccessibleName(
+      /^Repeat formatting ?, unavailable Format some text first, or use Copy formatting\./,
     );
+    await expect(repeat).not.toHaveAttribute("aria-describedby", /.+/);
+    // The default highlight is one Enter can run.
+    await expect(
+      page.locator(`${PALETTE} [cmdk-item][data-selected="true"]`),
+    ).not.toHaveAttribute("data-unavailable", /.*/);
+    await expect(
+      page.getByRole("option", { name: /^Save as format… ?, unavailable/ }),
+    ).toBeVisible();
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("repeat formatting");
     await page.keyboard.press("Enter");
@@ -214,8 +230,13 @@ test.describe("action palette", () => {
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("save as format");
     await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("heading", { name: "Save as format" }),
+    ).toBeVisible();
     const name = page.getByLabel("Name");
-    await expect(name).toHaveValue("B · U");
+    await expect(name).toHaveValue("");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("alert")).toHaveText("Use 1–40 characters.");
     await name.fill("Callout");
     await page.keyboard.press("Enter");
     await expect(page.locator(PALETTE)).toHaveCount(0);
@@ -246,6 +267,95 @@ test.describe("action palette", () => {
       timeout: 10_000,
     });
     expect(await html(page)).toContain("pie title Share of time");
+  });
+});
+
+test.describe("palette accessibility", () => {
+  test.skip(process.env.PALETTE_BUDGET === "1", "budget run only");
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`open palette and save view have no serious axe violations (${theme})`, async ({
+      page,
+    }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await select(page, "alpha");
+      await page.keyboard.press("ControlOrMeta+b");
+      await page.keyboard.press("Alt+Slash");
+      const input = page.getByRole("combobox", { name: "Search actions" });
+      await expect(input).toBeFocused();
+      await expect(
+        page.getByRole("listbox", { name: "Actions" }),
+      ).toBeVisible();
+
+      // The active option carries a 3:1 non-colour marker.
+      const active = page.locator(
+        `${PALETTE} [cmdk-item][data-selected="true"]`,
+      );
+      const marker = await active.evaluate((el) => {
+        const bar = getComputedStyle(el, "::before");
+        const popup = el.closest("[data-slot='command']") as HTMLElement;
+        return {
+          content: bar.content,
+          width: bar.width,
+          bar: bar.backgroundColor,
+          bg: getComputedStyle(popup).backgroundColor,
+        };
+      });
+      expect(marker.content).not.toBe("none");
+      expect(Number.parseFloat(marker.width)).toBeGreaterThanOrEqual(2);
+      expect(
+        contrastRatio(
+          await resolveRgb(page, marker.bar),
+          await resolveRgb(page, marker.bg),
+        ),
+      ).toBeGreaterThanOrEqual(3);
+
+      await expectNoSeriousA11yViolations(page, [PALETTE]);
+
+      await page.keyboard.type("save as format");
+      await page.keyboard.press("Enter");
+      await expect(page.getByLabel("Name")).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("alert")).toBeVisible();
+      await expectNoSeriousA11yViolations(page, [PALETTE]);
+      await page.keyboard.press("Escape");
+    });
+  }
+
+  test("forced colours paint the active option with Highlight", async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await openDoc(page);
+    await page.keyboard.press("Alt+Slash");
+    const active = page.locator(`${PALETTE} [cmdk-item][data-selected="true"]`);
+    await expect(active).toBeVisible();
+    const bg = await active.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    const highlight = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.background = "Highlight";
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
+    expect(await resolveRgb(page, bg)).toEqual(
+      await resolveRgb(page, highlight),
+    );
+    // No outline painted on every option: an inactive one has none.
+    const inactive = page
+      .locator(`${PALETTE} [cmdk-item]:not([data-selected="true"])`)
+      .first();
+    expect(
+      await inactive.evaluate((el) => getComputedStyle(el).outlineStyle),
+    ).toBe("none");
+    await testInfo.attach("palette-forced-colors", {
+      body: await page.locator(PALETTE).screenshot(),
+      contentType: "image/png",
+    });
   });
 });
 

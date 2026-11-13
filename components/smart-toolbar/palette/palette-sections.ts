@@ -1,7 +1,7 @@
 /**
  * Builds the palette's groups from the registry (spec §4.4): Recent,
  * Suggested here, Format, Insert, Section, View. Disabled entries stay
- * listed with their reason. Pure: tested without React.
+ * listed with their reason, after the runnable ones of their group. Pure: tested without React.
  */
 import { availability } from "@/lib/editor-actions/registry";
 import type { ActionGroup, AnyAction, Ctx } from "@/lib/editor-actions/types";
@@ -107,6 +107,17 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
   ];
 }
 
+/**
+ * Runnable entries before unavailable ones (stable), so cmdk's default
+ * highlight, the first item, is one Enter can run (spec §6.5).
+ */
+function runnableFirst(items: PaletteItem[]): PaletteItem[] {
+  return [
+    ...items.filter((item) => !item.disabledReason),
+    ...items.filter((item) => item.disabledReason),
+  ];
+}
+
 export function buildPaletteSections(input: {
   ctx: Ctx;
   actions: readonly AnyAction[];
@@ -150,7 +161,8 @@ export function buildPaletteSections(input: {
     else if (heading === "Suggested here") {
       items = prefixed("suggested", suggested.slice(0, MAX_SUGGESTED));
     } else items = byHeading.get(heading) ?? [];
-    if (items.length > 0) sections.push({ heading, items });
+    if (items.length > 0)
+      sections.push({ heading, items: runnableFirst(items) });
   }
   return sections;
 }
