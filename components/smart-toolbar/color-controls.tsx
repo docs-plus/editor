@@ -84,7 +84,6 @@ function ColorSplit({
         tooltip={faceLabel}
         disabled={reason !== undefined}
         disabledReason={reason}
-        isActive={view.active}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           const action = editorActions.get(copy.actionId);
