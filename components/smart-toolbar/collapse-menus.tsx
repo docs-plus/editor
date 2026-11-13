@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/react";
 
 import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
-import { CODE_LANGUAGES } from "@/lib/editor-actions/core/slot";
+import { CODE_LANGUAGES } from "@/lib/code-language";
 import {
   FONT_SIZE_LABELS,
   FONT_SIZE_SHORT,

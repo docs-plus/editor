@@ -13,8 +13,8 @@ import {
 } from "@/components/smart-toolbar/row/action-menu";
 import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
+import { CODE_LANGUAGES } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
-import { CODE_LANGUAGES } from "@/lib/editor-actions/core/slot";
 import { runAction } from "@/lib/editor-actions/registry";
 import {
   type ContextKind,
