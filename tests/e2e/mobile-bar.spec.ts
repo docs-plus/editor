@@ -1082,6 +1082,20 @@ for (const width of [320, 375]) {
   });
 }
 
+test("the presence and Privacy chips hide while the selection bar shows", async ({
+  page,
+}) => {
+  await openDoc(page);
+  const chips = page.locator("[data-collab-status]");
+  await expect(chips).toBeVisible();
+  await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+  await expect(chips).toBeHidden();
+  await selectionBar(page)
+    .getByRole("button", { name: "Back to all tools" })
+    .tap();
+  await expect(chips).toBeVisible();
+});
+
 test.describe("selection cells at 375px (design pass §6)", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
