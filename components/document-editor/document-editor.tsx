@@ -4,6 +4,7 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  Profiler,
   useCallback,
   useEffect,
   useMemo,
@@ -46,6 +47,10 @@ import {
 import { DocumentNotice } from "@/components/document-editor/document-notice";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
+import {
+  countToolbarCommit,
+  useToolbarOffForTests,
+} from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
 import {
   FilterBar,
@@ -100,6 +105,8 @@ function DocumentOutline({
   return <TocSidebar items={items} {...props} />;
 }
 
+const SCROLL_CLEARANCE = { top: 52, bottom: 8, left: 0, right: 0 };
+
 const EDITOR_PROPS = {
   attributes: {
     autocomplete: "off",
@@ -108,6 +115,10 @@ const EDITOR_PROPS = {
     "aria-label": "Main content area, start typing to enter text.",
     class: "document-editor",
   },
+  // ProseMirror ignores CSS scroll-padding when it scrolls the caret, so keep
+  // it clear of the sticky toolbar here: 52 = --tt-toolbar-height (44) + 8px air.
+  scrollMargin: SCROLL_CLEARANCE,
+  scrollThreshold: SCROLL_CLEARANCE,
 };
 
 function DocumentEditorContent({
@@ -230,35 +241,40 @@ function DocumentEditorContent({
   });
 
   const effectiveMobileView = isMobile ? mobileView : "main";
+  const toolbarOff = useToolbarOffForTests();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
       <EditorContext.Provider value={{ editor }}>
-        <Toolbar
-          ref={toolbarRef}
-          style={{
-            ...(isMobile
-              ? {
-                  bottom: `calc(100% - ${height - rect.y}px)`,
-                }
-              : {}),
-          }}
-        >
-          {effectiveMobileView === "main" ? (
-            <MainToolbarContent
-              onHighlighterClick={() => setMobileView("highlighter")}
-              onTocToggle={() => setTocVisible((v) => !v)}
-              onFilterToggle={headingFilter.toggleBar}
-              isMobile={isMobile}
-              tocVisible={tocVisible}
-              filterActive={
-                headingFilter.isBarOpen || headingFilter.hasActiveFilters
-              }
-            />
-          ) : (
-            <MobileToolbarContent onBack={() => setMobileView("main")} />
-          )}
-        </Toolbar>
+        {!toolbarOff && (
+          <Toolbar
+            ref={toolbarRef}
+            style={{
+              ...(isMobile
+                ? {
+                    bottom: `calc(100% - ${height - rect.y}px)`,
+                  }
+                : {}),
+            }}
+          >
+            <Profiler id="toolbar" onRender={countToolbarCommit}>
+              {effectiveMobileView === "main" ? (
+                <MainToolbarContent
+                  onHighlighterClick={() => setMobileView("highlighter")}
+                  onTocToggle={() => setTocVisible((v) => !v)}
+                  onFilterToggle={headingFilter.toggleBar}
+                  isMobile={isMobile}
+                  tocVisible={tocVisible}
+                  filterActive={
+                    headingFilter.isBarOpen || headingFilter.hasActiveFilters
+                  }
+                />
+              ) : (
+                <MobileToolbarContent onBack={() => setMobileView("main")} />
+              )}
+            </Profiler>
+          </Toolbar>
+        )}
 
         <FilterBar {...headingFilter} />
 

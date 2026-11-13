@@ -81,3 +81,68 @@ export function logLatencyStats(label: string, stats: LatencyStats): void {
   console.log(`Mean: ${stats.mean.toFixed(1)}ms`);
   console.log(`Max: ${stats.max.toFixed(1)}ms`);
 }
+
+type KeystrokeWindow = Window & {
+  __keystroke_latencies?: number[];
+  __keydown_ts?: number;
+};
+
+/**
+ * Times each keystroke's synchronous handling: from its keydown `timeStamp` to
+ * a microtask queued by a bubble-phase `input` listener on `window`, the last
+ * listener of the event. By then ProseMirror's DOM-change flush (a
+ * MutationObserver microtask), the Yjs write and the toolbar's transaction
+ * listener have all run, so their work in the event is included. Deferred
+ * work (timers, React renders) is not; Task 7's commit budget gates that.
+ *
+ * It must not stop at a task such as a `MessageChannel` message: under CPU
+ * throttle Chrome runs input ahead of normal-priority tasks, so such messages
+ * pile up while typing continues and drain together once it stops, timing
+ * the scheduler's backlog and whatever task ran before it instead of the key.
+ * Unlike Event Timing it has no 16 ms floor and, unlike
+ * requestAnimationFrame, no frame quantization.
+ */
+export async function injectKeystrokeTimer(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as KeystrokeWindow;
+    w.__keystroke_latencies = [];
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        w.__keydown_ts = e.timeStamp;
+      },
+      true,
+    );
+    window.addEventListener("input", () => {
+      const keydownTs = w.__keydown_ts;
+      if (keydownTs === undefined) return;
+      w.__keydown_ts = undefined;
+      queueMicrotask(() => {
+        w.__keystroke_latencies?.push(performance.now() - keydownTs);
+      });
+    });
+  });
+}
+
+export async function collectKeystrokeLatencies(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const w = window as KeystrokeWindow;
+    const samples = w.__keystroke_latencies ?? [];
+    w.__keystroke_latencies = [];
+    return samples;
+  });
+}
+
+export function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.floor(sorted.length * (p / 100)),
+  );
+  return sorted[idx] ?? 0;
+}
+
+export function median(values: number[]): number {
+  return percentile(values, 50);
+}

@@ -20,7 +20,21 @@ export default defineConfig({
         "**/soak*.spec.ts",
         "**/yjs-soak/**",
         "**/pwa-offline.spec.ts",
+        "**/performance.spec.ts",
       ],
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
+      // The typing budget compares timings, so it runs alone: after the
+      // chromium suite (when both are selected), on one worker. Run it by
+      // itself with `--project=perf --no-deps`.
+      name: "perf",
+      testMatch: ["**/performance.spec.ts"],
+      dependencies: ["chromium"],
+      workers: 1,
       use: {
         browserName: "chromium",
         viewport: { width: 1280, height: 720 },

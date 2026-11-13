@@ -46,6 +46,11 @@ interface MenuNavigationOptions<T> {
    * @default true
    */
   captureTab?: boolean;
+  /**
+   * Return false to ignore a keydown event (e.g. one from a nested widget
+   * that handles its own arrow keys).
+   */
+  shouldHandle?: (event: KeyboardEvent) => boolean;
 }
 
 /**
@@ -67,6 +72,7 @@ export function useMenuNavigation<T>({
   orientation = "vertical",
   autoSelectFirstItem = true,
   captureTab = true,
+  shouldHandle,
 }: MenuNavigationOptions<T>) {
   const [selectedIndex, setSelectedIndex] = useState<number>(
     autoSelectFirstItem ? 0 : -1,
@@ -75,6 +81,7 @@ export function useMenuNavigation<T>({
   useEffect(() => {
     const handleKeyboardNavigation = (event: KeyboardEvent) => {
       if (!items.length) return false;
+      if (shouldHandle && !shouldHandle(event)) return false;
 
       const moveNext = () =>
         setSelectedIndex((currentIndex) => {
@@ -190,6 +197,7 @@ export function useMenuNavigation<T>({
     onClose,
     orientation,
     captureTab,
+    shouldHandle,
   ]);
 
   useEffect(() => {

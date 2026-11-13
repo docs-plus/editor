@@ -94,7 +94,8 @@ export function useDocumentEditorEffects({
       documentId === PLAYGROUND_ID
         ? generatePlaygroundContent()
         : defaultContent;
-    editor.commands.setContent(content);
+    // The seed is not a user edit: Undo must not be able to wipe it.
+    editor.chain().setMeta("addToHistory", false).setContent(content).run();
   }, [
     editor,
     ydoc,

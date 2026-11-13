@@ -17,8 +17,8 @@ make dev
 | `make test` | Unit, fuzz, schema and plugin tests (`bun test`) | ~8s |
 | `make test-fuzz` | Chaos and structured fuzz tests | ~1s |
 | `make test-stress` | Headless stress probe (binary search for heading ceiling) | ~30s |
-| `make test-e2e` | Playwright chromium E2E suite (features, performance, collaboration) | ~90s |
-| `make test-perf` | Typing latency tests only (default 10, 50 headings; `PERF_HEADINGS=200` for custom) | ~15s |
+| `make test-e2e` | Playwright `chromium` E2E suite (features, collaboration), then the `perf` project (typing budget) | ~90s |
+| `make test-perf` | Typing latency tests only, `perf` project without its `chromium` dependency (default 10, 50 headings; `PERF_HEADINGS=200` for custom) | ~15s |
 | `make test-perf-collab` | Multi-user typing latency on shared doc (default 2 users, 50 headings) | ~30s |
 | `make test-load` | Yjs load harness (100 headless clients, convergence) | ~40s |
 | `make test-soak-quick` | Single-user soak (5 min, 50 headings, rich content) | ~6 min |
@@ -150,6 +150,8 @@ make test-e2e
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
+| `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |
+| `toolbar-a11y.spec.ts` | Focus outline and pressed bar contrast in light, dark and forced colours; highlight dialog and mobile panel keyboard behaviour; axe sweep (WCAG 2.2 AA, no serious or critical violations) of the toolbar in paragraph, title, heading, list, code block, table and read-only contexts and with the style menu, list menu and highlight dialog open, in both themes |
 | `toc-sidebar.spec.ts` | TOC lists all headings; clicking scrolls to heading |
 | `toc-drag.spec.ts` | TOC drag handle visibility; title H1 not draggable; drag reorder moves editor sections; folded section drag handle |
 
@@ -169,6 +171,13 @@ make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
 |----------|---------|-------------|
 | `PERF_HEADINGS` | `10,50` | Comma-separated heading counts to test |
 | `PERF_SHAPE` | `flat` | Document hierarchy: `flat` (all H2), `deep` (cycling H2–H6), `mixed` (random H2–H6) |
+| `PERF_ROUNDS` | `5` | A/B rounds per heading count (toolbar off vs on, alternating order); the median p95 of each arm is compared |
+| `PERF_CPU_THROTTLE` | `4` | CDP `Emulation.setCPUThrottlingRate` applied before typing |
+| `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run |
+
+`performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Each trial lets the page settle for 500 ms after the click that focuses the editor and drops its first 10 keystrokes (warm-up) before taking p95, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 100 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500`.
+
+The spec runs in its own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores it. Selecting both (`--project=chromium --project=perf`, as CI and `make test-e2e` do) times typing only after the parallel suite has finished, so other workers never compete for the CPU. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
 
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 
@@ -311,7 +320,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 | Job | Runs |
 |---|---|
 | Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
-| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --retries=1` |
+| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --project=perf --retries=1` (`perf` starts after `chromium`, on one worker) |
 
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
@@ -342,6 +351,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Platform-specific keys** — soak bot uses `Meta` (macOS) or `Control` (others) for keyboard shortcuts. Never use `Mod` — it is ProseMirror-only and unknown to Playwright.
 - **Test isolation** — each test generates a unique `docId` with timestamp + random suffix to prevent cross-test interference on the shared Hocuspocus server. Tab state is isolated via `window.__GLOBAL_TABS_DOC` (set per test in `EditorPage.goto()`) so parallel tests use separate `global-tabs-{docId}` Yjs documents.
 - **Wait for the server, then type at full speed** — `EditorPage.waitForSync()` waits for `data-server-synced` on the editor region (the editor is editable earlier, from the device copy, and a new document is seeded only after the first server sync). Tests then type without artificial waits; if typed text lands in the wrong place, look for an app bug first (the caret-after-Enter race was `content-visibility`, fixed by `CaretBlockVisible`). Use `typeInNewParagraphAtEnd(page, text)` to add text at the end of a document.
+- **Toolbar dev-only hooks** — `window.__TOOLBAR_OFF` (set before load) unmounts the toolbar for the A/B typing budget; `window.__toolbarCommits` counts React Profiler commits of the toolbar's children (every React commit that re-renders them) so tests can assert the update budget. Neither exists in production builds.
 - **Assertion split** — `assert-invariants.ts` (imports `expect` from `bun:test`) for unit tests; `assert-invariants-json.ts` (pure `throw`) for Playwright tests.
 
 ## Related Documentation

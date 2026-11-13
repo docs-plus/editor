@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { forwardRef, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 // --- Tiptap UI ---
 import type {
@@ -43,6 +43,12 @@ export interface ColorHighlightPopoverContentProps {
    * @default false
    */
   useColorValue?: boolean;
+  /**
+   * "grid" runs its own roving tabindex and arrow keys (popover). "toolbar"
+   * leaves the swatches as plain items of the surrounding toolbar (mobile panel).
+   * @default "grid"
+   */
+  navigation?: "grid" | "toolbar";
 }
 
 export interface ColorHighlightPopoverProps
@@ -81,6 +87,21 @@ export const ColorHighlightPopoverButton = forwardRef<
 
 ColorHighlightPopoverButton.displayName = "ColorHighlightPopoverButton";
 
+const HIGHLIGHT_GROUP_LABEL = "Highlight colours";
+
+/** "Green background" becomes "Green highlight". */
+function swatchName(label: string) {
+  return `${label.replace(/ background$/, "")} highlight`;
+}
+
+function firstPressedIndex(container: HTMLElement | null) {
+  const items = Array.from(container?.querySelectorAll("button") ?? []);
+  const index = items.findIndex(
+    (item) => item.getAttribute("aria-pressed") === "true",
+  );
+  return Math.max(index, 0);
+}
+
 export function ColorHighlightPopoverContent({
   editor,
   colors = pickHighlightColorsByValue([
@@ -91,43 +112,98 @@ export function ColorHighlightPopoverContent({
     "var(--tt-color-highlight-yellow)",
   ]),
   useColorValue = false,
+  navigation = "grid",
 }: ColorHighlightPopoverContentProps) {
-  const { handleRemoveHighlight } = useColorHighlight({ editor });
   const containerRef = useRef<HTMLDivElement>(null);
+  const isGrid = navigation === "grid";
 
   const menuItems = useMemo(
-    () => [...colors, { label: "Remove highlight", value: "none" }],
+    () => [...colors, { label: "No highlight", value: "none" }],
     [colors],
   );
 
-  const { selectedIndex } = useMenuNavigation({
-    containerRef,
+  // Applying refocuses the editor (Tiptap defers that by a frame); take focus
+  // back to the item so Esc still returns it to the trigger.
+  const refocusItem = (index: number) =>
+    isGrid
+      ? () =>
+          requestAnimationFrame(() =>
+            itemAt(containerRef.current, index)?.focus(),
+          )
+      : undefined;
+
+  const { handleRemoveHighlight } = useColorHighlight({
+    editor,
+    onApplied: refocusItem(colors.length),
+  });
+
+  const { selectedIndex, setSelectedIndex } = useMenuNavigation({
+    // Without a container the hook attaches no listener: toolbar mode leaves
+    // arrow keys to the surrounding toolbar.
+    containerRef: isGrid ? containerRef : undefined,
     items: menuItems,
     orientation: "both",
-    onSelect: (_item) => {
-      if (!containerRef.current) return false;
-      const highlightedElement = containerRef.current.querySelector(
-        '[data-highlighted="true"]',
-      ) as HTMLElement;
-      if (highlightedElement) highlightedElement.click();
-      return true;
+    captureTab: false,
+    // Escape belongs to the popover, which closes itself.
+    shouldHandle: (event) => event.key !== "Escape",
+    onSelect: () => {
+      itemAt(containerRef.current, selectedIndex)?.click();
     },
     autoSelectFirstItem: false,
   });
 
+  // Start on the pressed swatch, else the first. Runs once on mount, after the
+  // swatches have rendered their pressed state.
+  useEffect(() => {
+    if (isGrid) setSelectedIndex(firstPressedIndex(containerRef.current));
+  }, [isGrid, setSelectedIndex]);
+
+  // Arrow keys only move the roving index; follow it with focus.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!isGrid || !container || selectedIndex === undefined) return;
+    const target = itemAt(container, selectedIndex);
+    if (
+      target &&
+      container.contains(document.activeElement) &&
+      document.activeElement !== target
+    ) {
+      target.focus();
+    }
+  }, [isGrid, selectedIndex]);
+
+  const tabIndexFor = (index: number) =>
+    isGrid && index === selectedIndex ? 0 : -1;
+
   return (
-    <div ref={containerRef} tabIndex={0} className="flex items-center gap-1">
+    <div
+      ref={containerRef}
+      role="group"
+      aria-label={HIGHLIGHT_GROUP_LABEL}
+      data-roving-group={isGrid ? "" : undefined}
+      onFocus={(event) => {
+        if (!isGrid) return;
+        const buttons = Array.from(
+          containerRef.current?.querySelectorAll("button") ?? [],
+        );
+        const index = buttons.findIndex((button) =>
+          button.contains(event.target as Node),
+        );
+        if (index !== -1) setSelectedIndex(index);
+      }}
+      className="flex items-center gap-1"
+    >
       <div className="flex items-center gap-0.5">
         {colors.map((color, index) => (
           <ColorHighlightButton
             key={color.value}
             editor={editor}
             highlightColor={useColorValue ? color.colorValue : color.value}
-            tooltip={color.label}
-            aria-label={`${color.label} highlight color`}
-            tabIndex={index === selectedIndex ? 0 : -1}
-            data-highlighted={selectedIndex === index}
+            tooltip={swatchName(color.label)}
+            aria-label={swatchName(color.label)}
+            tabIndex={tabIndexFor(index)}
             useColorValue={useColorValue}
+            onApplied={refocusItem(index)}
           />
         ))}
       </div>
@@ -137,18 +213,21 @@ export function ColorHighlightPopoverContent({
       />
       <Button
         onClick={handleRemoveHighlight}
-        aria-label="Remove highlight"
-        tabIndex={selectedIndex === colors.length ? 0 : -1}
+        aria-label="No highlight"
+        tabIndex={tabIndexFor(colors.length)}
         type="button"
-        role="menuitem"
         variant="ghost"
         size="icon-sm"
-        data-highlighted={selectedIndex === colors.length}
       >
         <BanIcon />
       </Button>
     </div>
   );
+}
+
+function itemAt(container: HTMLElement | null, index: number | undefined) {
+  if (index === undefined) return undefined;
+  return container?.querySelectorAll("button")[index];
 }
 
 export function ColorHighlightPopover({
@@ -167,6 +246,7 @@ export function ColorHighlightPopover({
 }: ColorHighlightPopoverProps) {
   const { editor } = useTiptapEditor(providedEditor);
   const [isOpen, setIsOpen] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
   const { isVisible, canColorHighlight, isActive, label, Icon } =
     useColorHighlight({
       editor,
@@ -179,11 +259,12 @@ export function ColorHighlightPopover({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger
+        disabled={!canColorHighlight}
         render={
           <ColorHighlightPopoverButton
             disabled={!canColorHighlight}
             isActive={isActive}
-            aria-pressed={isActive}
+            aria-haspopup="dialog"
             aria-label={label}
             tooltip={label}
             {...props}
@@ -192,7 +273,20 @@ export function ColorHighlightPopover({
       >
         <Icon />
       </PopoverTrigger>
-      <PopoverContent aria-label="Highlight colors">
+      <PopoverContent
+        ref={popupRef}
+        aria-label={HIGHLIGHT_GROUP_LABEL}
+        initialFocus={() => {
+          const buttons = popupRef.current?.querySelectorAll("button");
+          return (
+            popupRef.current?.querySelector<HTMLElement>(
+              'button[aria-pressed="true"]',
+            ) ??
+            buttons?.[0] ??
+            true
+          );
+        }}
+      >
         <ColorHighlightPopoverContent
           editor={editor}
           colors={colors}

@@ -2,7 +2,8 @@ name: CI
 
 # Runs on every pull request and on pushes to main:
 #   checks  Biome, ESLint, typecheck (3 projects), unit tests, production build
-#   e2e     Playwright Chromium suite against `next dev` + Hocuspocus
+#   e2e     Playwright Chromium suite, then the typing-budget perf project,
+#           against `next dev` + Hocuspocus
 #
 # Read-only token and no secrets: pull requests from forks run the same way.
 
@@ -144,9 +145,11 @@ jobs:
 
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
-      # as "flaky" in the summary.
+      # as "flaky" in the summary. The perf project (typing budget) starts
+      # after the chromium suite and runs on one worker, so it is not timed
+      # under parallel load.
       - name: Run Playwright
-        run: CI= bun playwright test --project=chromium --retries=1 --trace off
+        run: CI= bun playwright test --project=chromium --project=perf --retries=1 --trace off
 
       - name: Upload failure artifacts
         if: failure()

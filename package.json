@@ -22,9 +22,9 @@
     "test": "bun test --path-ignore-patterns 'tests/unit/stress/**'",
     "test:watch": "bun test --watch",
     "test:fuzz": "bun test tests/unit/fuzz",
-    "test:e2e": "playwright test --project=chromium",
+    "test:e2e": "playwright test --project=chromium --project=perf",
     "test:pwa": "playwright test --project=pwa",
-    "test:perf": "playwright test tests/e2e/performance.spec.ts --project=chromium",
+    "test:perf": "playwright test --project=perf --no-deps",
     "test:perf-collab": "playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
     "test:stress": "bun test tests/unit/stress",
@@ -95,6 +95,7 @@
     "yjs": "^13.6.33"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@biomejs/biome": "^2.6.6",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",

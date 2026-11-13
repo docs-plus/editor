@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 // --- Tiptap UI ---
 import {
@@ -9,6 +9,8 @@ import {
   isListActive,
   type ListType,
   listIcons,
+  setListTypeInPlace,
+  toggleList,
 } from "@/components/tiptap-ui/list-button";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -109,6 +111,30 @@ export function shouldShowListDropdown(params: {
   return true;
 }
 
+export type ListValue = ListType | "none";
+
+const LIST_TYPES: ListType[] = ["bulletList", "orderedList", "taskList"];
+
+export function getListValue(editor: Editor | null): ListValue {
+  if (!editor?.isEditable) return "none";
+  return LIST_TYPES.find((type) => isListActive(editor, type)) ?? "none";
+}
+
+/**
+ * Sets the list type of the selected blocks, or removes the list with
+ * `"none"`. Unlike `toggleList`, picking the current value does nothing.
+ */
+export function setListType(editor: Editor | null, value: ListValue): boolean {
+  if (!editor?.isEditable) return false;
+  const current = getListValue(editor);
+  if (current === value) return false;
+
+  if (value === "none")
+    return current !== "none" && toggleList(editor, current);
+  if (current === "none") return toggleList(editor, value);
+  return setListTypeInPlace(editor, value);
+}
+
 /**
  * Gets the currently active list type from the available types
  */
@@ -167,7 +193,6 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   } = config || {};
 
   const { editor } = useTiptapEditor(providedEditor);
-  const [isVisible, setIsVisible] = useState(true);
 
   const listInSchema = types.some((type) => isNodeInSchema(type, editor));
 
@@ -178,33 +203,20 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
   const activeType = getActiveListType(editor, types);
   const activeList = filteredLists.find((option) => option.type === activeType);
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleSelectionUpdate = () => {
-      setIsVisible(
-        shouldShowListDropdown({
-          editor,
-          listTypes: types,
-          hideWhenUnavailable,
-          listInSchema,
-          canToggleAny,
-        }),
-      );
-    };
-
-    handleSelectionUpdate();
-
-    editor.on("selectionUpdate", handleSelectionUpdate);
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate);
-    };
-  }, [canToggleAny, editor, hideWhenUnavailable, listInSchema, types]);
+  const isVisible =
+    !editor ||
+    shouldShowListDropdown({
+      editor,
+      listTypes: types,
+      hideWhenUnavailable,
+      listInSchema,
+      canToggleAny,
+    });
 
   return {
     isVisible,
     activeType,
+    value: getListValue(editor),
     isActive: isAnyActive,
     canToggle: canToggleAny,
     types,

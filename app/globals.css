@@ -25,6 +25,9 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /* Keyboard focus ring and pressed bar: >=3:1 on --background (WCAG 1.4.11). */
+  --focus-ring: oklch(0.439 0 0);
+  --pressed-bar: var(--foreground);
   --chart-1: oklch(0.879 0.169 91.605);
   --chart-2: oklch(0.769 0.188 70.08);
   --chart-3: oklch(0.666 0.179 58.318);
@@ -61,6 +64,8 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --focus-ring: oklch(0.87 0 0);
+  --pressed-bar: var(--foreground);
   --chart-1: oklch(0.879 0.169 91.605);
   --chart-2: oklch(0.769 0.188 70.08);
   --chart-3: oklch(0.666 0.179 58.318);
@@ -92,6 +97,8 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  --color-focus-ring: var(--focus-ring);
+  --color-pressed-bar: var(--pressed-bar);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -135,5 +142,31 @@
   html,
   body {
     overscroll-behavior-y: none;
+  }
+}
+
+/* Forced colours drop background colours, so the pressed underline cannot
+   carry state there. Pressed uses system colours instead (Highlight fill, a
+   HighlightText underline); the focus
+   outline is a real outline and survives. Selectors use `button[...]`, not
+   `[data-slot="button"]`: a tooltip trigger overrides data-slot. */
+@media (forced-colors: active) {
+  button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  button[aria-pressed="true"]::after {
+    background: HighlightText;
+  }
+
+  button[aria-pressed="mixed"] {
+    outline: 2px dashed CanvasText;
+    outline-offset: -2px;
+  }
+
+  button[aria-disabled="true"] {
+    color: GrayText;
   }
 }

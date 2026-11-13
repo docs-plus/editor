@@ -1,7 +1,9 @@
 "use client";
 
+import type { NodeType, Node as PMNode } from "@tiptap/pm/model";
+import { Selection, type Transaction } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -124,12 +126,111 @@ export function isListActive(editor: Editor | null, type: ListType): boolean {
   }
 }
 
+const LIST_ITEM_TYPES: Record<ListType, string> = {
+  bulletList: "listItem",
+  orderedList: "listItem",
+  taskList: "taskItem",
+};
+
+function isListNode(node: PMNode): boolean {
+  return Object.hasOwn(LIST_ITEM_TYPES, node.type.name);
+}
+
+/** Rebuilds a list, and every list nested in it, as `listType`. Content and
+ * nesting stay; item attributes (task checked state) only where the item type
+ * stays the same. Node sizes are unchanged. */
+function retypeList(
+  list: PMNode,
+  listType: NodeType,
+  itemType: NodeType,
+): PMNode {
+  const items: PMNode[] = [];
+  list.forEach((item) => {
+    const children: PMNode[] = [];
+    item.forEach((child) => {
+      children.push(
+        isListNode(child) ? retypeList(child, listType, itemType) : child,
+      );
+    });
+    items.push(
+      itemType.createChecked(
+        item.type === itemType ? item.attrs : null,
+        children,
+        item.marks,
+      ),
+    );
+  });
+  return listType.createChecked(
+    list.type === listType ? list.attrs : null,
+    items,
+    list.marks,
+  );
+}
+
+/** Retypes the outermost lists the selection touches, in place. */
+function retypeListsInSelection(tr: Transaction, type: ListType): boolean {
+  const { schema } = tr.doc.type;
+  const listType = schema.nodes[type];
+  const itemType = schema.nodes[LIST_ITEM_TYPES[type]];
+  if (!listType || !itemType) return false;
+
+  const lists: { node: PMNode; pos: number }[] = [];
+  tr.doc.nodesBetween(tr.selection.from, tr.selection.to, (node, pos) => {
+    if (!isListNode(node)) return true;
+    lists.push({ node, pos });
+    return false;
+  });
+  if (lists.length === 0) return false;
+
+  // Sizes do not change, so positions stay valid across the replacements and
+  // the selection can be restored as it was.
+  const selection = tr.selection.toJSON();
+  for (const { node, pos } of lists) {
+    tr.replaceWith(
+      pos,
+      pos + node.nodeSize,
+      retypeList(node, listType, itemType),
+    );
+  }
+  tr.setSelection(Selection.fromJSON(tr.doc, selection));
+  return true;
+}
+
+/**
+ * Turns the list around the selection into `type` in one transaction (one
+ * undo step), keeping every item, nested lists and the selection.
+ */
+export function setListTypeInPlace(
+  editor: Editor | null,
+  type: ListType,
+): boolean {
+  if (!editor?.isEditable || !isNodeInSchema(type, editor)) return false;
+  try {
+    return editor
+      .chain()
+      .focus()
+      .command(({ tr }) => retypeListsInSelection(tr, type))
+      .run();
+  } catch {
+    return false;
+  }
+}
+
+function isInOtherList(editor: Editor, type: ListType): boolean {
+  return (Object.keys(LIST_ITEM_TYPES) as ListType[]).some(
+    (other) => other !== type && editor.isActive(other),
+  );
+}
+
 /**
  * Toggles list in the editor
  */
 export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!editor?.isEditable) return false;
   if (!canToggleList(editor, type)) return false;
+  if (!editor.isActive(type) && isInOtherList(editor, type)) {
+    return setListTypeInPlace(editor, type);
+  }
 
   try {
     const chain = prepareBlockToggle(editor);
@@ -227,25 +328,11 @@ export function useList(config: UseListConfig) {
   } = config;
 
   const { editor } = useTiptapEditor(providedEditor);
-  const [isVisible, setIsVisible] = useState<boolean>(true);
   const canToggle = canToggleList(editor, type);
   const isActive = isListActive(editor, type);
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleSelectionUpdate = () => {
-      setIsVisible(shouldShowListButton({ editor, type, hideWhenUnavailable }));
-    };
-
-    handleSelectionUpdate();
-
-    editor.on("selectionUpdate", handleSelectionUpdate);
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate);
-    };
-  }, [editor, type, hideWhenUnavailable]);
+  const isVisible =
+    !editor || shouldShowListButton({ editor, type, hideWhenUnavailable });
 
   const handleToggle = useCallback(() => {
     if (!editor) return false;

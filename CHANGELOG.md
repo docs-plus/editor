@@ -10,6 +10,13 @@ since the previous tag.
 ## [Unreleased]
 
 ### Added
+- **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
+  axe sweep of the toolbar in seven editor contexts and three open popups in
+  light and dark (`toolbar-a11y.spec.ts`, WCAG 2.2 AA including target size),
+  the toolbar behaviour spec (`toolbar.spec.ts`), and a typing-budget
+  assertion in `performance.spec.ts` (p95 with the toolbar within 10% of
+  toolbar off, per-keystroke timer, `PERF_ROUNDS` default 5).
+  `E2E_BASE_URL` overrides the Playwright base URL.
 - **Rollout safety for the smart toolbar (release N).** Lets later releases
   add new marks and nodes without corrupting older clients: a client that
   meets a name it does not know freezes the document read-only by design and
@@ -45,8 +52,8 @@ since the previous tag.
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
-  - `E2E_BASE_URL` overrides the Playwright base URL. Hocus servers spawned
-    by tests (`spawnHocus()`) no longer outlive an interrupted test run.
+  - Hocus servers spawned by tests (`spawnHocus()`) no longer outlive an
+    interrupted test run.
 - **Smart toolbar design** (`docs/superpowers/specs/2026-11-12-smart-toolbar-design.md`):
   sorted toolbar, colour and font-size tokens, a memory layer that remembers
   your choices, a context slot, responsive tiers, and a five-PR rollout with
@@ -54,6 +61,15 @@ since the previous tag.
   alongside it. Docs only, no runtime change.
 
 ### Changed
+- **Typing budget runs on its own:** `performance.spec.ts` moved to a `perf`
+  Playwright project (one worker, starts after `chromium`). CI and
+  `make test-e2e` run `--project=chromium --project=perf`; `make test-perf`
+  runs `--project=perf --no-deps`.
+- **Toolbar updates catch up within 1 s** (`TOOLBAR_MAX_WAIT_MS`) during
+  continuous remote edits, such as a collaborator typing without pause; local
+  typing still waits for a pause, so it never forces a toolbar commit.
+- **Toolbar controls derive visibility in render,** so they hide at once when
+  a document turns read-only, and per-keystroke listener work is gone.
 - **Highlights with an unknown value render as plain text:** a highlight
   whose value is not a known token (old hex highlights, the old "Default
   background") renders without an inline style. Stored values are untouched.
@@ -62,6 +78,37 @@ since the previous tag.
 - **docs.plus extension refresh runs daily** at 04:17 UTC instead of every
   three days. `bunfig.toml` still holds back releases younger than 3 days.
 
+### Fixed
+- **Focus outline and pressed underline on every button:** `Button`
+  (`components/ui/button.tsx`) draws a 2px solid focus outline and, while
+  `aria-pressed` is true, a short centred underline (12px wide, 2px tall, 3px
+  above the bottom edge, at least 3:1), so the new look applies app-wide, not
+  only in the toolbar. Both stay visible in dark mode and in Windows High
+  Contrast (forced colours, where the underline uses `HighlightText`).
+- **Disabled toolbar controls stay focusable** and say why they are disabled.
+- **Style and list menus are named by value** ("Normal text", "No list") and
+  use radio items; picking the checked item does nothing. They close after a
+  pick and return focus to the editor at once, so the next keystroke lands in
+  the document.
+- **Text styles are disabled in the title,** with the reason "Title is
+  always H1"; the style button still reads "Title".
+- **Highlight swatches are named pressed buttons** in a dialog. Focus stays
+  in the dialog, Esc returns it to the Highlight button, and toolbar arrow
+  keys move from whichever control has focus.
+- **Switching list type keeps the whole list:** bullet, ordered and task
+  lists convert in place in one undo step, keeping every item and nested
+  lists (task checked state stays only in lists that remain task lists).
+  Before, only the caret's item moved to the new list and the rest became
+  paragraphs.
+- **"No highlight" keeps focus in the highlight dialog,** so Esc still
+  returns focus to the Highlight button.
+- **Typing stays in the editor after arrowing in the toolbar:** a later
+  toolbar re-render no longer pulls focus back to the last arrowed control.
+- **Indent and outdent buttons work in lists,** like Tab.
+- **Headings and the caret stay clear of the sticky toolbar.**
+- **Focus no longer drops to the page** when a toolbar control disappears.
+- **Undo no longer wipes a new document:** the empty-document seed is kept
+  out of the undo history.
 ### Security
 - **Top-level content can no longer lock a document:** content other than an
   element directly in a document's editor fragment made y-tiptap throw before
