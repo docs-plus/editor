@@ -70,6 +70,7 @@ const QUIESCE_TIMEOUT_MS = 60_000;
 const UNLOAD_WAIT_MS = 4_000;
 /** Time for a remote update to reach the editors and the guard to react. */
 const SETTLE_MS = 300;
+const FREEZE_TIMEOUT_MS = 10_000;
 const SOCKET_RESET_CODE = 4205;
 
 /** Paragraph indexes (block index = paragraph + 1, after the title). */
@@ -155,6 +156,20 @@ function isFrozen(client: EditorClient): boolean {
     client.guard.getState() !== "ok" ||
     (client.fixture.binding()?.invalidContentError ?? null) !== null
   );
+}
+
+/** Waits for the marks to reach N and the guard to react; false on timeout. */
+async function waitForFreeze(
+  client: EditorClient,
+  sockets: SoakClient[],
+): Promise<boolean> {
+  await waitForQuiescence(sockets, QUIESCE_TIMEOUT_MS);
+  const deadline = Date.now() + FREEZE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (isFrozen(client)) return true;
+    await sleep(50);
+  }
+  return isFrozen(client);
 }
 
 type PreNClient = {
@@ -362,8 +377,10 @@ async function run(config: MixedSoakConfig): Promise<boolean> {
     applyMark(n1.fixture.editor, r);
     typeAtEnd(n1.fixture.editor, N1_TEXT_PARAGRAPH, WORD.n1(config.rounds + r));
     if (r === 0) {
-      await sleep(SETTLE_MS);
-      expect(isFrozen(n), "N did not freeze when the new marks arrived");
+      // Until the first mark reaches N, its typing is legitimate.
+      const froze = await waitForFreeze(n, [n1Socket, nSocket]);
+      expect(froze, `N did not freeze within ${FREEZE_TIMEOUT_MS} ms`);
+      if (!froze) break;
       nSentAtFreeze = n.fixture.outgoing.length;
     }
     // A frozen N editor still runs commands; y-tiptap must drop them.
