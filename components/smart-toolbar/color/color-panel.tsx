@@ -16,7 +16,12 @@ import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import { BanIcon, CheckIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
-import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
+import { type ColorTheme, isLowContrastPair } from "@/lib/text-style-contrast";
+import {
+  HIGHLIGHT_TOKENS,
+  isTextColorToken,
+  TEXT_COLOR_TOKENS,
+} from "@/lib/text-style-tokens";
 import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
@@ -31,7 +36,9 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
  * 360px phone. A kind that cannot apply here keeps its swatches focusable
  * but `aria-disabled`, described by the reason. Applying keeps the popover
  * open with focus on the swatch, so writers can try colours; Esc closes it.
- * Lazy chunk: loaded on first open.
+ * Swatches that would put text below AA on its highlight (Appendix A, O3)
+ * are dimmed and described "Low contrast", but stay selectable. Lazy chunk:
+ * loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -89,6 +96,38 @@ const HIGHLIGHT_ROW: Swatch[] = [
 
 const tokenOf = (value: string | null) => value?.toLowerCase() ?? null;
 
+/** The token a view shows; null when none, mixed or not a palette token. */
+function paletteToken(value: string | null | undefined) {
+  return isTextColorToken(value) ? value : null;
+}
+
+/** The theme is a class on <html> (`lib/theme.ts`); this chunk is client-only. */
+const currentTheme = (): ColorTheme =>
+  document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+/** True when the swatch would put text below AA on the selection's colours. */
+function isLowContrast(
+  swatch: Swatch,
+  text: string | null | undefined,
+  highlight: string | null | undefined,
+  theme: ColorTheme,
+): boolean {
+  return swatch.kind === "text"
+    ? isLowContrastPair(swatch.token, paletteToken(highlight), theme)
+    : isLowContrastPair(paletteToken(text), swatch.token, theme);
+}
+
+/** Tooltip: the disabled reason wins over the low-contrast note. */
+function swatchTitle(name: string, reason: string, low: boolean): string {
+  if (reason) return `${name}: ${reason}`;
+  return low ? `${name}: low contrast` : name;
+}
+
+const LOW_CONTRAST = {
+  text: "Low contrast on the current highlight",
+  highlight: "Low contrast with the current text colour",
+} as const;
+
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
   const id =
     swatch.kind === "text"
@@ -139,6 +178,7 @@ export function ColorPanel({
     isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
   );
   const lines = toLines(rows, columns);
+  const theme = currentTheme();
 
   const firstRow = rows.findIndex(
     (row) => row.label === (focusKind === "text" ? "Text colour" : "Highlight"),
@@ -222,13 +262,14 @@ export function ColorPanel({
       data-roving-group=""
       onKeyDown={onKeyDown}
     >
-      {(["text", "highlight"] as const).map((kind) =>
-        reasons[kind] ? (
-          <span key={kind} id={`${idPrefix}-${kind}-reason`} hidden>
-            {reasons[kind]}
-          </span>
-        ) : null,
-      )}
+      {(["text", "highlight"] as const).map((kind) => (
+        <span key={kind} hidden>
+          {reasons[kind] ? (
+            <span id={`${idPrefix}-${kind}-reason`}>{reasons[kind]}</span>
+          ) : null}
+          <span id={`${idPrefix}-${kind}-low`}>{LOW_CONTRAST[kind]}</span>
+        </span>
+      ))}
       {rows.map((row, rowIndex) => (
         <div key={row.label} className="st-color-row">
           <span
@@ -246,6 +287,18 @@ export function ColorPanel({
               const pressed = isPressed(swatch);
               const name = swatchName(swatch);
               const reason = reasons[swatch.kind];
+              const low = isLowContrast(
+                swatch,
+                currentText,
+                currentHighlight,
+                theme,
+              );
+              const describedBy = [
+                reason && `${idPrefix}-${swatch.kind}-reason`,
+                low && `${idPrefix}-${swatch.kind}-low`,
+              ]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <button
                   key={`${swatch.kind}-${swatch.token ?? "none"}`}
@@ -255,12 +308,11 @@ export function ColorPanel({
                   data-col={colIndex}
                   data-token={swatch.token ?? "none"}
                   aria-label={name}
-                  title={reason ? `${name}: ${reason}` : name}
+                  title={swatchTitle(name, reason, low)}
                   aria-pressed={pressed}
                   aria-disabled={reason ? true : undefined}
-                  aria-describedby={
-                    reason ? `${idPrefix}-${swatch.kind}-reason` : undefined
-                  }
+                  aria-describedby={describedBy || undefined}
+                  data-low-contrast={low ? "" : undefined}
                   tabIndex={
                     active.row === rowIndex && active.col === colIndex ? 0 : -1
                   }

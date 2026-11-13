@@ -410,6 +410,100 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
   });
 }
 
+const SCREENS = ".superpowers/screens-r2-popover";
+
+/**
+ * O3 (Appendix A): with teal text selected, a highlight that puts it below
+ * 4.5:1 is dimmed and described "Low contrast" but still applies, and the
+ * text row re-dims live against the highlight just applied.
+ */
+const LOW_CONTRAST_CASES = {
+  // Teal on gray is below AA in light only; teal on yellow in dark only.
+  light: { low: "Gray", ok: "Yellow" },
+  dark: { low: "Yellow", ok: "Gray" },
+} as const;
+
+for (const mode of ["light", "dark", "forced colours"] as const) {
+  test(`colour popover dims low-contrast swatches, still selectable (${mode})`, async ({
+    page,
+  }) => {
+    const forced = mode === "forced colours";
+    const theme = forced ? "light" : mode;
+    if (forced) await page.emulateMedia({ forcedColors: "active" });
+    await setTheme(page, theme);
+    await openToolbarTestDoc(page);
+    await selectWord(page);
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setTextColor("teal"),
+    );
+
+    const dialog = await openHighlightDialog(page);
+    const { low, ok } = LOW_CONTRAST_CASES[theme];
+    const dimmed = highlights(dialog).getByRole("button", {
+      name: `${low} highlight`,
+    });
+    const clear = highlights(dialog).getByRole("button", {
+      name: `${ok} highlight`,
+    });
+    await expect(dimmed).toHaveAttribute("data-low-contrast", "");
+    await expect(dimmed).toHaveAccessibleDescription(
+      "Low contrast with the current text colour",
+    );
+    await expect(dimmed).not.toHaveAttribute("aria-disabled", /.*/);
+    await expect(clear).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(clear).not.toHaveAccessibleDescription(/Low contrast/);
+    // Default text and "No highlight" never dim.
+    await expect(
+      highlights(dialog).getByRole("button", { name: "No highlight" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
+
+    const style = await dimmed.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        opacity: Number(cs.opacity),
+        borderStyle: cs.borderTopStyle,
+        borderWidth: cs.borderTopWidth,
+      };
+    });
+    expect(style.opacity).toBeLessThan(1);
+    // Not colour-only: a dotted border, also in forced colours.
+    expect(style.borderStyle).toBe("dotted");
+    expect(style.borderWidth).toBe("1px");
+
+    await expectNoSeriousA11yViolations(page, [
+      '[role="dialog"][aria-label="Highlight colours"]',
+    ]);
+    if (!forced) {
+      await dialog.screenshot({
+        path: `${SCREENS}/colour-low-contrast-${theme}.png`,
+      });
+    }
+
+    // Still selectable: it applies, the popover stays open, and the text
+    // row now dims teal against the new highlight.
+    await dimmed.click();
+    await expect(dimmed).toHaveAttribute("aria-pressed", "true");
+    expect(
+      await page.evaluate(
+        () => window.__tiptap_editor?.getAttributes("highlight").color,
+      ),
+    ).toBe(low.toLowerCase());
+    const teal = dialog
+      .getByRole("group", { name: "Text colour", exact: true })
+      .getByRole("button", { name: "Teal text" });
+    await expect(teal).toHaveAttribute("data-low-contrast", "");
+    await expect(teal).toHaveAccessibleDescription(
+      "Low contrast on the current highlight",
+    );
+    await expect(
+      dialog
+        .getByRole("group", { name: "Text colour", exact: true })
+        .getByRole("button", { name: "Default text" }),
+    ).not.toHaveAttribute("data-low-contrast", /.*/);
+    await closeWithEscape(page, dialog);
+  });
+}
+
 test("mobile colour panel: one arrow press moves one swatch", async ({
   page,
 }) => {

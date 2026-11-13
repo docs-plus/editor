@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { contrastRatio, isLowContrastPair } from "@/lib/text-style-contrast";
 import {
   FONT_SIZE_EM,
   FONT_SIZE_TOKENS,
@@ -10,7 +11,6 @@ import {
   TEXT_COLOR_TOKENS,
   type ThemedColor,
 } from "@/lib/text-style-tokens";
-import { contrastRatio } from "@/tests/helpers/contrast";
 
 const SCSS = readFileSync(
   "extensions/text-style-marks/text-style-marks.scss",
@@ -88,10 +88,10 @@ describe("text style palette (Appendix A)", () => {
   }
 
   /**
-   * Coloured text on a highlight is an open decision (Appendix A, "Text
-   * colour on a highlight"): these pairs fall below 4.5:1 today. Pinned so a
-   * palette change, or a fix such as a scoped darker variant inside
-   * `mark[data-highlight]`, has to update this list on purpose.
+   * Coloured text on a highlight (Appendix A, owner decision O3): these
+   * pairs fall below 4.5:1, and the colour popover dims them as
+   * "Low contrast" through `isLowContrastPair`. Pinned so a palette change
+   * has to update this list on purpose.
    */
   const ALL = HIGHLIGHT_TOKENS.join(" ");
   const BELOW_AA_ON_HIGHLIGHT: Record<
@@ -129,12 +129,8 @@ describe("text style palette (Appendix A)", () => {
       const below = Object.fromEntries(
         TEXT_COLOR_TOKENS.map((text) => [
           text,
-          HIGHLIGHT_TOKENS.filter(
-            (highlight) =>
-              contrastRatio(
-                TEXT_COLOR_PALETTE[text][theme],
-                HIGHLIGHT_PALETTE[highlight][theme],
-              ) < 4.5,
+          HIGHLIGHT_TOKENS.filter((highlight) =>
+            isLowContrastPair(text, highlight, theme),
           ).join(" "),
         ]),
       );
