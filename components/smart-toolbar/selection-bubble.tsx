@@ -1,15 +1,20 @@
 "use client";
 
 import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { lazySurface } from "./lazy-surface";
 import type { SurfaceProps } from "./types";
 
-/** The bubble and its plugin are their own chunk; phones never fetch it. */
-const SelectionBubbleView = lazy(() =>
-  import("./bubble/selection-bubble-view").then((module) => ({
-    default: module.SelectionBubbleView,
-  })),
+/**
+ * The bubble and its plugin are their own chunk; phones never fetch it.
+ * If it fails to load there is no bubble (every action is in the row)
+ * until the next editor mounts this again.
+ */
+const SelectionBubbleView = lazySurface(() =>
+  import("./bubble/selection-bubble-view").then(
+    (module) => module.SelectionBubbleView,
+  ),
 );
 
 /** Desktop only: a fine pointer and a viewport wider than the phone bar's. */
@@ -75,9 +80,5 @@ export function SelectionBubble({ editor: providedEditor }: SurfaceProps) {
   const desktop = useDesktopPointer();
   const scrollTarget = useScrollTarget(desktop ? editor : null);
   if (!editor || !desktop || !scrollTarget) return null;
-  return (
-    <Suspense fallback={null}>
-      <SelectionBubbleView editor={editor} scrollTarget={scrollTarget} />
-    </Suspense>
-  );
+  return <SelectionBubbleView editor={editor} scrollTarget={scrollTarget} />;
 }
