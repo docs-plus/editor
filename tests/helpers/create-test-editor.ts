@@ -16,6 +16,7 @@ import { StarterKit } from "@tiptap/starter-kit";
 import { HeadingFilter } from "@/extensions/heading-filter";
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
+import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
 import { lowlight } from "@/lib/lowlight";
@@ -63,6 +64,9 @@ export const DEFAULT_EXTENSIONS = [
   TaskItem.configure({ nested: true }),
   TableKit,
   UniqueID.configure({ types: ["heading"] }),
+  // After every existing mark, as in document-editor-config.ts.
+  TextColor,
+  FontSize,
 ] as Extension[];
 
 export interface CreateTestEditorOptions {

@@ -55,6 +55,7 @@ import {
   NodeViewsRenderOnce,
 } from "@/extensions/render-once";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
+import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
 import { lowlight } from "@/lib/lowlight";
@@ -231,5 +232,8 @@ export function buildDocumentEditorExtensions({
     }),
     TableKit.configure({ table: { resizable: true } }),
     Markdown,
+    // After every existing mark, so their ranks stay put (spec §3).
+    TextColor,
+    FontSize,
   ];
 }

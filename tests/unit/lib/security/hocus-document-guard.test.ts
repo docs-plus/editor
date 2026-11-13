@@ -135,14 +135,12 @@ describe("findDisallowedSchemaNames (B2)", () => {
     expect(findDisallowedSchemaNames(craft([], keys))).toEqual([]);
   });
 
-  it("refuses the smart toolbar marks until their server half ships", () => {
-    // Allowed in N, `textColor` would freeze every N client on any document.
-    expect(findDisallowedSchemaNames(craft([], ["textColor"]))).toEqual([
-      "textColor",
-    ]);
+  it("allows the smart toolbar marks now that their server half ships", () => {
     expect(
-      findDisallowedSchemaNames(craft([], ["fontSize--abcd1234"])),
-    ).toEqual(["fontSize"]);
+      findDisallowedSchemaNames(craft([], ["textColor", "fontSize--abcd1234"])),
+    ).toEqual([]);
+    // Unknown names are still refused at ingress.
+    expect(findDisallowedSchemaNames(craft([], ["zzz"]))).toEqual(["zzz"]);
   });
 
   describe("content directly in the editor fragment (I4)", () => {

@@ -159,12 +159,12 @@ describe("text style tokens (PR C)", () => {
     expect(isFontSizeToken("lg")).toBe(true);
   });
 
-  // PR C flips this when its server half adds the names (spec §3.1).
-  it("keeps the pending marks out of the ingress allowlist", () => {
+  // PR C's server half adds the names (spec §3.1).
+  it("allows the new marks at ingress", () => {
     expect(TEXT_COLOR_MARK).toBe("textColor");
     expect(FONT_SIZE_MARK).toBe("fontSize");
-    expect(SCHEMA_MARK_NAMES.has(TEXT_COLOR_MARK)).toBe(false);
-    expect(SCHEMA_MARK_NAMES.has(FONT_SIZE_MARK)).toBe(false);
+    expect(SCHEMA_MARK_NAMES.has(TEXT_COLOR_MARK)).toBe(true);
+    expect(SCHEMA_MARK_NAMES.has(FONT_SIZE_MARK)).toBe(true);
   });
 });
 
