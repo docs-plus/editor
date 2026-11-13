@@ -43,7 +43,7 @@
 - the palette entry "Paint format";
 - ⋯ → "Paint format".
 
-Arming reads `readBundleAt(state)` at the selection or the caret, so plain text picks up "plain" as in Docs. It also becomes the remembered (Repeat) bundle.
+Arming reads `readBundleAt(state)` at the selection or the caret, so plain text picks up "plain" as in Docs. It becomes the remembered (Repeat) bundle only once it is applied: arming and cancelling leaves Repeat as it was.
 
 **Armed state:**
 - The brush shows pressed (the 12×2 bar).
@@ -54,7 +54,7 @@ Arming reads `readBundleAt(state)` at the selection or the caret, so plain text 
 **Apply:**
 - **Mouse:** the next pointer-up that ends a non-empty selection applies the bundle (`applyFormatBundle`: one undo step, sets marks and never toggles), then disarms. Pill: "Formatting applied" for 2 s.
 - **Keyboard:** select with Shift+arrows, then press ⌘⌥V (Ctrl+Alt+V or F4 elsewhere), or activate the brush again via Alt+F10.
-- **Touch:** tap the brush, select text, then tap the brush again to apply. Pill: "Select text, then tap 🖌 to apply". Never auto-apply when the handles settle.
+- **Touch:** tap the brush, select text, then tap the brush again to apply. Pill: "Select text, then tap the brush again". Never auto-apply when the handles settle.
 
 **Cancel:** any of these disarms without applying:
 - Esc;
@@ -68,7 +68,7 @@ Arming reads `readBundleAt(state)` at the selection or the caret, so plain text 
 
 - **The bundle:** it fills from the writer's formatting of a selection, or from Paint format. No face shows it anywhere.
 - **Keys:** ⌘⌥V on macOS; Ctrl+Alt+V and F4 elsewhere.
-- **Palette entry:** labelled "Repeat formatting". Its secondary line is the long label ("Bold, Yellow highlight"), built from set fields only, so it never says "default size". The shortcut sits on the right. It comes first under Format, and under "Suggested here" when a bundle exists.
+- **Palette entry:** labelled "Repeat formatting". Its secondary line is the long label ("Bold, Yellow highlight"), built from set fields only, so it never says "default size". A bundle that only clears (painted from plain text) reads "Plain (removes formatting)". The shortcut sits on the right. It comes first under Format, and under "Suggested here" when a bundle exists, unless that bundle is plain.
 - **Nothing remembered:** the key shows the pill and announces "Nothing to repeat yet. Format some text or use Paint format." The palette entry is disabled with that reason.
 - **Unavailable** (empty selection, code, size in a heading): the pill shows the existing reason.
 - **After use:** pill "Repeated Bold, Yellow highlight".
@@ -92,12 +92,12 @@ Also:
 **Behaviour:**
 - One per editor. Non-modal and never takes focus.
 - It carries the same text as the `announce()` call; `announce()` stays the screen-reader channel.
-- It closes after 2.5 s, or 5 s when it has an action. It stays open while hovered or focused (WCAG 1.4.13), and Esc closes it.
+- It closes after 2.5 s, or 5 s when it has an action. It stays open while hovered or focused (WCAG 1.4.13), and Esc closes it, except while Paint format is armed: then only Esc in the text closes it, because that Esc also cancels painting (Esc on a toolbar item only returns to the text, §2).
 - Forced colours: system colours.
 
 **Placement:**
-- **Desktop:** 8 px under the sticky row, centred over the page column.
-- **Phone:** a sibling of the bar's scroller, never inside a masked element: `absolute inset-x-2 bottom-[calc(100%+8px)] z-50`. The presence and Privacy footer chips sit below the bar layer, or hide while the docked bar shows.
+- **Desktop:** 8 px under the sticky row, centred over the page column. When that would cover the open selection bubble (near the top of the page), it goes 8 px right of the bubble, level with it, when that fits the viewport, else 8 px below it, so the armed brush stays clickable.
+- **Phone:** a sibling of the bar's scroller, never inside a masked element: `absolute inset-x-2 bottom-[calc(100%+8px)] z-50`. The presence and Privacy footer chips sit below the bar layer, and hide while the docked selection bar shows. While the Aa sheet is open the pill sits 8 px above the sheet's top edge.
 
 **Style:**
 
@@ -142,6 +142,9 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
 - The swatch grid is `repeat(auto-fill, minmax(44px, 1fr))` with a 6 px gap.
 - No tooltip pops when the sheet opens.
 - It adds a "Your formats" section with the same previews as §4, plus "Save selection as format…".
+  - The formats fill the two-column grid. "Save selection as format…", the "Remove a format" toggle and the Remove list span its full width, below the formats, so a long label never widens the sheet (no sideways scroll at 320 px). Labels truncate with an ellipsis.
+  - The Remove list is a grid of its own under the toggle, inset (`ps-3`), never between the apply buttons.
+  - A disabled control's reason is a visible `text-xs text-muted-foreground` line under it (phones have no tooltips, §10): one line under the formats when none can apply, one under Save.
 
 **Touch:**
 - No tooltips on a coarse pointer (`[data-slot="tooltip-content"] { display:none }` under `(pointer: coarse)`); the pill replaces them.
@@ -200,7 +203,8 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
 ## 10. Menus: visible disabled reasons
 
 - A disabled item shows its reason as a visible second line, `block text-xs text-muted-foreground`.
-- Only the label dims: `group-data-disabled:opacity-50` on the label, with the item itself at opacity 100.
+- Only the label dims: `group-data-disabled:opacity-50` on the label, with the item itself at opacity 100. The label is an element of its own, so a bare-text label dims too.
+- The reason is read once, as the description: it is `aria-hidden` inside the item (out of the name taken from content), and Your formats items name themselves with `aria-labelledby` on the label.
 - `title`-only and sr-only-only reasons are retired.
 
 ## 11. Colour popover: low contrast
@@ -215,7 +219,7 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
 ⓘ  Couldn’t load colours.    [ Retry ]
 ```
 
-- Layout: `p-3 flex items-center gap-2 text-sm`.
+- Layout: `flex items-center gap-2 text-sm`, with no padding of its own: the popover around it has it.
 - Icon: `CircleAlert`, muted, not red.
 - The text names the surface: colours, or the table picker.
 - Retry resets the boundary; `lazySurface` already swapped in a fresh `lazy()`.

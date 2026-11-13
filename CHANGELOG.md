@@ -15,8 +15,8 @@ Minors left by the a11y review of the smart toolbar (contract §10), and
 the design pass of PR E's surfaces
 (`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
 
-The editor chunk ends at +23,994 B of the 23.5 KB budget (70 B left);
-the budget is unchanged. The palette's first Alt+/ loads 20,461 B gz of
+The editor chunk ends at +23,993 B of the 23.5 KB budget (71 B left);
+the budget is unchanged. The palette's first Alt+/ loads 20,472 B gz of
 its 20,480 B budget.
 
 #### Fixed
@@ -92,6 +92,28 @@ its 20,480 B budget.
   old repro pass); the 768px handoff test drives Alt+F10 again, and a new
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
   resize hid the tab stop.
+- **Design sign-off (PR #35):**
+  - Near the top of the page the desktop status pill no longer covers
+    the selection bubble: it moves 8px right of it (or below it), so a
+    second click on the armed brush cancels.
+  - The phone Aa sheet no longer scrolls sideways at 320px and 375px:
+    "Save selection as format…", "Remove a format" and the Remove list
+    span the sheet, the list is inset under its toggle instead of mixed
+    into the formats, and long names truncate. Why Save (or a format) is
+    unavailable is a visible line, since phones have no tooltips.
+  - A disabled menu item's label dims (a bare-text label did not), and
+    its reason is read once, as the description, not also in the name.
+  - While Paint format is armed, Esc on a toolbar item or in a menu no
+    longer closes its pill: only Esc in the text does, which also
+    cancels painting.
+  - Arming Paint format and cancelling no longer replaces the Repeat
+    bundle; it is remembered only once applied. A bundle that only clears
+    reads "Plain (removes formatting)" and is not suggested first in the
+    palette.
+  - The presence and Privacy chips hide while the phone selection bar
+    shows, instead of showing through behind its pill.
+  - The phone brush pill says "Select text, then tap the brush again"
+    (no emoji), and the "Couldn’t load" hint is no longer padded twice.
 
 - **Typing budget flipped between runs, partly addressed**
   (`performance.spec.ts`). Every trial generated its own random document,
