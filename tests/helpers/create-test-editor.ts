@@ -5,7 +5,6 @@ import { InlineCode } from "@docs.plus/extension-inline-code";
 import type { Extension, JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
-import { Highlight } from "@tiptap/extension-highlight";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
@@ -18,6 +17,7 @@ import { HeadingFilter } from "@/extensions/heading-filter";
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
 import { TitleDocument } from "@/extensions/title-document";
+import { TokenHighlight } from "@/extensions/token-highlight";
 import { lowlight } from "@/lib/lowlight";
 
 export const DEFAULT_EXTENSIONS = [
@@ -57,7 +57,7 @@ export const DEFAULT_EXTENSIONS = [
   }),
   HorizontalRule,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
-  Highlight.configure({ multicolor: true }),
+  TokenHighlight.configure({ multicolor: true }),
   HyperMultimediaKit,
   TaskList,
   TaskItem.configure({ nested: true }),

@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type * as Y from "yjs";
 
@@ -42,6 +43,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { DocumentNotice } from "@/components/document-editor/document-notice";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
 import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
@@ -55,11 +57,8 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
-import {
-  DOCUMENT_DELETED_REASON,
-  DOCUMENT_TOO_LARGE_REASON,
-  OFFLINE_BUDGET_REASON,
-} from "@/lib/collab-session";
+import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
+import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
 import { useMediaFileUpload } from "./use-media-file-upload";
@@ -82,20 +81,13 @@ type DocumentEditorContentProps = DocumentEditorProps & {
   ydoc: Y.Doc;
   provider: import("@hocuspocus/provider").HocuspocusProvider;
   documentId: string;
-  /** Why edits are refused (size cap, deleted, offline budget), if they are. */
+  /** Why the server refuses edits (size, deleted, outdated…), if it does. */
   rejectedReason: string | null;
   /** The server has confirmed this document; seeding waits for it. */
   serverSynced: boolean;
 };
 
-const REJECTION_NOTICES: Record<string, string> = {
-  [DOCUMENT_TOO_LARGE_REASON]:
-    "This document is over the size limit, so new changes can't be saved. Copy what you need into a new tab.",
-  [DOCUMENT_DELETED_REASON]:
-    "This document was deleted. You're seeing your device's last copy; copy what you need into a new tab.",
-  [OFFLINE_BUDGET_REASON]:
-    "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
-};
+const getServerGuardState = (): SchemaGuardState => "ok";
 
 /** The outline sidebar, re-rendered on its own when the items change. */
 function DocumentOutline({
@@ -145,6 +137,25 @@ function DocumentEditorContent({
     mode: "or",
   });
 
+  // Freezes on unknown schema names, repairs misfits of known ones.
+  const schemaGuard = useMemo(
+    () => createSchemaGuard(ydoc.getXmlFragment(EDITOR_FRAGMENT_NAME)),
+    [ydoc],
+  );
+  const guardState = useSyncExternalStore(
+    schemaGuard.subscribe,
+    schemaGuard.getState,
+    getServerGuardState,
+  );
+  const reason = rejectedReason ?? (guardState === "ok" ? null : guardState);
+  // The guard reads it when its repair timer fires, not when it binds.
+  const canWriteRef = useRef(rejectedReason === null);
+  useEffect(() => {
+    canWriteRef.current = rejectedReason === null;
+    // A repair deferred while refused (offline budget) runs now.
+    if (rejectedReason === null) schemaGuard.onWritable();
+  }, [rejectedReason, schemaGuard]);
+
   // `useEditor` compares its options on every render and, when any differ,
   // calls `editor.setOptions`: a full view update that also re-syncs the
   // whole document to Yjs. Keep every option stable between renders.
@@ -157,8 +168,9 @@ function DocumentEditorContent({
         onFoldChange: setFoldedIds,
         onFilterChange: setFilterState,
         onTocUpdate: tocStore.set,
+        onInvalidContent: schemaGuard.onInvalidContent,
       }),
-    [documentId, ydoc, provider, tocStore],
+    [documentId, ydoc, provider, tocStore, schemaGuard],
   );
 
   const editor = useEditor({
@@ -177,10 +189,18 @@ function DocumentEditorContent({
     },
   });
 
-  // Stop accepting input the server would drop.
   useEffect(() => {
-    if (editor) editor.setEditable(rejectedReason === null);
-  }, [editor, rejectedReason]);
+    if (!editor) return;
+    return schemaGuard.bind({
+      editor,
+      canWrite: () => canWriteRef.current,
+    });
+  }, [editor, schemaGuard]);
+
+  // Stop accepting input the server would drop or the schema can't hold.
+  useEffect(() => {
+    if (editor) editor.setEditable(reason === null);
+  }, [editor, reason]);
 
   const headingFilter = useHeadingFilter({ editor, filterState });
 
@@ -285,12 +305,7 @@ function DocumentEditorContent({
             )}
         </div>
 
-        {rejectedReason && (
-          <p role="alert" className="document-size-notice">
-            {REJECTION_NOTICES[rejectedReason] ??
-              "New changes to this document can't be saved."}
-          </p>
-        )}
+        {reason && <DocumentNotice reason={reason} />}
         <CollabStatusGroup />
       </EditorContext.Provider>
     </main>
@@ -309,9 +324,13 @@ export function DocumentEditor({
 
   if (!synced || !ydoc || !provider) {
     return (
-      <SkeletonEditorBody>
-        <SkeletonDocument />
-      </SkeletonEditorBody>
+      <>
+        {/* Refused with no device copy: explain instead of loading forever. */}
+        {rejectedReason && <DocumentNotice reason={rejectedReason} />}
+        <SkeletonEditorBody>
+          <SkeletonDocument />
+        </SkeletonEditorBody>
+      </>
     );
   }
 

@@ -122,14 +122,7 @@ const LIST_ITEMS = [
   "Prepare changelog",
 ];
 
-const HIGHLIGHT_COLORS = [
-  "#f1c40f",
-  "#2ecc71",
-  "#e74c3c",
-  "#3498db",
-  "#9b59b6",
-  "#e67e22",
-];
+const HIGHLIGHT_COLORS = ["yellow", "green", "red", "blue", "purple", "orange"];
 
 const IMAGE_URLS = [
   "https://picsum.photos/seed/doc1/400/300",

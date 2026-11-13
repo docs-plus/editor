@@ -7,7 +7,7 @@ export default defineConfig({
     ? [["list"], ["json", { outputFile: process.env.PLAYWRIGHT_REPORT_FILE }]]
     : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
     headless: true,
     // Only the production-build `pwa` project runs the service worker.
     serviceWorkers: "block",
@@ -55,7 +55,7 @@ export default defineConfig({
     ? {
         command:
           "DOC_CREATION_RATE_LIMIT=2000 WS_CONNECTION_LIMIT=200 WS_SOCKETS_PER_IP=600 WS_UPGRADE_RATE_LIMIT=6000 HOCUS_THROTTLE=0 make dev",
-        url: "http://localhost:3000",
+        url: process.env.E2E_BASE_URL ?? "http://localhost:3000",
         timeout: 60_000,
       }
     : undefined,

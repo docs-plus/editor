@@ -1,5 +1,7 @@
 import * as Y from "yjs";
 
+import { markNameFromKey } from "@/lib/schema-names";
+
 /** Collaboration field the editor binds its ProseMirror document to. */
 export const EDITOR_FRAGMENT_NAME = "default";
 
@@ -18,9 +20,6 @@ export const LEGACY_MARK_RENAMES: Readonly<Record<string, string>> = {
 /** Transaction origin, so update listeners can tell migrations apart. */
 export const MARK_MIGRATION_ORIGIN = "legacy-mark-migration";
 
-// y-prosemirror stores overlapping marks under `<name>--<8-char hash>`.
-const HASHED_MARK_SUFFIX = /--[a-zA-Z0-9+/=]{8}$/;
-
 interface FormatPatch {
   text: Y.XmlText;
   index: number;
@@ -29,8 +28,8 @@ interface FormatPatch {
 }
 
 function renamedAttributeKey(key: string): string | null {
-  const suffix = HASHED_MARK_SUFFIX.exec(key)?.[0] ?? "";
-  const name = suffix ? key.slice(0, -suffix.length) : key;
+  const name = markNameFromKey(key);
+  const suffix = key.slice(name.length);
   const renamed = LEGACY_MARK_RENAMES[name];
   return renamed ? `${renamed}${suffix}` : null;
 }

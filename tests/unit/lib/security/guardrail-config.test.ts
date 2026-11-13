@@ -19,6 +19,7 @@ const ENV_KEYS = [
   "HOCUS_REDIS",
   "HOCUS_REDIS_HOST",
   "HOCUS_REDIS_PORT",
+  "HOCUS_MIN_CLIENT_SCHEMA",
 ] as const;
 
 type GuardrailConfigModule = typeof import("@/lib/security/guardrail-config");
@@ -59,6 +60,7 @@ describe("guardrail-config", () => {
     expect(config.HOCUS_REDIS_ENABLED).toBe(false);
     expect(config.HOCUS_REDIS_HOST).toBe("127.0.0.1");
     expect(config.HOCUS_REDIS_PORT).toBe(6380);
+    expect(config.HOCUS_MIN_CLIENT_SCHEMA).toBe(0);
   });
 
   it("parses valid env values", async () => {
@@ -111,6 +113,13 @@ describe("guardrail-config", () => {
 
     expect(config.HOCUS_LOGGER_ENABLED).toBe(false);
     expect(config.HOCUS_THROTTLE_ENABLED).toBe(false);
+  });
+
+  it("parses the client schema minimum and ignores negative values", async () => {
+    process.env.HOCUS_MIN_CLIENT_SCHEMA = "2";
+    expect((await loadConfigModule()).HOCUS_MIN_CLIENT_SCHEMA).toBe(2);
+    process.env.HOCUS_MIN_CLIENT_SCHEMA = "-1";
+    expect((await loadConfigModule()).HOCUS_MIN_CLIENT_SCHEMA).toBe(0);
   });
 
   it("enables and parses Hocus Redis env when configured", async () => {
