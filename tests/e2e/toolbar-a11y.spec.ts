@@ -414,8 +414,8 @@ const SCREENS = ".superpowers/screens-r2-popover";
 
 /**
  * O3 (Appendix A): with teal text selected, a highlight that puts it below
- * 4.5:1 is dimmed and described "Low contrast" but still applies, and the
- * text row re-dims live against the highlight just applied.
+ * 4.5:1 is dimmed and described "Low contrast" but still applies. Only
+ * highlight swatches dim: the text row never does, even on a highlight.
  */
 const LOW_CONTRAST_CASES = {
   // Teal on gray is below AA in light only; teal on yellow in dark only.
@@ -511,8 +511,8 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
       });
     }
 
-    // Still selectable: it applies, the popover stays open, and the text
-    // row now dims teal against the new highlight.
+    // Still selectable: it applies and the popover stays open. The text
+    // row stays undimmed although teal is now below AA on this highlight.
     await dimmed.click();
     await expect(dimmed).toHaveAttribute("aria-pressed", "true");
     expect(
@@ -523,16 +523,8 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     const teal = dialog
       .getByRole("group", { name: "Text colour", exact: true })
       .getByRole("button", { name: "Teal text" });
-    await expect(teal).toHaveAttribute("data-low-contrast", "");
-    await expect(teal).toHaveAccessibleDescription(
-      "Low contrast on the current highlight",
-    );
-    if (!forced) {
-      await page.mouse.move(0, 0);
-      await dialog.screenshot({
-        path: `${SCREENS}/colour-low-contrast-text-${theme}.png`,
-      });
-    }
+    await expect(teal).not.toHaveAttribute("data-low-contrast", /.*/);
+    await expect(teal).not.toHaveAccessibleDescription(/Low contrast/);
     await expect(
       dialog
         .getByRole("group", { name: "Text colour", exact: true })
