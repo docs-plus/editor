@@ -95,7 +95,7 @@ test("listeners and heap return to baseline after 20 tab switches and 100 palett
   test.info().annotations.push({
     type: "known",
     description:
-      "Tab switches were observed to retain destroyed editors (about one per two switches, +0.3 MB per switch) under next dev; observed, not yet confirmed on base (no production-build A/B yet). Until that A/B exists, heap and live editors are gated over the palette cycles only, and listeners over both.",
+      "Tab switches retain destroyed editors on the v1 base too (A/B 2026-11-13, production builds of integrate/smart-toolbar-v1 f133508 and this branch: 2 -> 12 live editors and about +7 MB after 20 switches, 2 -> 32 after 60, identical with and without PR E; next dev the same). It is not PR E's, so heap and live editors are gated over the palette cycles only, listeners over both, and the tab-switch figures are logged.",
   });
   const editor = new EditorPage(page);
   await editor.goto();
@@ -117,11 +117,26 @@ test("listeners and heap return to baseline after 20 tab switches and 100 palett
   await paletteCycle(page);
   const baseline = await listenerCounts(cdp);
   expect(baseline.paletteKeydown).toBe(1);
+  const tabsHeapBefore = await heapUsed(cdp);
+  const tabsEditorsBefore = await liveEditors(cdp);
 
   for (let i = 0; i < 20; i++) {
     await switchTab(page, i % 2 === 0 ? "playground" : back);
   }
   const afterTabs = await listenerCounts(cdp);
+  const tabsHeapAfter = await heapUsed(cdp);
+  const tabsEditorsAfter = await liveEditors(cdp);
+  console.log(
+    "tab switches: heap",
+    tabsHeapBefore,
+    tabsHeapAfter,
+    "editors",
+    tabsEditorsBefore,
+    tabsEditorsAfter,
+    "listeners",
+    JSON.stringify(baseline),
+    JSON.stringify(afterTabs),
+  );
   expect(afterTabs.paletteKeydown).toBe(1);
   expect(afterTabs.window).toBeLessThanOrEqual(baseline.window);
   expect(afterTabs.document).toBeLessThanOrEqual(baseline.document);
