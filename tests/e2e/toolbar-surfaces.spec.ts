@@ -1,8 +1,9 @@
 /**
  * PR D2 surfaces: colour popover + split faces (M1–M3), size stepper, the
- * phone colour panel, outline memory (M6) and the memory kill switch.
- * Desktop row placement is PR D1's; until it lands, the phone panel is the
- * one place these controls render, so most cases run at phone width.
+ * phone "Text format" sheet, outline memory (M6) and the memory kill
+ * switch. Row cases run at desktop width, where the row holds the colour
+ * pair and the stepper; phones reach them through the sheet
+ * (`mobile-bar.spec.ts` covers the bar itself).
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -12,7 +13,8 @@ import {
   setTheme,
 } from "./helpers/a11y";
 
-const PHONE = { width: 390, height: 844 };
+/** Wide enough for the T1 row: colour pair and stepper in place. */
+const DESKTOP = { width: 1440, height: 900 };
 /** A small touch phone: coarse pointer, 360px wide. */
 const TOUCH_PHONE = { width: 360, height: 740 };
 const SCREENS = ".superpowers/screens-D2";
@@ -53,19 +55,30 @@ const lastHighlight = (page: Page) =>
     return (mark?.attrs.color as string | undefined) ?? null;
   });
 
-/**
- * Opens the phone colour panel. Pass `touch` inside a `hasTouch` context:
- * it keeps the context's viewport and taps instead of clicking.
- */
-async function openPhonePanel(page: Page, { touch = false } = {}) {
-  if (!touch) await page.setViewportSize(PHONE);
+/** Opens a doc at desktop width with a fresh paragraph selected. */
+async function openRow(page: Page) {
+  await page.setViewportSize(DESKTOP);
   await openToolbarTestDoc(page);
   await selectNewParagraph(page);
-  const entry = page
+}
+
+/**
+ * Inside a touch phone context: selects a fresh paragraph and taps Aa,
+ * the docked bar's "Text format" sheet (spec §4.7).
+ */
+async function openPhoneSheet(page: Page) {
+  await openToolbarTestDoc(page);
+  await selectNewParagraph(page);
+  await page
     .getByRole("toolbar")
-    .getByRole("button", { name: "Text style and colour" });
-  if (touch) await entry.tap();
-  else await entry.click();
+    .getByRole("button", { name: "Text format" })
+    .tap();
+  const sheet = page.getByRole("dialog", { name: "Text format" });
+  await sheet.getByRole("group", { name: "Text colour" }).waitFor();
+  await sheet.evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
+  return sheet;
 }
 
 const toolbar = (page: Page) => page.getByRole("toolbar");
@@ -86,10 +99,8 @@ const smallTargets = (page: Page, selector: string) =>
       .filter((box) => box.width < 44 || box.height < 44),
   );
 
-test("phone panel reaches text colour, highlight and size", async ({
-  page,
-}) => {
-  await openPhonePanel(page);
+test("the row reaches text colour, highlight and size", async ({ page }) => {
+  await openRow(page);
   await expect(
     toolbar(page).getByRole("button", { name: /^Apply text colour: / }),
   ).toBeVisible();
@@ -104,7 +115,7 @@ test("phone panel reaches text colour, highlight and size", async ({
 test("highlight popover applies a token, remembers it and lists it as recent", async ({
   page,
 }) => {
-  await openPhonePanel(page);
+  await openRow(page);
   await toolbar(page)
     .getByRole("button", { name: "More highlight colours" })
     .click();
@@ -172,7 +183,7 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
 test("size stepper is a named spinbutton, disabled with a reason in headings", async ({
   page,
 }) => {
-  await openPhonePanel(page);
+  await openRow(page);
   const spin = toolbar(page).getByRole("spinbutton", { name: "Font size" });
   await expect(spin).toHaveAttribute("aria-valuetext", /pixels|Mixed/);
   await page.evaluate(() =>
@@ -189,22 +200,22 @@ test("size stepper is a named spinbutton, disabled with a reason in headings", a
 test("size spinbutton keeps Home, End and Enter from the toolbar", async ({
   page,
 }) => {
-  await openPhonePanel(page);
+  await openRow(page);
   const spin = toolbar(page).getByRole("spinbutton", { name: "Font size" });
-  const back = toolbar(page).getByRole("button", {
-    name: "Back to all tools",
+  const decrease = toolbar(page).getByRole("button", {
+    name: "Decrease font size",
   });
-  // Rove left to Back so the toolbar's roving index points at it…
+  // Rove left to − so the toolbar's roving index points at it…
   await spin.focus();
   await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowLeft");
-  await expect(back).toBeFocused();
-  // …then click into the spinbutton: Enter must not click Back.
+  await expect(decrease).toBeFocused();
+  // …then click into the spinbutton: Enter must not click −.
   await spin.click({ force: true });
   await expect(spin).toBeFocused();
+  const before = await spin.getAttribute("aria-valuetext");
   await page.keyboard.press("Enter");
-  await expect(spin).toBeVisible();
   await expect(spin).toBeFocused();
+  await expect(spin).toHaveAttribute("aria-valuetext", before ?? "");
   for (const key of ["Home", "End", "ArrowUp", "ArrowDown"]) {
     await page.keyboard.press(key);
     await expect(spin, `${key} keeps focus`).toBeFocused();
@@ -220,7 +231,7 @@ test("colour swatches keep their colours in forced colours", async ({
   page,
 }, testInfo) => {
   await page.emulateMedia({ forcedColors: "active" });
-  await openPhonePanel(page);
+  await openRow(page);
   const more = toolbar(page).getByRole("button", {
     name: "More highlight colours",
   });
@@ -266,13 +277,13 @@ test("colour swatches keep their colours in forced colours", async ({
     .locator(".st-face-bar--highlight")
     .evaluate((el) => getComputedStyle(el).forcedColorAdjust);
   expect(face).toBe("none");
-  await page.mouse.move(0, PHONE.height - 1);
+  await page.mouse.move(0, DESKTOP.height - 1);
   await testInfo.attach("colour-popover-forced-colors", {
     body: await dialog.screenshot(),
     contentType: "image/png",
   });
   await dialog.screenshot({
-    path: `${SCREENS}/phone-colour-popover-forced.png`,
+    path: `${SCREENS}/row-colour-popover-forced.png`,
   });
 });
 
@@ -294,7 +305,7 @@ test("tampered memory falls back to defaults without errors", async ({
       }),
     );
   });
-  await openPhonePanel(page);
+  await openRow(page);
   await expect(
     toolbar(page).getByRole("button", { name: "Apply highlight: Yellow" }),
   ).toBeVisible();
@@ -324,11 +335,9 @@ test("outline open state survives a reload (M6) and Forget keeps it", async ({
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`screenshots of the colour popover and phone panel (${theme})`, async ({
-    page,
-  }) => {
+  test(`screenshots of the row colour popover (${theme})`, async ({ page }) => {
     await setTheme(page, theme);
-    await openPhonePanel(page);
+    await openRow(page);
     await toolbar(page)
       .getByRole("button", { name: "More highlight colours" })
       .click();
@@ -336,7 +345,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(
       dialog.getByRole("button", { name: "Red text" }),
     ).toBeVisible();
-    await page.mouse.move(0, PHONE.height - 1);
+    await page.mouse.move(0, DESKTOP.height - 1);
     await dialog.evaluate((el) =>
       Promise.all(
         el
@@ -345,7 +354,7 @@ for (const theme of ["light", "dark"] as const) {
       ),
     );
     await page.screenshot({
-      path: `${SCREENS}/phone-colour-popover-${theme}.png`,
+      path: `${SCREENS}/row-colour-popover-${theme}.png`,
     });
     // The floating popover must not clip the 2px focus outline.
     const focused = dialog.locator("button:focus-visible");
@@ -359,69 +368,38 @@ for (const theme of ["light", "dark"] as const) {
       expect(clipped).toBe(false);
     }
     await page.keyboard.press("Escape");
-    await toolbar(page).screenshot({
-      path: `${SCREENS}/phone-panel-${theme}.png`,
-    });
   });
 }
 
 test.describe("on a touch phone (coarse pointer, 360px)", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: TOUCH_PHONE });
 
-  test("targets are 44×44 and nothing scrolls sideways", async ({ page }) => {
+  test("the sheet's colours fit with 44×44 swatches in lines of six", async ({
+    page,
+  }) => {
     expect(
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
-    await openPhonePanel(page, { touch: true });
-    await expect(
-      toolbar(page).getByRole("spinbutton", { name: "Font size" }),
-    ).toBeVisible();
-
-    const controls =
-      '[role="toolbar"] button, [role="toolbar"] [role="spinbutton"]';
-    expect(await smallTargets(page, controls)).toEqual([]);
-    const overflow = await toolbar(page).evaluate(
-      (el) => el.scrollWidth - el.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `${SCREENS}/touch-phone-panel.png` });
-
-    // A tap opens the popover without moving focus into it, so a tap from
-    // the editor keeps the phone keyboard up. (The entry button that opens
-    // this panel already takes focus on touch: D1's main toolbar.)
-    const focusedBefore = await page.evaluateHandle(
-      () => document.activeElement,
-    );
-    await toolbar(page)
-      .getByRole("button", { name: "More highlight colours" })
-      .tap();
-    const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-    await expect(dialog).toBeVisible();
-    await dialog.evaluate((el) =>
-      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
-    );
+    const sheet = await openPhoneSheet(page);
     expect(
-      await page.evaluate(
-        (before) => document.activeElement === before,
-        focusedBefore,
+      await smallTargets(
+        page,
+        '[data-format-sheet] button, [data-format-sheet] [role="spinbutton"]',
       ),
-    ).toBe(true);
-    expect(
-      await smallTargets(page, '[role="dialog"] button.st-swatch'),
     ).toEqual([]);
-    const box = await dialog.boundingBox();
+    const box = await sheet.boundingBox();
     expect(box).not.toBeNull();
     if (box) {
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(TOUCH_PHONE.width);
     }
     expect(
-      await dialog.evaluate((el) => el.scrollWidth - el.clientWidth),
+      await sheet.evaluate((el) => el.scrollWidth - el.clientWidth),
     ).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `${SCREENS}/touch-colour-popover.png` });
+    await page.screenshot({ path: `${SCREENS}/touch-phone-sheet.png` });
 
     // ↑/↓ follow the visual lines of six swatches.
-    const highlights = dialog.getByRole("group", { name: "Highlight" });
+    const highlights = sheet.getByRole("group", { name: "Highlight" });
     const none = highlights.getByRole("button", { name: "No highlight" });
     await none.focus();
     await page.keyboard.press("ArrowDown");
@@ -430,7 +408,7 @@ test.describe("on a touch phone (coarse pointer, 360px)", () => {
     await expect(none).toBeFocused();
     await page.keyboard.press("ArrowUp");
     await expect(
-      dialog
+      sheet
         .getByRole("group", { name: "Text colour" })
         .locator('[data-col="6"]'),
     ).toBeFocused();
@@ -438,13 +416,10 @@ test.describe("on a touch phone (coarse pointer, 360px)", () => {
 });
 
 /**
- * v1 phone minimum (contract §1.3, D2 KEEP): at 375px on touch, the existing
- * mobile panel reaches text colour, highlight and size with 44×44 targets.
- * This pins the current panel only: it opens it through the old "Text style
- * and colour" entry and finds the controls in `role="toolbar"`. When the
- * docked bar and Aa sheet (a dialog) replace `MobileToolbarContent`, move
- * this block to the sheet in the same change; it does not prove parity on
- * its own.
+ * v1 phone minimum (contract §1.3, D2 KEEP), moved from the old panel to
+ * the docked bar's "Text format" sheet: at 375px on touch, text colour,
+ * highlight and size apply with 44×44 targets in light, dark and forced
+ * colours, and the stepper shows the applied size.
  */
 test.describe("on a 375px touch phone", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE_375 });
@@ -463,61 +438,49 @@ test.describe("on a 375px touch phone", () => {
     );
 
   for (const mode of ["light", "dark", "forced"] as const) {
-    test(`colour and size apply with 44×44 targets (${mode})`, async ({
+    test(`colour and size apply from the sheet with 44×44 targets (${mode})`, async ({
       page,
     }) => {
       if (mode === "forced")
         await page.emulateMedia({ forcedColors: "active" });
       else await setTheme(page, mode);
-      await openPhonePanel(page, { touch: true });
+      const sheet = await openPhoneSheet(page);
 
-      const controls =
-        '[role="toolbar"] button, [role="toolbar"] [role="spinbutton"]';
-      expect(await smallTargets(page, controls)).toEqual([]);
       expect(
-        await toolbar(page).evaluate((el) => el.scrollWidth - el.clientWidth),
+        await smallTargets(
+          page,
+          '[data-format-sheet] button, [data-format-sheet] [role="spinbutton"], [role="toolbar"] button',
+        ),
+      ).toEqual([]);
+      expect(
+        await sheet.evaluate((el) => el.scrollWidth - el.clientWidth),
       ).toBeLessThanOrEqual(1);
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth - window.innerWidth,
         ),
       ).toBeLessThanOrEqual(0);
-      await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
+      await expectNoSeriousA11yViolations(page, ["[data-format-sheet]"]);
 
-      const textFace = toolbar(page).getByRole("button", {
-        name: /^Apply text colour: /,
-      });
-      const highlightFace = toolbar(page).getByRole("button", {
-        name: /^Apply highlight: /,
-      });
-      // The faces name the colour they apply ("Apply text colour: Red").
-      const faceToken = async (face: typeof textFace) =>
-        ((await face.getAttribute("aria-label")) ?? "")
-          .replace(/^.*: /, "")
-          .toLowerCase();
-      const textToken = await faceToken(textFace);
-      const highlightToken = await faceToken(highlightFace);
-
-      await textFace.tap();
-      await highlightFace.tap();
-      await toolbar(page)
-        .getByRole("button", { name: "Increase font size" })
-        .tap();
-      await expect
-        .poll(() => lastMark(page, "textColor", "color"))
-        .toBe(textToken);
-      await expect.poll(() => lastHighlight(page)).toBe(highlightToken);
+      await sheet.getByRole("button", { name: "Red text" }).tap();
+      await sheet.getByRole("button", { name: "Yellow highlight" }).tap();
+      await sheet.getByRole("button", { name: "Increase font size" }).tap();
+      await expect.poll(() => lastMark(page, "textColor", "color")).toBe("red");
+      await expect.poll(() => lastHighlight(page)).toBe("yellow");
       await expect.poll(() => lastMark(page, "fontSize", "size")).toBe("lg");
       // What is on screen and exposed to assistive tech follows the mark
       // (WCAG 4.1.2); this also waits out the toolbar settle delay.
-      const stepper = toolbar(page).getByRole("spinbutton", {
-        name: "Font size",
-      });
+      const stepper = sheet.getByRole("spinbutton", { name: "Font size" });
       await expect(stepper).toHaveAttribute("aria-valuetext", /^Large/);
       await expect(stepper).toHaveText("L");
+      await expect(
+        sheet
+          .getByRole("group", { name: "Highlight" })
+          .getByRole("button", { name: "Yellow highlight" }),
+      ).toHaveAttribute("aria-pressed", "true");
 
       await page.screenshot({
-        path: `${PHONE_SCREENS}/phone-panel-${mode}.png`,
+        path: `${PHONE_SCREENS}/sheet-375-${mode}.png`,
       });
     });
   }

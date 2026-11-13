@@ -412,7 +412,7 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
   });
 }
 
-test("mobile colour panel: one arrow press moves one swatch", async ({
+test("phone format sheet colours: one arrow press moves one swatch", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -420,14 +420,10 @@ test("mobile colour panel: one arrow press moves one swatch", async ({
   await selectWord(page);
   await page
     .getByRole("toolbar")
-    .getByRole("button", { name: "Text style and colour" })
-    .click();
-  await page
-    .getByRole("toolbar")
-    .getByRole("button", { name: "More highlight colours" })
+    .getByRole("button", { name: "Text format" })
     .click();
 
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const dialog = page.getByRole("dialog", { name: "Text format" });
   const group = dialog.getByRole("group", { name: "Highlight" });
   await expect(group).toBeVisible();
   const green = group.getByRole("button", { name: "Green highlight" });

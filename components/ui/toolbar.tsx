@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 type BaseProps = React.HTMLAttributes<HTMLDivElement>;
 
 interface ToolbarProps extends BaseProps {
-  variant?: "floating" | "fixed";
+  /**
+   * `fixed`: the sticky row. `floating`: the bubble. `docked`: the phone
+   * bar, fixed to the bottom of the viewport (spec §4.7; the caller lifts it
+   * above the keyboard).
+   */
+  variant?: "floating" | "fixed" | "docked";
   /**
    * Esc on a toolbar item (not inside an open menu, which handles its own
    * Esc in a portal). The editor shell returns focus to the document with
@@ -290,6 +295,9 @@ const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
           // outline of the first and last items.
           variant === "floating" &&
             "p-0.5 rounded-lg border border-border bg-background shadow-md outline-none overflow-visible",
+          // A constant 44px; cells share the width (spec §4.7, §6.7).
+          variant === "docked" &&
+            "fixed inset-x-0 bottom-0 z-40 h-11 justify-between gap-0 border-t border-border bg-background px-1 [container:mobile-bar/inline-size]",
           className,
         )}
         {...props}
