@@ -17,7 +17,10 @@ import {
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
-import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
+import {
+  ariaKeyShortcuts,
+  formatKeyCombo,
+} from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { ChevronDownIcon } from "@/lib/icons";
@@ -161,9 +164,14 @@ export function ActionMenuItem({
   if (!action || !view) return null;
   const reason = view.enabled === true ? undefined : view.enabled.reason;
   const Icon = action.icon;
+  const { shortcut } = action;
+  const mac = isMac();
   const common = {
     disabled: reason !== undefined,
     "aria-describedby": reason ? reasonId : undefined,
+    // The visible hint is hidden from the name ("Superscript", not
+    // "Superscript⌘."); the item announces its keys instead.
+    "aria-keyshortcuts": shortcut ? ariaKeyShortcuts(shortcut, mac) : undefined,
     "data-action-id": id,
     onClick: () => {
       onPicked();
@@ -174,9 +182,9 @@ export function ActionMenuItem({
     <>
       {Icon ? <Icon aria-hidden="true" /> : null}
       <span>{label ?? action.label}</span>
-      {action.shortcut ? (
-        <DropdownMenuShortcut>
-          {formatKeyCombo(action.shortcut, isMac())}
+      {shortcut ? (
+        <DropdownMenuShortcut aria-hidden="true">
+          {formatKeyCombo(shortcut, mac)}
         </DropdownMenuShortcut>
       ) : null}
       <Reason id={reasonId} reason={reason} />
