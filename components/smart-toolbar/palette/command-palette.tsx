@@ -125,6 +125,18 @@ function useEngineReady(): boolean {
   return ready;
 }
 
+/**
+ * The rows for this open. `engineReady` is only a revision: when a late
+ * engine lands, E's "still loading" rows are read again as real ones.
+ */
+function readSections(editor: Editor, _engineReady: boolean) {
+  return buildPaletteSections({
+    ctx: computeContext(editor),
+    actions: editorActions.list(),
+    recentKeys: readPaletteRecent(),
+  });
+}
+
 export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   const reasonPrefix = useId();
   const [view, setView] = useState<PaletteMode>(mode);
@@ -132,14 +144,8 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   const [error, setError] = useState<string | null>(null);
   const mac = useMemo(() => isMac(), []);
   const engineReady = useEngineReady();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a late engine turns E's "still loading" rows into real ones
   const sections = useMemo(
-    () =>
-      buildPaletteSections({
-        ctx: computeContext(editor),
-        actions: editorActions.list(),
-        recentKeys: readPaletteRecent(),
-      }),
+    () => readSections(editor, engineReady),
     [editor, engineReady],
   );
   // cmdk highlights its first item on open; make that one Enter can run.
