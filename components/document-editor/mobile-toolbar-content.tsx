@@ -2,9 +2,8 @@
 
 import type { Editor } from "@tiptap/react";
 import {
-  lazy,
+  type ReactNode,
   type Ref,
-  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -13,12 +12,7 @@ import {
 } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
-import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
-import {
-  ActionMenuItem,
-  ToolbarMenu,
-  useMenuFocus,
-} from "@/components/smart-toolbar/row/action-menu";
+import { FormatSheetBody } from "@/components/smart-toolbar/phone/format-sheet";
 import {
   Sheet,
   SheetClose,
@@ -33,52 +27,14 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
-import { ListIcon } from "@/lib/icons";
 import {
   RECENT_COLORS_CHOICE,
   useRememberedChoice,
 } from "@/lib/remembered-choice";
-import "@/components/smart-toolbar/smart-toolbar.scss";
+import "@/components/smart-toolbar/phone/phone.scss";
 
 /** The bar's constant height (spec §4.7). */
 export const MOBILE_BAR_HEIGHT = 44;
-
-/** Sheet body: its own chunk, fetched on first touch or focus of Aa. */
-const loadFormatSheet = () =>
-  import("@/components/smart-toolbar/phone/format-sheet");
-const FormatSheetBody = lazy(() =>
-  loadFormatSheet().then((module) => ({ default: module.FormatSheetBody })),
-);
-
-const LIST_IDS = ["list.bullet", "list.ordered", "list.task"];
-
-/** List ▾ as one cell: the registry's list toggles in a menu. */
-function ListCell({ editor }: { editor: Editor }) {
-  const menu = useMenuFocus(editor);
-  return (
-    <ToolbarMenu
-      label="List"
-      tooltip="List"
-      readOnly={false}
-      icon={<ListIcon aria-hidden="true" />}
-      showLabel={false}
-      open={menu.open}
-      onOpenChange={menu.onOpenChange}
-      finalFocus={menu.finalFocus}
-      contentLabel="List"
-    >
-      {LIST_IDS.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkbox
-          onPicked={menu.markPicked}
-        />
-      ))}
-    </ToolbarMenu>
-  );
-}
 
 /**
  * Registry actions end in `editor.chain().focus()`. While the sheet is
@@ -108,21 +64,29 @@ interface MobileToolbarContentProps {
   ref?: Ref<HTMLDivElement>;
   /** Esc on a cell: back to the document with its selection. */
   onEscape?: () => void;
+  /**
+   * The last cells (List ▾, Indent, Insert ▾: `PhoneMenuCells`), rendered
+   * by the editor shell so the row's menus stay in the editor chunk.
+   */
+  menuCells: ReactNode;
 }
 
 /**
  * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, a constant
  * 44px tall, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, redo (360px and up; the sheet carries it below), Aa (the "Text format" sheet: style, size, colours, align, more),
- * B, I, list, indent, Insert. Toggles show their state with `aria-pressed`
+ * undo, redo (360px and up; the sheet carries it below), Aa (the "Text
+ * format" sheet: style, size, colours, align, more), B, I, then
+ * `menuCells` (list, indent, Insert). Toggles show their state with `aria-pressed`
  * (#269). Hidden in a read-only document (#308), which also closes the
  * sheet. Follow-ups: the context slot cell, and the selection swap
- * (`PhoneSelectionCells`, PR E).
+ * (`PhoneSelectionCells`, PR E). Its own lazy chunk with the sheet, loaded
+ * only below 768px (contract A9).
  */
 export function MobileToolbarContent({
   editor,
   ref,
   onEscape,
+  menuCells,
 }: MobileToolbarContentProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
@@ -215,9 +179,6 @@ export function MobileToolbarContent({
               aria-label="Text format"
               tooltip="Text format"
               aria-haspopup="dialog"
-              onPointerEnter={loadFormatSheet}
-              onFocus={loadFormatSheet}
-              onTouchStart={loadFormatSheet}
             />
           }
         >
@@ -237,20 +198,16 @@ export function MobileToolbarContent({
               Done
             </SheetClose>
           </SheetHeader>
-          <Suspense fallback={<div className="st-sheet-fallback" />}>
-            <FormatSheetBody
-              editor={editor}
-              recent={recent.recent}
-              onClose={closeSheet}
-            />
-          </Suspense>
+          <FormatSheetBody
+            editor={editor}
+            recent={recent.recent}
+            onClose={closeSheet}
+          />
         </SheetContent>
       </Sheet>
       <ActionButton id="mark.bold" editor={editor} variant="phone" />
       <ActionButton id="mark.italic" editor={editor} variant="phone" />
-      <ListCell editor={editor} />
-      <ActionButton id="indent.indent" editor={editor} variant="phone" />
-      <InsertMenu editor={editor} />
+      {menuCells}
     </Toolbar>
   );
 }

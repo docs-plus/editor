@@ -4,7 +4,9 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  lazy,
   Profiler,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -46,8 +48,8 @@ import {
 } from "@/components/app-skeleton";
 import { DocumentNotice } from "@/components/document-editor/document-notice";
 import { EditorSurfaces } from "@/components/smart-toolbar/editor-surfaces";
+import { PhoneMenuCells } from "@/components/smart-toolbar/phone/phone-menu-cells";
 import { MainToolbarContent } from "@/components/document-editor/main-toolbar-content";
-import { MobileToolbarContent } from "@/components/document-editor/mobile-toolbar-content";
 import {
   countToolbarCommit,
   useToolbarOffForTests,
@@ -96,6 +98,17 @@ type DocumentEditorContentProps = DocumentEditorProps & {
 };
 
 const getServerGuardState = (): SchemaGuardState => "ok";
+
+/**
+ * The phone bar and its Aa sheet are one lazy chunk (contract A9): only
+ * phones (< 768px) render it, so desktop never fetches it. Its menu cells
+ * (`PhoneMenuCells`) come from here, out of the editor chunk.
+ */
+const MobileToolbarContent = lazy(() =>
+  import("@/components/document-editor/mobile-toolbar-content").then(
+    (module) => ({ default: module.MobileToolbarContent }),
+  ),
+);
 
 /** The outline sidebar, re-rendered on its own when the items change. */
 function DocumentOutline({
@@ -300,13 +313,16 @@ function DocumentEditorContent({
           </Toolbar>
         )}
         {!toolbarOff && isMobile && (
-          <Profiler id="toolbar" onRender={countToolbarCommit}>
-            <MobileToolbarContent
-              ref={toolbarRef}
-              editor={editor}
-              onEscape={returnToEditor}
-            />
-          </Profiler>
+          <Suspense fallback={null}>
+            <Profiler id="toolbar" onRender={countToolbarCommit}>
+              <MobileToolbarContent
+                ref={toolbarRef}
+                editor={editor}
+                onEscape={returnToEditor}
+                menuCells={editor && <PhoneMenuCells editor={editor} />}
+              />
+            </Profiler>
+          </Suspense>
         )}
 
         {!toolbarOff && <EditorSurfaces editor={editor} />}

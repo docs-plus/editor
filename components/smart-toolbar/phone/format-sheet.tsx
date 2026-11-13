@@ -73,7 +73,7 @@ function LinkRow({ editor, onClose }: { editor: Editor; onClose: () => void }) {
  * Align and More (Redo below 360px, Outdent, Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
  * reasons (title, headings, code, read-only) and `aria-pressed` states are
- * the row's. Its own lazy chunk, loaded on first open.
+ * the row's. Part of the phone bar's lazy chunk (contract A9).
  */
 export function FormatSheetBody({
   editor,
