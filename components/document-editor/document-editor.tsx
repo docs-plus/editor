@@ -75,6 +75,7 @@ import {
   useToolbarHeight,
 } from "./use-document-editor-ui-state";
 import "@/components/document-editor/document-editor.scss";
+import "@/extensions/text-style-marks/text-style-marks.scss";
 
 interface DocumentEditorProps {
   documentId?: string;
