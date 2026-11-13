@@ -26,6 +26,7 @@ import {
   clearsBubbleSuppression,
   isBubbleDismissKey,
   OPEN_POPOVER_TRIGGER,
+  POPOVER_CONTENT,
   shouldShowBubble,
 } from "./bubble-rules";
 import "./selection-bubble.scss";
@@ -36,7 +37,6 @@ const BUBBLE_KEY = new PluginKey("selectionBubble");
 const EXIT_MS = 90;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
-const POPOVER_CONTENT = '[data-slot="popover-content"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
 
 /** Keeps the editor's focus and selection on a click between the items. */
@@ -225,11 +225,11 @@ export function SelectionBubbleView({
 
   // While shown: hide on read-only (`setEditable` changes neither the
   // selection nor the document, so the plugin never re-checks) and when
-  // focus moves anywhere but the editor, the bubble or its colour popover,
-  // from the editor or from the bubble (the stock blur check keeps it for
-  // anything inside its parent, the whole editor shell, and never sees a
-  // blur from the bubble itself). Track whether focus is in the bubble or
-  // its popover.
+  // focus moves anywhere but the editor, the bubble or its popups (colour
+  // dialog, Formats menu), from the editor or from the bubble (the stock
+  // blur check keeps it for anything inside its parent, the whole editor
+  // shell, and never sees a blur from the bubble itself). Track whether
+  // focus is in the bubble or a popup.
   useEffect(() => {
     if (!shown) return;
     const root = rootRef.current;

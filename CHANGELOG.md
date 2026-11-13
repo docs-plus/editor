@@ -14,6 +14,22 @@ since the previous tag.
 Minors left by the a11y review of the smart toolbar (contract §10).
 
 #### Fixed
+- **Selection bubble:** the Formats menu (the Repeat split's chevron) no
+  longer closes the moment it opens and drops keyboard focus on the page.
+  The bubble now stays while any of its popups is open (the menu, its
+  submenus and the colour dialog); Esc in the menu returns to the chevron,
+  and "Save as format…" hands focus straight to the name field.
+- **Action palette:** no zoom under reduced motion. Esc in the save view
+  goes back to the list, with focus in the search field; a second Esc
+  closes. The format name is capped at 40 characters (it was cut silently
+  at 40 after accepting 160) with a visible "Up to 40 characters" hint,
+  saving announces "Saved format ‘name’", and the same error or an
+  unavailable action's reason is read again on every try.
+- **Palette order:** Format opens with Repeat formatting, Copy formatting
+  and Your formats; Undo and Redo moved to their own History group. A
+  search for "repeat" ranks Repeat formatting above Copy formatting.
+- New `lib/announce.ts` (`announce(message)`): one polite, visually hidden
+  status node for messages that outlive the control that sent them.
 - **Phone List menu:** tapping the list type that is already checked kept
   removing the list; it now only closes the menu, as on desktop.
 - **One Esc leaves the row (M3):** Esc on a row, bubble or phone-bar item

@@ -195,6 +195,31 @@ describe("buildPaletteSections", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  it("opens Format with Repeat, Copy formatting and Your formats; Undo and Redo get their own group", () => {
+    const ed = setup();
+    rememberBundle({ bold: true });
+    ed.commands.setTextSelection({ from: 18, to: 23 });
+    const sections = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...coreActions, ...v11Actions],
+      recentKeys: [],
+    });
+    const format = sections.find((s) => s.heading === "Format");
+    expect(format?.items.slice(0, 2).map((i) => i.actionId)).toEqual([
+      "repeat.apply",
+      "repeat.copy",
+    ]);
+    expect(format?.items.some((i) => i.actionId.startsWith("history."))).toBe(
+      false,
+    );
+    const history = sections.find((s) => s.heading === "History");
+    expect(history?.items.map((i) => i.actionId).sort()).toEqual([
+      "history.redo",
+      "history.undo",
+    ]);
+    expect(sections.at(-1)?.heading).toBe("History");
+  });
+
   it("names style and align rows by their own target, marking the current one", () => {
     const ed = setup();
     ed.commands.setTextSelection(20);
