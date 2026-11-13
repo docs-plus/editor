@@ -2,26 +2,26 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
-import {
-  lazy,
-  type ReactNode,
-  Suspense,
-  useCallback,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
+import { useActionView } from "@/hooks/use-editor-context";
+import { editorActions } from "@/lib/editor-actions";
+import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
+import { runAction } from "@/lib/editor-actions/registry";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { ChevronDownIcon } from "@/lib/icons";
-
-import { useIdlePreload } from "../idle-preload";
+import { isMac } from "@/lib/shortcuts";
 
 /** The editor from props, else from `EditorContext`. */
 export function useSurfaceEditor(provided?: Editor | null): Editor | null {
@@ -90,7 +90,6 @@ export function ToolbarMenu({
   contentLabel,
   triggerClassName,
 }: MenuTriggerProps) {
-  useIdlePreload(loadMenuItems);
   const handleOpenChange = (next: boolean) => {
     if (next && readOnly) return;
     onOpenChange(next);
@@ -109,8 +108,6 @@ export function ToolbarMenu({
             className={triggerClassName}
             disabled={readOnly}
             disabledReason={readOnly ? READ_ONLY_REASON : undefined}
-            onPointerEnter={loadMenuItems}
-            onFocus={loadMenuItems}
           />
         }
       >
@@ -125,21 +122,114 @@ export function ToolbarMenu({
         aria-label={contentLabel}
         className="min-w-52"
       >
-        <Suspense fallback={null}>{children}</Suspense>
+        {children}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-/** Menu items: their own chunk, fetched when the page is idle. */
-export const loadMenuItems = () => import("./menu-items");
+function Reason({ id, reason }: { id: string; reason?: string }) {
+  return reason ? (
+    <span id={id} hidden>
+      {reason}
+    </span>
+  ) : null;
+}
+
+interface ActionItemProps {
+  id: string;
+  editor: Editor;
+  arg?: unknown;
+  onPicked: () => void;
+  /** Checkbox item (`menuitemcheckbox`) for toggles such as superscript. */
+  checkbox?: boolean;
+  label?: string;
+}
+
 /** One registry action as a menu item, with its reason and shortcut. */
-export const ActionMenuItem = lazy(() =>
-  loadMenuItems().then((module) => ({ default: module.ActionMenuItem })),
-);
+export function ActionMenuItem({
+  id,
+  editor,
+  arg,
+  onPicked,
+  checkbox = false,
+  label,
+}: ActionItemProps) {
+  const view = useActionView(id, editor);
+  const reasonId = useId();
+  const action = editorActions.get(id);
+  if (!action || !view) return null;
+  const reason = view.enabled === true ? undefined : view.enabled.reason;
+  const Icon = action.icon;
+  const common = {
+    disabled: reason !== undefined,
+    "aria-describedby": reason ? reasonId : undefined,
+    "data-action-id": id,
+    onClick: () => {
+      onPicked();
+      runAction(editor, action, arg);
+    },
+  };
+  const body = (
+    <>
+      {Icon ? <Icon aria-hidden="true" /> : null}
+      <span>{label ?? action.label}</span>
+      {action.shortcut ? (
+        <DropdownMenuShortcut>
+          {formatKeyCombo(action.shortcut, isMac())}
+        </DropdownMenuShortcut>
+      ) : null}
+      <Reason id={reasonId} reason={reason} />
+    </>
+  );
+  return checkbox ? (
+    <DropdownMenuCheckboxItem {...common} checked={view.active} closeOnClick>
+      {body}
+    </DropdownMenuCheckboxItem>
+  ) : (
+    <DropdownMenuItem {...common}>{body}</DropdownMenuItem>
+  );
+}
+
 /** One registry action as a radio item of a value menu. */
-export const ActionRadioItem = lazy(() =>
-  loadMenuItems().then((module) => ({ default: module.ActionRadioItem })),
-);
+export function ActionRadioItem({
+  id,
+  editor,
+  value,
+  onPicked,
+  arg,
+  label,
+}: {
+  id: string;
+  editor: Editor;
+  value: string;
+  onPicked: () => void;
+  /** Passed to the action's run, such as a language for `code.language`. */
+  arg?: unknown;
+  label?: string;
+}) {
+  const view = useActionView(id, editor);
+  const reasonId = useId();
+  const action = editorActions.get(id);
+  if (!action || !view) return null;
+  const reason = view.enabled === true ? undefined : view.enabled.reason;
+  return (
+    <DropdownMenuRadioItem
+      value={value}
+      closeOnClick
+      disabled={reason !== undefined}
+      aria-describedby={reason ? reasonId : undefined}
+      data-action-id={id}
+      onClick={() => {
+        if (reason) return;
+        onPicked();
+        runAction(editor, action, arg);
+      }}
+    >
+      <span>{label ?? action.label}</span>
+      <Reason id={reasonId} reason={reason} />
+    </DropdownMenuRadioItem>
+  );
+}
 
 export { DropdownMenuRadioGroup };
