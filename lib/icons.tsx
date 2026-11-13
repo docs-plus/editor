@@ -20,6 +20,7 @@ export {
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   ChevronsDownUp as ChevronsDownUpIcon,
+  CircleAlert as CircleAlertIcon,
   CircleDot as CircleDotIcon,
   CloudOff as CloudOffIcon,
   CloudUpload as CloudUploadIcon,

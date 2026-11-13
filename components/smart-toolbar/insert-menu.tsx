@@ -37,8 +37,10 @@ import "./smart-toolbar.scss";
  * fetched when the Insert button gets hover or focus, or when a step is
  * asked for, and rendered only once a step opens.
  */
-const InsertStep = lazySurface(() =>
-  loadInsertStep().then((module) => module.InsertStep),
+const InsertStep = lazySurface(
+  () => loadInsertStep().then((module) => module.InsertStep),
+  undefined,
+  ({ step }) => (step === "table" ? "the table picker" : "the embed form"),
 );
 
 /**

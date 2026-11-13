@@ -30,6 +30,7 @@ import "./smart-toolbar.scss";
 const ColorPanel = lazySurface(
   () => loadColorPanel().then((module) => module.ColorPanel),
   <div className="st-color-panel-fallback" />,
+  "colours",
 );
 
 type ColorKind = "text" | "highlight";

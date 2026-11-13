@@ -1,8 +1,9 @@
 /**
  * Lazy surface chunks that fail to load (offline, or a deploy replaced
  * them) leave the editor and the tab strip mounted and typing working; a
- * popup says so in place of its body, and the next open fetches the chunk
- * again.
+ * popup names what did not load, with Retry (design pass §12), and Retry
+ * or the next open fetches the chunk again. The palette says it could not
+ * open.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -17,11 +18,15 @@ const row = (page: Page) =>
 const failChunk = (page: Page, marker: string) =>
   interceptChunk(page, marker, (route) => route.fulfill({ status: 404 }));
 
-const HINT = "Couldn’t load. Close and try again.";
+const hint = (name: string) => `Couldn’t load ${name}.Retry`;
+const PALETTE_FAILED =
+  "Couldn’t open actions. Check your connection and try again.";
 
-/** No failure hint on screen: the bubble and the palette just stay away. */
+/** No failure hint on screen: the bubble just stays away. */
 const expectNoVisibleHint = (page: Page) =>
-  expect(page.getByText(HINT).filter({ visible: true })).toHaveCount(0);
+  expect(
+    page.getByText(/^Couldn’t (load|open)/).filter({ visible: true }),
+  ).toHaveCount(0);
 
 /** The page survived: editor and tabs mounted, and typing reaches the doc. */
 async function expectEditorAlive(page: Page, word: string) {
@@ -60,8 +65,10 @@ test.describe("lazy surface chunks", () => {
     await expect(dialog.locator(".st-color-panel-fallback")).toHaveCount(0, {
       timeout: 10_000,
     });
-    await expect(dialog.getByRole("status")).toHaveText(HINT);
-    await expect(dialog.getByRole("button")).toHaveCount(0);
+    await expect(dialog.getByRole("status")).toHaveText(hint("colours"));
+    // Only Retry: no swatch arrived.
+    await expect(dialog.getByRole("button")).toHaveCount(1);
+    await expect(dialog.getByRole("button", { name: "Retry" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expectEditorAlive(page, "afterColour");
@@ -70,7 +77,7 @@ test.describe("lazy surface chunks", () => {
     await restore();
     await chevron.click();
     await expect(dialog.getByRole("button").first()).toBeVisible();
-    await expect(dialog.getByText(HINT)).toHaveCount(0);
+    await expect(dialog.getByRole("status")).toHaveCount(0);
   });
 
   test("an Insert step chunk that 404s leaves the editor working", async ({
@@ -101,10 +108,11 @@ test.describe("lazy surface chunks", () => {
     };
 
     await openGrid();
-    await expect(dialog.getByRole("status")).toHaveText(HINT, {
-      timeout: 10_000,
-    });
-    await expect(dialog.getByRole("button")).toHaveCount(0);
+    await expect(dialog.getByRole("status")).toHaveText(
+      hint("the table picker"),
+      { timeout: 10_000 },
+    );
+    await expect(dialog.getByRole("button")).toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expectEditorAlive(page, "afterInsert");
@@ -135,9 +143,11 @@ test.describe("lazy surface chunks", () => {
     await openToolbarTestDoc(page);
     const palette = page.locator("[data-command-palette]");
     await page.keyboard.press("Alt+Slash");
-    await page.waitForTimeout(1_500);
+    // Never silent (design pass §8): a note says why, as an alert.
+    await expect(
+      page.getByRole("alert").filter({ hasText: PALETTE_FAILED }),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(palette).toHaveCount(0);
-    await expectNoVisibleHint(page);
     // Focus never left the document.
     await expect(page.locator(".tiptap")).toBeFocused();
     await expectEditorAlive(page, "afterPalette");
@@ -148,6 +158,35 @@ test.describe("lazy surface chunks", () => {
     await expect(
       page.getByRole("combobox", { name: "Search actions" }),
     ).toBeFocused();
+    // The next open hides the note.
+    await expect(page.getByText(PALETTE_FAILED)).toHaveCount(0);
+  });
+
+  test("Retry in the colour popover fetches the chunk again in place", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.colorPanel);
+    await openToolbarTestDoc(page);
+    await row(page)
+      .getByRole("button", { name: "More text colours" })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    const retry = dialog.getByRole("button", { name: "Retry" });
+    await expect(retry).toBeVisible({ timeout: 10_000 });
+    // The icon is muted, never red: nothing the writer did is wrong.
+    const colours = await dialog.getByRole("status").evaluate((el) => ({
+      icon: getComputedStyle(el.querySelector("svg") as Element).color,
+      text: getComputedStyle(el).color,
+    }));
+    expect(colours.icon).not.toBe(colours.text);
+
+    await restore();
+    await retry.click();
+    await expect(
+      dialog.getByRole("button", { name: "Red text" }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("status")).toHaveCount(0);
   });
 
   test("an E engine chunk that 404s leaves the editor and the palette working", async ({
