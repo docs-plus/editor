@@ -153,15 +153,33 @@ test.describe("action palette", () => {
         });
 
     await expectInSync();
+    // Every option is an option with its own selected state.
+    expect(
+      await page
+        .locator(`${PALETTE} [cmdk-item]`)
+        .evaluateAll(
+          (items) =>
+            items.filter(
+              (item) =>
+                item.getAttribute("role") !== "option" ||
+                !["true", "false"].includes(
+                  item.getAttribute("aria-selected") ?? "",
+                ),
+            ).length,
+        ),
+    ).toBe(0);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
     await expectInSync();
+    // Arrowing moves the active descendant, never focus.
+    await expect(input).toBeFocused();
     for (const char of "bol") {
       await page.keyboard.type(char);
       await expectInSync();
     }
     await page.keyboard.press("ArrowDown");
     await expectInSync();
+    await expect(input).toBeFocused();
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
     await expectInSync();
@@ -171,6 +189,27 @@ test.describe("action palette", () => {
     await expect(input).not.toHaveAttribute("aria-activedescendant", /.+/);
     for (let i = 0; i < 7; i += 1) await page.keyboard.press("Backspace");
     await expectInSync();
+    await page.keyboard.press("Escape");
+  });
+
+  test("shortcut glyphs are hidden; the option names its keys", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.keyboard.press("Alt+Slash");
+    await page.keyboard.type("bold");
+    const bold = page.locator(
+      `${PALETTE} [cmdk-item][data-action-id="mark.bold"]`,
+    );
+    await expect(bold).toHaveAttribute(
+      "aria-keyshortcuts",
+      /^(Meta|Control)\+b$/i,
+    );
+    await expect(
+      bold.locator('[data-slot="command-shortcut"]'),
+    ).toHaveAttribute("aria-hidden", "true");
+    await expect(bold).toHaveAccessibleName(/^Bold/);
+    await expect(bold).not.toHaveAccessibleName(/⌘|Ctrl/);
     await page.keyboard.press("Escape");
   });
 
