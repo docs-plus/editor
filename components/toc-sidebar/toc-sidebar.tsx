@@ -82,6 +82,8 @@ interface TocSidebarProps {
   onToggleFold: (id: string) => void;
   filteredIds?: Set<string>;
   previewMatchIds?: Set<string>;
+  /** Called after a heading pick has set the selection (the overlay closes). */
+  onNavigate?: () => void;
 }
 
 function filterItemsByFoldState(
@@ -128,6 +130,7 @@ export function TocSidebar({
   onToggleFold,
   filteredIds,
   previewMatchIds,
+  onNavigate,
 }: TocSidebarProps) {
   const isFiltering = filteredIds != null;
   const isPreviewing = previewMatchIds != null;
@@ -153,13 +156,14 @@ export function TocSidebar({
       const { node, pos } = anchor;
       editor.commands.setTextSelection(pos + node.nodeSize - 1);
       editor.commands.focus();
+      onNavigate?.();
       requestAnimationFrame(() => {
         if (editor.isDestroyed) return;
         const dom = editor.view.nodeDOM(pos);
         if (dom instanceof HTMLElement) scrollHeadingIntoView(dom);
       });
     },
-    [editor],
+    [editor, onNavigate],
   );
 
   const { visible, foldableIds } = useMemo(

@@ -10,9 +10,10 @@
 // holds at every width down to the phone layout; `toolbar-ladder.spec.ts`
 // asserts it. Spec §4.6's numbers were estimates for a narrower row.
 // Each tier starts where the row above it stops fitting, with room for the
-// widest context (a slot stand-in appears from T3 on).
+// widest context (a slot stand-in appears from T3 on). Mouse T2 also leaves
+// room for the widest M10 Insert face at T1 ("Code block", contract A6).
 $ladder-mouse: (
-  t2: 1232px,
+  t2: 1264px,
   t3: 1128px,
   t4: 950px,
   t5: 866px,
@@ -48,6 +49,11 @@ span[data-collapse-standin] {
       @if $tier == t2 {
         .st-insert-label {
           display: none;
+        }
+
+        // M10: the face is gone, so the menu trigger shows its "+" again.
+        [data-slot="toolbar"] .st-insert-trigger--split .st-insert-plus {
+          display: block;
         }
       }
 
@@ -97,6 +103,12 @@ span[data-collapse-standin] {
   display: inline-flex;
   align-items: center;
   gap: 1px;
+}
+
+// M10 at T1: the face carries the label, the trigger is just its chevron.
+.st-insert-trigger--split .st-insert-plus,
+.st-insert-trigger--split .st-insert-label {
+  display: none;
 }
 
 .st-split {

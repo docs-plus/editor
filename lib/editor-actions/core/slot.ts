@@ -8,19 +8,19 @@ import { NodeSelection } from "@tiptap/pm/state";
 
 import { headingFoldPluginKey } from "@/extensions/heading-fold/heading-fold-plugin";
 import { computeSection } from "@/extensions/shared/compute-section";
-import { sanitizeCodeLanguage } from "@/lib/code-language";
+import {
+  CODE_LANGUAGE_CHOICE,
+  CODE_LANGUAGES,
+  sanitizeCodeLanguage,
+} from "@/lib/code-language";
 import type {
-  ActionOption,
   AnyAction,
   Ctx,
   Enabled,
   IconComponent,
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
-import {
-  codeLanguageAt,
-  MERMAID_LANGUAGE,
-} from "@/lib/editor-context/snapshot";
+import { codeLanguageAt } from "@/lib/editor-context/snapshot";
 import { moveSection } from "@/lib/editor-utils";
 import {
   ArrowDownIcon,
@@ -36,6 +36,7 @@ import {
   TableCellsMergeIcon,
   TableIcon,
 } from "@/lib/icons";
+import { rememberChoice } from "@/lib/remembered-choice";
 
 // --- Sections ------------------------------------------------------------
 
@@ -198,32 +199,6 @@ const foldAction: AnyAction = {
 
 // --- Code and Mermaid ----------------------------------------------------
 
-export const CODE_LANGUAGES: readonly ActionOption<string>[] = [
-  { value: "plaintext", label: "Plain text" },
-  { value: "bash", label: "Bash" },
-  { value: "c", label: "C" },
-  { value: "cpp", label: "C++" },
-  { value: "csharp", label: "C#" },
-  { value: "css", label: "CSS" },
-  { value: "diff", label: "Diff" },
-  { value: "go", label: "Go" },
-  { value: "java", label: "Java" },
-  { value: "javascript", label: "JavaScript" },
-  { value: "json", label: "JSON" },
-  { value: "kotlin", label: "Kotlin" },
-  { value: "markdown", label: "Markdown" },
-  { value: "php", label: "PHP" },
-  { value: "python", label: "Python" },
-  { value: "ruby", label: "Ruby" },
-  { value: "rust", label: "Rust" },
-  { value: "sql", label: "SQL" },
-  { value: "swift", label: "Swift" },
-  { value: "typescript", label: "TypeScript" },
-  { value: "xml", label: "HTML / XML" },
-  { value: "yaml", label: "YAML" },
-  { value: MERMAID_LANGUAGE, label: "Mermaid diagram" },
-];
-
 const LANGUAGE_LABELS = new Map(
   CODE_LANGUAGES.map((option) => [option.value, option.label]),
 );
@@ -253,11 +228,14 @@ function languageAction(id: string, label: string, kind: "code" | "mermaid") {
       const language = sanitizeCodeLanguage(arg);
       if (!language || !LANGUAGE_LABELS.has(language)) return false;
       if (!editor.isActive("codeBlock")) return false;
-      return editor
+      const ok = editor
         .chain()
         .focus()
         .updateAttributes("codeBlock", { language })
         .run();
+      // M4: Mermaid fails the allowlist, so it is never remembered.
+      if (ok) rememberChoice(CODE_LANGUAGE_CHOICE, language);
+      return ok;
     },
   };
   return action;
