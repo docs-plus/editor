@@ -3,18 +3,26 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * `patches/cmdk@1.1.1.patch` (PR E) edits cmdk's minified dist so the
- * search field's `aria-activedescendant` follows a `value` set from props
- * (WCAG 4.1.2). It is pinned to that exact version: any cmdk upgrade must
- * drop the patch (if upstream fixed it) or re-make it with
- * `bun patch cmdk`, then update this test. Until then the version stays
- * exact and the installed dist must carry the patch.
+ * `patches/cmdk@1.1.1.patch` edits cmdk's minified dist so the search
+ * field's `aria-activedescendant` follows a `value` set from props (WCAG
+ * 4.1.2, PR E) and the highlighted row is scrolled into view once that
+ * value has rendered, and so a group's `data-value` is its id, which the
+ * group sort looks it up by (groups sort by their best match again). It
+ * is pinned to that exact version: any cmdk upgrade must drop the patch
+ * (if upstream fixed it) or re-make it with `bun patch cmdk`, then update
+ * this test. Until then the version stays exact and the installed dist
+ * must carry the patch.
  */
 const root = join(import.meta.dir, "..", "..", "..");
 const PATCHED = "cmdk@1.1.1";
-/** Present only in the patched dist: the value effect re-syncs the id. */
-const MARKER =
-  /value=\w+,\w+\(7,\(\)=>\{var \w+\s*\w+\.current\.selectedItemId=/;
+/**
+ * Present only in the patched dist: the value effect scrolls the
+ * highlighted row into view and re-syncs the id; a group's value is its id.
+ */
+const MARKERS = [
+  /value=\w+,\w+\(6,\w+\),\w+\(7,\(\)=>\{var \w+\s*\w+\.current\.selectedItemId=/,
+  /\w+\.group\((\w+)\),\[\]\),\w+\(\1,\w+,\[\1\]\)/,
+];
 
 const readJson = (path: string) =>
   JSON.parse(readFileSync(join(root, path), "utf8")) as Record<string, unknown>;
@@ -37,7 +45,7 @@ describe("cmdk patch", () => {
         join(root, "node_modules/cmdk/dist", file),
         "utf8",
       ).replaceAll(";", "\n");
-      expect(source).toMatch(MARKER);
+      for (const marker of MARKERS) expect(source).toMatch(marker);
     }
   });
 });
