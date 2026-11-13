@@ -182,6 +182,24 @@ test("the sheet applies style, size, colours, align and more, then returns focus
   await dialog.getByRole("button", { name: "Red text" }).tap();
   await expect.poll(() => lastMark(page, "textColor", "color")).toBe("red");
   await expect(dialog).toBeVisible();
+  // The action's own editor focus must not leave the sheet (a real phone
+  // would raise the keyboard over it).
+  const focusInSheet = () =>
+    page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(
+                document
+                  .querySelector("[data-format-sheet]")
+                  ?.contains(document.activeElement) ?? false,
+              ),
+            ),
+          ),
+        ),
+    );
+  expect(await focusInSheet()).toBe(true);
   await dialog.getByRole("button", { name: "Yellow highlight" }).tap();
   await expect.poll(() => lastMark(page, "highlight", "color")).toBe("yellow");
   await expect(
@@ -205,6 +223,7 @@ test("the sheet applies style, size, colours, align and more, then returns focus
   await expect.poll(async () => (await lastBlock(page)).align).toBe("center");
   await dialog.getByRole("button", { name: "Heading 2" }).tap();
   await expect.poll(async () => (await lastBlock(page)).level).toBe(2);
+  expect(await focusInSheet()).toBe(true);
   await expect(
     dialog.getByRole("button", { name: "Heading 2" }),
   ).toHaveAttribute("aria-pressed", "true");
@@ -335,6 +354,10 @@ for (const theme of ["light", "dark"] as const) {
   }) => {
     await setTheme(page, theme);
     await openDoc(page);
+    // Next's dev indicator sits over the first cell; keep it out of the evidence.
+    await page.addStyleTag({
+      content: "nextjs-portal { display: none !important; }",
+    });
     await selectNewParagraph(page);
     await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
     await page.screenshot({ path: `${SCREENS}/bar-${theme}.png` });
