@@ -43,7 +43,9 @@ since the previous tag.
     repair shows a banner and sends `schema_repair_failed`.
   - **Offline `~s2` namespace** for device copies, with a transactional merge
     of legacy copies (the legacy key is deleted only after a successful
-    save; IndexedDB writes now settle on commit).
+    save; IndexedDB writes now settle on commit). Saves and removals of one
+    document run in order, so a merge still in flight when its tab closes or
+    the document is deleted never writes the copy back.
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
