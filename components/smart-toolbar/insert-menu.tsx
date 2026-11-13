@@ -1,7 +1,7 @@
 "use client";
 
 import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import {
@@ -99,8 +99,31 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
   const tableSize = useRememberedChoice(TABLE_SIZE_CHOICE);
   const lastKind = useRememberedChoice(INSERT_KIND_CHOICE);
   const faceId = faceActionId(lastKind.ready ? lastKind.last : null);
+  // The step stays rendered until the popover has finished closing: a
+  // focused cell removed from a still-open popover makes Base UI pull focus
+  // back into the popup, away from the editor a pick just focused.
   const [step, setStep] = useState<Step | null>(null);
+  const [stepOpen, setStepOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const stepPopupRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Base UI returns focus when the step unmounts, after its exit animation,
+   * and moves it unconditionally for any `finalFocus` given. Back to the
+   * trigger only while focus is still lost in the closing step (Esc): a
+   * pick has focused the editor, and a click on another control in the
+   * meantime has focused that control (or opened its menu, which focus
+   * leaving would close).
+   */
+  const stepFinalFocus = useCallback(() => {
+    const active = document.activeElement;
+    const lost =
+      !active ||
+      active === document.body ||
+      !active.isConnected ||
+      Boolean(stepPopupRef.current?.contains(active));
+    return lost ? (triggerRef.current ?? true) : false;
+  }, []);
 
   useEffect(() => {
     if (!editor) return;
@@ -110,7 +133,10 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
       const kind = intent.kind;
       preloadSurfaces();
       // Let the menu close and hand focus back first.
-      requestAnimationFrame(() => setStep(kind));
+      requestAnimationFrame(() => {
+        setStep(kind);
+        setStepOpen(true);
+      });
       return true;
     });
   }, [editor]);
@@ -160,26 +186,28 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
       </DropdownMenu>
 
       <Popover
-        open={step !== null}
-        onOpenChange={(open) => {
+        open={stepOpen}
+        onOpenChange={setStepOpen}
+        onOpenChangeComplete={(open) => {
           if (!open) setStep(null);
         }}
       >
         {/* No trigger: the step anchors to the Insert button itself, so no
             hidden focusable element joins the toolbar's roving set. */}
         <PopoverContent
+          ref={stepPopupRef}
           anchor={triggerRef}
           aria-label={step ? STEP_LABEL[step] : undefined}
           align="start"
           className={step === "embed" ? "w-80" : undefined}
-          finalFocus={triggerRef}
+          finalFocus={stepFinalFocus}
         >
           {step ? (
             <InsertStep
               step={step}
               editor={editor}
               tableSize={tableSize.last}
-              onDone={() => setStep(null)}
+              onDone={() => setStepOpen(false)}
             />
           ) : null}
         </PopoverContent>

@@ -187,6 +187,14 @@ not part of v1.
   it. Faces are now named with a verb ("Insert quote"; the visible text is
   unchanged) and never show a pressed state, and Quote only inserts: inside
   a quote it is unavailable ("Already in a quote.").
+- **The Insert step took focus back after it closed.** Base UI returns
+  focus when the table grid or embed form unmounts, after its exit
+  animation, and it always moved focus to Insert. A menu opened in that
+  window (More formatting right after Esc on the grid, on a slow device)
+  lost focus and closed at once; it failed CI under three workers. Picking
+  a table size also ended with focus on Insert instead of in the new table.
+  The step now stays rendered until it has finished closing, and focus goes
+  back to Insert only when it is still inside the closing step.
 - **A fold could stay half-animated.** Registering any editor plugin while
   a section was folding (the selection bubble mounts its plugin lazily)
   rebuilt the plugin views and dropped the timer that ends the animation,
