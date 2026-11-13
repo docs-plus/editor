@@ -47,6 +47,7 @@ export {
   Plus as PlusIcon,
   Redo2 as Redo2Icon,
   RefreshCw as RefreshCwIcon,
+  Repeat2 as RepeatIcon,
   Search as SearchIcon,
   Share as ShareIcon,
   SquareCode as CodeBlockIcon,
