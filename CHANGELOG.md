@@ -32,6 +32,10 @@ was added, so this fix can ship to `main` on its own.
   tab count equals the cap in the button title, and allows 60 s for the 49
   editor mounts. The leak fix did not slow tab creation (about 80 ms per tab
   before and after).
+- **Leak spec heap bound.** Heap still grows about 5% over 20 switches
+  without a leak (it levels off near 10%), so the 5% bound in
+  `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
+  added about 17%, and the live-editor count stays the main check.
 
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
