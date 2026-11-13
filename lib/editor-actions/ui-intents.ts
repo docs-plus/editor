@@ -12,7 +12,6 @@ export type UiIntent =
   | { type: "palette.open" }
   | { type: "colors.open"; kind: "text" | "highlight" }
   | { type: "insert.open"; kind: "table" | "image" | "embed" }
-  | { type: "media.options" }
   /** Alt+F10: focus the open selection bubble's toolbar, else the row. */
   | { type: "toolbar.focus" };
 
