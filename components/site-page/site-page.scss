@@ -2,6 +2,9 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  // viewport-fit=cover: clear the status bar, notch and home indicator.
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+    var(--safe-area-left);
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
