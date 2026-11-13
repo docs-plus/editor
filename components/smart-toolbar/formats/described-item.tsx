@@ -2,14 +2,36 @@
 
 import { type ReactNode, useId } from "react";
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuReason,
+} from "@/components/ui/dropdown-menu";
+
+/** A reason shows as a second line; a long form stays hidden. */
+function Description({
+  id,
+  text,
+  visible,
+}: {
+  id: string;
+  text?: string;
+  visible?: boolean;
+}) {
+  if (!text) return null;
+  if (visible) return <DropdownMenuReason id={id}>{text}</DropdownMenuReason>;
+  return (
+    <span id={id} hidden>
+      {text}
+    </span>
+  );
+}
 
 /**
  * A menu item whose accessible name is its visible text (WCAG 2.5.3) and
- * whose long form ("Bold, Red text") or unavailable reason is its
- * description: a hidden node named by `aria-describedby`, the menus'
- * shared convention (`components/ui/dropdown-menu.tsx` renders disabled
- * reasons from it).
+ * whose description, named by `aria-describedby`, is either why it is
+ * unavailable, shown as a visible second line (`DropdownMenuReason`,
+ * design pass §10), or its long form ("Bold, Red text"), which stays
+ * hidden: the item already shows it in its own formatting.
  */
 export function DescribedItem({
   label,
@@ -40,11 +62,7 @@ export function DescribedItem({
     >
       {label}
       {children}
-      {description ? (
-        <span id={id} hidden>
-          {description}
-        </span>
-      ) : null}
+      <Description id={id} text={description} visible={disabled} />
     </DropdownMenuItem>
   );
 }

@@ -363,6 +363,13 @@ test.describe("Your formats in the text style dropdown", () => {
     await expect(save).toHaveAccessibleDescription(
       "Select formatted text to save it.",
     );
+    // Visible as a second line (design pass §10); only the label dims.
+    const reason = save.locator('[data-slot="dropdown-menu-reason"]');
+    await expect(reason).toBeVisible();
+    await expect(reason).toHaveText("Select formatted text to save it.");
+    expect(await reason.evaluate((el) => getComputedStyle(el).opacity)).toBe(
+      "1",
+    );
     await page.keyboard.press("Escape");
 
     await select(page, "source");
