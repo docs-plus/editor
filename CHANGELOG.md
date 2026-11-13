@@ -24,8 +24,12 @@ since the previous tag.
     choices"), **In this doc** (formats the document already uses, scanned
     on demand and never stored) and **Mermaid templates** (flowchart,
     sequence, state, mind map, pie).
-  - Repeat split button and phone selection cells for the selection bubble
-    and phone bar.
+  - Repeat split button and phone selection cells, built for the selection
+    bubble and phone bar. They mount once PR D2's bubble and phone bar land;
+    until then they render nowhere.
+  - Remembered choices (the Repeat bundle, Recent, the last diagram
+    template) persist across reloads only once PR D2's memory layer lands;
+    before that they last for the page. Your formats persist already.
   - No schema, server or environment change; no Deploy step.
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in
