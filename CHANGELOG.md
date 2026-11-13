@@ -9,6 +9,62 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar follow-ups
+
+Branch `test/toolbar-followups-flaky`. Tests only: no app change, no
+threshold or bound raised.
+
+#### Fixed
+- **Typing budget flipped between runs, partly addressed**
+  (`performance.spec.ts`). Every trial generated its own random document,
+  so the two arms typed into different documents; at 50 headings that
+  difference outweighed the toolbar's (resampled, about 27% of runs failed
+  with a new document per trial, about 1% with one shared document). All
+  trials of a heading count now share one document. One discarded warm-up
+  trial per arm runs first, each arm waits for its own end state (toolbar
+  mounted or gone) and then for an idle main thread, trials time 200
+  keystrokes after 20 warm-up ones (was 90 after 10), and `PERF_ROUNDS`
+  defaults to 7 (was 5). Both sizes can still fail on the 10% budget (see
+  Known below): in isolation 50 headings passed 10/10 (was 8/10) and 10
+  headings 8/10 (unchanged), and in a full chromium + perf run 50 headings
+  failed once (5.0 vs 4.5 ms). The test timeout is now 300 s (about
+  1.4 min per heading count locally, was about 36 s).
+- **Arrow p95 measured the toolbar arm first and colder, on a cliff**
+  (`toolbar-perf.spec.ts`). At 720 px the 60-key walk scrolled about five
+  times; the frame after a scroll lays out the revealed blocks and costs
+  several times a normal key, and those frames were about 5% of keys, right
+  at the p95 rank, so one more or one fewer moved an arm's p95 by hundreds
+  of ms. Both arms now open the same generated document in fresh 1280×4000
+  contexts (the test checks that the walk does not scroll), run a discarded
+  warm-up round each, then three interleaved rounds from the same start
+  once the main thread is idle. Each press is one sample (Shift's own
+  keydown used to count as a second) and waits for the previous press to
+  paint, and p95 is taken over all of an arm's presses. Scroll frames are
+  therefore no longer part of this budget. `TOOLBAR_PERF_CPU_THROTTLE`
+  throttles both arms for local reproduction. The test timeout is now
+  300 s.
+- **Leak spec heap bound sat close to warm-up growth**
+  (`editor-leak.spec.ts`). The baseline is now taken after 12 warm-up tab
+  switches (was 6), and each measurement repeats GC and reads until two
+  readings agree, instead of one reading after a fixed 2 s.
+- **Resize gripper test timed out** (`extensions.spec.ts`). The lazy
+  selection bubble registers its plugin when its chunk lands; that
+  reconfigures the editor, ProseMirror recreates every plugin view, and the
+  media controls hide an active gripper when theirs is destroyed. On a busy
+  machine this landed after the hover. The test now waits for the bubble's
+  plugin first.
+- Known, not fixed here: the same reconfigure hides an active gripper for
+  a user who hovers an image while the bubble chunk is still loading. The
+  hide on plugin-view destroy is in `@docs.plus/extension-hypermultimedia`.
+- Known, not fixed here: at 10 and 50 headings (p95 about 3-6 ms) single
+  trials still swing by about 10% in both arms, from bursts of consecutive
+  slow keystrokes whose cause was not found (they hit both arms alike, and
+  line up with neither offline copy writes nor WebSocket sends), so the
+  typing budget can still fail on noise. At this p95 and 0.1 ms timer
+  ticks a 10% budget sits at the measurement floor; the ways out (gate on
+  a larger document only, more rounds, or another measure of the
+  toolbar's per-keystroke cost) change the gate and are the owner's call.
+
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
 Rebuilt on `main` after v1 (#32), branch `feat/smart-toolbar-e`.
