@@ -10,11 +10,13 @@ import type { ComponentType, SVGProps } from "react";
 
 /**
  * Context kinds in precedence order: the snapshot's `kind` is the first
- * that applies (readonly > media/mermaid > code > table > title > heading >
- * list > paragraph). Mermaid is tested before code.
+ * that applies (media/mermaid > code > table > title > heading > list >
+ * paragraph). Mermaid is tested before code. `kind` is always structural:
+ * read-only is `Ctx.editable`, gated centrally for every action with
+ * `mutates !== false` (`READ_ONLY_REASON`), so copy and view actions still
+ * resolve in code and Mermaid blocks of a read-only document.
  */
 export const CONTEXT_KINDS = [
-  "readonly",
   "media",
   "mermaid",
   "code",
@@ -59,10 +61,20 @@ export type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 /** `true`, or why not: rendered as `aria-disabled` + `aria-describedby`. */
 export type Enabled = true | { reason: string };
 
+/** The one reason every mutating action shows in a read-only document (#308). */
+export const READ_ONLY_REASON = "This document is read-only.";
+
 /**
- * Selection snapshot, O(depth) to build. Memoized by store version; never
- * mutated. `memo` caches derived values for the lifetime of the snapshot's
- * `state.doc` (e.g. `can()` results, section lists, code-language counts).
+ * Selection snapshot, O(depth) to build; never mutated. The store memoizes
+ * it by version while subscribed, else by `(editor.state, isEditable)`.
+ *
+ * Two cache tiers, never mixed:
+ * - `memo` / `can`: per snapshot (doc + selection + editable). For
+ *   anything selection- or history-dependent: `can()` of lists, tables,
+ *   indent, section move, undo/redo.
+ * - `docMemo`: per `state.doc` identity, shared by every snapshot of that
+ *   doc (a module `WeakMap`). Only for values that depend on the doc alone:
+ *   section lists, code-language counts.
  */
 export interface Ctx {
   readonly kind: ContextKind;
@@ -86,7 +98,17 @@ export interface Ctx {
   readonly headingId: string | null;
   /** Mark names active across the selection (or stored marks at a caret). */
   readonly activeMarks: ReadonlySet<string>;
+  /** Per-snapshot lazy cache (selection-dependent values). */
   memo<T>(key: string, compute: () => T): T;
+  /** Per-`state.doc` lazy cache (doc-only values); survives selection moves. */
+  docMemo<T>(key: string, compute: () => T): T;
+  /**
+   * Tiptap command check (`editor.can()…`), run lazily on the live editor at
+   * first use and cached for this snapshot under `memo("can:" + key)`. The
+   * only way `enabled()` may reach the editor. `key` names the check
+   * (e.g. `"toggleBulletList"`); one key, one check.
+   */
+  can(key: string, check: (editor: Editor) => boolean): boolean;
 }
 
 /** One option of an action with a value argument (submenus, palette rows). */
@@ -110,9 +132,22 @@ export interface Action<Arg = undefined> {
   readonly contexts: readonly ContextKind[] | "any";
   readonly keywords?: readonly string[];
   readonly icon?: IconComponent;
+  /**
+   * Display only: hint text and `aria-keyshortcuts`. Never bound from the
+   * registry. Each key is bound by exactly one Tiptap extension (stock
+   * marks, D1's keymap for `Mod-\\`, E's `RepeatFormatting`), and no
+   * combo appears on two actions (contract test).
+   */
   readonly shortcut?: KeyCombo;
   /** Markdown input hint, e.g. `"**text**"`, `"## "` (#346). */
   readonly markdownHint?: string;
+  /**
+   * Default true. A mutating action is refused centrally (`runAction`,
+   * `getView`) with `READ_ONLY_REASON` when `!ctx.editable`; its `enabled()`
+   * need not check. Set false only for actions that never change the doc:
+   * `view.*`, `code.copy`, `mermaid.copySource`, `palette.open`.
+   */
+  readonly mutates?: boolean;
   enabled(ctx: Ctx): Enabled;
   isActive?(ctx: Ctx): boolean;
   isMixed?(ctx: Ctx): boolean;
@@ -120,6 +155,10 @@ export interface Action<Arg = undefined> {
   value?(ctx: Ctx): string | null;
   /** Value choices (colour swatches, table sizes, templates…). */
   options?(ctx: Ctx): readonly ActionOption<Arg>[];
+  /**
+   * The only place choice memory is written: after the command returns
+   * true (contract §6). A run that only emits a UI intent writes nothing.
+   */
   run(editor: Editor, arg: Arg): boolean;
 }
 

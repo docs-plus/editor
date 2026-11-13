@@ -1,10 +1,12 @@
 import type { Editor } from "@tiptap/core";
 
-import type {
-  ActionGroup,
-  AnyAction,
-  ContextKind,
-  Ctx,
+import {
+  type ActionGroup,
+  type AnyAction,
+  type ContextKind,
+  type Ctx,
+  type Enabled,
+  READ_ONLY_REASON,
 } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
 
@@ -52,15 +54,30 @@ export function createRegistry(actions: readonly AnyAction[]): ActionRegistry {
   };
 }
 
-/** Whether `action` may run in `ctx`: offered there and `enabled()`. */
+const READ_ONLY: Enabled = { reason: READ_ONLY_REASON };
+const OFFERED_ELSEWHERE: Enabled = { reason: "Not available here." };
+
+/**
+ * The one availability gate every surface and `runAction` share, in order:
+ * read-only (mutating actions only), not offered in this kind, `enabled()`.
+ */
+export function availability(action: AnyAction, ctx: Ctx): Enabled {
+  if (action.mutates !== false && !ctx.editable) return READ_ONLY;
+  if (!isOfferedIn(action, ctx.kind)) return OFFERED_ELSEWHERE;
+  return action.enabled(ctx);
+}
+
+/** Whether `action` may run in `ctx`: `availability()` is `true`. */
 export function canRun(action: AnyAction, ctx: Ctx): boolean {
-  return isOfferedIn(action, ctx.kind) && action.enabled(ctx) === true;
+  return availability(action, ctx) === true;
 }
 
 /**
  * Runs an action against the live document (never a held or stale
- * snapshot). Returns false, changing nothing, when it is not offered or
- * not enabled; otherwise returns what `run` returns.
+ * snapshot). Returns false, changing nothing, when `availability()` refuses
+ * it (read-only, not offered, not enabled); otherwise returns what `run`
+ * returns. Tiptap commands still dispatch on a non-editable editor, so this
+ * gate, not each action, is what keeps read-only documents unchanged.
  */
 export function runAction(
   editor: Editor,
