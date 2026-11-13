@@ -9,7 +9,7 @@ import { HIGHLIGHT_TOKENS, type HighlightToken } from "@/lib/highlight-tokens";
 
 export { HIGHLIGHT_TOKENS, type HighlightToken };
 
-/** Mark names. Not in `SCHEMA_MARK_NAMES` until PR C's server half ships. */
+/** Mark names, all in the server ingress allowlist (`SCHEMA_MARK_NAMES`). */
 export const TEXT_COLOR_MARK = "textColor";
 export const FONT_SIZE_MARK = "fontSize";
 export const HIGHLIGHT_MARK = "highlight";
