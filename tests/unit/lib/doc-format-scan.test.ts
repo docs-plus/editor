@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { Editor, Extension, JSONContent } from "@tiptap/core";
+import type { Editor, JSONContent } from "@tiptap/core";
 
 import { scanDocFormats } from "@/lib/doc-format-scan";
 
@@ -8,10 +8,6 @@ import {
   createTestEditor,
   DEFAULT_EXTENSIONS,
 } from "../../helpers/create-test-editor";
-import {
-  FontSizeStandIn,
-  TextColorStandIn,
-} from "../extensions/text-style-stand-ins";
 
 let editor: Editor | undefined;
 afterEach(() => {
@@ -32,11 +28,7 @@ function docOf(paragraphs: JSONContent[]): Editor {
         ...paragraphs,
       ],
     },
-    extensions: [
-      ...DEFAULT_EXTENSIONS,
-      TextColorStandIn,
-      FontSizeStandIn,
-    ] as Extension[],
+    extensions: DEFAULT_EXTENSIONS,
   });
   return editor;
 }

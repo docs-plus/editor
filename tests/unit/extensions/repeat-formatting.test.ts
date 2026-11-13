@@ -17,6 +17,7 @@ import {
   rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
+import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import {
   formatsApplyAction,
@@ -31,7 +32,6 @@ import {
   type CollabEditorFixture,
   createCollabEditor,
 } from "../../helpers/collab-editor";
-import { FontSizeStandIn, TextColorStandIn } from "./text-style-stand-ins";
 
 let f: CollabEditorFixture;
 let editor: Editor;
@@ -39,7 +39,7 @@ let editor: Editor;
 beforeEach(() => {
   resetBundleMemoryForTests();
   f = createCollabEditor({
-    extensions: [TextColorStandIn, FontSizeStandIn, RepeatFormatting],
+    extensions: [TextColor, FontSize, RepeatFormatting],
   });
   editor = f.editor;
 });
@@ -237,12 +237,7 @@ describe("RepeatFormatting: applying", () => {
   it("formats a mixed selection: title without size, code untouched, cells", () => {
     f.destroy();
     f = createCollabEditor({
-      extensions: [
-        TextColorStandIn,
-        FontSizeStandIn,
-        RepeatFormatting,
-        TableKit,
-      ],
+      extensions: [TextColor, FontSize, RepeatFormatting, TableKit],
     });
     editor = f.editor;
     editor.commands.setContent({

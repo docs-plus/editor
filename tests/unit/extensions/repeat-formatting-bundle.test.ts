@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { Editor, Extension, JSONContent } from "@tiptap/core";
+import type { Editor, JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 
 import {
@@ -18,7 +18,6 @@ import {
   createTestEditor,
   DEFAULT_EXTENSIONS,
 } from "../../helpers/create-test-editor";
-import { FontSizeStandIn, TextColorStandIn } from "./text-style-stand-ins";
 
 let editor: Editor | undefined;
 afterEach(() => {
@@ -29,11 +28,7 @@ afterEach(() => {
 function setup(content: unknown): Editor {
   editor = createTestEditor({
     content: content as JSONContent,
-    extensions: [
-      ...DEFAULT_EXTENSIONS,
-      TextColorStandIn,
-      FontSizeStandIn,
-    ] as Extension[],
+    extensions: DEFAULT_EXTENSIONS,
   });
   return editor;
 }

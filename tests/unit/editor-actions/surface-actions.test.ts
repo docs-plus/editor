@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type Editor, type Extension, Mark } from "@tiptap/core";
+import type { Editor } from "@tiptap/core";
 
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { surfaceActions } from "@/lib/editor-actions/surface-actions";
@@ -17,61 +17,19 @@ import {
   TABLE_SIZE_CHOICE,
   TEXT_COLOR_CHOICE,
 } from "@/lib/remembered-choice";
-import { isFontSizeToken, isTextColorToken } from "@/lib/text-style-tokens";
 
 import {
   createTestEditor,
   DEFAULT_EXTENSIONS,
 } from "../../helpers/create-test-editor";
 
-/**
- * Stand-ins for PR C's marks with the contract's command semantics
- * (contract §2.2): invalid tokens and headings refuse, one transaction.
- */
-const TestTextColor = Mark.create({
-  name: "textColor",
-  addAttributes: () => ({ color: { default: null } }),
-  renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
-  addCommands() {
-    return {
-      setTextColor:
-        (token) =>
-        ({ commands }) =>
-          isTextColorToken(token) &&
-          commands.setMark(this.name, { color: token }),
-      unsetTextColor:
-        () =>
-        ({ commands }) =>
-          commands.unsetMark(this.name),
-    };
-  },
-});
+/** PR C's real `textColor` / `fontSize` marks are in the default chain. */
+const WITH_MARKS = DEFAULT_EXTENSIONS;
 
-const TestFontSize = Mark.create({
-  name: "fontSize",
-  addAttributes: () => ({ size: { default: null } }),
-  renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
-  addCommands() {
-    return {
-      setFontSize:
-        (size) =>
-        ({ commands, state }) =>
-          isFontSizeToken(size) &&
-          state.selection.$from.parent.type.name !== "heading" &&
-          commands.setMark(this.name, { size }),
-      unsetFontSize:
-        () =>
-        ({ commands }) =>
-          commands.unsetMark(this.name),
-    };
-  },
-});
-
-const WITH_MARKS = [
-  ...DEFAULT_EXTENSIONS,
-  TestTextColor,
-  TestFontSize,
-] as Extension[];
+/** The chain without PR C's marks: an older client's schema. */
+const WITHOUT_MARKS = DEFAULT_EXTENSIONS.filter(
+  (ext) => ext.name !== "textColor" && ext.name !== "fontSize",
+);
 
 const DOC = {
   type: "doc",
@@ -177,7 +135,7 @@ describe("text colour", () => {
   });
 
   it("is disabled with a reason, not thrown, before the mark exists", () => {
-    const old = createTestEditor({ content: DOC });
+    const old = createTestEditor({ content: DOC, extensions: WITHOUT_MARKS });
     selectHello(old);
     const enabled = availability(
       getAction("color.text.apply"),
