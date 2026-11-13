@@ -15,6 +15,7 @@ const PHONE = { width: 390, height: 844 };
 const SCREENS = ".superpowers/screens-r2-phone";
 const CELLS = [
   "Undo",
+  "Redo",
   "Text format",
   "Bold",
   "Italic",
@@ -38,6 +39,10 @@ async function openDoc(page: Page) {
   await expectCoarse(page);
   await openToolbarTestDoc(page);
   await expect(bar(page)).toBeVisible();
+  // Next's dev indicator sits over the first cell and eats its taps.
+  await page.addStyleTag({
+    content: "nextjs-portal { display: none !important; }",
+  });
 }
 
 /** Appends a paragraph and selects `text` in it. */
@@ -124,7 +129,9 @@ for (const [width, height] of [
   [360, 740],
   [320, 568],
 ] as const) {
-  test(`${width}px: one 44px bar of seven 44×44 cells, docked at the bottom`, async ({
+  // Eight cells fit 360px; Redo moves into the sheet below that.
+  const cells = CELLS.filter((name) => width >= 360 || name !== "Redo");
+  test(`${width}px: one 44px bar of ${cells.length} 44×44 cells, docked at the bottom`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height });
@@ -137,7 +144,7 @@ for (const [width, height] of [
           .filter((el) => (el as HTMLElement).checkVisibility())
           .map((el) => el.getAttribute("aria-label")),
       );
-    expect(names).toEqual(CELLS);
+    expect(names).toEqual(cells);
     expect(await smallTargets(page, '[role="toolbar"] button')).toEqual([]);
     const box = await bar(page).boundingBox();
     expect(box?.height).toBe(44);
@@ -366,3 +373,91 @@ for (const theme of ["light", "dark"] as const) {
     await page.screenshot({ path: `${SCREENS}/sheet-${theme}.png` });
   });
 }
+
+/** Redo, Outdent and Link: the actions the phone reached nowhere before. */
+test("Redo sits beside Undo and replays an undone edit", async ({ page }) => {
+  await openDoc(page);
+  await selectNewParagraph(page, "alpha");
+  await bar(page).getByRole("button", { name: "Bold" }).tap();
+  await expect.poll(() => lastMark(page, "bold")).toBe(true);
+  const undo = bar(page).getByRole("button", { name: "Undo" });
+  const redo = bar(page).getByRole("button", { name: "Redo" });
+  await expect(redo).toHaveAttribute("aria-disabled", "true");
+  await undo.tap();
+  await expect.poll(() => lastMark(page, "bold")).toBeNull();
+  await expect(redo).not.toHaveAttribute("aria-disabled", "true");
+  await redo.tap();
+  await expect.poll(() => lastMark(page, "bold")).toBe(true);
+});
+
+test("Outdent in the sheet lifts a nested list item", async ({ page }) => {
+  await openDoc(page);
+  await page.evaluate(() => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(editor.state.doc.content.size, {
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "one" }] },
+              {
+                type: "bulletList",
+                content: [
+                  {
+                    type: "listItem",
+                    content: [
+                      {
+                        type: "paragraph",
+                        content: [{ type: "text", text: "nested" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+      .run();
+    let pos = 0;
+    editor.state.doc.descendants((node, at) => {
+      if (node.isText && node.text === "nested") pos = at + 1;
+    });
+    editor.chain().setTextSelection(pos).run();
+  });
+  const depth = () =>
+    page.evaluate(
+      () => window.__tiptap_editor?.state.selection.$from.depth ?? 0,
+    );
+  const before = await depth();
+  await openSheet(page);
+  const outdent = sheet(page).getByRole("button", { name: "Outdent" });
+  await expect(outdent).not.toHaveAttribute("aria-disabled", "true");
+  await outdent.tap();
+  await expect.poll(depth).toBeLessThan(before);
+});
+
+test("Link in the sheet closes it and opens the Hyperlink create popover", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page, "alpha");
+  await openSheet(page);
+  const link = sheet(page).getByRole("button", { name: "Link" });
+  await expect(link).toHaveAttribute("aria-pressed", "false");
+  expect(await smallTargets(page, "[data-format-sheet] button")).toEqual([]);
+  await link.tap();
+  await expect(sheet(page)).toBeHidden();
+  const popover = page.locator(".hyperlink-create-popover");
+  await expect(popover).toBeVisible();
+  await popover.locator("input").first().fill("https://example.com");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => lastMark(page, "hyperlink", "href"))
+    .toBe("https://example.com");
+});
