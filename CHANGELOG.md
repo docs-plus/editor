@@ -104,13 +104,19 @@ are decided (below).
   `scroll-padding-bottom` stay clear of the bar and the keyboard. The bar
   and its sheet are one lazy chunk, loaded only below 768px, so desktop
   never fetches them (contract A9).
-- **Aa "Text format" sheet**: Style (Normal, H1–H6; locked in the title), Size (the
-  XS–XL stepper, disabled in headings), Colours (the colour popover's panel:
-  text, highlight, Recent, low-contrast dimming), Align and More (redo below
-  360px, outdent, underline, strikethrough, superscript, subscript, inline
-  code, clear formatting, Forget my choices, link, theme), all registry
-  actions with their reasons. Picks keep the sheet open; Link closes it so
-  the link popover opens over the page; Done returns focus to Aa.
+- **Aa "Text format" sheet**: Colours first (the colour popover's panel:
+  text, highlight, Recent, low-contrast dimming), then Style (Normal,
+  H1–H6; locked in the title), Size (the XS–XL stepper, disabled in
+  headings), Align and More (redo below 360px, outdent, underline,
+  strikethrough, superscript, subscript, inline code, clear formatting,
+  Forget my choices, link, a labelled theme switch), all registry actions
+  with their reasons. It is modal: the page behind it is inert, the popup
+  says `aria-modal` and Tab wraps inside it. Picks keep the sheet open;
+  Link closes it and leaves focus in the link popover; Done returns focus
+  to Aa. The bar's List menu is a radio menu like the row's.
+- Crossing 768px with focus in the row or the phone bar moves focus to the
+  toolbar that replaces it (same action when it shows one) instead of
+  dropping it to the page.
 
 #### Changed
 - Mouse T2 starts below 1264px (was 1232px, contract A6): the widest M10
