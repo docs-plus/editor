@@ -81,6 +81,16 @@ function ListCell({ editor }: { editor: Editor }) {
 }
 
 /**
+ * Registry actions end in `editor.chain().focus()`. While the sheet is
+ * open the editor is `inert`, so a pick applies without pulling focus out
+ * of the sheet (on a phone that would raise the keyboard over it).
+ */
+function setEditorInert(editor: Editor | null, inert: boolean) {
+  if (!editor || editor.isDestroyed) return;
+  (editor.view.dom as HTMLElement).inert = inert;
+}
+
+/**
  * Something focusable in the document after the bar hides: the editor, or
  * (read-only, so not focusable) its region, made programmatically
  * focusable without joining the Tab order.
@@ -156,9 +166,19 @@ export function MobileToolbarContent({
     [],
   );
 
+  const onSheetOpenChange = useCallback(
+    (open: boolean) => {
+      setEditorInert(editor, open);
+      setSheetOpen(open);
+    },
+    [editor],
+  );
+
   useEffect(() => {
-    if (readOnly) setSheetOpen(false);
-  }, [readOnly]);
+    if (readOnly) onSheetOpenChange(false);
+  }, [readOnly, onSheetOpenChange]);
+
+  useEffect(() => () => setEditorInert(editor, false), [editor]);
 
   /** Back to Aa, or to the document when the bar just hid. */
   const finalFocus = useCallback(() => {
@@ -179,7 +199,7 @@ export function MobileToolbarContent({
       style={{ transform: inset ? `translateY(-${inset}px)` : undefined }}
     >
       <ActionButton id="history.undo" editor={editor} variant="phone" />
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={onSheetOpenChange}>
         <SheetTrigger
           render={
             <ToolbarButton

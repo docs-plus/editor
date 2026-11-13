@@ -460,7 +460,10 @@ test.describe("on a 375px touch phone", () => {
           () => document.documentElement.scrollWidth - window.innerWidth,
         ),
       ).toBeLessThanOrEqual(0);
-      await expectNoSeriousA11yViolations(page, ["[data-format-sheet]"]);
+      await expectNoSeriousA11yViolations(page, [
+        '[role="toolbar"]',
+        "[data-format-sheet]",
+      ]);
 
       await sheet.getByRole("button", { name: "Red text" }).tap();
       await sheet.getByRole("button", { name: "Yellow highlight" }).tap();
