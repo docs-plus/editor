@@ -12,9 +12,9 @@ since the previous tag.
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
 Rebuilt on `main` after v1 (#32), branch `feat/smart-toolbar-e`.
-Ships after v1, and only once v1's metrics hold in production (spec §8).
-**Not ready to merge as is:** the editor chunk is 2,943 B over the 20 KB
-budget (contract A8); the owner decides how E fits.
+Ships with v1's first deploy: the owner waived spec §8's 14-day hold and
+raised the editor-chunk budget to 23.5 KB for E (contract A12; growth
++22.9 KB, of which E's eager shell is about 2.4 KB).
 
 #### Added
 - **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list

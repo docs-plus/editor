@@ -25,10 +25,10 @@ export const EDITOR_CHUNK_BASELINE_BYTES = 377_888;
  * owner decision O1 (contract §10 A9) lazy-loads what is not needed at
  * first paint and sets the budget to the measured remainder (18.43 KB on
  * the r2 integration), rounded up to the next 0.5 KB. A11 raises it to
- * 20 KB for the r2 fix waves (owner, 2026-11-13). Raising it again needs a
- * new contract amendment.
+ * 20 KB for the r2 fix waves (owner, 2026-11-13), and A12 to 23.5 KB for
+ * PR E (owner, 2026-11-13). Raising it again needs a new contract amendment.
  */
-export const EDITOR_CHUNK_BUDGET_BYTES = 20 * 1024;
+export const EDITOR_CHUNK_BUDGET_BYTES = 23.5 * 1024;
 
 /** Only `document-editor.tsx` renders this string. */
 const EDITOR_MARKER = "Main content area, start typing to enter text.";
