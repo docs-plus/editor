@@ -115,6 +115,8 @@ function planMove(
 /** The live top-level heading for `id`, or the one at the caret. */
 function liveHeading(editor: Editor, id: unknown): SectionEntry | null {
   const { doc, selection } = editor.state;
+  // `null`: the slot was held on a heading without an id; never guess.
+  if (id === null) return null;
   const sections = sectionsOf(doc);
   if (typeof id === "string") {
     return sections.find((entry) => entry.id === id) ?? null;

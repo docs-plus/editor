@@ -261,6 +261,23 @@ test.describe("context slot", () => {
     await expect(up).toBeFocused();
   });
 
+  test("Fold section folds the heading at the caret", async ({ page }) => {
+    const editorPage = await openDoc(page);
+    await caretIn(page, "Alpha");
+    const tocId = await page.evaluate(() => {
+      let id: string | null = null;
+      window.__tiptap_editor?.state.doc.forEach((node) => {
+        if (node.textContent === "Alpha") id = node.attrs["data-toc-id"];
+      });
+      return id;
+    });
+    expect(tocId).toBeTruthy();
+    await slot(page).getByRole("button", { name: "Fold section" }).click();
+    await expect
+      .poll(() => editorPage.isSectionFolded(tocId as unknown as string))
+      .toBe(true);
+  });
+
   test("remote heading deletion while the slot is focused", async ({
     browser,
   }) => {
@@ -280,7 +297,18 @@ test.describe("context slot", () => {
     };
     try {
       const a = await openUser("slot-a");
-      await new EditorPage(a).setContent(DOC);
+      // After "Beta" goes, B's caret maps into a heading that could move
+      // up, so only the held heading id stops a move of the wrong section.
+      await new EditorPage(a).setContent({
+        type: "doc",
+        content: [
+          heading(1, "Title"),
+          heading(2, "Alpha"),
+          heading(2, "Gamma"),
+          heading(2, "Beta"),
+          heading(2, "Delta"),
+        ],
+      });
       const b = await openUser("slot-b");
       await expect(b.locator(".tiptap h2", { hasText: "Beta" })).toBeVisible();
       await caretIn(b, "Beta");
@@ -295,8 +323,10 @@ test.describe("context slot", () => {
         let from = -1;
         let to = -1;
         editor.state.doc.forEach((node, pos) => {
-          if (node.textContent === "Beta") from = pos;
-          if (node.textContent === "Beta body") to = pos + node.nodeSize;
+          if (node.textContent === "Beta") {
+            from = pos;
+            to = pos + node.nodeSize;
+          }
         });
         editor.view.dispatch(editor.state.tr.delete(from, to));
       });
@@ -312,7 +342,7 @@ test.describe("context slot", () => {
         });
         return names;
       });
-      expect(order).toEqual(["Title", "Alpha"]);
+      expect(order).toEqual(["Title", "Alpha", "Gamma", "Delta"]);
     } finally {
       await Promise.all(contexts.map((ctx) => ctx.close()));
     }
