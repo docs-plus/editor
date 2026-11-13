@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar plans for PR C, D1, D2 and E (docs)
+
+Docs only, no runtime change.
+
+#### Added
+- Implementation plans for the rest of the smart toolbar rollout in
+  `docs/superpowers/plans/`: PR C (text colour and font size schema,
+  release N+1), PR D1 (action registry, sorted row and context slot),
+  PR D2 (surfaces, memory and the responsive ladder) and PR E (palette,
+  Repeat formatting and saved formats). They are the plans the work started
+  from; where they differ, the v1 contract
+  (`docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` on the
+  integration branch, §10 amendments) records what was built.
+
 ### Editor leak on tab switch (fix/editor-tab-leak)
 
 Not specific to the smart toolbar: `main` has leaked since `@tiptap/markdown`
