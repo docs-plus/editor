@@ -81,6 +81,22 @@ async function expectRowFits(page: Page, label: string) {
   expect(fit.stops, `${label}: one Tab stop`).toBe(1);
 }
 
+/**
+ * M10: remembers the widest Insert face ("Code block") before load, so the
+ * T1 row is measured with the face the threshold must hold (A5).
+ */
+async function rememberWidestInsertFace(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "tinydocy-choices",
+      JSON.stringify({
+        v: 1,
+        slots: { insertKind: { last: "codeBlock", recent: [] } },
+      }),
+    );
+  });
+}
+
 async function sweep(page: Page, widths: number[], tag: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openToolbarTestDoc(page);
@@ -106,11 +122,25 @@ test("mouse: the row fits at every tier and context", async ({ page }) => {
   await sweep(page, MOUSE_WIDTHS, "mouse");
 });
 
+test("mouse: the row fits with the widest Insert face remembered", async ({
+  page,
+}) => {
+  await rememberWidestInsertFace(page);
+  await sweep(page, [1440, 1300, 1290, 1281, ...MOUSE_WIDTHS], "mouse+face");
+});
+
 test.describe("touch", () => {
   test.use({ hasTouch: true });
 
   test("the row fits at every touch tier and context", async ({ page }) => {
     await sweep(page, TOUCH_WIDTHS, "touch");
+  });
+
+  test("the row fits with the widest Insert face remembered", async ({
+    page,
+  }) => {
+    await rememberWidestInsertFace(page);
+    await sweep(page, [1600, 1560, ...TOUCH_WIDTHS], "touch+face");
   });
 
   test("phone: 44px row targets, text style entry on screen", async ({

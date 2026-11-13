@@ -41,10 +41,9 @@ split faces, the size stepper, List and Insert menus, the memory layer with
 Forget, and the responsive ladder below.
 
 **Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
-docked phone bar with the Aa sheet, the
-outline overlay below 950px, M4, the M10 face, M17a, and the mobile
-selection swap and Repeat split button (PR E). Phones reach size, text colour
-and highlight through the "Text style and colour" panel.
+docked phone bar with the Aa sheet, and the mobile selection swap and Repeat
+split button (PR E). Phones reach size, text colour and highlight through the
+"Text style and colour" panel.
 
 **Open before `main`** (contract §10, O1–O4): the editor chunk is +16.1 KB gz
 against a +6 KB budget, so the CI size gate fails; the arrow-key p95 budget;
@@ -66,6 +65,25 @@ listed under Changed.
   sticky row, it reads closed: Alt+F10 goes to the row and focus inside it
   returns to the editor. The bubble is its own lazy chunk (owner decision
   O1); touch devices and phone widths never load it.
+- **Outline overlay below 950px** (spec §4.6, D2 Decision 5): from 768 to
+  949px the outline slides over the page below the sticky toolbar instead of
+  pushing it aside. It is a non-modal "Outline" dialog with a "Close
+  outline" scrim; it focuses the active item when it opens, closes after a
+  heading pick (caret at the heading's end), and Esc or the scrim return
+  focus to the outline trigger (View ▾ at T4). Esc during a keyboard drag
+  only cancels the drag. Its open state is never remembered, so a
+  remembered "open" never covers the page on load; crossing 950px shows the
+  docked state (M6) and keeps focus, or moves it to "Toggle outline".
+- **More remembered choices** (spec §5, local only, cleared by Forget):
+  - M4: a new code block takes the language most code blocks in the doc
+    use (Mermaid excluded), else the last language you picked, else plain.
+  - M9: the list face follows the last list type from the face, the list
+    menu or a shortcut; the menu now runs the registry's `list.*` actions.
+  - M10: at T1 the last inserted kind gets a labelled face beside the Insert
+    menu; from T2 the plain menu pre-highlights it. A fresh profile keeps
+    "+ Insert" (the fallback was "table").
+  - M17a: the table grid reopens at your last size (now proven end to end,
+    across reloads and Forget).
 - **Responsive ladder** (spec §4.6): the fixed row is a size container and
   fits its width from 1440px down to 768px, mouse and touch, in paragraph,
   heading, code and table contexts. Tiers hide groups and show stand-ins:
@@ -78,6 +96,11 @@ listed under Changed.
   at every tier.
 
 #### Changed
+- Mouse T2 starts below 1264px (was 1232px, contract A6): the widest M10
+  face ("Code block") overflowed the T1 row by 31px. Touch is unchanged.
+- The `list.*` actions use the list menu's in-place toggle (a list of
+  another type is retyped in one step, nested lists too) and refuse the
+  title; `toggleList` reports success only when the document changed.
 - The row's scrollbar is no longer hidden: where it still overflows (phones),
   the clipped controls can be found.
 - On touch every row target is 44×44.

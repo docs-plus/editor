@@ -32,6 +32,8 @@ interface MainToolbarContentProps {
   onFilterToggle: () => void;
   isMobile: boolean;
   tocVisible: boolean;
+  /** The outline is an overlay (< 950px): opening it moves focus into it. */
+  outlineOverlay?: boolean;
   filterActive: boolean;
 }
 
@@ -94,6 +96,7 @@ export function MainToolbarContent({
   onFilterToggle,
   isMobile,
   tocVisible,
+  outlineOverlay = false,
   filterActive,
 }: MainToolbarContentProps) {
   return (
@@ -119,6 +122,7 @@ export function MainToolbarContent({
               onTocToggle={onTocToggle}
               onFilterToggle={onFilterToggle}
               tocVisible={tocVisible}
+              outlineOverlay={outlineOverlay}
               filterActive={filterActive}
             />
           </StandIn>

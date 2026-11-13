@@ -22,7 +22,18 @@ import {
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
+import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
+import type { AnyAction } from "@/lib/editor-actions/types";
 import { ChevronDownIcon } from "@/lib/icons";
+import { LIST_ACTION_IDS } from "@/lib/list-commands";
+
+const LIST_ACTIONS = Object.fromEntries(
+  Object.entries(LIST_ACTION_IDS).map(([type, id]) => [
+    type,
+    editorActions.get(id),
+  ]),
+) as Partial<Record<ListType, AnyAction>>;
 
 export interface ListDropdownMenuProps
   extends Omit<ToolbarButtonProps, "type"> {
@@ -78,7 +89,11 @@ export function ListDropdownMenu({
   const handleValueChange = useCallback(
     (next: string) => {
       picked.current = true;
-      setListType(editor, next as ListValue);
+      const action = LIST_ACTIONS[next as ListType];
+      // A list type goes through the registry, whose run() remembers it
+      // (M9); "No list" is not a choice and writes nothing.
+      if (editor && action) runAction(editor, action);
+      else setListType(editor, next as ListValue);
     },
     [editor],
   );
