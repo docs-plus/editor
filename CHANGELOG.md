@@ -26,7 +26,7 @@ was added, so this fix can ship to `main` on its own.
   Chromium keeps the `<img>` alive and, through the media resize gripper's
   listeners, its closed editor. They are released once the request settles.
 
-### Smart toolbar v1 integration (PR C + D1 + D2)
+### Smart toolbar v1 integration (PR C + D1 + D2, r2 surfaces)
 
 **Release order:** this must not merge to `main` before
 `integrate/smart-toolbar-ab` (PR A + B) has shipped as release N on its own,
@@ -38,17 +38,18 @@ days.
 
 **What v1 has:** the sorted row, the context slot, the colour popover with
 split faces, the size stepper, List and Insert menus, the memory layer with
-Forget, and the responsive ladder below.
+Forget, the responsive ladder, the desktop selection bubble and the outline
+overlay below 950px.
 
 **Not in v1 yet** (spec §8 PR D items, deferred by contract §1.3): the
 docked phone bar with the Aa sheet, and the mobile selection swap and Repeat
 split button (PR E). Phones reach size, text colour and highlight through the
 "Text style and colour" panel.
 
-**Open before `main`** (contract §10, O1–O4): the editor chunk is +16.1 KB gz
-against a +6 KB budget, so the CI size gate fails; the arrow-key p95 budget;
-text colour on a highlight contrast; and the colour popover keyboard changes
-listed under Changed.
+**Open before `main`** (contract §10): O2, the arrow-key p95 budget (logged,
+not asserted, in v1), and O5, the perf typing budget in the combined CI run
+and the owner's acceptance of the ladder thresholds (A5). O1, O3, O4 and O6
+are decided (below).
 
 #### Added
 - **Selection bubble** (spec §4.3, desktop only): selecting text with a fine
@@ -107,11 +108,23 @@ listed under Changed.
 - Phones get a **Text style and colour** button next to Undo and Redo in
   place of the off-screen "Highlight text" button, which also opened size and
   text colour.
-- **Colour popover keyboard behaviour (needs owner sign-off, O4):** Enter on a
-  swatch applies it and closes the popover, where PR A's dialog stayed open;
-  focus opens on the pressed swatch ("No highlight" when none, PR A: Green);
+- **Colour popover keeps open after a pick** (owner decision O4, spec
+  §4.5): Enter or a click applies the swatch and keeps the popover open with
+  focus on it, so writers can try several colours; Esc returns focus to the
+  trigger. Focus opens on the applied swatch, else the section's first;
   arrows follow the token order; the check glyph sits on its own badge. PR
-  A's per-swatch forced-colours border check still runs on D2's swatches.
+  A's per-swatch forced-colours border check runs on D2's swatches.
+- **Low-contrast highlight swatches are dimmed** (owner decision O3, spec
+  Appendix A): a highlight that would put the current text colour below
+  4.5:1 is dimmed and described "Low contrast", but stays selectable; the
+  focus ring keeps full strength. Text swatches never dim.
+- **Editor chunk budget** (owner decision O1, contract A9): surfaces that are
+  not on screen at first paint load as their own chunks once the page is
+  idle, or on their trigger's hover or focus: the context slot's controls,
+  every toolbar menu's items, and the Insert menu's items, table grid and
+  embed form (the colour popover and the bubble already did). Shortcuts and
+  triggers stay in the editor chunk. The CI gate's budget is now +19 KB gz
+  over the `58a9d22` baseline (measured +18.66 KB; spec §7 said +6 KB).
 
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 
