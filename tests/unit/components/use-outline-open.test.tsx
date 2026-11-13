@@ -45,11 +45,19 @@ function setWidth(next: number) {
 
 const originalMatchMedia = window.matchMedia;
 
-let latest: { open: boolean; set: SetOutlineOpen; view: OutlineView };
+interface Seen {
+  open: boolean;
+  set: SetOutlineOpen;
+  view: OutlineView;
+}
+const renders: Seen[] = [];
+const latest = new Proxy({} as Seen, {
+  get: (_, key: keyof Seen) => renders.at(-1)?.[key],
+});
 
 function Probe() {
   const [open, set, view] = useOutlineOpen();
-  latest = { open, set, view };
+  renders.push({ open, set, view });
   return null;
 }
 
@@ -57,6 +65,7 @@ let root: Root;
 
 beforeEach(() => {
   localStorage.clear();
+  renders.length = 0;
   width = 1280;
   queries.clear();
   window.matchMedia = ((query: string) => {

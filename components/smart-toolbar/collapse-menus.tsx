@@ -265,11 +265,12 @@ export function ViewCollapseMenu({
 }: ViewCollapseMenuProps) {
   const menu = useMenuFocus(null);
   const openingOverlay = useRef(false);
+  const menuFinalFocus = menu.finalFocus;
   const finalFocus = useCallback(() => {
-    if (!openingOverlay.current) return menu.finalFocus();
+    if (!openingOverlay.current) return menuFinalFocus();
     openingOverlay.current = false;
     return false;
-  }, [menu.finalFocus]);
+  }, [menuFinalFocus]);
   return (
     <ToolbarMenu
       label="View"
