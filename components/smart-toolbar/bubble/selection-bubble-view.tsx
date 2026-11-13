@@ -176,6 +176,23 @@ export function SelectionBubbleView({
     };
   }, [editor, scrollTarget, dispatchMeta]);
 
+  // `BubbleMenu` keeps one root for its lifetime. When it registers again
+  // (dev StrictMode's double effect, or a new editor), the previous
+  // cleanup removes that root one frame later if it has a parent. With a
+  // selection already there (this chunk landed after it) the new plugin
+  // shows the root at once, so the removal detaches a shown bubble without
+  // `onHide`, and the plugin never shows it again. This frame runs after
+  // that one: put the root back where the plugin shows it.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const root = rootRef.current;
+      if (!root || root.isConnected || root.dataset.state !== "open") return;
+      scrollTarget.appendChild(root);
+      dispatchMeta("updatePosition");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollTarget, dispatchMeta]);
+
   // One keydown and one mousedown listener on the editor, for the editor's
   // lifetime. They do nothing unless the bubble is in the DOM, so typing
   // with no bubble dispatches nothing extra.
