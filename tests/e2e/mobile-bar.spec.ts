@@ -773,6 +773,43 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     ).toBe(true);
   });
 
+  test("↑/↓ in the Aa sheet's colours keep the column the swatches show", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await openSheet(page);
+    const text = sheet(page).getByRole("group", { name: "Text colour" });
+    const swatches = text.getByRole("button");
+    // The sheet's grid fills its width, so its lines hold more swatches
+    // than the popover's six.
+    const perLine = await swatches.evaluateAll((els) => {
+      const top = els[0].getBoundingClientRect().top;
+      return els.filter((el) => el.getBoundingClientRect().top === top).length;
+    });
+    expect(perLine).toBeGreaterThan(6);
+    expect(await swatches.count()).toBeGreaterThan(perLine);
+    await swatches.nth(2).focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    const from = await page.evaluate(() =>
+      document.activeElement?.getBoundingClientRect().toJSON(),
+    );
+    await page.keyboard.press("ArrowDown");
+    const to = await page.evaluate(() =>
+      document.activeElement?.getBoundingClientRect().toJSON(),
+    );
+    // Straight down: the same column, the next line.
+    expect(Math.round(to.left)).toBe(Math.round(from.left));
+    expect(to.top).toBeGreaterThan(from.top);
+    await page.keyboard.press("ArrowUp");
+    const back = await page.evaluate(() =>
+      document.activeElement?.getBoundingClientRect().toJSON(),
+    );
+    expect(back).toEqual(from);
+  });
+
   test("the Aa sheet's Your formats apply with a preview, and Save opens the save view", async ({
     page,
   }) => {

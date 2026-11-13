@@ -55,6 +55,22 @@ interface Line {
   length: number;
 }
 
+/**
+ * Swatches per visual line as rendered, so ↑/↓ follow what the user sees:
+ * the Aa sheet's grid fills its width (`auto-fill`, design pass §6) and
+ * ignores `--swatch-cols`. Falls back to `columns` when the layout is
+ * not resolved to pixel tracks.
+ */
+function renderedColumns(grid: HTMLElement | null, columns: number): number {
+  const group = grid?.querySelector(".st-color-swatches");
+  const tracks = group
+    ? getComputedStyle(group).gridTemplateColumns.split(" ")
+    : [];
+  return tracks.length > 0 && tracks.every((track) => /^[\d.]+px$/.test(track))
+    ? tracks.length
+    : columns;
+}
+
 /** Each section split into visual lines of at most `columns` swatches. */
 function toLines(rows: readonly Row[], columns: number): Line[] {
   return rows.flatMap((row, index) => {
@@ -187,7 +203,6 @@ export function ColorPanel({
   const [columns] = useState(() =>
     isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
   );
-  const lines = toLines(rows, columns);
   const theme = currentTheme();
   const anyLow = HIGHLIGHT_ROW.some((swatch) =>
     isLowContrast(swatch, currentText, theme),
@@ -224,6 +239,7 @@ export function ColorPanel({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const { row, col } = active;
+    const lines = toLines(rows, renderedColumns(gridRef.current, columns));
     const width = rows[row].swatches.length;
     const lineIndex = lines.findIndex(
       (line) =>
