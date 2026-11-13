@@ -22,6 +22,10 @@ const PERF_ROUNDS = Number(process.env.PERF_ROUNDS ?? 5);
 const PERF_CPU_THROTTLE = Number(process.env.PERF_CPU_THROTTLE ?? 4);
 const PERF_MAX_REGRESSION = Number(process.env.PERF_MAX_REGRESSION ?? 0.1);
 const KEYSTROKES = 100;
+/** Leading keystrokes dropped from each trial: first-use JIT and layout cost. */
+const WARMUP_KEYSTROKES = 10;
+/** Quiet time after focusing the editor, so click-triggered work finishes. */
+const SETTLE_AFTER_CLICK_MS = 500;
 
 const perfResults: Array<{
   label: string;
@@ -64,10 +68,12 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     });
     await collectKeystrokeLatencies(page);
     await page.click(".tiptap p");
+    await page.waitForTimeout(SETTLE_AFTER_CLICK_MS);
+    await collectKeystrokeLatencies(page);
     await page.keyboard.type("a".repeat(KEYSTROKES), { delay: 10 });
     const samples = await collectKeystrokeLatencies(page);
     expect(samples.length, "keystroke samples").toBe(KEYSTROKES);
-    return percentile(samples, 95);
+    return percentile(samples.slice(WARMUP_KEYSTROKES), 95);
   } finally {
     await context.close();
   }

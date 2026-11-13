@@ -252,12 +252,18 @@ function attachWithLocalCopy(entry: Entry, name: string): void {
     attached = true;
     entry.provider.attach();
   };
-  entry.binding = bindLocalCopy(entry.doc, name, store);
+  // Every binding of this session saves with the generation it began with,
+  // so a removal while the copy is still read also stops the rebind below.
+  const generation = store.generation(name);
+  entry.binding = bindLocalCopy(entry.doc, name, store, { generation });
   const timeout = setTimeout(() => {
     if (attached) return;
     // Too slow: connect without the copy and keep saving from here on.
     entry.binding?.destroy();
-    entry.binding = bindLocalCopy(entry.doc, name, store, { hydrate: false });
+    entry.binding = bindLocalCopy(entry.doc, name, store, {
+      hydrate: false,
+      generation,
+    });
     attach();
   }, HYDRATE_TIMEOUT_MS);
   void entry.binding.hydrated.then((hasCopy) => {

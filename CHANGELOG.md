@@ -45,7 +45,10 @@ since the previous tag.
     of legacy copies (the legacy key is deleted only after a successful
     save; IndexedDB writes now settle on commit). Saves and removals of one
     document run in order, so a merge still in flight when its tab closes or
-    the document is deleted never writes the copy back.
+    the document is deleted never writes the copy back, and a removal drops
+    every later save of a session opened before it (one still flushing on
+    release, which a tab close cannot reach, or one connected without its
+    copy after the hydrate timeout).
   - **Token-aware highlight rendering** (attribute key stays `color`) and a
     teal highlight variable. The playground seed uses tokens.
   - **Schema snapshot test** and **schema rollout runbook**.
@@ -63,7 +66,8 @@ since the previous tag.
   `make test-e2e` run `--project=chromium --project=perf`; `make test-perf`
   runs `--project=perf --no-deps`.
 - **Toolbar updates catch up within 1 s** (`TOOLBAR_MAX_WAIT_MS`) during
-  continuous edits, such as a collaborator typing without pause.
+  continuous remote edits, such as a collaborator typing without pause; local
+  typing still waits for a pause, so it never forces a toolbar commit.
 - **Toolbar controls derive visibility in render,** so they hide at once when
   a document turns read-only, and per-keystroke listener work is gone.
 - **Highlights with an unknown value render as plain text:** a highlight
@@ -75,11 +79,12 @@ since the previous tag.
   three days. `bunfig.toml` still holds back releases younger than 3 days.
 
 ### Fixed
-- **Focus outline and pressed bar on every button:** `Button`
-  (`components/ui/button.tsx`) draws a 2px solid focus outline and a 2px
-  pressed bar (`aria-pressed`), so the new look applies app-wide, not only
-  in the toolbar. Both stay visible in dark mode and in Windows High
-  Contrast (forced colours).
+- **Focus outline and pressed underline on every button:** `Button`
+  (`components/ui/button.tsx`) draws a 2px solid focus outline and, while
+  `aria-pressed` is true, a short centred underline (12px wide, 2px tall, 3px
+  above the bottom edge, at least 3:1), so the new look applies app-wide, not
+  only in the toolbar. Both stay visible in dark mode and in Windows High
+  Contrast (forced colours, where the underline uses `HighlightText`).
 - **Disabled toolbar controls stay focusable** and say why they are disabled.
 - **Style and list menus are named by value** ("Normal text", "No list") and
   use radio items; picking the checked item does nothing. They close after a
