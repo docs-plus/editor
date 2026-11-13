@@ -365,6 +365,32 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
         name: `${name} highlight`,
       });
       await expect(swatch).toHaveAttribute("aria-pressed", "true");
+      // PR A's per-swatch forced-colours check, on D2's swatch: forced
+      // colours keep the swatch's own colour and outline it in a system
+      // colour; elsewhere the theme decides.
+      const border = await swatch.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const probe = document.createElement("div");
+        probe.style.color = "ButtonText";
+        document.body.appendChild(probe);
+        const system = getComputedStyle(probe).color;
+        probe.remove();
+        return {
+          adjust: cs.forcedColorAdjust,
+          width: cs.borderTopWidth,
+          color: cs.borderTopColor,
+          system,
+        };
+      });
+      expect(border.adjust, `${name} forced-color-adjust`).toBe(
+        forced ? "none" : "auto",
+      );
+      expect(border.width, `${name} border`).toBe("1px");
+      if (forced) {
+        expect(border.color, `${name} border in ButtonText`).toBe(
+          border.system,
+        );
+      }
       const check = await swatch.locator(".st-swatch-check").evaluate((el) => {
         const cs = getComputedStyle(el);
         return { color: cs.color, bg: cs.backgroundColor };
