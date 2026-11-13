@@ -89,6 +89,17 @@ describe("nextMobileBarMode", () => {
       },
       "all",
     ],
+    // ✕ pressed with keyboard or VoiceOver focus in the bar: an explicit
+    // Back overrides the focus guard.
+    [
+      {
+        hasTextSelection: true,
+        focusInBar: true,
+        dismissedForSelection: true,
+        current: "selection",
+      },
+      "all",
+    ],
   ] as const)("%o → %s", (input, expected) => {
     expect(nextMobileBarMode(input)).toBe(expected);
   });
@@ -117,6 +128,67 @@ describe("PhoneSelectionCells", () => {
   });
 });
 
+describe("PhoneSelectionCells Repeat cell", () => {
+  it("enables as soon as a bundle is remembered, without a selection change", () => {
+    editor = createTestEditor({
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "hello world" }],
+          },
+        ],
+      },
+    });
+    editor.commands.setTextSelection({ from: 8, to: 13 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const cell = () =>
+      el.querySelector<HTMLButtonElement>('[data-action-id="repeat.apply"]');
+    expect(cell()?.getAttribute("aria-disabled")).toBe("true");
+    act(() => rememberBundle({ bold: true }));
+    expect(cell()?.getAttribute("aria-disabled")).not.toBe("true");
+  });
+});
+
+describe("PhoneSelectionCells Back", () => {
+  it("moves focus to the bar's first cell once the cells unmount", async () => {
+    editor = createTestEditor();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const bar = (cells: boolean) =>
+      createElement(
+        "div",
+        { role: "toolbar", "aria-label": "Formatting" },
+        cells
+          ? createElement(PhoneSelectionCells, {
+              editor: editor as never,
+              onBack: () => act(() => root?.render(bar(false))),
+            })
+          : createElement("button", { type: "button", id: "aa" }, "Aa"),
+      );
+    act(() => root?.render(bar(true)));
+    const back = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Back to all tools"]',
+    );
+    back?.focus();
+    act(() => back?.click());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement?.id).toBe("aa");
+  });
+});
+
 describe("RepeatSplitButton", () => {
   it("renders nothing without a bundle, then names the bundle", () => {
     editor = createTestEditor();
@@ -126,11 +198,16 @@ describe("RepeatSplitButton", () => {
     expect(el.querySelector("[data-repeat-split]")).toBeNull();
     act(() => rememberBundle({ bold: true, highlight: "yellow" }));
     const face = el.querySelector('[data-action-id="repeat.apply"]');
+    // Label in Name (WCAG 2.5.3): the name starts with the visible face.
     expect(face?.getAttribute("aria-label")).toBe(
-      "Repeat formatting: Bold, Yellow highlight",
+      "Repeat B · Yellow highlight",
     );
-    expect(face?.textContent).toBe("B · Yellow highlight");
-    const chevron = el.querySelector('[aria-label="More formatting options"]');
+    const description = el.querySelector(
+      `[id="${face?.getAttribute("aria-describedby")}"]`,
+    );
+    expect(description?.textContent).toBe("Bold, Yellow highlight");
+    expect(face?.textContent).toContain("B · Yellow highlight");
+    const chevron = el.querySelector('[aria-label="Formats"]');
     expect(chevron?.getAttribute("aria-haspopup")).toBe("menu");
   });
 });

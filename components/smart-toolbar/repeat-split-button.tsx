@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
-import { useState, useSyncExternalStore } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 
 import {
   DropdownMenu,
@@ -25,13 +25,16 @@ import {
   subscribeBundle,
 } from "@/extensions/repeat-formatting/bundle-memory";
 import { scanDocFormats } from "@/lib/doc-format-scan";
-import { runAction } from "@/lib/editor-actions/registry";
+import { availability, runAction } from "@/lib/editor-actions/registry";
+import type { Enabled } from "@/lib/editor-actions/types";
 import {
   DOC_FORMAT_PREFIX,
   formatsApplyAction,
+  formatsSaveAction,
   repeatApplyAction,
   repeatCopyAction,
 } from "@/lib/editor-actions/v11-actions";
+import { computeContext } from "@/lib/editor-context/snapshot";
 import { ChevronDownIcon, RepeatIcon } from "@/lib/icons";
 import {
   readSavedFormats,
@@ -72,6 +75,8 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
   const bundle = useRememberedBundle();
   const saved = useSavedFormats();
   const [inDoc, setInDoc] = useState<readonly FormatBundle[]>([]);
+  const [canSave, setCanSave] = useState<Enabled>(true);
+  const describedBy = useId();
   if (!editor || (!bundle && saved.length === 0)) return null;
 
   const run = (action: Parameters<typeof runAction>[1], arg?: unknown) => {
@@ -84,7 +89,8 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
         <ToolbarButton
           type="button"
           data-action-id={repeatApplyAction.id}
-          aria-label={`Repeat formatting: ${bundleLabel(bundle)}`}
+          aria-label={`Repeat ${bundleFace(bundle)}`}
+          aria-describedby={describedBy}
           tooltip="Repeat formatting"
           className="min-h-6 min-w-6 gap-1 px-1.5"
           onMouseDown={(event) => event.preventDefault()}
@@ -92,20 +98,25 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
         >
           <RepeatIcon className="tiptap-button-icon" aria-hidden="true" />
           <span className="text-xs">{bundleFace(bundle)}</span>
+          <span id={describedBy} hidden>
+            {bundleLabel(bundle)}
+          </span>
         </ToolbarButton>
       ) : null}
       <DropdownMenu
         onOpenChange={(open) => {
-          if (open) setInDoc(scanDocFormats(editor.state.doc).bundles);
+          if (!open) return;
+          setInDoc(scanDocFormats(editor.state.doc).bundles);
+          setCanSave(availability(formatsSaveAction, computeContext(editor)));
         }}
       >
         <DropdownMenuTrigger
           render={
             <ToolbarButton
               type="button"
-              aria-label="More formatting options"
+              aria-label="Formats"
               aria-haspopup="menu"
-              tooltip="More formatting options"
+              tooltip="Formats"
               className="min-h-6 min-w-6 px-0.5"
               onMouseDown={(event) => event.preventDefault()}
             />
@@ -118,6 +129,7 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
           bundle={bundle}
           saved={saved}
           inDoc={inDoc}
+          canSave={canSave}
           run={run}
         />
       </DropdownMenu>
@@ -130,28 +142,35 @@ function FormatsMenuContent({
   bundle,
   saved,
   inDoc,
+  canSave,
   run,
 }: {
   editor: Editor;
   bundle: FormatBundle | null;
   saved: readonly SavedFormat[];
   inDoc: readonly FormatBundle[];
+  canSave: Enabled;
   run: (action: Parameters<typeof runAction>[1], arg?: unknown) => void;
 }) {
   return (
     <DropdownMenuContent align="start" className="min-w-56">
       <DropdownMenuGroup>
         {bundle ? (
-          <DropdownMenuItem onClick={() => run(repeatApplyAction)}>
-            Repeat formatting: {bundleFace(bundle)}
-          </DropdownMenuItem>
+          <DescribedItem
+            label={`Repeat ${bundleFace(bundle)}`}
+            description={bundleLabel(bundle)}
+            onClick={() => run(repeatApplyAction)}
+          />
         ) : null}
         <DropdownMenuItem onClick={() => run(repeatCopyAction)}>
           Copy formatting
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openPalette(editor, "save-format")}>
-          Save as format…
-        </DropdownMenuItem>
+        <DescribedItem
+          label="Save as format…"
+          description={canSave === true ? undefined : canSave.reason}
+          disabled={canSave !== true}
+          onClick={() => openPalette(editor, "save-format")}
+        />
       </DropdownMenuGroup>
       {saved.length > 0 ? (
         <>
@@ -175,21 +194,54 @@ function FormatsMenuContent({
           <DropdownMenuGroup>
             <DropdownMenuLabel>In this doc</DropdownMenuLabel>
             {inDoc.map((entry) => (
-              <DropdownMenuItem
+              <DescribedItem
                 key={bundleKey(entry)}
+                label={bundleFace(entry)}
+                description={bundleLabel(entry)}
                 onClick={() =>
                   run(
                     formatsApplyAction,
                     `${DOC_FORMAT_PREFIX}${bundleKey(entry)}`,
                   )
                 }
-              >
-                {bundleFace(entry)}
-              </DropdownMenuItem>
+              />
             ))}
           </DropdownMenuGroup>
         </>
       ) : null}
     </DropdownMenuContent>
+  );
+}
+
+/**
+ * A menu item whose accessible name is its visible text (WCAG 2.5.3) and
+ * whose long form ("Bold, Red text") or unavailable reason is its
+ * description, so screen readers never read only "B dot I".
+ */
+function DescribedItem({
+  label,
+  description,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const id = useId();
+  return (
+    <DropdownMenuItem
+      disabled={disabled}
+      aria-describedby={description ? id : undefined}
+      onClick={onClick}
+    >
+      {label}
+      {description ? (
+        <span id={id} hidden>
+          {description}
+        </span>
+      ) : null}
+    </DropdownMenuItem>
   );
 }
