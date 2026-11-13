@@ -102,8 +102,16 @@ async function rowNames(page: Page): Promise<string[]> {
         (el) =>
           el.checkVisibility() && !el.closest('[data-slot="context-slot"]'),
       )
+      // The style menu is named by its visible text (M8), without the
+      // short value hidden above T5.
       .map(
-        (el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "?",
+        (el) =>
+          el.getAttribute("aria-label") ??
+          Array.from(el.children)
+            .filter((child) => child.checkVisibility())
+            .map((child) => child.textContent)
+            .join("")
+            .trim(),
       ),
   );
 }
