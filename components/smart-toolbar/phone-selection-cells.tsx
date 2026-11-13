@@ -4,14 +4,16 @@ import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
 
 import { ToolbarButton } from "@/components/ui/toolbar-button";
+import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { useActionView } from "@/hooks/use-editor-context";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { repeatApplyAction } from "@/lib/editor-actions/v11-actions";
+// Installs the E action bodies (lazy half of v11-actions) with this chunk.
+import "@/lib/editor-actions/v11-engine";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { CloseIcon, RepeatIcon } from "@/lib/icons";
 
 import { ActionButton } from "./action-button";
-import { useRememberedBundle } from "./repeat-split-button";
 import type { SurfaceProps } from "./types";
 
 export type MobileBarMode = "all" | "selection";

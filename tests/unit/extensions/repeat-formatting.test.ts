@@ -32,6 +32,8 @@ import {
   type CollabEditorFixture,
   createCollabEditor,
 } from "../../helpers/collab-editor";
+// The E action bodies are a lazy chunk in the app; install them here.
+import "@/lib/editor-actions/v11-engine";
 
 let f: CollabEditorFixture;
 let editor: Editor;

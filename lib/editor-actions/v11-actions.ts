@@ -2,60 +2,122 @@
  * PR E actions (spec §4.4, §5 M7/M11/M12/M14/M17b). Id prefixes:
  * palette. repeat. formats. template.
  *
+ * Only the definitions are eager. Their bodies, the Repeat commands and
+ * the bundle recorder live in `v11-engine.ts`, a lazy chunk the
+ * `RepeatFormatting` extension starts loading when an editor is created
+ * (editor-chunk budget, contract A11 and E's A8). Until it lands, the E
+ * actions are unavailable with `ENGINE_LOADING_REASON` and run nothing.
+ *
  * Import rule (contract §4): never the registry index or the context
  * store, and never the RepeatFormatting extension module (it imports this
  * file for its key binding). Commands are reached through `editor.commands`.
  */
 import type { Editor } from "@tiptap/core";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
 
+import type { SessionRange } from "@/extensions/repeat-formatting/relative-range";
 import {
-  applyDisabledReason,
-  REPEAT_REASONS,
-  repeatDisabledReason,
-} from "@/extensions/repeat-formatting/apply-bundle";
-import {
-  bundleFace,
-  bundleFromKey,
-  bundleKey,
-  type FormatBundle,
-  isEmptyBundle,
-  readBundleAt,
-  setEntries,
-} from "@/extensions/repeat-formatting/bundle";
-import {
-  getRememberedBundle,
-  rememberBundle,
-} from "@/extensions/repeat-formatting/bundle-memory";
-import { scanDocFormats } from "@/lib/doc-format-scan";
-import {
+  type Action,
+  type ActionOption,
   type AnyAction,
   type Ctx,
   defineAction,
   type Enabled,
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
-import {
-  getMermaidTemplate,
-  isMermaidTemplateId,
-  lastMermaidTemplate,
-  MERMAID_TEMPLATES,
-  type MermaidTemplateId,
-  rememberMermaidTemplate,
-} from "@/lib/mermaid-templates";
-import {
-  FORMAT_REASONS,
-  readSavedFormats,
-  saveFormat,
-} from "@/lib/saved-formats";
 
 /** Arg prefix of an "In this doc" format: `doc:<bundleKey>`. */
 export const DOC_FORMAT_PREFIX = "doc:";
 
-const enabledFrom = (reason: string | null): Enabled =>
-  reason === null ? true : { reason };
+/** Reason of every E action while its chunk is still loading. */
+export const ENGINE_LOADING_REASON = "Formatting tools are still loading.";
 
-const isCodeOnly = (ctx: Ctx) =>
-  applyDisabledReason(ctx.state, { bold: true }) === REPEAT_REASONS.code;
+/** The Repeat "extend" session of one editor (memory only). */
+export interface RepeatSession {
+  range: SessionRange | null;
+}
+
+type CommandProps = {
+  state: EditorState;
+  tr: Transaction;
+  dispatch?: (tr: Transaction) => void;
+  editor: { isEditable: boolean };
+};
+
+interface EngineAction {
+  enabled(ctx: Ctx): Enabled;
+  value?(ctx: Ctx): string | null;
+  options?(ctx: Ctx): readonly ActionOption<unknown>[];
+  run(editor: Editor, arg: unknown): boolean;
+}
+
+type EngineActionId =
+  | "repeat.apply"
+  | "repeat.copy"
+  | "formats.save"
+  | "formats.apply"
+  | "template.mermaid";
+
+/** What `v11-engine.ts` provides once loaded. */
+export interface V11Engine {
+  actions: Readonly<Record<EngineActionId, EngineAction>>;
+  commands: {
+    repeatFormatting(props: CommandProps): boolean;
+    applyFormatBundle(
+      bundle: Parameters<Editor["commands"]["applyFormatBundle"]>[0],
+      props: CommandProps,
+    ): boolean;
+  };
+  record(session: RepeatSession, tr: Transaction, state: EditorState): void;
+  /** Why the selection cannot be saved under `name` now, or null. */
+  formatSaveReason(editor: Editor, name: string): string | null;
+}
+
+let engine: V11Engine | null = null;
+let loading: Promise<V11Engine> | null = null;
+
+/** The loaded engine, or null while its chunk is on its way. */
+export const getV11Engine = (): V11Engine | null => engine;
+
+/** Called once by `v11-engine.ts` when it is evaluated. */
+export function installV11Engine(loaded: V11Engine): void {
+  engine = loaded;
+}
+
+/**
+ * Fetches the engine chunk once. A failed fetch (offline, or a deploy
+ * replaced the chunk) clears the promise, so the next editor retries.
+ */
+export function loadV11Engine(): Promise<V11Engine> {
+  loading ??= import("./v11-engine").then(
+    (module) => module.v11Engine,
+    (error: unknown) => {
+      loading = null;
+      throw error;
+    },
+  );
+  return loading;
+}
+
+const LOADING: Enabled = { reason: ENGINE_LOADING_REASON };
+
+/** An E action whose behaviour comes from the engine once it is loaded. */
+function engineAction<Arg>(
+  meta: Omit<Action<Arg>, "enabled" | "value" | "options" | "run">,
+  extras: { value?: true; options?: true } = {},
+): Action<Arg> {
+  const id = meta.id as EngineActionId;
+  const body = () => engine?.actions[id];
+  return defineAction<Arg>({
+    ...meta,
+    enabled: (ctx) => body()?.enabled(ctx) ?? LOADING,
+    value: extras.value ? (ctx) => body()?.value?.(ctx) ?? null : undefined,
+    options: extras.options
+      ? (ctx) => (body()?.options?.(ctx) ?? []) as readonly ActionOption<Arg>[]
+      : undefined,
+    run: (editor, arg) => body()?.run(editor, arg) ?? false,
+  });
+}
 
 export const paletteOpenAction = defineAction({
   id: "palette.open",
@@ -69,159 +131,58 @@ export const paletteOpenAction = defineAction({
   run: (editor) => emitUiIntent(editor, { type: "palette.open" }),
 });
 
-export const repeatApplyAction = defineAction({
-  id: "repeat.apply",
-  label: "Repeat formatting",
-  group: "format",
-  contexts: "any",
-  keywords: ["format painter", "again", "f4", "paste formatting"],
-  shortcut: "Mod-Alt-v",
-  enabled: (ctx) =>
-    enabledFrom(repeatDisabledReason(ctx.state, getRememberedBundle())),
-  value: () => {
-    const bundle = getRememberedBundle();
-    return bundle ? bundleFace(bundle) : null;
+export const repeatApplyAction = engineAction(
+  {
+    id: "repeat.apply",
+    label: "Repeat formatting",
+    group: "format",
+    contexts: "any",
+    keywords: ["format painter", "again", "f4", "paste formatting"],
+    shortcut: "Mod-Alt-v",
   },
-  run: (editor) => editor.commands.repeatFormatting(),
-});
+  { value: true },
+);
 
-export const repeatCopyAction = defineAction({
+export const repeatCopyAction = engineAction({
   id: "repeat.copy",
   label: "Copy formatting",
   group: "format",
   contexts: "any",
   keywords: ["format painter", "pick up", "copy style"],
-  enabled: (ctx) =>
-    ctx.nodeSelectionType !== null
-      ? { reason: "Select text to copy its formatting." }
-      : isCodeOnly(ctx)
-        ? { reason: REPEAT_REASONS.code }
-        : true,
-  run: (editor) => {
-    if (!editor.commands.copyFormatting()) return false;
-    rememberBundle(readBundleAt(editor.state));
-    return true;
-  },
 });
 
-/** Whether the selection carries anything a saved format would keep. */
-const hasSetFormatting = (ctx: Ctx): boolean =>
-  ctx.memo(
-    "formats.hasSet",
-    () => !isEmptyBundle(setEntries(readBundleAt(ctx.state))),
-  );
-
 /** Arg: the format name. Saves the selection's set entries (M14). */
-export const formatsSaveAction = defineAction<string>({
+export const formatsSaveAction = engineAction<string>({
   id: "formats.save",
   label: "Save as format…",
   group: "format",
   contexts: "any",
   keywords: ["style", "preset", "your formats"],
-  enabled: (ctx) =>
-    isCodeOnly(ctx)
-      ? { reason: REPEAT_REASONS.code }
-      : hasSetFormatting(ctx)
-        ? true
-        : { reason: FORMAT_REASONS.empty },
-  run: (editor, name) => {
-    const bundle = setEntries(readBundleAt(editor.state));
-    if (isEmptyBundle(bundle)) return false;
-    return saveFormat(name, bundle).ok;
-  },
 });
-
-function docBundles(ctx: Ctx): readonly FormatBundle[] {
-  return ctx.docMemo("formats.docScan", () => scanDocFormats(ctx.state.doc))
-    .bundles;
-}
-
-function resolveFormat(id: unknown): FormatBundle | null {
-  if (typeof id !== "string") return null;
-  if (id.startsWith(DOC_FORMAT_PREFIX)) {
-    const bundle = bundleFromKey(id.slice(DOC_FORMAT_PREFIX.length));
-    return bundle ? setEntries(bundle) : null;
-  }
-  return readSavedFormats().find((format) => format.id === id)?.bundle ?? null;
-}
 
 /** Arg: a saved format id, or `doc:<bundleKey>` for an "In this doc" one. */
-export const formatsApplyAction = defineAction<string>({
-  id: "formats.apply",
-  label: "Apply format",
-  group: "format",
-  contexts: "any",
-  keywords: ["your formats", "in this doc", "style", "preset"],
-  enabled: (ctx) => {
-    if (readSavedFormats().length === 0 && docBundles(ctx).length === 0) {
-      return { reason: "Save a format first." };
-    }
-    return enabledFrom(
-      ctx.empty || ctx.nodeSelectionType !== null
-        ? "Select text to apply a format."
-        : isCodeOnly(ctx)
-          ? REPEAT_REASONS.code
-          : null,
-    );
+export const formatsApplyAction = engineAction<string>(
+  {
+    id: "formats.apply",
+    label: "Apply format",
+    group: "format",
+    contexts: "any",
+    keywords: ["your formats", "in this doc", "style", "preset"],
   },
-  options: (ctx) => [
-    ...readSavedFormats().map((format) => ({
-      value: format.id,
-      label: format.name,
-      keywords: [bundleFace(format.bundle)],
-    })),
-    ...docBundles(ctx).map((bundle) => ({
-      value: `${DOC_FORMAT_PREFIX}${bundleKey(bundle)}`,
-      label: `${bundleFace(bundle)} (in this doc)`,
-      keywords: ["in this doc"],
-    })),
-  ],
-  run: (editor, id) => {
-    const bundle = resolveFormat(id);
-    if (!bundle || isEmptyBundle(bundle)) return false;
-    if (!editor.commands.applyFormatBundle(bundle)) return false;
-    rememberBundle(bundle);
-    return true;
-  },
-});
-
-const hasMermaid = (editor: Editor) => "insertMermaid" in editor.commands;
-
-function canInsertMermaid(editor: Editor): boolean {
-  return (
-    hasMermaid(editor) &&
-    editor.can().insertMermaid(MERMAID_TEMPLATES[0].source)
-  );
-}
+  { options: true },
+);
 
 /** Arg: a template id; defaults to the last one used (M17b). */
-export const templateMermaidAction = defineAction<
-  MermaidTemplateId | undefined
->({
-  id: "template.mermaid",
-  label: "Insert diagram",
-  group: "insert",
-  contexts: ["paragraph", "heading", "list", "table"],
-  keywords: ["mermaid", "chart", "flowchart", "sequence", "mind map", "pie"],
-  enabled: (ctx) =>
-    ctx.can("insertMermaid", canInsertMermaid)
-      ? true
-      : { reason: "Diagrams cannot go here." },
-  options: () =>
-    MERMAID_TEMPLATES.map((template) => ({
-      value: template.id,
-      label: template.label,
-      keywords: [template.id],
-    })),
-  run: (editor, arg) => {
-    if (!hasMermaid(editor)) return false;
-    const id = isMermaidTemplateId(arg) ? arg : lastMermaidTemplate();
-    const { source } = getMermaidTemplate(id);
-    const inserted = editor.chain().focus().insertMermaid(source).run();
-    if (inserted) rememberMermaidTemplate(id);
-    return inserted;
+export const templateMermaidAction = engineAction<string | undefined>(
+  {
+    id: "template.mermaid",
+    label: "Insert diagram",
+    group: "insert",
+    contexts: ["paragraph", "heading", "list", "table"],
+    keywords: ["mermaid", "chart", "flowchart", "sequence", "mind map", "pie"],
   },
-});
+  { options: true },
+);
 
 export const v11Actions: readonly AnyAction[] = [
   paletteOpenAction,

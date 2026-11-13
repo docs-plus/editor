@@ -29,23 +29,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  isEmptyBundle,
-  readBundleAt,
-  setEntries,
-} from "@/extensions/repeat-formatting/bundle";
 import { editorActions } from "@/lib/editor-actions";
 import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
-import { formatsSaveAction } from "@/lib/editor-actions/v11-actions";
+import {
+  ENGINE_LOADING_REASON,
+  formatsSaveAction,
+  getV11Engine,
+} from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { CheckIcon } from "@/lib/icons";
-import {
-  FORMAT_REASONS,
-  MAX_SAVED_FORMATS,
-  readSavedFormats,
-  sanitizeFormatName,
-} from "@/lib/saved-formats";
 import { isMac } from "@/lib/shortcuts";
 
 import { readPaletteRecent, rememberPaletteRecent } from "./palette-recent";
@@ -62,18 +55,13 @@ export interface CommandPaletteProps {
   onClose: () => void;
 }
 
+/**
+ * Why `name` cannot be saved, from the engine (loaded before this chunk,
+ * so the palette never carries a second copy of the bundle code).
+ */
 function saveReason(editor: Editor, name: string): string | null {
-  const cleanName = sanitizeFormatName(name);
-  if (!cleanName) return FORMAT_REASONS.name;
-  if (isEmptyBundle(setEntries(readBundleAt(editor.state)))) {
-    return FORMAT_REASONS.empty;
-  }
-  const formats = readSavedFormats();
-  const exists = formats.some(
-    (format) => format.name.toLowerCase() === cleanName.toLowerCase(),
-  );
-  if (!exists && formats.length >= MAX_SAVED_FORMATS) return FORMAT_REASONS.cap;
-  return null;
+  const engine = getV11Engine();
+  return engine ? engine.formatSaveReason(editor, name) : ENGINE_LOADING_REASON;
 }
 
 /** Pause after the last keystroke before the result count is announced. */

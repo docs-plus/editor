@@ -8,6 +8,8 @@
  * and it is dropped whenever the memory layer reports a change (Forget, or
  * another tab's write), so the next read comes from storage.
  */
+import { useSyncExternalStore } from "react";
+
 import {
   type ChoiceSpec,
   readChoice,
@@ -70,6 +72,17 @@ export function subscribeBundle(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+const getNoBundle = () => null;
+
+/** The remembered Repeat bundle; re-renders on every change. */
+export function useRememberedBundle(): FormatBundle | null {
+  return useSyncExternalStore(
+    subscribeBundle,
+    getRememberedBundle,
+    getNoBundle,
+  );
 }
 
 /** Test hook: forget the in-page bundle. */

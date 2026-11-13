@@ -20,13 +20,12 @@ import {
   bundleLabel,
   type FormatBundle,
 } from "@/extensions/repeat-formatting/bundle";
-import {
-  getRememberedBundle,
-  subscribeBundle,
-} from "@/extensions/repeat-formatting/bundle-memory";
+import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { scanDocFormats } from "@/lib/doc-format-scan";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { Enabled } from "@/lib/editor-actions/types";
+// Installs the E action bodies (lazy half of v11-actions) with this chunk.
+import "@/lib/editor-actions/v11-engine";
 import {
   DOC_FORMAT_PREFIX,
   formatsApplyAction,
@@ -45,14 +44,8 @@ import {
 import { openPalette } from "./palette/palette-store";
 import type { SurfaceProps } from "./types";
 
-const getNull = () => null;
 const EMPTY: readonly SavedFormat[] = [];
 const getNoFormats = () => EMPTY;
-
-/** The remembered Repeat bundle; re-renders on every change. */
-export function useRememberedBundle(): FormatBundle | null {
-  return useSyncExternalStore(subscribeBundle, getRememberedBundle, getNull);
-}
 
 function useSavedFormats(): readonly SavedFormat[] {
   return useSyncExternalStore(

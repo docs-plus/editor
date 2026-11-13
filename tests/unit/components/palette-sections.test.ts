@@ -21,6 +21,8 @@ import { v11Actions } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
+// The E action bodies are a lazy chunk in the app; install them here.
+import "@/lib/editor-actions/v11-engine";
 
 let editor: Editor | undefined;
 afterEach(() => {
