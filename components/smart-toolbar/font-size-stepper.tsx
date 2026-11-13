@@ -54,7 +54,19 @@ export function FontSizeStepper({ editor: providedEditor }: SurfaceProps) {
     if (next && action && next !== step) runAction(editor, action, next);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  /**
+   * Runs in the capture phase and stops propagation, so the toolbar's
+   * roving handler (a native capture listener on the toolbar, below React's
+   * root) never sees these keys: Home/End would also move focus to the
+   * first/last tool, and Enter would click a stale roving item. ←/→ still
+   * rove.
+   */
+  const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented) return;
+    if (event.key === "Enter") {
+      event.stopPropagation();
+      return;
+    }
     const keys: Record<string, FontSizeStep | undefined> = {
       ArrowUp: FONT_SIZE_LADDER[index + 1],
       ArrowDown: FONT_SIZE_LADDER[index - 1],
@@ -65,6 +77,7 @@ export function FontSizeStepper({ editor: providedEditor }: SurfaceProps) {
     };
     if (!(event.key in keys)) return;
     event.preventDefault();
+    event.stopPropagation();
     if (!reason) setStep(keys[event.key]);
   };
 
@@ -83,7 +96,7 @@ export function FontSizeStepper({ editor: providedEditor }: SurfaceProps) {
         aria-disabled={reason ? true : undefined}
         aria-describedby={reason ? reasonId : undefined}
         title={reason ?? sizeValueText(step, view.mixed)}
-        onKeyDown={onKeyDown}
+        onKeyDownCapture={onKeyDownCapture}
       >
         {view.mixed ? "–" : FONT_SIZE_SHORT[step]}
       </div>
