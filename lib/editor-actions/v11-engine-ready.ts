@@ -5,28 +5,27 @@
  * `v11-engine.ts`, so its code lives in exactly one chunk. Kept out of
  * `v11-actions.ts`, which is in the eager editor chunk.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
-import { getV11Engine, loadV11Engine } from "@/lib/editor-actions/v11-actions";
+import {
+  getV11Engine,
+  loadV11Engine,
+  subscribeV11Engine,
+} from "@/lib/editor-actions/v11-actions";
+
+const isReady = () => getV11Engine() !== null;
+const notReady = () => false;
 
 /**
- * Whether the engine is installed. If not, asks for it (editors start the
- * load on create, so this usually joins that fetch) and re-renders once it
- * lands. A failed fetch (offline) stays "not ready" until the next mount
- * retries; the E actions keep their loading reason meanwhile.
+ * Whether the engine is installed; re-renders when it lands. If it is not,
+ * asks for it (editors start the load on create, so this usually joins
+ * that fetch). A failed fetch (offline) stays "not ready" until the next
+ * mount retries; the E actions keep their loading reason meanwhile.
  */
 export function useV11EngineReady(): boolean {
-  const [ready, setReady] = useState(() => getV11Engine() !== null);
+  const ready = useSyncExternalStore(subscribeV11Engine, isReady, notReady);
   useEffect(() => {
-    if (ready) return;
-    let live = true;
-    loadV11Engine().then(
-      () => live && setReady(true),
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
+    if (!ready) loadV11Engine().catch(() => undefined);
   }, [ready]);
   return ready;
 }

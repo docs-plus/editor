@@ -17,6 +17,7 @@
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 
+import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
 import type { SessionRange } from "@/extensions/repeat-formatting/relative-range";
 import {
   type Action,
@@ -37,6 +38,12 @@ export const ENGINE_LOADING_REASON = "Formatting tools are still loading.";
 /** The Repeat "extend" session of one editor (memory only). */
 export interface RepeatSession {
   range: SessionRange | null;
+  /**
+   * What this session has built so far. Extending merges into it, never
+   * into the shared remembered bundle, which another tab may have
+   * replaced in the meantime.
+   */
+  bundle: FormatBundle | null;
 }
 
 type CommandProps = {
@@ -73,17 +80,36 @@ export interface V11Engine {
   record(session: RepeatSession, tr: Transaction, state: EditorState): void;
   /** Why the selection cannot be saved under `name` now, or null. */
   formatSaveReason(editor: Editor, name: string): string | null;
+  /**
+   * The Repeat key in an editable editor: repeats, or announces why it
+   * cannot. Always handles the key.
+   */
+  repeatKey(editor: Editor): true;
 }
 
 let engine: V11Engine | null = null;
 let loading: Promise<V11Engine> | null = null;
+const installed = new Set<() => void>();
 
 /** The loaded engine, or null while its chunk is on its way. */
 export const getV11Engine = (): V11Engine | null => engine;
 
-/** Called once by `v11-engine.ts` when it is evaluated. */
+/** Calls `listener` when the engine installs (`useSyncExternalStore` shape). */
+export function subscribeV11Engine(listener: () => void): () => void {
+  installed.add(listener);
+  return () => {
+    installed.delete(listener);
+  };
+}
+
+/**
+ * Called by `v11-engine.ts` when it is evaluated, and by the load (a
+ * no-op then, except after a test reset). Tells subscribers once.
+ */
 export function installV11Engine(loaded: V11Engine): void {
+  if (engine) return;
   engine = loaded;
+  for (const listener of [...installed]) listener();
 }
 
 /**
@@ -92,13 +118,22 @@ export function installV11Engine(loaded: V11Engine): void {
  */
 export function loadV11Engine(): Promise<V11Engine> {
   loading ??= import("./v11-engine").then(
-    (module) => module.v11Engine,
+    (module) => {
+      installV11Engine(module.v11Engine);
+      return module.v11Engine;
+    },
     (error: unknown) => {
       loading = null;
       throw error;
     },
   );
   return loading;
+}
+
+/** Test hook: back to before the chunk landed (listeners are kept). */
+export function resetV11EngineForTests(): void {
+  engine = null;
+  loading = null;
 }
 
 const LOADING: Enabled = { reason: ENGINE_LOADING_REASON };

@@ -19,6 +19,7 @@ import {
   applyBundle,
   applyDisabledReason,
   bundlePatchFromSteps,
+  onlyCode,
   REPEAT_META,
   REPEAT_REASONS,
   repeatDisabledReason,
@@ -27,6 +28,7 @@ import {
   bundleFace,
   bundleFromKey,
   bundleKey,
+  bundleLabel,
   type FormatBundle,
   isEmptyBundle,
   readBundleAt,
@@ -42,14 +44,18 @@ import {
   sameRange,
   toSessionRange,
 } from "@/extensions/repeat-formatting/relative-range";
+import { announce } from "@/lib/announce";
 import { scanDocFormats } from "@/lib/doc-format-scan";
+import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { ActionOption, Ctx, Enabled } from "@/lib/editor-actions/types";
 import {
   DOC_FORMAT_PREFIX,
   installV11Engine,
   type RepeatSession,
+  repeatApplyAction,
   type V11Engine,
 } from "@/lib/editor-actions/v11-actions";
+import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   getMermaidTemplate,
   isMermaidTemplateId,
@@ -68,8 +74,19 @@ import {
 const enabledFrom = (reason: string | null): Enabled =>
   reason === null ? true : { reason };
 
+/** "Bold, Italic": what was set; a clear-only bundle reads as its clears. */
+function spoken(bundle: FormatBundle): string {
+  const set = setEntries(bundle);
+  return bundleLabel(isEmptyBundle(set) ? bundle : set);
+}
+
+/** The selection-wide code walk, once per snapshot for every E action. */
+const codeOnlyOf = (ctx: Ctx) => () =>
+  ctx.memo("repeat.onlyCode", () => onlyCode(ctx.state));
+
 const isCodeOnly = (ctx: Ctx) =>
-  applyDisabledReason(ctx.state, { bold: true }) === REPEAT_REASONS.code;
+  applyDisabledReason(ctx.state, { bold: true }, codeOnlyOf(ctx)) ===
+  REPEAT_REASONS.code;
 
 /** Whether the selection carries anything a saved format would keep. */
 const hasSetFormatting = (ctx: Ctx): boolean =>
@@ -134,7 +151,7 @@ function applyCommand(
   if (applyDisabledReason(state, bundle) !== null) return false;
   if (!dispatch) return true;
   undoManagerOf(state)?.stopCapturing();
-  applyBundle(tr, bundle).setMeta(REPEAT_META, true);
+  applyBundle(tr, bundle).setMeta(REPEAT_META, bundle);
   return true;
 }
 
@@ -148,9 +165,11 @@ function record(
   tr: Transaction,
   state: EditorState,
 ): void {
-  if (tr.getMeta(REPEAT_META)) {
+  const applied = tr.getMeta(REPEAT_META) as FormatBundle | undefined;
+  if (applied) {
     undoManagerOf(state)?.stopCapturing();
     session.range = toSessionRange(state, tr.selection);
+    session.bundle = applied;
     return;
   }
   const sync = tr.getMeta(ySyncPluginKey) as
@@ -161,7 +180,14 @@ function record(
     if (sync.isUndoRedoOperation) session.range = null;
     return;
   }
-  if (session.range) session.range = mapSessionRange(session.range, tr);
+  if (session.range) {
+    // "Forget my choices" (here or in another tab) ends the session: what
+    // it built must not come back with the next format.
+    session.range =
+      getRememberedBundle() === null
+        ? null
+        : mapSessionRange(session.range, tr);
+  }
   if (!tr.docChanged && !tr.selectionSet) return;
   const { selection } = state;
   const patch = tr.docChanged ? bundlePatchFromSteps(tr) : {};
@@ -169,8 +195,11 @@ function record(
     const same =
       session.range !== null &&
       sameRange(fromSessionRange(state, session.range), selection);
-    const base = same ? getRememberedBundle() : null;
-    rememberBundle(base ? { ...base, ...patch } : patch);
+    // The session's own bundle, never the shared memory: another tab may
+    // have written its own bundle there since.
+    const bundle = same ? { ...session.bundle, ...patch } : patch;
+    session.bundle = bundle;
+    rememberBundle(bundle);
     session.range = toSessionRange(state, selection);
   } else if (
     tr.selectionSet &&
@@ -195,9 +224,19 @@ function formatSaveReason(editor: Editor, name: string): string | null {
   return null;
 }
 
+/** Repeats with the key, or says why not; the key is always handled. */
+function repeatKey(editor: Editor): true {
+  if (!runAction(editor, repeatApplyAction)) {
+    const enabled = availability(repeatApplyAction, computeContext(editor));
+    if (enabled !== true) announce(enabled.reason);
+  }
+  return true;
+}
+
 export const v11Engine: V11Engine = {
   record,
   formatSaveReason,
+  repeatKey,
   commands: {
     repeatFormatting: (props) => {
       const bundle = getRememberedBundle();
@@ -212,7 +251,13 @@ export const v11Engine: V11Engine = {
   actions: {
     "repeat.apply": {
       enabled: (ctx) =>
-        enabledFrom(repeatDisabledReason(ctx.state, getRememberedBundle())),
+        enabledFrom(
+          repeatDisabledReason(
+            ctx.state,
+            getRememberedBundle(),
+            codeOnlyOf(ctx),
+          ),
+        ),
       value: () => {
         const bundle = getRememberedBundle();
         return bundle ? bundleFace(bundle) : null;
