@@ -14,7 +14,7 @@ import {
 } from "react";
 import type * as Y from "yjs";
 
-import { Toolbar } from "@/components/ui/toolbar";
+import { focusRovingItem, Toolbar } from "@/components/ui/toolbar";
 import {
   type HeadingFilterCallbackState,
   readFilterUrl,
@@ -53,6 +53,7 @@ import {
   useToolbarOffForTests,
 } from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
+import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import {
   FilterBar,
   useHeadingFilter,
@@ -239,6 +240,35 @@ function DocumentEditorContent({
 
   useMediaFileUpload(editor);
 
+  // D1 (contract §5.2): shell intents from registry actions and Alt+F10.
+  const toggleFilterBar = headingFilter.toggleBar;
+  useEffect(() => {
+    if (!editor) return;
+    return onUiIntent(editor, (intent) => {
+      switch (intent.type) {
+        case "toolbar.focus": {
+          const bubble = document.querySelector<HTMLElement>(
+            '[data-smart-bubble][data-state="open"] [role="toolbar"]',
+          );
+          return focusRovingItem(bubble ?? toolbarRef.current);
+        }
+        case "outline.toggle":
+          setOutlineOpen((open) => !open);
+          return true;
+        case "filter.toggle":
+          toggleFilterBar();
+          return true;
+        default:
+          return false;
+      }
+    });
+  }, [editor, toggleFilterBar]);
+
+  // Esc on a toolbar item returns to the document with its selection.
+  const returnToEditor = useCallback(() => {
+    editor?.commands.focus();
+  }, [editor]);
+
   const rect = useCursorVisibility({
     editor,
     overlayHeight: toolbarHeight,
@@ -253,6 +283,7 @@ function DocumentEditorContent({
         {!toolbarOff && (
           <Toolbar
             ref={toolbarRef}
+            onEscape={returnToEditor}
             style={{
               ...(isMobile
                 ? {
