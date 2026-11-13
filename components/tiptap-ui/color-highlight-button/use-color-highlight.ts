@@ -4,11 +4,13 @@ import type { Editor } from "@tiptap/react";
 import { useCallback } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 
+import { activeHighlightToken } from "@/extensions/token-highlight";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 // --- Lib ---
 import { isMarkInSchema, isNodeTypeSelected } from "@/lib/editor-utils";
+import { highlightTokenFromValue } from "@/lib/highlight-tokens";
 // --- Icons ---
 import { HighlighterIcon } from "@/lib/icons";
 
@@ -183,9 +185,12 @@ export function isColorHighlightActive(
   if (!editor?.isEditable) return false;
 
   if (mode === "mark") {
-    return highlightColor
-      ? editor.isActive("highlight", { color: highlightColor })
-      : editor.isActive("highlight");
+    if (!highlightColor) return editor.isActive("highlight");
+    // Compare tokens: a legacy `var(--tt-color-highlight-X)` and a bare `X`
+    // are the same swatch. A non-token swatch ("Default background") is
+    // never pressed.
+    const token = highlightTokenFromValue(highlightColor);
+    return token !== null && activeHighlightToken(editor.state) === token;
   } else {
     if (!highlightColor) return false;
 

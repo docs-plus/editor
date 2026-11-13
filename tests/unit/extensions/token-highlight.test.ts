@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import type { Extension } from "@tiptap/core";
 
-import { TokenHighlight } from "@/extensions/token-highlight";
+import { isColorHighlightActive } from "@/components/tiptap-ui/color-highlight-button/use-color-highlight";
+import {
+  activeHighlightToken,
+  TokenHighlight,
+} from "@/extensions/token-highlight";
 import { highlightTokenFromValue } from "@/lib/highlight-tokens";
 import {
   createTestEditor,
@@ -101,7 +105,7 @@ describe("TokenHighlight", () => {
       return out;
     };
 
-    it("stores tokens, and the legacy form as given (the N popover's pressed state)", () => {
+    it("stores the token for a token or the legacy form", () => {
       const editor = make();
       editor
         .chain()
@@ -109,14 +113,95 @@ describe("TokenHighlight", () => {
         .setHighlight({ color: "red" })
         .run();
       expect(colors(editor)).toEqual(["red"]);
-      editor.commands.setHighlight({ color: "var(--tt-color-highlight-red)" });
-      expect(colors(editor)).toEqual(["var(--tt-color-highlight-red)"]);
+      editor.commands.setHighlight({ color: "var(--tt-color-highlight-blue)" });
+      expect(colors(editor)).toEqual(["blue"]);
+      expect(editor.getHTML()).toContain('data-highlight="blue"');
+    });
+
+    /** "hello" highlighted with a raw stored value, selected. */
+    const marked = (color: string) => {
+      const editor = make();
+      editor
+        .chain()
+        .setTextSelection({ from: P, to: P + 5 })
+        .setMark("highlight", { color })
+        .run();
+      return editor;
+    };
+    const modShiftH = (editor: ReturnType<typeof make>) =>
+      editor.commands.keyboardShortcut("Mod-Shift-h");
+
+    describe("Mod-Shift-H removes any highlight in one press", () => {
+      for (const color of [
+        "red",
+        "yellow",
+        "var(--tt-color-highlight-yellow)",
+        "var(--tt-color-highlight-red)",
+      ]) {
+        it(`on ${color}`, () => {
+          const editor = marked(color);
+          expect(colors(editor)).toEqual([color]);
+          modShiftH(editor);
+          expect(colors(editor)).toEqual([]);
+        });
+      }
+
+      it("and sets yellow on plain text", () => {
+        const editor = make();
+        editor.commands.setTextSelection({ from: P, to: P + 5 });
+        modShiftH(editor);
+        expect(colors(editor)).toEqual(["yellow"]);
+        modShiftH(editor);
+        expect(colors(editor)).toEqual([]);
+      });
+    });
+
+    it("toggling a colour compares tokens, not raw values", () => {
+      // legacy value, bare token: removes
+      let editor = marked("var(--tt-color-highlight-yellow)");
+      editor.commands.toggleHighlight({ color: "yellow" });
+      expect(colors(editor)).toEqual([]);
+      // bare value, legacy swatch: removes
+      editor = marked("yellow");
+      editor.commands.toggleHighlight({
+        color: "var(--tt-color-highlight-yellow)",
+      });
+      expect(colors(editor)).toEqual([]);
+      // another colour: replaces with the token
+      editor = marked("var(--tt-color-highlight-yellow)");
+      editor.commands.toggleHighlight({
+        color: "var(--tt-color-highlight-red)",
+      });
+      expect(colors(editor)).toEqual(["red"]);
+    });
+
+    it("activeHighlightToken maps legacy values and ignores unknown ones", () => {
       expect(
-        editor.isActive("highlight", {
-          color: "var(--tt-color-highlight-red)",
-        }),
+        activeHighlightToken(marked("var(--tt-color-highlight-teal)").state),
+      ).toBe("teal");
+      expect(activeHighlightToken(marked("teal").state)).toBe("teal");
+      expect(activeHighlightToken(marked("#ff0").state)).toBeNull();
+      const plain = make();
+      plain.commands.setTextSelection({ from: P, to: P + 5 });
+      expect(activeHighlightToken(plain.state)).toBeNull();
+      // empty selection: the stored mark counts
+      plain.commands.setTextSelection(P + 11);
+      plain.commands.setHighlight({ color: "green" });
+      expect(activeHighlightToken(plain.state)).toBe("green");
+    });
+
+    it("the release N popover reads a Mod-Shift-H highlight as its swatch", () => {
+      const editor = make();
+      editor.commands.setTextSelection({ from: P, to: P + 5 });
+      modShiftH(editor);
+      expect(
+        isColorHighlightActive(editor, "var(--tt-color-highlight-yellow)"),
       ).toBe(true);
-      expect(editor.getHTML()).toContain('data-highlight="red"');
+      expect(
+        isColorHighlightActive(editor, "var(--tt-color-highlight-red)"),
+      ).toBe(false);
+      expect(isColorHighlightActive(editor, "var(--background)")).toBe(false);
+      expect(isColorHighlightActive(editor)).toBe(true);
     });
 
     it("defaults to yellow for toggleHighlight() and ==x==", () => {
