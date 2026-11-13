@@ -9,6 +9,7 @@ import {
   setTheme,
 } from "./helpers/a11y";
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
+import { CHUNK_MARKERS, interceptChunk } from "./helpers/lazy-chunk";
 
 /**
  * PR E (v1.1): the Alt+/ palette, Repeat formatting, Your formats and the
@@ -309,6 +310,55 @@ test.describe("action palette", () => {
     await expect(firstGroup).toHaveText("Recent");
     await page.keyboard.press("Escape");
   });
+
+  /** Holds the engine chunk until the returned `release` is called. */
+  async function holdEngine(page: Page) {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unroute = await interceptChunk(
+      page,
+      CHUNK_MARKERS.engine,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    return { release, unroute };
+  }
+
+  for (const moved of [false, true]) {
+    test(`Repeat pressed before the engine lands ${moved ? "is dropped if the selection moves" : "runs once it arrives"}`, async ({
+      page,
+    }) => {
+      const { release, unroute } = await holdEngine(page);
+      await openDoc(page);
+      await select(page, "alpha");
+      await page.keyboard.press("ControlOrMeta+b");
+      await page.keyboard.press("ControlOrMeta+i");
+      await select(page, "beta");
+      await page.keyboard.press(repeatKey);
+      // Still loading: nothing applied yet.
+      expect(await html(page)).not.toContain("<em>beta</em>");
+      if (moved) await select(page, "gamma");
+
+      release();
+      if (moved) {
+        // Once loaded, the key works on the new selection.
+        await page.keyboard.press(repeatKey);
+        await expect
+          .poll(() => html(page))
+          .toContain("<strong><em>gamma</em></strong>");
+        expect(await html(page)).not.toContain("<em>beta</em>");
+      } else {
+        await expect
+          .poll(() => html(page))
+          .toContain("<strong><em>beta</em></strong>");
+      }
+      await unroute();
+    });
+  }
 
   test("Copy formatting then Repeat clears formatting it lacks", async ({
     page,

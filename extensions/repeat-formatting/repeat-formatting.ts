@@ -75,7 +75,31 @@ export const RepeatFormatting = Extension.create<
   },
 
   addKeyboardShortcuts() {
-    const repeat = () => runAction(this.editor, repeatApplyAction);
+    const repeat = () => {
+      const { editor } = this;
+      if (getV11Engine()) return runAction(editor, repeatApplyAction);
+      if (!editor.isEditable) return false;
+      // The engine chunk is still loading (slow network, busy device):
+      // take the key and repeat once it lands, if the selection has not
+      // moved. The buffered transactions are recorded first, so the
+      // bundle is current.
+      const { storage } = this;
+      const { from, to } = editor.state.selection;
+      loadV11Engine().then(
+        (engine) => {
+          if (editor.isDestroyed) return;
+          for (const entry of storage.pending.splice(0)) {
+            engine.record(storage.session, entry.tr, entry.state);
+          }
+          const now = editor.state.selection;
+          if (now.from === from && now.to === to) {
+            runAction(editor, repeatApplyAction);
+          }
+        },
+        () => undefined,
+      );
+      return true;
+    };
     const keys: Record<string, () => boolean> = { "Mod-Alt-v": repeat };
     // F4 is Repeat in Office on Windows/Linux; on macOS it is a system key.
     if (!isMac()) keys.F4 = repeat;
