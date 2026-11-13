@@ -70,8 +70,9 @@ function LinkRow({ editor, onClose }: { editor: Editor; onClose: () => void }) {
 }
 
 /**
- * Body of the phone "Text format" sheet (spec §4.7): Style, Size, Colours,
- * Align and More (Redo below 360px, Outdent, Link). Every control is a registry action (`ActionButton`,
+ * Body of the phone "Text format" sheet (spec §4.7): Colours first, so the
+ * swatches show without scrolling, then Style, Size, Align and More (Redo
+ * below 360px, Outdent, Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
  * reasons (title, headings, code, read-only) and `aria-pressed` states are
  * the row's. Part of the phone bar's lazy chunk (contract A9).
@@ -89,6 +90,15 @@ export function FormatSheetBody({
 }) {
   return (
     <div className="st-sheet-body">
+      {/* A pick keeps the sheet open: writers try colours (O4). */}
+      <Section title="Colours">
+        <ColorPanel
+          editor={editor}
+          recent={recent}
+          focusKind="text"
+          focusOnMount={false}
+        />
+      </Section>
       <Section title="Style">
         <div className="st-sheet-list">
           {STYLE_IDS.map((id) => (
@@ -104,15 +114,6 @@ export function FormatSheetBody({
       </Section>
       <Section title="Size">
         <FontSizeStepper editor={editor} />
-      </Section>
-      {/* A pick keeps the sheet open: writers try colours (O4). */}
-      <Section title="Colours">
-        <ColorPanel
-          editor={editor}
-          recent={recent}
-          focusKind="text"
-          focusOnMount={false}
-        />
       </Section>
       <Section title="Align">
         <div className="st-sheet-grid">

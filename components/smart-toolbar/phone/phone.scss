@@ -110,3 +110,10 @@
     min-height: 44px;
   }
 }
+
+// The theme switch is an icon button in the row; in the sheet's labelled
+// list it shows its name too (generated from `aria-label`, so the visible
+// text always matches the accessible name).
+.st-sheet-list button[aria-label^="Switch to"]::after {
+  content: attr(aria-label);
+}
