@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
 import { type Swatch, swatchName, swatchStyle } from "./swatch";
+import "./color-panel.scss";
 
 /**
  * The colour popover body (spec §4.5): Recent (M3, frozen while open),
