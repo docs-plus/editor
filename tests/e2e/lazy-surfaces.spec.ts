@@ -143,23 +143,44 @@ test.describe("lazy surface chunks", () => {
     await openToolbarTestDoc(page);
     const palette = page.locator("[data-command-palette]");
     await page.keyboard.press("Alt+Slash");
-    // Never silent (design pass §8): a note says why, as an alert.
+    // Never silent (design pass §8): the status pill says why, with Retry,
+    // and the live region reads it.
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText(PALETTE_FAILED, { timeout: 10_000 });
+    await expect(
+      page.getByRole("status").filter({ hasText: PALETTE_FAILED }),
+    ).toHaveCount(1);
     await expect(
       page.getByRole("alert").filter({ hasText: PALETTE_FAILED }),
-    ).toBeVisible({ timeout: 10_000 });
+    ).toHaveCount(0);
     await expect(palette).toHaveCount(0);
     // Focus never left the document.
     await expect(page.locator(".tiptap")).toBeFocused();
     await expectEditorAlive(page, "afterPalette");
 
+    // Back online: the next Alt+/ opens it.
     await restore();
     await page.keyboard.press("Alt+Slash");
     await expect(palette).toBeVisible();
     await expect(
       page.getByRole("combobox", { name: "Search actions" }),
     ).toBeFocused();
-    // The next open hides the note.
-    await expect(page.getByText(PALETTE_FAILED)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
+  test("Retry on the palette's failure pill opens it", async ({ page }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.palette);
+    await openToolbarTestDoc(page);
+    await page.keyboard.press("Alt+Slash");
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText(PALETTE_FAILED, { timeout: 10_000 });
+    await restore();
+    await pill.getByRole("button", { name: /^Retry/ }).click();
+    await expect(page.locator("[data-command-palette]")).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Search actions" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
   });
 
   test("Retry in the colour popover fetches the chunk again in place", async ({

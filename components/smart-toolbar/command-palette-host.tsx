@@ -1,8 +1,9 @@
 "use client";
 
 import { useCurrentEditor } from "@tiptap/react";
-import { lazy, useEffect, useState, useSyncExternalStore } from "react";
+import { lazy, useEffect, useSyncExternalStore } from "react";
 
+import { announceLater } from "@/lib/announce-later";
 import { emitUiIntent, onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
 
@@ -20,7 +21,7 @@ import type { SurfaceProps } from "./types";
 /**
  * The palette chunk (cmdk included), after the E engine it reads through
  * `getV11Engine()` (usually there already: editors load it on create).
- * Without the engine it still opens; E's rows then say they are loading.
+ * Without the engine it still opens, and E's rows run once it lands.
  */
 const loadPalette = () =>
   loadV11Engine()
@@ -34,8 +35,6 @@ let CommandPalette = lazy(loadPalette);
 /** Why the palette did not open (design pass §8): never stay silent. */
 const LOAD_FAILED =
   "Couldn’t open actions. Check your connection and try again.";
-/** How long the failure note stays on screen. */
-const FAILED_MS = 5000;
 
 /**
  * Alt+/ (fallback Alt+Shift+Z) palette host (spec §4.4). Mounted once per
@@ -52,7 +51,6 @@ export function CommandPaletteHost({ editor: provided }: SurfaceProps) {
     getPaletteState,
     getServerPaletteState,
   );
-  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!editor) return;
@@ -68,26 +66,7 @@ export function CommandPaletteHost({ editor: provided }: SurfaceProps) {
     };
   }, [editor]);
 
-  // The note stands in for the status pill; the next Alt+/ hides it.
-  useEffect(() => {
-    if (!failed) return;
-    if (state.editor) setFailed(false);
-    const timer = setTimeout(() => setFailed(false), FAILED_MS);
-    return () => clearTimeout(timer);
-  }, [failed, state.editor]);
-
-  if (!editor) return null;
-  if (state.editor !== editor) {
-    return failed ? (
-      // An alert, so it is read although it mounts with its text.
-      <p
-        role="alert"
-        className="fixed top-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-      >
-        {LOAD_FAILED}
-      </p>
-    ) : null;
-  }
+  if (!editor || state.editor !== editor) return null;
   return (
     <SurfaceBoundary
       onError={() => {
@@ -95,10 +74,12 @@ export function CommandPaletteHost({ editor: provided }: SurfaceProps) {
         // the palette, so the next Alt+/ is a fresh open, and swap in a
         // fresh `lazy()` so that open fetches again (React keeps a
         // rejected one for good). Focus never left the editor: the dialog
-        // had not rendered.
+        // had not rendered. The status pill says so, with Retry.
         CommandPalette = lazy(loadPalette);
         closePalette();
-        setFailed(true);
+        announceLater(LOAD_FAILED, {
+          action: { label: "Retry", run: () => openPalette(editor) },
+        });
       }}
     >
       <CommandPalette
