@@ -252,8 +252,12 @@ test.describe("action palette", () => {
     await page.keyboard.press("Alt+Slash");
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("callout");
+    // D2's memory layer keeps Recent across the reload too, so look in the
+    // Format group, where saved formats always appear.
     await expect(
-      page.getByRole("option", { name: /Apply format: Callout/ }),
+      page
+        .getByRole("group", { name: "Format" })
+        .getByRole("option", { name: /Apply format: Callout/ }),
     ).toBeVisible();
   });
 

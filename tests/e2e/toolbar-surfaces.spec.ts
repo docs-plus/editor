@@ -94,16 +94,11 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
   const blue = dialog.getByRole("button", { name: "Blue highlight" });
   await expect(blue).toHaveAttribute("aria-pressed", "false");
   await expect(blue).not.toHaveAttribute("aria-disabled", "true");
-  // Until PR C registers the text colour mark, its swatches stay focusable
-  // but say why they do nothing (spec §6.5).
+  // PR C registers the text colour mark, so its swatches are live here.
   const red = dialog
     .getByRole("group", { name: "Text colour" })
     .getByRole("button", { name: "Red text" });
-  await expect(red).toHaveAttribute("aria-disabled", "true");
-  const redReason = await red.getAttribute("aria-describedby");
-  await expect(page.locator(`[id="${redReason}"]`)).toHaveText(
-    "Text colour isn't available here.",
-  );
+  await expect(red).not.toHaveAttribute("aria-disabled", "true");
   // Arrow keys move focus only: nothing is applied.
   await expect(
     dialog.getByRole("button", { name: "No highlight" }),
@@ -185,7 +180,6 @@ test("size spinbutton keeps Home, End and Enter from the toolbar", async ({
   await page.keyboard.press("ArrowLeft");
   await expect(back).toBeFocused();
   // …then click into the spinbutton: Enter must not click Back.
-  // The spinbutton is aria-disabled until PR C's fontSize mark lands.
   await spin.click({ force: true });
   await expect(spin).toBeFocused();
   await page.keyboard.press("Enter");
@@ -315,7 +309,6 @@ for (const theme of ["light", "dark"] as const) {
   }) => {
     await setTheme(page, theme);
     await openPhonePanel(page);
-    // Text colour stays disabled until PR C registers its mark.
     await toolbar(page)
       .getByRole("button", { name: "More highlight colours" })
       .click();

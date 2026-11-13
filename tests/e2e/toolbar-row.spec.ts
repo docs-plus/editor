@@ -191,6 +191,10 @@ test.describe("sorted row", () => {
       "Undo",
       "Redo",
       "<value>",
+      // D2's size stepper sits in the size group, between style and marks.
+      "Decrease font size",
+      "Font size",
+      "Increase font size",
       "Bold",
       "Italic",
       "Underline",

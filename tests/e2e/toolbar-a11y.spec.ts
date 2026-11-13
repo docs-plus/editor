@@ -214,49 +214,69 @@ async function closeWithEscape(page: Page, dialog: Locator) {
   await expect(dialog).toBeHidden();
 }
 
+/** D2's colour split: the chevron opens the colour popover (spec §4.5). */
+const highlightTrigger = (page: Page) =>
+  page
+    .getByRole("toolbar")
+    .getByRole("button", { name: "More highlight colours" });
+
+/** The popover's Highlight row; Recent can repeat the same swatch names. */
+const highlights = (dialog: Locator) =>
+  dialog.getByRole("group", { name: "Highlight", exact: true });
+
+async function openHighlightDialog(page: Page): Promise<Locator> {
+  await highlightTrigger(page).click();
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  await expect(highlights(dialog)).toBeVisible();
+  return dialog;
+}
+
 test("highlight dialog: named swatches, focus on open, arrows move focus only", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const trigger = page
-    .getByRole("toolbar")
-    .getByRole("button", { name: /highlight/i })
-    .first();
+  const trigger = highlightTrigger(page);
   await expect(trigger).not.toHaveAttribute("aria-pressed", /.*/);
   await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const dialog = await openHighlightDialog(page);
   await expect(
-    dialog.getByRole("group", { name: "Highlight colours" }),
-  ).toBeVisible();
-  await expect(
-    dialog.locator('[role="menuitem"], [tabindex="0"]:not(button)'),
+    dialog.locator(
+      '[role="menuitem"], [role="radiogroup"], [tabindex="0"]:not(button)',
+    ),
   ).toHaveCount(0);
-  await expect(
-    dialog.getByRole("button", { name: "Green highlight" }),
-  ).toBeFocused();
+  // Nothing applied yet: focus starts on the pressed "No highlight".
+  const none = highlights(dialog).getByRole("button", { name: "No highlight" });
+  await expect(none).toBeFocused();
+  await expect(none).toHaveAttribute("aria-pressed", "true");
 
   const before = await page.evaluate(() => window.__tiptap_editor?.getJSON());
   await page.keyboard.press("ArrowRight");
   await expect(
-    dialog.getByRole("button", { name: "Blue highlight" }),
+    highlights(dialog).getByRole("button", { name: "Gray highlight" }),
   ).toBeFocused();
   expect(await page.evaluate(() => window.__tiptap_editor?.getJSON())).toEqual(
     before,
   );
 
+  // Enter applies and closes the popover; focus goes back to the trigger.
+  await highlights(dialog)
+    .getByRole("button", { name: "Blue highlight" })
+    .focus();
   await page.keyboard.press("Enter");
-  await expect(
-    dialog.getByRole("button", { name: "Blue highlight" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await closeWithEscape(page, dialog);
+  await expect(dialog).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => window.__tiptap_editor?.getAttributes("highlight").color,
+    ),
+  ).toBe("blue");
   await expect(trigger).toBeFocused();
 
   // Reopen: Blue is pressed, focused and carries a check glyph.
   await page.keyboard.press("Enter");
-  const blue = dialog.getByRole("button", { name: "Blue highlight" });
+  const blue = highlights(dialog).getByRole("button", {
+    name: "Blue highlight",
+  });
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-pressed", "true");
   await expect(blue.locator("svg")).toHaveCount(1);
@@ -264,32 +284,37 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
   await expect(trigger).toBeFocused();
 });
 
-test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
+test("highlight dialog: No highlight removes it, Esc returns focus to the trigger", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const trigger = page
-    .getByRole("toolbar")
-    .getByRole("button", { name: /highlight/i })
-    .first();
-  await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-  const green = dialog.getByRole("button", { name: "Green highlight" });
-  await expect(green).toBeFocused();
+  let dialog = await openHighlightDialog(page);
+  await highlights(dialog)
+    .getByRole("button", { name: "Green highlight" })
+    .focus();
   await page.keyboard.press("Enter");
-  await expect(green).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog).toBeHidden();
 
-  const none = dialog.getByRole("button", { name: "No highlight" });
+  dialog = await openHighlightDialog(page);
+  const green = highlights(dialog).getByRole("button", {
+    name: "Green highlight",
+  });
+  await expect(green).toHaveAttribute("aria-pressed", "true");
+  await expect(green).toBeFocused();
+  const none = highlights(dialog).getByRole("button", { name: "No highlight" });
   await none.focus();
   await page.keyboard.press("Enter");
-  await expect(green).toHaveAttribute("aria-pressed", "false");
+  await expect(dialog).toBeHidden();
   expect(
     await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
   ).toBe(false);
-  await expect(none).toBeFocused();
+
+  dialog = await openHighlightDialog(page);
+  await expect(none).toHaveAttribute("aria-pressed", "true");
+  await expect(green).toHaveAttribute("aria-pressed", "false");
   await closeWithEscape(page, dialog);
-  await expect(trigger).toBeFocused();
+  await expect(highlightTrigger(page)).toBeFocused();
 });
 
 test("highlight dialog: a Mod-Shift-H highlight shows as the pressed Yellow swatch", async ({
@@ -298,24 +323,21 @@ test("highlight dialog: a Mod-Shift-H highlight shows as the pressed Yellow swat
   await openToolbarTestDoc(page);
   await selectWord(page);
   await page.keyboard.press(`${getPlaywrightModifierKey()}+Shift+KeyH`);
-  // Stored as the bare token; the popover's swatch value is the legacy form.
+  // Stored as the bare token.
   expect(
     await page.evaluate(
       () => window.__tiptap_editor?.getAttributes("highlight").color,
     ),
   ).toBe("yellow");
 
-  await page
-    .getByRole("toolbar")
-    .getByRole("button", { name: /highlight/i })
-    .first()
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-  const yellow = dialog.getByRole("button", { name: "Yellow highlight" });
+  const dialog = await openHighlightDialog(page);
+  const yellow = highlights(dialog).getByRole("button", {
+    name: "Yellow highlight",
+  });
   await expect(yellow).toHaveAttribute("aria-pressed", "true");
   await expect(yellow.locator("svg")).toHaveCount(1);
   await expect(
-    dialog.getByRole("button", { name: "Green highlight" }),
+    highlights(dialog).getByRole("button", { name: "Green highlight" }),
   ).toHaveAttribute("aria-pressed", "false");
   await closeWithEscape(page, dialog);
 });
@@ -331,45 +353,36 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     else await setTheme(page, mode);
     await openToolbarTestDoc(page);
     await selectWord(page);
-    await page
-      .getByRole("toolbar")
-      .getByRole("button", { name: /highlight/i })
-      .first()
-      .click();
-    const dialog = page.getByRole("dialog", { name: "Highlight colours" });
 
+    let dialog = await openHighlightDialog(page);
     for (const name of SWATCHES) {
-      const swatch = dialog.getByRole("button", { name: `${name} highlight` });
-      await swatch.click();
+      await highlights(dialog)
+        .getByRole("button", { name: `${name} highlight` })
+        .click();
+      await expect(dialog).toBeHidden();
+      dialog = await openHighlightDialog(page);
+      const swatch = highlights(dialog).getByRole("button", {
+        name: `${name} highlight`,
+      });
       await expect(swatch).toHaveAttribute("aria-pressed", "true");
-      const dot = await swatch
-        .locator(".tiptap-button-highlight")
-        .evaluate((el) => {
-          const cs = getComputedStyle(el);
-          const check = el.querySelector("svg");
-          return {
-            adjust: cs.forcedColorAdjust,
-            border: cs.borderTopWidth,
-            bg: cs.backgroundColor,
-            check: check ? getComputedStyle(check).color : "",
-          };
-        });
-      // Forced colours keep the dot's colour and outline it in CanvasText;
-      // elsewhere the theme decides.
-      expect(dot.adjust).toBe(forced ? "none" : "auto");
-      expect(dot.border).toBe(forced ? "1px" : "0px");
+      const check = await swatch.locator(".st-swatch-check").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { color: cs.color, bg: cs.backgroundColor };
+      });
+      // The check sits on its own badge, so it reads on every swatch colour.
       expect(
         contrastRatio(
-          await resolveRgb(page, dot.check),
-          await resolveRgb(page, dot.bg),
+          await resolveRgb(page, check.color),
+          await resolveRgb(page, check.bg),
         ),
-        `${name} check on its swatch`,
+        `${name} check on its badge`,
       ).toBeGreaterThanOrEqual(3);
     }
 
     await dialog.screenshot({
       path: testInfo.outputPath(`highlight-dialog-${mode.split(" ")[0]}.png`),
     });
+    await closeWithEscape(page, dialog);
   });
 }
 
@@ -491,13 +504,7 @@ async function openPopup(page: Page, popup: Popup) {
   const toolbar = page.getByRole("toolbar");
   if (popup === "highlight dialog") {
     await selectWord(page);
-    await toolbar
-      .getByRole("button", { name: /highlight/i })
-      .first()
-      .click();
-    await expect(
-      page.getByRole("dialog", { name: "Highlight colours" }),
-    ).toBeVisible();
+    await openHighlightDialog(page);
     return;
   }
   const menus = toolbar.locator('button[aria-haspopup="menu"]');

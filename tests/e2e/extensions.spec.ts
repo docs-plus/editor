@@ -49,6 +49,15 @@ async function focusLastParagraph(page: Page): Promise<void> {
     .toBe(true);
 }
 
+/** Runs an item from D2's toolbar Insert menu. */
+async function insertFromMenu(page: Page, item: string): Promise<void> {
+  await page
+    .getByRole("toolbar")
+    .getByRole("button", { name: "Insert", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: new RegExp(`^${item}`) }).click();
+}
+
 async function topLevelTypes(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const types: string[] = [];
@@ -136,7 +145,7 @@ test.describe("docs.plus extensions", () => {
 
   test("toolbar inserts a Mermaid diagram that renders", async ({ page }) => {
     await focusLastParagraph(page);
-    await page.getByRole("button", { name: "Insert diagram" }).click();
+    await insertFromMenu(page, "Diagram");
 
     const preview = page.locator(".mermaid-diagram__preview").first();
     await expect(preview).toHaveAttribute("data-state", "ready", {
@@ -148,7 +157,7 @@ test.describe("docs.plus extensions", () => {
   test("embed media popover stacks consecutive embeds", async ({ page }) => {
     await focusLastParagraph(page);
     const embed = async (url: string) => {
-      await page.getByRole("button", { name: "Embed media" }).click();
+      await insertFromMenu(page, "Embed");
       await page.getByLabel("Media URL").fill(url);
       await page.getByRole("button", { name: "Embed", exact: true }).click();
     };
@@ -166,7 +175,7 @@ test.describe("docs.plus extensions", () => {
 
   test("embed media popover rejects unsafe URLs", async ({ page }) => {
     await focusLastParagraph(page);
-    await page.getByRole("button", { name: "Embed media" }).click();
+    await insertFromMenu(page, "Embed");
     await page.getByLabel("Media URL").fill("javascript:alert(1)");
     await page.getByRole("button", { name: "Embed", exact: true }).click();
 
