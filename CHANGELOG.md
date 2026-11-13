@@ -76,16 +76,20 @@ Minors left by the a11y review of the smart toolbar (contract §10).
   a long name truncates, so nothing is clipped off the left edge (WCAG
   1.4.10).
 - **Lazy surface failures:** a colour popover or Insert step whose chunk
-  does not load says "Couldn’t load. Close and try again." in the popup
-  instead of opening empty; reopening fetches the chunk again. The bubble
-  and the palette still just stay away.
+  does not load names it in the popup ("Couldn’t load colours.", "…the
+  table picker.") with a muted alert icon and a Retry button that fetches
+  the chunk again in place (design pass §12); reopening also retries. A
+  palette that cannot load says "Couldn’t open actions. Check your
+  connection and try again." for 5 s instead of staying silent. The
+  bubble still just stays away.
 - **Alt+F10 at 800px:** no longer reproducible on `main` (62 runs of the
   old repro pass); the 768px handoff test drives Alt+F10 again, and a new
   test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
   resize hid the tab stop.
 
-The editor chunk ends at +23.4 KB of the 23.5 KB budget (112 B left); the
-budget is unchanged.
+The editor chunk ends at +23.4 KB of the 23.5 KB budget (125 B left after
+the design pass surfaces, 112 B before); the budget is unchanged. The
+palette's first Alt+/ loads 20,460 B gz of its 20,480 B budget.
 - **Typing budget flipped between runs, partly addressed**
   (`performance.spec.ts`). Every trial generated its own random document,
   so the two arms typed into different documents; at 50 headings that
@@ -137,12 +141,16 @@ budget is unchanged.
   toolbar's per-keystroke cost) change the gate and are the owner's call.
 
 #### Added
-- **Diagram ▸ templates in the Insert menu (M17b):** a "▸" item beside
-  Diagram opens the five Mermaid templates; the last used one is
-  described "Last used" and focused first. Diagram itself still inserts
-  with one click. E's `template.mermaid` no longer shows up as a second,
-  icon-less "Insert diagram" row. The submenu rides in the insert step's
-  preloaded chunk.
+- **Diagram ▸ templates in the Insert menu (M17b, design pass §9):**
+  Diagram is one standard submenu row (hover, click, Enter or →) with the
+  five Mermaid templates and their icons (Flowchart, Sequence, State,
+  Mind map, Pie chart); the last used one is noted "Last used" and
+  focused first. A collision flips the submenu to the menu's other side,
+  never over its rows. When no template can go here (the title, inside a
+  diagram) one note at the top says why instead of a reason per row.
+  E's `template.mermaid` no longer shows up as a second, icon-less
+  "Insert diagram" row. The submenu rides in the insert step's preloaded
+  chunk; until it lands, Diagram is one item that inserts.
 - **Remove a saved format:** each entry under "Your formats" in the
   bubble's Formats menu has a Remove item ("Remove format 'X'"),
   confirmed in place and announced, so the 20-format cap can be acted
@@ -174,6 +182,36 @@ budget is unchanged.
   makes both instant, and Done, Esc and the backdrop still close it.
 
 #### Changed
+- **Design pass surfaces (§7–§12 of
+  `docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`):**
+  - **Save as format:** "Reuse this style anywhere. Saved on this
+    device.", a preview box with "Sample text" in the format and its long
+    label, an empty name with the placeholder "e.g. Warning", and Save
+    disabled until the name is non-blank. Saving over a name says
+    "Replaces your format ‘X’." first; at 20 formats the dialog says so
+    with a "Remove a format" link (`formats.remove` UI intent, answered
+    by the style dropdown). The view is its own chunk, loaded when it
+    opens, so the palette chunk could take the row changes.
+  - **Palette rows:** a leading `size-4` slot with the registry icon or a
+    colour chip; 32 px rows, 48 px with a second line. Colour rows are
+    named once ("Orange text"); saved formats get their own "Your
+    formats" group, named by the format. An action under "Suggested here"
+    (now at most 4) is not repeated in its home group, and unavailable
+    rows sort to the bottom of theirs with the label at full contrast,
+    the reason muted (`text-foreground/70` when selected) and no shortcut.
+    The selected row's bar uses the focus-ring colour. Repeat formatting
+    is named alone, with what it applies as its second line.
+  - **Shortcuts:** toolbar tooltips use the palette's and menus'
+    formatter, one `<kbd>`: "⌘⌥V" on macOS, "Ctrl+Alt+V" elsewhere (it
+    said "Mod" off macOS).
+  - **Menus:** a disabled item shows its reason as a visible second line
+    (`DropdownMenuReason`, still its description); only the label and
+    icon dim. Title-only and hidden reasons are gone from the row menus
+    and Insert.
+  - **Colour popover:** low-contrast highlights are no longer dimmed;
+    their dotted border is 60% foreground (≥ 5:1), and the note names the
+    colour: "Dotted: hard to read with Red text". The popover body and the
+    table grid styles load with their own chunks, off the editor chunk.
 - PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
   in one lazy chunk. The selection bubble and the phone selection cells
   reach it through `getV11Engine()` / `loadV11Engine()` like the palette,

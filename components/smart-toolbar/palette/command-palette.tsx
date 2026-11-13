@@ -10,9 +10,8 @@
  */
 import type { Editor } from "@tiptap/core";
 import { defaultFilter } from "cmdk";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -23,13 +22,7 @@ import {
   CommandShortcut,
   useCommandState,
 } from "@/components/ui/command";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import {
@@ -38,13 +31,13 @@ import {
 } from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
 import {
-  ENGINE_LOADING_REASON,
   formatsSaveAction,
   getV11Engine,
   loadV11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { CheckIcon } from "@/lib/icons";
+import "./command-palette.scss";
 import { isMac } from "@/lib/shortcuts";
 
 import { readPaletteRecent, rememberPaletteRecent } from "./palette-recent";
@@ -59,19 +52,23 @@ export interface CommandPaletteProps {
   editor: Editor;
   mode: PaletteMode;
   onClose: () => void;
+  /**
+   * Opens "Remove a format ▸" (the Save view's link at the cap); true when
+   * a listener took it. From the host, so this chunk imports no UI intents.
+   */
+  onRemoveFormat: () => boolean;
 }
 
 /**
- * Why `name` cannot be saved, from the engine (loaded before this chunk,
- * so the palette never carries a second copy of the bundle code).
+ * The Save view (design pass §7): its own chunk, fetched when it opens. A
+ * failure reaches the host's boundary, which closes the palette and says
+ * so.
  */
-function saveReason(editor: Editor, name: string): string | null {
-  const engine = getV11Engine();
-  return engine ? engine.formatSaveReason(editor, name) : ENGINE_LOADING_REASON;
-}
-
-/** `MAX_FORMAT_NAME` (not imported: it would pull saved-formats in here). */
-const NAME_MAX = 40;
+const SaveFormatForm = lazy(() =>
+  import("./save-format-form").then((module) => ({
+    default: module.SaveFormatForm,
+  })),
+);
 
 /**
  * cmdk's scorer over the label and keywords first, the item key (an action
@@ -159,13 +156,93 @@ function readSections(editor: Editor, _engineReady: boolean) {
   });
 }
 
-export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
-  const reasonPrefix = useId();
+/**
+ * The row's leading `size-4` slot: the colour's chip, else the registry
+ * icon (design pass §8). Empty slots keep the labels aligned.
+ */
+function Lead({ item }: { item: PaletteItem }) {
+  const Icon = item.icon;
+  const swatch = item.swatch;
+  return (
+    <span aria-hidden="true" className="flex size-4 shrink-0 items-center">
+      {swatch ? (
+        <span
+          className={`st-chip st-chip--${swatch.kind}`}
+          data-token={swatch.token ?? "none"}
+        >
+          {swatch.kind === "text" ? "A" : null}
+        </span>
+      ) : Icon ? (
+        <Icon />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * One option. An unavailable one keeps its label at full contrast, with
+ * its reason as a muted second line and no shortcut (design pass §8).
+ */
+function PaletteRow({
+  item,
+  mac,
+  onSelect,
+}: {
+  item: PaletteItem;
+  mac: boolean;
+  onSelect: () => void;
+}) {
+  const reason = item.disabledReason;
+  const second = reason ?? item.detail;
+  const shortcut = reason ? undefined : item.shortcut;
+  return (
+    <CommandItem
+      value={item.key}
+      keywords={[item.label, ...item.keywords]}
+      data-action-id={item.actionId}
+      data-unavailable={reason ? "" : undefined}
+      // The glyph is hidden; the option announces the keys.
+      aria-keyshortcuts={shortcut ? ariaKeyShortcuts(shortcut, mac) : undefined}
+      className={second ? "min-h-12" : "min-h-8"}
+      onSelect={onSelect}
+    >
+      <Lead item={item} />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">
+          {item.label}
+          {/* cmdk forces aria-disabled="false" on items it keeps
+              navigable (spec §6.5), so the state is part of the name. */}
+          {item.current ? <span className="sr-only">, current</span> : null}
+          {reason ? <span className="sr-only">, unavailable</span> : null}
+        </span>
+        {second ? (
+          <span className="truncate text-xs text-muted-foreground in-data-[selected=true]:text-foreground/70">
+            {second}
+          </span>
+        ) : null}
+      </span>
+      {item.current ? (
+        <CheckIcon aria-hidden="true" data-current="" className="ml-auto" />
+      ) : null}
+      {shortcut ? (
+        <CommandShortcut
+          aria-hidden="true"
+          className={item.current ? "ml-0" : undefined}
+        >
+          {formatKeyCombo(shortcut, mac)}
+        </CommandShortcut>
+      ) : null}
+    </CommandItem>
+  );
+}
+
+export function CommandPalette({
+  editor,
+  mode,
+  onClose,
+  onRemoveFormat,
+}: CommandPaletteProps) {
   const [view, setView] = useState<PaletteMode>(mode);
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  // Keys the alert, so the same error is read again on each submit.
-  const [attempt, setAttempt] = useState(0);
   const [notice, setNotice] = useState("");
   const mac = useMemo(() => isMac(), []);
   const engineReady = useEngineReady();
@@ -213,25 +290,13 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
     }
   };
 
-  const fail = (message: string) => {
-    setError(message);
-    setAttempt((n) => n + 1);
-  };
-
-  const save = () => {
-    const reason = saveReason(editor, name);
-    if (reason) {
-      fail(reason);
-      return;
-    }
-    if (runAction(editor, formatsSaveAction, name)) {
-      rememberPaletteRecent(formatsSaveAction.id);
-      close();
-      // After the dialog (which hides the rest of the page) is gone.
-      announce(`Saved format ‘${name.trim()}’`);
-    } else {
-      fail("This format could not be saved.");
-    }
+  const save = (name: string) => {
+    if (!runAction(editor, formatsSaveAction, name)) return false;
+    rememberPaletteRecent(formatsSaveAction.id);
+    close();
+    // After the dialog (which hides the rest of the page) is gone.
+    announce(`Saved format ‘${name}’`);
+    return true;
   };
 
   return (
@@ -260,67 +325,14 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
           <DialogTitle className="sr-only">All actions</DialogTitle>
         )}
         {view === "save-format" ? (
-          <form
-            className="flex flex-col gap-2 p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              save();
-            }}
-          >
-            <DialogTitle>Save as format</DialogTitle>
-            <DialogDescription>
-              Saves the selection&apos;s marks, colour, highlight and size under
-              a name, on this device.
-            </DialogDescription>
-            <label
-              htmlFor={`${reasonPrefix}-name`}
-              className="pt-2 text-sm font-medium"
-            >
-              Name
-            </label>
-            <Input
-              id={`${reasonPrefix}-name`}
-              autoFocus
-              maxLength={NAME_MAX}
-              value={name}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={`${reasonPrefix}-hint${error ? ` ${reasonPrefix}-error` : ""}`}
-              onChange={(event) => {
-                setName(event.target.value);
-                setError(null);
-              }}
-              className="pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          <Suspense fallback={<div className="h-80" />}>
+            <SaveFormatForm
+              editor={editor}
+              onClose={close}
+              onSave={save}
+              onRemoveFormat={onRemoveFormat}
             />
-            <p
-              id={`${reasonPrefix}-hint`}
-              className="text-xs text-muted-foreground"
-            >
-              Up to {NAME_MAX} characters
-            </p>
-            {error ? (
-              <p
-                key={attempt}
-                id={`${reasonPrefix}-error`}
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {error}
-              </p>
-            ) : null}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="ghost"
-                className="pointer-coarse:min-h-11"
-                onClick={close}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="pointer-coarse:min-h-11">
-                Save
-              </Button>
-            </div>
-          </form>
+          </Suspense>
         ) : (
           <Command
             loop
@@ -337,60 +349,12 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
               {sections.map((section) => (
                 <CommandGroup key={section.heading} heading={section.heading}>
                   {section.items.map((item) => (
-                    <CommandItem
+                    <PaletteRow
                       key={item.key}
-                      value={item.key}
-                      keywords={[item.label, ...item.keywords]}
-                      data-action-id={item.actionId}
-                      data-unavailable={item.disabledReason ? "" : undefined}
-                      // The glyph is hidden; the option announces the keys.
-                      aria-keyshortcuts={
-                        item.shortcut
-                          ? ariaKeyShortcuts(item.shortcut, mac)
-                          : undefined
-                      }
-                      className={
-                        item.disabledReason
-                          ? "text-muted-foreground"
-                          : undefined
-                      }
+                      item={item}
+                      mac={mac}
                       onSelect={() => select(item)}
-                    >
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate">
-                          {item.label}
-                          {/* cmdk forces aria-disabled="false" on items it
-                              keeps navigable (spec §6.5), so the state is
-                              part of the name. */}
-                          {item.current ? (
-                            <span className="sr-only">, current</span>
-                          ) : null}
-                          {item.disabledReason ? (
-                            <span className="sr-only">, unavailable</span>
-                          ) : null}
-                        </span>
-                        {item.disabledReason ? (
-                          <span className="truncate text-xs">
-                            {item.disabledReason}
-                          </span>
-                        ) : null}
-                      </span>
-                      {item.current ? (
-                        <CheckIcon
-                          aria-hidden="true"
-                          data-current=""
-                          className="ml-auto"
-                        />
-                      ) : null}
-                      {item.shortcut ? (
-                        <CommandShortcut
-                          aria-hidden="true"
-                          className={item.current ? "ml-0" : undefined}
-                        >
-                          {formatKeyCombo(item.shortcut, mac)}
-                        </CommandShortcut>
-                      ) : null}
-                    </CommandItem>
+                    />
                   ))}
                 </CommandGroup>
               ))}

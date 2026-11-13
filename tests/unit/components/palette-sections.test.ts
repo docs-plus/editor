@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/core";
 
 import {
   buildPaletteSections,
+  MAX_SUGGESTED,
   PALETTE_GROUP_OF,
   PALETTE_HEADINGS,
 } from "@/components/smart-toolbar/palette/palette-sections";
@@ -12,6 +13,7 @@ import {
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
 import { coreActions } from "@/lib/editor-actions/core-actions";
+import { surfaceActions } from "@/lib/editor-actions/surface-actions";
 import {
   ACTION_GROUPS,
   type AnyAction,
@@ -140,9 +142,68 @@ describe("buildPaletteSections", () => {
       recentKeys: [],
     });
     const suggested = sections.find((s) => s.heading === "Suggested here");
-    expect(suggested?.items.map((i) => i.label)).toContain(
-      "Repeat formatting: B",
+    const repeat = suggested?.items.find((i) => i.actionId === "repeat.apply");
+    // Named by the action alone; what it applies is the second line.
+    expect(repeat?.label).toBe("Repeat formatting");
+    expect(repeat?.detail).toBeTruthy();
+  });
+
+  it("never repeats a suggested action in its home group", () => {
+    const sections = sectionsAt(10);
+    const suggested = sections.find((s) => s.heading === "Suggested here");
+    const ids = new Set(suggested?.items.map((i) => i.actionId));
+    expect(ids.size).toBeGreaterThan(0);
+    const home = sections.filter(
+      (s) => s.heading !== "Suggested here" && s.heading !== "Recent",
     );
+    for (const section of home) {
+      for (const item of section.items) {
+        expect(ids.has(item.actionId)).toBe(false);
+      }
+    }
+  });
+
+  it("suggests at most four entries", () => {
+    const many = Array.from({ length: 6 }, (_, i) =>
+      fake({ id: `section.extra${i}`, label: `Extra ${i}` }),
+    );
+    const ed = setup();
+    ed.commands.setTextSelection(10);
+    const suggested = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...ACTIONS, ...many],
+      recentKeys: [],
+    }).find((s) => s.heading === "Suggested here");
+    expect(suggested?.items).toHaveLength(MAX_SUGGESTED);
+    expect(MAX_SUGGESTED).toBe(4);
+  });
+
+  it("names colour rows once, with a chip, and puts formats in Your formats", () => {
+    const ed = setup();
+    ed.commands.setTextSelection({ from: 18, to: 23 });
+    const sections = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...coreActions, ...surfaceActions, ...v11Actions],
+      recentKeys: [],
+    });
+    const items = sections.flatMap((s) => s.items);
+    const orange = items.find((i) => i.key === "color.text.apply:orange");
+    expect(orange?.label).toBe("Orange text");
+    expect(orange?.swatch).toEqual({ kind: "text", token: "orange" });
+    const yellow = items.find((i) => i.key === "color.highlight.apply:yellow");
+    expect(yellow?.label).toBe("Yellow highlight");
+    expect(yellow?.swatch).toEqual({ kind: "highlight", token: "yellow" });
+    const yours = sections.find((s) => s.heading === "Your formats");
+    expect(yours?.items.map((i) => i.actionId).sort()).toEqual([
+      "formats.apply",
+      "formats.save",
+    ]);
+    const format = sections.find((s) => s.heading === "Format");
+    expect(format?.items.some((i) => i.actionId.startsWith("formats."))).toBe(
+      false,
+    );
+    // Registry icons fill the leading slot.
+    expect(items.find((i) => i.actionId === "mark.bold")?.icon).toBeDefined();
   });
 
   it("keeps disabled entries with their reason", () => {
@@ -195,7 +256,7 @@ describe("buildPaletteSections", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("opens Format with Repeat, Copy formatting and Your formats; Undo and Redo get their own group", () => {
+  it("opens Format with Repeat and Paint format (Copy formatting) unless suggested; Undo and Redo get their own group", () => {
     const ed = setup();
     rememberBundle({ bold: true });
     ed.commands.setTextSelection({ from: 18, to: 23 });
@@ -204,11 +265,19 @@ describe("buildPaletteSections", () => {
       actions: [...coreActions, ...v11Actions],
       recentKeys: [],
     });
+    // Repeat can run here, so it is suggested and not repeated in Format.
+    const suggested = sections.find((s) => s.heading === "Suggested here");
+    expect(suggested?.items[0]?.actionId).toBe("repeat.apply");
     const format = sections.find((s) => s.heading === "Format");
-    expect(format?.items.slice(0, 2).map((i) => i.actionId)).toEqual([
-      "repeat.apply",
-      "repeat.copy",
-    ]);
+    expect(format?.items[0]?.actionId).toBe("repeat.copy");
+    ed.commands.setTextSelection(20);
+    const caret = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...coreActions, ...v11Actions],
+      recentKeys: [],
+    }).find((s) => s.heading === "Format");
+    // Unavailable at a caret: Repeat stays home, last of its group.
+    expect(caret?.items.map((i) => i.actionId)).toContain("repeat.apply");
     expect(format?.items.some((i) => i.actionId.startsWith("history."))).toBe(
       false,
     );

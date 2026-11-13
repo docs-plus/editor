@@ -103,18 +103,31 @@ test.describe("palette follow-ups", () => {
     await page.keyboard.type("y".repeat(50));
     await expect(name).toHaveValue("y".repeat(40));
 
-    await name.fill("");
+    // A blank name cannot be submitted: Save stays disabled (§7).
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    await name.fill("   ");
+    await expect(save).toBeDisabled();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+
+    // A storage failure is the error left to show.
+    await page.evaluate(() => {
+      Storage.prototype.setItem = () => {
+        throw new Error("QuotaExceededError");
+      };
+    });
+    await name.fill("Callout");
     await page.keyboard.press("Enter");
     const alert = page.getByRole("alert");
-    await expect(alert).toHaveText("Use 1–40 characters.");
+    await expect(alert).toHaveText("This format could not be saved.");
     await expect(name).toHaveAccessibleDescription(
-      "Up to 40 characters Use 1–40 characters.",
+      "Up to 40 characters This format could not be saved.",
     );
     await alert.evaluate((el) => {
       (el as HTMLElement & { __seen?: true }).__seen = true;
     });
     await page.keyboard.press("Enter");
-    await expect(alert).toHaveText("Use 1–40 characters.");
+    await expect(alert).toHaveText("This format could not be saved.");
     // A new alert node, so assistive tech reads the same text again.
     expect(
       await alert.evaluate(
@@ -152,22 +165,26 @@ test.describe("palette follow-ups", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("Format opens with Repeat and Copy formatting; Undo and Redo have their own group", async ({
+  test("Repeat is suggested, not repeated in Format, which opens with Copy formatting; Undo and Redo have their own group", async ({
     page,
   }) => {
     await openDoc(page);
     await boldAlpha(page);
     await select(page, "beta");
     await openPalette(page);
+    const suggested = page.getByRole("group", { name: "Suggested here" });
+    await expect(suggested.getByRole("option").first()).toHaveAttribute(
+      "data-action-id",
+      "repeat.apply",
+    );
     const format = page.getByRole("group", { name: "Format" });
     const formatRows = format.getByRole("option");
     await expect(formatRows.nth(0)).toHaveAttribute(
       "data-action-id",
-      "repeat.apply",
-    );
-    await expect(formatRows.nth(1)).toHaveAttribute(
-      "data-action-id",
       "repeat.copy",
+    );
+    await expect(format.locator('[data-action-id="repeat.apply"]')).toHaveCount(
+      0,
     );
     await expect(
       page

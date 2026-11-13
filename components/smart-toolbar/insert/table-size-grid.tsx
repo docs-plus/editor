@@ -11,6 +11,7 @@ import {
 import { MAX_TABLE_SIZE, type TableSize } from "@/lib/remembered-choice";
 
 import { isCoarsePointer } from "../coarse-pointer";
+import "./table-size-grid.scss";
 
 export interface TableSizeGridProps {
   /** Opens here (M17a: the last size). */

@@ -1,0 +1,42 @@
+@use "../../../extensions/text-style-marks/text-style-marks" as marks;
+@use "sass:map";
+
+// Palette rows (design pass §8): the colour chip in a row's `size-4`
+// leading slot, coloured from its `data-token` with the document's own
+// palette maps. Loaded with the palette chunk; nothing here is in JS.
+.st-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  // ≥ 3:1 on the popover and on the selected row (WCAG 1.4.11).
+  border: 1px solid color-mix(in srgb, var(--foreground) 50%, transparent);
+  background: var(--background);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  // Forced colours would erase the colour that is the row's meaning.
+  forced-color-adjust: none;
+}
+
+@each $token, $value in marks.$text-colors {
+  .st-chip--text[data-token="#{$token}"] {
+    color: map.get($value, light);
+
+    :is(.dark *) & {
+      color: map.get($value, dark);
+    }
+  }
+}
+
+@each $token, $value in marks.$highlight-colors {
+  .st-chip--highlight[data-token="#{$token}"] {
+    background: map.get($value, light);
+
+    :is(.dark *) & {
+      background: map.get($value, dark);
+    }
+  }
+}

@@ -163,7 +163,11 @@ test.describe("docs.plus extensions", () => {
 
   test("toolbar inserts a Mermaid diagram that renders", async ({ page }) => {
     await focusLastParagraph(page);
+    // Diagram is a submenu of templates (design pass §9).
     await insertFromMenu(page, "Diagram");
+    await page
+      .getByRole("menuitem", { name: "Flowchart", exact: true })
+      .click();
 
     const preview = page.locator(".mermaid-diagram__preview").first();
     await expect(preview).toHaveAttribute("data-state", "ready", {
