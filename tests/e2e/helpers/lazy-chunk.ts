@@ -8,6 +8,8 @@ export const CHUNK_MARKERS = {
   bubble: "function SelectionBubbleView",
   colorPanel: "function ColorPanel",
   insertStep: "function InsertStep",
+  palette: "function CommandPalette({",
+  engine: "const v11Engine = {",
 } as const;
 
 const CHUNKS = "**/_next/static/chunks/**";
