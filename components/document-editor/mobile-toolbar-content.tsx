@@ -4,6 +4,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import {
   type FocusEvent,
+  type MouseEvent,
   type ReactNode,
   type Ref,
   useCallback,
@@ -35,6 +36,7 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
+import { announce } from "@/lib/announce";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
@@ -75,6 +77,25 @@ function documentFocusTarget(editor: Editor): HTMLElement {
 }
 
 const noopSubscribe = () => () => {};
+
+/**
+ * A tap on an unavailable cell or sheet row says why on the status pill:
+ * touch has no tooltips (design pass §6, "the pill replaces them"). The
+ * reason is the control's own description (`ToolbarButton`). A capture
+ * listener, since the disabled button never runs its own click.
+ */
+function sayWhyUnavailable(event: MouseEvent<HTMLElement>): void {
+  const control =
+    event.target instanceof Element
+      ? event.target.closest('[aria-disabled="true"]')
+      : null;
+  const reason = control
+    ?.getAttribute("aria-describedby")
+    ?.split(" ")
+    .map((id) => document.getElementById(id)?.textContent)
+    .find(Boolean);
+  if (reason) announce(reason);
+}
 
 /**
  * `"from:to"` while text is selected (not a caret or a node selection),
@@ -259,6 +280,7 @@ export function MobileToolbarContent({
       onEscape={onEscape}
       onFocus={onBarFocus}
       onBlur={onBarBlur}
+      onClickCapture={sayWhyUnavailable}
       style={{ transform: inset ? `translateY(-${inset}px)` : undefined }}
     >
       {mode === "selection" ? (
@@ -287,6 +309,7 @@ export function MobileToolbarContent({
               data-toolbar-popup=""
               finalFocus={finalFocus}
               className="st-format-sheet max-h-[60dvh]"
+              onClickCapture={sayWhyUnavailable}
             >
               <SheetHeader>
                 <SheetTitle className="flex-1">Text format</SheetTitle>

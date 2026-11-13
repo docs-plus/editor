@@ -694,6 +694,25 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(pill).toHaveText("Formatting applied");
   });
 
+  test("a tap on an unavailable cell says why on the pill", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setMark("inlineCode"),
+    );
+    const brush = selectionBar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await expect(brush).toHaveAttribute("aria-disabled", "true");
+    // Unavailable but still tappable (Playwright skips aria-disabled).
+    await brush.tap({ force: true });
+    await expect(page.locator("[data-status-pill]")).toHaveText(
+      "Code has no formatting.",
+    );
+  });
+
   test("the status pill sits above the bar, uncovered by the chips", async ({
     page,
   }) => {
