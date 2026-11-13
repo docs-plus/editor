@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { Mark } from "@tiptap/pm/model";
 
+import { suggestedCodeLanguage } from "@/lib/code-language";
 import {
   type ActionOption,
   type AnyAction,
@@ -541,8 +542,18 @@ const insertCodeBlock = defineAction({
     insertEnabled(ctx, "toggleCodeBlock", (editor) =>
       editor.can().toggleCodeBlock(),
     ),
-  run: (editor) =>
-    inserted("codeBlock", editor.chain().toggleCodeBlock().run()),
+  // M4: the doc's most used language, else your last (one doc walk, here
+  // only, never per render).
+  run(editor) {
+    const language = suggestedCodeLanguage(editor.state.doc);
+    return inserted(
+      "codeBlock",
+      editor
+        .chain()
+        .toggleCodeBlock(language ? { language } : undefined)
+        .run(),
+    );
+  },
 });
 
 const insertMermaid = defineAction({
