@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import type { Editor, Extension } from "@tiptap/core";
 import { TableOfContents } from "@tiptap/extension-table-of-contents";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 
 import {
   getEditorVersionStore,
@@ -19,6 +20,15 @@ afterEach(() => {
   editor?.destroy();
   vi.useRealTimers();
 });
+
+/** Inserts text as a Yjs sync does for a collaborator's change. */
+function insertRemote(instance: Editor) {
+  instance.view.dispatch(
+    instance.state.tr
+      .insertText("x", 9)
+      .setMeta(ySyncPluginKey, { isChangeOrigin: true }),
+  );
+}
 
 function setup() {
   vi.useFakeTimers();
@@ -84,10 +94,10 @@ describe("editor version store", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it("notifies at least every TOOLBAR_MAX_WAIT_MS while changes never pause", () => {
+  it("notifies at least every TOOLBAR_MAX_WAIT_MS while remote changes never pause", () => {
     const { editor: instance, listener } = setup();
     for (let t = 0; t < 2 * TOOLBAR_MAX_WAIT_MS; t += 100) {
-      instance.commands.insertContentAt(9, "x");
+      insertRemote(instance);
       vi.advanceTimersByTime(100);
     }
     // Max-wait fires at 1000 and 2000. The 2000 notify also clears the settle
@@ -97,14 +107,25 @@ describe("editor version store", () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
+  it("does not cap local typing: it notifies only once typing pauses", () => {
+    const { editor: instance, listener } = setup();
+    for (let t = 0; t < 2 * TOOLBAR_MAX_WAIT_MS; t += 100) {
+      instance.commands.insertContentAt(9, "x");
+      vi.advanceTimersByTime(100);
+    }
+    expect(listener).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(TOOLBAR_SETTLE_MS);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("starts a fresh max-wait window after a notify", () => {
     const { editor: instance, listener } = setup();
-    instance.commands.insertContentAt(9, "x");
+    insertRemote(instance);
     vi.advanceTimersByTime(TOOLBAR_SETTLE_MS);
     expect(listener).toHaveBeenCalledTimes(1);
     // A max-wait timer left over from the first change would fire at 1000.
     for (let t = 0; t < TOOLBAR_MAX_WAIT_MS - 100; t += 100) {
-      instance.commands.insertContentAt(9, "x");
+      insertRemote(instance);
       vi.advanceTimersByTime(100);
     }
     expect(listener).toHaveBeenCalledTimes(1);

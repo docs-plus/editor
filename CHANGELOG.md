@@ -29,7 +29,8 @@ since the previous tag.
   `make test-e2e` run `--project=chromium --project=perf`; `make test-perf`
   runs `--project=perf --no-deps`.
 - **Toolbar updates catch up within 1 s** (`TOOLBAR_MAX_WAIT_MS`) during
-  continuous edits, such as a collaborator typing without pause.
+  continuous remote edits, such as a collaborator typing without pause; local
+  typing still waits for a pause, so it never forces a toolbar commit.
 - **Toolbar controls derive visibility in render,** so they hide at once when
   a document turns read-only, and per-keystroke listener work is gone.
 - `.gitignore` ignores `.claude/launch.json`, the local preview config.
