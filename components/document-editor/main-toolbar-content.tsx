@@ -12,6 +12,7 @@ import {
   InsertMenu,
   ListControl,
   ParagraphCollapseMenu,
+  SizeCollapseMenu,
   SlotCollapseButton,
   ViewCollapseMenu,
 } from "@/components/smart-toolbar";
@@ -19,12 +20,11 @@ import { ContextSlot } from "@/components/smart-toolbar/context-slot/context-slo
 import { AlignMenu } from "@/components/smart-toolbar/row/align-menu";
 import { OverflowMenu } from "@/components/smart-toolbar/row/overflow-menu";
 import { StyleMenu } from "@/components/smart-toolbar/row/style-menu";
-import { ColorHighlightPopoverButton } from "@/components/tiptap-ui/color-highlight-popover";
 import { FilterToolbarButton } from "@/components/tiptap-ui/heading-filter";
 import { Spacer } from "@/components/ui/spacer";
 import { ToolbarGroup, ToolbarSeparator } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { PanelLeftIcon } from "@/lib/icons";
+import { BaselineIcon, PanelLeftIcon } from "@/lib/icons";
 
 interface MainToolbarContentProps {
   onHighlighterClick: () => void;
@@ -47,6 +47,35 @@ function Collapse({ tier, children }: { tier: Tier; children: ReactNode }) {
     <span data-collapse-tier={tier} className="contents">
       {children}
     </span>
+  );
+}
+
+/**
+ * A stand-in shown only below its tier (spec §4.6), in place of the
+ * `Collapse` group of the same tier. Hidden by default in
+ * `smart-toolbar.scss`, so wide rows never render it visibly.
+ */
+function StandIn({ tier, children }: { tier: Tier; children: ReactNode }) {
+  return (
+    <span data-collapse-standin={tier} className="contents">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Phones: one named entry to the secondary panel (size, text colour,
+ * highlight), placed in the first screenful of the row.
+ */
+function PhoneTextStyleButton({ onClick }: { onClick: () => void }) {
+  return (
+    <ToolbarButton
+      onClick={onClick}
+      aria-label="Text style and colour"
+      tooltip="Text style and colour"
+    >
+      <BaselineIcon />
+    </ToolbarButton>
   );
 }
 
@@ -85,7 +114,14 @@ export function MainToolbarContent({
               isActive={filterActive}
             />
           </Collapse>
-          <ViewCollapseMenu />
+          <StandIn tier="t4">
+            <ViewCollapseMenu
+              onTocToggle={onTocToggle}
+              onFilterToggle={onFilterToggle}
+              tocVisible={tocVisible}
+              filterActive={filterActive}
+            />
+          </StandIn>
         </ToolbarGroup>
       )}
 
@@ -96,14 +132,27 @@ export function MainToolbarContent({
         <ActionButton id="history.redo" />
       </ToolbarGroup>
 
+      {isMobile && (
+        <ToolbarGroup data-toolbar-group="phone-style" aria-label="Text style">
+          <PhoneTextStyleButton onClick={onHighlighterClick} />
+        </ToolbarGroup>
+      )}
+
       <ToolbarSeparator />
 
       <ToolbarGroup data-toolbar-group="style" aria-label="Text style">
         <StyleMenu />
       </ToolbarGroup>
-      <ToolbarGroup data-toolbar-group="size" aria-label="Text size">
-        <FontSizeStepper />
-      </ToolbarGroup>
+      {!isMobile && (
+        <ToolbarGroup data-toolbar-group="size" aria-label="Text size">
+          <Collapse tier="t2">
+            <FontSizeStepper />
+          </Collapse>
+          <StandIn tier="t2">
+            <SizeCollapseMenu />
+          </StandIn>
+        </ToolbarGroup>
+      )}
 
       <ToolbarSeparator />
 
@@ -114,18 +163,20 @@ export function MainToolbarContent({
           <ActionButton id="mark.underline" />
           <ActionButton id="mark.strike" />
         </Collapse>
-        <AaCollapseMenu />
+        <StandIn tier="t5">
+          <AaCollapseMenu />
+        </StandIn>
       </ToolbarGroup>
-      <ToolbarGroup data-toolbar-group="color" aria-label="Colour">
-        {isMobile ? (
-          <ColorHighlightPopoverButton onClick={onHighlighterClick} />
-        ) : (
+      {!isMobile && (
+        <ToolbarGroup data-toolbar-group="color" aria-label="Colour">
           <Collapse tier="t4">
             <ColorControls />
           </Collapse>
-        )}
-        <ColorCollapseButton />
-      </ToolbarGroup>
+          <StandIn tier="t4">
+            <ColorCollapseButton />
+          </StandIn>
+        </ToolbarGroup>
+      )}
       <ToolbarGroup data-toolbar-group="link" aria-label="Link">
         <ActionButton id="mark.link" />
       </ToolbarGroup>
@@ -143,7 +194,9 @@ export function MainToolbarContent({
           <ActionButton id="indent.outdent" />
           <ActionButton id="indent.indent" />
         </Collapse>
-        <ParagraphCollapseMenu />
+        <StandIn tier="t3">
+          <ParagraphCollapseMenu />
+        </StandIn>
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -152,7 +205,9 @@ export function MainToolbarContent({
         <Collapse tier="t3">
           <ContextSlot />
         </Collapse>
-        <SlotCollapseButton />
+        <StandIn tier="t3">
+          <SlotCollapseButton />
+        </StandIn>
       </div>
 
       <ToolbarSeparator />

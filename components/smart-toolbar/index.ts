@@ -7,6 +7,7 @@ export {
   AaCollapseMenu,
   ColorCollapseButton,
   ParagraphCollapseMenu,
+  SizeCollapseMenu,
   SlotCollapseButton,
   ViewCollapseMenu,
 } from "./collapse-menus";

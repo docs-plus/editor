@@ -1,6 +1,96 @@
 // Smart toolbar surfaces owned by PR D2: colour split pair, colour popover,
-// size stepper, Insert steps. Container-query ladder (spec §4.6) lands here
-// once the row (PR D1) marks its groups with `data-collapse-tier`.
+// size stepper, Insert steps, and the responsive ladder (spec §4.6).
+
+// ── Responsive ladder ────────────────────────────────────────────────────
+// Pure container queries on the fixed row. Each tier hides the groups the
+// row marks `data-collapse-tier="tN"` and shows the stand-ins marked
+// `data-collapse-standin="tN"`; hidden items fail `checkVisibility()`, so
+// roving focus skips them. The thresholds are the row's measured widths
+// (mouse, then touch with 44px targets), so `scrollWidth <= clientWidth`
+// holds at every width down to the phone layout; `toolbar-ladder.spec.ts`
+// asserts it. Spec §4.6's numbers were estimates for a narrower row.
+// Each tier starts where the row above it stops fitting, with room for the
+// widest context (a slot stand-in appears from T3 on).
+$ladder-mouse: (
+  t2: 1232px,
+  t3: 1128px,
+  t4: 950px,
+  t5: 866px,
+);
+$ladder-touch: (
+  t2: 1560px,
+  t3: 1388px,
+  t4: 1180px,
+  t5: 1012px,
+);
+
+[data-slot="toolbar"][data-variant="fixed"] {
+  container: smart-toolbar / inline-size;
+  // Never hide overflow: a clipped control must stay discoverable.
+  scrollbar-width: thin;
+}
+
+span[data-collapse-standin] {
+  display: none;
+}
+
+@mixin ladder($tiers) {
+  @each $tier, $width in $tiers {
+    @container smart-toolbar (width < #{$width}) {
+      span[data-collapse-tier="#{$tier}"] {
+        display: none;
+      }
+
+      span[data-collapse-standin="#{$tier}"] {
+        display: contents;
+      }
+
+      @if $tier == t2 {
+        .st-insert-label {
+          display: none;
+        }
+      }
+
+      // T5: the style menu shows a short value; separators go.
+      @if $tier == t5 {
+        [data-toolbar-group="style"] [data-toolbar-item] {
+          max-width: 3.75rem;
+        }
+
+        [data-slot="toolbar-separator"] {
+          display: none;
+        }
+      }
+    }
+  }
+}
+
+@media (pointer: fine), (pointer: none) {
+  @include ladder($ladder-mouse);
+}
+
+@media (pointer: coarse) {
+  @include ladder($ladder-touch);
+
+  // Every row target is at least 44×44 on touch (spec §6.7, §4.7). The
+  // targets already space the row, so it drops its gaps and menu padding.
+  [data-slot="toolbar"][data-variant="fixed"] {
+    gap: 0;
+
+    [data-slot="toolbar-group"] {
+      gap: 0;
+    }
+
+    [data-toolbar-item] {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    [data-toolbar-item][aria-haspopup] {
+      padding-inline: 0.25rem;
+    }
+  }
+}
 
 .st-color-controls,
 .st-stepper {
