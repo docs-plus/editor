@@ -163,8 +163,15 @@ test.describe("docs.plus extensions", () => {
 
   test("toolbar inserts a Mermaid diagram that renders", async ({ page }) => {
     await focusLastParagraph(page);
-    // Diagram is a submenu of templates (design pass §9).
-    await insertFromMenu(page, "Diagram");
+    // Diagram is a submenu of templates (design pass §9). Until the insert
+    // step's chunk lands it is one item that inserts: wait for the trigger.
+    await page
+      .getByRole("toolbar")
+      .getByRole("button", { name: "Insert", exact: true })
+      .click();
+    const diagram = page.getByRole("menuitem", { name: /^Diagram/ });
+    await expect(diagram).toHaveAttribute("aria-haspopup", "menu");
+    await diagram.click();
     await page
       .getByRole("menuitem", { name: "Flowchart", exact: true })
       .click();
