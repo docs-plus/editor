@@ -38,6 +38,7 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { announce } from "@/lib/announce";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
+import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
 import {
@@ -150,6 +151,8 @@ export function MobileToolbarContent({
   menuCells,
 }: MobileToolbarContentProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  /** Opened for `formats.remove`: Your formats starts at its Remove list. */
+  const [removing, setRemoving] = useState(false);
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
   const inset = useKeyboardInset();
   const bold = useActionView("mark.bold", editor);
@@ -235,10 +238,29 @@ export function MobileToolbarContent({
   const onSheetOpenChange = useCallback(
     (open: boolean) => {
       if (open) keepFocusOnCloseRef.current = false;
+      else setRemoving(false);
       setPageInert(editor, open);
       setSheetOpen(open);
     },
     [editor],
+  );
+
+  // The Save dialog's "Remove a format" link at the cap (design pass §7):
+  // the phone's answer is the Aa sheet at its Remove list, a frame later,
+  // once the palette has closed.
+  useEffect(
+    () =>
+      editor
+        ? onUiIntent(editor, (intent) => {
+            if (intent.type !== "formats.remove" || readOnly) return false;
+            requestAnimationFrame(() => {
+              setRemoving(true);
+              onSheetOpenChange(true);
+            });
+            return true;
+          })
+        : undefined,
+    [editor, readOnly, onSheetOpenChange],
   );
 
   /** Closes the sheet for an action that moves focus elsewhere itself. */
@@ -325,7 +347,11 @@ export function MobileToolbarContent({
                 editor={editor}
                 recent={recent.recent}
                 onClose={closeSheet}
+                removing={removing}
               />
+              {/* Over the sheet while it is open: the bar's pill is
+                  covered and inert then, and Undo must stay reachable. */}
+              <StatusPill placement="phone" />
             </SheetContent>
           </Sheet>
           <ActionButton id="mark.bold" editor={editor} variant="phone" />
@@ -333,7 +359,7 @@ export function MobileToolbarContent({
           {menuCells}
         </>
       )}
-      <StatusPill placement="phone" />
+      {sheetOpen ? null : <StatusPill placement="phone" />}
     </Toolbar>
   );
 }

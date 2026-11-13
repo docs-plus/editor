@@ -206,8 +206,11 @@ export function FormatSheetBody({
   editor,
   recent,
   onClose,
+  removing = false,
 }: {
   editor: Editor;
+  /** Opened for `formats.remove`: Your formats shows its Remove list. */
+  removing?: boolean;
   /** Closes the sheet (before an action that opens a popover over the page). */
   onClose: () => void;
   /** M3, read by the bar (ready before the sheet opens); frozen while open. */
@@ -239,7 +242,7 @@ export function FormatSheetBody({
         </div>
       </Section>
       <Section title="Your formats">
-        <SheetFormats editor={editor} onClose={onClose} />
+        <SheetFormats editor={editor} onClose={onClose} removing={removing} />
       </Section>
       <Section title="Size">
         <FontSizeStepper editor={editor} />

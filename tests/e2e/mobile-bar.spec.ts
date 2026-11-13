@@ -844,6 +844,89 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(page.locator("[data-command-palette] input")).toBeFocused();
   });
 
+  test("the Aa sheet's Remove a format removes at once, with Undo on the pill", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [
+            { id: "fnote", name: "Note", bundle: { italic: true } },
+            { id: "fwarn", name: "Warning", bundle: { bold: true } },
+          ],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await openSheet(page);
+    const section = sheet(page).getByRole("region", { name: "Your formats" });
+    const toggle = section.getByRole("button", { name: "Remove a format" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.tap();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const list = section.getByRole("list", { name: "Remove a format" });
+    const remove = list.getByRole("button", { name: "Remove Note" });
+    const box = await remove.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await remove.tap();
+    await expect(
+      section.getByRole("button", { name: "Note", exact: true }),
+    ).toHaveCount(0);
+    const pill = page.locator('[data-status-pill="phone"]');
+    await expect(pill).toContainText("Removed ‘Note’");
+    // Over the open sheet, not under it.
+    const [pillBox, sheetBox] = await Promise.all([
+      pill.boundingBox(),
+      sheet(page).boundingBox(),
+    ]);
+    expect((pillBox?.y ?? 0) + (pillBox?.height ?? 0)).toBeLessThanOrEqual(
+      sheetBox?.y ?? 0,
+    );
+    await pill.getByRole("button", { name: /^Undo/ }).tap();
+    await expect(
+      section.getByRole("button", { name: "Note", exact: true }),
+    ).toBeVisible();
+  });
+
+  test("the Save dialog's cap link opens the Aa sheet at Remove a format", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const formats = Array.from({ length: 20 }, (_, i) => ({
+        id: `f${i}`,
+        name: `Format ${i}`,
+        bundle: { bold: true },
+      }));
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({ v: 1, formats }),
+      );
+    });
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await bar(page).getByRole("button", { name: "Bold", exact: true }).tap();
+    await expect.poll(() => lastMark(page, "bold")).toBe(true);
+    await openSheet(page);
+    await sheet(page)
+      .getByRole("region", { name: "Your formats" })
+      .getByRole("button", { name: "Save selection as format…" })
+      .tap();
+    const palette = page.locator("[data-command-palette]");
+    await expect(palette.locator("input")).toBeFocused();
+    await palette.locator("input").fill("Another");
+    await palette.getByRole("button", { name: "Remove a format" }).tap();
+    await expect(palette).toHaveCount(0);
+    await expect(sheet(page)).toBeVisible();
+    await expect(
+      sheet(page)
+        .getByRole("list", { name: "Remove a format" })
+        .getByRole("button", { name: "Remove Format 0" }),
+    ).toBeFocused();
+  });
+
   test("Back dismisses for that selection only: a direct reselect swaps again", async ({
     page,
   }) => {
