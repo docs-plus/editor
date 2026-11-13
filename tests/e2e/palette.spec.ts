@@ -367,10 +367,13 @@ test.describe("action palette", () => {
     await select(page, "alpha");
     await page.keyboard.press("ControlOrMeta+b");
     await select(page, "gamma");
+    await page.keyboard.press("ControlOrMeta+i");
     await runFromPalette(page, "copy formatting");
     await select(page, "alpha");
     await page.keyboard.press(repeatKey);
-    await expect.poll(() => html(page)).not.toContain("<strong>alpha</strong>");
+    // Italic, and no bold: the copied read clears what gamma lacks.
+    await expect.poll(() => html(page)).toContain("<em>alpha</em>");
+    await expect.poll(() => html(page)).not.toContain("<strong>");
   });
 
   test("lists unavailable actions with their reason and keeps the palette open", async ({

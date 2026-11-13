@@ -323,11 +323,11 @@ test.describe("selection bubble", () => {
 
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Italic" }),
+      bubbleToolbar(page).getByRole("button", { name: "Italic", exact: true }),
     ).toBeFocused();
     // A focus tooltip takes the first Esc (WCAG 1.4.13), as in the row.
     await escapeToEditor(page);
@@ -491,7 +491,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
@@ -514,7 +514,7 @@ test.describe("selection bubble", () => {
     const before = await selectionRange(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await page.keyboard.press("Tab");
@@ -591,7 +591,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("PageDown");
     await page.waitForTimeout(500);
@@ -682,7 +682,10 @@ test.describe("selection bubble", () => {
     );
     expect(border).not.toBe("none");
     await page.keyboard.press("ControlOrMeta+b");
-    const bold = bubbleToolbar(page).getByRole("button", { name: "Bold" });
+    const bold = bubbleToolbar(page).getByRole("button", {
+      name: "Bold",
+      exact: true,
+    });
     await expect(bold).toHaveAttribute("aria-pressed", "true");
     await page.mouse.move(0, 0);
     const pressed = await bold.evaluate((el) => {
@@ -834,6 +837,92 @@ test.describe("selection bubble", () => {
       .poll(() => page.evaluate(() => window.__tiptap_editor?.getHTML()))
       .toContain("<strong>some words</strong>");
     await unroute();
+  });
+
+  test("the Repeat face is disabled with the reason on inline code", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setMark("inlineCode"),
+    );
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const face = bubbleToolbar(page).locator('[data-action-id="repeat.apply"]');
+    await expect(face).toHaveAttribute("aria-disabled", "true");
+    await expect(face).toHaveAccessibleDescription("Code has no formatting.");
+    // Named for what it repeats, with Repeat's shortcut.
+    await expect(face).toHaveAccessibleName("Repeat Bold");
+    await expect(face).toHaveAttribute("aria-keyshortcuts", /\+Alt\+v/i);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    await expect(copy).toHaveAttribute("aria-disabled", "true");
+    await expect(copy).toHaveAccessibleDescription("Code has no formatting.");
+    await page.keyboard.press("Escape");
+  });
+
+  test("Copy formatting on plain text copies nothing and says so", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    await page.getByRole("menuitem", { name: "Copy formatting" }).click();
+    await expect(page.locator("[data-announcer]")).toHaveText(
+      "Nothing to copy",
+    );
+    // The Bold bundle stays: no clear-only "Repeat Plain".
+    await expect(
+      page.locator('[data-smart-bubble] [data-action-id="repeat.apply"]'),
+    ).toHaveAccessibleName("Repeat Bold");
+    expect(
+      await page.evaluate(() => localStorage.getItem("tinydocy-choices")),
+    ).toContain('"bold":true');
+  });
+
+  test("a saved format can be removed from the Formats menu, after a confirm", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [
+            { id: "fwarn", name: "Warning", bundle: { bold: true } },
+            { id: "fnote", name: "Note", bundle: { italic: true } },
+          ],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const remove = page.getByRole("menuitem", {
+      name: "Remove format ‘Warning’",
+    });
+    await expect(remove).toBeVisible();
+    await remove.click();
+    // First press asks again, in place; the menu stays open.
+    const confirm = page.getByRole("menuitem", {
+      name: "Confirm: remove format ‘Warning’",
+    });
+    await expect(confirm).toBeVisible();
+    await confirm.click();
+    await expect(page.locator("[data-announcer]")).toHaveText(
+      "Removed format ‘Warning’",
+    );
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("tinydocy-formats") ?? "{}"),
+    );
+    expect(
+      stored.formats.map((format: { name: string }) => format.name),
+    ).toEqual(["Note"]);
   });
 
   for (const theme of ["light", "dark"] as const) {

@@ -163,6 +163,68 @@ describe("PhoneSelectionCells Repeat cell", () => {
   });
 });
 
+describe("Repeat face availability", () => {
+  it("is disabled with the reason on inline code, like the palette", async () => {
+    editor = createTestEditor({
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "hello world" }],
+          },
+        ],
+      },
+    });
+    act(() => rememberBundle({ bold: true }));
+    editor.commands.setTextSelection({ from: 8, to: 13 });
+    const el = mount(
+      createElement(RepeatSplitButton, { editor: editor as never }),
+    );
+    const face = () =>
+      el.querySelector<HTMLElement>('[data-action-id="repeat.apply"]');
+    expect(face()?.hasAttribute("disabled")).toBe(false);
+    act(() => {
+      editor?.commands.setMark("inlineCode");
+    });
+    // Doc changes reach the toolbar after the settle window.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    const reasonId = face()
+      ?.getAttribute("aria-describedby")
+      ?.split(" ")
+      .find((id) => document.getElementById(id)?.textContent);
+    expect(face()?.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
+      "Code has no formatting.",
+    );
+  });
+});
+
+describe("PhoneSelectionCells Repeat cell, unavailable", () => {
+  it("stays tappable and shows its reason on a tap", () => {
+    editor = createTestEditor();
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const cell = el.querySelector<HTMLButtonElement>(
+      '[data-action-id="repeat.apply"]',
+    );
+    expect(cell?.getAttribute("aria-disabled")).toBe("true");
+    act(() => cell?.click());
+    expect(el.querySelector("[data-phone-reason]")?.textContent).toBe(
+      "Format some text first, or use Copy formatting.",
+    );
+  });
+});
+
 describe("PhoneSelectionCells Back", () => {
   it("moves focus to the bar's first cell once the cells unmount", async () => {
     editor = createTestEditor();
@@ -200,15 +262,15 @@ describe("RepeatSplitButton", () => {
     expect(el.querySelector("[data-repeat-split]")).toBeNull();
     act(() => rememberBundle({ bold: true, highlight: "yellow" }));
     const face = el.querySelector('[data-action-id="repeat.apply"]');
-    // Label in Name (WCAG 2.5.3): the name starts with the visible face.
+    // The name spells out what it repeats; the compact face is the text.
     expect(face?.getAttribute("aria-label")).toBe(
-      "Repeat B · Yellow highlight",
+      "Repeat Bold, Yellow highlight",
     );
-    const description = el.querySelector(
-      `[id="${face?.getAttribute("aria-describedby")}"]`,
-    );
-    expect(description?.textContent).toBe("Bold, Yellow highlight");
     expect(face?.textContent).toContain("B · Yellow highlight");
+    // Mod+Alt+V (+ F4 off macOS), like ActionButton.
+    expect(face?.getAttribute("aria-keyshortcuts")).toMatch(
+      /^(Meta|Control)\+Alt\+v( F4)?$/i,
+    );
     const chevron = el.querySelector('[aria-label="Formats"]');
     expect(chevron?.getAttribute("aria-haspopup")).toBe("menu");
   });
