@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import {
   ariaKeyShortcuts,
@@ -68,6 +69,9 @@ function saveReason(editor: Editor, name: string): string | null {
   return engine ? engine.formatSaveReason(editor, name) : ENGINE_LOADING_REASON;
 }
 
+/** `MAX_FORMAT_NAME` (not imported: it would pull saved-formats in here). */
+const NAME_MAX = 40;
+
 /** Pause after the last keystroke before the result count is announced. */
 const STATUS_DELAY_MS = 300;
 
@@ -82,22 +86,31 @@ function resultStatus(count: number): string {
  * read), empty until the search changes, then debounced so each keystroke
  * does not interrupt. cmdk's `CommandEmpty` mounts only with no results
  * and is not announced, and with no match the input loses its
- * `aria-activedescendant`, so this is the only feedback.
+ * `aria-activedescendant`, so this is the only feedback. It also reads
+ * `notice` (why a row cannot run) at once. Inside the dialog: a modal
+ * dialog hides `body`'s other children from assistive tech.
  */
-function ResultStatus() {
+function ResultStatus({ notice }: { notice: string }) {
   const search = useCommandState((state) => state.search);
   const count = useCommandState((state) => state.filtered.count);
   const [message, setMessage] = useState("");
   const searched = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (!searched.current && search === "") return;
     searched.current = true;
-    const timer = setTimeout(
+    timer.current = setTimeout(
       () => setMessage(resultStatus(count)),
       STATUS_DELAY_MS,
     );
-    return () => clearTimeout(timer);
+    return () => clearTimeout(timer.current);
   }, [search, count]);
+  // A pending count would talk over the reason.
+  useEffect(() => {
+    if (!notice) return;
+    clearTimeout(timer.current);
+    setMessage(notice);
+  }, [notice]);
   return (
     <div role="status" aria-live="polite" className="sr-only">
       {message}
@@ -142,6 +155,9 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   const [view, setView] = useState<PaletteMode>(mode);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Keys the alert, so the same error is read again on each submit.
+  const [attempt, setAttempt] = useState(0);
+  const [notice, setNotice] = useState("");
   const mac = useMemo(() => isMac(), []);
   const engineReady = useEngineReady();
   const sections = useMemo(
@@ -170,7 +186,12 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   };
 
   const select = (item: PaletteItem) => {
-    if (item.disabledReason) return;
+    if (item.disabledReason) {
+      // A trailing no-break space toggles, so the same reason is read again.
+      const text = `${item.label}: ${item.disabledReason}`;
+      setNotice((last) => (last === text ? `${text}\u00a0` : text));
+      return;
+    }
     if (item.actionId === formatsSaveAction.id && item.arg === undefined) {
       setView("save-format");
       return;
@@ -183,17 +204,24 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
     }
   };
 
+  const fail = (message: string) => {
+    setError(message);
+    setAttempt((n) => n + 1);
+  };
+
   const save = () => {
     const reason = saveReason(editor, name);
     if (reason) {
-      setError(reason);
+      fail(reason);
       return;
     }
     if (runAction(editor, formatsSaveAction, name)) {
       rememberPaletteRecent(formatsSaveAction.id);
       close();
+      // After the dialog (which hides the rest of the page) is gone.
+      announce(`Saved format ‘${name.trim()}’`);
     } else {
-      setError("This format could not be saved.");
+      fail("This format could not be saved.");
     }
   };
 
@@ -232,18 +260,25 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             <Input
               id={`${reasonPrefix}-name`}
               autoFocus
-              maxLength={160}
+              maxLength={NAME_MAX}
               value={name}
               aria-invalid={error ? true : undefined}
-              aria-describedby={error ? `${reasonPrefix}-error` : undefined}
+              aria-describedby={`${reasonPrefix}-hint${error ? ` ${reasonPrefix}-error` : ""}`}
               onChange={(event) => {
                 setName(event.target.value);
                 setError(null);
               }}
               className="pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
             />
+            <p
+              id={`${reasonPrefix}-hint`}
+              className="text-xs text-muted-foreground"
+            >
+              Up to {NAME_MAX} characters
+            </p>
             {error ? (
               <p
+                key={attempt}
                 id={`${reasonPrefix}-error`}
                 role="alert"
                 className="text-sm text-destructive"
@@ -273,7 +308,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             onValueChange={setValue}
           >
             <CommandInput placeholder="Search actions…" />
-            <ResultStatus />
+            <ResultStatus notice={notice} />
             <CommandList label="Actions">
               <CommandEmpty>No matching actions.</CommandEmpty>
               {sections.map((section) => (
