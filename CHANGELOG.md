@@ -140,11 +140,14 @@ from 112 B before the design pass); the budget is unchanged.
 #### Changed
 - **Loading is not a state the user sees:** before the formatting engine
   lands, its actions are available and a click waits for it, as the
-  Repeat key does; "Formatting tools are still loading." is gone.
+  Repeat key does; "Formatting tools are still loading." is gone. A
+  failed load says "Couldn’t load formatting tools." on the pill, with
+  Retry.
 - "In this doc" formats left the menus and the palette, and the short
   "B · I · Red" notation is gone from all UI text.
 - **Touch:** no tooltips and no shortcut glyphs on a coarse pointer; a
-  focused phone cell keeps its ring inside the bar. The Aa sheet's
+  tap on an unavailable phone cell or sheet row shows its reason on the
+  pill instead, and a focused phone cell keeps its ring inside the bar. The Aa sheet's
   sections and row labels have a clear hierarchy, and its swatches fill
   the width.
 - PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
