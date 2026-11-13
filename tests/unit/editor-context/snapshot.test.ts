@@ -4,7 +4,7 @@ import type { Editor, JSONContent } from "@tiptap/core";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 
-import { computeContext } from "@/lib/editor-context/snapshot";
+import { computeContext, presentMarks } from "@/lib/editor-context/snapshot";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 
@@ -205,5 +205,22 @@ describe("computeContext flags", () => {
       ),
     );
     expect(computeContext(target).activeMarks.has("bold")).toBe(false);
+  });
+
+  it("reads marks present anywhere in the range, from the same walk", () => {
+    const target = setup();
+    const plain = posOf(target, "Plain");
+    const bold = posOf(target, "Bold");
+    target.view.dispatch(
+      target.state.tr.setSelection(
+        TextSelection.create(target.state.doc, plain, bold + 2),
+      ),
+    );
+    const ctx = computeContext(target);
+    expect(presentMarks(ctx).has("bold")).toBe(true);
+    expect(presentMarks(ctx).has("italic")).toBe(false);
+    expect(ctx.activeMarks.size).toBe(0);
+    // One memoized summary serves both reads.
+    expect(presentMarks(ctx)).toBe(presentMarks(ctx));
   });
 });

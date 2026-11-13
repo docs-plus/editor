@@ -11,6 +11,7 @@ import type {
   Enabled,
   IconComponent,
 } from "@/lib/editor-actions/types";
+import { presentMarks } from "@/lib/editor-context/snapshot";
 import {
   BoldIcon,
   Code2Icon,
@@ -79,17 +80,6 @@ function historyAction(
 
 // --- Marks ---------------------------------------------------------------
 
-/** True when some text in the selection carries `name` (for "mixed"). */
-function rangeHasMark(ctx: Ctx, name: string): boolean {
-  return ctx.memo(`hasMark:${name}`, () => {
-    const type = ctx.state.schema.marks[name];
-    if (!type) return false;
-    return ctx.state.selection.ranges.some((range) =>
-      ctx.state.doc.rangeHasMark(range.$from.pos, range.$to.pos, type),
-    );
-  });
-}
-
 interface MarkSpec {
   name: string;
   id: string;
@@ -124,7 +114,7 @@ function markAction(spec: MarkSpec): AnyAction {
     isMixed: (ctx) =>
       !ctx.empty &&
       !ctx.activeMarks.has(spec.name) &&
-      rangeHasMark(ctx, spec.name),
+      presentMarks(ctx).has(spec.name),
     run: (editor) => editor.chain().focus().toggleMark(spec.name).run(),
   };
 }
