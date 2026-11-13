@@ -28,9 +28,9 @@ function Description({
 
 /**
  * A menu item whose accessible name is its visible label (WCAG 2.5.3),
- * named by `aria-labelledby` so a visible reason is never part of it, and
- * whose description, named by `aria-describedby`, is either why it is
- * unavailable, shown as a visible second line (`DropdownMenuReason`,
+ * taken from its content: the visible reason is `aria-hidden` there, so it
+ * is read once, as the description. `aria-describedby` names either why
+ * it is unavailable, shown as a visible second line (`DropdownMenuReason`,
  * design pass §10), or its long form ("Bold, Red text"), which stays
  * hidden: the item already shows it in its own formatting. The label is
  * an element, so a disabled item dims it (the reason stays at full
@@ -55,17 +55,15 @@ export function DescribedItem({
   "data-saved-format"?: string;
 }) {
   const id = useId();
-  const labelId = useId();
   return (
     <DropdownMenuItem
       disabled={disabled}
       className={className}
-      aria-labelledby={labelId}
       aria-describedby={description ? id : undefined}
       data-saved-format={savedFormat}
       onClick={onClick}
     >
-      <span id={labelId}>{label}</span>
+      <span>{label}</span>
       {children}
       <Description id={id} text={description} visible={disabled} />
     </DropdownMenuItem>

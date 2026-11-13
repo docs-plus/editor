@@ -204,7 +204,7 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
 
 - A disabled item shows its reason as a visible second line, `block text-xs text-muted-foreground`.
 - Only the label dims: `group-data-disabled:opacity-50` on the label, with the item itself at opacity 100. The label is an element of its own, so a bare-text label dims too.
-- The reason is read once, as the description: it is `aria-hidden` inside the item (out of the name taken from content), and Your formats items name themselves with `aria-labelledby` on the label.
+- The reason is read once, as the description: it is `aria-hidden` inside the item, so the name taken from content is the label alone (no `aria-labelledby`, which axe's label-content-name-mismatch flags while the reason shows).
 - `title`-only and sr-only-only reasons are retired.
 
 ## 11. Colour popover: low contrast
