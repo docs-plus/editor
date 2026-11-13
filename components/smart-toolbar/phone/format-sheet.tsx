@@ -31,6 +31,8 @@ const ALIGN_IDS = [
  * nothing (`ActionButton`).
  */
 const MORE_IDS = [
+  "history.redo",
+  "indent.outdent",
   "mark.underline",
   "mark.strike",
   "mark.superscript",
@@ -52,12 +54,26 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/**
+ * Link opens the Hyperlink extension's own popover over the document, so
+ * the sheet closes first: the editor is `inert` while it is open, and the
+ * popover would open behind it. The capture handler runs before the
+ * button's own click, which then acts on the live editor.
+ */
+function LinkRow({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  return (
+    <div className="contents" onClickCapture={onClose}>
+      <ActionButton id="mark.link" editor={editor} variant="phone" showLabel />
+    </div>
+  );
+}
+
 /** Applying keeps the sheet open: writers try colours (O4's popover rule). */
 const keepOpen = () => {};
 
 /**
  * Body of the phone "Text format" sheet (spec §4.7): Style, Size, Colours,
- * Align and More. Every control is a registry action (`ActionButton`,
+ * Align and More (Redo below 360px, Outdent, Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
  * reasons (title, headings, code, read-only) and `aria-pressed` states are
  * the row's. Its own lazy chunk, loaded on first open.
@@ -65,8 +81,11 @@ const keepOpen = () => {};
 export function FormatSheetBody({
   editor,
   recent,
+  onClose,
 }: {
   editor: Editor;
+  /** Closes the sheet (before an action that opens a popover over the page). */
+  onClose: () => void;
   /** M3, read by the bar (ready before the sheet opens); frozen while open. */
   recent: readonly RecentColor[];
 }) {
@@ -115,6 +134,7 @@ export function FormatSheetBody({
               showLabel
             />
           ))}
+          <LinkRow editor={editor} onClose={onClose} />
           <ThemeToggle />
         </div>
       </Section>

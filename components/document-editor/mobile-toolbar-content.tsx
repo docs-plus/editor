@@ -113,7 +113,7 @@ interface MobileToolbarContentProps {
 /**
  * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, a constant
  * 44px tall, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, Aa (the "Text format" sheet: style, size, colours, align, more),
+ * undo, redo (360px and up; the sheet carries it below), Aa (the "Text format" sheet: style, size, colours, align, more),
  * B, I, list, indent, Insert. Toggles show their state with `aria-pressed`
  * (#269). Hidden in a read-only document (#308), which also closes the
  * sheet. Follow-ups: the context slot cell, and the selection swap
@@ -174,6 +174,11 @@ export function MobileToolbarContent({
     [editor],
   );
 
+  const closeSheet = useCallback(
+    () => onSheetOpenChange(false),
+    [onSheetOpenChange],
+  );
+
   useEffect(() => {
     if (readOnly) onSheetOpenChange(false);
   }, [readOnly, onSheetOpenChange]);
@@ -199,6 +204,7 @@ export function MobileToolbarContent({
       style={{ transform: inset ? `translateY(-${inset}px)` : undefined }}
     >
       <ActionButton id="history.undo" editor={editor} variant="phone" />
+      <ActionButton id="history.redo" editor={editor} variant="phone" />
       <Sheet open={sheetOpen} onOpenChange={onSheetOpenChange}>
         <SheetTrigger
           render={
@@ -232,7 +238,11 @@ export function MobileToolbarContent({
             </SheetClose>
           </SheetHeader>
           <Suspense fallback={<div className="st-sheet-fallback" />}>
-            <FormatSheetBody editor={editor} recent={recent.recent} />
+            <FormatSheetBody
+              editor={editor}
+              recent={recent.recent}
+              onClose={closeSheet}
+            />
           </Suspense>
         </SheetContent>
       </Sheet>

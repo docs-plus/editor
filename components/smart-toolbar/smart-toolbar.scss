@@ -366,6 +366,20 @@ span[data-collapse-standin] {
   }
 }
 
+// Eight 44px cells fit 360px; below it Redo moves to the sheet's More
+// section, and above it the sheet does not repeat it.
+@media (max-width: 359.98px) {
+  [data-slot="toolbar"][data-variant="docked"] [data-action-id="history.redo"] {
+    display: none;
+  }
+}
+
+@media (min-width: 360px) {
+  [data-format-sheet] [data-action-id="history.redo"] {
+    display: none;
+  }
+}
+
 .st-phone-aa {
   font-weight: 600;
   letter-spacing: -0.01em;
