@@ -309,17 +309,28 @@ describe("sections", () => {
   });
 
   it("refuses to move another section when the held heading is gone", () => {
-    const target = doc();
+    const target = make(
+      heading(2, "Alpha", "a"),
+      heading(2, "Gamma", "g"),
+      heading(2, "Beta", "b"),
+      heading(2, "Delta", "d"),
+    );
     select(target, posInside(target, "Beta"));
-    // A collaborator deletes "Beta"; the caret maps into another block.
+    // A collaborator deletes "Beta"; the caret maps into a heading that
+    // could move up, so only the held id stops the wrong move.
     const start = posInside(target, "Beta") - 1;
     const beta = target.state.doc.nodeAt(start);
     target.view.dispatch(
       target.state.tr.delete(start, start + (beta?.nodeSize ?? 0)),
     );
+    expect(computeContext(target).headingLevel).toBe(2);
     const before = topLevelTexts(target);
     expect(runAction(target, action("section.moveUp"), "b")).toBe(false);
+    expect(runAction(target, action("section.moveUp"), null)).toBe(false);
     expect(topLevelTexts(target)).toEqual(before);
+    // Control: without a held id the caret's heading moves.
+    expect(runAction(target, action("section.moveUp"))).toBe(true);
+    expect(topLevelTexts(target)).not.toEqual(before);
   });
 });
 
