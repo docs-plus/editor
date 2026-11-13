@@ -1,23 +1,17 @@
 "use client";
 
-import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useCurrentEditor } from "@tiptap/react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
-import { embedMedia } from "@/components/tiptap-ui/media-embed-popover";
-import { MediaEmbedForm } from "@/components/tiptap-ui/media-embed-popover/media-embed-popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { useEditorContext } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
-import { availability, runAction } from "@/lib/editor-actions/registry";
-import type { AnyAction } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { ChevronDownIcon, PlusIcon } from "@/lib/icons";
 import {
@@ -28,11 +22,19 @@ import {
 } from "@/lib/remembered-choice";
 import { cn } from "@/lib/utils";
 
-import { TableSizeGrid } from "./insert/table-size-grid";
+import { useIdlePreload } from "./idle-preload";
+import type { InsertStepKind as Step } from "./insert/insert-menu-body";
 import type { SurfaceProps } from "./types";
 import "./smart-toolbar.scss";
 
-type Step = "table" | "embed";
+/** Menu items and steps: their own chunk, fetched when the page is idle. */
+const loadInsertBody = () => import("./insert/insert-menu-body");
+const InsertMenuItems = lazy(() =>
+  loadInsertBody().then((module) => ({ default: module.InsertMenuItems })),
+);
+const InsertStep = lazy(() =>
+  loadInsertBody().then((module) => ({ default: module.InsertStep })),
+);
 
 const STEP_LABEL: Record<Step, string> = {
   table: "Insert table",
@@ -45,39 +47,6 @@ const STEP_LABEL: Record<Step, string> = {
  */
 const faceActionId = (kind: InsertKind | null) =>
   kind && editorActions.get(`insert.${kind}`) ? `insert.${kind}` : null;
-
-/** "insert.codeBlock" → "codeBlock", the M10 kind. */
-const kindOf = (action: AnyAction) => action.id.slice("insert.".length);
-
-/**
- * The menu items: mounted only while the menu is open, so the snapshot
- * subscription costs nothing while typing.
- */
-function InsertMenuItems({ editor }: { editor: Editor }) {
-  const ctx = useEditorContext(editor);
-  const lastKind = useRememberedChoice(INSERT_KIND_CHOICE);
-  return editorActions.list({ group: "insert" }).map((action) => {
-    const enabled = ctx ? availability(action, ctx) : true;
-    const reason = enabled === true ? undefined : enabled.reason;
-    const Icon = action.icon;
-    return (
-      <DropdownMenuItem
-        key={action.id}
-        data-action-id={action.id}
-        data-last={
-          lastKind.ready && kindOf(action) === lastKind.last ? "" : undefined
-        }
-        disabled={reason !== undefined}
-        title={reason}
-        onClick={() => runAction(editor, action)}
-      >
-        {Icon ? <Icon aria-hidden="true" /> : null}
-        <span>{action.label}</span>
-        {reason ? <span className="sr-only">({reason})</span> : null}
-      </DropdownMenuItem>
-    );
-  });
-}
 
 /**
  * `+ Insert ▾` (spec §4.1): lists every registry action in group `insert`
@@ -95,6 +64,7 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
   const faceId = faceActionId(lastKind.ready ? lastKind.last : null);
   const [step, setStep] = useState<Step | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  useIdlePreload(loadInsertBody);
 
   useEffect(() => {
     if (!editor) return;
@@ -133,6 +103,8 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
               aria-label="Insert"
               tooltip="Insert"
               onMouseDown={(event) => event.preventDefault()}
+              onPointerEnter={loadInsertBody}
+              onFocus={loadInsertBody}
             />
           }
         >
@@ -141,7 +113,9 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           <ChevronDownIcon aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-44">
-          <InsertMenuItems editor={editor} />
+          <Suspense fallback={null}>
+            <InsertMenuItems editor={editor} />
+          </Suspense>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -160,22 +134,15 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           className={step === "embed" ? "w-80" : undefined}
           finalFocus={triggerRef}
         >
-          {step === "table" ? (
-            <TableSizeGrid
-              initial={tableSize.last}
-              onPick={(size) => {
-                const action = editorActions.get("insert.table");
-                if (action) runAction(editor, action, size);
-                setStep(null);
-                editor.commands.focus();
-              }}
-            />
-          ) : null}
-          {step === "embed" ? (
-            <MediaEmbedForm
-              onEmbed={(url) => embedMedia(editor, url)}
-              onDone={() => setStep(null)}
-            />
+          {step ? (
+            <Suspense fallback={null}>
+              <InsertStep
+                step={step}
+                editor={editor}
+                tableSize={tableSize.last}
+                onDone={() => setStep(null)}
+              />
+            </Suspense>
           ) : null}
         </PopoverContent>
       </Popover>
