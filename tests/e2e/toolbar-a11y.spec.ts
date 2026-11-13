@@ -373,7 +373,7 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
   });
 }
 
-test("mobile highlight panel: one arrow press moves one swatch", async ({
+test("mobile colour panel: one arrow press moves one swatch", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -383,14 +383,19 @@ test("mobile highlight panel: one arrow press moves one swatch", async ({
     .getByRole("toolbar")
     .getByRole("button", { name: "Highlight text" })
     .click();
+  await page
+    .getByRole("toolbar")
+    .getByRole("button", { name: "More highlight colours" })
+    .click();
 
-  const group = page.getByRole("group", { name: "Highlight colours" });
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const group = dialog.getByRole("group", { name: "Highlight" });
   await expect(group).toBeVisible();
   const green = group.getByRole("button", { name: "Green highlight" });
   await green.focus();
   await page.keyboard.press("ArrowRight");
   await expect(
-    group.getByRole("button", { name: "Blue highlight" }),
+    group.getByRole("button", { name: "Teal highlight" }),
   ).toBeFocused();
 });
 
