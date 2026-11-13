@@ -3,6 +3,7 @@
 import { type Editor, useCurrentEditor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 
+import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { embedMedia } from "@/components/tiptap-ui/media-embed-popover";
 import { MediaEmbedForm } from "@/components/tiptap-ui/media-embed-popover/media-embed-popover";
 import {
@@ -21,9 +22,11 @@ import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { ChevronDownIcon, PlusIcon } from "@/lib/icons";
 import {
   INSERT_KIND_CHOICE,
+  type InsertKind,
   TABLE_SIZE_CHOICE,
   useRememberedChoice,
 } from "@/lib/remembered-choice";
+import { cn } from "@/lib/utils";
 
 import { TableSizeGrid } from "./insert/table-size-grid";
 import type { SurfaceProps } from "./types";
@@ -35,6 +38,13 @@ const STEP_LABEL: Record<Step, string> = {
   table: "Insert table",
   embed: "Embed media",
 };
+
+/**
+ * M10: the face's registry id, or null with nothing remembered (the face
+ * then stays "+ Insert" and opens the menu, D2 Decision 1).
+ */
+const faceActionId = (kind: InsertKind | null) =>
+  kind && editorActions.get(`insert.${kind}`) ? `insert.${kind}` : null;
 
 /** "insert.codeBlock" → "codeBlock", the M10 kind. */
 const kindOf = (action: AnyAction) => action.id.slice("insert.".length);
@@ -74,12 +84,15 @@ function InsertMenuItems({ editor }: { editor: Editor }) {
  * (E's templates join that way). Kinds that need input first (table size,
  * embed link) answer the action's `insert.open` intent with their step
  * (M10), anchored to the Insert button. The table grid opens at the last
- * size (M17a); the last inserted kind is pre-highlighted. PR D2 owns.
+ * size (M17a); the last inserted kind is pre-highlighted. At T1 the last
+ * kind also gets a labelled face beside the menu (M10). PR D2 owns.
  */
 export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
   const { editor: contextEditor } = useCurrentEditor();
   const editor = providedEditor ?? contextEditor ?? null;
   const tableSize = useRememberedChoice(TABLE_SIZE_CHOICE);
+  const lastKind = useRememberedChoice(INSERT_KIND_CHOICE);
+  const faceId = faceActionId(lastKind.ready ? lastKind.last : null);
   const [step, setStep] = useState<Step | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -99,6 +112,13 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
 
   return (
     <>
+      {faceId ? (
+        // M10 face, T1 only: the tier hides it from T2 on, where the plain
+        // menu (with the kind pre-highlighted) remains.
+        <span data-collapse-tier="t2" className="contents">
+          <ActionButton id={faceId} editor={editor} showLabel />
+        </span>
+      ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -106,14 +126,17 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
               ref={triggerRef}
               type="button"
               size="sm"
-              className="st-insert-trigger"
+              className={cn(
+                "st-insert-trigger",
+                faceId && "st-insert-trigger--split",
+              )}
               aria-label="Insert"
               tooltip="Insert"
               onMouseDown={(event) => event.preventDefault()}
             />
           }
         >
-          <PlusIcon aria-hidden="true" />
+          <PlusIcon className="st-insert-plus" aria-hidden="true" />
           <span className="st-insert-label">Insert</span>
           <ChevronDownIcon aria-hidden="true" />
         </DropdownMenuTrigger>
