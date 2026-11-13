@@ -340,12 +340,13 @@ export const LIST_TYPE_CHOICE: ChoiceSpec<ListType> = {
   fallback: "bulletList",
 };
 
-/** M10: the last inserted kind (pre-highlighted in the Insert menu). */
-export const INSERT_KIND_CHOICE: ChoiceSpec<InsertKind> = {
+/** M10: the last inserted kind (the T1 face; pre-highlighted in the menu). */
+export const INSERT_KIND_CHOICE: ChoiceSpec<InsertKind | null> = {
   slot: "insertKind",
   maxRecent: 0,
   validate: isInsertKind,
-  fallback: "table",
+  // Nothing remembered: the Insert face stays "+ Insert" (D2 Decision 1).
+  fallback: null,
 };
 
 /** M17a: the table grid opens at the last size. */
