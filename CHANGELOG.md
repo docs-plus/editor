@@ -14,6 +14,8 @@ since the previous tag.
 Minors left by the a11y review of the smart toolbar (contract §10).
 
 #### Fixed
+- **Phone List menu:** tapping the list type that is already checked kept
+  removing the list; it now only closes the menu, as on desktop.
 - **One Esc leaves the row (M3):** Esc on a row, bubble or phone-bar item
   returns to the editor with its selection in one press, even while the
   item's focus tooltip shows (the toolbar takes the key in the capture
@@ -60,10 +62,6 @@ Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
 - **Swipe down to close the Aa sheet:** drag its header (new handle)
   down past 80px or flick it; shorter drags snap back, reduced motion
   makes both instant, and Done, Esc and the backdrop still close it.
-
-#### Fixed (phone)
-- Phone List menu: tapping the list type that is already checked kept
-  removing the list; it now only closes the menu, as on desktop.
 
 ### Smart toolbar later-phase plans (docs)
 
