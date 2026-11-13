@@ -30,7 +30,7 @@ selection swap and Repeat split button (PR E). Phones reach size, text colour
 and highlight through the "Text style and colour" panel. The bubble-in-row
 matrix and Alt+F10-to-bubble tests stay pending until the bubble lands.
 
-**Open before `main`** (contract §10, O1–O4): the editor chunk is +15.9 KB gz
+**Open before `main`** (contract §10, O1–O4): the editor chunk is +16.1 KB gz
 against a +6 KB budget, so the CI size gate fails; the arrow-key p95 budget;
 text colour on a highlight contrast; and the colour popover keyboard changes
 listed under Changed.
