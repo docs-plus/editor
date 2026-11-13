@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
 import type * as Y from "yjs";
 
+import { preloadSurfaces } from "@/components/smart-toolbar/lazy-surface";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import { getUserIdentity } from "@/lib/user-identity";
 
@@ -104,6 +105,13 @@ export function useDocumentEditorEffects({
     generatePlaygroundContent,
     defaultContent,
   ]);
+
+  // After the first server sync, fetch the colour and Insert chunks when
+  // idle, so the service worker has them for offline use.
+  useEffect(() => {
+    if (!serverSynced) return;
+    (window.requestIdleCallback ?? setTimeout)(preloadSurfaces);
+  }, [serverSynced]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
