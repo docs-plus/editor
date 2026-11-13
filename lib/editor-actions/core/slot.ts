@@ -356,24 +356,68 @@ function firstRowIsHeader(ctx: Ctx): boolean {
 
 // --- Media ---------------------------------------------------------------
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const MEDIA_OPTIONS_BUTTON =
+  '[data-slot="context-slot"] [data-action-id="media.options"]';
+/** Kit toolbars that already return focus on Esc. */
+const escapeWired = new WeakSet<HTMLElement>();
+
+/**
+ * Esc in the kit toolbar (outside its own popovers) closes it and returns
+ * focus to the slot's "Media options…" button, else to the editor.
+ */
+function wireEscape(
+  editor: Editor,
+  toolbar: HTMLElement,
+  target: HTMLElement,
+  returnTo: HTMLElement | null,
+): void {
+  if (escapeWired.has(toolbar)) return;
+  escapeWired.add(toolbar);
+  toolbar.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const from = event.target;
+    if (from instanceof Element && from.closest(".floating-popover")) return;
+    event.preventDefault();
+    // Keeps the kit's document-level Esc from also focusing the editor.
+    event.stopPropagation();
+    closeMediaToolbar(target);
+    const back =
+      (returnTo?.isConnected ? returnTo : null) ??
+      document.querySelector<HTMLElement>(MEDIA_OPTIONS_BUTTON);
+    if (back) back.focus();
+    else editor.view.focus();
+  });
+}
+
 /**
  * Opens the HyperMultimedia kit's own toolbar for the selected media node
- * (today reachable only on hover). Returns the toolbar element's presence.
+ * (otherwise reachable only on hover) and moves focus to its first control,
+ * so a keyboard user can reach it (WCAG 2.1.1); Esc comes back. A toolbar
+ * with nothing focusable stays open for the pointer and focus stays on the
+ * slot button. Returns the toolbar element, or null when none opened.
  */
 export function openMediaOptions(editor: Editor): HTMLElement | null {
   const { selection } = editor.state;
   if (!(selection instanceof NodeSelection)) return null;
   const target = editor.view.nodeDOM(selection.from);
   if (!(target instanceof HTMLElement)) return null;
-  return openMediaToolbar({
+  const active = document.activeElement;
+  const returnTo = active instanceof HTMLElement ? active : null;
+  const toolbar = openMediaToolbar({
     target,
     editor,
     nodeType: selection.node.type.name,
     nodePos: selection.from,
   });
+  if (!toolbar) return null;
+  const first = toolbar.querySelector<HTMLElement>(FOCUSABLE);
+  if (!first) return toolbar;
+  wireEscape(editor, toolbar, target, returnTo);
+  first.focus();
+  return toolbar;
 }
-
-export { closeMediaToolbar };
 
 const mediaOptionsAction: AnyAction = {
   id: "media.options",
