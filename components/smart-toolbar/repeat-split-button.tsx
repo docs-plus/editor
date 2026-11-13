@@ -24,15 +24,15 @@ import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memor
 import { scanDocFormats } from "@/lib/doc-format-scan";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { Enabled } from "@/lib/editor-actions/types";
-// Installs the E action bodies (lazy half of v11-actions) with this chunk.
-import "@/lib/editor-actions/v11-engine";
 import {
   DOC_FORMAT_PREFIX,
+  ENGINE_LOADING_REASON,
   formatsApplyAction,
   formatsSaveAction,
   repeatApplyAction,
   repeatCopyAction,
 } from "@/lib/editor-actions/v11-actions";
+import { useV11EngineReady } from "@/lib/editor-actions/v11-engine-ready";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { ChevronDownIcon, RepeatIcon } from "@/lib/icons";
 import {
@@ -61,16 +61,29 @@ function useSavedFormats(): readonly SavedFormat[] {
  * format…, Your formats M14, In this doc M12). Every item runs a registry
  * action. Rendered by D2's bubble and phone bar; nothing without a bundle
  * or saved format.
+ *
+ * The action bodies live in E's lazy engine, reached only through the
+ * registry (never imported here, so this chunk carries no copy). A bundle
+ * or saved format can come from storage before the engine lands: until
+ * then the face and the action items are disabled with
+ * `ENGINE_LOADING_REASON`, and they enable once it lands.
  */
 export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
   const { editor: contextEditor } = useCurrentEditor();
   const editor = provided ?? contextEditor ?? null;
   const bundle = useRememberedBundle();
   const saved = useSavedFormats();
+  const ready = useV11EngineReady();
+  const [open, setOpen] = useState(false);
   const [inDoc, setInDoc] = useState<readonly FormatBundle[]>([]);
-  const [canSave, setCanSave] = useState<Enabled>(true);
   const describedBy = useId();
   if (!editor || (!bundle && saved.length === 0)) return null;
+
+  // Read while the menu is open, so a late engine turns "still loading"
+  // into the real answer without reopening.
+  const canSave: Enabled = open
+    ? availability(formatsSaveAction, computeContext(editor))
+    : true;
 
   const run = (action: Parameters<typeof runAction>[1], arg?: unknown) => {
     runAction(editor, action, arg);
@@ -86,6 +99,8 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
           aria-describedby={describedBy}
           tooltip="Repeat formatting"
           className="min-h-6 min-w-6 gap-1 px-1.5"
+          disabled={!ready}
+          disabledReason={ENGINE_LOADING_REASON}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => run(repeatApplyAction)}
         >
@@ -97,10 +112,9 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
         </ToolbarButton>
       ) : null}
       <DropdownMenu
-        onOpenChange={(open) => {
-          if (!open) return;
-          setInDoc(scanDocFormats(editor.state.doc).bundles);
-          setCanSave(availability(formatsSaveAction, computeContext(editor)));
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) setInDoc(scanDocFormats(editor.state.doc).bundles);
         }}
       >
         <DropdownMenuTrigger
@@ -123,6 +137,7 @@ export function RepeatSplitButton({ editor: provided }: SurfaceProps) {
           saved={saved}
           inDoc={inDoc}
           canSave={canSave}
+          ready={ready}
           run={run}
         />
       </DropdownMenu>
@@ -136,6 +151,7 @@ function FormatsMenuContent({
   saved,
   inDoc,
   canSave,
+  ready,
   run,
 }: {
   editor: Editor;
@@ -143,21 +159,28 @@ function FormatsMenuContent({
   saved: readonly SavedFormat[];
   inDoc: readonly FormatBundle[];
   canSave: Enabled;
+  ready: boolean;
   run: (action: Parameters<typeof runAction>[1], arg?: unknown) => void;
 }) {
+  // Until E's engine lands, every action item says why it does nothing.
+  const loading = ready ? undefined : ENGINE_LOADING_REASON;
   return (
     <DropdownMenuContent align="start" className="min-w-56">
       <DropdownMenuGroup>
         {bundle ? (
           <DescribedItem
             label={`Repeat ${bundleFace(bundle)}`}
-            description={bundleLabel(bundle)}
+            description={loading ?? bundleLabel(bundle)}
+            disabled={!ready}
             onClick={() => run(repeatApplyAction)}
           />
         ) : null}
-        <DropdownMenuItem onClick={() => run(repeatCopyAction)}>
-          Copy formatting
-        </DropdownMenuItem>
+        <DescribedItem
+          label="Copy formatting"
+          description={loading}
+          disabled={!ready}
+          onClick={() => run(repeatCopyAction)}
+        />
         <DescribedItem
           label="Save as format…"
           description={canSave === true ? undefined : canSave.reason}
@@ -171,12 +194,13 @@ function FormatsMenuContent({
           <DropdownMenuGroup>
             <DropdownMenuLabel>Your formats</DropdownMenuLabel>
             {saved.map((format) => (
-              <DropdownMenuItem
+              <DescribedItem
                 key={format.id}
+                label={format.name}
+                description={loading}
+                disabled={!ready}
                 onClick={() => run(formatsApplyAction, format.id)}
-              >
-                {format.name}
-              </DropdownMenuItem>
+              />
             ))}
           </DropdownMenuGroup>
         </>
@@ -190,7 +214,8 @@ function FormatsMenuContent({
               <DescribedItem
                 key={bundleKey(entry)}
                 label={bundleFace(entry)}
-                description={bundleLabel(entry)}
+                description={loading ?? bundleLabel(entry)}
+                disabled={!ready}
                 onClick={() =>
                   run(
                     formatsApplyAction,

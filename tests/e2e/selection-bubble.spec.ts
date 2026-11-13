@@ -788,6 +788,54 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
   });
 
+  test("Repeat and Formats say they are loading until the engine lands", async ({
+    page,
+  }) => {
+    // A bundle remembered from an earlier visit shows the Repeat split
+    // before E's engine chunk (which no longer rides in the bubble chunk).
+    await rememberBoldBundle(page);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unroute = await interceptChunk(
+      page,
+      CHUNK_MARKERS.engine,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+
+    const loading = "Formatting tools are still loading.";
+    const face = bubbleToolbar(page).locator('[data-action-id="repeat.apply"]');
+    await expect(face).toHaveAttribute("aria-disabled", "true");
+    await expect(face).toHaveAccessibleDescription(new RegExp(loading));
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    const save = page.getByRole("menuitem", { name: "Save as format…" });
+    await expect(copy).toHaveAttribute("aria-disabled", "true");
+    await expect(copy).toHaveAccessibleDescription(loading);
+    await expect(save).toHaveAccessibleDescription(loading);
+
+    release();
+    // The open menu turns live without reopening.
+    await expect(copy).not.toHaveAttribute("aria-disabled", "true");
+    await expect(save).toHaveAccessibleDescription(
+      "Select formatted text to save it as a format.",
+    );
+    await page.keyboard.press("Escape");
+    await expect(face).not.toHaveAttribute("aria-disabled", "true");
+    await face.click();
+    await expect
+      .poll(() => page.evaluate(() => window.__tiptap_editor?.getHTML()))
+      .toContain("<strong>some words</strong>");
+    await unroute();
+  });
+
   for (const theme of ["light", "dark"] as const) {
     test(`screenshots: above, below and with the popover (${theme})`, async ({
       page,

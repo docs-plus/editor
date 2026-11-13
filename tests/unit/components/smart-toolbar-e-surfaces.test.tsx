@@ -13,6 +13,8 @@ import {
   rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
+// The surfaces no longer import the engine; install it as an editor would.
+import "@/lib/editor-actions/v11-engine";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 

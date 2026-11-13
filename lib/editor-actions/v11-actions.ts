@@ -7,6 +7,8 @@
  * `RepeatFormatting` extension starts loading when an editor is created
  * (editor-chunk budget, contract A11 and E's A8). Until it lands, the E
  * actions are unavailable with `ENGINE_LOADING_REASON` and run nothing.
+ * `loadV11Engine()` is the engine's only importer: a static import from a
+ * surface would put a second copy of it in that surface's chunk.
  *
  * Import rule (contract §4): never the registry index or the context
  * store, and never the RepeatFormatting extension module (it imports this

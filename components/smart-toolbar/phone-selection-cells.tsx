@@ -9,8 +9,7 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { colorLabel } from "@/lib/editor-actions/surface-actions";
 import { repeatApplyAction } from "@/lib/editor-actions/v11-actions";
-// Installs the E action bodies (lazy half of v11-actions) with this chunk.
-import "@/lib/editor-actions/v11-engine";
+import { useV11EngineReady } from "@/lib/editor-actions/v11-engine-ready";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { CloseIcon, RepeatIcon } from "@/lib/icons";
 import {
@@ -47,12 +46,14 @@ export function nextMobileBarMode(input: {
  * ↻ Repeat as a phone cell. `repeat.apply` reads the remembered bundle,
  * which is not part of the context snapshot (contract §3.1, documented
  * external read), so the cached `getView` can lag a bundle change. This
- * cell re-renders on bundle changes and on view changes, and computes its
- * availability from the live snapshot at render.
+ * cell re-renders on bundle changes, on view changes and when E's lazy
+ * engine lands (until then the action reports `ENGINE_LOADING_REASON`),
+ * and computes its availability from the live snapshot at render.
  */
 function RepeatCell({ editor }: { editor: Editor }) {
   useActionView(repeatApplyAction.id, editor);
   useRememberedBundle();
+  useV11EngineReady();
   const enabled = availability(
     repeatApplyAction,
     getEditorContextStore(editor).getContext(),

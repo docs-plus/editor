@@ -1,10 +1,13 @@
 /**
  * PR E's action bodies, commands and bundle recorder: the lazy half of
  * `v11-actions.ts` (contract §10, editor-chunk budget A11). Loaded by the
- * `RepeatFormatting` extension as soon as an editor is created, and by
- * every E surface that imports it (palette, Repeat split button, phone
- * cells). Evaluating this module installs it, so whichever importer lands
- * first makes the registry's E actions live.
+ * `RepeatFormatting` extension as soon as an editor is created. Only
+ * `loadV11Engine()` imports this module, so its code lives in exactly one
+ * chunk: E's surfaces (palette, Repeat split button, phone cells) reach it
+ * through `getV11Engine()` / `loadV11Engine()` and show
+ * `ENGINE_LOADING_REASON` until it lands (`v11-engine-ready.ts`).
+ * Evaluating this module installs it and makes the registry's E actions
+ * live.
  *
  * Import rule (contract §4): never the registry index or the context store.
  */
