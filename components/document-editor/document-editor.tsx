@@ -265,8 +265,10 @@ function DocumentEditorContent({
   }, [editor, toggleFilterBar]);
 
   // Esc on a toolbar item returns to the document with its selection.
+  // `view.focus()` restores the selection at once; Tiptap's `focus()` waits
+  // a frame, and a keystroke typed before it would land in the toolbar.
   const returnToEditor = useCallback(() => {
-    editor?.commands.focus();
+    editor?.view.focus();
   }, [editor]);
 
   const rect = useCursorVisibility({
