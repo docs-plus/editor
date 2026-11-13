@@ -17,7 +17,7 @@ interface ToolbarProps extends BaseProps {
   /**
    * Esc on a toolbar item (not inside an open menu, which handles its own
    * Esc in a portal). The editor shell returns focus to the document with
-   * its selection.
+   * its selection, in one press even while the item shows its tooltip.
    */
   onEscape?: () => void;
 }
@@ -257,30 +257,19 @@ function rovingItemOf(target: EventTarget | null): HTMLElement | null {
 }
 
 /**
- * Arrow/Home/End/Esc on a toolbar item. Runs as React `onKeyDown` on the
+ * Arrow/Home/End on a toolbar item. Runs as React `onKeyDown` on the
  * toolbar, so it bubbles after the items' own React handlers: an item that
- * handles a key (prevents its default or stops it) keeps it, so the first
- * Esc closes an open tooltip and the second returns to the editor. Events
+ * handles a key (prevents its default or stops it) keeps it. Events
  * bubbling through React portals (open menus) are ignored.
  */
-function handleRovingKeyDown(
-  event: React.KeyboardEvent<HTMLDivElement>,
-  onEscape: (() => void) | undefined,
-) {
+function handleRovingKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
   const toolbar = event.currentTarget;
   if (!toolbar.contains(event.target as Node)) return;
   const item = rovingItemOf(event.target);
   if (!item) return;
   // Base UI prevents the default of every key but Tab on a focusable
   // disabled button (to block activation); that must not trap the arrows.
-  // A tooltip's Esc dismiss also stops propagation, so it never gets here.
   if (event.defaultPrevented && item.getAttribute("aria-disabled") !== "true") {
-    return;
-  }
-  if (event.key === "Escape") {
-    if (!onEscape) return;
-    event.preventDefault();
-    onEscape();
     return;
   }
   const move = MOVES[event.key];
@@ -291,6 +280,31 @@ function handleRovingKeyDown(
   const next = move(Math.max(current, 0), items.length - 1);
   event.preventDefault();
   items[(next + items.length) % items.length].focus();
+}
+
+/**
+ * Esc on a toolbar item, in the capture phase: before the item's focus
+ * tooltip takes it, so one press returns to the editor (the tooltip still
+ * sees the key and closes; a hover tooltip with focus elsewhere keeps its
+ * own Esc, WCAG 1.4.13). An item whose popup is open keeps the key, and
+ * events from portals (open menus) never reach here.
+ */
+function handleEscapeCapture(
+  event: React.KeyboardEvent<HTMLDivElement>,
+  onEscape: (() => void) | undefined,
+) {
+  const item = rovingItemOf(event.target);
+  if (
+    event.key !== "Escape" ||
+    !onEscape ||
+    !item ||
+    !event.currentTarget.contains(item) ||
+    item.getAttribute("aria-expanded") === "true"
+  ) {
+    return;
+  }
+  event.preventDefault();
+  onEscape();
 }
 
 const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
@@ -323,9 +337,10 @@ const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>(
           className,
         )}
         {...props}
+        onKeyDownCapture={(event) => handleEscapeCapture(event, onEscape)}
         onKeyDown={(event) => {
           onKeyDown?.(event);
-          handleRovingKeyDown(event, onEscape);
+          handleRovingKeyDown(event);
         }}
       >
         {children}

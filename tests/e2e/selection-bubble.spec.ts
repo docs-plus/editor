@@ -134,16 +134,9 @@ async function selectUnderToolbar(page: Page) {
   });
 }
 
-/** Esc until the editor has focus: a focus tooltip may take the first. */
+/** One Esc on a bubble item returns to the editor, tooltip or not (M3). */
 async function escapeToEditor(page: Page) {
-  for (let press = 0; press < 2; press += 1) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(100);
-    const back = await page
-      .locator(".tiptap")
-      .evaluate((el) => el === document.activeElement);
-    if (back) return;
-  }
+  await page.keyboard.press("Escape");
   await expect(page.locator(".tiptap")).toBeFocused();
 }
 
@@ -317,7 +310,7 @@ test.describe("selection bubble", () => {
     await expect(
       bubbleToolbar(page).getByRole("button", { name: "Italic" }),
     ).toBeFocused();
-    // A focus tooltip takes the first Esc (WCAG 1.4.13), as in the row.
+    // One Esc, even with the item's focus tooltip open, as in the row.
     await escapeToEditor(page);
     expect(await selectionRange(page)).toEqual(before);
     await expect(bubble(page)).toHaveCount(0, { timeout: 500 });
