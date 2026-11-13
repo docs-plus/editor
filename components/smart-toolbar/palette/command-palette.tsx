@@ -9,6 +9,7 @@
  * stays one), and y-tiptap remaps it across remote edits.
  */
 import type { Editor } from "@tiptap/core";
+import { defaultFilter } from "cmdk";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,14 @@ function saveReason(editor: Editor, name: string): string | null {
 
 /** `MAX_FORMAT_NAME` (not imported: it would pull saved-formats in here). */
 const NAME_MAX = 40;
+
+/**
+ * cmdk's scorer over the label and keywords first, the item key (an action
+ * id) last, so "repeat" ranks Repeat formatting over Copy formatting
+ * (`repeat.copy`), which still matches.
+ */
+const labelFirst = (value: string, search: string, keywords?: string[]) =>
+  defaultFilter(keywords?.join(" ") ?? "", search, [value]);
 
 /** Pause after the last keystroke before the result count is announced. */
 const STATUS_DELAY_MS = 300;
@@ -318,6 +327,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             label="Search actions"
             value={value}
             onValueChange={setValue}
+            filter={labelFirst}
           >
             {/* Back from the save view: focus returns here. */}
             <CommandInput autoFocus placeholder="Search actions…" />

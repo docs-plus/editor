@@ -1,7 +1,9 @@
 /**
  * Builds the palette's groups from the registry (spec §4.4): Recent,
- * Suggested here, Format, Insert, Section, View. Disabled entries stay
- * listed with their reason, after the runnable ones of their group. Pure: tested without React.
+ * Suggested here, Format, Insert, Section, View, History. Format opens
+ * with Repeat, Copy formatting and Your formats. Disabled entries stay
+ * listed with their reason, after the runnable ones of their group. Pure:
+ * tested without React.
  */
 import { availability } from "@/lib/editor-actions/registry";
 import type { ActionGroup, AnyAction, Ctx } from "@/lib/editor-actions/types";
@@ -12,7 +14,8 @@ export type PaletteHeading =
   | "Format"
   | "Insert"
   | "Section"
-  | "View";
+  | "View"
+  | "History";
 
 export const PALETTE_HEADINGS: readonly PaletteHeading[] = [
   "Recent",
@@ -21,13 +24,14 @@ export const PALETTE_HEADINGS: readonly PaletteHeading[] = [
   "Insert",
   "Section",
   "View",
+  "History",
 ];
 
 type GroupHeading = Exclude<PaletteHeading, "Recent" | "Suggested here">;
 
 /** A `Record`, so a new `ActionGroup` fails typecheck until it is placed. */
 export const PALETTE_GROUP_OF: Readonly<Record<ActionGroup, GroupHeading>> = {
-  history: "Format",
+  history: "History",
   style: "Format",
   mark: "Format",
   color: "Format",
@@ -57,6 +61,18 @@ export const MAX_SUGGESTED = 6;
 
 /** Ids the palette never lists (itself) or lists through a custom flow. */
 const HIDDEN_IDS = new Set(["palette.open"]);
+/** First in Format, in this order; the rest keep registry order. */
+const FORMAT_FIRST = [
+  "repeat.apply",
+  "repeat.copy",
+  "formats.apply",
+  "formats.save",
+];
+const formatRank = (action: AnyAction) => {
+  const index = FORMAT_FIRST.indexOf(action.id);
+  return index < 0 ? FORMAT_FIRST.length : index;
+};
+
 /** Shown in Suggested whenever they can run. */
 const ALWAYS_SUGGESTED = new Set(["repeat.apply"]);
 /**
@@ -141,7 +157,8 @@ export function buildPaletteSections(input: {
   const byHeading = new Map<PaletteHeading, PaletteItem[]>();
   const all = new Map<string, PaletteItem>();
   const suggested: PaletteItem[] = [];
-  for (const action of actions) {
+  const ordered = [...actions].sort((a, b) => formatRank(a) - formatRank(b));
+  for (const action of ordered) {
     if (HIDDEN_IDS.has(action.id)) continue;
     const items = itemsOf(action, ctx);
     const heading = PALETTE_GROUP_OF[action.group];
