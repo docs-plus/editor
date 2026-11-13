@@ -436,6 +436,14 @@ test.describe("palette accessibility", () => {
     expect(await resolveRgb(page, bg)).toEqual(
       await resolveRgb(page, highlight),
     );
+    // The popup keeps a visible edge: forced colours drop the ring's
+    // box-shadow and paint the backdrop and popup as Canvas (spec §4.5).
+    const edge = await page.locator(PALETTE).evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { style: style.borderTopStyle, width: style.borderTopWidth };
+    });
+    expect(edge.style).not.toBe("none");
+    expect(edge.width).not.toBe("0px");
     // No outline painted on every option: an inactive one has none.
     const inactive = page
       .locator(`${PALETTE} [cmdk-item]:not([data-selected="true"])`)

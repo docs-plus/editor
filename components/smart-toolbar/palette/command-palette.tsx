@@ -182,7 +182,9 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
       <DialogContent
         data-command-palette=""
         showCloseButton={false}
-        className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg"
+        // The shared ring is a box-shadow, which forced colours drop: give
+        // the popup a real edge there (spec §4.5).
+        className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg forced-colors:border forced-colors:border-[CanvasText]"
         finalFocus={false}
       >
         {view === "save-format" ? null : (
