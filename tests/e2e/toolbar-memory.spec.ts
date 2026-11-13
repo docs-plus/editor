@@ -154,6 +154,59 @@ test.describe("M17a: table size", () => {
   });
 });
 
+test.describe("Insert step focus", () => {
+  const stepDialog = (page: Page) =>
+    page.getByRole("dialog", { name: "Insert table" });
+
+  async function openTableStep(page: Page) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openToolbarTestDoc(page);
+    await caretInBody(page);
+    await insertTrigger(page).click();
+    await page.getByRole("menuitem", { name: "Table" }).click();
+    await expect(stepDialog(page)).toBeVisible();
+  }
+
+  test("a picked size leaves focus in the new table", async ({ page }) => {
+    await openTableStep(page);
+    await page.getByRole("button", { name: "2 by 4 table" }).click();
+    // Unmounted: Base UI has run its focus return by now.
+    await expect(stepDialog(page)).toHaveCount(0);
+    const inTable = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const { $from } = editor?.state.selection ?? {};
+      let depth = $from?.depth ?? 0;
+      while (depth > 0 && $from?.node(depth).type.name !== "table") depth -= 1;
+      return Boolean(editor?.view.hasFocus() && depth > 0);
+    });
+    expect(inTable).toBe(true);
+  });
+
+  test("Esc returns focus to Insert", async ({ page }) => {
+    await openTableStep(page);
+    await page.keyboard.press("Escape");
+    await expect(stepDialog(page)).toHaveCount(0);
+    await expect(insertTrigger(page)).toBeFocused();
+  });
+
+  // A slow device stretches the step's exit animation, so the next click
+  // lands before Base UI returns focus; that return must not close the
+  // menu just opened (CI run 43434733098).
+  test("a menu opened while the step closes stays open", async ({ page }) => {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await openTableStep(page);
+    await page.keyboard.press("Escape");
+    await row(page).getByRole("button", { name: "More formatting" }).click();
+    await expect(stepDialog(page)).toHaveCount(0);
+    // Closing flips aria-expanded at once, before any exit animation.
+    await expect(
+      row(page).getByRole("button", { name: "More formatting" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await page.getByRole("menuitem", { name: "Forget my choices" }).click();
+  });
+});
+
 /**
  * The ladder queries the row's content box. Sets the viewport so that box
  * is exactly `threshold` wide (the narrowest T1, A5) with the widest face
