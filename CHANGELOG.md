@@ -15,8 +15,8 @@ Minors left by the a11y review of the smart toolbar (contract §10), and
 the design pass of PR E's surfaces
 (`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
 
-The editor chunk ends at +23,995 B of the 23.5 KB budget (69 B left);
-the budget is unchanged. The palette's first Alt+/ loads 20,459 B gz of
+The editor chunk ends at +23,994 B of the 23.5 KB budget (70 B left);
+the budget is unchanged. The palette's first Alt+/ loads 20,461 B gz of
 its 20,480 B budget.
 
 #### Fixed
@@ -80,7 +80,8 @@ its 20,480 B budget.
   1.1.1 bug looked groups up by a value they never had, so any weak match
   under Suggested here beat a strong one in Format): "paint format",
   "format painter" and "brush" find Paint format first, "repeat" still
-  finds Repeat formatting.
+  finds Repeat formatting. The highlighted row stays in view as the
+  groups reorder while typing.
 - **Saving a format** announces once, as a confirmation ("Saved format
   ‘X’" or "Replaced format ‘X’"); the palette said it a second time.
 - **Aa sheet colours:** ↑/↓ follow the swatch lines as the sheet lays
