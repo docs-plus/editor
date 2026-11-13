@@ -174,6 +174,37 @@ test.describe("action palette", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("typing highlights the best match and a status region announces the results (WCAG 4.1.3)", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // cmdk highlights on pointer move: keep the pointer off the list.
+    await page.mouse.move(0, 0);
+    await page.keyboard.press("Alt+Slash");
+    const input = page.getByPlaceholder("Search actions…");
+    await expect(input).toBeFocused();
+    const status = page.locator(`${PALETTE} [role="status"]`);
+    await expect(status).toHaveCount(1);
+    await expect(status).toHaveText("");
+
+    await page.keyboard.type("bol");
+    const active = page.locator(`${PALETTE} [cmdk-item][data-selected="true"]`);
+    await expect(active).toHaveAttribute("data-action-id", "mark.bold");
+    await expect(active).toHaveText(/^Bold/);
+    await expect(status).toHaveText(/^\d+ actions?$/);
+
+    await page.keyboard.type("zzzzqqq");
+    await expect(status).toHaveText("No matching actions");
+    for (let i = 0; i < 7; i += 1) await page.keyboard.press("Backspace");
+    await expect(status).toHaveText(/^\d+ actions?$/);
+
+    // Enter runs the highlighted option: Bold, not the second row.
+    await page.keyboard.press("Escape");
+    await select(page, "gamma");
+    await runFromPalette(page, "bol");
+    expect(await html(page)).toContain("<strong>gamma</strong>");
+  });
+
   test("leaves Alt+/ to other text fields", async ({ page }) => {
     await openDoc(page);
     await page.evaluate(() => {

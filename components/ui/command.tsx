@@ -12,6 +12,7 @@ import {
   CommandItem as CommandItemPrimitive,
   CommandList as CommandListPrimitive,
   CommandRoot,
+  useCommandState,
 } from "cmdk";
 import type * as React from "react";
 
@@ -149,4 +150,5 @@ export {
   CommandItem,
   CommandList,
   CommandShortcut,
+  useCommandState,
 };

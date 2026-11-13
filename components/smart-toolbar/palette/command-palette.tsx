@@ -9,7 +9,7 @@
  * stays one), and y-tiptap remaps it across remote edits.
  */
 import type { Editor } from "@tiptap/core";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
+  useCommandState,
 } from "@/components/ui/command";
 import {
   Dialog,
@@ -73,6 +74,43 @@ function saveReason(editor: Editor, name: string): string | null {
   );
   if (!exists && formats.length >= MAX_SAVED_FORMATS) return FORMAT_REASONS.cap;
   return null;
+}
+
+/** Pause after the last keystroke before the result count is announced. */
+const STATUS_DELAY_MS = 300;
+
+function resultStatus(count: number): string {
+  if (count === 0) return "No matching actions";
+  return count === 1 ? "1 action" : `${count} actions`;
+}
+
+/**
+ * Polite live region for search results (WCAG 4.1.3). Rendered for the
+ * palette's whole life (a region inserted with its text is often not
+ * read), empty until the search changes, then debounced so each keystroke
+ * does not interrupt. cmdk's `CommandEmpty` mounts only with no results
+ * and is not announced, and with no match the input loses its
+ * `aria-activedescendant`, so this is the only feedback.
+ */
+function ResultStatus() {
+  const search = useCommandState((state) => state.search);
+  const count = useCommandState((state) => state.filtered.count);
+  const [message, setMessage] = useState("");
+  const searched = useRef(false);
+  useEffect(() => {
+    if (!searched.current && search === "") return;
+    searched.current = true;
+    const timer = setTimeout(
+      () => setMessage(resultStatus(count)),
+      STATUS_DELAY_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [search, count]);
+  return (
+    <div role="status" aria-live="polite" className="sr-only">
+      {message}
+    </div>
+  );
 }
 
 export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
@@ -206,6 +244,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             onValueChange={setValue}
           >
             <CommandInput placeholder="Search actions…" />
+            <ResultStatus />
             <CommandList label="Actions">
               <CommandEmpty>No matching actions.</CommandEmpty>
               {sections.map((section) => (
