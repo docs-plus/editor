@@ -20,9 +20,11 @@ import type { SurfaceProps } from "./types";
 /**
  * The palette chunk (cmdk included), after the E engine it reads through
  * `getV11Engine()` (usually there already: editors load it on create).
+ * Without the engine it still opens; E's rows then say they are loading.
  */
 const loadPalette = () =>
   loadV11Engine()
+    .catch(() => undefined)
     .then(() => import("./palette/command-palette"))
     .then((module) => ({ default: module.CommandPalette }));
 

@@ -39,6 +39,7 @@ import {
   ENGINE_LOADING_REASON,
   formatsSaveAction,
   getV11Engine,
+  loadV11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { CheckIcon } from "@/lib/icons";
@@ -104,12 +105,34 @@ function ResultStatus() {
   );
 }
 
+/**
+ * Whether E's engine is installed. The host tries to load it before this
+ * chunk; if that failed (offline), each open tries again.
+ */
+function useEngineReady(): boolean {
+  const [ready, setReady] = useState(() => getV11Engine() !== null);
+  useEffect(() => {
+    if (ready) return;
+    let live = true;
+    loadV11Engine().then(
+      () => live && setReady(true),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [ready]);
+  return ready;
+}
+
 export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
   const reasonPrefix = useId();
   const [view, setView] = useState<PaletteMode>(mode);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const mac = useMemo(() => isMac(), []);
+  const engineReady = useEngineReady();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a late engine turns E's "still loading" rows into real ones
   const sections = useMemo(
     () =>
       buildPaletteSections({
@@ -117,7 +140,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
         actions: editorActions.list(),
         recentKeys: readPaletteRecent(),
       }),
-    [editor],
+    [editor, engineReady],
   );
   // cmdk highlights its first item on open; make that one Enter can run.
   const firstRunnable = useMemo(
