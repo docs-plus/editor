@@ -162,6 +162,83 @@ describe("migrateLegacyMarks", () => {
     ]);
   });
 
+  describe("legacy highlight colours", () => {
+    /** One paragraph whose text runs carry the given attributes. */
+    const runs = (...parts: [string, Record<string, unknown>][]) => {
+      const doc = new Y.Doc();
+      const paragraph = new Y.XmlElement("paragraph");
+      const text = new Y.XmlText();
+      doc.getXmlFragment(EDITOR_FRAGMENT_NAME).insert(0, [paragraph]);
+      paragraph.insert(0, [text]);
+      let at = 0;
+      for (const [insert, attributes] of parts) {
+        text.insert(at, insert, attributes);
+        at += insert.length;
+      }
+      return { doc, text };
+    };
+
+    it("rewrites var(--tt-color-highlight-X) to the token X", () => {
+      const { doc, text } = runs(
+        ["a", { highlight: { color: "var(--tt-color-highlight-yellow)" } }],
+        ["b", { highlight: { color: "var(--tt-color-highlight-red)" } }],
+      );
+      expect(migrateLegacyMarks(doc)).toBe(2);
+      expect(text.toDelta()).toEqual([
+        { insert: "a", attributes: { highlight: { color: "yellow" } } },
+        { insert: "b", attributes: { highlight: { color: "red" } } },
+      ]);
+      expect(migrateLegacyMarks(doc)).toBe(0);
+    });
+
+    it("leaves tokens, unknown and hostile values untouched", () => {
+      const values = ["teal", "#ff0", "var(--background)", "red;x", null];
+      const { doc, text } = runs(
+        ...values.map((color, i): [string, Record<string, unknown>] => [
+          String(i),
+          { highlight: { color } },
+        ]),
+      );
+      const before = text.toDelta();
+      const updates: Uint8Array[] = [];
+      doc.on("update", (u: Uint8Array) => updates.push(u));
+      expect(migrateLegacyMarks(doc)).toBe(0);
+      expect(text.toDelta()).toEqual(before);
+      expect(updates).toHaveLength(0);
+    });
+
+    it("rewrites a run that also carries a legacy link, in one patch", () => {
+      const { doc, text } = runs([
+        "both",
+        {
+          link: { href: "https://a.b" },
+          highlight: { color: "var(--tt-color-highlight-blue)" },
+        },
+      ]);
+      expect(migrateLegacyMarks(doc)).toBe(1);
+      expect(text.toDelta()).toEqual([
+        {
+          insert: "both",
+          attributes: {
+            hyperlink: { href: "https://a.b" },
+            highlight: { color: "blue" },
+          },
+        },
+      ]);
+    });
+
+    it("the rewritten doc loads in the editor with the token", () => {
+      const { doc } = runs([
+        "x",
+        { highlight: { color: "var(--tt-color-highlight-green)" } },
+      ]);
+      migrateLegacyMarks(doc);
+      expect(
+        collectMarks(yDocToProsemirrorJSON(doc, EDITOR_FRAGMENT_NAME)),
+      ).toEqual([{ type: "highlight", attrs: { color: "green" } }]);
+    });
+  });
+
   it("does not create the editor fragment on docs without one", () => {
     const doc = new Y.Doc();
     doc.getArray("tabs").push(["playground"]);
