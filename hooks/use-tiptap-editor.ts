@@ -95,6 +95,10 @@ export function getEditorVersionStore(editor: Editor): EditorVersionStore {
     if (!transaction.docChanged) notify();
   };
 
+  // A destroyed editor must never notify: the settle or max-wait timer of
+  // its last burst would re-render controls of a dead editor (spec §7).
+  editor.on("destroy", clearTimers);
+
   const store: EditorVersionStore = {
     subscribe(listener) {
       if (listeners.size === 0) {

@@ -131,6 +131,14 @@ describe("editor version store", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("notifies nothing after the editor is destroyed mid-burst", () => {
+    const { editor: instance, listener } = setup();
+    instance.commands.insertContentAt(9, "x");
+    instance.destroy();
+    vi.advanceTimersByTime(TOOLBAR_MAX_WAIT_MS);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("leaves no timer behind when the last subscriber leaves mid-burst", () => {
     const { editor: instance, listener, unsubscribe } = setup();
     instance.commands.insertContentAt(9, "x");
