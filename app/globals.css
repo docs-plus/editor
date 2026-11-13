@@ -145,10 +145,26 @@
   }
 }
 
+/* Mixed (`aria-pressed="mixed"`: part of the selection has the mark) is a
+   half-width bar, distinct from pressed's 12px one (`button.tsx`). Tailwind's
+   `aria-pressed:` variant matches only "true". */
+button[aria-pressed="mixed"]::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--pressed-bar);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 /* Forced colours drop background colours, so the pressed underline cannot
    carry state there. Pressed uses system colours instead (Highlight fill, a
-   HighlightText underline); the focus
-   outline is a real outline and survives. Selectors use `button[...]`, not
+   HighlightText underline) and mixed a dashed border; the focus outline is a
+   real outline and survives. Selectors use `button[...]`, not
    `[data-slot="button"]`: a tooltip trigger overrides data-slot. */
 @media (forced-colors: active) {
   button[aria-pressed="true"] {
@@ -161,9 +177,10 @@
     background: HighlightText;
   }
 
+  /* A border, not an outline: the focus ring must still show on mixed. */
   button[aria-pressed="mixed"] {
-    outline: 2px dashed CanvasText;
-    outline-offset: -2px;
+    border-style: dashed;
+    border-color: CanvasText;
   }
 
   button[aria-disabled="true"] {
