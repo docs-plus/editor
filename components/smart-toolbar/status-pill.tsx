@@ -40,7 +40,8 @@ function desktopPosition(): CSSProperties {
     position: "fixed",
     top: (row?.bottom ?? 0) + 8,
     left: column ? column.left + column.width / 2 : "50%",
-    transform: "translateX(-50%)",
+    // `translate`, not `transform`: the enter animation owns `transform`.
+    translate: "-50% 0",
   };
 }
 

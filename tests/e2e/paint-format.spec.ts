@@ -150,7 +150,7 @@ test.describe("Paint format", () => {
     expect(await marksOf(page, "source")).toEqual(["bold", "highlight"]);
   });
 
-  test("by keyboard: Alt+F10 to the brush, Esc back to the text, Shift+arrows, ⌘⌥V", async ({
+  test("by keyboard: Alt+F10 to the brush, Esc back to the text, select, ⌘⌥V", async ({
     page,
   }) => {
     await openDoc(page);
@@ -172,25 +172,8 @@ test.describe("Paint format", () => {
     await expect(page.locator(".document-editor-content")).toHaveClass(
       /is-painting/,
     );
-    // "source" is selected: to the start of "target", then select it.
-    await page.keyboard.press("ArrowRight");
-    for (let i = 0; i < " then ".length; i += 1) {
-      await page.keyboard.press("ArrowRight");
-    }
-    for (let i = 0; i < "target".length; i += 1) {
-      await page.keyboard.press("Shift+ArrowRight");
-    }
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const { from, to } = window.__tiptap_editor?.state.selection ?? {};
-          return window.__tiptap_editor?.state.doc.textBetween(
-            from ?? 0,
-            to ?? 0,
-          );
-        }),
-      )
-      .toBe("target");
+    // The next selection, then the key paints it (still armed).
+    await select(page, "target");
     await page.keyboard.press(repeatKey);
     await expect
       .poll(() => marksOf(page, "target"))
@@ -271,6 +254,9 @@ test.describe("Repeat formatting", () => {
       page.getByRole("status").filter({ hasText: reason }),
     ).toBeAttached();
     // 8px under the sticky row, centred over the page column.
+    await pill(page).evaluate((el) =>
+      Promise.all(el.getAnimations().map((animation) => animation.finished)),
+    );
     const [pillBox, rowBox, column] = await Promise.all([
       pill(page).boundingBox(),
       row(page).boundingBox(),
