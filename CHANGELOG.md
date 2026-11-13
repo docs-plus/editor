@@ -174,6 +174,11 @@ not part of v1.
   it. Faces are now named with a verb ("Insert quote"; the visible text is
   unchanged) and never show a pressed state, and Quote only inserts: inside
   a quote it is unavailable ("Already in a quote.").
+- **A fold could stay half-animated.** Registering any editor plugin while
+  a section was folding (the selection bubble mounts its plugin lazily)
+  rebuilt the plugin views and dropped the timer that ends the animation,
+  so the section stayed mid-fold until the next edit. The rebuilt view now
+  finishes it.
 - **Menu items read their shortcut as part of the name** ("Superscript⌘.").
   The hint is hidden from assistive technology and the item announces its
   keys through `aria-keyshortcuts`.
