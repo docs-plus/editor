@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   useCallback,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -103,6 +104,7 @@ export function ColorPanel({
   });
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const idPrefix = useId();
   const focusCell = useCallback((row: number, col: number) => {
     gridRef.current
       ?.querySelector<HTMLButtonElement>(
@@ -163,12 +165,15 @@ export function ColorPanel({
     >
       {rows.map((row, rowIndex) => (
         <div key={row.label} className="st-color-row">
-          <span className="st-color-row-label" id={`st-color-row-${rowIndex}`}>
+          <span
+            className="st-color-row-label"
+            id={`${idPrefix}-row-${rowIndex}`}
+          >
             {row.label}
           </span>
           <div
             role="group"
-            aria-labelledby={`st-color-row-${rowIndex}`}
+            aria-labelledby={`${idPrefix}-row-${rowIndex}`}
             className="st-color-swatches"
           >
             {row.swatches.map((swatch, colIndex) => {
