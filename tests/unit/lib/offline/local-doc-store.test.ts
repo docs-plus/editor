@@ -373,3 +373,102 @@ describe("~s2 namespace", () => {
     ]);
   });
 });
+
+/**
+ * Memory backend whose `~s2` puts land only when `release` is called, while
+ * deletes land at once: a backend that does not keep call order.
+ */
+function gatedBackend() {
+  const memory = createMemoryBackend();
+  const gates: Array<() => void> = [];
+  const backend: DocStoreBackend = {
+    ...memory,
+    put: async (doc) => {
+      if (doc.key.includes("~s2:")) {
+        await new Promise<void>((resolve) => gates.push(resolve));
+      }
+      await memory.put(doc);
+    },
+  };
+  const release = () => {
+    for (const open of gates.splice(0)) open();
+  };
+  return { backend, memory, release, pending: () => gates.length };
+}
+
+describe("removal during a legacy merge", () => {
+  it("lands a removal after a save begun before it", async () => {
+    const { backend, release } = gatedBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const saving = store.save("a", yState("late"));
+    const removal = store.remove("a");
+    await tick();
+    release();
+    await Promise.all([saving, removal]);
+    expect(await keys(backend)).toEqual([]);
+  });
+
+  it("leaves no copy when a tab closes mid-merge", async () => {
+    const { backend, release, pending } = gatedBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await new LegacyLocalDocStore(backend, "ws.example", () => 1_000_000).save(
+      "a",
+      yState("pre-N offline edit"),
+    );
+    const binding = bindLocalCopy(new Y.Doc(), "a", store);
+    expect(await binding.hydrated).toBe(true);
+    expect(pending()).toBe(1); // the merged save is in flight
+
+    // forgetLocalCopy: destroy, then remove.
+    binding.destroy();
+    const removal = store.remove("a");
+    release();
+    await removal;
+    await tick(10);
+    expect(await keys(backend)).toEqual([]);
+  });
+
+  it("never resurrects a document deleted mid-merge", async () => {
+    const { backend, memory, release } = gatedBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    // A current copy too, written past the gate.
+    await new LocalDocStore(memory, "ws.example", () => 1_000_000).save(
+      "a",
+      yState("base"),
+    );
+    await new LegacyLocalDocStore(backend, "ws.example", () => 1_000_000).save(
+      "a",
+      yState("pre-N offline edit"),
+    );
+    const doc = new Y.Doc();
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    expect(await binding.hydrated).toBe(true);
+
+    // document_deleted: destroy, then a fire-and-forget removeLocalCopy.
+    binding.destroy();
+    void store.remove("a");
+    doc.getText("t").insert(0, "typed after delete");
+    release();
+    await tick(20);
+    expect(await keys(backend)).toEqual([]);
+  });
+
+  it("keeps the legacy key for the removal once destroyed", async () => {
+    const { backend, release } = gatedBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await new LegacyLocalDocStore(backend, "ws.example", () => 1_000_000).save(
+      "a",
+      yState("pre-N offline edit"),
+    );
+    const binding = bindLocalCopy(new Y.Doc(), "a", store);
+    expect(await binding.hydrated).toBe(true);
+    binding.destroy();
+    release();
+    await tick(10);
+    // Not retired after destroy; a later load merges it again (idempotent).
+    expect(await keys(backend)).toEqual([
+      "1:ws.example:a",
+      "1:ws.example~s2:a",
+    ]);
+  });
+});

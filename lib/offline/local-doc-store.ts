@@ -82,11 +82,32 @@ function isCurrent(doc: StoredDoc, now: number): boolean {
 
 /** Local copies of collaborative documents, scoped to one collab server. */
 export class LocalDocStore {
+  /** Per document, the last queued save, retirement or removal. */
+  private readonly tails = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly backend: DocStoreBackend,
     private readonly serverHost: string,
     private readonly now: () => number = Date.now,
   ) {}
+
+  /**
+   * Runs `op` once every earlier write or removal of `name` has settled, so
+   * a removal lands after a save begun before it (a closed or deleted
+   * document is never written back), whatever order the backend keeps.
+   */
+  private serialize<T>(name: string, op: () => Promise<T>): Promise<T> {
+    const result = (this.tails.get(name) ?? Promise.resolve()).then(op);
+    const tail = result.then(
+      () => {},
+      () => {},
+    );
+    this.tails.set(name, tail);
+    void tail.then(() => {
+      if (this.tails.get(name) === tail) this.tails.delete(name);
+    });
+    return result;
+  }
 
   /** Both copies of `name`, or null if neither exists (expired ones are deleted). */
   async load(name: string): Promise<LoadedCopy | null> {
@@ -110,25 +131,31 @@ export class LocalDocStore {
    * Deletes the legacy copy once it is merged and saved, unless a pre-N tab
    * rewrote it since `legacy` was loaded. True if it was deleted.
    */
-  async retireLegacy(name: string, legacy: StoredDoc): Promise<boolean> {
-    return this.backend.deleteIfUnchanged(
-      legacyStoreKey(this.serverHost, name),
-      { updatedAt: legacy.updatedAt, byteLength: legacy.update.byteLength },
+  retireLegacy(name: string, legacy: StoredDoc): Promise<boolean> {
+    return this.serialize(name, () =>
+      this.backend.deleteIfUnchanged(legacyStoreKey(this.serverHost, name), {
+        updatedAt: legacy.updatedAt,
+        byteLength: legacy.update.byteLength,
+      }),
     );
   }
 
-  async save(name: string, update: Uint8Array): Promise<void> {
-    await this.backend.put({
-      key: storeKey(this.serverHost, name),
-      name,
-      update,
-      updatedAt: this.now(),
-    });
+  save(name: string, update: Uint8Array): Promise<void> {
+    return this.serialize(name, () =>
+      this.backend.put({
+        key: storeKey(this.serverHost, name),
+        name,
+        update,
+        updatedAt: this.now(),
+      }),
+    );
   }
 
-  async remove(name: string): Promise<void> {
-    await this.backend.delete(storeKey(this.serverHost, name));
-    await this.backend.delete(legacyStoreKey(this.serverHost, name));
+  remove(name: string): Promise<void> {
+    return this.serialize(name, async () => {
+      await this.backend.delete(storeKey(this.serverHost, name));
+      await this.backend.delete(legacyStoreKey(this.serverHost, name));
+    });
   }
 
   async clear(): Promise<void> {
@@ -244,13 +271,18 @@ export function bindLocalCopy(
 
   // LOCAL_ORIGIN updates never reach onUpdate, so the merged state is saved
   // explicitly; the legacy copy is deleted only once that save succeeded.
+  // After destroy nothing is written: a removal (tab closed, document
+  // deleted) deletes both keys and waits for the save already queued, and
+  // without one the next load merges the kept legacy copy again.
   const migrate = async (legacy: StoredDoc, merged: Uint8Array) => {
+    if (destroyed) return;
     try {
       await store.save(name, merged);
     } catch {
       disabled = true;
       return;
     }
+    if (destroyed) return;
     try {
       await store.retireLegacy(name, legacy);
     } catch {
