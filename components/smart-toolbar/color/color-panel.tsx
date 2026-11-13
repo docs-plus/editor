@@ -29,8 +29,9 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
  * keys move without applying. ↑/↓ follow the visual lines: on touch each
  * section wraps at `COARSE_COLUMNS` 44px swatches so the popover fits a
  * 360px phone. A kind that cannot apply here keeps its swatches focusable
- * but `aria-disabled`, described by the reason. Lazy chunk: loaded on
- * first open.
+ * but `aria-disabled`, described by the reason. Applying keeps the popover
+ * open with focus on the swatch, so writers can try colours; Esc closes it.
+ * Lazy chunk: loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -70,8 +71,6 @@ export interface ColorPanelProps {
   recent: readonly RecentColor[];
   /** Which section takes initial focus. */
   focusKind: "text" | "highlight";
-  /** Called after a swatch applied (the popover closes). */
-  onApplied: () => void;
   /**
    * Move focus to the active swatch on mount. False when a tap opened the
    * popover, so the editor keeps focus and the phone keyboard stays up.
@@ -107,7 +106,6 @@ export function ColorPanel({
   editor,
   recent,
   focusKind,
-  onApplied,
   focusOnMount = true,
 }: ColorPanelProps) {
   const textView = useActionView("color.text.apply", editor);
@@ -270,8 +268,7 @@ export function ColorPanel({
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
-                    if (reason) return;
-                    if (applySwatch(editor, swatch)) onApplied();
+                    if (!reason) applySwatch(editor, swatch);
                   }}
                 >
                   {swatch.token === null ? (

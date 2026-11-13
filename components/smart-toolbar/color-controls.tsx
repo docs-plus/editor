@@ -122,7 +122,6 @@ export function ColorPopoverButton({
             recent={recent.recent}
             focusKind={focusKind}
             focusOnMount={!openedByTouch}
-            onApplied={() => setOpen(false)}
           />
         </Suspense>
       </PopoverContent>
