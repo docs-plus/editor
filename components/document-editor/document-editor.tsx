@@ -60,6 +60,7 @@ import {
 } from "@/components/tiptap-ui/heading-filter";
 import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
+import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
@@ -145,7 +146,8 @@ function DocumentEditorContent({
 
   // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
   // M6: remembered locally (`tinydocy-ui`), same name and signature.
-  const [outlineOpen, setOutlineOpen] = useOutlineOpen();
+  // Below 950px the outline is a transient overlay (A6).
+  const [outlineOpen, setOutlineOpen, outlineView] = useOutlineOpen();
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
@@ -220,6 +222,14 @@ function DocumentEditorContent({
   }, [editor, reason]);
 
   const headingFilter = useHeadingFilter({ editor, filterState });
+
+  // A heading pick closes the overlay; the editor already holds the
+  // selection, so focus it now (Tiptap's focus() waits a frame).
+  const closeOutline = outlineView.close;
+  const closeOutlineOnPick = useCallback(() => {
+    editor?.view.focus();
+    closeOutline();
+  }, [editor, closeOutline]);
 
   const handleToggleFold = useCallback(
     (id: string) => editor?.commands.toggleFold(id),
@@ -303,6 +313,7 @@ function DocumentEditorContent({
                   onFilterToggle={headingFilter.toggleBar}
                   isMobile={isMobile}
                   tocVisible={outlineOpen}
+                  outlineOverlay={outlineView.mode === "overlay"}
                   filterActive={
                     headingFilter.isBarOpen || headingFilter.hasActiveFilters
                   }
@@ -320,22 +331,29 @@ function DocumentEditorContent({
 
         <div className="editor-with-toc">
           {outlineOpen && !isMobile && (
-            <DocumentOutline
-              tocStore={tocStore}
-              editor={editor}
-              foldedIds={foldedIds}
-              onToggleFold={handleToggleFold}
-              filteredIds={
-                headingFilter.hasActiveFilters
-                  ? filterState.matchedSectionIds
-                  : undefined
-              }
-              previewMatchIds={
-                headingFilter.query.trim().length > 0
-                  ? filterState.matchedSectionIds
-                  : undefined
-              }
-            />
+            <OutlinePanel mode={outlineView.mode} onClose={outlineView.close}>
+              <DocumentOutline
+                tocStore={tocStore}
+                editor={editor}
+                foldedIds={foldedIds}
+                onToggleFold={handleToggleFold}
+                onNavigate={
+                  outlineView.mode === "overlay"
+                    ? closeOutlineOnPick
+                    : undefined
+                }
+                filteredIds={
+                  headingFilter.hasActiveFilters
+                    ? filterState.matchedSectionIds
+                    : undefined
+                }
+                previewMatchIds={
+                  headingFilter.query.trim().length > 0
+                    ? filterState.matchedSectionIds
+                    : undefined
+                }
+              />
+            </OutlinePanel>
           )}
           <EditorContent
             editor={editor}
