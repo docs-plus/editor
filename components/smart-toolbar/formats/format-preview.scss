@@ -1,11 +1,11 @@
 @use "../../../extensions/text-style-marks/text-style-marks" as marks;
 @use "sass:map";
 
-// A saved format's preview (`format-preview.tsx`, design pass §4, §6, §7),
-// from the document's own token maps, so a preview matches the text it
-// formats in both themes. Lazy: imported by the style dropdown's formats
-// section, the Aa sheet and the palette's save view, never by the editor
-// chunk.
+// A saved format's preview (`format-preview.tsx`, design pass §4, §6-8):
+// its marks from `data-marks`, its colours and size from the document's
+// own token maps, so a preview matches the text it formats in both
+// themes. Lazy: imported by the style dropdown's formats section, the Aa
+// sheet, the palette and its save view, never by the editor chunk.
 .st-format-preview {
   min-width: 0;
   overflow: hidden;
@@ -16,6 +16,26 @@
   // Larger sizes stay inside a 32px row.
   line-height: 1.25;
   max-height: 1.5rem;
+}
+
+.st-format-preview[data-marks~="bold"] {
+  font-weight: 700;
+}
+
+.st-format-preview[data-marks~="italic"] {
+  font-style: italic;
+}
+
+.st-format-preview[data-marks~="underline"] {
+  text-decoration-line: underline;
+}
+
+.st-format-preview[data-marks~="strike"] {
+  text-decoration-line: line-through;
+}
+
+.st-format-preview[data-marks~="underline"][data-marks~="strike"] {
+  text-decoration-line: underline line-through;
 }
 
 @each $token, $value in marks.$text-colors {

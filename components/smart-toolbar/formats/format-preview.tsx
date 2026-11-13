@@ -1,32 +1,19 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
 
 import "./format-preview.scss";
 
-/**
- * Inline CSS for the marks of a saved format (design pass §4, §7): weight,
- * style and decoration. Colour, highlight and size come from the
- * `data-*` tokens `FormatPreview` sets, through `format-preview.scss`.
- */
-export function formatPreviewStyle(bundle: FormatBundle): CSSProperties {
-  const decoration = [
-    bundle.underline && "underline",
-    bundle.strike && "line-through",
-  ].filter(Boolean);
-  return {
-    fontWeight: bundle.bold ? 700 : undefined,
-    fontStyle: bundle.italic ? "italic" : undefined,
-    textDecorationLine: decoration.length ? decoration.join(" ") : undefined,
-  };
-}
+const MARKS = ["bold", "italic", "underline", "strike"] as const;
 
 /**
- * `children` rendered in `bundle`'s formatting: a saved format's name in
- * the style dropdown and the Aa sheet, and the Save view's sample. Tokens
- * only, never stored CSS, so a tampered bundle cannot inject a value.
+ * `children` rendered in `bundle`'s formatting (design pass §4, §7, §8):
+ * a saved format's name in the style dropdown and the Aa sheet, its chip
+ * in the palette, and the Save view's sample. Only `data-*` tokens, styled
+ * by `format-preview.scss` (no inline CSS, and a tampered bundle cannot
+ * inject a value).
  */
 export function FormatPreview({
   bundle,
@@ -38,10 +25,10 @@ export function FormatPreview({
   return (
     <span
       className="st-format-preview"
+      data-marks={MARKS.filter((mark) => bundle[mark]).join(" ")}
       data-text-color={bundle.textColor ?? undefined}
       data-highlight={bundle.highlight ?? undefined}
       data-font-size={bundle.fontSize ?? undefined}
-      style={formatPreviewStyle(bundle)}
     >
       {children}
     </span>
