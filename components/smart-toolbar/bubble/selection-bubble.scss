@@ -1,0 +1,65 @@
+// Selection bubble (spec §4.3). The plugin owns the root's inline
+// position, visibility and opacity, so the motion runs on the inner panel.
+
+// The bubble is appended to this scroll container. As its containing block
+// the bubble scrolls with the text instead of waiting for the plugin's
+// debounced reposition (nothing else in it is absolutely positioned).
+.document-editor-wrapper {
+  position: relative;
+}
+
+// Below the sticky toolbar (`z-10`): the bubble slides under it on scroll.
+.st-bubble {
+  z-index: 9;
+}
+
+.st-bubble-panel {
+  // 4px around 2px-offset 2px outlines: a focused item's ring stays inside
+  // the panel instead of drawing over its border.
+  padding: 4px;
+  gap: 2px;
+  animation: st-bubble-in-above 140ms ease-out both;
+}
+
+.st-bubble[data-placement="bottom"] .st-bubble-panel {
+  animation-name: st-bubble-in-below;
+}
+
+@keyframes st-bubble-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes st-bubble-in-below {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes st-bubble-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes st-bubble-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-bubble-panel,
+  .st-bubble[data-placement="bottom"] .st-bubble-panel {
+    animation-name: st-bubble-fade-in;
+  }
+}
+
+// Last, so the exit fade (opacity only already) wins over every in-motion.
+.st-bubble[data-closing] .st-bubble-panel {
+  animation: st-bubble-out 90ms ease-in forwards;
+  pointer-events: none;
+}
