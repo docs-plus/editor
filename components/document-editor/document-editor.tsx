@@ -59,6 +59,7 @@ import {
 } from "@/components/tiptap-ui/heading-filter";
 import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
+import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useWindowSize } from "@/hooks/use-window-size";
@@ -140,10 +141,9 @@ function DocumentEditorContent({
   const toolbarHeight = useToolbarHeight(toolbarRef);
   const tocStore = useTocItemsStore();
 
-  // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`; D2
-  // swaps only this line for M6 memory, keeping the name and the
-  // `(next: boolean | ((open: boolean) => boolean)) => void` signature.
-  const [outlineOpen, setOutlineOpen] = useState(true);
+  // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
+  // M6: remembered locally (`tinydocy-ui`), same name and signature.
+  const [outlineOpen, setOutlineOpen] = useOutlineOpen();
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
