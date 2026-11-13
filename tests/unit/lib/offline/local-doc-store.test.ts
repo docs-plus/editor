@@ -453,6 +453,40 @@ describe("removal during a legacy merge", () => {
     expect(await keys(backend)).toEqual([]);
   });
 
+  it("drops saves a binding bound before the removal makes after it", async () => {
+    const { backend, release } = gatedBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await new LegacyLocalDocStore(backend, "ws.example", () => 1_000_000).save(
+      "a",
+      yState("pre-N offline edit"),
+    );
+    const doc = new Y.Doc();
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    expect(await binding.hydrated).toBe(true);
+    doc.getText("t").insert(0, "typed before release");
+
+    // A releasing session flushes, and a tab close removes the copy before
+    // the flush's write is queued; nothing destroyed this binding.
+    const flushing = binding.flush();
+    const removal = store.remove("a");
+    for (let i = 0; i < 3; i++) {
+      release();
+      await tick(10);
+    }
+    await Promise.all([flushing, removal]);
+    expect(await keys(backend)).toEqual([]);
+
+    // A binding made after the removal saves again.
+    const reopened = new Y.Doc();
+    const fresh = bindLocalCopy(reopened, "a", store, { debounceMs: 5 });
+    expect(await fresh.hydrated).toBe(false);
+    reopened.getText("t").insert(0, "reopened");
+    await tick(10);
+    release();
+    await tick(10);
+    expect(await keys(backend)).toEqual(["1:ws.example~s2:a"]);
+  });
+
   it("keeps the legacy key for the removal once destroyed", async () => {
     const { backend, release } = gatedBackend();
     const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
