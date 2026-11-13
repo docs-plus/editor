@@ -69,6 +69,12 @@ async function openRow(page: Page) {
 async function openPhoneSheet(page: Page) {
   await openToolbarTestDoc(page);
   await selectNewParagraph(page);
+  // A selection swaps the bar to its selection cells (PR E); Back keeps
+  // the selection and brings Aa back.
+  await page
+    .getByRole("toolbar", { name: "Selection formatting" })
+    .getByRole("button", { name: "Back to all tools" })
+    .tap();
   await page
     .getByRole("toolbar")
     .getByRole("button", { name: "Text format" })
