@@ -1,13 +1,17 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 
 import { announce } from "@/lib/announce";
 
-// Other files share this DOM: count only status nodes added here.
-const foreign = new Set(document.body.querySelectorAll('[role="status"]'));
+// Other files share this DOM (and may already have made the announcer's
+// node): start each test with no status nodes, so the announcer makes a
+// fresh one.
+beforeEach(() => {
+  for (const node of document.body.querySelectorAll('[role="status"]')) {
+    node.remove();
+  }
+});
 const regions = () =>
-  Array.from(document.body.querySelectorAll('[role="status"]')).filter(
-    (node) => !foreign.has(node),
-  );
+  Array.from(document.body.querySelectorAll('[role="status"]'));
 const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
 
 describe("announce", () => {

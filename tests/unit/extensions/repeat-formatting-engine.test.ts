@@ -248,15 +248,16 @@ describe("RepeatFormatting: the key", () => {
     open();
   });
 
-  const announced = async () => {
-    // Any polite status region: the announcer's markup and its delay (it
-    // clears, then sets the text, so a repeat is read again) are not the
-    // contract. Wait until some region has text, up to a second.
+  /** Waits until some polite status region says `expected` (up to 1 s). */
+  const announced = async (expected: string) => {
+    // Any region: the announcer's markup and its delay (it clears, then
+    // sets the text, so a repeat is read again) are not the contract, and
+    // other test files may leave their own regions behind.
     const read = () =>
       [...document.querySelectorAll('[role="status"]')]
         .map((node) => node.textContent)
         .join("|");
-    for (let waited = 0; waited < 1000 && !read().replace(/\|/g, ""); ) {
+    for (let waited = 0; waited < 1000 && !read().includes(expected); ) {
       await new Promise((resolve) => setTimeout(resolve, 25));
       waited += 25;
     }
@@ -266,9 +267,8 @@ describe("RepeatFormatting: the key", () => {
   it("announces why it cannot repeat, and keeps the key", async () => {
     sel("hello");
     expect(v11Engine.repeatKey(editor)).toBe(true);
-    expect(await announced()).toContain(
-      "Format some text first, or use Copy formatting.",
-    );
+    const reason = "Format some text first, or use Copy formatting.";
+    expect(await announced(reason)).toContain(reason);
   });
 
   it("announces what it repeated", async () => {
@@ -276,7 +276,9 @@ describe("RepeatFormatting: the key", () => {
     sel("world");
     expect(v11Engine.repeatKey(editor)).toBe(true);
     expect(editor.getHTML()).toContain("world");
-    expect(await announced()).toContain("Repeated Bold, Italic");
+    expect(await announced("Repeated Bold, Italic")).toContain(
+      "Repeated Bold, Italic",
+    );
   });
 });
 
