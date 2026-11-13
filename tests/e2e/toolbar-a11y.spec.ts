@@ -705,13 +705,8 @@ test("crossing 768px keeps focus in the toolbar that replaces the other", async 
   await page.addStyleTag({
     content: "nextjs-portal { display: none !important; }",
   });
-  // Into the row on its tab stop, then five items along. (Not Alt+F10:
-  // at T4 it can land on View ▾ and the next arrow drops to the editor,
-  // a ladder issue that predates the phone bar.)
-  await page
-    .getByRole("toolbar", { name: "Formatting" })
-    .getByRole("button", { name: "Undo" })
-    .focus();
+  // Into the row with Alt+F10 (View ▾ at this tier), then five items along.
+  await page.keyboard.press("Alt+F10");
   for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
   const inToolbar = () =>
     page.evaluate(() => {

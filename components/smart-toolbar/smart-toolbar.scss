@@ -31,7 +31,8 @@ $ladder-touch: (
   scrollbar-width: thin;
 }
 
-span[data-collapse-standin] {
+span[data-collapse-standin],
+.st-short {
   display: none;
 }
 
@@ -65,10 +66,14 @@ span[data-collapse-standin] {
         }
       }
 
-      // T5: the style menu shows a short value; separators go.
+      // T5: the style menu shows its short value ("H2"); separators go.
       @if $tier == t5 {
-        [data-toolbar-group="style"] [data-toolbar-item] {
-          max-width: 3.75rem;
+        .st-short {
+          display: inline;
+
+          + span {
+            display: none;
+          }
         }
 
         [data-slot="toolbar-separator"] {

@@ -73,6 +73,12 @@ interface MenuTriggerProps {
   contentLabel?: string;
   /** Extra trigger classes, such as letting a long value shrink and truncate. */
   triggerClassName?: string;
+  /**
+   * A short value ("H2") that replaces the label at the narrowest ladder
+   * tier (T5, `smart-toolbar.scss`). The name then comes from the visible
+   * text: "Heading 2" above T5, "H2 Heading 2" at T5 (WCAG 2.5.3).
+   */
+  short?: string;
 }
 
 /**
@@ -92,6 +98,7 @@ export function ToolbarMenu({
   children,
   contentLabel,
   triggerClassName,
+  short,
 }: MenuTriggerProps) {
   const handleOpenChange = (next: boolean) => {
     if (next && readOnly) return;
@@ -105,7 +112,7 @@ export function ToolbarMenu({
           <ToolbarButton
             type="button"
             aria-haspopup="menu"
-            aria-label={label}
+            aria-label={short ? undefined : label}
             tooltip={tooltip}
             size="sm"
             className={triggerClassName}
@@ -115,6 +122,12 @@ export function ToolbarMenu({
         }
       >
         {icon}
+        {short ? (
+          <span className="st-short">
+            {short}
+            {short !== label && <span className="sr-only">{label}</span>}
+          </span>
+        ) : null}
         {showLabel ? <span className="min-w-0 truncate">{label}</span> : null}
         <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
       </DropdownMenuTrigger>

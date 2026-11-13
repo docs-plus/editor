@@ -9,6 +9,38 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar follow-ups
+
+Minors left by the a11y review of the smart toolbar (contract §10).
+
+#### Fixed
+- **One Esc leaves the row (M3):** Esc on a row, bubble or phone-bar item
+  returns to the editor with its selection in one press, even while the
+  item's focus tooltip shows (the toolbar takes the key in the capture
+  phase; the tooltip still closes). A hover tooltip keeps its own Esc
+  (WCAG 1.4.13), and an item whose popup is open keeps the key.
+- **Short text style at T5 (M8):** the narrowest ladder tier shows "Text",
+  "Title", "H1"–"H6" or "Mixed" instead of a truncated "N…". The trigger
+  is named by its visible text, "H2 Heading 2" at T5 and "Heading 2" above
+  it (WCAG 2.5.3).
+- **Outline overlay below 950px (M11):** focus leaving it (Tab, a click in
+  the row or the tabs) closes it, Esc anywhere closes it and returns focus
+  to the trigger, and an outline with no headings focuses the dialog
+  instead of dropping focus on `<body>`.
+- **Connection chip at 320px (M15):** the status and links cards wrap and
+  a long name truncates, so nothing is clipped off the left edge (WCAG
+  1.4.10).
+- **Lazy surface failures:** a colour popover or Insert step whose chunk
+  does not load says "Couldn’t load. Close and try again." in the popup
+  instead of opening empty; reopening fetches the chunk again. The bubble
+  and the palette still just stay away.
+- **Alt+F10 at 800px:** no longer reproducible on `main` (62 runs of the
+  old repro pass); the 768px handoff test drives Alt+F10 again, and a new
+  test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
+  resize hid the tab stop.
+
+Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
+
 ### Smart toolbar later-phase plans (docs)
 
 Docs only, no runtime change.
