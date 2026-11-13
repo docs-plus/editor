@@ -4,7 +4,7 @@ import {
   NodeSelection,
   type Transaction,
 } from "@tiptap/pm/state";
-import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
+import { AddMarkStep, RemoveMarkStep, type Step } from "@tiptap/pm/transform";
 
 import {
   BOOLEAN_FIELDS,
@@ -33,16 +33,23 @@ export const REPEAT_REASONS = {
 const isTokenField = (field: BundleField): field is TokenField =>
   !(BOOLEAN_FIELDS as readonly string[]).includes(field);
 
+const isMarkStep = (step: Step): boolean =>
+  step instanceof AddMarkStep || step instanceof RemoveMarkStep;
+
 /**
  * The bundle a transaction's local mark steps express: `AddMarkStep` sets
  * the field, `RemoveMarkStep` clears it, later steps win, other marks are
- * ignored. Cheap: no step, no work (runs on every keystroke).
+ * ignored. Empty unless every step is a mark step. Cheap: no step, no
+ * work (runs on every keystroke).
  */
 export function bundlePatchFromSteps(tr: Transaction): FormatBundle {
   const patch: Record<string, boolean | string | null> = {};
+  // Mark-only transactions only (contract §6, exception 3): a heading
+  // change or block conversion that also strips marks never clobbers the
+  // bundle.
+  if (!tr.steps.every(isMarkStep)) return patch as FormatBundle;
   for (const step of tr.steps) {
     const added = step instanceof AddMarkStep;
-    if (!added && !(step instanceof RemoveMarkStep)) continue;
     const { mark } = step as AddMarkStep | RemoveMarkStep;
     const field = fieldOfMark(mark.type.name);
     if (!field) continue;

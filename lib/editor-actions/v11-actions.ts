@@ -22,7 +22,10 @@ import {
   readBundleAt,
   setEntries,
 } from "@/extensions/repeat-formatting/bundle";
-import { getRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
+import {
+  getRememberedBundle,
+  rememberBundle,
+} from "@/extensions/repeat-formatting/bundle-memory";
 import { scanDocFormats } from "@/lib/doc-format-scan";
 import {
   type AnyAction,
@@ -39,7 +42,11 @@ import {
   type MermaidTemplateId,
   rememberMermaidTemplate,
 } from "@/lib/mermaid-templates";
-import { readSavedFormats, saveFormat } from "@/lib/saved-formats";
+import {
+  FORMAT_REASONS,
+  readSavedFormats,
+  saveFormat,
+} from "@/lib/saved-formats";
 
 /** Arg prefix of an "In this doc" format: `doc:<bundleKey>`. */
 export const DOC_FORMAT_PREFIX = "doc:";
@@ -90,8 +97,19 @@ export const repeatCopyAction = defineAction({
       : isCodeOnly(ctx)
         ? { reason: REPEAT_REASONS.code }
         : true,
-  run: (editor) => editor.commands.copyFormatting(),
+  run: (editor) => {
+    if (!editor.commands.copyFormatting()) return false;
+    rememberBundle(readBundleAt(editor.state));
+    return true;
+  },
 });
+
+/** Whether the selection carries anything a saved format would keep. */
+const hasSetFormatting = (ctx: Ctx): boolean =>
+  ctx.memo(
+    "formats.hasSet",
+    () => !isEmptyBundle(setEntries(readBundleAt(ctx.state))),
+  );
 
 /** Arg: the format name. Saves the selection's set entries (M14). */
 export const formatsSaveAction = defineAction<string>({
@@ -100,7 +118,12 @@ export const formatsSaveAction = defineAction<string>({
   group: "format",
   contexts: "any",
   keywords: ["style", "preset", "your formats"],
-  enabled: (ctx) => (isCodeOnly(ctx) ? { reason: REPEAT_REASONS.code } : true),
+  enabled: (ctx) =>
+    isCodeOnly(ctx)
+      ? { reason: REPEAT_REASONS.code }
+      : hasSetFormatting(ctx)
+        ? true
+        : { reason: FORMAT_REASONS.empty },
   run: (editor, name) => {
     const bundle = setEntries(readBundleAt(editor.state));
     if (isEmptyBundle(bundle)) return false;
@@ -156,7 +179,9 @@ export const formatsApplyAction = defineAction<string>({
   run: (editor, id) => {
     const bundle = resolveFormat(id);
     if (!bundle || isEmptyBundle(bundle)) return false;
-    return editor.commands.applyFormatBundle(bundle);
+    if (!editor.commands.applyFormatBundle(bundle)) return false;
+    rememberBundle(bundle);
+    return true;
   },
 });
 

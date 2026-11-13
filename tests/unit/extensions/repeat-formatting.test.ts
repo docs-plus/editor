@@ -17,8 +17,15 @@ import {
   rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
-import { runAction } from "@/lib/editor-actions/registry";
-import { repeatApplyAction } from "@/lib/editor-actions/v11-actions";
+import { availability, runAction } from "@/lib/editor-actions/registry";
+import {
+  formatsApplyAction,
+  formatsSaveAction,
+  repeatApplyAction,
+  repeatCopyAction,
+} from "@/lib/editor-actions/v11-actions";
+import { computeContext } from "@/lib/editor-context/snapshot";
+import { FORMAT_REASONS } from "@/lib/saved-formats";
 
 import {
   type CollabEditorFixture,
@@ -136,6 +143,36 @@ describe("RepeatFormatting: recording", () => {
     sel("hello");
     editor.commands.toggleItalic();
     expect(getRememberedBundle()).toEqual({ italic: true });
+  });
+
+  it("never records a transaction that also changes structure (spec M7)", () => {
+    rememberBundle({ underline: true });
+    sel("hello");
+    const { from, to } = editor.state.selection;
+    const boldType = editor.schema.marks.bold;
+    editor.view.dispatch(
+      editor.state.tr
+        .addMark(from, to, boldType.create())
+        .setBlockType(from, to, editor.schema.nodes.heading, { level: 2 }),
+    );
+    expect(marksOf("hello")).toContain("bold");
+    expect(getRememberedBundle()).toEqual({ underline: true });
+  });
+
+  it("never records a transaction that also writes attributes", () => {
+    sel("Title");
+    editor.commands.toggleBold();
+    rememberBundle({ underline: true });
+    sel("Title");
+    const { from, to } = editor.state.selection;
+    const headingPos = editor.state.selection.$from.before();
+    editor.view.dispatch(
+      editor.state.tr
+        .removeMark(from, to, editor.schema.marks.bold)
+        .setNodeAttribute(headingPos, "level", 2),
+    );
+    expect(marksOf("Title")).not.toContain("bold");
+    expect(getRememberedBundle()).toEqual({ underline: true });
   });
 
   it("never records a remote mark change", () => {
@@ -321,12 +358,36 @@ describe("RepeatFormatting: applying", () => {
       expect(reason.endsWith(".")).toBe(true);
   });
 
+  it("the copy and apply commands write no memory; their actions do (contract §6)", () => {
+    rememberBundle({ underline: true });
+    sel("hello");
+    expect(editor.commands.copyFormatting()).toBe(true);
+    expect(editor.commands.applyFormatBundle({ italic: true })).toBe(true);
+    expect(marksOf("hello")).toContain("italic");
+    expect(getRememberedBundle()).toEqual({ underline: true });
+
+    sel("world");
+    expect(runAction(editor, formatsApplyAction, "doc:missing")).toBe(false);
+    expect(getRememberedBundle()).toEqual({ underline: true });
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    expect(getRememberedBundle()).toMatchObject({ bold: false, italic: false });
+  });
+
+  it("Save as format is unavailable, with the reason, without formatting", () => {
+    sel("world");
+    expect(availability(formatsSaveAction, computeContext(editor))).toEqual({
+      reason: FORMAT_REASONS.empty,
+    });
+    editor.commands.toggleBold();
+    expect(availability(formatsSaveAction, computeContext(editor))).toBe(true);
+  });
+
   it("copy formatting remembers the full read, then clears with it", () => {
     sel("hello");
     editor.commands.toggleBold();
     setRed();
     sel("hello");
-    editor.commands.copyFormatting();
+    runAction(editor, repeatCopyAction);
     expect(getRememberedBundle()).toEqual({
       bold: true,
       italic: false,
@@ -337,7 +398,7 @@ describe("RepeatFormatting: applying", () => {
       fontSize: null,
     });
     sel("world");
-    editor.commands.copyFormatting();
+    runAction(editor, repeatCopyAction);
     sel("hello");
     editor.commands.repeatFormatting();
     expect(marksOf("hello")).toEqual([]);
