@@ -53,6 +53,13 @@ since the previous tag.
 - **Highlight swatches are named pressed buttons** in a dialog. Focus stays
   in the dialog, Esc returns it to the Highlight button, and toolbar arrow
   keys move from whichever control has focus.
+- **Switching list type keeps the whole list:** bullet, ordered and task
+  lists convert in place in one undo step, keeping every item and nested
+  lists (task checked state stays only in lists that remain task lists).
+  Before, only the caret's item moved to the new list and the rest became
+  paragraphs.
+- **"No highlight" keeps focus in the highlight dialog,** so Esc still
+  returns focus to the Highlight button.
 - **Typing stays in the editor after arrowing in the toolbar:** a later
   toolbar re-render no longer pulls focus back to the last arrowed control.
 - **Indent and outdent buttons work in lists,** like Tab.
