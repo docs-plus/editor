@@ -33,12 +33,6 @@ import {
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
-/**
- * Kept for the palette's save view, which loads after the engine; no E
- * action shows it any more (design pass §6, principle 4).
- */
-export const ENGINE_LOADING_REASON = "Formatting tools are still loading.";
-
 /** The Repeat "extend" session of one editor (memory only). */
 export interface RepeatSession {
   range: SessionRange | null;
