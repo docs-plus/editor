@@ -28,6 +28,11 @@ import {
   useSavedFormats,
 } from "./use-e-action";
 
+/** Focuses the first format to remove once the opening menu settles. */
+const focusSoon = (item: HTMLElement | null) => {
+  if (item) requestAnimationFrame(() => item.focus());
+};
+
 /**
  * Your formats in the text style dropdown (design pass §4), after the
  * styles: each saved format named in its own formatting (its description
@@ -39,10 +44,13 @@ import {
 export function StyleFormats({
   editor,
   onPicked,
+  removing = false,
 }: {
   editor: Editor;
   /** Hands focus back to the editor when the menu closes. */
   onPicked: () => void;
+  /** Opened for `formats.remove`: "Remove a format ▸" starts open. */
+  removing?: boolean;
 }) {
   const saved = useSavedFormats();
   const apply = useEActionReason(formatsApplyAction, editor);
@@ -78,12 +86,13 @@ export function StyleFormats({
           onClick={() => openPalette(editor, "save-format")}
         />
         {saved.length > 0 ? (
-          <DropdownMenuSub>
+          <DropdownMenuSub defaultOpen={removing}>
             <DropdownMenuSubTrigger>Remove a format</DropdownMenuSubTrigger>
             <DropdownMenuSubContent aria-label="Remove a format">
               {saved.map((format, index) => (
                 <DropdownMenuItem
                   key={format.id}
+                  ref={index === 0 && removing ? focusSoon : undefined}
                   onClick={() => {
                     onPicked();
                     removeFormatWithUndo(format, index);

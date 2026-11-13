@@ -577,6 +577,60 @@ test.describe("palette design pass (§7, §8)", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("the cap's Remove a format link opens the style dropdown at Remove a format", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const formats = Array.from({ length: 20 }, (_, i) => ({
+        id: `f${i}`,
+        name: `Format ${i}`,
+        bundle: { bold: true },
+      }));
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({ v: 1, formats }),
+      );
+    });
+    await openDoc(page);
+    await select(page, "alpha");
+    await page.keyboard.press("ControlOrMeta+b");
+    await openSaveView(page);
+    await page.getByLabel("Name").fill("Another");
+    await page
+      .locator(PALETTE)
+      .getByRole("button", { name: "Remove a format" })
+      .click();
+    await expect(page.locator(PALETTE)).toHaveCount(0);
+    const style = page.getByRole("menu", { name: "Text style" });
+    await expect(style).toBeVisible();
+    const remove = page.getByRole("menu", { name: "Remove a format" });
+    await expect(remove).toBeVisible();
+    await expect(
+      remove.getByRole("menuitem", { name: "Format 0", exact: true }),
+    ).toBeFocused();
+    // Removing one closes the menus, with Undo on the pill.
+    await page.keyboard.press("Enter");
+    await expect(style).toBeHidden();
+    await expect(page.locator('[data-status-pill="desktop"]')).toContainText(
+      "Removed ‘Format 0’",
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("tinydocy-formats") ?? "{}").formats
+            .length,
+      ),
+    ).toBe(19);
+    // The next open is an ordinary one.
+    await page
+      .getByRole("toolbar", { name: "Formatting", exact: true })
+      .getByRole("button", { name: "Normal text" })
+      .click();
+    await expect(style).toBeVisible();
+    await expect(remove).toBeHidden();
+    await page.keyboard.press("Escape");
+  });
+
   test("rows: leading icons and chips, bare colour names, reasons on a second line, Suggested once", async ({
     page,
   }) => {
