@@ -60,6 +60,18 @@ describe("saved formats", () => {
   it("sanitizes names", () => {
     expect(sanitizeFormatName(`${RLO}evil${BEL} name `)).toBe("evil name");
     expect(sanitizeFormatName(`a${ZWSP}b${LRI}c`)).toBe("abc");
+  });
+
+  it("strips the soft hyphen, Arabic letter mark, word joiner and invisible operators", () => {
+    const invisible = [0xad, 0x61c, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064];
+    for (const code of invisible) {
+      expect(sanitizeFormatName(`a${String.fromCharCode(code)}b`)).toBe("ab");
+    }
+    // Only invisible characters: no name at all.
+    expect(sanitizeFormatName(String.fromCharCode(...invisible))).toBe("");
+  });
+
+  it("keeps the other naming rules", () => {
     expect(Array.from(sanitizeFormatName("x".repeat(10_000)))).toHaveLength(40);
     expect(sanitizeFormatName(42)).toBe("");
     expect(saveFormat("   ", { bold: true })).toEqual({

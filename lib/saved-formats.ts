@@ -35,13 +35,17 @@ export const FORMAT_REASONS = {
 } as const;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
-// Control, zero-width, line/paragraph separator, bidi embedding/override
-// and isolate characters, as code-point ranges.
+// Control, soft hyphen, Arabic letter mark, zero-width, line/paragraph
+// separator, bidi embedding/override, word joiner and invisible operators,
+// isolate characters and BOM, as code-point ranges.
 const UNSAFE_RANGES: readonly (readonly [number, number])[] = [
   [0x00, 0x1f],
   [0x7f, 0x9f],
+  [0xad, 0xad],
+  [0x61c, 0x61c],
   [0x200b, 0x200f],
   [0x2028, 0x202e],
+  [0x2060, 0x2064],
   [0x2066, 0x2069],
   [0xfeff, 0xfeff],
 ];
