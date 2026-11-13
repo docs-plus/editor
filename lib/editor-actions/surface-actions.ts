@@ -90,8 +90,21 @@ function hasCommand(editor: Editor, name: string): boolean {
   );
 }
 
-function canDo(ctx: Ctx, name: string, check: (editor: Editor) => boolean) {
-  return ctx.can(name, (editor) => hasCommand(editor, name) && check(editor));
+/**
+ * `ctx.can` under a D2-only key per check (`surface:<command>:<case>`), so
+ * a D1 check of the same command with other arguments never shares a
+ * cache entry (one key, one check).
+ */
+function canDo(
+  ctx: Ctx,
+  command: string,
+  check: (editor: Editor) => boolean,
+  variant = "",
+) {
+  return ctx.can(
+    `surface:${command}:${variant}`,
+    (editor) => hasCommand(editor, command) && check(editor),
+  );
 }
 
 const enabledIf = (ok: boolean, reason: string): Enabled =>
@@ -386,9 +399,13 @@ function insertEnabled(
   ctx: Ctx,
   command: string,
   check: (e: Editor) => boolean,
+  variant?: string,
 ) {
   if (ctx.isTitle) return { reason: TITLE_REASON };
-  return enabledIf(canDo(ctx, command, check), "Can't insert that here.");
+  return enabledIf(
+    canDo(ctx, command, check, variant),
+    "Can't insert that here.",
+  );
 }
 
 function inserted(kind: InsertKind, ok: boolean): boolean {
@@ -405,8 +422,11 @@ const insertImage = defineAction({
   icon: ImagePlusIcon,
   // `imageUpload` is the image's first step: a drop zone, not a file.
   enabled: (ctx) =>
-    insertEnabled(ctx, "insertContent", (editor) =>
-      editor.can().insertContent({ type: "imageUpload" }),
+    insertEnabled(
+      ctx,
+      "insertContent",
+      (editor) => editor.can().insertContent({ type: "imageUpload" }),
+      "imageUpload",
     ),
   run: (editor) =>
     inserted(
