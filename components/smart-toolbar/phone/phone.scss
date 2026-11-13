@@ -31,20 +31,12 @@
   padding-bottom: var(--safe-area-bottom);
 }
 
-// Selection cells (PR E, `phone-selection-cells.tsx`): nine cells and the
-// sticky ✕ do not fit a phone, so the bar scrolls sideways, with no
-// scrollbar in its constant 44px. A cell focused by keyboard or VoiceOver
-// is never scrolled under the ✕ (WCAG 2.4.11).
+// Selection cells (PR E, `phone-selection-cells.tsx`): ten cells and ✕ do
+// not fit a phone, so the cells scroll sideways in their own container
+// (styled in the component, with edge fades), and ✕ sits beside it, never
+// over a cell, at rest or focused (WCAG 2.4.11).
 [data-slot="toolbar"][data-variant="docked"][data-bar-mode="selection"] {
   justify-content: flex-start;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-padding-inline-end: 44px;
-  scrollbar-width: none;
-
-  [data-toolbar-item] {
-    flex: 1 0 44px;
-  }
 }
 
 // Width rules. The bar's cells sit in the viewport less its 8px padding:

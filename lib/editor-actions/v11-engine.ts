@@ -1,10 +1,13 @@
 /**
  * PR E's action bodies, commands and bundle recorder: the lazy half of
  * `v11-actions.ts` (contract §10, editor-chunk budget A11). Loaded by the
- * `RepeatFormatting` extension as soon as an editor is created, and by
- * every E surface that imports it (palette, Repeat split button, phone
- * cells). Evaluating this module installs it, so whichever importer lands
- * first makes the registry's E actions live.
+ * `RepeatFormatting` extension as soon as an editor is created. Only
+ * `loadV11Engine()` imports this module, so its code lives in exactly one
+ * chunk: E's surfaces (palette, Repeat split button, phone cells) reach it
+ * through `getV11Engine()` / `loadV11Engine()` and show
+ * `ENGINE_LOADING_REASON` until it lands (`v11-engine-ready.ts`).
+ * Evaluating this module installs it and makes the registry's E actions
+ * live.
  *
  * Import rule (contract §4): never the registry index or the context store.
  */
@@ -16,6 +19,7 @@ import {
   applyBundle,
   applyDisabledReason,
   bundlePatchFromSteps,
+  onlyCode,
   REPEAT_META,
   REPEAT_REASONS,
   repeatDisabledReason,
@@ -24,6 +28,7 @@ import {
   bundleFace,
   bundleFromKey,
   bundleKey,
+  bundleLabel,
   type FormatBundle,
   isEmptyBundle,
   readBundleAt,
@@ -39,20 +44,25 @@ import {
   sameRange,
   toSessionRange,
 } from "@/extensions/repeat-formatting/relative-range";
+import { announce } from "@/lib/announce";
 import { scanDocFormats } from "@/lib/doc-format-scan";
+import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { ActionOption, Ctx, Enabled } from "@/lib/editor-actions/types";
 import {
   DOC_FORMAT_PREFIX,
   installV11Engine,
   type RepeatSession,
+  repeatApplyAction,
   type V11Engine,
 } from "@/lib/editor-actions/v11-actions";
+import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   getMermaidTemplate,
   isMermaidTemplateId,
   lastMermaidTemplate,
   MERMAID_TEMPLATES,
   rememberMermaidTemplate,
+  usedMermaidTemplate,
 } from "@/lib/mermaid-templates";
 import {
   FORMAT_REASONS,
@@ -65,8 +75,19 @@ import {
 const enabledFrom = (reason: string | null): Enabled =>
   reason === null ? true : { reason };
 
+/** "Bold, Italic": what was set; a clear-only bundle reads as its clears. */
+function spoken(bundle: FormatBundle): string {
+  const set = setEntries(bundle);
+  return bundleLabel(isEmptyBundle(set) ? bundle : set);
+}
+
+/** The selection-wide code walk, once per snapshot for every E action. */
+const codeOnlyOf = (ctx: Ctx) => () =>
+  ctx.memo("repeat.onlyCode", () => onlyCode(ctx.state));
+
 const isCodeOnly = (ctx: Ctx) =>
-  applyDisabledReason(ctx.state, { bold: true }) === REPEAT_REASONS.code;
+  applyDisabledReason(ctx.state, { bold: true }, codeOnlyOf(ctx)) ===
+  REPEAT_REASONS.code;
 
 /** Whether the selection carries anything a saved format would keep. */
 const hasSetFormatting = (ctx: Ctx): boolean =>
@@ -131,7 +152,7 @@ function applyCommand(
   if (applyDisabledReason(state, bundle) !== null) return false;
   if (!dispatch) return true;
   undoManagerOf(state)?.stopCapturing();
-  applyBundle(tr, bundle).setMeta(REPEAT_META, true);
+  applyBundle(tr, bundle).setMeta(REPEAT_META, bundle);
   return true;
 }
 
@@ -145,9 +166,11 @@ function record(
   tr: Transaction,
   state: EditorState,
 ): void {
-  if (tr.getMeta(REPEAT_META)) {
+  const applied = tr.getMeta(REPEAT_META) as FormatBundle | undefined;
+  if (applied) {
     undoManagerOf(state)?.stopCapturing();
     session.range = toSessionRange(state, tr.selection);
+    session.bundle = applied;
     return;
   }
   const sync = tr.getMeta(ySyncPluginKey) as
@@ -158,7 +181,14 @@ function record(
     if (sync.isUndoRedoOperation) session.range = null;
     return;
   }
-  if (session.range) session.range = mapSessionRange(session.range, tr);
+  if (session.range) {
+    // "Forget my choices" (here or in another tab) ends the session: what
+    // it built must not come back with the next format.
+    session.range =
+      getRememberedBundle() === null
+        ? null
+        : mapSessionRange(session.range, tr);
+  }
   if (!tr.docChanged && !tr.selectionSet) return;
   const { selection } = state;
   const patch = tr.docChanged ? bundlePatchFromSteps(tr) : {};
@@ -166,8 +196,11 @@ function record(
     const same =
       session.range !== null &&
       sameRange(fromSessionRange(state, session.range), selection);
-    const base = same ? getRememberedBundle() : null;
-    rememberBundle(base ? { ...base, ...patch } : patch);
+    // The session's own bundle, never the shared memory: another tab may
+    // have written its own bundle there since.
+    const bundle = same ? { ...session.bundle, ...patch } : patch;
+    session.bundle = bundle;
+    rememberBundle(bundle);
     session.range = toSessionRange(state, selection);
   } else if (
     tr.selectionSet &&
@@ -192,9 +225,19 @@ function formatSaveReason(editor: Editor, name: string): string | null {
   return null;
 }
 
+/** Repeats with the key, or says why not; the key is always handled. */
+function repeatKey(editor: Editor): true {
+  if (!runAction(editor, repeatApplyAction)) {
+    const enabled = availability(repeatApplyAction, computeContext(editor));
+    if (enabled !== true) announce(enabled.reason);
+  }
+  return true;
+}
+
 export const v11Engine: V11Engine = {
   record,
   formatSaveReason,
+  repeatKey,
   commands: {
     repeatFormatting: (props) => {
       const bundle = getRememberedBundle();
@@ -208,15 +251,28 @@ export const v11Engine: V11Engine = {
   },
   actions: {
     "repeat.apply": {
+      keywords: ["format painter", "again", "f4", "paste formatting"],
       enabled: (ctx) =>
-        enabledFrom(repeatDisabledReason(ctx.state, getRememberedBundle())),
+        enabledFrom(
+          repeatDisabledReason(
+            ctx.state,
+            getRememberedBundle(),
+            codeOnlyOf(ctx),
+          ),
+        ),
       value: () => {
         const bundle = getRememberedBundle();
         return bundle ? bundleFace(bundle) : null;
       },
-      run: (editor) => editor.commands.repeatFormatting(),
+      run: (editor) => {
+        const bundle = getRememberedBundle();
+        if (!bundle || !editor.commands.repeatFormatting()) return false;
+        announce(`Repeated ${spoken(bundle)}`);
+        return true;
+      },
     },
     "repeat.copy": {
+      keywords: ["format painter", "pick up", "copy style"],
       enabled: (ctx) =>
         ctx.nodeSelectionType !== null
           ? { reason: "Select text to copy its formatting." }
@@ -224,12 +280,23 @@ export const v11Engine: V11Engine = {
             ? { reason: REPEAT_REASONS.code }
             : true,
       run: (editor) => {
+        // The full read (cleared fields too), so Repeat also removes what
+        // the source lacks. Plain text would make a Repeat that only
+        // clears: nothing is copied instead.
+        const read = readBundleAt(editor.state);
+        const set = setEntries(read);
+        if (isEmptyBundle(set)) {
+          announce("Nothing to copy");
+          return false;
+        }
         if (!editor.commands.copyFormatting()) return false;
-        rememberBundle(readBundleAt(editor.state));
+        rememberBundle(read);
+        announce(`Copied formatting: ${spoken(set)}`);
         return true;
       },
     },
     "formats.save": {
+      keywords: ["style", "preset", "your formats"],
       enabled: (ctx) =>
         isCodeOnly(ctx)
           ? { reason: REPEAT_REASONS.code }
@@ -239,10 +306,18 @@ export const v11Engine: V11Engine = {
       run: (editor, name) => {
         const bundle = setEntries(readBundleAt(editor.state));
         if (isEmptyBundle(bundle)) return false;
-        return saveFormat(name, bundle).ok;
+        const result = saveFormat(name, bundle);
+        if (!result.ok) return false;
+        announce(
+          result.replaced === undefined
+            ? `Saved format ‘${result.format.name}’`
+            : `Replaced format ‘${result.replaced}’`,
+        );
+        return true;
       },
     },
     "formats.apply": {
+      keywords: ["your formats", "in this doc", "style", "preset"],
       enabled: (ctx) => {
         if (readSavedFormats().length === 0 && docBundles(ctx).length === 0) {
           return { reason: "Save a format first." };
@@ -272,20 +347,32 @@ export const v11Engine: V11Engine = {
         if (!bundle || isEmptyBundle(bundle)) return false;
         if (!editor.commands.applyFormatBundle(bundle)) return false;
         rememberBundle(bundle);
+        announce(`Applied ${spoken(bundle)}`);
         return true;
       },
     },
     "template.mermaid": {
+      keywords: [
+        "mermaid",
+        "chart",
+        "flowchart",
+        "sequence",
+        "mind map",
+        "pie",
+      ],
       enabled: (ctx) =>
         ctx.can("insertMermaid", canInsertMermaid)
           ? true
           : { reason: "Diagrams cannot go here." },
-      options: () =>
-        MERMAID_TEMPLATES.map((template) => ({
+      options: () => {
+        const last = usedMermaidTemplate();
+        return MERMAID_TEMPLATES.map((template) => ({
           value: template.id,
           label: template.label,
           keywords: [template.id],
-        })),
+          note: template.id === last ? "Last used" : undefined,
+        }));
+      },
       run: (editor, arg) => {
         if (!hasMermaid(editor)) return false;
         const id = isMermaidTemplateId(arg) ? arg : lastMermaidTemplate();

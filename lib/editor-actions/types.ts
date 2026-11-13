@@ -116,6 +116,8 @@ export interface ActionOption<Arg> {
   value: Arg;
   label: string;
   keywords?: readonly string[];
+  /** A short note beside the label in menus ("Last used"). */
+  note?: string;
 }
 
 /**

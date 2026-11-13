@@ -6,6 +6,7 @@
 export type PaletteKeyEvent = Pick<
   KeyboardEvent,
   | "code"
+  | "key"
   | "altKey"
   | "ctrlKey"
   | "metaKey"
@@ -15,13 +16,17 @@ export type PaletteKeyEvent = Pick<
 >;
 
 /**
- * Physical keys (`code`), so macOS ⌥/ (which types "÷") still matches.
+ * Alt with a key that produces "/" (wherever the layout puts it), or the
+ * physical slash key when it produces "÷" (macOS US-like layouts, where
+ * the spec gives up ⌥/). The physical key alone is not enough: on German
+ * and Swiss Mac layouts it is ⌥- (en dash "–"), which must keep typing.
  * Ctrl+Alt is AltGr on Windows: never ours.
  */
 export function matchPaletteHotkey(event: PaletteKeyEvent): boolean {
   if (!event.altKey || event.ctrlKey || event.metaKey) return false;
   if (event.isComposing || event.repeat) return false;
-  if (event.code === "Slash") return !event.shiftKey;
+  if (event.key === "/") return true;
+  if (event.code === "Slash") return event.key === "÷" && !event.shiftKey;
   if (event.code === "KeyZ") return event.shiftKey;
   return false;
 }

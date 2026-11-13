@@ -135,10 +135,15 @@ export function MobileToolbarContent({
     bold.enabled.reason === READ_ONLY_REASON;
   const barRef = useRef<HTMLDivElement>(null);
   const selectionKey = useTextSelectionKey(editor);
-  const [dismissed, setDismissed] = useState(false);
+  // ✕ dismisses the selection cells for that selection only: a new one
+  // (even a direct reselect, with no caret in between) swaps them back.
+  // `false`: not dismissed; otherwise the selection key ✕ was pressed on.
+  const [dismissedKey, setDismissedKey] = useState<string | null | false>(
+    false,
+  );
+  const dismissed = dismissedKey === selectionKey;
   const [focusInBar, setFocusInBar] = useState(false);
   const [mode, setMode] = useState<MobileBarMode>("all");
-  if (selectionKey === null && dismissed) setDismissed(false);
   const nextMode = nextMobileBarMode({
     hasTextSelection: selectionKey !== null && !sheetOpen,
     focusInBar,
@@ -153,7 +158,10 @@ export function MobileToolbarContent({
       setFocusInBar(false);
     }
   }, []);
-  const onBack = useCallback(() => setDismissed(true), []);
+  const onBack = useCallback(
+    () => setDismissedKey(selectionKey),
+    [selectionKey],
+  );
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {

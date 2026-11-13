@@ -22,7 +22,8 @@ export interface SavedFormat {
 }
 
 export type SaveFormatResult =
-  | { ok: true; format: SavedFormat }
+  /** `replaced`: the name of the format this save overwrote, if any. */
+  | { ok: true; format: SavedFormat; replaced?: string }
   | { ok: false; reason: string };
 
 export const FORMATS_STORAGE_KEY = STORAGE_KEYS.formats;
@@ -35,13 +36,17 @@ export const FORMAT_REASONS = {
 } as const;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
-// Control, zero-width, line/paragraph separator, bidi embedding/override
-// and isolate characters, as code-point ranges.
+// Control, soft hyphen, Arabic letter mark, zero-width, line/paragraph
+// separator, bidi embedding/override, word joiner and invisible operators,
+// isolate characters and BOM, as code-point ranges.
 const UNSAFE_RANGES: readonly (readonly [number, number])[] = [
   [0x00, 0x1f],
   [0x7f, 0x9f],
+  [0xad, 0xad],
+  [0x61c, 0x61c],
   [0x200b, 0x200f],
   [0x2028, 0x202e],
+  [0x2060, 0x2064],
   [0x2066, 0x2069],
   [0xfeff, 0xfeff],
 ];
@@ -107,6 +112,18 @@ let cache: SavedFormat[] | null = null;
 const listeners = new Set<() => void>();
 let storageListening = false;
 
+/**
+ * Other tabs' writes drop the cache. Attached once, on the first read or
+ * subscription, and never removed (it holds no editor), so the cache is
+ * fresh even while no component is subscribed (palette rows, apply, the
+ * cap reason).
+ */
+function listenToStorage(): void {
+  if (storageListening || typeof window === "undefined") return;
+  window.addEventListener("storage", onStorage);
+  storageListening = true;
+}
+
 function notify(): void {
   for (const listener of listeners) listener();
 }
@@ -119,6 +136,7 @@ function onStorage(event: StorageEvent): void {
 
 /** Valid saved formats, at most 20, names unique (first wins). */
 export function readSavedFormats(): readonly SavedFormat[] {
+  listenToStorage();
   if (cache) return cache;
   let raw: string | null = null;
   try {
@@ -170,7 +188,9 @@ export function saveFormat(
     (format) => format.name.toLowerCase() === cleanName.toLowerCase(),
   );
   let format: SavedFormat;
+  let replaced: string | undefined;
   if (index >= 0) {
+    replaced = formats[index].name;
     format = { id: formats[index].id, name: cleanName, bundle: kept };
     formats[index] = format;
   } else {
@@ -181,7 +201,7 @@ export function saveFormat(
     formats.push(format);
   }
   return write(formats)
-    ? { ok: true, format }
+    ? { ok: true, format, ...(replaced === undefined ? {} : { replaced }) }
     : { ok: false, reason: "Formats cannot be saved in this browser." };
 }
 
@@ -193,17 +213,10 @@ export function removeFormat(id: string): void {
 
 /** In-tab writes and other tabs' `storage` events. */
 export function subscribeSavedFormats(listener: () => void): () => void {
-  if (!storageListening && typeof window !== "undefined") {
-    window.addEventListener("storage", onStorage);
-    storageListening = true;
-  }
+  listenToStorage();
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0 && storageListening) {
-      window.removeEventListener("storage", onStorage);
-      storageListening = false;
-    }
   };
 }
 

@@ -146,6 +146,18 @@ const selectionRange = (page: Page) =>
     return { from: selection?.from, to: selection?.to };
   });
 
+/** A Repeat bundle remembered from an earlier visit (Bold). */
+const rememberBoldBundle = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem(
+      "tinydocy-choices",
+      JSON.stringify({
+        v: 1,
+        slots: { repeatBundle: { last: { bold: true }, recent: [] } },
+      }),
+    );
+  });
+
 async function expectBubbleOpen(page: Page) {
   await expect(bubble(page)).toHaveAttribute("data-state", "open");
   await expect(bubbleToolbar(page)).toBeVisible();
@@ -304,11 +316,11 @@ test.describe("selection bubble", () => {
 
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Italic" }),
+      bubbleToolbar(page).getByRole("button", { name: "Italic", exact: true }),
     ).toBeFocused();
     // One Esc, even with the item's focus tooltip open, as in the row.
     await escapeToEditor(page);
@@ -472,7 +484,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
@@ -495,7 +507,7 @@ test.describe("selection bubble", () => {
     const before = await selectionRange(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await page.keyboard.press("Tab");
@@ -572,7 +584,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("PageDown");
     await page.waitForTimeout(500);
@@ -663,7 +675,10 @@ test.describe("selection bubble", () => {
     );
     expect(border).not.toBe("none");
     await page.keyboard.press("ControlOrMeta+b");
-    const bold = bubbleToolbar(page).getByRole("button", { name: "Bold" });
+    const bold = bubbleToolbar(page).getByRole("button", {
+      name: "Bold",
+      exact: true,
+    });
     await expect(bold).toHaveAttribute("aria-pressed", "true");
     await page.mouse.move(0, 0);
     const pressed = await bold.evaluate((el) => {
@@ -747,6 +762,162 @@ test.describe("selection bubble", () => {
     // Past the deferred removal (one frame) and the 250 ms update debounce.
     await page.waitForTimeout(400);
     await expectBubbleOpen(page);
+  });
+
+  test("the Formats menu opens and keeps the bubble attached", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    // Focus moving into the menu (portalled to `body`) used to hide the
+    // bubble, and the menu with it.
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    await expect(copy).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(copy).toBeVisible();
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Escape");
+    await expect(copy).toBeHidden();
+    await expectBubbleOpen(page);
+  });
+
+  test("Repeat and Formats say they are loading until the engine lands", async ({
+    page,
+  }) => {
+    // A bundle remembered from an earlier visit shows the Repeat split
+    // before E's engine chunk (which no longer rides in the bubble chunk).
+    await rememberBoldBundle(page);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unroute = await interceptChunk(
+      page,
+      CHUNK_MARKERS.engine,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+
+    const loading = "Formatting tools are still loading.";
+    const face = bubbleToolbar(page).locator('[data-action-id="repeat.apply"]');
+    await expect(face).toHaveAttribute("aria-disabled", "true");
+    await expect(face).toHaveAccessibleDescription(new RegExp(loading));
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    const save = page.getByRole("menuitem", { name: "Save as format…" });
+    await expect(copy).toHaveAttribute("aria-disabled", "true");
+    await expect(copy).toHaveAccessibleDescription(loading);
+    await expect(save).toHaveAccessibleDescription(loading);
+
+    release();
+    // The open menu turns live without reopening.
+    await expect(copy).not.toHaveAttribute("aria-disabled", "true");
+    await expect(save).toHaveAccessibleDescription(
+      "Select formatted text to save it as a format.",
+    );
+    await page.keyboard.press("Escape");
+    await expect(face).not.toHaveAttribute("aria-disabled", "true");
+    await face.click();
+    await expect
+      .poll(() => page.evaluate(() => window.__tiptap_editor?.getHTML()))
+      .toContain("<strong>some words</strong>");
+    await unroute();
+  });
+
+  test("the Repeat face is disabled with the reason on inline code", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setMark("inlineCode"),
+    );
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const face = bubbleToolbar(page).locator('[data-action-id="repeat.apply"]');
+    await expect(face).toHaveAttribute("aria-disabled", "true");
+    await expect(face).toHaveAccessibleDescription("Code has no formatting.");
+    // Named for what it repeats, with Repeat's shortcut.
+    await expect(face).toHaveAccessibleName("Repeat Bold");
+    await expect(face).toHaveAttribute("aria-keyshortcuts", /\+Alt\+v/i);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    await expect(copy).toHaveAttribute("aria-disabled", "true");
+    await expect(copy).toHaveAccessibleDescription("Code has no formatting.");
+    await page.keyboard.press("Escape");
+  });
+
+  test("Copy formatting on plain text copies nothing and says so", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    await page.getByRole("menuitem", { name: "Copy formatting" }).click();
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Nothing to copy" }),
+    ).toBeAttached();
+    // The Bold bundle stays: no clear-only "Repeat Plain".
+    await expect(
+      page.locator('[data-smart-bubble] [data-action-id="repeat.apply"]'),
+    ).toHaveAccessibleName("Repeat Bold");
+    expect(
+      await page.evaluate(() => localStorage.getItem("tinydocy-choices")),
+    ).toContain('"bold":true');
+  });
+
+  test("a saved format can be removed from the Formats menu, after a confirm", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [
+            { id: "fwarn", name: "Warning", bundle: { bold: true } },
+            { id: "fnote", name: "Note", bundle: { italic: true } },
+          ],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const remove = page.getByRole("menuitem", {
+      name: "Remove format ‘Warning’",
+    });
+    await expect(remove).toBeVisible();
+    await remove.click();
+    // First press asks again, in place; the menu stays open.
+    const confirm = page.getByRole("menuitem", {
+      name: "Confirm: remove format ‘Warning’",
+    });
+    await expect(confirm).toBeVisible();
+    await confirm.click();
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Removed format ‘Warning’" }),
+    ).toBeAttached();
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("tinydocy-formats") ?? "{}"),
+    );
+    expect(
+      stored.formats.map((format: { name: string }) => format.name),
+    ).toEqual(["Note"]);
   });
 
   for (const theme of ["light", "dark"] as const) {

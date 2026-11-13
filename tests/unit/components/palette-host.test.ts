@@ -17,6 +17,7 @@ import {
 
 const key = (overrides: Partial<PaletteKeyEvent>): PaletteKeyEvent => ({
   code: "Slash",
+  key: "/",
   altKey: true,
   ctrlKey: false,
   metaKey: false,
@@ -44,8 +45,16 @@ describe("matchPaletteHotkey", () => {
     [{ code: "KeyZ", shiftKey: true }, true],
     [{ ctrlKey: true }, false], // AltGr on Windows
     [{ metaKey: true }, false],
-    [{ shiftKey: true }, false],
-    [{ code: "KeyZ" }, false],
+    [{ shiftKey: true, key: "?" }, false], // US Alt+Shift+/
+    [{ key: "÷" }, true], // macOS US ⌥/
+    [{ key: "÷", shiftKey: true }, false],
+    // German / Swiss Mac: the physical slash key is ⌥- (en dash).
+    [{ key: "–" }, false],
+    [{ key: "-" }, false],
+    // A layout with "/" elsewhere (German Windows: Alt+Shift+7).
+    [{ code: "Digit7", key: "/", shiftKey: true }, true],
+    [{ code: "KeyZ", key: "z" }, false],
+    [{ code: "KeyZ", key: "Z", shiftKey: true }, true],
     [{ isComposing: true }, false],
     [{ repeat: true }, false],
     [{ altKey: false }, false],
@@ -109,6 +118,7 @@ describe("palette store", () => {
     const release = registerPaletteEditor(a);
     const event = new KeyboardEvent("keydown", {
       code: "Slash",
+      key: "/",
       altKey: true,
       cancelable: true,
     });
@@ -117,6 +127,7 @@ describe("palette store", () => {
     expect(getPaletteState().requested).toBe(true);
     const again = new KeyboardEvent("keydown", {
       code: "Slash",
+      key: "/",
       altKey: true,
       cancelable: true,
     });
@@ -125,6 +136,7 @@ describe("palette store", () => {
     expect(getPaletteState().editor).toBeNull();
     const plain = new KeyboardEvent("keydown", {
       code: "Slash",
+      key: "/",
       cancelable: true,
     });
     window.dispatchEvent(plain);
@@ -136,7 +148,7 @@ describe("palette store", () => {
     const a = fakeEditor("a");
     const release = registerPaletteEditor(a);
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { code: "Slash", altKey: true }),
+      new KeyboardEvent("keydown", { code: "Slash", key: "/", altKey: true }),
     );
     expect(getPaletteState().editor).toBe(a);
     release();

@@ -65,8 +65,17 @@ export const MERMAID_TEMPLATE_CHOICE: ChoiceSpec<MermaidTemplateId> = {
   fallback: "flowchart",
 };
 
-/** In-page value; dropped on any memory-layer change (Forget, other tabs). */
+/** The same slot, read without the fallback: null until a first use. */
+const USED_TEMPLATE_CHOICE: ChoiceSpec<MermaidTemplateId | null> = {
+  ...MERMAID_TEMPLATE_CHOICE,
+  validate: (value): value is MermaidTemplateId | null =>
+    value === null || isMermaidTemplateId(value),
+  fallback: null,
+};
+
+/** In-page values; dropped on any memory-layer change (Forget, other tabs). */
 let lastTemplate: MermaidTemplateId | undefined;
+let usedTemplate: MermaidTemplateId | null | undefined;
 let watching = false;
 
 function watch(): void {
@@ -74,7 +83,21 @@ function watch(): void {
   watching = true;
   subscribeChoices(() => {
     lastTemplate = undefined;
+    usedTemplate = undefined;
   });
+}
+
+/**
+ * The template actually used last, or null on a fresh profile (where
+ * `lastMermaidTemplate()` falls back to flowchart): only a real use earns
+ * the "Last used" mark.
+ */
+export function usedMermaidTemplate(): MermaidTemplateId | null {
+  watch();
+  if (usedTemplate === undefined) {
+    usedTemplate = readChoice(USED_TEMPLATE_CHOICE).last;
+  }
+  return usedTemplate;
 }
 
 export function lastMermaidTemplate(): MermaidTemplateId {
@@ -93,4 +116,5 @@ export function rememberMermaidTemplate(id: MermaidTemplateId): void {
   watch();
   rememberChoice(MERMAID_TEMPLATE_CHOICE, id);
   lastTemplate = id;
+  usedTemplate = id;
 }

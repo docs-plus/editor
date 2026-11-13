@@ -14,6 +14,33 @@ since the previous tag.
 Minors left by the a11y review of the smart toolbar (contract §10).
 
 #### Fixed
+- The bubble's Repeat face and Formats items show why they are
+  unavailable (e.g. "Code has no formatting." on inline code) instead of
+  failing silently. The face is sized to its text, capped at 10ch, so it
+  no longer runs over Link and the chevron.
+- Repeat's face, menu item and phone cell carry Mod+Alt+V (plus F4 off
+  macOS) in `aria-keyshortcuts` and are named for what they repeat
+  ("Repeat Bold, Italic").
+- A tap on the unavailable phone Repeat cell shows its reason above the
+  bar. The phone selection cells scroll in their own container with edge
+  fades, and Back sits beside it, so no cell is under Back at 320px, at
+  rest or focused. Back dismisses the cells for that selection only.
+- Copy formatting on plain text no longer remembers a clear-only "Repeat
+  Plain"; it says "Nothing to copy".
+- The Repeat extend session merges into its own bundle, not the shared
+  memory another tab may have replaced (bold here plus red here no
+  longer repeats as the other tab's italic plus red); "Forget my choices"
+  ends the session.
+- Saved formats stay fresh across tabs with no component mounted (the
+  palette no longer lists or applies a format another tab deleted).
+- Format names also lose the soft hyphen, the Arabic letter mark, the
+  word joiner and the invisible operators.
+- Alt+/ no longer takes Option-hyphen (en dash) on German and Swiss Mac
+  layouts: it needs a key that types "/" (or "÷" on US-like Mac
+  layouts); Alt+Shift+Z stays the fallback.
+- While the engine loads, remote and meta-only transactions no longer
+  push the user's own out of the capped buffer, and every engine use
+  records the buffer first.
 - **Selection bubble:** the Formats menu (the Repeat split's chevron) no
   longer closes the moment it opens and drops keyboard focus on the page.
   The bubble now stays while any of its popups is open (the menu, its
@@ -60,6 +87,23 @@ Minors left by the a11y review of the smart toolbar (contract §10).
 Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
 
 #### Added
+- **Diagram ▸ templates in the Insert menu (M17b):** a "▸" item beside
+  Diagram opens the five Mermaid templates; the last used one is
+  described "Last used" and focused first. Diagram itself still inserts
+  with one click. E's `template.mermaid` no longer shows up as a second,
+  icon-less "Insert diagram" row. The submenu rides in the insert step's
+  preloaded chunk.
+- **Remove a saved format:** each entry under "Your formats" in the
+  bubble's Formats menu has a Remove item ("Remove format 'X'"),
+  confirmed in place and announced, so the 20-format cap can be acted
+  on.
+- **Formats cell on the phone selection bar:** Copy formatting, Save as
+  format…, Your formats and In this doc, which Repeat's reason points at.
+- **Announcements** through one polite live region (`lib/announce.ts`):
+  "Repeated Bold, Italic", "Copied formatting: Bold", "Applied …",
+  "Saved format 'X'" / "Replaced format 'X'", "Removed format 'X'", and
+  the reason when the Repeat key cannot run (the key is then handled,
+  not passed on).
 - **Phone context slot cell:** the docked bar shows the current block's
   tools as one 44×44 cell between Indent and Insert (spec §4.7): section
   fold and moves, code language and copy, table rows and columns, and
@@ -78,6 +122,18 @@ Editor chunk growth +257 B gz (+23.2 KB of the 23.5 KB budget).
 - **Swipe down to close the Aa sheet:** drag its header (new handle)
   down past 80px or flick it; shorter drags snap back, reduced motion
   makes both instant, and Done, Esc and the backdrop still close it.
+
+#### Changed
+- PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
+  in one lazy chunk. The selection bubble and the phone selection cells
+  reach it through `getV11Engine()` / `loadV11Engine()` like the palette,
+  instead of each carrying a copy (about 5 KB gz each). A unit test
+  fails on any static import of the engine from app code.
+- The selection-wide code check runs once per snapshot and stops at the
+  first formattable character.
+- E's palette keywords ride with the engine, and the eager shell drops
+  its listener set, to keep the editor chunk flat: it ends at +23.1 KB
+  of 23.5 KB (+148 B gz over the start of this branch).
 
 ### Smart toolbar later-phase plans (docs)
 

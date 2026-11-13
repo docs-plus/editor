@@ -40,6 +40,7 @@ const SELECTION_CELLS = [
   "Link",
   "Clear formatting",
   "Repeat formatting",
+  "Formats",
   "Back to all tools",
 ];
 const sheet = (page: Page) => page.getByRole("dialog", { name: "Text format" });
@@ -196,7 +197,7 @@ for (const [width, height] of [
 test("Bold shows its state with aria-pressed", async ({ page }) => {
   await openDoc(page);
   await selectNewParagraph(page);
-  const bold = bar(page).getByRole("button", { name: "Bold" });
+  const bold = bar(page).getByRole("button", { name: "Bold", exact: true });
   await expect(bold).toHaveAttribute("aria-pressed", "false");
   await bold.tap();
   await expect.poll(() => lastMark(page, "bold")).toBe(true);
@@ -411,7 +412,7 @@ for (const theme of ["light", "dark"] as const) {
 test("Redo sits beside Undo and replays an undone edit", async ({ page }) => {
   await openDoc(page);
   await selectNewParagraph(page, "alpha");
-  await bar(page).getByRole("button", { name: "Bold" }).tap();
+  await bar(page).getByRole("button", { name: "Bold", exact: true }).tap();
   await expect.poll(() => lastMark(page, "bold")).toBe(true);
   const undo = bar(page).getByRole("button", { name: "Undo" });
   const redo = bar(page).getByRole("button", { name: "Redo" });
@@ -570,18 +571,23 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     for (const [index, name] of SELECTION_CELLS.entries()) {
       await expect(cells.nth(index)).toHaveAccessibleName(name);
     }
-    // The cells scroll sideways under a sticky Back cell, all 44×44.
+    // The cells scroll sideways in their own container; Back sits beside
+    // it, outside, all 44×44.
     expect(await smallTargets(page, "[data-mobile-bar] button")).toEqual([]);
+    const scroller = selectionBar(page).locator("[data-phone-selection-cells]");
     expect(
-      await selectionBar(page).evaluate(
-        (el) => getComputedStyle(el).scrollPaddingInlineEnd,
-      ),
-    ).toBe("44px");
+      await scroller.evaluate((el) => getComputedStyle(el).overflowX),
+    ).toBe("auto");
+    await expect(
+      scroller.getByRole("button", { name: "Back to all tools" }),
+    ).toHaveCount(0);
 
-    await selectionBar(page).getByRole("button", { name: "Bold" }).tap();
+    await selectionBar(page)
+      .getByRole("button", { name: "Bold", exact: true })
+      .tap();
     expect(await lastMark(page, "bold")).toBe(true);
     await expect(
-      selectionBar(page).getByRole("button", { name: "Bold" }),
+      selectionBar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
 
     // Back keeps all tools while the text stays selected.
@@ -607,7 +613,10 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
   }) => {
     await openDoc(page);
     await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
-    const italic = selectionBar(page).getByRole("button", { name: "Italic" });
+    const italic = selectionBar(page).getByRole("button", {
+      name: "Italic",
+      exact: true,
+    });
     await italic.focus();
     await expect(italic).toBeFocused();
 
@@ -627,15 +636,15 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(back).toBeFocused();
     // Focused by keyboard, the last cell before Back is not hidden by it.
     await page.keyboard.press("ArrowLeft");
-    const repeat = selectionBar(page).getByRole("button", {
-      name: "Repeat formatting",
+    const formats = selectionBar(page).getByRole("button", {
+      name: "Formats",
     });
-    await expect(repeat).toBeFocused();
-    const [repeatBox, backBox] = await Promise.all([
-      repeat.boundingBox(),
+    await expect(formats).toBeFocused();
+    const [formatsBox, backBox] = await Promise.all([
+      formats.boundingBox(),
       back.boundingBox(),
     ]);
-    expect((repeatBox?.x ?? 0) + (repeatBox?.width ?? 0)).toBeLessThanOrEqual(
+    expect((formatsBox?.x ?? 0) + (formatsBox?.width ?? 0)).toBeLessThanOrEqual(
       (backBox?.x ?? 0) + 1,
     );
     await page.keyboard.press("ArrowRight");
@@ -659,16 +668,90 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
   }) => {
     await openDoc(page);
     await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
-    await selectionBar(page).getByRole("button", { name: "Italic" }).tap();
+    await selectionBar(page)
+      .getByRole("button", { name: "Italic", exact: true })
+      .tap();
     expect(await lastMark(page, "italic")).toBe(true);
 
     await selectText(page, "beta");
+    // Named for what it repeats.
+    const repeat = selectionBar(page).getByRole("button", {
+      name: "Repeat Italic",
+    });
+    await expect(repeat).not.toHaveAttribute("aria-disabled", "true");
+    await expect(repeat).toHaveAttribute("aria-keyshortcuts", /\+Alt\+v/i);
+    await repeat.tap();
+    expect(await lastMark(page, "italic")).toBe(true);
+  });
+
+  test("a tap on the unavailable Repeat cell shows why, on screen", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
     const repeat = selectionBar(page).getByRole("button", {
       name: "Repeat formatting",
     });
-    await expect(repeat).not.toHaveAttribute("aria-disabled", "true");
-    await repeat.tap();
+    await expect(repeat).toHaveAttribute("aria-disabled", "true");
+    // Unavailable but still tappable (Playwright skips aria-disabled).
+    await repeat.tap({ force: true });
+    const reason = page.locator("[data-phone-reason]");
+    await expect(reason).toBeVisible();
+    await expect(reason).toHaveText(
+      "Format some text first, or use Copy formatting.",
+    );
+    // Above the bar, not over it.
+    const [reasonBox, barBox] = await Promise.all([
+      reason.boundingBox(),
+      selectionBar(page).boundingBox(),
+    ]);
+    expect((reasonBox?.y ?? 0) + (reasonBox?.height ?? 0)).toBeLessThanOrEqual(
+      barBox?.y ?? 0,
+    );
+  });
+
+  test("the Formats cell reaches Copy formatting and Your formats", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [{ id: "fnote", name: "Note", bundle: { italic: true } }],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await selectionBar(page)
+      .getByRole("button", { name: "Bold", exact: true })
+      .tap();
+    await selectionBar(page).getByRole("button", { name: "Formats" }).tap();
+    await page.getByRole("menuitem", { name: "Copy formatting" }).tap();
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Copied formatting: Bold" }),
+    ).toBeAttached();
+    await selectText(page, "beta");
+    await selectionBar(page).getByRole("button", { name: "Formats" }).tap();
+    await page.getByRole("menuitem", { name: "Note", exact: true }).tap();
     expect(await lastMark(page, "italic")).toBe(true);
+  });
+
+  test("Back dismisses for that selection only: a direct reselect swaps again", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await expect(bar(page)).toBeVisible();
+    // No caret in between: straight to another selection, in one step.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const to = editor?.state.selection.to ?? 0;
+      editor?.commands.setTextSelection({ from: to - 5, to: to - 2 });
+    });
+    await expect(selectionBar(page)).toBeVisible();
   });
 
   for (const theme of ["light", "dark"] as const) {
@@ -679,4 +762,43 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
       await expectNoSeriousA11yViolations(page, ["[data-mobile-bar]"]);
     });
   }
+});
+
+test.describe("selection cells at 320px (PR E, WCAG 2.4.11)", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("no cell sits under Back, at rest or focused, and the bar shows it scrolls", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    const scroller = selectionBar(page).locator("[data-phone-selection-cells]");
+    const back = selectionBar(page).getByRole("button", {
+      name: "Back to all tools",
+    });
+    const backBox = await back.boundingBox();
+    const scrollerBox = await scroller.boundingBox();
+    // The scroller ends where Back begins: nothing can pass under it.
+    expect(
+      (scrollerBox?.x ?? 0) + (scrollerBox?.width ?? 0),
+    ).toBeLessThanOrEqual((backBox?.x ?? 0) + 1);
+    // More cells than room: the end fades.
+    await expect(scroller).toHaveAttribute("data-more", "end");
+
+    const cells = scroller.getByRole("button");
+    const count = await cells.count();
+    await cells.first().focus();
+    for (let index = 0; index < count; index += 1) {
+      const cell = cells.nth(index);
+      await expect(cell).toBeFocused();
+      const box = await cell.boundingBox();
+      const view = await scroller.boundingBox();
+      expect(box?.x ?? 0).toBeGreaterThanOrEqual((view?.x ?? 0) - 1);
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+        (backBox?.x ?? 0) + 1,
+      );
+      if (index < count - 1) await page.keyboard.press("ArrowRight");
+    }
+    await expect(scroller).toHaveAttribute("data-more", /start|both/);
+  });
 });
