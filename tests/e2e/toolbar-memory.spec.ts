@@ -1,7 +1,8 @@
 /**
- * Insert memory (spec §5): the M10 face shows the last inserted kind at T1
- * only (a fresh profile keeps "+ Insert"), and the M17a table grid opens
- * at the last size, across reloads, until "Forget my choices".
+ * Toolbar memory (spec §5): the M9 list face follows the last list type,
+ * including picks from the list menu; the M10 face shows the last inserted
+ * kind at T1 only (a fresh profile keeps "+ Insert"); the M17a table grid
+ * opens at the last size, across reloads, until "Forget my choices".
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -42,6 +43,26 @@ const countNodes = (page: Page, name: string) =>
     });
     return count;
   }, name);
+
+test.describe("M9: list face", () => {
+  test("a list menu pick becomes the face, across reloads", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const editorPage = await openToolbarTestDoc(page);
+    const listFace = row(page).locator("[data-list-face]");
+    await expect(listFace).toHaveAttribute("data-list-face", "bulletList");
+    await caretInBody(page);
+    await row(page).getByRole("button", { name: "List", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Task List" }).click();
+    expect(await countNodes(page, "taskList")).toBe(1);
+    await expect(listFace).toHaveAttribute("data-list-face", "taskList");
+
+    await page.reload();
+    await editorPage.waitForSync();
+    await expect(listFace).toHaveAttribute("data-list-face", "taskList");
+  });
+});
 
 test.describe("M10: Insert face", () => {
   test("a fresh profile shows '+ Insert' and no face", async ({ page }) => {
