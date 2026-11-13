@@ -42,9 +42,13 @@ listed under Changed.
   selection, code and Mermaid blocks, a selection inside one link and a
   read-only document hide it; Esc fades it out (90 ms) and keeps the
   selection; Alt+F10 focuses it when it shows, else the row. The colour
-  popover opens from the bubble and keeps it attached. The bubble is its own
-  lazy chunk (owner decision O1); touch devices and phone widths never load
-  it.
+  popover opens from the bubble, away from the selection, and keeps it
+  attached. Focus leaving the editor or the bubble (Tab, another control)
+  hides it, and a click between its buttons keeps the editor focused. While
+  the selection is scrolled out of view, or the bubble is wholly under the
+  sticky row, it reads closed: Alt+F10 goes to the row and focus inside it
+  returns to the editor. The bubble is its own lazy chunk (owner decision
+  O1); touch devices and phone widths never load it.
 - **Responsive ladder** (spec §4.6): the fixed row is a size container and
   fits its width from 1440px down to 768px, mouse and touch, in paragraph,
   heading, code and table contexts. Tiers hide groups and show stand-ins:
