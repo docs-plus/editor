@@ -3,12 +3,14 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
 import { MAX_TABLE_SIZE, type TableSize } from "@/lib/remembered-choice";
+
+import { isCoarsePointer } from "../coarse-pointer";
 
 export interface TableSizeGridProps {
   /** Opens here (M17a: the last size). */
@@ -16,28 +18,40 @@ export interface TableSizeGridProps {
   onPick: (size: TableSize) => void;
 }
 
-const clamp = (value: number) => Math.min(Math.max(value, 1), MAX_TABLE_SIZE);
+/** Largest grid on touch: 6 × 44px cells plus gaps fit a 360px phone. */
+export const COARSE_MAX_TABLE_SIZE = 6;
 
 /**
  * Rows × columns picker for Insert → Table. One focusable cell (roving):
- * arrow keys grow or shrink the size, Enter or a click inserts. Hovering
- * previews the size.
+ * arrow keys grow or shrink the size and move focus, Enter or a click
+ * inserts. Hovering only previews the size; focus stays put. The focused
+ * cell's name ("3 by 4 table") is the announcement, so the visible caption
+ * is not a live region.
  */
 export function TableSizeGrid({ initial, onPick }: TableSizeGridProps) {
-  const [size, setSize] = useState<TableSize>({
+  const [max] = useState(() =>
+    isCoarsePointer() ? COARSE_MAX_TABLE_SIZE : MAX_TABLE_SIZE,
+  );
+  const clamp = (value: number) => Math.min(Math.max(value, 1), max);
+  const [size, setSize] = useState<TableSize>(() => ({
     rows: clamp(initial.rows),
     cols: clamp(initial.cols),
-  });
+  }));
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Focus follows the active cell (also on open).
-  useEffect(() => {
+  const focusCell = (target: TableSize) =>
     gridRef.current
       ?.querySelector<HTMLButtonElement>(
-        `[data-row="${size.rows}"][data-col="${size.cols}"]`,
+        `[data-row="${target.rows}"][data-col="${target.cols}"]`,
       )
       ?.focus();
-  }, [size]);
+
+  // Focus the opening cell once; later, only keyboard moves focus.
+  const opening = useRef(size);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
+  useLayoutEffect(() => {
+    focusCell(opening.current);
+  }, []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const moves: Record<string, TableSize> = {
@@ -50,11 +64,12 @@ export function TableSizeGrid({ initial, onPick }: TableSizeGridProps) {
     if (!next) return;
     event.preventDefault();
     setSize(next);
+    focusCell(next);
   };
 
   const cells = [];
-  for (let row = 1; row <= MAX_TABLE_SIZE; row++) {
-    for (let col = 1; col <= MAX_TABLE_SIZE; col++) {
+  for (let row = 1; row <= max; row++) {
+    for (let col = 1; col <= max; col++) {
       const active = row === size.rows && col === size.cols;
       cells.push(
         <button
@@ -75,19 +90,18 @@ export function TableSizeGrid({ initial, onPick }: TableSizeGridProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: arrow keys move the roving cell; each cell is a button */}
       <div
         ref={gridRef}
         role="group"
         aria-label="Table size"
         className="st-table-grid"
-        style={{ "--cols": MAX_TABLE_SIZE } as CSSProperties}
+        style={{ "--cols": max } as CSSProperties}
         data-roving-group=""
         onKeyDown={onKeyDown}
       >
         {cells}
       </div>
-      <p className="st-table-size" aria-live="polite">
+      <p className="st-table-size" aria-hidden="true">
         {size.rows} × {size.cols}
       </p>
     </div>
