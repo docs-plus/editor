@@ -353,6 +353,57 @@ test.describe("context slot cell", () => {
     await expect(sheet(page)).toBeVisible();
   });
 
+  for (const width of [390, 320] as const) {
+    test(`media at ${width}px: Media options opens the kit toolbar with focus in it`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 740 });
+      await openDoc(page);
+      await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        const svg = encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="200" height="120" fill="teal"/></svg>',
+        );
+        editor.commands.insertContentAt(editor.state.doc.content.size, [
+          {
+            type: "image",
+            attrs: { src: `data:image/svg+xml,${svg}`, alt: "Sample" },
+          },
+          { type: "paragraph", content: [{ type: "text", text: "After" }] },
+        ]);
+        let pos = -1;
+        editor.state.doc.descendants((node, at) => {
+          if (pos < 0 && node.type.name === "image") pos = at;
+          return pos < 0;
+        });
+        editor.chain().setNodeSelection(pos).focus().run();
+      });
+      await page.locator('.tiptap img[alt="Sample"]').scrollIntoViewIfNeeded();
+      if (width >= 360) {
+        // One tool: a direct button, as in the row's slot.
+        await bar(page).getByRole("button", { name: "Media options…" }).tap();
+      } else {
+        await openSheet(page);
+        await sheet(page)
+          .getByRole("region", { name: "Media tools" })
+          .getByRole("button", { name: "Media options…" })
+          .tap();
+        await expect(sheet(page)).toBeHidden();
+      }
+      const inKitToolbar = () =>
+        page.evaluate(
+          () => !!document.activeElement?.closest("[data-hm-toolbar]"),
+        );
+      await expect.poll(inKitToolbar).toBe(true);
+      // Focus stays there once the menu or sheet has finished closing.
+      await page.waitForTimeout(400);
+      expect(await inKitToolbar()).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect.poll(() => focusedName(page)).not.toBe("body");
+    });
+  }
+
   for (const theme of ["light", "dark"] as const) {
     test(`axe and 360px screenshots of the slot cell and its menu (${theme})`, async ({
       page,
