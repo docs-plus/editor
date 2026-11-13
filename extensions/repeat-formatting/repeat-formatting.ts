@@ -13,7 +13,7 @@ import {
   REPEAT_META,
   repeatDisabledReason,
 } from "./apply-bundle";
-import { type FormatBundle, isEmptyBundle, readBundleAt } from "./bundle";
+import { type FormatBundle, isEmptyBundle } from "./bundle";
 import { getRememberedBundle, rememberBundle } from "./bundle-memory";
 import {
   fromSessionRange,
@@ -28,9 +28,9 @@ declare module "@tiptap/core" {
     repeatFormatting: {
       /** Applies the remembered bundle to the selection: one undo step. */
       repeatFormatting: () => ReturnType;
-      /** Remembers the selection's full formatting as the bundle. */
+      /** Closes the extend session; `repeat.copy` remembers the read. */
       copyFormatting: () => ReturnType;
-      /** Applies `bundle` (a saved or in-doc format) and remembers it. */
+      /** Applies `bundle` (a saved or in-doc format); `formats.apply` remembers it. */
       applyFormatBundle: (bundle: FormatBundle) => ReturnType;
     };
   }
@@ -55,7 +55,7 @@ function undoManagerOf(state: EditorState): UndoManagerLike | null {
 
 /**
  * Repeat formatting and Copy formatting (spec §5 M7). Records a bundle
- * from local mark steps, keeps the "extend" session as Yjs relative
+ * from local mark-only transactions (contract §6, exception 3), keeps the "extend" session as Yjs relative
  * positions, applies a bundle as one transaction that sets marks (never
  * toggles) wrapped in `stopCapturing()` so it is exactly one undo step,
  * and binds Mod-Alt-v (and F4 off macOS) through the registry action, so
@@ -73,7 +73,7 @@ export const RepeatFormatting = Extension.create<
 
   addCommands() {
     const apply =
-      (bundle: FormatBundle, remember: boolean) =>
+      (bundle: FormatBundle) =>
       ({
         state,
         tr,
@@ -93,7 +93,6 @@ export const RepeatFormatting = Extension.create<
         // `onTransaction` stops capturing again once the Yjs write is done,
         // so typing that follows is its own undo step.
         applyBundle(tr, bundle).setMeta(REPEAT_META, true);
-        if (remember) rememberBundle(bundle);
         return true;
       };
 
@@ -105,21 +104,20 @@ export const RepeatFormatting = Extension.create<
           if (repeatDisabledReason(state, bundle) !== null || !bundle) {
             return false;
           }
-          return apply(bundle, false)({ state, tr, dispatch, editor });
+          return apply(bundle)({ state, tr, dispatch, editor });
         },
       applyFormatBundle:
         (bundle) =>
         ({ state, tr, dispatch, editor }) => {
           if (isEmptyBundle(bundle)) return false;
-          return apply(bundle, true)({ state, tr, dispatch, editor });
+          return apply(bundle)({ state, tr, dispatch, editor });
         },
+      // Memory is written by the actions' run(), after these return true
+      // (contract §6); the commands only touch the editor.
       copyFormatting:
         () =>
-        ({ state, dispatch }) => {
-          if (dispatch) {
-            rememberBundle(readBundleAt(state));
-            this.storage.session = null;
-          }
+        ({ dispatch }) => {
+          if (dispatch) this.storage.session = null;
           return true;
         },
     };
