@@ -7,6 +7,7 @@ import {
   type ChoiceSpec,
   forgetChoices,
   HIGHLIGHT_CHOICE,
+  INSERT_KIND_CHOICE,
   isTableSize,
   OUTLINE_OPEN_CHOICE,
   RECENT_COLORS_CHOICE,
@@ -188,6 +189,22 @@ describe("remembered choices: tamper resistance", () => {
       Storage.prototype.getItem = original;
       Storage.prototype.setItem = originalSet;
     }
+  });
+});
+
+describe("M10: a fresh profile has no remembered Insert kind", () => {
+  it("falls back to null, so the face stays '+ Insert'", () => {
+    expect(readChoice(INSERT_KIND_CHOICE).last).toBeNull();
+  });
+
+  it("remembers a real kind", () => {
+    rememberChoice(INSERT_KIND_CHOICE, "codeBlock");
+    expect(readChoice(INSERT_KIND_CHOICE).last).toBe("codeBlock");
+  });
+
+  it("never stores null", () => {
+    rememberChoice(INSERT_KIND_CHOICE, null);
+    expect(localStorage.getItem(STORAGE_KEYS.choices)).toBeNull();
   });
 });
 
