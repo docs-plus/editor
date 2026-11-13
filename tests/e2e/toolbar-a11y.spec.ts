@@ -243,6 +243,87 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
   await expect(trigger).toBeFocused();
 });
 
+test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
+  page,
+}) => {
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  const trigger = page
+    .getByRole("toolbar")
+    .getByRole("button", { name: /highlight/i })
+    .first();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const green = dialog.getByRole("button", { name: "Green highlight" });
+  await expect(green).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(green).toHaveAttribute("aria-pressed", "true");
+
+  const none = dialog.getByRole("button", { name: "No highlight" });
+  await none.focus();
+  await page.keyboard.press("Enter");
+  await expect(green).toHaveAttribute("aria-pressed", "false");
+  expect(
+    await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
+  ).toBe(false);
+  await expect(none).toBeFocused();
+  await closeWithEscape(page, dialog);
+  await expect(trigger).toBeFocused();
+});
+
+const SWATCHES = ["Green", "Blue", "Red", "Purple", "Yellow"] as const;
+
+for (const mode of ["light", "dark", "forced colours"] as const) {
+  test(`highlight check glyph is visible on every swatch (${mode})`, async ({
+    page,
+  }, testInfo) => {
+    const forced = mode === "forced colours";
+    if (forced) await page.emulateMedia({ forcedColors: "active" });
+    else await setTheme(page, mode);
+    await openToolbarTestDoc(page);
+    await selectWord(page);
+    await page
+      .getByRole("toolbar")
+      .getByRole("button", { name: /highlight/i })
+      .first()
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+
+    for (const name of SWATCHES) {
+      const swatch = dialog.getByRole("button", { name: `${name} highlight` });
+      await swatch.click();
+      await expect(swatch).toHaveAttribute("aria-pressed", "true");
+      const dot = await swatch
+        .locator(".tiptap-button-highlight")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          const check = el.querySelector("svg");
+          return {
+            adjust: cs.forcedColorAdjust,
+            border: cs.borderTopWidth,
+            bg: cs.backgroundColor,
+            check: check ? getComputedStyle(check).color : "",
+          };
+        });
+      // Forced colours keep the dot's colour and outline it in CanvasText;
+      // elsewhere the theme decides.
+      expect(dot.adjust).toBe(forced ? "none" : "auto");
+      expect(dot.border).toBe(forced ? "1px" : "0px");
+      expect(
+        contrastRatio(
+          await resolveRgb(page, dot.check),
+          await resolveRgb(page, dot.bg),
+        ),
+        `${name} check on its swatch`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+
+    await dialog.screenshot({
+      path: testInfo.outputPath(`highlight-dialog-${mode.split(" ")[0]}.png`),
+    });
+  });
+}
+
 test("mobile highlight panel: one arrow press moves one swatch", async ({
   page,
 }) => {

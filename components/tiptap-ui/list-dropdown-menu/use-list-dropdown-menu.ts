@@ -9,6 +9,7 @@ import {
   isListActive,
   type ListType,
   listIcons,
+  setListTypeInPlace,
   toggleList,
 } from "@/components/tiptap-ui/list-button";
 // --- Hooks ---
@@ -128,9 +129,10 @@ export function setListType(editor: Editor | null, value: ListValue): boolean {
   const current = getListValue(editor);
   if (current === value) return false;
 
-  if (current !== "none" && !toggleList(editor, current)) return false;
-  if (value === "none") return true;
-  return toggleList(editor, value);
+  if (value === "none")
+    return current !== "none" && toggleList(editor, current);
+  if (current === "none") return toggleList(editor, value);
+  return setListTypeInPlace(editor, value);
 }
 
 /**

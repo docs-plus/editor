@@ -27,6 +27,9 @@ export const blockquote = built.blockquote;
 export const codeBlock = built.codeBlock;
 export const bulletList = built.bulletList;
 export const listItem = built.listItem;
+export const orderedList = built.orderedList;
+export const taskList = built.taskList;
+export const taskItem = built.taskItem;
 export const hr = built.horizontalRule;
 export const img = built.image;
 

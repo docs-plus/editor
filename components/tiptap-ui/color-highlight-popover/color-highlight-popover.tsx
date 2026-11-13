@@ -114,7 +114,6 @@ export function ColorHighlightPopoverContent({
   useColorValue = false,
   navigation = "grid",
 }: ColorHighlightPopoverContentProps) {
-  const { handleRemoveHighlight } = useColorHighlight({ editor });
   const containerRef = useRef<HTMLDivElement>(null);
   const isGrid = navigation === "grid";
 
@@ -122,6 +121,21 @@ export function ColorHighlightPopoverContent({
     () => [...colors, { label: "No highlight", value: "none" }],
     [colors],
   );
+
+  // Applying refocuses the editor (Tiptap defers that by a frame); take focus
+  // back to the item so Esc still returns it to the trigger.
+  const refocusItem = (index: number) =>
+    isGrid
+      ? () =>
+          requestAnimationFrame(() =>
+            itemAt(containerRef.current, index)?.focus(),
+          )
+      : undefined;
+
+  const { handleRemoveHighlight } = useColorHighlight({
+    editor,
+    onApplied: refocusItem(colors.length),
+  });
 
   const { selectedIndex, setSelectedIndex } = useMenuNavigation({
     // Without a container the hook attaches no listener: toolbar mode leaves
@@ -189,16 +203,7 @@ export function ColorHighlightPopoverContent({
             aria-label={swatchName(color.label)}
             tabIndex={tabIndexFor(index)}
             useColorValue={useColorValue}
-            // Applying refocuses the editor (Tiptap defers that by a frame);
-            // take focus back so Esc still returns it to the trigger.
-            onApplied={
-              isGrid
-                ? () =>
-                    requestAnimationFrame(() =>
-                      itemAt(containerRef.current, index)?.focus(),
-                    )
-                : undefined
-            }
+            onApplied={refocusItem(index)}
           />
         ))}
       </div>

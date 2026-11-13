@@ -9,20 +9,28 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  // Dots must keep their colour in forced-colours mode; a CanvasText border
-  // keeps them visible, and the check glyph carries the pressed state (1.4.1).
-  forced-color-adjust: none;
-  border: 1px solid CanvasText;
   box-sizing: border-box;
 
+  // The check glyph carries the pressed state (1.4.1). --foreground is >=3:1
+  // on every highlight colour in light and dark.
   .tiptap-button-highlight-check {
     position: relative;
     z-index: 1;
     width: 0.8rem;
     height: 0.8rem;
-    color: CanvasText;
+    color: var(--foreground);
     stroke-width: 3;
+  }
+
+  // Dots must keep their colour in forced-colours mode; a CanvasText border
+  // keeps them visible.
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+
+    .tiptap-button-highlight-check {
+      color: CanvasText;
+    }
   }
 
   &::after {
