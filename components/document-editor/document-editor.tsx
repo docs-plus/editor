@@ -263,7 +263,7 @@ function DocumentEditorContent({
           return false;
       }
     });
-  }, [editor, toggleFilterBar]);
+  }, [editor, setOutlineOpen, toggleFilterBar]);
 
   // Esc on a toolbar item returns to the document with its selection.
   // `view.focus()` restores the selection at once; Tiptap's `focus()` waits
