@@ -224,7 +224,8 @@ span[data-collapse-standin] {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  // ≥ 3:1 on the popover in both themes (WCAG 1.4.11).
+  border: 1px solid color-mix(in srgb, var(--foreground) 50%, transparent);
   --swatch-bg: var(--background);
   --swatch-fg: var(--foreground);
   background: var(--swatch-bg);
@@ -237,7 +238,7 @@ span[data-collapse-standin] {
   }
 
   &:hover {
-    border-color: color-mix(in srgb, var(--foreground) 45%, transparent);
+    border-color: color-mix(in srgb, var(--foreground) 80%, transparent);
   }
 
   &:focus-visible {
