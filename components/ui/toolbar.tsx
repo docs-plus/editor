@@ -134,24 +134,25 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
         repairFocus(normalize());
         return;
       }
-      for (const record of records) {
-        if (record.type === "attributes") {
-          if (
-            record.attributeName === "tabindex" &&
-            record.target instanceof HTMLElement &&
-            record.target !== stop &&
-            record.target.getAttribute("tabindex") === "0"
-          ) {
-            stampInactive(record.target);
-          }
-          continue;
+      const stampTree = (node: Node) => {
+        if (!(node instanceof Element)) return;
+        if (node.matches(ITEM_SELECTOR)) stampInactive(node);
+        for (const el of node.querySelectorAll(ITEM_SELECTOR)) {
+          stampInactive(el);
         }
-        for (const node of record.addedNodes) {
-          if (!(node instanceof Element)) continue;
-          if (node.matches(ITEM_SELECTOR)) stampInactive(node);
-          for (const el of node.querySelectorAll(ITEM_SELECTOR)) {
-            stampInactive(el);
-          }
+      };
+      for (const record of records) {
+        if (record.type === "childList") {
+          record.addedNodes.forEach(stampTree);
+        } else if (record.attributeName !== "tabindex") {
+          // Un-hidden or re-enabled items were never stamped by a full pass.
+          stampTree(record.target);
+        } else if (
+          record.target !== stop &&
+          record.target instanceof Element &&
+          record.target.getAttribute("tabindex") === "0"
+        ) {
+          stampInactive(record.target);
         }
       }
     };
