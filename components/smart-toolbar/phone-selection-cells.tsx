@@ -4,15 +4,11 @@ import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
 
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { useActionView } from "@/hooks/use-editor-context";
-import { availability, runAction } from "@/lib/editor-actions/registry";
+import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
 import { colorLabel } from "@/lib/editor-actions/surface-actions";
-import { repeatApplyAction } from "@/lib/editor-actions/v11-actions";
-// Installs the E action bodies (lazy half of v11-actions) with this chunk.
-import "@/lib/editor-actions/v11-engine";
-import { getEditorContextStore } from "@/lib/editor-context/store";
-import { CloseIcon, RepeatIcon } from "@/lib/icons";
+import { CloseIcon } from "@/lib/icons";
 import {
   HIGHLIGHT_CHOICE,
   TEXT_COLOR_CHOICE,
@@ -20,6 +16,8 @@ import {
 } from "@/lib/remembered-choice";
 
 import { ActionButton } from "./action-button";
+import { type Swatch, swatchStyle } from "./color/swatch";
+import { PaintFormatButton } from "./formats/paint-format-button";
 import type { SurfaceProps } from "./types";
 
 export type MobileBarMode = "all" | "selection";
@@ -43,63 +41,59 @@ export function nextMobileBarMode(input: {
   return input.hasTextSelection ? "selection" : "all";
 }
 
+const COLOR_CELLS = {
+  text: {
+    id: "color.text.apply",
+    choice: TEXT_COLOR_CHOICE,
+    apply: "Apply text colour",
+  },
+  highlight: {
+    id: "color.highlight.apply",
+    choice: HIGHLIGHT_CHOICE,
+    apply: "Apply highlight",
+  },
+} as const;
+
 /**
- * ↻ Repeat as a phone cell. `repeat.apply` reads the remembered bundle,
- * which is not part of the context snapshot (contract §3.1, documented
- * external read), so the cached `getView` can lag a bundle change. This
- * cell re-renders on bundle changes and on view changes, and computes its
- * availability from the live snapshot at render.
+ * Text colour or highlight: applies the colour last used (M3), and shows
+ * it as a 12×3 bar under the icon, like the row's split face. The Aa
+ * sheet keeps the full palette.
  */
-function RepeatCell({ editor }: { editor: Editor }) {
-  useActionView(repeatApplyAction.id, editor);
-  useRememberedBundle();
-  const enabled = availability(
-    repeatApplyAction,
-    getEditorContextStore(editor).getContext(),
-  );
-  const reason = enabled === true ? undefined : enabled.reason;
+function ColorCell({
+  kind,
+  editor,
+}: {
+  kind: keyof typeof COLOR_CELLS;
+  editor: Editor;
+}) {
+  const { id, choice, apply } = COLOR_CELLS[kind];
+  const token = useRememberedChoice(choice).last;
+  const view = useActionView(id, editor);
+  const action = editorActions.get(id);
+  if (!view || !action) return null;
+  const reason = view.enabled === true ? undefined : view.enabled.reason;
+  const label = `${apply}: ${colorLabel(token)}`;
+  const Icon = action.icon;
   return (
     <ToolbarButton
       type="button"
-      data-action-id={repeatApplyAction.id}
+      data-action-id={id}
       data-surface="phone"
-      aria-label={repeatApplyAction.label}
-      tooltip={repeatApplyAction.label}
-      className="min-h-11 min-w-11"
+      aria-label={label}
+      tooltip={label}
       disabled={reason !== undefined}
       disabledReason={reason}
+      className="st-split-face"
       onMouseDown={(event) => event.preventDefault()}
-      onClick={() => runAction(editor, repeatApplyAction)}
+      onClick={() => runAction(editor, action, token)}
     >
-      <RepeatIcon className="tiptap-button-icon" aria-hidden="true" />
+      {Icon ? <Icon aria-hidden="true" /> : null}
+      <span
+        aria-hidden="true"
+        className={`st-face-bar st-face-bar--${kind}`}
+        style={swatchStyle({ kind, token } as Swatch)}
+      />
     </ToolbarButton>
-  );
-}
-
-/**
- * Text colour and highlight apply the colour last used (M3), like the
- * row's split face; the Aa sheet keeps the full palette.
- */
-function ColorCells({ editor }: { editor: Editor }) {
-  const text = useRememberedChoice(TEXT_COLOR_CHOICE).last;
-  const highlight = useRememberedChoice(HIGHLIGHT_CHOICE).last;
-  return (
-    <>
-      <ActionButton
-        id="color.text.apply"
-        editor={editor}
-        variant="phone"
-        arg={text}
-        label={`Apply text colour: ${colorLabel(text)}`}
-      />
-      <ActionButton
-        id="color.highlight.apply"
-        editor={editor}
-        variant="phone"
-        arg={highlight}
-        label={`Apply highlight: ${colorLabel(highlight)}`}
-      />
-    </>
   );
 }
 
@@ -124,32 +118,28 @@ function focusBarAfterBack(bar: Element | null): void {
 /** The bar's label while swapped; the bar stays one `role="toolbar"`. */
 export const SELECTION_BAR_LABEL = "Selection formatting";
 
-/** Registry ids, in order; unknown ids render nothing until their track lands. */
+/**
+ * The cells in order (design pass §6): B I U, text colour, highlight,
+ * link, Paint format, then ✕. Below 360px U leaves for the Aa sheet
+ * (`phone.scss`), as do strikethrough, clear formatting and Your formats.
+ */
 export const PHONE_SELECTION_CELL_IDS = [
   "mark.bold",
   "mark.italic",
   "mark.underline",
-  "mark.strike",
   "color.text.apply",
   "color.highlight.apply",
   "mark.link",
-  "format.clear",
-  "repeat.apply",
+  "repeat.copy",
 ] as const;
 
-const COLOR_CELL_IDS = new Set<string>([
-  "color.text.apply",
-  "color.highlight.apply",
-]);
-
 /**
- * Mobile selection swap (spec §4.7): B I U S, text colour, highlight,
- * link, clear, ↻ Repeat, then ✕ "Back to all tools". Rendered by D2's
- * phone bar in place of its own cells, inside its one toolbar, which
- * scrolls horizontally; ✕ stays pinned at the inline end. Cells are
- * registry actions through `ActionButton` (44×44 in the phone variant).
- * ✕ calls `onBack` (D2 sets `dismissedForSelection`), then moves focus to
- * the bar's first cell once the normal cells are back.
+ * Mobile selection swap (spec §4.7, design pass §6): eight 44px cells,
+ * B I U A▁ ✎▁ 🔗 🖌 ✕ (352px; seven below 360px), so nothing scrolls and
+ * no cell is ever under ✕. Rendered by D2's phone bar in place of its own
+ * cells, inside its one toolbar. ✕ "Back to all tools", set off by a left
+ * divider, calls `onBack` (D2 sets `dismissedForSelection`), then moves
+ * focus to the bar's first cell once the normal cells are back.
  */
 export function PhoneSelectionCells({
   editor: provided,
@@ -162,20 +152,18 @@ export function PhoneSelectionCells({
   if (!editor) return null;
   return (
     <>
-      {PHONE_SELECTION_CELL_IDS.map((id) =>
-        id === repeatApplyAction.id ? (
-          <RepeatCell key={id} editor={editor} />
-        ) : id === "color.text.apply" ? (
-          <ColorCells key={id} editor={editor} />
-        ) : COLOR_CELL_IDS.has(id) ? null : (
-          <ActionButton key={id} id={id} editor={editor} variant="phone" />
-        ),
-      )}
+      <ActionButton id="mark.bold" editor={editor} variant="phone" />
+      <ActionButton id="mark.italic" editor={editor} variant="phone" />
+      <ActionButton id="mark.underline" editor={editor} variant="phone" />
+      <ColorCell kind="text" editor={editor} />
+      <ColorCell kind="highlight" editor={editor} />
+      <ActionButton id="mark.link" editor={editor} variant="phone" />
+      <PaintFormatButton editor={editor} phone />
       <ToolbarButton
         type="button"
         aria-label="Back to all tools"
         tooltip="Back to all tools"
-        className="sticky end-0 min-h-11 min-w-11 bg-background"
+        className="shadow-[-1px_0_0_var(--border)]"
         onMouseDown={(event) => event.preventDefault()}
         onClick={(event) => {
           const bar = event.currentTarget.closest('[role="toolbar"]');

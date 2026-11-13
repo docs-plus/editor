@@ -8,6 +8,7 @@ import {
   readSavedFormats,
   removeFormat,
   resetSavedFormatsCacheForTests,
+  restoreFormat,
   sanitizeFormatName,
   saveFormat,
   subscribeSavedFormats,
@@ -60,6 +61,18 @@ describe("saved formats", () => {
   it("sanitizes names", () => {
     expect(sanitizeFormatName(`${RLO}evil${BEL} name `)).toBe("evil name");
     expect(sanitizeFormatName(`a${ZWSP}b${LRI}c`)).toBe("abc");
+  });
+
+  it("strips the soft hyphen, Arabic letter mark, word joiner and invisible operators", () => {
+    const invisible = [0xad, 0x61c, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064];
+    for (const code of invisible) {
+      expect(sanitizeFormatName(`a${String.fromCharCode(code)}b`)).toBe("ab");
+    }
+    // Only invisible characters: no name at all.
+    expect(sanitizeFormatName(String.fromCharCode(...invisible))).toBe("");
+  });
+
+  it("keeps the other naming rules", () => {
     expect(Array.from(sanitizeFormatName("x".repeat(10_000)))).toHaveLength(40);
     expect(sanitizeFormatName(42)).toBe("");
     expect(saveFormat("   ", { bold: true })).toEqual({
@@ -140,6 +153,35 @@ describe("saved formats", () => {
     expect(formats).toHaveLength(1);
     expect(formats[0].bundle).toEqual({ italic: true });
     if (first.ok) expect(formats[0].id).toBe(first.format.id);
+    // The caller learns which name it overwrote; a new name replaces nothing.
+    expect(second.ok && second.replaced).toBe("Warning");
+    expect(first.ok && first.replaced).toBeUndefined();
+  });
+
+  it("drops its cache on another tab's write, with no subscriber", () => {
+    saveFormat("Mine", { bold: true });
+    expect(readSavedFormats().map((format) => format.name)).toEqual(["Mine"]);
+    // Another tab removed it (the storage event never fires in the writer).
+    localStorage.setItem(
+      FORMATS_STORAGE_KEY,
+      JSON.stringify({ v: 1, formats: [] }),
+    );
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: FORMATS_STORAGE_KEY }),
+    );
+    expect(readSavedFormats()).toEqual([]);
+  });
+
+  it("keeps listening after the last subscriber leaves", () => {
+    const off = subscribeSavedFormats(() => {});
+    off();
+    saveFormat("Theirs", { italic: true });
+    localStorage.setItem(
+      FORMATS_STORAGE_KEY,
+      JSON.stringify({ v: 1, formats: [] }),
+    );
+    window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    expect(readSavedFormats()).toEqual([]);
   });
 
   it("removes a format and notifies subscribers", () => {
@@ -152,6 +194,27 @@ describe("saved formats", () => {
     expect(readSavedFormats()).toEqual([]);
     expect(calls).toBe(2);
     off();
+  });
+
+  it("restores a removed format at its place (Undo), once", () => {
+    saveFormat("One", { bold: true });
+    const two = saveFormat("Two", { italic: true });
+    saveFormat("Three", { underline: true });
+    if (!two.ok) throw new Error("not saved");
+    removeFormat(two.format.id);
+    expect(readSavedFormats().map((format) => format.name)).toEqual([
+      "One",
+      "Three",
+    ]);
+    expect(restoreFormat(two.format, 1)).toBe(true);
+    expect(readSavedFormats().map((format) => format.name)).toEqual([
+      "One",
+      "Two",
+      "Three",
+    ]);
+    // Already back (or its name taken): nothing doubles.
+    expect(restoreFormat(two.format, 1)).toBe(false);
+    expect(readSavedFormats()).toHaveLength(3);
   });
 
   it("survives clearing the choices key (Forget my choices)", () => {

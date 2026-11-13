@@ -9,6 +9,285 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar follow-ups
+
+Minors left by the a11y review of the smart toolbar (contract §10), and
+the design pass of PR E's surfaces
+(`docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`).
+
+The editor chunk ends at +23,994 B of the 23.5 KB budget (70 B left);
+the budget is unchanged. The palette's first Alt+/ loads 20,472 B gz of
+its 20,480 B budget.
+
+#### Fixed
+- Back on the phone selection bar dismisses the cells for that
+  selection only.
+- The Repeat extend session merges into its own bundle, not the shared
+  memory another tab may have replaced (bold here plus red here no
+  longer repeats as the other tab's italic plus red); "Forget my choices"
+  ends the session.
+- Saved formats stay fresh across tabs with no component mounted (the
+  palette no longer lists or applies a format another tab deleted).
+- Format names also lose the soft hyphen, the Arabic letter mark, the
+  word joiner and the invisible operators.
+- Alt+/ no longer takes Option-hyphen (en dash) on German and Swiss Mac
+  layouts: it needs a key that types "/" (or "÷" on US-like Mac
+  layouts); Alt+Shift+Z stays the fallback.
+- While the engine loads, remote and meta-only transactions no longer
+  push the user's own out of the capped buffer, and every engine use
+  records the buffer first.
+- **Selection bubble:** the bubble stays while any of its popups is open
+  (the colour dialog).
+- **Action palette:** no zoom under reduced motion. Esc in the save view
+  goes back to the list, with focus in the search field; a second Esc
+  closes. The format name is capped at 40 characters (it was cut silently
+  at 40 after accepting 160) with a visible "Up to 40 characters" hint,
+  saving announces "Saved format ‘name’", and the same error or an
+  unavailable action's reason is read again on every try.
+- **Palette order:** Repeat formatting is suggested once a bundle exists
+  and Format opens with Paint format; saved formats have their own Your
+  formats group; Undo and Redo moved to their own History group. A search
+  for "repeat" ranks Repeat formatting above Paint format.
+- New `lib/announce.ts` (`announce(message, options)`): one polite,
+  visually hidden status node for messages that outlive the control that
+  sent them, which also feeds the status pill.
+- **Phone List menu:** tapping the list type that is already checked kept
+  removing the list; it now only closes the menu, as on desktop.
+- **One Esc leaves the row (M3):** Esc on a row, bubble or phone-bar item
+  returns to the editor with its selection in one press, even while the
+  item's focus tooltip shows (the toolbar takes the key in the capture
+  phase; the tooltip still closes). A hover tooltip keeps its own Esc
+  (WCAG 1.4.13), and an item whose popup is open keeps the key.
+- **Short text style at T5 (M8):** the narrowest ladder tier shows "Text",
+  "Title", "H1"–"H6" or "Mixed" instead of a truncated "N…". The trigger
+  is named by its visible text, "H2 Heading 2" at T5 and "Heading 2" above
+  it (WCAG 2.5.3).
+- **Outline overlay below 950px (M11):** focus leaving it (Tab, a click in
+  the row or the tabs) closes it, Esc anywhere closes it and returns focus
+  to the trigger, and an outline with no headings focuses the dialog
+  instead of dropping focus on `<body>`.
+- **Connection chip at 320px (M15):** the status and links cards wrap and
+  a long name truncates, so nothing is clipped off the left edge (WCAG
+  1.4.10).
+- **Lazy surface failures:** a colour popover or Insert step whose chunk
+  does not load names it in the popup ("Couldn’t load colours.", "…the
+  table picker.") with a muted alert icon and a Retry button that fetches
+  the chunk again in place (design pass §12); reopening also retries. A
+  palette that cannot load says "Couldn’t open actions. Check your
+  connection and try again." on the status pill, with Retry, instead of
+  staying silent. The bubble still just stays away.
+- **Palette ranking:** groups sort by their best match again (a cmdk
+  1.1.1 bug looked groups up by a value they never had, so any weak match
+  under Suggested here beat a strong one in Format): "paint format",
+  "format painter" and "brush" find Paint format first, "repeat" still
+  finds Repeat formatting. The highlighted row stays in view as the
+  groups reorder while typing.
+- **Saving a format** announces once, as a confirmation ("Saved format
+  ‘X’" or "Replaced format ‘X’"); the palette said it a second time.
+- **Aa sheet colours:** ↑/↓ follow the swatch lines as the sheet lays
+  them out (its grid fills the width), so they keep the column.
+- **Touch tablets:** tooltips and shortcut glyphs are hidden on a coarse
+  pointer at any width, not only with the phone bar.
+- **Alt+F10 at 800px:** no longer reproducible on `main` (62 runs of the
+  old repro pass); the 768px handoff test drives Alt+F10 again, and a new
+  test repeats Alt+F10, arrows and Esc at 800px, loaded there and after a
+  resize hid the tab stop.
+- **Design sign-off (PR #35):**
+  - Near the top of the page the desktop status pill no longer covers
+    the selection bubble: it moves 8px right of it (or below it), so a
+    second click on the armed brush cancels.
+  - The phone Aa sheet no longer scrolls sideways at 320px and 375px:
+    "Save selection as format…", "Remove a format" and the Remove list
+    span the sheet, the list is inset under its toggle instead of mixed
+    into the formats, and long names truncate. Why Save (or a format) is
+    unavailable is a visible line, since phones have no tooltips.
+  - A disabled menu item's label dims (a bare-text label did not), and
+    its reason is read once, as the description, not also in the name.
+  - While Paint format is armed, Esc on a toolbar item or in a menu no
+    longer closes its pill: only Esc in the text does, which also
+    cancels painting.
+  - Arming Paint format and cancelling no longer replaces the Repeat
+    bundle; it is remembered only once applied. A bundle that only clears
+    reads "Plain (removes formatting)" and is not suggested first in the
+    palette.
+  - The presence and Privacy chips hide while the phone selection bar
+    shows, instead of showing through behind its pill.
+  - The phone brush pill says "Select text, then tap the brush again"
+    (no emoji), and the "Couldn’t load" hint is no longer padded twice.
+
+- **Typing budget flipped between runs, partly addressed**
+  (`performance.spec.ts`). Every trial generated its own random document,
+  so the two arms typed into different documents; at 50 headings that
+  difference outweighed the toolbar's (resampled, about 27% of runs failed
+  with a new document per trial, about 1% with one shared document). All
+  trials of a heading count now share one document. One discarded warm-up
+  trial per arm runs first, each arm waits for its own end state (toolbar
+  mounted or gone) and then for an idle main thread, trials time 200
+  keystrokes after 20 warm-up ones (was 90 after 10), and `PERF_ROUNDS`
+  defaults to 7 (was 5). Both sizes can still fail on the 10% budget (see
+  Known below): in isolation 50 headings passed 10/10 (was 8/10) and 10
+  headings 8/10 (unchanged), and in a full chromium + perf run 50 headings
+  failed once (5.0 vs 4.5 ms). The test timeout is now 300 s (about
+  1.4 min per heading count locally, was about 36 s).
+- **Arrow p95 measured the toolbar arm first and colder, on a cliff**
+  (`toolbar-perf.spec.ts`). At 720 px the 60-key walk scrolled about five
+  times; the frame after a scroll lays out the revealed blocks and costs
+  several times a normal key, and those frames were about 5% of keys, right
+  at the p95 rank, so one more or one fewer moved an arm's p95 by hundreds
+  of ms. Both arms now open the same generated document in fresh 1280×4000
+  contexts (the test checks that the walk does not scroll), run a discarded
+  warm-up round each, then three interleaved rounds from the same start
+  once the main thread is idle. Each press is one sample (Shift's own
+  keydown used to count as a second) and waits for the previous press to
+  paint, and p95 is taken over all of an arm's presses. Scroll frames are
+  therefore no longer part of this budget. `TOOLBAR_PERF_CPU_THROTTLE`
+  throttles both arms for local reproduction. The test timeout is now
+  300 s.
+- **Leak spec heap bound sat close to warm-up growth**
+  (`editor-leak.spec.ts`). The baseline is now taken after 12 warm-up tab
+  switches (was 6), and each measurement repeats GC and reads until two
+  readings agree, instead of one reading after a fixed 2 s.
+- **Resize gripper test timed out** (`extensions.spec.ts`). The lazy
+  selection bubble registers its plugin when its chunk lands; that
+  reconfigures the editor, ProseMirror recreates every plugin view, and the
+  media controls hide an active gripper when theirs is destroyed. On a busy
+  machine this landed after the hover. The test now waits for the bubble's
+  plugin first.
+- Known, not fixed here: the same reconfigure hides an active gripper for
+  a user who hovers an image while the bubble chunk is still loading. The
+  hide on plugin-view destroy is in `@docs.plus/extension-hypermultimedia`.
+- Known, not fixed here: at 10 and 50 headings (p95 about 3-6 ms) single
+  trials still swing by about 10% in both arms, from bursts of consecutive
+  slow keystrokes whose cause was not found (they hit both arms alike, and
+  line up with neither offline copy writes nor WebSocket sends), so the
+  typing budget can still fail on noise. At this p95 and 0.1 ms timer
+  ticks a 10% budget sits at the measurement floor; the ways out (gate on
+  a larger document only, more rounds, or another measure of the
+  toolbar's per-keystroke cost) change the gate and are the owner's call.
+
+
+#### Added
+- **Diagram ▸ templates in the Insert menu (M17b, design pass §9):**
+  Diagram is one standard submenu row (hover, click, Enter or →) with the
+  five Mermaid templates and their icons (Flowchart, Sequence, State,
+  Mind map, Pie chart); the last used one is noted "Last used" and
+  focused first. A collision flips the submenu to the menu's other side,
+  never over its rows. When no template can go here (the title, inside a
+  diagram) one note at the top says why instead of a reason per row.
+  E's `template.mermaid` no longer shows up as a second, icon-less
+  "Insert diagram" row. The submenu rides in the insert step's preloaded
+  chunk; until it lands, Diagram is one item that inserts.
+- **Paint format (design pass §1–2)** replaces Copy formatting: a brush
+  after a separator in the selection bubble (28×28, `aria-pressed` while
+  armed), "Paint format" in ⋯ and the palette. It picks up the formatting
+  at the selection or caret (plain text picks up plain) as the remembered
+  Repeat bundle. While armed the editor shows a copy cursor; the next
+  mouse selection paints it as one undo step; on the keyboard, Alt+F10 to
+  the brush, Esc back to the text, select, then ⌘⌥V (Ctrl+Alt+V or F4)
+  or the brush again; on touch, tap the brush, select, tap it again
+  (never on its own). Esc in the text, the brush on the same selection, a
+  document switch or read-only cancel it.
+- **Status pill (§5):** every announcement also shows as a short pill,
+  8px under the sticky row on desktop and 8px above the phone bar (beside
+  its cells, never in a masked element; the presence and Privacy chips
+  sit under the bar's layer). It closes after 2.5 s (5 s with Undo or
+  Retry), stays while hovered or focused, and Esc closes it. Repeat with
+  nothing remembered says "Nothing to repeat yet. Format some text or use
+  Paint format."; Repeat confirms "Repeated Bold, Yellow highlight".
+- **Your formats in the text style dropdown (§4):** after the styles,
+  each saved format named in its own formatting (described by its long
+  label), "Save selection as format…" (the palette's save view) and
+  "Remove a format ▸", which removes at once with Undo on the pill. The
+  section is a lazy chunk loaded with the dropdown. A disabled item says
+  why on a visible second line. The Aa sheet has the same Your formats
+  section, with "Remove a format" (a tap removes, Undo on the pill, which
+  sits above the open sheet). The Save dialog's "Remove a format" link
+  at the cap opens the dropdown, or the sheet on a phone, at that list.
+- **Format chips in the palette (§8):** Your formats rows show "A" in
+  the format in their leading slot.
+- **Phone selection bar (§6):** eight 44px cells, B I U A▁ ✎▁ 🔗 🖌 ✕,
+  with no scroll or edge fades (U moves to the sheet below 360px; strike
+  and clear formatting are in the sheet). The colour cells show the
+  remembered colour as a bar; ✕ has a left divider.
+- **Announcements** through one polite live region (`lib/announce.ts`):
+  "Repeated Bold, Italic", "Picked up Bold. Select text to apply.",
+  "Formatting applied", "Applied 'X'", "Saved format 'X'" / "Replaced
+  format 'X'", "Removed 'X'", and the reason when the Repeat key cannot
+  run (the key is then handled, not passed on).
+- **Phone context slot cell:** the docked bar shows the current block's
+  tools as one 44×44 cell between Indent and Insert (spec §4.7): section
+  fold and moves, code language and copy, table rows and columns, and
+  media options (a direct button, as in the row), from the same registry
+  actions as the row's slot. It is held
+  while focus is in the bar or its menu, so another writer's edit never
+  removes it under focus. Below 404px Redo lives in the sheet, so the cell
+  never shifts the others; below 360px the cell's tools move into the
+  sheet (the language as a native select). The cell shows its kind
+  (heading, code, table or image icon) beside its chevron, and the code
+  menu has a "Language" group after a separator, with the current
+  language checked, aliases included (`js` checks JavaScript).
+- **Safe areas:** `viewport-fit=cover`. The tab strip and the loading
+  skeleton clear the status bar and notch, the shell keeps clear of
+  landscape notches, the phone bar keeps its cells above the home
+  indicator while the keyboard is closed, and the Aa sheet and the
+  about, privacy and offline pages pad by the insets. Desktop is
+  unchanged.
+- **Swipe down to close the Aa sheet:** drag its header (new handle)
+  down past 80px or flick it; shorter drags snap back, reduced motion
+  makes both instant, and Done, Esc and the backdrop still close it.
+
+#### Changed
+- **Design pass surfaces (§7–§12 of
+  `docs/superpowers/specs/2026-11-13-smart-toolbar-design-pass.md`):**
+  - **Save as format:** "Reuse this style anywhere. Saved on this
+    device.", a preview box with "Sample text" in the format and its long
+    label, an empty name with the placeholder "e.g. Warning", and Save
+    disabled until the name is non-blank. Saving over a name says
+    "Replaces your format ‘X’." first; at 20 formats the dialog says so
+    with a "Remove a format" link (`formats.remove` UI intent). The view is its own chunk, loaded when it
+    opens, so the palette chunk could take the row changes.
+  - **Palette rows:** a leading `size-4` slot with the registry icon or a
+    colour chip; 32 px rows, 48 px with a second line. Colour rows are
+    named once ("Orange text"); saved formats get their own "Your
+    formats" group, named by the format. An action under "Suggested here"
+    (now at most 4) is not repeated in its home group, and unavailable
+    rows sort to the bottom of theirs with the label at full contrast,
+    the reason muted (`text-foreground/70` when selected) and no shortcut.
+    The selected row's bar uses the focus-ring colour. Repeat formatting
+    is named alone, with what it applies as its second line.
+  - **Shortcuts:** toolbar tooltips use the palette's and menus'
+    formatter, one `<kbd>`: "⌘⌥V" on macOS, "Ctrl+Alt+V" elsewhere (it
+    said "Mod" off macOS).
+  - **Menus:** a disabled item shows its reason as a visible second line
+    (`DropdownMenuReason`, still its description); only the label and
+    icon dim. Title-only and hidden reasons are gone from the row menus
+    and Insert.
+  - **Colour popover:** low-contrast highlights are no longer dimmed;
+    their dotted border is 60% foreground (≥ 5:1), and the note names the
+    colour: "Dotted: hard to read with Red text". The popover body and the
+    table grid styles load with their own chunks, off the editor chunk.
+- **Loading is not a state the user sees:** before the formatting engine
+  lands, its actions are available and a click waits for it, as the
+  Repeat key does; "Formatting tools are still loading." is gone. A
+  failed load (a brush, Your formats, the Repeat key or a palette row)
+  says "Couldn’t load formatting tools." on the pill, with Retry.
+- "In this doc" formats left the menus and the palette, and the short
+  "B · I · Red" notation is gone from all UI text.
+- **Touch:** no tooltips and no shortcut glyphs on a coarse pointer; a
+  tap on an unavailable phone cell or sheet row shows its reason on the
+  pill instead, and a focused phone cell keeps its ring inside the bar.
+  The Aa sheet's sections and row labels have a clear hierarchy, and its
+  swatches fill the width.
+- PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
+  in one lazy chunk. The selection bubble and the phone selection cells
+  reach it through `getV11Engine()` / `loadV11Engine()` like the palette,
+  instead of each carrying a copy (about 5 KB gz each). A unit test
+  fails on any static import of the engine from app code.
+- The selection-wide code check runs once per snapshot and stops at the
+  first formattable character.
+- E's palette keywords ride with the engine, and the eager shell drops
+  its listener set, to keep the editor chunk near flat (+148 B gz).
+
 ### Smart toolbar later-phase plans (docs)
 
 Docs only, no runtime change.
@@ -39,7 +318,7 @@ raised the editor-chunk budget to 23.5 KB for E (contract A12; growth
 #### Added
 - **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list
   of every registry action, grouped Recent, Suggested here, Format, Insert,
-  Section and View; unavailable entries stay listed with their reason. The
+  Section, View and History; unavailable entries stay listed with their reason. The
   palette (cmdk 1.1.1) is a lazy chunk loaded on the first open, rendered
   in v1's `SurfaceBoundary`; one capture-phase key listener serves every
   tab.

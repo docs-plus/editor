@@ -4,6 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import {
+  ShortcutDisplay,
   ToolbarButton,
   type ToolbarButtonProps,
 } from "@/components/ui/toolbar-button";
@@ -142,5 +143,48 @@ describe("ToolbarButton disabled with a reason and a tooltip", () => {
     expect(popup?.textContent).toContain("Nothing to undo");
     expect(popup?.textContent).not.toContain("Undo​");
     expect(popup?.querySelector("kbd")).toBeNull();
+  });
+});
+
+describe("ShortcutDisplay", () => {
+  function renderKeys(keys: string): HTMLElement {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    act(() => root.render(createElement(ShortcutDisplay, { keys })));
+    return container;
+  }
+
+  function withUserAgent(userAgent: string, run: () => void) {
+    const original = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+    Object.defineProperty(navigator, "userAgent", {
+      value: userAgent,
+      configurable: true,
+    });
+    try {
+      run();
+    } finally {
+      if (original) Object.defineProperty(navigator, "userAgent", original);
+      else delete (navigator as { userAgent?: string }).userAgent;
+    }
+  }
+
+  it("shows one <kbd> with the shared formatter on macOS: ⌘⌥V, no +", () => {
+    withUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)", () => {
+      const container = renderKeys("mod+alt+v");
+      const kbds = container.querySelectorAll("kbd");
+      expect(kbds).toHaveLength(1);
+      expect(kbds[0]?.textContent).toBe("⌘⌥V");
+    });
+  });
+
+  it("spells Ctrl elsewhere, never Mod", () => {
+    withUserAgent("Mozilla/5.0 (X11; Linux x86_64)", () => {
+      const container = renderKeys("mod+shift+z");
+      const kbds = container.querySelectorAll("kbd");
+      expect(kbds).toHaveLength(1);
+      expect(kbds[0]?.textContent).toBe("Ctrl+Shift+Z");
+    });
   });
 });

@@ -429,7 +429,7 @@ const LOW_CONTRAST_CASES = {
 } as const;
 
 for (const mode of ["light", "dark", "forced colours"] as const) {
-  test(`colour popover dims low-contrast swatches, still selectable (${mode})`, async ({
+  test(`colour popover marks low-contrast swatches dotted, undimmed and still selectable (${mode})`, async ({
     page,
   }) => {
     const forced = mode === "forced colours";
@@ -462,18 +462,45 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
       highlights(dialog).getByRole("button", { name: "No highlight" }),
     ).not.toHaveAttribute("data-low-contrast", /.*/);
 
+    await page.mouse.move(0, 0);
     const style = await dimmed.evaluate((el) => {
       const cs = getComputedStyle(el);
       return {
         opacity: Number(cs.opacity),
         borderStyle: cs.borderTopStyle,
         borderWidth: cs.borderTopWidth,
+        border: cs.borderTopColor,
+        popover: getComputedStyle(el.closest("[role=dialog]") as Element)
+          .backgroundColor,
       };
     });
-    expect(style.opacity).toBeLessThan(1);
+    // Design pass §11: never dimmed, so the writer sees the real colour.
+    expect(style.opacity).toBe(1);
     // Not colour-only: a dotted border, also in forced colours.
     expect(style.borderStyle).toBe("dotted");
     expect(style.borderWidth).toBe("1px");
+    if (!forced) {
+      // 60% foreground: ≥ 3:1 on the popover (WCAG 1.4.11; ≥ 5:1 by design).
+      const border = await page.evaluate(
+        ([under, over]) => {
+          const ctx = document.createElement("canvas").getContext("2d", {
+            willReadFrequently: true,
+          }) as CanvasRenderingContext2D;
+          ctx.fillStyle = under;
+          ctx.fillRect(0, 0, 1, 1);
+          ctx.fillStyle = over;
+          ctx.fillRect(0, 0, 1, 1);
+          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+          return [r, g, b] as [number, number, number];
+        },
+        [style.popover, style.border],
+      );
+      const ratio = contrastRatio(
+        border,
+        await resolveRgb(page, style.popover),
+      );
+      expect(ratio, "dotted border on the popover").toBeGreaterThanOrEqual(3);
+    }
 
     // Dimming must not fade the focus ring: opacity also paints the
     // outline, so composite it at the swatch's opacity over the popover.
@@ -705,13 +732,8 @@ test("crossing 768px keeps focus in the toolbar that replaces the other", async 
   await page.addStyleTag({
     content: "nextjs-portal { display: none !important; }",
   });
-  // Into the row on its tab stop, then five items along. (Not Alt+F10:
-  // at T4 it can land on View ▾ and the next arrow drops to the editor,
-  // a ladder issue that predates the phone bar.)
-  await page
-    .getByRole("toolbar", { name: "Formatting" })
-    .getByRole("button", { name: "Undo" })
-    .focus();
+  // Into the row with Alt+F10 (View ▾ at this tier), then five items along.
+  await page.keyboard.press("Alt+F10");
   for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
   const inToolbar = () =>
     page.evaluate(() => {

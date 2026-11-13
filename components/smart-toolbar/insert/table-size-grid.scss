@@ -1,0 +1,42 @@
+// The table size grid (`table-size-grid.tsx`): loaded with the lazy insert
+// step chunk, so none of it weighs on the editor chunk.
+
+// Table size grid (M17a): 24px cells (WCAG 2.5.8), 44px on touch.
+.st-table-grid {
+  --cell: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  gap: 2px;
+}
+
+.st-table-cell {
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
+  background: var(--background);
+  cursor: pointer;
+
+  &[data-in-range="true"] {
+    background: color-mix(in srgb, var(--primary) 22%, var(--background));
+    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+}
+
+.st-table-size {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--popover-foreground);
+  text-align: center;
+}
+
+@media (pointer: coarse) {
+  .st-table-grid {
+    --cell: 44px;
+  }
+}

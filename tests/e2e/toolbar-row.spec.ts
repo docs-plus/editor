@@ -102,8 +102,16 @@ async function rowNames(page: Page): Promise<string[]> {
         (el) =>
           el.checkVisibility() && !el.closest('[data-slot="context-slot"]'),
       )
+      // The style menu is named by its visible text (M8), without the
+      // short value hidden above T5.
       .map(
-        (el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "?",
+        (el) =>
+          el.getAttribute("aria-label") ??
+          Array.from(el.children)
+            .filter((child) => child.checkVisibility())
+            .map((child) => child.textContent)
+            .join("")
+            .trim(),
       ),
   );
 }
@@ -278,17 +286,8 @@ test.describe("keyboard model", () => {
     await page.keyboard.press("Alt+F10");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
-    // A focus tooltip takes the first Esc (WCAG 1.4.13); never more than two.
-    for (let press = 0; press < 2; press += 1) {
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(100);
-      if (
-        await page
-          .locator(".tiptap")
-          .evaluate((el) => el === document.activeElement)
-      )
-        break;
-    }
+    // One Esc, even with the item's focus tooltip open (M3).
+    await page.keyboard.press("Escape");
     await expect(page.locator(".tiptap")).toBeFocused();
     expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
       "paragraph",
@@ -590,7 +589,7 @@ test.describe("media options by keyboard (WCAG 2.1.1)", () => {
 });
 
 test.describe("toolbar keys", () => {
-  test("Esc first closes a focus tooltip, then returns to the editor", async ({
+  test("one Esc closes a focus tooltip and returns to the editor (M3)", async ({
     page,
   }) => {
     await openDoc(page);
@@ -598,20 +597,13 @@ test.describe("toolbar keys", () => {
     await page.keyboard.press("Alt+F10");
     await page.keyboard.press("ArrowRight");
     const focused = page.locator(":focus");
-    const name = await focused.getAttribute("aria-label");
     // Base UI marks the trigger while its tooltip is open.
     await expect(focused).toHaveAttribute("data-popup-open", "");
     const tips = page.locator('[data-slot="tooltip-content"]:visible');
     await expect(tips).toHaveCount(1);
     await page.keyboard.press("Escape");
-    await expect(tips).toHaveCount(0);
-    expect(
-      await page.evaluate(() =>
-        document.activeElement?.getAttribute("aria-label"),
-      ),
-    ).toBe(name);
-    await page.keyboard.press("Escape");
     await expect(page.locator(".tiptap")).toBeFocused();
+    await expect(tips).toHaveCount(0);
   });
 
   test("stays one Tab stop after the slot swaps while the editor has focus", async ({

@@ -4,6 +4,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import {
   type FocusEvent,
+  type MouseEvent,
   type ReactNode,
   type Ref,
   useCallback,
@@ -22,6 +23,7 @@ import {
   PhoneSelectionCells,
   SELECTION_BAR_LABEL,
 } from "@/components/smart-toolbar/phone-selection-cells";
+import { StatusPill } from "@/components/smart-toolbar/status-pill";
 import {
   Sheet,
   SheetClose,
@@ -34,7 +36,9 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
+import { announce } from "@/lib/announce";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
+import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
 import {
@@ -43,7 +47,7 @@ import {
 } from "@/lib/remembered-choice";
 import "@/components/smart-toolbar/phone/phone.scss";
 
-/** The bar's constant height (spec §4.7). */
+/** The bar's constant cell height (spec §4.7), above any safe area. */
 export const MOBILE_BAR_HEIGHT = 44;
 
 /**
@@ -76,6 +80,25 @@ function documentFocusTarget(editor: Editor): HTMLElement {
 const noopSubscribe = () => () => {};
 
 /**
+ * A tap on an unavailable cell or sheet row says why on the status pill:
+ * touch has no tooltips (design pass §6, "the pill replaces them"). The
+ * reason is the control's own description (`ToolbarButton`). A capture
+ * listener, since the disabled button never runs its own click.
+ */
+function sayWhyUnavailable(event: MouseEvent<HTMLElement>): void {
+  const control =
+    event.target instanceof Element
+      ? event.target.closest('[aria-disabled="true"]')
+      : null;
+  const reason = control
+    ?.getAttribute("aria-describedby")
+    ?.split(" ")
+    .map((id) => document.getElementById(id)?.textContent)
+    .find(Boolean);
+  if (reason) announce(reason);
+}
+
+/**
  * `"from:to"` while text is selected (not a caret or a node selection),
  * else null. Re-renders the bar only when that changes.
  */
@@ -106,17 +129,20 @@ interface MobileToolbarContentProps {
 }
 
 /**
- * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, a constant
- * 44px tall, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, redo (360px and up; the sheet carries it below), Aa (the "Text
- * format" sheet: style, size, colours, align, more), B, I, then
- * `menuCells` (list, indent, Insert). Toggles show their state with `aria-pressed`
- * (#269). Hidden in a read-only document (#308), which also closes the
- * sheet. While text is selected it swaps to `PhoneSelectionCells` (PR E,
- * spec §4.7), never while focus is in the bar or the sheet is open; ✕
- * keeps the normal cells until the selection collapses. Follow-up: the
- * context slot cell. Its own lazy chunk with the sheet, loaded only below
- * 768px (contract A9).
+ * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, with 44px of
+ * cells, docked above the on-screen keyboard. Cells of at least 44×44:
+ * undo, redo (from 404px; below, the sheet carries it, so the slot cell
+ * never shifts the others), Aa (the
+ * "Text format" sheet: style, size, colours, align, more), B, I, then
+ * `menuCells` (list, indent, the context slot, Insert). Toggles show their
+ * state with `aria-pressed` (#269). Hidden in a read-only document (#308),
+ * which also closes the sheet. While text is selected it swaps to
+ * `PhoneSelectionCells` (PR E, spec §4.7), never while focus is in the bar
+ * or the sheet is open; ✕ keeps the normal cells until the selection
+ * collapses. Clear of the home indicator while the keyboard is closed
+ * (`data-keyboard`, `phone.scss`). The status pill (design pass §5) sits
+ * 8px above it, a sibling of the cells, never in a masked element. Its own
+ * lazy chunk with the sheet, loaded only below 768px (contract A9).
  */
 export function MobileToolbarContent({
   editor,
@@ -125,6 +151,8 @@ export function MobileToolbarContent({
   menuCells,
 }: MobileToolbarContentProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  /** Opened for `formats.remove`: Your formats starts at its Remove list. */
+  const [removing, setRemoving] = useState(false);
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
   const inset = useKeyboardInset();
   const bold = useActionView("mark.bold", editor);
@@ -134,10 +162,15 @@ export function MobileToolbarContent({
     bold.enabled.reason === READ_ONLY_REASON;
   const barRef = useRef<HTMLDivElement>(null);
   const selectionKey = useTextSelectionKey(editor);
-  const [dismissed, setDismissed] = useState(false);
+  // ✕ dismisses the selection cells for that selection only: a new one
+  // (even a direct reselect, with no caret in between) swaps them back.
+  // `false`: not dismissed; otherwise the selection key ✕ was pressed on.
+  const [dismissedKey, setDismissedKey] = useState<string | null | false>(
+    false,
+  );
+  const dismissed = dismissedKey === selectionKey;
   const [focusInBar, setFocusInBar] = useState(false);
   const [mode, setMode] = useState<MobileBarMode>("all");
-  if (selectionKey === null && dismissed) setDismissed(false);
   const nextMode = nextMobileBarMode({
     hasTextSelection: selectionKey !== null && !sheetOpen,
     focusInBar,
@@ -152,7 +185,10 @@ export function MobileToolbarContent({
       setFocusInBar(false);
     }
   }, []);
-  const onBack = useCallback(() => setDismissed(true), []);
+  const onBack = useCallback(
+    () => setDismissedKey(selectionKey),
+    [selectionKey],
+  );
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
@@ -164,14 +200,23 @@ export function MobileToolbarContent({
   );
 
   // ProseMirror and CSS keep the caret clear of the bar and the keyboard.
+  // The bar's measured height includes the bottom safe area (`phone.scss`),
+  // which only CSS knows; it changes with the keyboard and the orientation.
   useLayoutEffect(() => {
-    const clearance = readOnly ? 0 : MOBILE_BAR_HEIGHT + inset;
-    setMobileBarClearance(clearance);
-    const wrapper = barRef.current?.closest<HTMLElement>(
-      ".document-editor-wrapper",
-    );
-    wrapper?.style.setProperty("--mobile-bar-clearance", `${clearance}px`);
-    wrapper?.style.setProperty("--mobile-bar-inset", `${inset}px`);
+    const bar = barRef.current;
+    if (!bar) return;
+    const wrapper = bar.closest<HTMLElement>(".document-editor-wrapper");
+    const update = () => {
+      const height = bar.offsetHeight || MOBILE_BAR_HEIGHT;
+      const clearance = readOnly ? 0 : height + inset;
+      setMobileBarClearance(clearance);
+      wrapper?.style.setProperty("--mobile-bar-clearance", `${clearance}px`);
+      wrapper?.style.setProperty("--mobile-bar-inset", `${inset}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar, { box: "border-box" });
+    return () => observer.disconnect();
   }, [inset, readOnly]);
 
   useEffect(
@@ -193,10 +238,29 @@ export function MobileToolbarContent({
   const onSheetOpenChange = useCallback(
     (open: boolean) => {
       if (open) keepFocusOnCloseRef.current = false;
+      else setRemoving(false);
       setPageInert(editor, open);
       setSheetOpen(open);
     },
     [editor],
+  );
+
+  // The Save dialog's "Remove a format" link at the cap (design pass §7):
+  // the phone's answer is the Aa sheet at its Remove list, a frame later,
+  // once the palette has closed.
+  useEffect(
+    () =>
+      editor
+        ? onUiIntent(editor, (intent) => {
+            if (intent.type !== "formats.remove" || readOnly) return false;
+            requestAnimationFrame(() => {
+              setRemoving(true);
+              onSheetOpenChange(true);
+            });
+            return true;
+          })
+        : undefined,
+    [editor, readOnly, onSheetOpenChange],
   );
 
   /** Closes the sheet for an action that moves focus elsewhere itself. */
@@ -233,10 +297,12 @@ export function MobileToolbarContent({
       aria-label={mode === "selection" ? SELECTION_BAR_LABEL : "Formatting"}
       data-mobile-bar=""
       data-bar-mode={mode}
+      data-keyboard={inset ? "" : undefined}
       hidden={readOnly}
       onEscape={onEscape}
       onFocus={onBarFocus}
       onBlur={onBarBlur}
+      onClickCapture={sayWhyUnavailable}
       style={{ transform: inset ? `translateY(-${inset}px)` : undefined }}
     >
       {mode === "selection" ? (
@@ -265,6 +331,7 @@ export function MobileToolbarContent({
               data-toolbar-popup=""
               finalFocus={finalFocus}
               className="st-format-sheet max-h-[60dvh]"
+              onClickCapture={sayWhyUnavailable}
             >
               <SheetHeader>
                 <SheetTitle className="flex-1">Text format</SheetTitle>
@@ -280,7 +347,11 @@ export function MobileToolbarContent({
                 editor={editor}
                 recent={recent.recent}
                 onClose={closeSheet}
+                removing={removing}
               />
+              {/* Over the sheet while it is open: the bar's pill is
+                  covered and inert then, and Undo must stay reachable. */}
+              <StatusPill placement="phone" />
             </SheetContent>
           </Sheet>
           <ActionButton id="mark.bold" editor={editor} variant="phone" />
@@ -288,6 +359,7 @@ export function MobileToolbarContent({
           {menuCells}
         </>
       )}
+      {sheetOpen ? null : <StatusPill placement="phone" />}
     </Toolbar>
   );
 }

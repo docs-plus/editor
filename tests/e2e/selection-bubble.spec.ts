@@ -134,16 +134,9 @@ async function selectUnderToolbar(page: Page) {
   });
 }
 
-/** Esc until the editor has focus: a focus tooltip may take the first. */
+/** One Esc on a bubble item returns to the editor, tooltip or not (M3). */
 async function escapeToEditor(page: Page) {
-  for (let press = 0; press < 2; press += 1) {
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(100);
-    const back = await page
-      .locator(".tiptap")
-      .evaluate((el) => el === document.activeElement);
-    if (back) return;
-  }
+  await page.keyboard.press("Escape");
   await expect(page.locator(".tiptap")).toBeFocused();
 }
 
@@ -151,6 +144,18 @@ const selectionRange = (page: Page) =>
   page.evaluate(() => {
     const selection = window.__tiptap_editor?.state.selection;
     return { from: selection?.from, to: selection?.to };
+  });
+
+/** A Repeat bundle remembered from an earlier visit (Bold). */
+const rememberBoldBundle = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem(
+      "tinydocy-choices",
+      JSON.stringify({
+        v: 1,
+        slots: { repeatBundle: { last: { bold: true }, recent: [] } },
+      }),
+    );
   });
 
 async function expectBubbleOpen(page: Page) {
@@ -200,7 +205,7 @@ async function expectOutlineNotClipped(item: Locator) {
 }
 
 test.describe("selection bubble", () => {
-  test("shows B, I, U, text colour and link for a mouse selection", async ({
+  test("shows B, I, U, text colour, link and Paint format for a mouse selection", async ({
     page,
   }) => {
     await openDoc(page);
@@ -218,6 +223,7 @@ test.describe("selection bubble", () => {
       expect.stringMatching(/^Apply text colour: /),
       "More text colours",
       "Link",
+      "Paint format",
     ]);
     // One Tab stop: the plugin's root is not focusable, not even by a click.
     await expect(bubble(page)).not.toHaveAttribute("tabindex");
@@ -311,13 +317,13 @@ test.describe("selection bubble", () => {
 
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Italic" }),
+      bubbleToolbar(page).getByRole("button", { name: "Italic", exact: true }),
     ).toBeFocused();
-    // A focus tooltip takes the first Esc (WCAG 1.4.13), as in the row.
+    // One Esc, even with the item's focus tooltip open, as in the row.
     await escapeToEditor(page);
     expect(await selectionRange(page)).toEqual(before);
     await expect(bubble(page)).toHaveCount(0, { timeout: 500 });
@@ -479,7 +485,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
@@ -502,7 +508,7 @@ test.describe("selection bubble", () => {
     const before = await selectionRange(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await page.keyboard.press("Tab");
@@ -579,7 +585,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("PageDown");
     await page.waitForTimeout(500);
@@ -670,7 +676,10 @@ test.describe("selection bubble", () => {
     );
     expect(border).not.toBe("none");
     await page.keyboard.press("ControlOrMeta+b");
-    const bold = bubbleToolbar(page).getByRole("button", { name: "Bold" });
+    const bold = bubbleToolbar(page).getByRole("button", {
+      name: "Bold",
+      exact: true,
+    });
     await expect(bold).toHaveAttribute("aria-pressed", "true");
     await page.mouse.move(0, 0);
     const pressed = await bold.evaluate((el) => {
@@ -754,6 +763,93 @@ test.describe("selection bubble", () => {
     // Past the deferred removal (one frame) and the 250 ms update debounce.
     await page.waitForTimeout(400);
     await expectBubbleOpen(page);
+  });
+
+  test("the bubble ends with the Paint format brush, no Repeat or Formats", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const brush = bubbleToolbar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await expect(brush).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      bubbleToolbar(page).locator('[data-action-id="repeat.apply"]'),
+    ).toHaveCount(0);
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Formats" }),
+    ).toHaveCount(0);
+    // A separator before the brush, which is the last item.
+    expect(
+      await brush.evaluate((el) => {
+        const items = [
+          ...(el
+            .closest('[role="toolbar"]')
+            ?.querySelectorAll('button, [data-slot="toolbar-separator"]') ??
+            []),
+        ];
+        const at = items.indexOf(el);
+        return [
+          at === items.length - 1,
+          items[at - 1]?.getAttribute("data-slot"),
+        ];
+      }),
+    ).toEqual([true, "toolbar-separator"]);
+    const box = await brush.boundingBox();
+    expect(box?.width).toBe(28);
+    expect(box?.height).toBe(28);
+  });
+
+  test("the brush queues a click until the engine lands, never 'loading'", async ({
+    page,
+  }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unroute = await interceptChunk(
+      page,
+      CHUNK_MARKERS.engine,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const brush = bubbleToolbar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await expect(brush).not.toHaveAttribute("aria-disabled", "true");
+    await brush.click();
+    await expect(
+      page.getByText("Formatting tools are still loading."),
+    ).toHaveCount(0);
+    release();
+    // The queued click arms it once the engine lands.
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    await unroute();
+  });
+
+  test("the brush is disabled with the reason on inline code", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setMark("inlineCode"),
+    );
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const brush = bubbleToolbar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await expect(brush).toHaveAttribute("aria-disabled", "true");
+    await expect(brush).toHaveAccessibleDescription("Code has no formatting.");
   });
 
   for (const theme of ["light", "dark"] as const) {

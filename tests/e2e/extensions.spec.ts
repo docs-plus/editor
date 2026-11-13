@@ -58,6 +58,24 @@ async function insertFromMenu(page: Page, item: string): Promise<void> {
   await page.getByRole("menuitem", { name: new RegExp(`^${item}`) }).click();
 }
 
+/**
+ * Waits until the selection bubble's plugin is registered. The bubble is a
+ * lazy chunk whose `BubbleMenu` registers its plugin when the chunk lands,
+ * and registering a plugin reconfigures the editor: ProseMirror destroys and
+ * recreates every plugin view, and the media controls' view hides an active
+ * gripper on destroy. On a loaded machine the chunk can land after a hover.
+ */
+async function waitForBubblePlugin(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      window.__tiptap_editor?.state.plugins.some((plugin) =>
+        (plugin as unknown as { key: string }).key.startsWith(
+          "selectionBubble$",
+        ),
+      ) ?? false,
+  );
+}
+
 async function topLevelTypes(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const types: string[] = [];
@@ -145,7 +163,18 @@ test.describe("docs.plus extensions", () => {
 
   test("toolbar inserts a Mermaid diagram that renders", async ({ page }) => {
     await focusLastParagraph(page);
-    await insertFromMenu(page, "Diagram");
+    // Diagram is a submenu of templates (design pass §9). Until the insert
+    // step's chunk lands it is one item that inserts: wait for the trigger.
+    await page
+      .getByRole("toolbar")
+      .getByRole("button", { name: "Insert", exact: true })
+      .click();
+    const diagram = page.getByRole("menuitem", { name: /^Diagram/ });
+    await expect(diagram).toHaveAttribute("aria-haspopup", "menu");
+    await diagram.click();
+    await page
+      .getByRole("menuitem", { name: "Flowchart", exact: true })
+      .click();
 
     const preview = page.locator(".mermaid-diagram__preview").first();
     await expect(preview).toHaveAttribute("data-state", "ready", {
@@ -215,6 +244,7 @@ test.describe("docs.plus extensions", () => {
     });
 
     const image = page.locator('.tiptap img[alt="Sample"]');
+    await waitForBubblePlugin(page);
     await image.scrollIntoViewIfNeeded();
     await image.hover();
     const gripper = page.locator(".hypermultimedia__resize-gripper--active");

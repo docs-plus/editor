@@ -282,6 +282,63 @@ test.describe("outline overlay below 950px", () => {
     await expect(page.locator(".toc-sidebar")).toHaveCount(0);
     await expect(toggleOutline(page)).toBeFocused();
   });
+
+  test("focus moving out closes it: Tab past the last item, or a click in the row", async ({
+    page,
+  }) => {
+    await open(page, 900);
+    await openOverlayFromMenu(page);
+    const inPanel = () =>
+      page.evaluate(() =>
+        Boolean(document.activeElement?.closest(".outline-panel")),
+      );
+    await expect.poll(inPanel).toBe(true);
+    // Tab walks the items, then leaves for the page: the overlay goes with it.
+    for (let press = 0; press < 200 && (await inPanel()); press += 1) {
+      await page.keyboard.press("Tab");
+    }
+    await expect(dialog(page)).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.activeElement === document.body),
+    ).toBe(false);
+
+    await openOverlayFromMenu(page);
+    await expect.poll(inPanel).toBe(true);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(dialog(page)).toHaveCount(0);
+  });
+
+  test("Esc on the trigger closes it and keeps focus there", async ({
+    page,
+  }) => {
+    await open(page, 900);
+    await openOverlayFromMenu(page);
+    // Shift+Tab or a click can put focus on the trigger with it open.
+    await viewMenu(page).focus();
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(viewMenu(page)).toBeFocused();
+  });
+
+  test("with no headings, opening it still focuses the dialog, not body", async ({
+    page,
+  }) => {
+    await open(page, 900);
+    await new EditorPage(page).setContent({
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 } },
+        { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+      ],
+    });
+    await openOverlayFromMenu(page);
+    await expect(dialog(page)).toContainText("Add headings to see an outline");
+    await expect(dialog(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(viewMenu(page)).toBeFocused();
+  });
 });
 
 test.describe("docked outline state (M6)", () => {

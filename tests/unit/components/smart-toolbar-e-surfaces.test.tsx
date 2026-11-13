@@ -8,13 +8,24 @@ import {
   nextMobileBarMode,
   PhoneSelectionCells,
 } from "@/components/smart-toolbar/phone-selection-cells";
-import { RepeatSplitButton } from "@/components/smart-toolbar/repeat-split-button";
 import {
+  besideBubble,
+  StatusPill,
+} from "@/components/smart-toolbar/status-pill";
+import { RepeatFormatting } from "@/extensions/repeat-formatting";
+import {
+  getRememberedBundle,
   rememberBundle,
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
+import { announce, dismissNotice, getNotice } from "@/lib/announce";
+// The surfaces never import the engine; install it as an editor would.
+import { v11Engine } from "@/lib/editor-actions/v11-engine";
 
-import { createTestEditor } from "../../helpers/create-test-editor";
+import {
+  createTestEditor,
+  DEFAULT_EXTENSIONS,
+} from "../../helpers/create-test-editor";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -40,6 +51,7 @@ afterEach(() => {
   container = null;
   editor = null;
   resetBundleMemoryForTests();
+  dismissNotice();
 });
 
 describe("nextMobileBarMode", () => {
@@ -106,7 +118,7 @@ describe("nextMobileBarMode", () => {
 });
 
 describe("PhoneSelectionCells", () => {
-  it("always offers Back to all tools and calls onBack", () => {
+  it("renders the eight cells in order and calls onBack", () => {
     editor = createTestEditor();
     let backs = 0;
     const el = mount(
@@ -117,19 +129,160 @@ describe("PhoneSelectionCells", () => {
         },
       }),
     );
+    // Colour cells are named for the remembered colour: drop it here.
+    const names = Array.from(el.querySelectorAll("button"), (button) =>
+      button.getAttribute("aria-label")?.replace(/:.*/, ""),
+    );
+    expect(names).toEqual([
+      "Bold",
+      "Italic",
+      "Underline",
+      "Apply text colour",
+      "Apply highlight",
+      "Link",
+      "Paint format",
+      "Back to all tools",
+    ]);
+    // No Repeat or Formats cell, no scroller (design pass §6).
+    expect(el.querySelector('[data-action-id="repeat.apply"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Formats"]')).toBeNull();
+    expect(el.querySelector("[data-phone-selection-cells]")).toBeNull();
     const back = el.querySelector<HTMLButtonElement>(
       '[aria-label="Back to all tools"]',
     );
-    expect(back).not.toBeNull();
     act(() => back?.click());
     expect(backs).toBe(1);
-    // repeat.apply is registered (E); D1/D2 ids render once they land.
-    expect(el.querySelector('[data-action-id="repeat.apply"]')).not.toBeNull();
   });
 });
 
-describe("PhoneSelectionCells Repeat cell", () => {
-  it("enables as soon as a bundle is remembered, without a selection change", () => {
+describe("Paint format brush", () => {
+  const doc = {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Title" }],
+      },
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "hello", marks: [{ type: "bold" }] },
+          { type: "text", text: " world" },
+        ],
+      },
+    ],
+  };
+
+  it("arms (pressed) and a second press cancels, leaving Repeat as it was", () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    editor.commands.setTextSelection({ from: 8, to: 13 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("true");
+    expect(getNotice()?.text).toBe("Select text to paint · Esc to cancel");
+    // Same selection again: cancels without applying.
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    // Picked up but never applied: not the Repeat bundle.
+    expect(getRememberedBundle()).toBeNull();
+  });
+
+  it("arming on plain text and cancelling keeps the Repeat bundle", () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    rememberBundle({ italic: true });
+    editor.commands.setTextSelection({ from: 14, to: 19 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("true");
+    act(() => brush()?.click());
+    expect(getRememberedBundle()).toEqual({ italic: true });
+  });
+
+  it("applies to a new selection on the second press, as one step", () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    editor.commands.setTextSelection({ from: 8, to: 13 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Paint format"]');
+    act(() => brush()?.click());
+    act(() => {
+      editor?.commands.setTextSelection({ from: 14, to: 19 });
+    });
+    act(() => brush()?.click());
+    expect(brush()?.getAttribute("aria-pressed")).toBe("false");
+    expect(editor.state.doc.textBetween(14, 19)).toBe("world");
+    expect(editor.isActive("bold")).toBe(true);
+    expect(getNotice()).toMatchObject({
+      text: "Formatting applied",
+      done: true,
+    });
+    // Applied: now it is the Repeat bundle.
+    expect(getRememberedBundle()).toMatchObject({ bold: true });
+  });
+
+  it("is disabled with the reason on inline code, unless armed", async () => {
+    editor = createTestEditor({
+      content: doc,
+      extensions: [...DEFAULT_EXTENSIONS, RepeatFormatting],
+    });
+    editor.commands.setTextSelection({ from: 14, to: 19 });
+    const el = mount(
+      createElement(PhoneSelectionCells, {
+        editor: editor as never,
+        onBack: () => {},
+      }),
+    );
+    const brush = () =>
+      el.querySelector<HTMLElement>('[aria-label="Paint format"]');
+    expect(brush()?.getAttribute("aria-disabled")).not.toBe("true");
+    act(() => {
+      editor?.commands.setMark("inlineCode");
+    });
+    // Doc changes reach the toolbar after the settle window.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    const reasonId = brush()
+      ?.getAttribute("aria-describedby")
+      ?.split(" ")
+      .find((id) => document.getElementById(id)?.textContent);
+    expect(brush()?.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
+      "Code has no formatting.",
+    );
+  });
+});
+
+describe("Repeat key with nothing remembered", () => {
+  it("shows the reason on the pill", () => {
     editor = createTestEditor({
       content: {
         type: "doc",
@@ -139,25 +292,38 @@ describe("PhoneSelectionCells Repeat cell", () => {
             attrs: { level: 1 },
             content: [{ type: "text", text: "Title" }],
           },
-          {
-            type: "paragraph",
-            content: [{ type: "text", text: "hello world" }],
-          },
+          { type: "paragraph", content: [{ type: "text", text: "hello" }] },
         ],
       },
     });
     editor.commands.setTextSelection({ from: 8, to: 13 });
-    const el = mount(
-      createElement(PhoneSelectionCells, {
-        editor: editor as never,
-        onBack: () => {},
+    v11Engine.repeatKey(editor);
+    expect(getNotice()?.text).toBe(
+      "Nothing to repeat yet. Format some text or use Paint format.",
+    );
+  });
+});
+
+describe("StatusPill", () => {
+  it("shows announce()'s text, hidden from assistive tech, with its action", () => {
+    let undone = 0;
+    const el = mount(createElement(StatusPill, { placement: "phone" }));
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
+    act(() =>
+      announce("Removed ‘Warning’", {
+        done: true,
+        action: { label: "Undo", run: () => (undone += 1) },
       }),
     );
-    const cell = () =>
-      el.querySelector<HTMLButtonElement>('[data-action-id="repeat.apply"]');
-    expect(cell()?.getAttribute("aria-disabled")).toBe("true");
-    act(() => rememberBundle({ bold: true }));
-    expect(cell()?.getAttribute("aria-disabled")).not.toBe("true");
+    const pill = el.querySelector("[data-status-pill]");
+    expect(pill?.textContent).toContain("Removed ‘Warning’");
+    expect(pill?.getAttribute("role")).toBeNull();
+    expect(pill?.hasAttribute("data-roving-skip")).toBe(true);
+    const undo = pill?.querySelector("button");
+    expect(undo?.textContent).toBe("Undo");
+    act(() => undo?.click());
+    expect(undone).toBe(1);
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
   });
 });
 
@@ -189,25 +355,62 @@ describe("PhoneSelectionCells Back", () => {
   });
 });
 
-describe("RepeatSplitButton", () => {
-  it("renders nothing without a bundle, then names the bundle", () => {
-    editor = createTestEditor();
-    const el = mount(
-      createElement(RepeatSplitButton, { editor: editor as never }),
-    );
-    expect(el.querySelector("[data-repeat-split]")).toBeNull();
-    act(() => rememberBundle({ bold: true, highlight: "yellow" }));
-    const face = el.querySelector('[data-action-id="repeat.apply"]');
-    // Label in Name (WCAG 2.5.3): the name starts with the visible face.
-    expect(face?.getAttribute("aria-label")).toBe(
-      "Repeat B · Yellow highlight",
-    );
-    const description = el.querySelector(
-      `[id="${face?.getAttribute("aria-describedby")}"]`,
-    );
-    expect(description?.textContent).toBe("Bold, Yellow highlight");
-    expect(face?.textContent).toContain("B · Yellow highlight");
-    const chevron = el.querySelector('[aria-label="Formats"]');
-    expect(chevron?.getAttribute("aria-haspopup")).toBe("menu");
+describe("besideBubble (desktop pill placement)", () => {
+  const box = (left: number, top: number, width: number, height: number) => ({
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+  });
+
+  it("leaves the pill alone when the bubble is closed or elsewhere", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, undefined, 1440, 60)).toBeNull();
+    expect(besideBubble(pill, box(400, 300, 260, 40), 1440, 60)).toBeNull();
+  });
+
+  it("moves it 8px right of the bubble, level with it, when that fits", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, box(380, 70, 260, 40), 1440, 60)).toEqual({
+      top: 70,
+      left: 648,
+    });
+  });
+
+  it("never above 8px under the sticky row, where the bubble can slide", () => {
+    const pill = box(400, 60, 240, 36);
+    expect(besideBubble(pill, box(380, 40, 260, 40), 1440, 60)).toEqual({
+      top: 60,
+      left: 648,
+    });
+  });
+
+  it("else 8px below the bubble", () => {
+    const pill = box(100, 60, 240, 36);
+    expect(besideBubble(pill, box(80, 50, 260, 40), 500, 60)).toEqual({
+      top: 98,
+      left: 100,
+    });
+  });
+});
+
+describe("StatusPill Esc", () => {
+  it("closes it, unless Paint format is armed", () => {
+    const el = mount(createElement(StatusPill, { placement: "phone" }));
+    const painting = document.createElement("div");
+    painting.className = "is-painting";
+    document.body.appendChild(painting);
+    act(() => announce("Picked up Bold.", { pill: "Select text to paint" }));
+    const esc = () =>
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      });
+    esc();
+    expect(el.querySelector("[data-status-pill]")).not.toBeNull();
+    painting.remove();
+    esc();
+    expect(el.querySelector("[data-status-pill]")).toBeNull();
   });
 });

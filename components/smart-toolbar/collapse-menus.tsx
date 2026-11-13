@@ -3,7 +3,11 @@
 import type { Editor } from "@tiptap/react";
 import { useCallback, useRef } from "react";
 
-import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
 import { CODE_LANGUAGES } from "@/lib/code-language";
 import {
@@ -159,9 +163,12 @@ function SlotLanguageItems({
 }) {
   const view = useActionView(id, editor);
   if (!view) return null;
+  // The value is the language's name, aliases resolved (`js` is JavaScript).
   const current = CODE_LANGUAGES.find((option) => option.label === view.value);
   return (
     <DropdownMenuRadioGroup value={current?.value ?? ""}>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>Language</DropdownMenuLabel>
       {CODE_LANGUAGES.map((option) => (
         <ActionRadioItem
           key={option.value}

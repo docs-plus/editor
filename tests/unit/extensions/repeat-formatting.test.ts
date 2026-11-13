@@ -355,19 +355,42 @@ describe("RepeatFormatting: applying", () => {
       expect(reason.endsWith(".")).toBe(true);
   });
 
-  it("the copy and apply commands write no memory; their actions do (contract §6)", () => {
+  it("the apply command writes no memory; the actions do (contract §6)", () => {
     rememberBundle({ underline: true });
     sel("hello");
-    expect(editor.commands.copyFormatting()).toBe(true);
     expect(editor.commands.applyFormatBundle({ italic: true })).toBe(true);
     expect(marksOf("hello")).toContain("italic");
     expect(getRememberedBundle()).toEqual({ underline: true });
 
     sel("world");
-    expect(runAction(editor, formatsApplyAction, "doc:missing")).toBe(false);
+    expect(runAction(editor, formatsApplyAction, "missing")).toBe(false);
     expect(getRememberedBundle()).toEqual({ underline: true });
+    editor.commands.toggleItalic();
+    // Paint format remembers only what it applies.
     expect(runAction(editor, repeatCopyAction)).toBe(true);
-    expect(getRememberedBundle()).toMatchObject({ bold: false, italic: false });
+    expect(getRememberedBundle()).not.toHaveProperty("bold");
+    sel("hello");
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    expect(getRememberedBundle()).toMatchObject({ bold: false, italic: true });
+  });
+
+  it("Paint format on plain text picks up plain, as in Docs", () => {
+    rememberBundle({ underline: true });
+    sel("world");
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    // Picked up, not applied yet: Repeat keeps its bundle.
+    expect(getRememberedBundle()).toEqual({ underline: true });
+    sel("hello");
+    expect(runAction(editor, repeatCopyAction)).toBe(true);
+    expect(getRememberedBundle()).toEqual({
+      bold: false,
+      italic: false,
+      underline: false,
+      strike: false,
+      textColor: null,
+      highlight: null,
+      fontSize: null,
+    });
   });
 
   it("Save as format is unavailable, with the reason, without formatting", () => {
@@ -379,26 +402,33 @@ describe("RepeatFormatting: applying", () => {
     expect(availability(formatsSaveAction, computeContext(editor))).toBe(true);
   });
 
-  it("copy formatting remembers the full read, then clears with it", () => {
+  it("Paint format remembers the full read once applied, which clears", () => {
     sel("hello");
     editor.commands.toggleBold();
     setRed();
+    const formatted = getRememberedBundle();
     sel("hello");
     runAction(editor, repeatCopyAction);
+    // The brush again on the same selection cancels: nothing painted,
+    // nothing remembered.
+    runAction(editor, repeatCopyAction);
+    expect(getRememberedBundle()).toEqual(formatted);
+    sel("world");
+    editor.commands.toggleItalic();
+    runAction(editor, repeatCopyAction);
+    sel("hello");
+    runAction(editor, repeatCopyAction);
+    // The full read clears what "world" lacks.
+    expect(marksOf("hello")).toEqual(["italic"]);
     expect(getRememberedBundle()).toEqual({
-      bold: true,
-      italic: false,
+      bold: false,
+      italic: true,
       underline: false,
       strike: false,
-      textColor: "red",
+      textColor: null,
       highlight: null,
       fontSize: null,
     });
-    sel("world");
-    runAction(editor, repeatCopyAction);
-    sel("hello");
-    editor.commands.repeatFormatting();
-    expect(marksOf("hello")).toEqual([]);
   });
 
   it("refuses in a read-only editor, and the registry gate returns false", () => {

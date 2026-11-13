@@ -1,7 +1,7 @@
 "use client";
 
 import type { VariantProps } from "class-variance-authority";
-import { Fragment, forwardRef, useId, useMemo } from "react";
+import { forwardRef, useId } from "react";
 
 import { Button, type buttonVariants } from "@/components/ui/button";
 import {
@@ -9,7 +9,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { parseShortcutKeys } from "@/lib/shortcuts";
+import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
+import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
 interface ToolbarButtonProps
@@ -23,22 +24,21 @@ interface ToolbarButtonProps
   disabledReason?: string;
 }
 
-function ShortcutDisplay({ shortcuts }: { shortcuts: string[] }) {
-  if (shortcuts.length === 0) return null;
-
+/**
+ * One `<kbd>` from the shared formatter (design pass §8): "⌘⌥V" on macOS,
+ * "Ctrl+Alt+V" elsewhere, as in the palette and menus. `keys` is
+ * `"mod+alt+v"` notation.
+ */
+function ShortcutDisplay({ keys }: { keys?: string }) {
+  if (!keys) return null;
+  const combo = keys
+    .split("+")
+    .map((key) => key.charAt(0).toUpperCase() + key.slice(1))
+    .join("-");
   return (
-    <div className="flex items-center gap-0.5">
-      {shortcuts.map((key, index) => (
-        <Fragment key={key}>
-          {index > 0 && (
-            <kbd className="text-muted-foreground text-[10px]">+</kbd>
-          )}
-          <kbd className="rounded bg-foreground/20 px-1 py-0.5 text-[10px] font-mono">
-            {key}
-          </kbd>
-        </Fragment>
-      ))}
-    </div>
+    <kbd className="rounded bg-foreground/20 px-1 py-0.5 text-[10px] font-mono">
+      {formatKeyCombo(combo, isMac())}
+    </kbd>
   );
 }
 
@@ -59,11 +59,6 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
     },
     ref,
   ) => {
-    const shortcuts = useMemo<string[]>(
-      () => parseShortcutKeys({ shortcutKeys }),
-      [shortcutKeys],
-    );
-
     const ariaPressed =
       props["aria-pressed"] ??
       (isActive !== undefined && !props["aria-haspopup"]
@@ -130,7 +125,7 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
           </TooltipTrigger>
           <TooltipContent>
             {reason ?? tooltip}
-            {!reason && <ShortcutDisplay shortcuts={shortcuts} />}
+            {!reason && <ShortcutDisplay keys={shortcutKeys} />}
           </TooltipContent>
         </Tooltip>
         {reasonNode}

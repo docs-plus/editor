@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
 import { type Swatch, swatchName, swatchStyle } from "./swatch";
+import "./color-panel.scss";
 
 /**
  * The colour popover body (spec §4.5): Recent (M3, frozen while open),
@@ -37,9 +38,10 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
  * but `aria-disabled`, described by the reason. Applying keeps the popover
  * open with focus on the swatch, so writers can try colours; Esc closes it.
  * Highlight swatches that would put the current text colour below AA
- * (Appendix A, O3) are dimmed and described "Low contrast", with one
- * visible line under Highlight, but stay selectable. Lazy chunk: loaded on
- * first open.
+ * (Appendix A, O3) get a dotted border and the description "Low
+ * contrast", with one visible line under Highlight naming the text colour
+ * (design pass §11), but stay selectable and undimmed. Lazy chunk: loaded
+ * on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -51,6 +53,22 @@ interface Line {
   row: number;
   start: number;
   length: number;
+}
+
+/**
+ * Swatches per visual line as rendered, so ↑/↓ follow what the user sees:
+ * the Aa sheet's grid fills its width (`auto-fill`, design pass §6) and
+ * ignores `--swatch-cols`. Falls back to `columns` when the layout is
+ * not resolved to pixel tracks.
+ */
+function renderedColumns(grid: HTMLElement | null, columns: number): number {
+  const group = grid?.querySelector(".st-color-swatches");
+  const tracks = group
+    ? getComputedStyle(group).gridTemplateColumns.split(" ")
+    : [];
+  return tracks.length > 0 && tracks.every((track) => /^[\d.]+px$/.test(track))
+    ? tracks.length
+    : columns;
 }
 
 /** Each section split into visual lines of at most `columns` swatches. */
@@ -125,9 +143,16 @@ function swatchTitle(name: string, reason: string, low: boolean): string {
 }
 
 const LOW_CONTRAST = "Low contrast with the current text colour";
-/** The visible line under Highlight while any of its swatches dims. */
-const LOW_CONTRAST_NOTE =
-  "Some highlights are low contrast with the current text colour";
+
+/**
+ * The visible line under Highlight while any swatch is dotted: "Dotted:
+ * hard to read with Red text" (design pass §11).
+ */
+function lowContrastNote(text: string | null | undefined): string {
+  const token = paletteToken(text);
+  const name = token ? swatchName({ kind: "text", token }) : "default text";
+  return `Dotted: hard to read with ${name}`;
+}
 
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
   const id =
@@ -178,7 +203,6 @@ export function ColorPanel({
   const [columns] = useState(() =>
     isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
   );
-  const lines = toLines(rows, columns);
   const theme = currentTheme();
   const anyLow = HIGHLIGHT_ROW.some((swatch) =>
     isLowContrast(swatch, currentText, theme),
@@ -215,6 +239,7 @@ export function ColorPanel({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const { row, col } = active;
+    const lines = toLines(rows, renderedColumns(gridRef.current, columns));
     const width = rows[row].swatches.length;
     const lineIndex = lines.findIndex(
       (line) =>
@@ -347,7 +372,7 @@ export function ColorPanel({
           </div>
           {row.label === "Highlight" && anyLow ? (
             <p className="w-0 min-w-full text-xs text-muted-foreground">
-              {LOW_CONTRAST_NOTE}
+              {lowContrastNote(currentText)}
             </p>
           ) : null}
         </div>

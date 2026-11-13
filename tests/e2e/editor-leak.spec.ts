@@ -3,8 +3,13 @@ import { type CDPSession, expect, type Page, test } from "@playwright/test";
 import { EditorPage } from "./helpers/editor-page";
 
 /** Longer than collab-session's deferred release (1 s). */
-const SETTLE_MS = 2_000;
+const SETTLE_MS = 1_100;
+/** Settled readings: equal editor counts and heaps within this fraction. */
+const HEAP_STABLE = 0.01;
+const MAX_READINGS = 8;
 const SWITCHES = 20;
+/** Rounds through every tab before the baseline (3 switches per round). */
+const WARMUP_ROUNDS = 4;
 
 /** A 1×1 PNG, so Playground images settle instead of waiting on the network. */
 const PIXEL = Buffer.from(
@@ -73,13 +78,31 @@ async function listenerCounts(
   }
 }
 
-async function measure(page: Page, cdp: CDPSession) {
+async function reading(page: Page, cdp: CDPSession) {
   await page.waitForTimeout(SETTLE_MS);
   await collectGarbage(cdp);
   const editors = await liveEditors(cdp);
   await collectGarbage(cdp);
   const { usedSize } = await cdp.send("Runtime.getHeapUsage");
   return { editors, heap: usedSize };
+}
+
+/**
+ * Reads the editor count and heap until two readings in a row agree (same
+ * count, heap within {@link HEAP_STABLE}), so released sessions, pending
+ * timers and lazy work have settled instead of being caught mid-flight.
+ */
+async function measure(page: Page, cdp: CDPSession) {
+  let last = await reading(page, cdp);
+  for (let i = 1; i < MAX_READINGS; i++) {
+    const next = await reading(page, cdp);
+    const settled =
+      next.editors === last.editors &&
+      Math.abs(next.heap - last.heap) <= last.heap * HEAP_STABLE;
+    last = next;
+    if (settled) break;
+  }
+  return last;
 }
 
 test.describe("editor lifetime", () => {
@@ -130,8 +153,10 @@ test.describe("editor lifetime", () => {
       });
     };
 
-    // Warm up: every chunk, session and cache exists before the baseline.
-    for (let round = 0; round < 2; round++)
+    // Warm up: every chunk, session and cache exists, and heap growth has
+    // flattened, before the baseline. Measured from a 6-switch baseline the
+    // heap still grew for about 30 more switches without a leak.
+    for (let round = 0; round < WARMUP_ROUNDS; round++)
       for (const id of order) await open(id);
     const home = order[order.length - 1];
 
@@ -147,10 +172,9 @@ test.describe("editor lifetime", () => {
       type: "editors / heap",
       description: `${before.editors} → ${after.editors}, ${before.heap} → ${after.heap} bytes`,
     });
-    // The editor count is the precise check. Heap is a backstop: it still
-    // warms up for a while without a leak (about 5% after 20 switches,
-    // levelling off near 10% after 50), while the marked leak added about
-    // 17% after 20 switches and kept growing.
+    // The editor count is the precise check. Heap is a backstop against a
+    // warmed baseline: the marked leak added about 17% after 20 switches
+    // and kept growing.
     expect(after.editors).toBeLessThanOrEqual(before.editors + 1);
     expect(after.heap).toBeLessThanOrEqual(before.heap * 1.1);
   });

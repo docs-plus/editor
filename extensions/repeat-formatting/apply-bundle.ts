@@ -19,12 +19,15 @@ import {
   tokenOfMark,
 } from "./bundle";
 
-/** Transaction meta set by Repeat / apply: never recorded as a new bundle. */
+/**
+ * Transaction meta set by Repeat / apply, valued with the bundle applied:
+ * never recorded as a new bundle; it becomes the session's bundle.
+ */
 export const REPEAT_META = "repeatFormatting";
 
 /** Disabled reasons (full sentences, contract §4). */
 export const REPEAT_REASONS = {
-  noBundle: "Format some text first, or use Copy formatting.",
+  noBundle: "Nothing to repeat yet. Format some text or use Paint format.",
   noText: "Select text to repeat formatting.",
   code: "Code has no formatting.",
   heading: "Headings scale automatically.",
@@ -67,21 +70,27 @@ function isCodeBlock(node: ProseMirrorNode): boolean {
   return Boolean(node.type.spec.code);
 }
 
-/** Runs `fn` over each textblock slice of the selection's ranges. */
+/**
+ * Runs `fn` over each textblock slice of the selection's ranges; `fn`
+ * returning true stops the walk.
+ */
 function forEachTextblockSlice(
   state: { doc: ProseMirrorNode; selection: EditorState["selection"] },
-  fn: (block: ProseMirrorNode, from: number, to: number) => void,
+  fn: (block: ProseMirrorNode, from: number, to: number) => unknown,
 ): void {
+  let stop = false;
   for (const range of state.selection.ranges) {
     const from = range.$from.pos;
     const to = range.$to.pos;
     state.doc.nodesBetween(from, to, (node, pos) => {
+      if (stop) return false;
       if (!node.isTextblock) return true;
       const start = Math.max(from, pos + 1);
       const end = Math.min(to, pos + node.nodeSize - 1);
-      if (end > start) fn(node, start, end);
+      if (end > start && fn(node, start, end) === true) stop = true;
       return false;
     });
+    if (stop) return;
   }
 }
 
@@ -117,21 +126,28 @@ export function applyBundle(
   return tr;
 }
 
-function onlyCode(state: EditorState): boolean {
+/**
+ * Whether every selected character is code (code blocks, inline code).
+ * Stops at the first formattable character: the usual answer, so a long
+ * selection of prose costs one text node, not a whole-selection walk.
+ */
+export function onlyCode(state: EditorState): boolean {
   let sawText = false;
   let sawFormattable = false;
   const inlineCode = state.schema.marks.inlineCode;
   forEachTextblockSlice(state, (block, from, to) => {
     if (isCodeBlock(block)) {
       sawText = true;
-      return;
+      return false;
     }
     state.doc.nodesBetween(from, to, (node) => {
+      if (sawFormattable) return false;
       if (!node.isText) return true;
       sawText = true;
       if (!inlineCode?.isInSet(node.marks)) sawFormattable = true;
       return false;
     });
+    return sawFormattable;
   });
   return sawText && !sawFormattable;
 }
@@ -148,21 +164,26 @@ function allHeadings(state: EditorState): boolean {
 export function repeatDisabledReason(
   state: EditorState,
   bundle: FormatBundle | null,
+  codeOnly?: () => boolean,
 ): string | null {
   if (!bundle || isEmptyBundle(bundle)) return REPEAT_REASONS.noBundle;
-  return applyDisabledReason(state, bundle);
+  return applyDisabledReason(state, bundle, codeOnly);
 }
 
-/** Like `repeatDisabledReason`, for a bundle known to exist. */
+/**
+ * Like `repeatDisabledReason`, for a bundle known to exist. `codeOnly`
+ * lets a caller share one `onlyCode` walk per snapshot (`ctx.memo`).
+ */
 export function applyDisabledReason(
   state: EditorState,
   bundle: FormatBundle,
+  codeOnly: () => boolean = () => onlyCode(state),
 ): string | null {
   const { selection } = state;
   if (selection.empty || selection instanceof NodeSelection) {
     return REPEAT_REASONS.noText;
   }
-  if (onlyCode(state)) return REPEAT_REASONS.code;
+  if (codeOnly()) return REPEAT_REASONS.code;
   const fields = BUNDLE_FIELDS.filter((field) => bundle[field] !== undefined);
   if (fields.length === 1 && fields[0] === "fontSize" && allHeadings(state)) {
     return REPEAT_REASONS.heading;

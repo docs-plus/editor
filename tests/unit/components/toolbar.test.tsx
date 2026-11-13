@@ -220,13 +220,16 @@ describe("Toolbar roving tabindex", () => {
     expect(escaped).toBe(1);
   });
 
-  it("leaves Esc to an item whose own handler took it (open tooltip)", async () => {
+  it("takes Esc once, before an item's own handler (a focus tooltip, M3)", async () => {
     let escaped = 0;
+    let itemSaw = 0;
     const container = mountWith(
       [
         button("A", {
           onKeyDown: (event: React.KeyboardEvent) => {
-            if (event.key === "Escape") event.preventDefault();
+            if (event.key !== "Escape") return;
+            itemSaw += 1;
+            event.stopPropagation();
           },
         }),
         button("B"),
@@ -240,10 +243,28 @@ describe("Toolbar roving tabindex", () => {
     await settle();
     act(() => byLabel(container, "A")?.focus());
     keydown("Escape");
-    expect(escaped).toBe(0);
+    // One press returns to the editor; the tooltip still sees it and closes.
+    expect(escaped).toBe(1);
+    expect(itemSaw).toBe(1);
     act(() => byLabel(container, "B")?.focus());
     keydown("Escape");
-    expect(escaped).toBe(1);
+    expect(escaped).toBe(2);
+  });
+
+  it("leaves Esc to an item whose popup is open", async () => {
+    let escaped = 0;
+    const container = mountWith(
+      [button("A", { "aria-expanded": true }), button("B")],
+      {
+        onEscape: () => {
+          escaped += 1;
+        },
+      },
+    );
+    await settle();
+    act(() => byLabel(container, "A")?.focus());
+    keydown("Escape");
+    expect(escaped).toBe(0);
   });
 
   it("ignores keys bubbling from a React portal (an open menu)", async () => {

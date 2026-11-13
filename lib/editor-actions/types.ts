@@ -8,6 +8,8 @@ import type { Editor } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
 import type { ComponentType, SVGProps } from "react";
 
+import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
+
 /**
  * Context kinds in precedence order: the snapshot's `kind` is the first
  * that applies (media/mermaid > code > table > title > heading > list >
@@ -116,6 +118,10 @@ export interface ActionOption<Arg> {
   value: Arg;
   label: string;
   keywords?: readonly string[];
+  /** A short note beside the label in menus ("Last used"). */
+  note?: string;
+  /** A saved format's formatting, for its palette chip (design pass §8). */
+  bundle?: FormatBundle;
 }
 
 /**

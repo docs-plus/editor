@@ -7,6 +7,12 @@
 :root {
   /* @docs.plus extension skins resolve light-dark() from color-scheme. */
   color-scheme: light;
+  /* Safe areas (viewport-fit=cover): read through one token each, so a test
+     can stand in a notch where Chromium reports 0. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -161,18 +167,26 @@ button[aria-pressed="mixed"]::after {
   pointer-events: none;
 }
 
-/* Touch: menu items are 44px tall (spec §6.7); fine pointers keep 28px. */
+/* Touch: menu items are 44px tall (spec §6.7); fine pointers keep 28px.
+   No tooltips (the status pill replaces them) and no shortcut glyphs at
+   any width, phones and touch tablets alike (design pass §6). */
 @media (pointer: coarse) {
   [role="menu"] [role^="menuitem"] {
     min-height: 44px;
   }
+
+  [data-slot="tooltip-content"],
+  [data-slot="dropdown-menu-shortcut"] {
+    display: none;
+  }
 }
 
-/* No zoom or slide when menus and popovers open or close. */
+/* No zoom or slide when menus, popovers and the palette open or close. */
 @media (prefers-reduced-motion: reduce) {
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"] {
+  [data-slot="popover-content"],
+  [data-command-palette] {
     animation: none;
   }
 }

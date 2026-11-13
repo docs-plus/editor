@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuReason,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -36,38 +37,81 @@ import "./smart-toolbar.scss";
  * fetched when the Insert button gets hover or focus, or when a step is
  * asked for, and rendered only once a step opens.
  */
-const InsertStep = lazySurface(() =>
-  loadInsertStep().then((module) => module.InsertStep),
+const InsertStep = lazySurface(
+  () => loadInsertStep().then((module) => module.InsertStep),
+  undefined,
+  ({ step }) => (step === "table" ? "the table picker" : "the embed form"),
 );
 
-/** "insert.codeBlock" → "codeBlock", the M10 kind. */
-const kindOf = (action: AnyAction) => action.id.slice("insert.".length);
+/**
+ * Diagram ▸, the Mermaid templates submenu (M17b, design pass §9). It
+ * rides in the insert step's chunk, which the Insert button preloads on
+ * hover and focus (editor-chunk budget: the submenu code stays out of the
+ * editor chunk). Until it loads, or if it fails, Diagram is one item that
+ * inserts the last used template.
+ */
+const DiagramTemplates = lazySurface(
+  () => loadInsertStep().then((module) => module.DiagramTemplates),
+  <DiagramItem />,
+);
+
+function DiagramItem() {
+  const { editor } = useCurrentEditor();
+  const action = editorActions.get("insert.mermaid");
+  const Icon = action?.icon;
+  return editor && action ? (
+    <DropdownMenuItem
+      data-action-id={action.id}
+      onClick={() => runAction(editor, action)}
+    >
+      {Icon ? <Icon aria-hidden="true" /> : null}
+      <span>{action.label}</span>
+    </DropdownMenuItem>
+  ) : null;
+}
+
+/** "insert.codeBlock" → "codeBlock", the M10 kind ("" for other groups). */
+const kindOf = (action: AnyAction) =>
+  action.id.startsWith("insert.") ? action.id.slice(7) : "";
 
 /**
  * The menu items: mounted only while the menu is open, so the snapshot
- * subscription costs nothing while typing.
+ * subscription costs nothing while typing. E's `template.*` actions are
+ * no rows of their own: Diagram is a submenu of them (design pass §9).
  */
 function InsertMenuItems({ editor }: { editor: Editor }) {
   const ctx = useEditorContext(editor);
   const lastKind = useRememberedChoice(INSERT_KIND_CHOICE);
   return editorActions.list({ group: "insert" }).map((action) => {
+    const kind = kindOf(action);
+    if (!kind) return null;
     const enabled = ctx ? availability(action, ctx) : true;
     const reason = enabled === true ? undefined : enabled.reason;
     const Icon = action.icon;
-    return (
+    return kind === "mermaid" ? (
+      <DiagramTemplates
+        key={kind}
+        editor={editor}
+        ctx={ctx}
+        last={lastKind.ready && kind === lastKind.last}
+        fallback={<DiagramItem />}
+      />
+    ) : (
       <DropdownMenuItem
         key={action.id}
         data-action-id={action.id}
-        data-last={
-          lastKind.ready && kindOf(action) === lastKind.last ? "" : undefined
-        }
+        data-last={lastKind.ready && kind === lastKind.last ? "" : undefined}
         disabled={reason !== undefined}
-        title={reason}
+        aria-describedby={reason ? `${action.id}-reason` : undefined}
         onClick={() => runAction(editor, action)}
       >
         {Icon ? <Icon aria-hidden="true" /> : null}
         <span>{action.label}</span>
-        {reason ? <span className="sr-only">({reason})</span> : null}
+        {reason ? (
+          <DropdownMenuReason id={`${action.id}-reason`} className="ps-5.5">
+            {reason}
+          </DropdownMenuReason>
+        ) : null}
       </DropdownMenuItem>
     );
   });

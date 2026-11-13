@@ -10,6 +10,9 @@ import type { TableSize } from "@/lib/remembered-choice";
 
 import { TableSizeGrid } from "./table-size-grid";
 
+// The Insert menu's Diagram templates (▸) share this preloaded chunk.
+export { DiagramTemplates } from "./diagram-templates";
+
 /*
  * The Insert menu's steps, a lazy chunk (owner decision O1). `InsertMenu`
  * keeps the trigger, the items, the M10 face and the step popover eager.
