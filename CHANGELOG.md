@@ -9,6 +9,34 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Editor leak on tab switch (fix/editor-tab-leak)
+
+Not specific to the smart toolbar: `main` has leaked since `@tiptap/markdown`
+was added, so this fix can ship to `main` on its own.
+
+#### Fixed
+- **Destroyed editors stayed in memory.** `@tiptap/markdown` registered each
+  editor's tokenizers on the module-wide `marked` instance and never removed
+  them, which kept every closed editor reachable: 20 tab switches left 7
+  extra live editors and 6 MB more heap, without limit. Each editor now gets
+  its own `Marked` instance (`marked` is now a direct dependency, at the
+  version already installed), and `tests/e2e/editor-leak.spec.ts` checks
+  that 20 switches return to the baseline.
+- Known, not fixed here: while a Playground image request is still pending,
+  Chromium keeps the `<img>` alive and, through the media resize gripper's
+  listeners, its closed editor. They are released once the request settles.
+- **Tab-cap e2e timed out in CI.** `tabs.spec.ts` "create tab is blocked
+  when cap is reached" slept 120 ms after each of its 48 clicks; on `main` it
+  had grown from 16 s to 30 s in CI and already failed once there. It now
+  waits for each new tab instead (about 9.8 s to 5.5 s locally), checks the
+  tab count equals the cap in the button title, and allows 60 s for the 49
+  editor mounts. The leak fix did not slow tab creation (about 80 ms per tab
+  before and after).
+- **Leak spec heap bound.** Heap still grows about 5% over 20 switches
+  without a leak (it levels off near 10%), so the 5% bound in
+  `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
+  added about 17%, and the live-editor count stays the main check.
+
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
   axe sweep of the toolbar in seven editor contexts and three open popups in

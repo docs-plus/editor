@@ -33,6 +33,7 @@ import { Markdown } from "@tiptap/markdown";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
 import DOMPurify from "dompurify";
+import { Marked, type marked } from "marked";
 import type * as Y from "yjs";
 
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
@@ -105,6 +106,17 @@ function sanitizeMermaidSvg(svg: string): Node {
     FORBID_ATTR: ["href", "xlink:href"],
     RETURN_DOM_FRAGMENT: true,
   });
+}
+
+/**
+ * A marked instance for one editor's `Markdown` extension. With the
+ * module-wide default, every editor adds its tokenizers to `marked` and stays
+ * reachable after destroy. The option is typed as that default; the extension
+ * only uses `Lexer`, `lexer`, `defaults`, `use` and `setOptions`, which a
+ * `Marked` instance has.
+ */
+function createMarkedInstance(): typeof marked {
+  return new Marked() as unknown as typeof marked;
 }
 
 interface BuildDocumentEditorExtensionsOptions {
@@ -230,6 +242,6 @@ export function buildDocumentEditorExtensions({
       onError: (error) => console.error("Upload failed:", error),
     }),
     TableKit.configure({ table: { resizable: true } }),
-    Markdown,
+    Markdown.configure({ marked: createMarkedInstance() }),
   ];
 }

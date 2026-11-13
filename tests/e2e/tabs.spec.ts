@@ -52,26 +52,37 @@ test.describe("tabs", () => {
   });
 
   test("create tab is blocked when cap is reached", async ({ page }) => {
+    // Reaching the cap mounts an editor per tab (49 by default), which takes
+    // several times longer on a loaded CI runner than locally.
+    test.setTimeout(60_000);
     const ep = new EditorPage(page);
     await ep.goto();
     await ep.waitForSync();
 
     const newTabBtn = page.locator(".tab-bar-new");
+    const tabs = page.locator(".tab-bar-tab");
+    // Each click mounts a new editor, so wait for the tab it adds rather than
+    // a fixed sleep: under CI load the sleeps alone pushed this test past its
+    // timeout, and a click slower than the sleep ended the loop early.
     for (let i = 0; i < 60; i++) {
       if (await newTabBtn.isDisabled()) break;
-      const beforeCount = await page.locator(".tab-bar-tab").count();
+      const beforeCount = await tabs.count();
       await newTabBtn.click();
-      await page.waitForTimeout(120);
-      const afterCount = await page.locator(".tab-bar-tab").count();
-      if (afterCount === beforeCount) break;
+      await expect(tabs).toHaveCount(beforeCount + 1);
     }
 
     await expect(newTabBtn).toBeDisabled();
     await expect(newTabBtn).toHaveAttribute("title", /Maximum tabs reached/);
 
-    const cappedCount = await page.locator(".tab-bar-tab").count();
+    const cappedCount = await tabs.count();
+    const cap = Number(
+      (await newTabBtn.getAttribute("title"))?.match(/\((\d+)\)/)?.[1],
+    );
+    expect(cappedCount).toBe(cap);
+
+    // Nothing should happen, so there is no condition to wait for.
     await page.keyboard.press("Control+t");
     await page.waitForTimeout(300);
-    await expect(page.locator(".tab-bar-tab")).toHaveCount(cappedCount);
+    await expect(tabs).toHaveCount(cappedCount);
   });
 });
