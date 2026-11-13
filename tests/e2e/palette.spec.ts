@@ -118,6 +118,61 @@ test.describe("action palette", () => {
     expect(await selection(page)).toEqual(before);
   });
 
+  test("aria-activedescendant follows the highlighted option while filtering (WCAG 4.1.2)", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.keyboard.press("Alt+Slash");
+    const input = page.getByPlaceholder("Search actions…");
+    await expect(input).toBeFocused();
+
+    /** The input's active descendant must be the one rendered option cmdk highlights. */
+    const expectInSync = async () =>
+      expect
+        .poll(() =>
+          input.evaluate((el) => {
+            const id = el.getAttribute("aria-activedescendant");
+            const target = id ? document.getElementById(id) : null;
+            const highlighted = el
+              .closest("[cmdk-root]")
+              ?.querySelectorAll('[cmdk-item][aria-selected="true"]');
+            return {
+              resolves: !!target && target.getAttribute("role") === "option",
+              selected: target?.getAttribute("aria-selected") ?? null,
+              single: highlighted?.length === 1,
+              same: !!target && highlighted?.[0] === target,
+            };
+          }),
+        )
+        .toEqual({
+          resolves: true,
+          selected: "true",
+          single: true,
+          same: true,
+        });
+
+    await expectInSync();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expectInSync();
+    for (const char of "bol") {
+      await page.keyboard.type(char);
+      await expectInSync();
+    }
+    await page.keyboard.press("ArrowDown");
+    await expectInSync();
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await expectInSync();
+
+    // No results: nothing to point at.
+    await page.keyboard.type("zzzzqqq");
+    await expect(input).not.toHaveAttribute("aria-activedescendant", /.+/);
+    for (let i = 0; i < 7; i += 1) await page.keyboard.press("Backspace");
+    await expectInSync();
+    await page.keyboard.press("Escape");
+  });
+
   test("leaves Alt+/ to other text fields", async ({ page }) => {
     await openDoc(page);
     await page.evaluate(() => {

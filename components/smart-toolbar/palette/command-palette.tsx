@@ -98,6 +98,13 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
     [sections],
   );
 
+  // Controlled highlight. cmdk 1.1.1 only re-points the input's
+  // aria-activedescendant when it moves the highlight itself, so a value
+  // set from props (the first runnable item on open) left it empty;
+  // `patches/cmdk@1.1.1.patch` re-syncs it on mount and on every `value`
+  // change (WCAG 4.1.2, `palette.spec.ts`).
+  const [value, setValue] = useState(firstRunnable ?? "");
+
   const close = () => {
     onClose();
     if (!editor.isDestroyed) editor.view.focus();
@@ -191,7 +198,12 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
             </div>
           </form>
         ) : (
-          <Command loop label="Search actions" defaultValue={firstRunnable}>
+          <Command
+            loop
+            label="Search actions"
+            value={value}
+            onValueChange={setValue}
+          >
             <CommandInput placeholder="Search actions…" />
             <CommandList label="Actions">
               <CommandEmpty>No matching actions.</CommandEmpty>

@@ -126,5 +126,8 @@
     "@parcel/watcher",
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "patchedDependencies": {
+    "cmdk@1.1.1": "patches/cmdk@1.1.1.patch"
+  }
 }
