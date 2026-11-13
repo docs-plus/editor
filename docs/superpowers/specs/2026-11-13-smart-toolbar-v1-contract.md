@@ -211,6 +211,11 @@ export function defineAction<Arg = undefined>(action: Action<Arg>): Action<Arg>;
 - reaches the editor only through `ctx.can`;
 - never reads the DOM.
 
+**Amendment (PR E review): two documented external reads.** `repeat.apply` (`enabled`, `value`) reads the remembered bundle (`getRememberedBundle()`), and `formats.apply` (`enabled`, `options`) reads the saved formats (`readSavedFormats()`). Neither is part of the snapshot key, so a cached `getView` can lag a change that leaves the doc and selection alone (Copy formatting, a format saved from the palette, another tab's write) until the next selection change. Until D1 decides on an invalidation hook (preferred long term: `store.invalidate()` or an external-version input to the snapshot key, called from `subscribeBundle` / `subscribeSavedFormats`):
+- no other action may read module state;
+- a surface that renders `repeat.apply` subscribes to the bundle itself (`useRememberedBundle`) and computes `availability()` from the live snapshot at render. E's phone Repeat cell and `RepeatSplitButton` do this; a plain `ActionButton` for `repeat.apply` does not, so D1/D2 surfaces render E's components rather than `ActionButton id="repeat.apply"`;
+- the palette is unaffected (it takes a fresh snapshot on every open).
+
 ### 3.2 `lib/editor-actions/registry.ts` (exists, complete; D1 owns)
 ```ts
 export interface ActionFilter { group?: ActionGroup; context?: ContextKind }
@@ -482,7 +487,7 @@ Rules:
 **Floating and phone surfaces:**
 - `EditorSurfaces` (frozen) is mounted once inside `EditorContext`. It renders `SelectionBubble` (D2) and `CommandPaletteHost` (E).
 - D2's bubble renders `RepeatSplitButton` (E).
-- D2's phone bar renders `PhoneSelectionCells` (E, with `onBack`) in place of its own cells while text is selected and VoiceOver focus is not in the bar.
+- D2's phone bar renders `PhoneSelectionCells` (E, with `onBack`) in place of its own cells while text is selected and VoiceOver focus is not in the bar. The mode comes from `nextMobileBarMode`; ✕ sets `dismissedForSelection`, which overrides the focus guard (an explicit Back). D2 resets it on a new selection and keeps the bar one `role="toolbar"` element, so ✕ can move focus to the bar's first enabled cell once the normal cells are back (spec §6.6).
 - E's components render `null` until E lands, so D2 needs nothing from E to ship.
 
 ### 5.4 Ports (e2e and dev servers)
@@ -535,6 +540,7 @@ export function useRememberedChoice<T>(spec: ChoiceSpec<T>): RememberedChoice<T>
 - A `run()` that only emits a UI intent (M10 inputs) writes nothing. The run that applies the argument writes.
 - **Exception 1:** `outlineOpen` is shell state, written by the shell's `setOutlineOpen` (§5.2).
 - **Exception 2:** `paletteRecent` is written by the palette host after `runAction` returned true.
+- **Exception 3 (PR E review):** `repeatBundle` is recorded by the `RepeatFormatting` extension from local **mark-only** transactions (spec M7): every step is an `AddMarkStep` or `RemoveMarkStep`. A transaction that also holds a `ReplaceStep`, `ReplaceAroundStep` or `AttrStep` (a heading change or block conversion that strips marks) records nothing. `repeat.copy` and `formats.apply` write the bundle in their `run()`, after the command returned true; the commands themselves write no memory.
 
 **Change feed.** The `storage` event never fires in the tab that wrote. `rememberChoice` and `forgetChoices` therefore notify an in-module listener set (`subscribeChoices`), which also forwards the cross-tab `storage` event. `useRememberedChoice` reads through it in the `useSyncExternalStore` style, so an M1/M2 face updates as soon as its action runs.
 
