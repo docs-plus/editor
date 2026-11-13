@@ -76,9 +76,12 @@ export function lazySurface<P extends object>(
   const retry = () => {
     Lazy = make();
   };
-  return (props: P) => (
-    <SurfaceBoundary fallback={fallback} onError={retry}>
-      <Lazy {...props} />
-    </SurfaceBoundary>
-  );
+  // biome-ignore lint/correctness/noComponentHookFactories: called once per surface at module level, like `lazy()` itself
+  return function LazySurface(props: P) {
+    return (
+      <SurfaceBoundary fallback={fallback} onError={retry}>
+        <Lazy {...props} />
+      </SurfaceBoundary>
+    );
+  };
 }
