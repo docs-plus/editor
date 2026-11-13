@@ -28,6 +28,7 @@
     "test:perf-collab": "playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
     "test:soak:color": "bun tests/load/color-mark-soak.ts",
+    "test:soak:mixed-version": "bun tests/load/mixed-version-soak.ts",
     "test:stress": "bun test tests/unit/stress",
     "test:soak": "playwright test --project=soak",
     "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 playwright test --project=soak soak.spec.ts",
