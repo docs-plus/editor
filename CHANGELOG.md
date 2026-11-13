@@ -25,6 +25,13 @@ was added, so this fix can ship to `main` on its own.
 - Known, not fixed here: while a Playground image request is still pending,
   Chromium keeps the `<img>` alive and, through the media resize gripper's
   listeners, its closed editor. They are released once the request settles.
+- **Tab-cap e2e timed out in CI.** `tabs.spec.ts` "create tab is blocked
+  when cap is reached" slept 120 ms after each of its 48 clicks; on `main` it
+  had grown from 16 s to 30 s in CI and already failed once there. It now
+  waits for each new tab instead (about 9.8 s to 5.5 s locally), checks the
+  tab count equals the cap in the button title, and allows 60 s for the 49
+  editor mounts. The leak fix did not slow tab creation (about 80 ms per tab
+  before and after).
 
 ### Added
 - **Toolbar accessibility tests:** `@axe-core/playwright` (dev dependency), an
