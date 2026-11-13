@@ -150,6 +150,31 @@ test.describe("lazy surface chunks", () => {
     ).toBeFocused();
   });
 
+  test("a brush click whose engine chunk 404s says so, with Retry", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.engine);
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "paint me");
+    await page.keyboard.press("Shift+Home");
+    const brush = page
+      .getByRole("toolbar", { name: "Selection formatting" })
+      .getByRole("button", { name: "Paint format" });
+    await brush.click();
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Couldn’t load formatting tools.");
+    await expect(page.getByText("still loading")).toHaveCount(0);
+
+    // Back online: Retry fetches the engine and runs the click.
+    await restore();
+    await pill.getByRole("button", { name: /^Retry/ }).click();
+    // The click kept the editor's focus and selection, and the bubble.
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".document-editor-content")).toHaveClass(
+      /is-painting/,
+    );
+  });
+
   test("an E engine chunk that 404s leaves the editor and the palette working", async ({
     page,
   }) => {

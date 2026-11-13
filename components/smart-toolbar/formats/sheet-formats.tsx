@@ -14,7 +14,11 @@ import type { SavedFormat } from "@/lib/saved-formats";
 
 import { openPalette } from "../palette/palette-store";
 import { FormatPreview } from "./format-preview";
-import { useEActionReason, useSavedFormats } from "./use-e-action";
+import {
+  runWithEngine,
+  useEActionReason,
+  useSavedFormats,
+} from "./use-e-action";
 
 function SheetFormat({
   editor,
@@ -37,7 +41,11 @@ function SheetFormat({
         disabled={reason !== undefined}
         disabledReason={reason}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => runAction(editor, formatsApplyAction, format.id)}
+        onClick={() =>
+          runWithEngine(editor, () =>
+            runAction(editor, formatsApplyAction, format.id),
+          )
+        }
       >
         <FormatPreview bundle={format.bundle}>{format.name}</FormatPreview>
       </ToolbarButton>

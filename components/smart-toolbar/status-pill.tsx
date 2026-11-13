@@ -126,6 +126,8 @@ function Pill({
           variant="ghost"
           size="xs"
           aria-label={`${action.label}: ${notice.text}`}
+          // A click keeps focus (and the selection) in the editor.
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             dismissNotice(notice.id);
             action.run();

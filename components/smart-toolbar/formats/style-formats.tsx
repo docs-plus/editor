@@ -22,7 +22,11 @@ import { openPalette } from "../palette/palette-store";
 import { DescribedItem } from "./described-item";
 import { FormatPreview } from "./format-preview";
 import { removeFormatWithUndo } from "./remove-format";
-import { useEActionReason, useSavedFormats } from "./use-e-action";
+import {
+  runWithEngine,
+  useEActionReason,
+  useSavedFormats,
+} from "./use-e-action";
 
 /**
  * Your formats in the text style dropdown (design pass §4), after the
@@ -61,7 +65,9 @@ export function StyleFormats({
             disabled={apply !== undefined}
             onClick={() => {
               onPicked();
-              runAction(editor, formatsApplyAction, format.id);
+              runWithEngine(editor, () =>
+                runAction(editor, formatsApplyAction, format.id),
+              );
             }}
           />
         ))}
