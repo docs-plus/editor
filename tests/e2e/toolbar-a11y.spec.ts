@@ -243,6 +243,34 @@ test("highlight dialog: named swatches, focus on open, arrows move focus only", 
   await expect(trigger).toBeFocused();
 });
 
+test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
+  page,
+}) => {
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  const trigger = page
+    .getByRole("toolbar")
+    .getByRole("button", { name: /highlight/i })
+    .first();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Highlight colours" });
+  const green = dialog.getByRole("button", { name: "Green highlight" });
+  await expect(green).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(green).toHaveAttribute("aria-pressed", "true");
+
+  const none = dialog.getByRole("button", { name: "No highlight" });
+  await none.focus();
+  await page.keyboard.press("Enter");
+  await expect(green).toHaveAttribute("aria-pressed", "false");
+  expect(
+    await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
+  ).toBe(false);
+  await expect(none).toBeFocused();
+  await closeWithEscape(page, dialog);
+  await expect(trigger).toBeFocused();
+});
+
 test("mobile highlight panel: one arrow press moves one swatch", async ({
   page,
 }) => {
