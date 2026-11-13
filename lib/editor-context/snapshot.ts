@@ -41,30 +41,59 @@ function memoIn<T>(
   return cache.get(key) as T;
 }
 
+/** Marks on every text node of the selection (`common`) and on any (`present`). */
+export interface MarkSummary {
+  common: ReadonlySet<string>;
+  present: ReadonlySet<string>;
+}
+
+const MARK_SUMMARY_KEY = "markSummary";
+
 /**
- * Mark names on every text node of the selection, or the stored marks (else
- * the marks at the caret) for an empty selection. O(range) for a range, so
- * `Ctx.activeMarks` computes it lazily.
+ * One walk over the selection for both `Ctx.activeMarks` (marks on every
+ * text node) and `presentMarks` (marks on some text node, for "mixed"). An
+ * empty selection uses the stored marks, else the marks at the caret. The
+ * intersection stops shrinking once it is empty, and the walk stops once
+ * every schema mark is present. No per-node allocation.
  */
-function marksAcrossSelection(state: EditorState): ReadonlySet<string> {
-  const { selection, storedMarks, doc } = state;
+function summarizeMarks(state: EditorState): MarkSummary {
+  const { selection, storedMarks, doc, schema } = state;
   if (selection.empty) {
-    return new Set(
+    const names = new Set(
       (storedMarks ?? selection.$head.marks()).map((mark) => mark.type.name),
     );
+    return { common: names, present: names };
   }
+  const markCount = Object.keys(schema.marks).length;
   let common: Set<string> | null = null;
+  const present = new Set<string>();
+  let done = false;
   for (const range of selection.ranges) {
     doc.nodesBetween(range.$from.pos, range.$to.pos, (node) => {
+      if (done) return false;
       if (!node.isText) return true;
-      const names = node.marks.map((mark) => mark.type.name);
-      common = common
-        ? new Set(names.filter((name) => common?.has(name)))
-        : new Set(names);
+      const { marks } = node;
+      for (const mark of marks) present.add(mark.type.name);
+      if (common === null) {
+        common = new Set(marks.map((mark) => mark.type.name));
+      } else if (common.size > 0) {
+        for (const name of common) {
+          if (!marks.some((mark) => mark.type.name === name)) {
+            common.delete(name);
+          }
+        }
+      }
+      if (common.size === 0 && present.size >= markCount) done = true;
       return false;
     });
+    if (done) break;
   }
-  return common ?? new Set<string>();
+  return { common: common ?? new Set<string>(), present };
+}
+
+/** Mark names on some text node of the selection (memoized per snapshot). */
+export function presentMarks(ctx: Ctx): ReadonlySet<string> {
+  return ctx.memo(MARK_SUMMARY_KEY, () => summarizeMarks(ctx.state)).present;
 }
 
 interface Structure {
@@ -159,7 +188,7 @@ export function computeContext(editor: Editor): Ctx {
     headingLevel: isHeading ? (block.attrs.level as number) : null,
     headingId: isHeading ? ((block.attrs.id as string | null) ?? null) : null,
     get activeMarks() {
-      return memoIn(memo, "activeMarks", () => marksAcrossSelection(state));
+      return memoIn(memo, MARK_SUMMARY_KEY, () => summarizeMarks(state)).common;
     },
     memo<T>(key: string, compute: () => T): T {
       return memoIn(memo, key, compute);
