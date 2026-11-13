@@ -1079,6 +1079,51 @@ for (const width of [320, 375]) {
         section.getByText("Select formatted text to save it."),
       ).toBeVisible();
     });
+
+    test("with a caret, why no format applies is one full-width line", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem(
+          "tinydocy-formats",
+          JSON.stringify({
+            v: 1,
+            formats: [
+              { id: "fnote", name: "Note", bundle: { italic: true } },
+              { id: "fwarn", name: "Warning", bundle: { bold: true } },
+              { id: "fcall", name: "Callout", bundle: { strike: true } },
+            ],
+          }),
+        );
+      });
+      await openDoc(page);
+      await openSheet(page);
+      const section = sheet(page).getByRole("region", {
+        name: "Your formats",
+      });
+      const note = section.getByRole("button", { name: "Note", exact: true });
+      await expect(note).toHaveAttribute("aria-disabled", "true");
+      await expect(note).toHaveAccessibleDescription(
+        "Select text to apply a format.",
+      );
+      const reason = section.getByText("Select text to apply a format.");
+      await expect(reason).toBeVisible();
+      await section.scrollIntoViewIfNeeded();
+      const [reasonBox, toggleBox] = await Promise.all([
+        reason.boundingBox(),
+        section.getByRole("button", { name: "Remove a format" }).boundingBox(),
+      ]);
+      expect(Math.round(reasonBox?.width ?? 0)).toBe(
+        Math.round(toggleBox?.width ?? -1),
+      );
+      const body = sheet(page).locator(".st-sheet-body");
+      await body.evaluate((el) => {
+        (el as HTMLElement).style.overflowX = "auto";
+      });
+      expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(
+        0,
+      );
+    });
   });
 }
 

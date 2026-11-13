@@ -62,10 +62,16 @@ function SheetFormat({
   );
 }
 
-/** Why a sheet control cannot run, as a visible line (design pass §10). */
+/**
+ * Why a sheet control cannot run, as a visible line (design pass §10),
+ * across the grid's full width.
+ */
 function SheetReason({ id, text }: { id: string; text: string | undefined }) {
   return text ? (
-    <p id={id} className="st-sheet-reason text-xs text-muted-foreground">
+    <p
+      id={id}
+      className="st-sheet-reason st-sheet-wide text-xs text-muted-foreground"
+    >
       {text}
     </p>
   ) : null;
