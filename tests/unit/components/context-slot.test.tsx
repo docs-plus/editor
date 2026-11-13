@@ -5,7 +5,10 @@ import type { Editor as ReactEditor } from "@tiptap/react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 
-import { ContextSlot } from "@/components/smart-toolbar/context-slot/context-slot";
+import {
+  ContextSlot,
+  loadSlotContents,
+} from "@/components/smart-toolbar/context-slot/context-slot";
 import { Toolbar } from "@/components/ui/toolbar";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 
@@ -23,7 +26,7 @@ afterEach(() => {
 });
 
 describe("ContextSlot hold", () => {
-  it("holds while a slot control has focus and releases on unmount", () => {
+  it("holds while a slot control has focus and releases on unmount", async () => {
     editor = createTestEditor({
       content: {
         type: "doc",
@@ -58,6 +61,10 @@ describe("ContextSlot hold", () => {
           }),
         ),
       );
+    });
+    // The controls are a lazy chunk (O1): let it resolve and render.
+    await act(async () => {
+      await loadSlotContents();
     });
     const group = host.querySelector('[data-slot="context-slot"]');
     expect(group?.getAttribute("aria-label")).toBe("Section tools");
