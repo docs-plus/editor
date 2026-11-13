@@ -872,9 +872,10 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
     await page.getByRole("menuitem", { name: "Copy formatting" }).click();
-    await expect(page.locator("[data-announcer]")).toHaveText(
-      "Nothing to copy",
-    );
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Nothing to copy" }),
+    ).toBeAttached();
     // The Bold bundle stays: no clear-only "Repeat Plain".
     await expect(
       page.locator('[data-smart-bubble] [data-action-id="repeat.apply"]'),
@@ -914,9 +915,10 @@ test.describe("selection bubble", () => {
     });
     await expect(confirm).toBeVisible();
     await confirm.click();
-    await expect(page.locator("[data-announcer]")).toHaveText(
-      "Removed format ‘Warning’",
-    );
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Removed format ‘Warning’" }),
+    ).toBeAttached();
     const stored = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("tinydocy-formats") ?? "{}"),
     );

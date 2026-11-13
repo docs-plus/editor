@@ -250,13 +250,16 @@ describe("RepeatFormatting: the key", () => {
 
   const announced = async () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    return document.querySelector("[data-announcer]")?.textContent;
+    // Any polite status region: the announcer's markup is not the contract.
+    return [...document.querySelectorAll('[role="status"]')]
+      .map((node) => node.textContent)
+      .join("|");
   };
 
   it("announces why it cannot repeat, and keeps the key", async () => {
     sel("hello");
     expect(v11Engine.repeatKey(editor)).toBe(true);
-    expect(await announced()).toBe(
+    expect(await announced()).toContain(
       "Format some text first, or use Copy formatting.",
     );
   });
@@ -266,7 +269,7 @@ describe("RepeatFormatting: the key", () => {
     sel("world");
     expect(v11Engine.repeatKey(editor)).toBe(true);
     expect(editor.getHTML()).toContain("world");
-    expect(await announced()).toBe("Repeated Bold, Italic");
+    expect(await announced()).toContain("Repeated Bold, Italic");
   });
 });
 

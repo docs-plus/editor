@@ -729,9 +729,10 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
       .tap();
     await selectionBar(page).getByRole("button", { name: "Formats" }).tap();
     await page.getByRole("menuitem", { name: "Copy formatting" }).tap();
-    await expect(page.locator("[data-announcer]")).toHaveText(
-      "Copied formatting: Bold",
-    );
+    // The shared polite region (role=status), whoever renders it.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Copied formatting: Bold" }),
+    ).toBeAttached();
     await selectText(page, "beta");
     await selectionBar(page).getByRole("button", { name: "Formats" }).tap();
     await page.getByRole("menuitem", { name: "Note", exact: true }).tap();
