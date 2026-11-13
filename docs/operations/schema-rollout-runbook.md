@@ -5,16 +5,17 @@ deleting content. Design background: `docs/superpowers/specs/2026-11-12-smart-to
 section 3.1.
 
 An old bundle that meets a mark it does not know makes y-prosemirror delete the
-whole block and upload the deletion. Four guards stop that. Release N (this
-change) ships all four; the minimum client schema stays log-only until a later
-release raises it. A server-side root sweep also keeps every document
+whole block and upload the deletion. Four guards stop that. Release N ships
+all four with the gate log-only; release N+1 (smart toolbar PR C) sets the
+built-in floor `SCHEMA_FLOOR = 2`, so from then on the gate always refuses
+bundles below schema 2. A server-side root sweep also keeps every document
 mountable when content slips past the ingress check.
 
 ## What the guards are
 
 | Guard | What it does | Where to see it |
 |---|---|---|
-| Version gate | The client sends `schema=2` and `build=<id>` on the shared socket URL (`lib/schema-version.ts`). Hocus counts them and, when `HOCUS_MIN_CLIENT_SCHEMA` is above 0, refuses older bundles with `client_outdated`. | `client_schema` log line, once a minute |
+| Version gate | The client sends `schema=2` and `build=<id>` on the shared socket URL (`lib/schema-version.ts`). Hocus counts them and refuses bundles below `max(HOCUS_MIN_CLIENT_SCHEMA, SCHEMA_FLOOR)` with `client_outdated` (`SCHEMA_FLOOR = 2` from release N+1; release N has no floor and refuses nothing at env 0). | `client_schema` log line, once a minute |
 | Offline namespace | Device copies live under `1:${host}~s2:${name}`. Pre-N bundles never read that key, so they cannot save a damaged copy over a new one. Legacy copies are merged in, then deleted inside one IndexedDB transaction. | none (client only) |
 | Freeze and repair | A document with unknown node or mark names freezes read-only with the update banner, by design. Any misfit made only of known names is fitted to the schema in place: an emptied fragment is reseeded, a missing title inserted, elements whose content does not fit are removed (as earlier releases did) and stray inline nodes such as a top-level hard break are wrapped in a paragraph. | `schema_repair_failed` analytics event when a repair fails |
 | Ingress allowlist | Hocus refuses any update that names a node or mark outside `lib/schema-names.ts`, or puts content other than an element directly in the editor fragment (logged as `#text`), and closes that document's connection with `4422` `schema_rejected`; the shared socket and its other documents stay open. Malformed sync frames are refused the same way. | `ws_unknown_schema_name` abuse event |
@@ -22,9 +23,13 @@ mountable when content slips past the ingress check.
 
 Details worth knowing:
 
-- **Gate.** Never set `HOCUS_MIN_CLIENT_SCHEMA` above the highest schema any
-  shipped bundle sends (currently 2), or release N clients are refused too.
-  At `HOCUS_MIN_CLIENT_SCHEMA=0` (the default) nothing is refused.
+- **Gate.** The effective minimum is `max(HOCUS_MIN_CLIENT_SCHEMA,
+  SCHEMA_FLOOR)` (`effectiveMinClientSchema` in
+  `lib/security/client-schema-gate.ts`); the startup line prints it as
+  `[hocus] client schema gate: min=2 (floor 2, env 0)`. The env can only raise
+  it. Never set `HOCUS_MIN_CLIENT_SCHEMA` above the highest schema any
+  shipped bundle sends (currently 2), or current clients are refused too.
+  In release N (no floor), `HOCUS_MIN_CLIENT_SCHEMA=0` refuses nothing.
   At 1 or more, a socket is refused unless `schema` is a plain decimal integer
   at or above the minimum; a missing value counts as 0. `global-tabs` and every
   `global-tabs-*` document are exempt so outdated clients can still list tabs
@@ -113,7 +118,9 @@ The full N+1 ship gates (spec section 3.1) are:
 - Hostile tests: an unknown name is refused at ingress; delete-all,
   paragraph-before-title and other known-name misfits (a top-level list item
   or hard break) are repaired instead of freezing.
-- Staging drill: env set to 0, effective minimum still 2 (once PR C ships the floor).
+- Staging drill: env set to 0, effective minimum still 2 (PR C's floor;
+  `tests/unit/scripts/hocus-client-gate.test.ts` runs it against a spawned
+  Hocus).
 - CHANGELOG Deploy note: Hocus restart first, then Next, at low traffic.
 
 ## Release order
@@ -124,8 +131,8 @@ names are `editor-hocus` and `editor-next`.
 
 1. **Deploy release N** — client + server; gate log-only; server ingress allowlist is the current schema plus legacy `link`/`code`. `textColor` and `fontSize` are **not** allowed yet: they ship with PR C's server half in step 3. Allowed earlier, anyone could write `textColor` and freeze any document for every N client. (N clients that meet them freeze read-only by design, never delete.)
 2. **Wait** for the N+1 ship gates (adoption above).
-3. **Server-only step: deploy PR C's server half and restart Hocus *before* Next.** It adds `textColor` and `fontSize` to the ingress allowlist. PR C sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. (Until PR C ships, setting `HOCUS_MIN_CLIENT_SCHEMA=2` is the manual equivalent.) The owner runs it: `bunx pm2@6.0.14 restart editor-hocus --update-env`, confirm refusals in the log (`refused` above 0 in `client_schema`), then `bunx pm2@6.0.14 restart editor-next --update-env`. Verify the build step does not change the client bundle served by the still-running Next process before its restart; if it does, build into a separate directory.
-4. **Restart Next** to serve the new client with the new marks.
+3. **Server-only step (release N+1, PR C): restart Hocus *before* Next.** It adds `textColor` and `fontSize` to the ingress allowlist and sets `SCHEMA_FLOOR = 2` in code, so the gate turns on with the Hocus restart regardless of env. Build the new client into a separate directory first (building in place was not proven safe for the still-running Next). The owner runs `bunx pm2@6.0.14 restart editor-hocus --update-env` and confirms `min=2 (floor 2, env 0)` and the `client_schema` counts in the log (`refused` counts pre-N bundles; 0 is fine if none are left). The exact steps are PR C's CHANGELOG Deploy note.
+4. **Switch Next to the new build and restart it** (`bunx pm2@6.0.14 restart editor-next --update-env`) to serve the new marks.
 
 Never serve the new client before step 3 completes. Deploy at low traffic.
 
@@ -137,8 +144,14 @@ Release N itself: restart `editor-hocus` first, then rebuild and restart
 - Reverting the **client** is safe, down to release N.
 - **Never lower the floor.** Never set `HOCUS_MIN_CLIENT_SCHEMA` below a value
   it has already had in production: bundles that were refused would be
-  admitted again and could damage documents. A later release makes this
-  structural with `SCHEMA_FLOOR = 2` in code; until then it is a rule.
+  admitted again and could damage documents. From release N+1 the floor is
+  structural (`SCHEMA_FLOOR = 2` in code); never lower that constant.
+- **Rolling Hocus back below N+1:** roll Next back to N first and set
+  `HOCUS_MIN_CLIENT_SCHEMA=2`, because release N's code has no floor and
+  with the env unset readmits pre-N bundles that delete coloured blocks. N+1
+  tabs still open then get `4422` on `textColor`/`fontSize` until they reload.
+  Rolling only Next back to N is safe: N clients freeze on the new marks,
+  never delete.
 - **Never roll back below release N.** Pre-N bundles do not know the guards.
   Offline copies are the practical reason: while pre-N and N bundles coexist on
   one device, storage can hold up to 30 legacy plus 30 `~s2` copies, and after N
@@ -150,8 +163,9 @@ Release N itself: restart `editor-hocus` first, then rebuild and restart
 
 Every new mark or node name ships in `lib/schema-names.ts` in a Hocus restart
 that **precedes** any client that writes it. The allowlist is the current
-schema plus legacy `link`/`code`; `textColor` and `fontSize` join it with PR
-C's server half (release order step 3), never earlier.
+schema plus legacy `link`/`code`. Worked example: `textColor` and `fontSize`
+joined it with PR C's server half (release order step 3), in the same commit
+as the schema snapshot, and Hocus restarts before Next serves them.
 The schema snapshot test (`tests/unit/schema/schema-snapshot.test.ts`) fails
 when the editor schema drifts from the committed snapshot, which is how an
 unreviewed change from the daily docs.plus extension refresh is caught; update
@@ -185,8 +199,18 @@ on it alone.
 
 ## Scripts and load tests
 
-Anything that opens a collaboration socket must send `?schema=2` once the
-minimum is above 0, or it is refused. The load harness
+Anything that opens a collaboration socket must send `?schema=2`, or it is
+refused (always, from release N+1; `global-tabs*` documents are exempt). The load harness
 (`tests/load/yjs-load-harness.ts`) already does. Tests that spawn Hocus use
 `spawnHocus()` from `tests/helpers/spawn-hocus.ts`; see
 [tests/TESTING.md](../../tests/TESTING.md).
+
+## Text colour, size and highlight values
+
+Release N+1 stores palette tokens: `textColor { color }`, `fontSize { size }`
+(`xs sm lg xl`) and `highlight { color }`, rendered only as `data-*`
+attributes styled by `extensions/text-style-marks/text-style-marks.scss`.
+Unknown values from a raw client render as plain text. Highlights written by
+release N as `var(--tt-color-highlight-X)` render as the same token and are
+not rewritten in storage yet: the server rewrite in `lib/yjs-mark-migration.ts`
+is deferred (cleanup only).

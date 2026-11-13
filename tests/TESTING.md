@@ -43,6 +43,7 @@ tests/
 │   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no `bun:test` dep)
 ├── fixtures/                             # Static JSON document fixtures
+│   └── clipboard/                        # SYNTHETIC Google Docs / Word clipboard HTML (not real captures; see below)
 ├── unit/
 │   ├── schema/                           # TitleDocument enforcement, paste handling, schema invariants, trailing node
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
@@ -364,3 +365,17 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 Historical-doc note: some completed plans/brainstorms predate the `extensions/`
 refactor and may reference legacy paths under
 `components/tiptap-node/{heading-node,document-node}`.
+
+## Clipboard fixtures (text style paste)
+
+`tests/fixtures/clipboard/google-docs.html` and `word.html` are hand-written in
+the shape of each app's clipboard HTML. They are **not** real captures, so
+`text-style-paste.test.ts` and `tests/e2e/text-style-marks.spec.ts` prove that
+foreign colour, size and background paste plain only for these samples. To
+replace them with real captures, type `Red Large Marked Plain` in the app,
+make "Red" red, "Large" 18 pt and "Marked" highlighted, copy the line, then on
+macOS run
+`osascript -e 'the clipboard as «class HTML»' | perl -ne 'print pack("H*", $1) if /«data HTML([0-9A-F]+)»/' > tests/fixtures/clipboard/<name>.html`.
+Strip author names, e-mail addresses and `<xml>` metadata before committing.
+Biome skips this folder.
+
