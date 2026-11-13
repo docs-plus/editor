@@ -196,6 +196,8 @@ test.describe("toolbar focus and disabled controls", () => {
     for (const item of await items.all()) {
       await expect(item).toHaveAttribute("aria-disabled", "true");
       await expect(item).toHaveAccessibleDescription("Title is always H1.");
+      // Read once: the visible reason line is not part of the name.
+      await expect(item).not.toHaveAccessibleName(/Title is always H1/);
     }
     await page.keyboard.press("Escape");
     await expect(toolbarButton(page, "Title")).toBeVisible();

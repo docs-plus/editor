@@ -477,6 +477,13 @@ test.describe("Your formats in the text style dropdown", () => {
     expect(await reason.evaluate((el) => getComputedStyle(el).opacity)).toBe(
       "1",
     );
+    // The label dims, and the reason is read once: not in the name.
+    await expect(save).toHaveAccessibleName("Save selection as format…");
+    expect(
+      await save
+        .getByText("Save selection as format…")
+        .evaluate((el) => getComputedStyle(el).opacity),
+    ).toBe("0.5");
     await page.keyboard.press("Escape");
 
     await select(page, "source");

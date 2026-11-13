@@ -242,7 +242,8 @@ function DropdownMenuSeparator({
 /**
  * Why a disabled item cannot run, as a visible second line (design pass
  * §10). Only the rest of the item dims. Point the item's
- * `aria-describedby` at it.
+ * `aria-describedby` at it: hidden from the item's name (taken from its
+ * content), it is read once, as the description.
  */
 function DropdownMenuReason({
   className,
@@ -250,6 +251,7 @@ function DropdownMenuReason({
 }: React.ComponentProps<"span">) {
   return (
     <span
+      aria-hidden
       data-slot="dropdown-menu-reason"
       className={cn(
         "block basis-full text-xs text-muted-foreground",
