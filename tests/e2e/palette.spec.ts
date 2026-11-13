@@ -519,13 +519,30 @@ test.describe("palette design pass (§7, §8)", () => {
     // Counts the pills shown from here on: one notice each.
     await page.evaluate(() => {
       const shown: string[] = [];
-      (window as unknown as { __pills: string[] }).__pills = shown;
+      const spoken: { text: string; hidden: boolean }[] = [];
+      const w = window as unknown as {
+        __pills: string[];
+        __spoken: typeof spoken;
+      };
+      w.__pills = shown;
+      w.__spoken = spoken;
       new MutationObserver((records) => {
         for (const record of records) {
           for (const node of record.addedNodes) {
             if (node instanceof HTMLElement && node.dataset.statusPill) {
               shown.push(node.textContent ?? "");
             }
+          }
+          // The live region gets its text: is it exposed at that moment?
+          const region =
+            record.target instanceof HTMLElement
+              ? record.target.closest('.sr-only[role="status"]')
+              : null;
+          if (region?.textContent) {
+            spoken.push({
+              text: region.textContent,
+              hidden: region.closest('[aria-hidden="true"],[inert]') !== null,
+            });
           }
         }
       }).observe(document.body, { childList: true, subtree: true });
@@ -541,6 +558,19 @@ test.describe("palette design pass (§7, §8)", () => {
         () => (window as unknown as { __pills: string[] }).__pills,
       ),
     ).toEqual(["Saved format ‘Warning’"]);
+    // Read out once the dialog no longer hides the rest of the page.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __spoken: { text: string; hidden: boolean }[];
+              }
+            ).__spoken,
+        ),
+      )
+      .toEqual([{ text: "Saved format ‘Warning’", hidden: false }]);
     await expect(page.locator(".tiptap")).toBeFocused();
     expect(await selection(page)).not.toBeNull();
 
