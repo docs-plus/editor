@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar follow-ups
+
+Branch `perf/toolbar-followups-engine`. No deploy steps.
+
+#### Fixed
+- The Formats menu in the selection bubble's Repeat split now stays open:
+  focus moving into the menu (portalled to `body`) hid the bubble and the
+  menu with it.
+
+#### Changed
+- PR E's formatting engine (`lib/editor-actions/v11-engine.ts`) now lives
+  in one lazy chunk. The selection bubble and the phone selection cells
+  reach it through `getV11Engine()` / `loadV11Engine()` like the palette,
+  instead of each carrying a copy. Production build: the bubble's chunks
+  13.0 → 10.6 KB gz, the phone cells' chunk 10.6 → 6.9 KB gz; the editor
+  chunk group is unchanged (+22.9 KB of 23.5 KB). Until the engine lands,
+  the Repeat face and the Formats menu items are disabled with
+  "Formatting tools are still loading." and turn live without a reopen. A
+  unit test fails on any static import of the engine from app code.
+
 ### Smart toolbar v1.1, PR E: action palette and repeat formatting
 
 Rebuilt on `main` after v1 (#32), branch `feat/smart-toolbar-e`.
