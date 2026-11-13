@@ -118,13 +118,12 @@ are decided (below).
   Appendix A): a highlight that would put the current text colour below
   4.5:1 is dimmed and described "Low contrast", but stays selectable; the
   focus ring keeps full strength. Text swatches never dim.
-- **Editor chunk budget** (owner decision O1, contract A9): surfaces that are
-  not on screen at first paint load as their own chunks once the page is
-  idle, or on their trigger's hover or focus: the context slot's controls,
-  every toolbar menu's items, and the Insert menu's items, table grid and
-  embed form (the colour popover and the bubble already did). Shortcuts and
-  triggers stay in the editor chunk. The CI gate's budget is now +19 KB gz
-  over the `58a9d22` baseline (measured +18.66 KB; spec §7 said +6 KB).
+- **Editor chunk budget** (owner decision O1, contract A9): the Insert
+  menu's table grid and embed form now load as their own chunk, on the
+  Insert button's hover or focus (the colour popover and the bubble already
+  did). The CI gate's budget is now +18.5 KB gz over the `58a9d22` baseline
+  (measured +18.43 KB; spec §7 said +6 KB). Lazy slot controls and menu
+  items were tried and reverted (contract A9).
 
 ### Smart toolbar v1, PR D1: action registry, sorted row and context slot
 
