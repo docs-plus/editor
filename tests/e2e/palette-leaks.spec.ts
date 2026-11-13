@@ -95,7 +95,7 @@ test("listeners and heap return to baseline after 20 tab switches and 100 palett
   test.info().annotations.push({
     type: "known",
     description:
-      "Tab switches retain destroyed editors (about one per two switches) on the base commit too, without any PR E code; heap is therefore gated over the palette cycles, and listeners over both.",
+      "Tab switches were observed to retain destroyed editors (about one per two switches, +0.3 MB per switch) under next dev; observed, not yet confirmed on base (no production-build A/B yet). Until that A/B exists, heap and live editors are gated over the palette cycles only, and listeners over both.",
   });
   const editor = new EditorPage(page);
   await editor.goto();
