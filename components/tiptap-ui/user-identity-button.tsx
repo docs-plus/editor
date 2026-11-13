@@ -151,10 +151,12 @@ export function UserIdentityButton() {
 
   return (
     <>
+      {/* Never wider than the viewport: on a phone the two cards wrap
+          instead of running off the left edge (WCAG 1.4.10). */}
       <div
         className={cn(
-          "fixed bottom-4 right-4 z-50",
-          "flex items-center gap-4 p-1 text-xs",
+          "fixed bottom-4 right-4 z-50 max-w-[calc(100vw-2rem)]",
+          "flex flex-wrap items-center justify-end gap-x-4 gap-y-1 p-1 text-xs",
         )}
         data-state={connection}
         data-collab-status=""
@@ -175,7 +177,7 @@ export function UserIdentityButton() {
             type="button"
             onClick={() => setDialogOpen(true)}
             className={cn(
-              "group flex items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
+              "group flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
               "hover:bg-foreground/5 active:bg-foreground/10",
               "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             )}
