@@ -2,7 +2,9 @@
   --tab-bar-height: 38px;
   display: flex;
   align-items: stretch;
-  height: var(--tab-bar-height);
+  // Installed or notched: the strip's colour runs under the status bar.
+  height: calc(var(--tab-bar-height) + var(--safe-area-top));
+  padding-top: var(--safe-area-top);
   background-color: var(--sidebar);
   border-bottom: 1px solid var(--border);
   user-select: none;

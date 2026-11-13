@@ -45,11 +45,14 @@ body {
   font-family: Arial, sans-serif;
 }
 
+// Landscape notches: the shell keeps its content beside them (the tab
+// strip pads the top itself, so its colour runs under the status bar).
 .app-shell {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100dvh;
+  padding-inline: var(--safe-area-left) var(--safe-area-right);
 }
 
 .document-editor-wrapper {

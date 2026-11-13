@@ -43,7 +43,7 @@ import {
 } from "@/lib/remembered-choice";
 import "@/components/smart-toolbar/phone/phone.scss";
 
-/** The bar's constant height (spec §4.7). */
+/** The bar's constant cell height (spec §4.7), above any safe area. */
 export const MOBILE_BAR_HEIGHT = 44;
 
 /**
@@ -106,17 +106,18 @@ interface MobileToolbarContentProps {
 }
 
 /**
- * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, a constant
- * 44px tall, docked above the on-screen keyboard. Cells of at least 44×44:
- * undo, redo (360px and up; the sheet carries it below), Aa (the "Text
- * format" sheet: style, size, colours, align, more), B, I, then
- * `menuCells` (list, indent, Insert). Toggles show their state with `aria-pressed`
- * (#269). Hidden in a read-only document (#308), which also closes the
- * sheet. While text is selected it swaps to `PhoneSelectionCells` (PR E,
- * spec §4.7), never while focus is in the bar or the sheet is open; ✕
- * keeps the normal cells until the selection collapses. Follow-up: the
- * context slot cell. Its own lazy chunk with the sheet, loaded only below
- * 768px (contract A9).
+ * The phone bar (< 768px, spec §4.7): one `role="toolbar"`, with 44px of
+ * cells, docked above the on-screen keyboard. Cells of at least 44×44:
+ * undo, redo (where it fits; the sheet carries it otherwise), Aa (the
+ * "Text format" sheet: style, size, colours, align, more), B, I, then
+ * `menuCells` (list, indent, the context slot, Insert). Toggles show their
+ * state with `aria-pressed` (#269). Hidden in a read-only document (#308),
+ * which also closes the sheet. While text is selected it swaps to
+ * `PhoneSelectionCells` (PR E, spec §4.7), never while focus is in the bar
+ * or the sheet is open; ✕ keeps the normal cells until the selection
+ * collapses. Clear of the home indicator while the keyboard is closed
+ * (`data-keyboard`, `phone.scss`). Its own lazy chunk with the sheet,
+ * loaded only below 768px (contract A9).
  */
 export function MobileToolbarContent({
   editor,
@@ -164,14 +165,23 @@ export function MobileToolbarContent({
   );
 
   // ProseMirror and CSS keep the caret clear of the bar and the keyboard.
+  // The bar's measured height includes the bottom safe area (`phone.scss`),
+  // which only CSS knows; it changes with the keyboard and the orientation.
   useLayoutEffect(() => {
-    const clearance = readOnly ? 0 : MOBILE_BAR_HEIGHT + inset;
-    setMobileBarClearance(clearance);
-    const wrapper = barRef.current?.closest<HTMLElement>(
-      ".document-editor-wrapper",
-    );
-    wrapper?.style.setProperty("--mobile-bar-clearance", `${clearance}px`);
-    wrapper?.style.setProperty("--mobile-bar-inset", `${inset}px`);
+    const bar = barRef.current;
+    if (!bar) return;
+    const wrapper = bar.closest<HTMLElement>(".document-editor-wrapper");
+    const update = () => {
+      const height = bar.offsetHeight || MOBILE_BAR_HEIGHT;
+      const clearance = readOnly ? 0 : height + inset;
+      setMobileBarClearance(clearance);
+      wrapper?.style.setProperty("--mobile-bar-clearance", `${clearance}px`);
+      wrapper?.style.setProperty("--mobile-bar-inset", `${inset}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar, { box: "border-box" });
+    return () => observer.disconnect();
   }, [inset, readOnly]);
 
   useEffect(
@@ -233,6 +243,7 @@ export function MobileToolbarContent({
       aria-label={mode === "selection" ? SELECTION_BAR_LABEL : "Formatting"}
       data-mobile-bar=""
       data-bar-mode={mode}
+      data-keyboard={inset ? "" : undefined}
       hidden={readOnly}
       onEscape={onEscape}
       onFocus={onBarFocus}

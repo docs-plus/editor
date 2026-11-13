@@ -51,6 +51,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: THEME_COLOR,
+  // Edge to edge on notched phones and installed apps; the shell, the tab
+  // strip, the phone bar and its sheet pad themselves by the safe areas.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
