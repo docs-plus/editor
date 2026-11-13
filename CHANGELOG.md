@@ -12,14 +12,15 @@ since the previous tag.
 ### Smart toolbar follow-ups
 
 Branch `fix/toolbar-followups-phone` (phone). Editor chunk group
-+80 B gz (401,467 B, 485 B under the 23.5 KB budget); the rest is in
++98 B gz (401,485 B, 467 B under the 23.5 KB budget); the rest is in
 the lazy phone chunk.
 
 #### Added
 - **Phone context slot cell:** the docked bar shows the current block's
   tools as one 44×44 cell between Indent and Insert (spec §4.7): section
-  fold and moves, code language and copy, table rows and columns, media
-  options, from the same registry actions as the row's slot. It is held
+  fold and moves, code language and copy, table rows and columns, and
+  media options (a direct button, as in the row), from the same registry
+  actions as the row's slot. It is held
   while focus is in the bar or its menu, so another writer's edit never
   removes it under focus. From 360 to 403px Redo moves to the sheet while
   the cell shows; below 360px the cell's tools move into the sheet (the
@@ -27,8 +28,9 @@ the lazy phone chunk.
 - **Safe areas:** `viewport-fit=cover`. The tab strip and the loading
   skeleton clear the status bar and notch, the shell keeps clear of
   landscape notches, the phone bar keeps its cells above the home
-  indicator while the keyboard is closed, and the Aa sheet pads its
-  bottom and sides. Desktop is unchanged.
+  indicator while the keyboard is closed, and the Aa sheet and the
+  about, privacy and offline pages pad by the insets. Desktop is
+  unchanged.
 - **Swipe down to close the Aa sheet:** drag its header (new handle)
   down past 80px or flick it; shorter drags snap back, reduced motion
   makes both instant, and Done, Esc and the backdrop still close it.
