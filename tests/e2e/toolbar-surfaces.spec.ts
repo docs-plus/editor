@@ -440,8 +440,11 @@ test.describe("on a touch phone (coarse pointer, 360px)", () => {
 /**
  * v1 phone minimum (contract §1.3, D2 KEEP): at 375px on touch, the existing
  * mobile panel reaches text colour, highlight and size with 44×44 targets.
- * This also gates removing the old mobile path: it must keep passing once
- * the docked bar and Aa sheet replace `MobileToolbarContent`.
+ * This pins the current panel only: it opens it through the old "Text style
+ * and colour" entry and finds the controls in `role="toolbar"`. When the
+ * docked bar and Aa sheet (a dialog) replace `MobileToolbarContent`, move
+ * this block to the sheet in the same change; it does not prove parity on
+ * its own.
  */
 test.describe("on a 375px touch phone", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE_375 });
@@ -479,23 +482,39 @@ test.describe("on a 375px touch phone", () => {
           () => document.documentElement.scrollWidth - window.innerWidth,
         ),
       ).toBeLessThanOrEqual(0);
+      await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
 
-      await toolbar(page)
-        .getByRole("button", { name: /^Apply text colour: / })
-        .tap();
-      await toolbar(page)
-        .getByRole("button", { name: /^Apply highlight: / })
-        .tap();
+      const textFace = toolbar(page).getByRole("button", {
+        name: /^Apply text colour: /,
+      });
+      const highlightFace = toolbar(page).getByRole("button", {
+        name: /^Apply highlight: /,
+      });
+      // The faces name the colour they apply ("Apply text colour: Red").
+      const faceToken = async (face: typeof textFace) =>
+        ((await face.getAttribute("aria-label")) ?? "")
+          .replace(/^.*: /, "")
+          .toLowerCase();
+      const textToken = await faceToken(textFace);
+      const highlightToken = await faceToken(highlightFace);
+
+      await textFace.tap();
+      await highlightFace.tap();
       await toolbar(page)
         .getByRole("button", { name: "Increase font size" })
         .tap();
       await expect
         .poll(() => lastMark(page, "textColor", "color"))
-        .not.toBeNull();
-      await expect.poll(() => lastHighlight(page)).not.toBeNull();
-      await expect
-        .poll(() => lastMark(page, "fontSize", "size"))
-        .not.toBeNull();
+        .toBe(textToken);
+      await expect.poll(() => lastHighlight(page)).toBe(highlightToken);
+      await expect.poll(() => lastMark(page, "fontSize", "size")).toBe("lg");
+      // What is on screen and exposed to assistive tech follows the mark
+      // (WCAG 4.1.2); this also waits out the toolbar settle delay.
+      const stepper = toolbar(page).getByRole("spinbutton", {
+        name: "Font size",
+      });
+      await expect(stepper).toHaveAttribute("aria-valuetext", /^Large/);
+      await expect(stepper).toHaveText("L");
 
       await page.screenshot({
         path: `${PHONE_SCREENS}/phone-panel-${mode}.png`,
