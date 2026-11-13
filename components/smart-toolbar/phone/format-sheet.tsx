@@ -58,7 +58,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * Link opens the Hyperlink extension's own popover over the document, so
  * the sheet closes first: the editor is `inert` while it is open, and the
  * popover would open behind it. The capture handler runs before the
- * button's own click, which then acts on the live editor.
+ * button's own click, which then acts on the live editor; that close
+ * leaves focus in the popover instead of returning it to Aa.
  */
 function LinkRow({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   return (
