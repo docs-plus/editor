@@ -117,34 +117,70 @@ interface MarkState {
   mixed: boolean;
 }
 
-/** One mark type across the selection (or at the caret), per snapshot. */
-function markState(ctx: Ctx, markName: string): MarkState {
-  return ctx.memo(`marks:${markName}`, () => {
+/** The mark types the D2 surfaces read on every selection snapshot. */
+const SELECTION_MARKS = [TEXT_COLOR_MARK, HIGHLIGHT_MARK, FONT_SIZE_MARK];
+
+const NO_MARKS: MarkState = { marks: [], mixed: false };
+
+/**
+ * Text colour, highlight and font size across the selection, in one walk
+ * per snapshot (selection snapshots are immediate, so this runs on every
+ * Shift+Arrow). A type is settled once it is mixed; when every type is
+ * settled the walk stops descending. Text whose parent cannot hold a type
+ * (code blocks) does not count for that type. Types missing from the
+ * schema read as unmarked.
+ */
+function selectionMarkStates(ctx: Ctx): ReadonlyMap<string, MarkState> {
+  return ctx.memo("surface:marks", () => {
     const { state } = ctx;
     const { from, to, empty, $from } = state.selection;
-    const pick = (marks: readonly Mark[]) =>
-      marks.filter((mark) => mark.type.name === markName);
-    if (empty) {
-      return { marks: pick(state.storedMarks ?? $from.marks()), mixed: false };
-    }
-    const found: Mark[] = [];
-    let unmarked = false;
-    state.doc.nodesBetween(from, to, (node) => {
-      if (!node.isText) return;
-      const marks = pick(node.marks);
-      if (marks.length === 0) unmarked = true;
-      for (const mark of marks) {
-        if (!found.some((seen) => seen.eq(mark))) found.push(mark);
-      }
-      // Stop walking once the answer is "mixed".
-      return found.length + (unmarked ? 1 : 0) < 2;
+    const types = SELECTION_MARKS.flatMap((name) => {
+      const type = state.schema.marks[name];
+      return type ? [type] : [];
     });
-    return {
-      marks: found,
-      mixed: found.length > 1 || (unmarked && found.length > 0),
-    };
+    const result = new Map<string, MarkState>();
+    if (empty) {
+      const marks = state.storedMarks ?? $from.marks();
+      for (const type of types) {
+        result.set(type.name, {
+          marks: marks.filter((mark) => mark.type === type),
+          mixed: false,
+        });
+      }
+      return result;
+    }
+    const walks = types.map((type) => ({
+      type,
+      found: [] as Mark[],
+      unmarked: false,
+      mixed: false,
+    }));
+    let open = walks.length;
+    state.doc.nodesBetween(from, to, (node, _pos, parent) => {
+      if (open === 0) return false;
+      if (!node.isText || !parent) return;
+      for (const walk of walks) {
+        if (walk.mixed || !parent.type.allowsMarkType(walk.type)) continue;
+        const mark = walk.type.isInSet(node.marks);
+        if (!mark) walk.unmarked = true;
+        else if (!walk.found.some((seen) => seen.eq(mark)))
+          walk.found.push(mark);
+        if (walk.found.length + (walk.unmarked ? 1 : 0) >= 2) {
+          walk.mixed = true;
+          open -= 1;
+        }
+      }
+    });
+    for (const walk of walks) {
+      result.set(walk.type.name, { marks: walk.found, mixed: walk.mixed });
+    }
+    return result;
   });
 }
+
+/** One mark type across the selection (or at the caret), per snapshot. */
+const markState = (ctx: Ctx, markName: string): MarkState =>
+  selectionMarkStates(ctx).get(markName) ?? NO_MARKS;
 
 /** The single value of a mark attribute across the selection, or null. */
 function singleAttr(ctx: Ctx, markName: string, attr: string): unknown {
