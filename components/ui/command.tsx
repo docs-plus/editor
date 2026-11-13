@@ -113,7 +113,7 @@ function CommandItem({
     <CommandItemPrimitive
       data-slot="command-item"
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none pointer-coarse:min-h-11 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         // The active option is never colour-only (WCAG 1.4.11): an
         // inline-start bar in the foreground colour, and in forced colours
         // a Highlight fill (backgrounds are dropped there).

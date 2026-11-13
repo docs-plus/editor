@@ -30,7 +30,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { editorActions } from "@/lib/editor-actions";
-import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
+import {
+  ariaKeyShortcuts,
+  formatKeyCombo,
+} from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
 import {
   ENGINE_LOADING_REASON,
@@ -208,7 +211,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                 setName(event.target.value);
                 setError(null);
               }}
-              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+              className="pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
             />
             {error ? (
               <p
@@ -220,10 +223,17 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
               </p>
             ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={close}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="pointer-coarse:min-h-11"
+                onClick={close}
+              >
                 Cancel
               </Button>
-              <Button type="submit">Save</Button>
+              <Button type="submit" className="pointer-coarse:min-h-11">
+                Save
+              </Button>
             </div>
           </form>
         ) : (
@@ -246,6 +256,12 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                       keywords={[item.label, ...item.keywords]}
                       data-action-id={item.actionId}
                       data-unavailable={item.disabledReason ? "" : undefined}
+                      // The glyph is hidden; the option announces the keys.
+                      aria-keyshortcuts={
+                        item.shortcut
+                          ? ariaKeyShortcuts(item.shortcut, mac)
+                          : undefined
+                      }
                       className={
                         item.disabledReason
                           ? "text-muted-foreground"
@@ -281,6 +297,7 @@ export function CommandPalette({ editor, mode, onClose }: CommandPaletteProps) {
                       ) : null}
                       {item.shortcut ? (
                         <CommandShortcut
+                          aria-hidden="true"
                           className={item.current ? "ml-0" : undefined}
                         >
                           {formatKeyCombo(item.shortcut, mac)}
