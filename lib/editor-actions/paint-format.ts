@@ -25,7 +25,7 @@ export const PAINTING_CLASS = "is-painting";
 
 export const PAINT_PILLS = {
   pointer: "Select text to paint · Esc to cancel",
-  touch: "Select text, then tap 🖌 to apply",
+  touch: "Select text, then tap the brush again",
   applied: "Formatting applied",
 } as const;
 

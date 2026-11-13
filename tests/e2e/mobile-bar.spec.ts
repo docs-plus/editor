@@ -678,7 +678,7 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await brush.tap();
     await expect(brush).toHaveAttribute("aria-pressed", "true");
     const pill = page.locator("[data-status-pill]");
-    await expect(pill).toHaveText("Select text, then tap 🖌 to apply");
+    await expect(pill).toHaveText("Select text, then tap the brush again");
 
     // The handles settle many times: selecting alone never paints.
     await selectText(page, "beta");
