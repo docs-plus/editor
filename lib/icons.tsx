@@ -58,6 +58,7 @@ export {
   Redo2 as Redo2Icon,
   RefreshCw as RefreshCwIcon,
   RemoveFormatting as RemoveFormattingIcon,
+  Repeat2 as RepeatIcon,
   Rows3 as Rows3Icon,
   Search as SearchIcon,
   SeparatorHorizontal as DividerIcon,
