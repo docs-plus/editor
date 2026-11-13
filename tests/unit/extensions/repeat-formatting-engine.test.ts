@@ -20,7 +20,6 @@ import {
   resetBundleMemoryForTests,
 } from "@/extensions/repeat-formatting/bundle-memory";
 import { TextColor } from "@/extensions/text-style-marks";
-import { getEditorVersionStore } from "@/hooks/use-tiptap-editor";
 import { availability } from "@/lib/editor-actions/registry";
 import {
   ENGINE_LOADING_REASON,
@@ -28,9 +27,10 @@ import {
   installV11Engine,
   repeatApplyAction,
   resetV11EngineForTests,
+  subscribeV11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { v11Engine } from "@/lib/editor-actions/v11-engine";
-import { getEditorContextStore } from "@/lib/editor-context/store";
+import { computeContext } from "@/lib/editor-context/snapshot";
 import { forgetChoices } from "@/lib/remembered-choice";
 
 import {
@@ -112,7 +112,9 @@ describe("RepeatFormatting: before the engine lands", () => {
     setRed();
     expect(getV11Engine()).toBeNull();
     expect(getRememberedBundle()).toBeNull();
-    await settle();
+    await settle(); // create ran: this editor waits for the engine
+    // The chunk evaluates (the test reset keeps the module cached).
+    installV11Engine(v11Engine);
     expect(getV11Engine()).not.toBeNull();
     expect(storage().pending).toHaveLength(0);
     // Same selection throughout: one extended bundle, in order.
@@ -157,7 +159,8 @@ describe("RepeatFormatting: before the engine lands", () => {
   });
 
   it("drains before a command uses the engine", async () => {
-    await settle(); // subscribed (create) and installed
+    await settle(); // create ran
+    installV11Engine(v11Engine); // this editor's wait ends here
     resetV11EngineForTests();
     sel("hello");
     editor.commands.toggleBold();
@@ -172,22 +175,20 @@ describe("RepeatFormatting: before the engine lands", () => {
     expect(editor.getHTML()).toContain("<strong>world</strong>");
   });
 
-  it("moves the toolbar version when it lands, so cached views re-read", async () => {
-    const versions = getEditorVersionStore(editor);
-    const stop = getEditorContextStore(editor).subscribe(() => {});
+  it("tells subscribers once, with the buffer already recorded", async () => {
+    await settle(); // create ran: this editor waits too
     sel("hello");
-    const before = versions.getVersion();
-    expect(
-      availability(
-        repeatApplyAction,
-        getEditorContextStore(editor).getContext(),
-      ),
-    ).toEqual({ reason: ENGINE_LOADING_REASON });
-    await settle();
-    expect(versions.getVersion()).toBeGreaterThan(before);
-    expect(
-      getEditorContextStore(editor).getView(repeatApplyAction.id)?.enabled,
-    ).not.toEqual({ reason: ENGINE_LOADING_REASON });
+    editor.commands.toggleBold();
+    const seen: unknown[] = [];
+    const stop = subscribeV11Engine(() => seen.push(getRememberedBundle()));
+    expect(availability(repeatApplyAction, computeContext(editor))).toEqual({
+      reason: ENGINE_LOADING_REASON,
+    });
+    installV11Engine(v11Engine);
+    // The editor subscribed first (at create), so it drained first.
+    expect(seen).toEqual([{ bold: true }]);
+    expect(storage().pending).toHaveLength(0);
+    expect(availability(repeatApplyAction, computeContext(editor))).toBe(true);
     stop();
   });
 

@@ -142,21 +142,16 @@ export const RepeatFormatting = Extension.create<
   },
 
   onCreate() {
-    const { editor, storage } = this;
+    const { storage } = this;
     if (drain(storage)) return;
-    // Waits for the engine from any importer (this load, or a retry by the
-    // palette after this one failed offline). Views cached before it
-    // landed still say "still loading": a no-op stored-marks transaction
-    // moves this editor's toolbar version so they are read again.
+    // Waits for the engine from any importer (this load, or a retry by
+    // the palette after this one failed offline) and records the buffer
+    // at once, so the remembered bundle is current when the surfaces
+    // subscribed to the landing (`useV11EngineReady`) re-render.
     storage.unwait = subscribeV11Engine(() => {
       storage.unwait?.();
       storage.unwait = null;
       drain(storage);
-      if (editor.isDestroyed) return;
-      const { tr } = editor.state;
-      editor.view.dispatch(
-        tr.setStoredMarks(tr.storedMarks).setMeta("addToHistory", false),
-      );
     });
     // Offline or a replaced chunk: E's actions stay unavailable and the
     // buffer stays capped; the next load retries the fetch.

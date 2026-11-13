@@ -102,12 +102,8 @@ export function subscribeV11Engine(listener: () => void): () => void {
   };
 }
 
-/**
- * Called by `v11-engine.ts` when it is evaluated, and by the load (a
- * no-op then, except after a test reset). Tells subscribers once.
- */
+/** Called once by `v11-engine.ts` when it is evaluated; tells subscribers. */
 export function installV11Engine(loaded: V11Engine): void {
-  if (engine) return;
   engine = loaded;
   for (const listener of [...installed]) listener();
 }
@@ -118,10 +114,7 @@ export function installV11Engine(loaded: V11Engine): void {
  */
 export function loadV11Engine(): Promise<V11Engine> {
   loading ??= import("./v11-engine").then(
-    (module) => {
-      installV11Engine(module.v11Engine);
-      return module.v11Engine;
-    },
+    (module) => module.v11Engine,
     (error: unknown) => {
       loading = null;
       throw error;
