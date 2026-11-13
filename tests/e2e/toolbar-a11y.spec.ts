@@ -545,6 +545,12 @@ test("phone format sheet colours: one arrow press moves one swatch", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await openToolbarTestDoc(page);
   await selectWord(page);
+  // A selection swaps the bar to its selection cells (PR E); Back keeps
+  // the selection and brings Aa back.
+  await page
+    .getByRole("toolbar", { name: "Selection formatting" })
+    .getByRole("button", { name: "Back to all tools" })
+    .click();
   await page
     .getByRole("toolbar")
     .getByRole("button", { name: "Text format" })

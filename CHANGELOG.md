@@ -9,6 +9,84 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Smart toolbar v1.1, PR E: action palette and repeat formatting
+
+Rebuilt on `main` after v1 (#32), branch `feat/smart-toolbar-e`.
+Ships with v1's first deploy: the owner waived spec §8's 14-day hold and
+raised the editor-chunk budget to 23.5 KB for E (contract A12; growth
++22.9 KB, of which E's eager shell is about 2.4 KB).
+
+#### Added
+- **Action palette:** Alt+/ (fallback Alt+Shift+Z) opens a searchable list
+  of every registry action, grouped Recent, Suggested here, Format, Insert,
+  Section and View; unavailable entries stay listed with their reason. The
+  palette (cmdk 1.1.1) is a lazy chunk loaded on the first open, rendered
+  in v1's `SurfaceBoundary`; one capture-phase key listener serves every
+  tab.
+- **Repeat formatting and Copy formatting:** Mod+Alt+V (and F4 off macOS)
+  applies the last formatting as one undo step, setting marks rather than
+  toggling them; Copy formatting picks up the selection's formatting.
+- **Your formats** (saved in `tinydocy-formats`, kept by "Forget my
+  choices"), **In this doc** (formats the document already uses, scanned on
+  demand and never stored) and **Mermaid templates** (flowchart, sequence,
+  state, mind map, pie).
+- **Repeat split button** in the selection bubble, with the Formats menu
+  (Repeat, Copy formatting, Save as format…, Your formats, In this doc).
+- **Phone selection cells:** on the docked phone bar a text selection swaps
+  the cells to B, I, U, S, text colour, highlight, link, clear and Repeat,
+  with a sticky "Back to all tools". The bar never swaps under keyboard or
+  VoiceOver focus or with the Aa sheet open, stays one toolbar, and scrolls
+  sideways with scroll padding under the Back cell.
+- Remembered choices (the Repeat bundle, Recent, the last diagram template)
+  persist in v1's memory layer (`tinydocy-choices`).
+- No schema, server or environment change; no Deploy step.
+
+#### Changed
+- **Bundle:** E's action bodies, Repeat commands, bundle recorder, saved
+  formats, doc scan and diagram templates load as a lazy engine chunk when
+  the editor is created; only the action definitions, the Repeat key
+  binding and the palette listener stay eager. Until the engine lands
+  (milliseconds), E's actions read "Formatting tools are still loading."
+  and up to 50 transactions are buffered for the recorder. Measured with
+  `scripts/check-editor-chunk-size.ts`: 401,311 B gz, +23,423 B over the
+  baseline against the 20,480 B budget (v1 r2 alone: +19,346 B); E as first
+  built measured +28,250 B. The budget is not raised here.
+- **Palette budget** is 20 KB gz (owner decision O5, contract A7): 19,981 B
+  on a local production build. The nightly `pwa` job runs the
+  `PALETTE_BUDGET=1` check on its production build.
+- The smart-toolbar barrel no longer re-exports `RepeatSplitButton` and
+  `PhoneSelectionCells` (contract A6, E's sub-bullet): it pulled them into
+  the editor chunk.
+- Edits outside E's file scope (`nightly.yml`, cmdk's
+  `patchedDependencies`, the phone bar, the barrel, `tests/TESTING.md`) are
+  listed under the owner's ownership grant, contract A6.
+  `tests/unit/ci/cmdk-patch.test.ts` fails when cmdk moves off 1.1.1 or the
+  patch is missing.
+- `palette-leaks.spec.ts` logs tab-switch heap and live editors.
+
+#### Fixed
+- **Repeat pressed before the engine chunk loaded did nothing.** On a slow
+  network or a busy device the shortcut could arrive first; the key is now
+  taken and Repeat runs once the engine lands, if the selection has not
+  moved.
+- The palette's search field keeps `aria-activedescendant` on the
+  highlighted option on open, after arrow keys, while filtering, and drops
+  it when nothing matches (WCAG 4.1.2); `patches/cmdk@1.1.1.patch` re-syncs
+  the attribute.
+- Palette rows name their keys with `aria-keyshortcuts` and hide the glyph
+  from assistive technology; on a coarse pointer the rows and the Save as
+  format field and buttons are 44px tall.
+- Palette rows are named for their own action ("Heading 1", not "Heading 1:
+  Normal text"), and the current style and alignment show a check and ",
+  current" (WCAG 2.4.6).
+- A polite status region announces "N actions" or "No matching actions"
+  300 ms after the search changes (WCAG 4.1.3).
+- In forced colours the palette and the Save as format form keep a
+  CanvasText border.
+- A palette or engine chunk that fails to load (offline, or replaced by a
+  deploy) leaves the editor working: the palette closes and the next Alt+/
+  fetches it again; without the engine the palette still opens.
+
 ### Smart toolbar plans for PR C, D1, D2 and E (docs)
 
 Docs only, no runtime change.

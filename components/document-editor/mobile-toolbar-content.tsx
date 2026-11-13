@@ -1,7 +1,9 @@
 "use client";
 
+import { NodeSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import {
+  type FocusEvent,
   type ReactNode,
   type Ref,
   useCallback,
@@ -9,10 +11,17 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { FormatSheetBody } from "@/components/smart-toolbar/phone/format-sheet";
+import {
+  type MobileBarMode,
+  nextMobileBarMode,
+  PhoneSelectionCells,
+  SELECTION_BAR_LABEL,
+} from "@/components/smart-toolbar/phone-selection-cells";
 import {
   Sheet,
   SheetClose,
@@ -26,6 +35,7 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
+import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
 import {
   RECENT_COLORS_CHOICE,
@@ -63,6 +73,26 @@ function documentFocusTarget(editor: Editor): HTMLElement {
   return region;
 }
 
+const noopSubscribe = () => () => {};
+
+/**
+ * `"from:to"` while text is selected (not a caret or a node selection),
+ * else null. Re-renders the bar only when that changes.
+ */
+function useTextSelectionKey(editor: Editor | null): string | null {
+  const store = editor ? getEditorContextStore(editor) : null;
+  return useSyncExternalStore(
+    store?.subscribe ?? noopSubscribe,
+    () => {
+      if (!editor || editor.isDestroyed) return null;
+      const { selection } = editor.state;
+      if (selection.empty || selection instanceof NodeSelection) return null;
+      return `${selection.from}:${selection.to}`;
+    },
+    () => null,
+  );
+}
+
 interface MobileToolbarContentProps {
   editor: Editor | null;
   ref?: Ref<HTMLDivElement>;
@@ -82,9 +112,11 @@ interface MobileToolbarContentProps {
  * format" sheet: style, size, colours, align, more), B, I, then
  * `menuCells` (list, indent, Insert). Toggles show their state with `aria-pressed`
  * (#269). Hidden in a read-only document (#308), which also closes the
- * sheet. Follow-ups: the context slot cell, and the selection swap
- * (`PhoneSelectionCells`, PR E). Its own lazy chunk with the sheet, loaded
- * only below 768px (contract A9).
+ * sheet. While text is selected it swaps to `PhoneSelectionCells` (PR E,
+ * spec §4.7), never while focus is in the bar or the sheet is open; ✕
+ * keeps the normal cells until the selection collapses. Follow-up: the
+ * context slot cell. Its own lazy chunk with the sheet, loaded only below
+ * 768px (contract A9).
  */
 export function MobileToolbarContent({
   editor,
@@ -101,6 +133,26 @@ export function MobileToolbarContent({
     bold.enabled !== true &&
     bold.enabled.reason === READ_ONLY_REASON;
   const barRef = useRef<HTMLDivElement>(null);
+  const selectionKey = useTextSelectionKey(editor);
+  const [dismissed, setDismissed] = useState(false);
+  const [focusInBar, setFocusInBar] = useState(false);
+  const [mode, setMode] = useState<MobileBarMode>("all");
+  if (selectionKey === null && dismissed) setDismissed(false);
+  const nextMode = nextMobileBarMode({
+    hasTextSelection: selectionKey !== null && !sheetOpen,
+    focusInBar,
+    dismissedForSelection: dismissed,
+    current: mode,
+  });
+  if (nextMode !== mode) setMode(nextMode);
+  const onBarFocus = useCallback(() => setFocusInBar(true), []);
+  const onBarBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node && event.currentTarget.contains(next))) {
+      setFocusInBar(false);
+    }
+  }, []);
+  const onBack = useCallback(() => setDismissed(true), []);
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
@@ -178,53 +230,64 @@ export function MobileToolbarContent({
     <Toolbar
       ref={setRefs}
       variant="docked"
-      aria-label="Formatting"
+      aria-label={mode === "selection" ? SELECTION_BAR_LABEL : "Formatting"}
       data-mobile-bar=""
+      data-bar-mode={mode}
       hidden={readOnly}
       onEscape={onEscape}
+      onFocus={onBarFocus}
+      onBlur={onBarBlur}
       style={{ transform: inset ? `translateY(-${inset}px)` : undefined }}
     >
-      <ActionButton id="history.undo" editor={editor} variant="phone" />
-      <ActionButton id="history.redo" editor={editor} variant="phone" />
-      <Sheet open={sheetOpen} onOpenChange={onSheetOpenChange}>
-        <SheetTrigger
-          render={
-            <ToolbarButton
-              type="button"
-              data-surface="phone"
-              className="st-phone-aa"
-              aria-label="Text format"
-              tooltip="Text format"
-              aria-haspopup="dialog"
-            />
-          }
-        >
-          <span aria-hidden="true">Aa</span>
-        </SheetTrigger>
-        <SheetContent
-          data-format-sheet=""
-          data-toolbar-popup=""
-          finalFocus={finalFocus}
-          className="st-format-sheet max-h-[60dvh]"
-        >
-          <SheetHeader>
-            <SheetTitle className="flex-1">Text format</SheetTitle>
-            <SheetClose
-              render={<ToolbarButton type="button" className="st-sheet-done" />}
+      {mode === "selection" ? (
+        <PhoneSelectionCells editor={editor} onBack={onBack} />
+      ) : (
+        <>
+          <ActionButton id="history.undo" editor={editor} variant="phone" />
+          <ActionButton id="history.redo" editor={editor} variant="phone" />
+          <Sheet open={sheetOpen} onOpenChange={onSheetOpenChange}>
+            <SheetTrigger
+              render={
+                <ToolbarButton
+                  type="button"
+                  data-surface="phone"
+                  className="st-phone-aa"
+                  aria-label="Text format"
+                  tooltip="Text format"
+                  aria-haspopup="dialog"
+                />
+              }
             >
-              Done
-            </SheetClose>
-          </SheetHeader>
-          <FormatSheetBody
-            editor={editor}
-            recent={recent.recent}
-            onClose={closeSheet}
-          />
-        </SheetContent>
-      </Sheet>
-      <ActionButton id="mark.bold" editor={editor} variant="phone" />
-      <ActionButton id="mark.italic" editor={editor} variant="phone" />
-      {menuCells}
+              <span aria-hidden="true">Aa</span>
+            </SheetTrigger>
+            <SheetContent
+              data-format-sheet=""
+              data-toolbar-popup=""
+              finalFocus={finalFocus}
+              className="st-format-sheet max-h-[60dvh]"
+            >
+              <SheetHeader>
+                <SheetTitle className="flex-1">Text format</SheetTitle>
+                <SheetClose
+                  render={
+                    <ToolbarButton type="button" className="st-sheet-done" />
+                  }
+                >
+                  Done
+                </SheetClose>
+              </SheetHeader>
+              <FormatSheetBody
+                editor={editor}
+                recent={recent.recent}
+                onClose={closeSheet}
+              />
+            </SheetContent>
+          </Sheet>
+          <ActionButton id="mark.bold" editor={editor} variant="phone" />
+          <ActionButton id="mark.italic" editor={editor} variant="phone" />
+          {menuCells}
+        </>
+      )}
     </Toolbar>
   );
 }

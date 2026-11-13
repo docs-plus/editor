@@ -27,6 +27,21 @@ const CELLS = [
 test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
 
 const bar = (page: Page) => page.getByRole("toolbar", { name: "Formatting" });
+/** The same bar while text is selected (PR E's selection cells). */
+const selectionBar = (page: Page) =>
+  page.getByRole("toolbar", { name: "Selection formatting" });
+const SELECTION_CELLS = [
+  "Bold",
+  "Italic",
+  "Underline",
+  "Strike",
+  /^Apply text colour: /,
+  /^Apply highlight: /,
+  "Link",
+  "Clear formatting",
+  "Repeat formatting",
+  "Back to all tools",
+];
 const sheet = (page: Page) => page.getByRole("dialog", { name: "Text format" });
 
 async function expectCoarse(page: Page) {
@@ -45,8 +60,26 @@ async function openDoc(page: Page) {
   });
 }
 
-/** Appends a paragraph and selects `text` in it. */
-async function selectNewParagraph(page: Page, text = "alpha") {
+/**
+ * Appends a paragraph and selects `text` in it. The bar swaps to the
+ * selection cells; unless `keepSelectionCells`, "Back to all tools" brings
+ * the normal cells back with the selection kept.
+ */
+async function selectNewParagraph(
+  page: Page,
+  text = "alpha",
+  { keepSelectionCells = false } = {},
+) {
+  await selectText(page, text);
+  await expect(selectionBar(page)).toBeVisible();
+  if (keepSelectionCells) return;
+  await selectionBar(page)
+    .getByRole("button", { name: "Back to all tools" })
+    .tap();
+  await expect(bar(page)).toBeVisible();
+}
+
+async function selectText(page: Page, text: string) {
   await page.evaluate((value) => {
     const editor = window.__tiptap_editor;
     if (!editor) throw new Error("editor missing");
@@ -523,4 +556,127 @@ test("List is a radio menu like the row's", async ({ page }) => {
       .getByRole("menu", { name: "List" })
       .getByRole("menuitemradio", { name: /bullet/i }),
   ).toHaveAttribute("aria-checked", "true");
+});
+
+test.describe("selection cells (PR E, spec §4.7)", () => {
+  test("a text selection swaps the bar to 44×44 selection cells; Back brings all tools back", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await expect(page.getByRole("toolbar")).toHaveCount(1);
+    const cells = selectionBar(page).getByRole("button");
+    await expect(cells).toHaveCount(SELECTION_CELLS.length);
+    for (const [index, name] of SELECTION_CELLS.entries()) {
+      await expect(cells.nth(index)).toHaveAccessibleName(name);
+    }
+    // The cells scroll sideways under a sticky Back cell, all 44×44.
+    expect(await smallTargets(page, "[data-mobile-bar] button")).toEqual([]);
+    expect(
+      await selectionBar(page).evaluate(
+        (el) => getComputedStyle(el).scrollPaddingInlineEnd,
+      ),
+    ).toBe("44px");
+
+    await selectionBar(page).getByRole("button", { name: "Bold" }).tap();
+    expect(await lastMark(page, "bold")).toBe(true);
+    await expect(
+      selectionBar(page).getByRole("button", { name: "Bold" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // Back keeps all tools while the text stays selected.
+    await selectionBar(page)
+      .getByRole("button", { name: "Back to all tools" })
+      .tap();
+    await expect(bar(page)).toBeVisible();
+    await expect(
+      bar(page).getByRole("button", { name: "Text format" }),
+    ).toBeVisible();
+
+    // A caret brings nothing back; the next selection swaps again.
+    await page.evaluate(() =>
+      window.__tiptap_editor?.commands.setTextSelection(3),
+    );
+    await expect(bar(page)).toBeVisible();
+    await selectText(page, "beta");
+    await expect(selectionBar(page)).toBeVisible();
+  });
+
+  test("the bar never swaps under keyboard focus, and Back moves focus to a cell, not the page", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    const italic = selectionBar(page).getByRole("button", { name: "Italic" });
+    await italic.focus();
+    await expect(italic).toBeFocused();
+
+    // The selection collapses while focus is in the bar: no swap.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      editor?.commands.setTextSelection(editor.state.selection.to);
+    });
+    await expect(selectionBar(page)).toBeVisible();
+    await expect(italic).toBeFocused();
+
+    // Back from the keyboard: focus lands on the first enabled cell.
+    await page.keyboard.press("End");
+    const back = selectionBar(page).getByRole("button", {
+      name: "Back to all tools",
+    });
+    await expect(back).toBeFocused();
+    // Focused by keyboard, the last cell before Back is not hidden by it.
+    await page.keyboard.press("ArrowLeft");
+    const repeat = selectionBar(page).getByRole("button", {
+      name: "Repeat formatting",
+    });
+    await expect(repeat).toBeFocused();
+    const [repeatBox, backBox] = await Promise.all([
+      repeat.boundingBox(),
+      back.boundingBox(),
+    ]);
+    expect((repeatBox?.x ?? 0) + (repeatBox?.width ?? 0)).toBeLessThanOrEqual(
+      (backBox?.x ?? 0) + 1,
+    );
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(bar(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const active = document.activeElement;
+          return active?.closest("[data-mobile-bar]") !== null &&
+            active !== document.body
+            ? (active?.getAttribute("aria-label") ?? "")
+            : "body";
+        }),
+      )
+      .toBe("Undo");
+  });
+
+  test("Repeat in the selection cells repeats the last formatting", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await selectionBar(page).getByRole("button", { name: "Italic" }).tap();
+    expect(await lastMark(page, "italic")).toBe(true);
+
+    await selectText(page, "beta");
+    const repeat = selectionBar(page).getByRole("button", {
+      name: "Repeat formatting",
+    });
+    await expect(repeat).not.toHaveAttribute("aria-disabled", "true");
+    await repeat.tap();
+    expect(await lastMark(page, "italic")).toBe(true);
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`axe: the selection cells (${theme})`, async ({ page }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+      await expectNoSeriousA11yViolations(page, ["[data-mobile-bar]"]);
+    });
+  }
 });

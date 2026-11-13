@@ -116,4 +116,48 @@ test.describe("lazy surface chunks", () => {
     await expect(page.locator("[data-smart-bubble]")).toHaveCount(0);
     await expectEditorAlive(page, "afterBubble");
   });
+  test("a palette chunk that 404s leaves the editor working; the next Alt+/ loads it", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.palette);
+    await openToolbarTestDoc(page);
+    const palette = page.locator("[data-command-palette]");
+    await page.keyboard.press("Alt+Slash");
+    await page.waitForTimeout(1_500);
+    await expect(palette).toHaveCount(0);
+    // Focus never left the document.
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await expectEditorAlive(page, "afterPalette");
+
+    await restore();
+    await page.keyboard.press("Alt+Slash");
+    await expect(palette).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Search actions" }),
+    ).toBeFocused();
+  });
+
+  test("an E engine chunk that 404s leaves the editor and the palette working", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.engine);
+    await openToolbarTestDoc(page);
+    await expectEditorAlive(page, "afterEngine");
+    const repeatRow = page.locator(
+      '[data-command-palette] [cmdk-item][data-action-id="repeat.apply"]',
+    );
+    await page.keyboard.press("Alt+Slash");
+    await page.keyboard.type("repeat formatting");
+    await expect(repeatRow).toContainText(
+      "Formatting tools are still loading.",
+    );
+    await page.keyboard.press("Escape");
+
+    // Back online: the next palette open fetches the engine again.
+    await restore();
+    await page.keyboard.press("Alt+Slash");
+    await page.keyboard.type("repeat formatting");
+    await expect(repeatRow).toContainText("Format some text first");
+    await page.keyboard.press("Escape");
+  });
 });

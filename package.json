@@ -83,6 +83,7 @@
     "@tiptap/y-tiptap": "^3.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "1.1.1",
     "dompurify": "^3.4.17",
     "lodash.throttle": "^4.1.1",
     "lowlight": "^3.3.0",
@@ -125,5 +126,8 @@
     "@parcel/watcher",
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "patchedDependencies": {
+    "cmdk@1.1.1": "patches/cmdk@1.1.1.patch"
+  }
 }
