@@ -251,7 +251,8 @@ function DocumentEditorContent({
           const bubble = document.querySelector<HTMLElement>(
             '[data-smart-bubble][data-state="open"] [role="toolbar"]',
           );
-          return focusRovingItem(bubble ?? toolbarRef.current);
+          // A bubble that cannot take focus falls back to the row (A6).
+          return focusRovingItem(bubble) || focusRovingItem(toolbarRef.current);
         }
         case "outline.toggle":
           setOutlineOpen((open) => !open);

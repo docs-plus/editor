@@ -29,15 +29,20 @@ export interface BubbleView {
 const CODE_BLOCK = "codeBlock";
 const HYPERLINK = "hyperlink";
 
-/** The bubble's colour trigger keeps it while its popover (in `body`) is open. */
-const OPEN_POPUP_TRIGGER = "[data-popup-open]";
+/**
+ * The bubble's colour trigger keeps it while its popover (in `body`) is
+ * open. `aria-expanded`, not `data-popup-open`: Base UI also stamps that on
+ * a trigger whose tooltip is open.
+ */
+export const OPEN_POPOVER_TRIGGER =
+  '[aria-haspopup="dialog"][aria-expanded="true"]';
 
 function isFocusWithBubble(view: BubbleView, root: HTMLElement): boolean {
   if (view.hasFocus()) return true;
   const active =
     typeof document === "undefined" ? null : document.activeElement;
   if (active && root.contains(active)) return true;
-  return root.querySelector(OPEN_POPUP_TRIGGER) !== null;
+  return root.querySelector(OPEN_POPOVER_TRIGGER) !== null;
 }
 
 function insideOneLink(state: EditorState, from: number, to: number) {

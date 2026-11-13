@@ -8,7 +8,11 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { BUBBLE_ACTION_IDS } from "@/components/smart-toolbar/bubble/bubble-rules";
 
-import { setTheme } from "./helpers/a11y";
+import {
+  expectNoSeriousA11yViolations,
+  resolveRgb,
+  setTheme,
+} from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
@@ -214,8 +218,8 @@ test.describe("selection bubble", () => {
       "More text colours",
       "Link",
     ]);
-    // One Tab stop: the plugin's root is not focusable on its own.
-    await expect(bubble(page)).toHaveAttribute("tabindex", "-1");
+    // One Tab stop: the plugin's root is not focusable, not even by a click.
+    await expect(bubble(page)).not.toHaveAttribute("tabindex");
     const box = await bubbleToolbar(page).boundingBox();
     const sel = await page.evaluate(() => {
       const editor = window.__tiptap_editor;
@@ -449,6 +453,229 @@ test.describe("selection bubble", () => {
       .toBe(true);
   });
 
+  test("focus moving to another control in the page hides it", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    // Inside the same scroll container as the bubble: the stock blur check
+    // alone would keep it.
+    await row(page)
+      .getByRole("button", { name: "Toggle document filter" })
+      .focus();
+    await expect(bubble(page)).toHaveCount(0);
+    // And to another row control after a new selection.
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await row(page).getByRole("button", { name: "Undo" }).focus();
+    await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("focus leaving the bubble hides it", async ({ page }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(bubble(page)).toHaveCount(0);
+
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await row(page).getByRole("button", { name: "Undo" }).focus();
+    await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("Tab out of the colour dialog leaves the bubble too", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    await expect(dialog.locator("button:focus")).toHaveCount(1);
+    // Past Base UI's focus guards (they hand focus on, and must not count
+    // as leaving) to the next stop after the toolbar.
+    await page.keyboard.press("Tab");
+    await expect(dialog).toHaveCount(0);
+    await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("a click between the items keeps the editor focused", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const box = await bubbleToolbar(page).boundingBox();
+    if (!box) throw new Error("no bubble box");
+    // The panel's 4px padding.
+    await page.mouse.click(box.x + 2, box.y + 2);
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.type("Z");
+    await expect(page.locator(".tiptap")).toContainText(
+      "Select Z in this paragraph",
+    );
+  });
+
+  test("Alt+F10 goes to the row when the selection is scrolled out", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const wrapper = document.querySelector(".document-editor-wrapper");
+      if (!wrapper) throw new Error("missing");
+      wrapper.scrollTop = wrapper.scrollHeight;
+    });
+    await expect(bubble(page)).toHaveAttribute("data-state", "closed");
+    await page.keyboard.press("Alt+F10");
+    await expect
+      .poll(() =>
+        row(page).evaluate((el) => el.contains(document.activeElement)),
+      )
+      .toBe(true);
+  });
+
+  test("PageDown from a bubble item never drops focus on body", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Bold" }),
+    ).toBeFocused();
+    await page.keyboard.press("PageDown");
+    await page.waitForTimeout(500);
+    expect(
+      await page.evaluate(() => document.activeElement === document.body),
+    ).toBe(false);
+    await expect(bubble(page)).not.toHaveAttribute("data-state", "open");
+    await expect(page.locator(".tiptap")).toBeFocused();
+  });
+
+  test("the colour popover opens away from the selection", async ({ page }) => {
+    await openDoc(page);
+    const overlaps = async () => {
+      const dialog = page.getByRole("dialog", { name: "Text colours" });
+      await bubbleToolbar(page)
+        .getByRole("button", { name: "More text colours" })
+        .click();
+      await expect(dialog.locator("button:focus")).toHaveCount(1);
+      await page.waitForTimeout(200);
+      const box = await dialog.boundingBox();
+      const sel = await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        const { from, to } = editor.state.selection;
+        const a = editor.view.coordsAtPos(from);
+        const b = editor.view.coordsAtPos(to);
+        return {
+          top: Math.min(a.top, b.top),
+          bottom: Math.max(a.bottom, b.bottom),
+          left: Math.min(a.left, b.left),
+          right: Math.max(a.right, b.right),
+        };
+      });
+      await page.keyboard.press("Escape");
+      if (await dialog.isVisible()) await page.keyboard.press("Escape");
+      if (!box) throw new Error("no dialog box");
+      return (
+        box.x < sel.right &&
+        box.x + box.width > sel.left &&
+        box.y < sel.bottom &&
+        box.y + box.height > sel.top
+      );
+    };
+
+    // Above: a selection in mid-viewport.
+    await selectText(page, "Filler paragraph number 14");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const wrapper = document.querySelector(".document-editor-wrapper");
+      const editor = window.__tiptap_editor;
+      if (!wrapper || !editor) throw new Error("missing");
+      const line = editor.view.coordsAtPos(editor.state.selection.from);
+      wrapper.scrollTop += line.top - window.innerHeight / 2 - 60;
+    });
+    await page.waitForTimeout(300);
+    await expect(bubble(page)).toHaveAttribute("data-placement", "top");
+    expect(await overlaps()).toBe(false);
+
+    // Below: the bubble flips under the selection, and so does the popover.
+    await selectUnderToolbar(page);
+    await expect(bubble(page)).toHaveAttribute("data-placement", "bottom");
+    await expectBubbleOpen(page);
+    expect(await overlaps()).toBe(false);
+  });
+
+  test("axe: the bubble and its colour dialog", async ({ page }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await expectNoSeriousA11yViolations(page, ["[data-smart-bubble]"]);
+    await bubbleToolbar(page)
+      .getByRole("button", { name: "More text colours" })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    await expect(dialog.locator("button:focus")).toHaveCount(1);
+    await expectNoSeriousA11yViolations(page, ['[role="dialog"]']);
+  });
+
+  test("forced colours keep the panel border and mark pressed Bold with Highlight", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const border = await bubbleToolbar(page).evaluate(
+      (el) => getComputedStyle(el).borderTopStyle,
+    );
+    expect(border).not.toBe("none");
+    await page.keyboard.press("ControlOrMeta+b");
+    const bold = bubbleToolbar(page).getByRole("button", { name: "Bold" });
+    await expect(bold).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(0, 0);
+    const pressed = await bold.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { adjust: cs.forcedColorAdjust, bg: cs.backgroundColor };
+    });
+    expect(pressed.adjust).toBe("none");
+    const highlight = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.background = "Highlight";
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
+    expect(await resolveRgb(page, pressed.bg)).toEqual(
+      await resolveRgb(page, highlight),
+    );
+  });
+
+  test("reduced motion fades in without the rise", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await expect(bubbleToolbar(page)).toHaveCSS(
+      "animation-name",
+      "st-bubble-fade-in",
+    );
+  });
+
   test("read-only while the bubble popover is open", async ({ page }) => {
     await openDoc(page);
     await selectText(page, "some words");
@@ -458,6 +685,9 @@ test.describe("selection bubble", () => {
       .click();
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog).toBeVisible();
+    // The editor blurs into the popup: past the 250 ms debounce, still open.
+    await page.waitForTimeout(400);
+    await expect(bubble(page)).toHaveAttribute("data-state", "open");
     await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
     await expect(bubble(page)).toHaveCount(0);
     await expect(dialog).toHaveCount(0);

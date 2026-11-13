@@ -25,6 +25,7 @@ import {
   chooseBubblePlacement,
   clearsBubbleSuppression,
   isBubbleDismissKey,
+  OPEN_POPOVER_TRIGGER,
   shouldShowBubble,
 } from "./bubble-rules";
 import "./selection-bubble.scss";
@@ -36,6 +37,17 @@ const EXIT_MS = 90;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
 const POPOVER_CONTENT = '[data-slot="popover-content"]';
+const FOCUS_GUARD = "[data-base-ui-focus-guard]";
+
+/** Keeps the editor's focus and selection on a click between the items. */
+function keepEditorFocus(event: React.MouseEvent<HTMLElement>) {
+  // React events bubble through portals: act only on the panel's own DOM.
+  const target = event.target;
+  if (!(target instanceof Node) || !event.currentTarget.contains(target)) {
+    return;
+  }
+  if (!(target instanceof HTMLInputElement)) event.preventDefault();
+}
 
 interface SelectionBubbleViewProps {
   editor: Editor;
@@ -61,6 +73,8 @@ export function SelectionBubbleView({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const suppressedRef = useRef(false);
   const placementRef = useRef<BubblePlacement>("top");
+  // Mirrors `placementRef` so the colour popover opens away from the text.
+  const [placement, setPlacement] = useState<BubblePlacement>("top");
   const closeTimerRef = useRef<number | undefined>(undefined);
   const focusInsideRef = useRef(false);
   const restoreFocusRef = useRef(false);
@@ -124,6 +138,7 @@ export function SelectionBubbleView({
       if (next === placementRef.current) return;
       placementRef.current = next;
       root.dataset.placement = next;
+      setPlacement(next);
       dispatchMeta({
         type: "updateOptions",
         options: { options: { ...base, placement: next } },
@@ -138,9 +153,11 @@ export function SelectionBubbleView({
         if (!root) return;
         window.clearTimeout(closeTimerRef.current);
         // The plugin makes its root a Tab stop; the toolbar inside has one.
-        root.tabIndex = -1;
+        // Not `-1` either: a click on the panel would focus a nameless div.
+        root.removeAttribute("tabindex");
         root.dataset.state = "open";
         root.dataset.placement = placementRef.current;
+        setPlacement(placementRef.current);
         delete root.dataset.closing;
         setShown(true);
       },
@@ -190,31 +207,92 @@ export function SelectionBubbleView({
   }, [editor, dispatchMeta, startClose]);
 
   // While shown: hide on read-only (`setEditable` changes neither the
-  // selection nor the document, so the plugin never re-checks), and track
-  // whether focus is in the bubble or its colour popover (in `body`).
+  // selection nor the document, so the plugin never re-checks) and when
+  // focus moves anywhere but the editor, the bubble or its colour popover,
+  // from the editor or from the bubble (the stock blur check keeps it for
+  // anything inside its parent, the whole editor shell, and never sees a
+  // blur from the bubble itself). Track whether focus is in the bubble or
+  // its popover.
   useEffect(() => {
     if (!shown) return;
+    const root = rootRef.current;
     const onEditorUpdate = () => {
       if (!editor.isEditable) queueMicrotask(() => dispatchMeta("hide"));
     };
-    const onFocusIn = (event: FocusEvent) => {
-      const root = rootRef.current;
-      const target = event.target;
-      focusInsideRef.current = Boolean(
-        root &&
-          target instanceof Element &&
-          (root.contains(target) ||
-            (root.querySelector("[data-popup-open]") !== null &&
-              target.closest(POPOVER_CONTENT) !== null)),
-      );
+    // Focus to the window or `body` fires no `focusin`.
+    const onEditorBlur = ({ event }: { event: FocusEvent }) => {
+      if (event.relatedTarget === null) dispatchMeta("hide");
     };
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!root || !(target instanceof Element)) return;
+      const inPopover =
+        target.closest(POPOVER_CONTENT) !== null ||
+        // Base UI's guards next to the portal hand focus straight on.
+        target.matches(FOCUS_GUARD);
+      focusInsideRef.current =
+        root.contains(target) ||
+        (root.querySelector(OPEN_POPOVER_TRIGGER) !== null && inPopover);
+      // After the ref: a hide with focus outside restores nothing.
+      if (
+        !focusInsideRef.current &&
+        !inPopover &&
+        !editor.view.dom.contains(target)
+      ) {
+        dispatchMeta("hide");
+      }
+    };
+    // Tab past the last stop (or a click on nothing) drops focus on `body`,
+    // which fires no `focusin`. Not a window switch: that keeps the bubble.
+    const onFocusOut = (event: FocusEvent) => {
+      if (event.relatedTarget !== null || !document.hasFocus()) return;
+      focusInsideRef.current = false;
+      dispatchMeta("hide");
+    };
+    // `hide: true` hides the root (inline `visibility`) when the selection
+    // scrolls out, without `onHide`; wholly under the sticky row it is
+    // covered (WCAG 2.4.11; it scrolls with the text, so only a scroll
+    // tells). Either way it is not open for Alt+F10, and focus moves to the
+    // editor before the browser drops it on `body`.
+    const toolbar = scrollTarget.querySelector(STICKY_TOOLBAR);
+    const syncVisibility = () => {
+      if (!root?.isConnected || root.dataset.closing !== undefined) return;
+      const covered =
+        root.style.visibility === "hidden" ||
+        (toolbar !== null &&
+          root.getBoundingClientRect().bottom <=
+            toolbar.getBoundingClientRect().bottom);
+      root.dataset.state = covered ? "closed" : "open";
+      if (covered && focusInsideRef.current) {
+        focusInsideRef.current = false;
+        editor.view.focus();
+      }
+    };
+    const observer = new MutationObserver(syncVisibility);
+    if (root) observer.observe(root, { attributeFilter: ["style"] });
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        syncVisibility();
+      });
+    };
+    scrollTarget.addEventListener("scroll", onScroll, { passive: true });
     editor.on("update", onEditorUpdate);
+    editor.on("blur", onEditorBlur);
     document.addEventListener("focusin", onFocusIn, true);
+    root?.addEventListener("focusout", onFocusOut);
     return () => {
+      root?.removeEventListener("focusout", onFocusOut);
+      observer.disconnect();
+      scrollTarget.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
       editor.off("update", onEditorUpdate);
+      editor.off("blur", onEditorBlur);
       document.removeEventListener("focusin", onFocusIn, true);
     };
-  }, [shown, editor, dispatchMeta]);
+  }, [shown, editor, scrollTarget, dispatchMeta]);
 
   useLayoutEffect(() => {
     if (shown) {
@@ -258,12 +336,13 @@ export function SelectionBubbleView({
           aria-label="Selection formatting"
           className="st-bubble-panel"
           onEscape={onEscape}
+          onMouseDown={keepEditorFocus}
         >
           <ActionButton id="mark.bold" editor={editor} variant="bubble" />
           <ActionButton id="mark.italic" editor={editor} variant="bubble" />
           <ActionButton id="mark.underline" editor={editor} variant="bubble" />
           <ToolbarSeparator />
-          <ColorSplit kind="text" editor={editor} />
+          <ColorSplit kind="text" editor={editor} popoverSide={placement} />
           <ToolbarSeparator />
           <ActionButton id="mark.link" editor={editor} variant="bubble" />
           <RepeatSplitButton editor={editor} />
