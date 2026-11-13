@@ -153,6 +153,18 @@ const selectionRange = (page: Page) =>
     return { from: selection?.from, to: selection?.to };
   });
 
+/** A Repeat bundle remembered from an earlier visit (Bold). */
+const rememberBoldBundle = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem(
+      "tinydocy-choices",
+      JSON.stringify({
+        v: 1,
+        slots: { repeatBundle: { last: { bold: true }, recent: [] } },
+      }),
+    );
+  });
+
 async function expectBubbleOpen(page: Page) {
   await expect(bubble(page)).toHaveAttribute("data-state", "open");
   await expect(bubbleToolbar(page)).toBeVisible();
@@ -753,6 +765,26 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     // Past the deferred removal (one frame) and the 250 ms update debounce.
     await page.waitForTimeout(400);
+    await expectBubbleOpen(page);
+  });
+
+  test("the Formats menu opens and keeps the bubble attached", async ({
+    page,
+  }) => {
+    await rememberBoldBundle(page);
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    // Focus moving into the menu (portalled to `body`) used to hide the
+    // bubble, and the menu with it.
+    await bubbleToolbar(page).getByRole("button", { name: "Formats" }).click();
+    const copy = page.getByRole("menuitem", { name: "Copy formatting" });
+    await expect(copy).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(copy).toBeVisible();
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Escape");
+    await expect(copy).toBeHidden();
     await expectBubbleOpen(page);
   });
 

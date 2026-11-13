@@ -36,7 +36,9 @@ const BUBBLE_KEY = new PluginKey("selectionBubble");
 const EXIT_MS = 90;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
-const POPOVER_CONTENT = '[data-slot="popover-content"]';
+/** The colour popover and the Formats menu, both portalled to `body`. */
+const POPOVER_CONTENT =
+  '[data-slot="popover-content"], [data-slot="dropdown-menu-content"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
 
 /** Keeps the editor's focus and selection on a click between the items. */

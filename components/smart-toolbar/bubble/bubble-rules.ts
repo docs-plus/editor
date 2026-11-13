@@ -30,12 +30,13 @@ const CODE_BLOCK = "codeBlock";
 const HYPERLINK = "hyperlink";
 
 /**
- * The bubble's colour trigger keeps it while its popover (in `body`) is
- * open. `aria-expanded`, not `data-popup-open`: Base UI also stamps that on
- * a trigger whose tooltip is open.
+ * The bubble's colour trigger and Formats chevron keep it while their
+ * popover or menu (in `body`) is open. `aria-expanded`, not
+ * `data-popup-open`: Base UI also stamps that on a trigger whose tooltip
+ * is open.
  */
 export const OPEN_POPOVER_TRIGGER =
-  '[aria-haspopup="dialog"][aria-expanded="true"]';
+  '[aria-haspopup="dialog"][aria-expanded="true"], [aria-haspopup="menu"][aria-expanded="true"]';
 
 function isFocusWithBubble(view: BubbleView, root: HTMLElement): boolean {
   if (view.hasFocus()) return true;
