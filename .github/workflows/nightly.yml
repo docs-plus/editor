@@ -1,7 +1,8 @@
 name: Nightly
 
 # The test layers CI skips on pull requests, twice a day on main:
-#   pwa    service worker and offline tests against a production build
+#   pwa    service worker and offline tests against a production build,
+#          then the palette budget (contract A6) on the same build
 #   soak   Yjs reconnection soak, a quick multi-user soak and a 5-minute
 #          single-user soak against next dev
 #   load   the Yjs load harness (100 clients, both scenarios) against
@@ -67,6 +68,7 @@ jobs:
       # The service worker runs only in production builds; Hocuspocus allows
       # the per-test tab lists (make dev-hocus).
       - name: Start servers
+        id: servers
         run: |
           PORT=3847 bun run start > "$RUNNER_TEMP/next.log" 2>&1 &
           make dev-hocus > "$RUNNER_TEMP/hocus.log" 2>&1 &
@@ -84,6 +86,15 @@ jobs:
         run: >-
           PWA_BASE_URL=http://localhost:3847 CI=
           bun playwright test --project=pwa --trace retain-on-failure
+
+      # Contract A6: the palette chunk plus cmdk that the first Alt+/ loads
+      # stays within 20 KB gz. Only a production build measures it.
+      - name: Palette budget
+        if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
+        run: >-
+          PALETTE_BUDGET=1 E2E_BASE_URL=http://localhost:3847 CI=
+          bun playwright test --project=chromium tests/e2e/palette.spec.ts
+          --grep "palette budget" --trace retain-on-failure
 
       - name: Upload failure artifacts
         if: failure()

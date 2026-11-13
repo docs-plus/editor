@@ -18,7 +18,8 @@ import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
  */
 
 const PALETTE = "[data-command-palette]";
-const PALETTE_BUDGET_BYTES = 15 * 1024;
+/** Owner decision (2026-11-13): palette chunk plus cmdk ≤ 20 KB gz (spec: 15). */
+const PALETTE_BUDGET_BYTES = 20 * 1024;
 const repeatKey = process.platform === "darwin" ? "Meta+Alt+KeyV" : "F4";
 
 type EditorWindow = Window & {
@@ -421,7 +422,7 @@ test.describe("palette accessibility", () => {
 test.describe("palette budget", () => {
   test.skip(process.env.PALETTE_BUDGET !== "1", "production build only");
 
-  test("the palette chunk plus cmdk loads on the first Alt+/ within 15 KB gz", async ({
+  test("the palette chunk plus cmdk loads on the first Alt+/ within 20 KB gz", async ({
     page,
   }) => {
     const editor = new EditorPage(page);
