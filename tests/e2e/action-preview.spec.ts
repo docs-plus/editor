@@ -1,13 +1,14 @@
 /**
  * Hover preview (smart toolbar later phase): pointing at a colour swatch
  * with a mouse, or arrowing to one, shows it on the selection with
- * decorations only. Nothing is written, and touch shows nothing.
+ * decorations only. Nothing is written. On a touch-first device a tap or
+ * pointer shows nothing, while a hardware keyboard's arrows still preview.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { HIGHLIGHT_PALETTE, TEXT_COLOR_PALETTE } from "@/lib/text-style-tokens";
 
-import { resolveRgb } from "./helpers/a11y";
+import { resolveRgb, setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 
 const text = (value: string, marks?: unknown[]) => ({
@@ -91,6 +92,24 @@ async function openPopover(
   await expect(dialog.locator(".st-swatch").first()).toBeVisible();
   return dialog;
 }
+
+/** The focus ring's outline, worn by the previewed swatch too. */
+const STRONG = "solid 2px";
+/** Keyboard focus while the pointer previews another swatch. */
+const WEAK = "dashed 1px";
+
+/** A swatch's outline: style and width ("none" without one), and colour. */
+const ring = (swatch: Locator) =>
+  swatch.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      style:
+        cs.outlineStyle === "none"
+          ? "none"
+          : `${cs.outlineStyle} ${cs.outlineWidth}`,
+      color: cs.outlineColor,
+    };
+  });
 
 /** The computed colour (or background) of the innermost preview element. */
 const previewStyle = (page: Page, property: "color" | "backgroundColor") =>
@@ -256,6 +275,53 @@ test.describe("hover preview", () => {
     expect(await page.evaluate(() => window.__toolbarCommits ?? 0)).toBe(0);
   });
 
+  for (const theme of ["light", "dark"] as const) {
+    test(`the previewed swatch wears the focus ring; focus elsewhere drops to a dashed one (${theme})`, async ({
+      page,
+    }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await selectText(page, "some words");
+      const dialog = await openPopover(page, "text");
+      const focused = dialog.locator("button:focus");
+      await expect(focused).toHaveAccessibleName("Default text");
+      expect(await focused.evaluate((el) => el.matches(":focus-visible"))).toBe(
+        true,
+      );
+      const focusRing = await ring(focused);
+      expect(focusRing.style).toBe(STRONG);
+
+      // A mouse-opened popover: the pointer's swatch is the previewed one,
+      // so it takes the ring and the focused swatch drops to a dashed one.
+      const red = dialog.getByRole("button", { name: "Red text" });
+      await red.hover();
+      await expect(previews(page)).toHaveAttribute("data-text-color", "red");
+      await expect.poll(async () => (await ring(red)).style).toBe(STRONG);
+      expect((await ring(red)).color).toBe(focusRing.color);
+      await expect.poll(async () => (await ring(focused)).style).toBe(WEAK);
+
+      // Arrows take over: the focused swatch is previewed and strong
+      // again; Red, still under the pointer, shows no ring.
+      await page.keyboard.press("ArrowRight");
+      await expect(focused).toHaveAccessibleName("Gray text");
+      await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
+      await expect.poll(async () => (await ring(focused)).style).toBe(STRONG);
+      expect((await ring(red)).style).toBe("none");
+
+      // The pointer moves on: the swatch under it takes the ring back.
+      const blue = dialog.getByRole("button", { name: "Blue text" });
+      await blue.hover();
+      await expect(previews(page)).toHaveAttribute("data-text-color", "blue");
+      await expect.poll(async () => (await ring(blue)).style).toBe(STRONG);
+      expect((await ring(focused)).style).toBe(WEAK);
+
+      // Off the swatches: the focus ring is the only marker again.
+      await dialog.locator(".st-color-row-label").first().hover();
+      await expect.poll(async () => (await ring(focused)).style).toBe(STRONG);
+      expect((await ring(blue)).style).toBe("none");
+    });
+  }
+
   test("a swatch that cannot apply previews nothing", async ({ page }) => {
     await openDoc(page);
     await selectText(page, "some words");
@@ -287,12 +353,62 @@ test.describe("hover preview on touch", () => {
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     const swatch = dialog.getByRole("button", { name: "Red text" });
     await expect(swatch).toBeVisible();
+    // A tap marks no swatch: the ring is for a pointer that hovers.
+    const blue = dialog.getByRole("button", { name: "Blue text" });
+    await blue.tap();
+    await expect(blue).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.locator("[data-pointed]")).toHaveCount(0);
+    expect((await ring(blue)).style).toBe("none");
+
     await swatch.hover();
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
     await swatch.tap();
     await expect(swatch).toHaveAttribute("aria-pressed", "true");
     await expect(previews(page)).toHaveCount(0);
+  });
+
+  test("touch with a hardware keyboard: arrows preview, a pointer does not; Esc clears", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    await selectText(page, "some words");
+    const before = await docJson(page);
+    // A keyboard open (Enter on the chevron) moves focus into the grid.
+    const chevron = row(page).getByRole("button", {
+      name: "More text colours",
+    });
+    await chevron.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    await expect(dialog.locator("button:focus")).toHaveCount(1);
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveCount(0);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(dialog.locator("button:focus")).toHaveAccessibleName(
+      "Gray text",
+    );
+    await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
+    await expect(previews(page)).toHaveText("some words");
+    await page.keyboard.press("ArrowRight");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+
+    // A pointer (an iPad trackpad reports "mouse") neither previews nor
+    // clears the keyboard's preview.
+    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.locator(".st-color-row-label").first().hover();
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+    expect(await docJson(page)).toBe(before);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(previews(page)).toHaveCount(0);
+    expect(await docJson(page)).toBe(before);
   });
 });
 
