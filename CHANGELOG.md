@@ -9,7 +9,6 @@ since the previous tag.
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ### Continue where you left off
 
 Reopening a document offers a way back to the section you were in (spec
@@ -44,7 +43,7 @@ palette's chunks are unchanged.
 - The outline's jump to a heading is shared with the chip
   (`lib/heading-navigation.ts`) and now scrolls without animation when you
   prefer reduced motion.
-=======
+
 ### Toolbar menu alignment
 
 Three visual inconsistencies in the toolbar menus. The layout changes sit
@@ -61,7 +60,6 @@ which grows by 1 B to +16,680 B of the 23.5 KB budget (7,384 B left).
 - The desktop List menu says "Bullet list", "Numbered list" and "Task
   list", as the phone and the action registry do, and is as wide as its
   longest label.
->>>>>>> origin/main
 
 ### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
 
