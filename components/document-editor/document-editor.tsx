@@ -17,10 +17,7 @@ import {
 import type * as Y from "yjs";
 
 import { focusRovingItem, Toolbar } from "@/components/ui/toolbar";
-import {
-  type HeadingFilterCallbackState,
-  readFilterUrl,
-} from "@/extensions/heading-filter";
+import type { HeadingFilterCallbackState } from "@/extensions/heading-filter";
 import "@docs.plus/extension-hyperlink/styles.css";
 import "@docs.plus/extension-hypermultimedia/styles.css";
 import "@docs.plus/extension-mermaid/styles.css";
@@ -233,7 +230,11 @@ function DocumentEditorContent({
     if (editor) editor.setEditable(reason === null);
   }, [editor, reason]);
 
-  const headingFilter = useHeadingFilter({ editor, filterState });
+  const headingFilter = useHeadingFilter({
+    editor,
+    filterState,
+    serverSynced,
+  });
 
   // A heading pick closes the overlay; the editor already holds the
   // selection, so focus it now (Tiptap's focus() waits a frame).
@@ -254,8 +255,6 @@ function DocumentEditorContent({
     documentId,
     playgroundRegenerateTrigger,
     serverSynced,
-    readInitialFilter: readFilterUrl,
-    openFilterBar: headingFilter.openBar,
     toggleFilterBar: headingFilter.toggleBar,
     generatePlaygroundContent,
     defaultContent: DEFAULT_EDITOR_CONTENT,
