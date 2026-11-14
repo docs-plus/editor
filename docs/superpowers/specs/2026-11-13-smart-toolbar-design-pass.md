@@ -151,9 +151,9 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
 - Shortcut glyphs are hidden on a coarse pointer.
 - A focused cell inside a scroller uses `outline-offset: -2px`.
 
-## 7. Save as format dialog
+## 7. Save selection as format dialog
 
-- **Title:** "Save as format".
+- **Title:** "Save selection as format".
 - **Description:** "Reuse this style anywhere. Saved on this device."
 - **Preview box above the name:** `flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm`, holding "Sample text" rendered in the format plus its long label.
 - **Name field:**
