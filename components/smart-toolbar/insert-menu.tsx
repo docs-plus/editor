@@ -71,7 +71,7 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
   // focused cell removed from a still-open popover makes Base UI pull focus
   // back into the popup, away from the editor a pick just focused.
   const [menuOpen, setMenuOpen] = useState(false);
-  const gate = useMenuGate(setMenuOpen);
+  const openMenu = useMenuGate(setMenuOpen);
   const [step, setStep] = useState<Step | null>(null);
   const [stepOpen, setStepOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -127,7 +127,7 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
           />
         </span>
       ) : null}
-      <DropdownMenu open={menuOpen} onOpenChange={gate.onOpenChange}>
+      <DropdownMenu open={menuOpen} onOpenChange={openMenu}>
         <DropdownMenuTrigger
           render={
             <ToolbarButton
@@ -141,7 +141,6 @@ export function InsertMenu({ editor: providedEditor }: SurfaceProps) {
               aria-label="Insert"
               tooltip="Insert"
               onMouseDown={(event) => event.preventDefault()}
-              onKeyDownCapture={gate.onKeyDownCapture}
               onPointerEnter={preloadSurfaces}
               onFocus={preloadSurfaces}
             />

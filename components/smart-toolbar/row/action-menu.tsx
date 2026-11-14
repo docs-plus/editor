@@ -91,10 +91,10 @@ export function ToolbarMenu({
   triggerClassName,
   short,
 }: MenuTriggerProps) {
-  const gate = useMenuGate(onOpenChange);
-  const handleOpenChange = (next: boolean) => {
+  const openMenu = useMenuGate(onOpenChange);
+  const handleOpenChange: typeof openMenu = (next, details) => {
     if (next && readOnly) return;
-    gate.onOpenChange(next);
+    openMenu(next, details);
   };
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
@@ -110,7 +110,6 @@ export function ToolbarMenu({
             className={triggerClassName}
             disabled={readOnly}
             disabledReason={readOnly ? READ_ONLY_REASON : undefined}
-            onKeyDownCapture={gate.onKeyDownCapture}
             onPointerEnter={prefetchMenuBodies}
             onFocus={prefetchMenuBodies}
           />

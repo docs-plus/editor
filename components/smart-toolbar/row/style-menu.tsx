@@ -1,14 +1,14 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useActionView } from "@/hooks/use-editor-context";
 import { TEXT_STYLE_LABELS } from "@/lib/editor-actions/core/blocks";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 
-import { menuBody } from "../lazy-menu";
+import { menuBody, useMenuGate } from "../lazy-menu";
 import { ToolbarMenu, useMenuFocus, useSurfaceEditor } from "./action-menu";
 
 const StyleMenuItems = menuBody((bodies) => bodies.StyleMenuItems);
@@ -35,19 +35,27 @@ export function StyleMenu({ editor: provided }: { editor?: Editor | null }) {
   const menu = useMenuFocus(editor);
   const [removing, setRemoving] = useState(false);
   const { onOpenChange } = menu;
+  // Opened without its trigger, so through the gate too: it waits for the
+  // menu chunk like a click does, and says so if the chunk does not load.
+  const openRemoving = useMenuGate(
+    useCallback(
+      (next: boolean) => {
+        setRemoving(next);
+        onOpenChange(next);
+      },
+      [onOpenChange],
+    ),
+  );
   useEffect(
     () =>
       editor
         ? onUiIntent(editor, (intent) => {
             if (intent.type !== "formats.remove") return false;
-            requestAnimationFrame(() => {
-              setRemoving(true);
-              onOpenChange(true);
-            });
+            requestAnimationFrame(() => openRemoving(true));
             return true;
           })
         : undefined,
-    [editor, onOpenChange],
+    [editor, openRemoving],
   );
   if (!editor || !view) return null;
   const label = view.value ?? TEXT_STYLE_LABELS.paragraph;

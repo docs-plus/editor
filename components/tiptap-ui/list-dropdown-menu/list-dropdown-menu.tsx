@@ -108,14 +108,14 @@ export function ListDropdownMenu({
     return editor?.view.dom ?? true;
   }, [editor]);
 
-  const gate = useMenuGate(handleOpenChange);
+  const openMenu = useMenuGate(handleOpenChange);
 
   if (!isVisible) {
     return null;
   }
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={gate.onOpenChange}>
+    <DropdownMenu open={isOpen} onOpenChange={openMenu}>
       <DropdownMenuTrigger
         disabled={!canToggle}
         render={
@@ -128,7 +128,6 @@ export function ListDropdownMenu({
             aria-haspopup="menu"
             tooltip="List"
             size="sm"
-            onKeyDownCapture={gate.onKeyDownCapture}
             onPointerEnter={prefetchMenuBodies}
             onFocus={prefetchMenuBodies}
             {...buttonProps}

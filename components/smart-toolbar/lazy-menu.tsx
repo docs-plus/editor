@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type ComponentType,
-  type KeyboardEvent,
-  useCallback,
-  useRef,
-} from "react";
+import { type ComponentType, useCallback, useEffect, useRef } from "react";
 
 import { announceLater } from "@/lib/announce-later";
 import { CheckIcon as Check } from "@/lib/icons";
@@ -83,7 +78,7 @@ const afterFocusMoves = () =>
     requestAnimationFrame(() => requestAnimationFrame(resolve)),
   );
 
-const keyInit = (event: globalThis.KeyboardEvent): KeyboardEventInit => ({
+const keyInit = (event: KeyboardEvent): KeyboardEventInit => ({
   key: event.key,
   code: event.code,
   shiftKey: event.shiftKey,
@@ -106,35 +101,87 @@ async function replay(keys: KeyboardEventInit[]) {
   }
 }
 
+/** What Base UI's `onOpenChange` passes along (its change details). */
+interface OpenDetails {
+  trigger?: Element;
+  event?: Event;
+}
+
+/** The menu's trigger: Base UI names it, else the event came from it. */
+function triggerOf(details?: OpenDetails): Element | null {
+  if (details?.trigger) return details.trigger;
+  const target = details?.event?.target;
+  return target instanceof Element
+    ? target.closest('[aria-haspopup="menu"]')
+    : null;
+}
+
+const within = (trigger: Element | null, target: EventTarget | null) =>
+  trigger !== null && target instanceof Node && trigger.contains(target);
+
 /**
  * Opens a menu only once the menu chunk is in, so the open renders its
  * popup at once and Base UI puts focus on the first item exactly as it
- * does for a loaded menu (the trigger's key decides which). Keys pressed
- * while it loads are held on the trigger (they would otherwise move along
- * the toolbar) and replayed into the menu. If the chunk does not load, the
- * status pill says so, with Retry, as the palette does.
+ * does for a loaded menu (the trigger's key decides which). While it
+ * loads, the wait behaves like the open menu it stands for:
+ * - keys on the trigger are held (they would otherwise move along the
+ *   toolbar) and replayed into the menu once it opens;
+ * - Esc, a key anywhere else, a press outside the trigger or focus moving
+ *   off it cancels the open, as each would close the menu (Esc is used up,
+ *   so it does not also leave the toolbar).
+ * The listeners are on `window`, in the capture phase: React's own are on
+ * the document (the app hydrates it), so they would see the key first.
+ * If the chunk does not load, the status pill says so, with Retry, as the
+ * palette does. Returns Base UI's `onOpenChange`.
  */
 export function useMenuGate(onOpenChange: (open: boolean) => void) {
-  // Non-null while an open waits for the chunk: the keys typed meanwhile.
-  const held = useRef<KeyboardEventInit[] | null>(null);
-  const requestOpen = useCallback(
-    function request(next: boolean) {
+  const cancel = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancel.current?.(), []);
+  return useCallback(
+    function request(next: boolean, details?: OpenDetails) {
       if (!next || loaded) {
-        held.current = null;
+        cancel.current?.();
         onOpenChange(next);
         return;
       }
-      if (held.current) return;
-      held.current = [];
+      if (cancel.current) return;
+      const trigger = triggerOf(details);
+      const held: KeyboardEventInit[] = [];
+      const onKey = (event: KeyboardEvent) => {
+        const onTrigger = within(trigger, event.target);
+        if (onTrigger || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        if (onTrigger && event.key !== "Escape") held.push(keyInit(event));
+        else stop();
+      };
+      const onPointer = (event: PointerEvent) => {
+        if (!within(trigger, event.target)) stop();
+      };
+      const onFocus = (event: FocusEvent) => {
+        if (trigger && !within(trigger, event.target)) stop();
+      };
+      const stop = () => {
+        cancel.current = null;
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("pointerdown", onPointer, true);
+        window.removeEventListener("focusin", onFocus, true);
+      };
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("pointerdown", onPointer, true);
+      window.addEventListener("focusin", onFocus, true);
+      cancel.current = stop;
       preloadMenuBodies().then(
         () => {
-          const keys = held.current ?? [];
-          held.current = null;
+          if (cancel.current !== stop) return;
+          stop();
           onOpenChange(true);
-          if (keys.length > 0) void replay(keys);
+          if (held.length > 0) void replay(held);
         },
         () => {
-          held.current = null;
+          if (cancel.current !== stop) return;
+          stop();
           announceLater(LOAD_FAILED, {
             action: { label: "Retry", run: () => request(true) },
           });
@@ -143,12 +190,4 @@ export function useMenuGate(onOpenChange: (open: boolean) => void) {
     },
     [onOpenChange],
   );
-  const onKeyDownCapture = useCallback((event: KeyboardEvent) => {
-    const keys = held.current;
-    if (!keys) return;
-    event.preventDefault();
-    event.stopPropagation();
-    keys.push(keyInit(event.nativeEvent));
-  }, []);
-  return { onOpenChange: requestOpen, onKeyDownCapture };
 }
