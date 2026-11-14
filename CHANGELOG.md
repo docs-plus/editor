@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Home, End, Page Up and Page Down in the "/" menu
+
+The code is in the lazy slash chunk only (5,509 B gz of its 6 KB budget);
+the editor chunk is unchanged (+19,282 B of the 23.5 KB budget) and the
+palette chunk is untouched; nothing to do when deploying.
+
+#### Added
+- The open "/" menu takes Home and End (first and last option) and Page Up
+  and Page Down (the farthest option still on one screen of the list with
+  the active one, never wrapping). The editor's `aria-activedescendant`
+  follows, and the active option scrolls into view. Modified keys
+  (Shift+End, Ctrl+Home) and every key while the menu is closed stay
+  caret keys.
+
 ### Paint format keyboard test waits for the brush to arm
 
 Test only: no app code changes, and the editor chunk is unchanged (0 B).
