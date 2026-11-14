@@ -16,8 +16,8 @@ M15): a small chip above the title, "Continue where you left off ·
 *Section*", with Go and ✕. No schema or protocol change; nothing to
 deploy beyond the app.
 
-The editor chunk grows by 474 B, to +17,154 B of the 23.5 KB budget
-(6,910 B left); the budget is unchanged. The chip, its recorder and its
+The editor chunk grows by 477 B, to +17,157 B of the 23.5 KB budget
+(6,907 B left); the budget is unchanged. The chip, its recorder and its
 styles load as one lazy chunk (2.5 KB gz) when the browser is idle. The
 palette's chunks are unchanged.
 
