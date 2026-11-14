@@ -21,8 +21,14 @@ import {
   useRememberedChoice,
 } from "@/lib/remembered-choice";
 
+import type { OffsetData } from "./color/clear-of-selection";
 import { type Swatch, swatchStyle } from "./color/swatch";
-import { lazySurface, loadColorPanel, preloadSurfaces } from "./lazy-surface";
+import {
+  lazySurface,
+  loadColorPanel,
+  loadedColorPanel,
+  preloadSurfaces,
+} from "./lazy-surface";
 import type { SurfaceProps } from "./types";
 import "./smart-toolbar.scss";
 
@@ -39,6 +45,9 @@ type PopoverSide = "top" | "bottom";
 
 const faceSwatch = (kind: ColorKind, token: Swatch["token"]): Swatch =>
   kind === "text" ? { kind, token } : { kind, token };
+
+/** `PopoverContent`'s default gap to its button. */
+const SIDE_OFFSET = 4;
 
 const COPY = {
   text: {
@@ -85,9 +94,19 @@ export function ColorPopoverButton({
   // docked on it) stays put; keyboard and mouse opens focus a swatch.
   const [openedByTouch, setOpenedByTouch] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Off the selection the hover preview paints (in the lazy colour chunk).
+  const clear = (data: OffsetData) =>
+    loadedColorPanel()?.clearOfSelection(
+      editor,
+      triggerRef.current,
+      data,
+      SIDE_OFFSET,
+    ) ?? [0, 0];
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
+        ref={triggerRef}
         disabled={reason !== undefined}
         render={
           <ToolbarButton
@@ -115,6 +134,8 @@ export function ColorPopoverButton({
         aria-label={focusKind === "text" ? "Text colours" : "Highlight colours"}
         className="st-color-popover"
         side={side}
+        sideOffset={(data) => SIDE_OFFSET + clear(data)[1]}
+        alignOffset={(data) => clear(data)[0]}
         initialFocus={(openType) =>
           openType === "touch" || openedByTouch
             ? false

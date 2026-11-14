@@ -29,6 +29,9 @@ import { type Swatch, swatchName, swatchStyle } from "./swatch";
 import { useSwatchPreview } from "./swatch-preview";
 import "./color-panel.scss";
 
+// The trigger's selection avoidance rides in this chunk (`lazy-surface`).
+export { clearOfSelection } from "./clear-of-selection";
+
 /**
  * The colour popover body (spec §4.5): Recent (M3, frozen while open),
  * Text (default + 10) and Highlight (none + 10). Swatches are named

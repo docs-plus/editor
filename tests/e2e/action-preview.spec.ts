@@ -270,6 +270,75 @@ test.describe("hover preview", () => {
   });
 });
 
+type Box = { x: number; y: number; width: number; height: number };
+const intersects = (a: Box, b: Box) =>
+  a.x < b.x + b.width &&
+  b.x < a.x + a.width &&
+  a.y < b.y + b.height &&
+  b.y < a.y + a.height;
+
+/** The box once the open animation (zoom-in) has finished. */
+async function settledBox(locator: Locator): Promise<Box> {
+  await locator.evaluate((element) =>
+    Promise.all(element.getAnimations().map((animation) => animation.finished)),
+  );
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("no box");
+  return box;
+}
+
+test.describe("hover preview at 1440", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("the row's popover keeps clear of the previewed first body line, under its button", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    for (const [kind, swatch] of [
+      ["text", "Red text"],
+      ["highlight", "Yellow highlight"],
+    ] as const) {
+      await selectText(page, "some words");
+      const dialog = await openPopover(page, kind);
+      await dialog.getByRole("button", { name: swatch }).hover();
+      await expect(previews(page)).toHaveText("some words");
+      const popover = await settledBox(dialog);
+      const selection = await settledBox(previews(page));
+      expect(intersects(popover, selection)).toBe(false);
+      // Still anchored to its row button: below it and spanning it.
+      const chevron = await row(page)
+        .getByRole("button", {
+          name:
+            kind === "text" ? "More text colours" : "More highlight colours",
+        })
+        .boundingBox();
+      if (!chevron) throw new Error("no chevron");
+      expect(popover.y).toBeGreaterThanOrEqual(chevron.y + chevron.height);
+      expect(popover.x).toBeLessThanOrEqual(chevron.x + chevron.width);
+      expect(popover.x + popover.width).toBeGreaterThanOrEqual(chevron.x);
+      // Opened by mouse, focus still starts on a swatch in the popover.
+      await expect(dialog.locator("button:focus")).toHaveCount(1);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+    }
+  });
+
+  test("a whole first line selected: the popover still leaves it visible", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "Select some words in this paragraph");
+    const dialog = await openPopover(page, "text");
+    await dialog.getByRole("button", { name: "Blue text" }).hover();
+    await expect(previews(page)).toHaveText(
+      "Select some words in this paragraph",
+    );
+    expect(
+      intersects(await settledBox(dialog), await settledBox(previews(page))),
+    ).toBe(false);
+  });
+});
+
 test.describe("hover preview on touch", () => {
   test.use({
     hasTouch: true,
