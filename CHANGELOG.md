@@ -15,8 +15,8 @@ Pointing at a text colour or highlight swatch shows it on the selected
 text before you apply it (amendment A14). No schema or protocol change,
 and nothing to do when deploying.
 
-The editor chunk goes from +16,679 B to +16,897 B of the 23.5 KB budget
-(+218 B; 7,167 B left); the colour popover chunk grows by 641 B gz. The
+The editor chunk goes from +17,249 B to +17,464 B of the 23.5 KB budget
+(+215 B; 6,600 B left); the colour popover chunk grows by 641 B gz. The
 palette is unchanged.
 
 #### Added
