@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### "/" menu says why a pick was refused
+
+The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
+(4,794 B left); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB) and
+the first Alt+/ not at all; nothing to do when deploying.
+
+#### Fixed
+- A "/" menu row whose block could no longer go there (the document
+  changed after the menu opened, for example a collaborator wrapped the
+  line in a quote) closed the menu and did nothing, without a word. The
+  status pill, and the screen reader, now say why, in the menu's own
+  words ("Quote: Already in a quote."), and "/quo" stays as typed. A
+  pick that was allowed but did nothing still says nothing.
+
 ### Home, End, Page Up and Page Down in the "/" menu
 
 The code is in the lazy slash chunk only (5,509 B gz of its 6 KB budget);
