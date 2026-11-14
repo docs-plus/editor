@@ -29,7 +29,13 @@ import {
   type SlashSection,
   slashEmptyNote,
 } from "@/lib/slash-menu/slash-items";
-import { slashKey } from "@/lib/slash-menu/slash-keys";
+import {
+  pageIndex,
+  type RowSpan,
+  type SlashKey,
+  slashKey,
+  stepIndex,
+} from "@/lib/slash-menu/slash-keys";
 import { cn } from "@/lib/utils";
 
 /*
@@ -175,6 +181,27 @@ function styleOf(placement: Placement | null): CSSProperties {
 const optionId = (listbox: string, item: SlashItem) =>
   `${listbox}-${item.key.replace(/[^\w-]/g, "-")}`;
 
+/** Each option's span in the list; headings are the gaps between them. */
+const rowSpans = (box: HTMLElement): RowSpan[] =>
+  Array.from(box.querySelectorAll<HTMLElement>('[role="option"]'), (row) => ({
+    top: row.offsetTop,
+    bottom: row.offsetTop + row.offsetHeight,
+  }));
+
+/** The option a move key lands on; the page keys measure the list. */
+function moveTarget(
+  key: Exclude<SlashKey, "Enter" | "Escape">,
+  index: number,
+  count: number,
+  box: HTMLElement | null,
+): number {
+  if (key !== "PageUp" && key !== "PageDown") {
+    return stepIndex(key, index, count);
+  }
+  if (!box) return -1;
+  return pageIndex(rowSpans(box), index, box.clientHeight, key === "PageDown");
+}
+
 function sections(items: readonly SlashItem[]) {
   const groups: { section: SlashSection; items: SlashItem[] }[] = [];
   for (const item of items) {
@@ -192,9 +219,10 @@ function optionMessage(item: SlashItem, index: number, count: number) {
 }
 
 /**
- * The listbox under the caret. Focus stays in the editor: ↑ ↓ Enter Esc
- * aimed at it are taken here, in the window's capture phase before
- * ProseMirror and its keymaps see them (as the palette does); rows never
+ * The listbox under the caret. Focus stays in the editor: ↑, ↓, Home,
+ * End, Page Up, Page Down, Enter and Esc aimed at it are taken here, in
+ * the window's capture phase before ProseMirror and its keymaps see them
+ * (as the palette does); the active row scrolls into view; rows never
  * take focus (`mousedown` is prevented, so a tap keeps the phone
  * keyboard); and the editor points at the active row with
  * `aria-activedescendant`. The editor's combobox attributes are set on
@@ -238,34 +266,25 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   latest.current = { matches, activeIndex, active };
   /** The list is on screen (its caret is inside the band). */
   const shown = useRef(false);
+  const list = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const used = (event: KeyboardEvent) => {
       const key = slashKey(event, editor.view);
-      const {
-        matches: list,
-        activeIndex: index,
-        active: item,
-      } = latest.current;
+      const { matches: all, activeIndex: index, active: item } = latest.current;
       if (key === "Escape") {
         closeSlash(editor);
         return true;
       }
       // A hidden list (its caret scrolled away) takes only Esc.
-      if (!key || list.length === 0 || !shown.current) return false;
+      if (!key || all.length === 0 || !shown.current) return false;
       if (key === "Enter") {
         if (!item) return false;
         runSlashPick(editor, item);
         return true;
       }
-      const step = key === "ArrowDown" ? 1 : -1;
-      const next =
-        index < 0
-          ? step > 0
-            ? 0
-            : list.length - 1
-          : (index + step + list.length) % list.length;
-      setActiveKey(list[next].key);
+      const target = all[moveTarget(key, index, all.length, list.current)];
+      if (target) setActiveKey(target.key);
       return true;
     };
     const onKey = (event: KeyboardEvent) => {
@@ -312,7 +331,6 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     return () => clearTimeout(timer);
   }, [active, activeIndex, matches.length, empty, announce]);
 
-  const list = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const side = useRef<boolean | null>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);

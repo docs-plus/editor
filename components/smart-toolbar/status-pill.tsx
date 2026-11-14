@@ -24,6 +24,9 @@ const PILL_MS = 2500;
 const ACTION_PILL_MS = 5000;
 const STICKY_ROW = '.document-editor-wrapper > [data-slot="toolbar"]';
 const PAGE_COLUMN = ".document-editor-content";
+/** The bubble's scroll container: the plugin appends its root here. */
+const SCROLL_CONTAINER = ".document-editor-wrapper";
+const BUBBLE_ROOT = ":scope > [data-smart-bubble]";
 
 const BUBBLE_PANEL = '[data-smart-bubble][data-state="open"] .st-bubble-panel';
 /** `PAINTING_CLASS` (`paint-format.ts`, the lazy engine: never imported here). */
@@ -62,21 +65,21 @@ export function besideBubble(
 
 /**
  * Desktop: fixed 8px under the sticky row, centred over the page column,
- * beside the bubble when it would cover it (`besideBubble`). Measured when
- * the notice shows (it lasts seconds): the default first, applied to the
- * pill so its own width is known.
+ * beside the bubble when it would cover it (`besideBubble`). The default
+ * goes on the pill first, so its own width is known, then the result: the
+ * pill is right even when React sees the same style again.
  */
 function desktopPosition(pill: HTMLElement): CSSProperties {
   const row = document.querySelector(STICKY_ROW)?.getBoundingClientRect();
   const column = document.querySelector(PAGE_COLUMN)?.getBoundingClientRect();
   const top = (row?.bottom ?? 0) + GAP;
-  const centred = {
+  const centred: CSSProperties = {
     position: "fixed",
     top: `${top}px`,
     left: column ? `${column.left + column.width / 2}px` : "50%",
     // `translate`, not `transform`: the enter animation owns `transform`.
     translate: "-50% 0",
-  } as const;
+  };
   Object.assign(pill.style, centred);
   const moved = besideBubble(
     pill.getBoundingClientRect(),
@@ -84,7 +87,51 @@ function desktopPosition(pill: HTMLElement): CSSProperties {
     window.innerWidth,
     top,
   );
-  return moved ? { position: "fixed", ...moved, translate: "none" } : centred;
+  if (!moved) return centred;
+  const beside: CSSProperties = {
+    position: "fixed",
+    top: `${moved.top}px`,
+    left: `${moved.left}px`,
+    translate: "none",
+  };
+  Object.assign(pill.style, beside);
+  return beside;
+}
+
+/**
+ * Calls `measure` (at most once a frame) whenever the bubble appears,
+ * moves or closes while the pill shows: the plugin appends and removes
+ * its root and moves it by its inline style, the view flips `data-state`,
+ * and it scrolls with the text under the fixed pill. Returns the cleanup.
+ */
+function followBubble(measure: () => void): () => void {
+  const container = document.querySelector(SCROLL_CONTAINER);
+  if (!container) return () => {};
+  let frame = 0;
+  const schedule = () => {
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      measure();
+    });
+  };
+  const watchRoot = () => {
+    const root = container.querySelector(BUBBLE_ROOT);
+    if (root) {
+      observer.observe(root, { attributeFilter: ["style", "data-state"] });
+    }
+  };
+  const observer = new MutationObserver(() => {
+    watchRoot();
+    schedule();
+  });
+  observer.observe(container, { childList: true });
+  watchRoot();
+  container.addEventListener("scroll", schedule, { passive: true });
+  return () => {
+    observer.disconnect();
+    container.removeEventListener("scroll", schedule);
+    cancelAnimationFrame(frame);
+  };
 }
 
 function Pill({
@@ -117,9 +164,11 @@ function Pill({
   }, []);
   const [position, setPosition] = useState<CSSProperties>();
   useLayoutEffect(() => {
-    if (placement === "desktop" && ref.current) {
-      setPosition(desktopPosition(ref.current));
-    }
+    const pill = ref.current;
+    if (placement !== "desktop" || !pill) return;
+    const measure = () => setPosition(desktopPosition(pill));
+    measure();
+    return followBubble(measure);
   }, [placement]);
   useEffect(() => {
     if (held) return;

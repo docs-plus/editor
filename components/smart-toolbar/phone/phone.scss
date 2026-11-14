@@ -144,6 +144,16 @@
 }
 
 // ── Format sheet (`phone/format-sheet.tsx`) ──────────────────────────────
+// While a swatch previews on the selection (`.tt-preview`, from
+// `color/swatch-preview.ts`), the scrim clears so the previewed colour
+// shows true instead of dimmed; it still catches taps, and comes back
+// when the preview ends. The backdrop's own 150ms transition fades it.
+// Touch never previews, so its scrim never changes. The rule exists only
+// once this lazy chunk has loaded, and its `:has()` takes a single class.
+body:has(.tt-preview) [data-slot="sheet-overlay"] {
+  background-color: transparent;
+}
+
 .st-format-sheet {
   padding: 0 var(--safe-area-right) var(--safe-area-bottom)
     var(--safe-area-left);
@@ -221,9 +231,9 @@
   }
 }
 
-// Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle and
-// the Remove list take the full width, under the formats, never between
-// them; the list is a grid of its own (`ps-3` insets it).
+// Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle,
+// the Remove list and Restore take the full width, under the formats,
+// never between them; the list is a grid of its own (`ps-3` insets it).
 .st-sheet-wide {
   grid-column: 1 / -1;
   min-width: 0;
