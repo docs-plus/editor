@@ -106,6 +106,9 @@ async function measure(page: Page, cdp: CDPSession) {
 }
 
 test.describe("editor lifetime", () => {
+  // Heap and listener counts come from Chromium's DevTools protocol.
+  test.skip(({ browserName }) => browserName !== "chromium", "CDP only");
+
   test("switching tabs does not keep destroyed editors alive", async ({
     page,
   }) => {

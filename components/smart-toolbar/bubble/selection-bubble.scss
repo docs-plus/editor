@@ -1,13 +1,6 @@
 // Selection bubble (spec §4.3). The plugin owns the root's inline
 // position, visibility and opacity, so the motion runs on the inner panel.
 
-// The bubble is appended to this scroll container. As its containing block
-// the bubble scrolls with the text instead of waiting for the plugin's
-// debounced reposition (nothing else in it is absolutely positioned).
-.document-editor-wrapper {
-  position: relative;
-}
-
 // Below the sticky toolbar (`z-10`): the bubble slides under it on scroll.
 .st-bubble {
   z-index: 9;

@@ -29,6 +29,30 @@ export default defineConfig({
       },
     },
     {
+      // Safari's engine, run by hand (CI runs chromium only):
+      // `bun playwright test --project=webkit`. Covers the core editing
+      // surfaces; tests that drive Chromium's DevTools protocol (heap and
+      // listener counts, raw touch events, CPU throttling) skip here.
+      name: "webkit",
+      testMatch: [
+        "**/toolbar*.spec.ts",
+        "**/selection-bubble.spec.ts",
+        "**/paint-format.spec.ts",
+        "**/palette*.spec.ts",
+        "**/slash-menu.spec.ts",
+        "**/continue-chip.spec.ts",
+        "**/action-preview.spec.ts",
+        "**/mobile-bar*.spec.ts",
+        "**/collaboration.spec.ts",
+        "**/editor-leak.spec.ts",
+      ],
+      testIgnore: ["**/toolbar-perf.spec.ts"],
+      use: {
+        browserName: "webkit",
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
       // The typing budget compares timings, so it runs alone: after the
       // chromium suite (when both are selected), on one worker. Run it by
       // itself with `--project=perf --no-deps`.

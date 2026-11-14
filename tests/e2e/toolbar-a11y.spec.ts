@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   contrastRatio,
   expectNoSeriousA11yViolations,
+  NO_FORCED_COLOURS,
   openToolbarTestDoc,
   resolveRgb,
   setTheme,
@@ -354,8 +355,10 @@ const SWATCHES = ["Green", "Blue", "Red", "Purple", "Yellow"] as const;
 for (const mode of ["light", "dark", "forced colours"] as const) {
   test(`highlight check glyph is visible on every swatch (${mode})`, async ({
     page,
+    browserName,
   }, testInfo) => {
     const forced = mode === "forced colours";
+    test.skip(forced && browserName !== "chromium", NO_FORCED_COLOURS);
     if (forced) await page.emulateMedia({ forcedColors: "active" });
     else await setTheme(page, mode);
     await openToolbarTestDoc(page);
@@ -385,7 +388,8 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
           system,
         };
       });
-      expect(border.adjust, `${name} forced-color-adjust`).toBe(
+      // WebKit has no `forced-color-adjust`: there it is the default.
+      expect(border.adjust ?? "auto", `${name} forced-color-adjust`).toBe(
         forced ? "none" : "auto",
       );
       expect(border.width, `${name} border`).toBe("1px");
@@ -415,6 +419,56 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
   });
 }
 
+test("forced colours: the hovered swatch wears the Highlight ring; focus elsewhere drops to a dashed one", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  const dialog = await openHighlightDialog(page);
+  const focused = dialog.locator("button:focus");
+  await expect(focused).toHaveAccessibleName("No highlight");
+  const outline = (swatch: Locator) =>
+    swatch.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const probe = document.createElement("div");
+      probe.style.color = "Highlight";
+      document.body.appendChild(probe);
+      const highlight = getComputedStyle(probe).color;
+      probe.remove();
+      const style =
+        cs.outlineStyle === "none"
+          ? "none"
+          : `${cs.outlineStyle} ${cs.outlineWidth}`;
+      return { style, inHighlight: cs.outlineColor === highlight };
+    });
+
+  // No preview in forced colours, but the pointer's swatch is still marked.
+  const red = highlights(dialog).getByRole("button", {
+    name: "Red highlight",
+  });
+  await red.hover();
+  await expect
+    .poll(() => outline(red))
+    .toEqual({ style: "solid 2px", inHighlight: true });
+  expect(await outline(focused)).toEqual({
+    style: "dashed 1px",
+    inHighlight: true,
+  });
+  // The ring is an outline: the swatch keeps its 1px system border.
+  expect(await red.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe(
+    "1px",
+  );
+
+  await page.keyboard.press("ArrowRight");
+  await expect(focused).toHaveAccessibleName("Gray highlight");
+  await expect
+    .poll(() => outline(focused))
+    .toEqual({ style: "solid 2px", inHighlight: true });
+  expect((await outline(red)).style).toBe("none");
+  await closeWithEscape(page, dialog);
+});
+
 const SCREENS = ".superpowers/screens-r2-popover";
 
 /**
@@ -431,8 +485,10 @@ const LOW_CONTRAST_CASES = {
 for (const mode of ["light", "dark", "forced colours"] as const) {
   test(`colour popover marks low-contrast swatches dotted, undimmed and still selectable (${mode})`, async ({
     page,
+    browserName,
   }) => {
     const forced = mode === "forced colours";
+    test.skip(forced && browserName !== "chromium", NO_FORCED_COLOURS);
     const theme = forced ? "light" : mode;
     if (forced) await page.emulateMedia({ forcedColors: "active" });
     await setTheme(page, theme);
