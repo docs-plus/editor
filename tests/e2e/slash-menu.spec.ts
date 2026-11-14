@@ -496,6 +496,10 @@ test.describe("slash menu", () => {
     await expect(page.locator('[data-status-pill="desktop"]')).toHaveText(
       "Quote: Already in a quote.",
     );
+    // Spoken too, by the announcer's region (the menu's own has closed).
+    await expect(
+      page.locator('body > [role="status"][aria-live="polite"]'),
+    ).toHaveText("Quote: Already in a quote.");
     // Nothing changed: "/quo" stays as typed, the caret after it.
     expect(await caretBlock(page)).toMatchObject({
       type: "paragraph",
