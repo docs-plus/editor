@@ -126,14 +126,17 @@ describe("swatchPreviewAttrs", () => {
     });
   });
 
-  it("previews Default text and No highlight with the page's colours", () => {
+  it("previews Default text and No highlight with the context's colours", () => {
+    // Inside the mark, what the mark's own variable says is under it;
+    // outside one, the context shows through (inline code, a link, a cell).
     expect(swatchPreviewAttrs({ kind: "text", token: null })).toEqual({
       class: "tt-preview",
-      style: "color: var(--foreground); background-color: transparent",
+      style:
+        "color: var(--tt-preview-plain-color, currentColor); background-color: transparent",
     });
     expect(swatchPreviewAttrs({ kind: "highlight", token: null })).toEqual({
       class: "tt-preview",
-      style: "background-color: var(--background)",
+      style: "background: var(--tt-preview-plain-bg, transparent)",
     });
   });
 
