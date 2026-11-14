@@ -3,7 +3,11 @@
 import { type Editor, useCurrentEditor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 
-import { lazySurface } from "./lazy-surface";
+import {
+  DESKTOP_QUERY,
+  lazySurface,
+  loadSelectionBubble,
+} from "./lazy-surface";
 import type { SurfaceProps } from "./types";
 
 /**
@@ -12,16 +16,13 @@ import type { SurfaceProps } from "./types";
  * until the next editor mounts this again.
  */
 const SelectionBubbleView = lazySurface(() =>
-  import("./bubble/selection-bubble-view").then(
-    (module) => module.SelectionBubbleView,
-  ),
+  loadSelectionBubble().then((module) => module.SelectionBubbleView),
 );
 
-/**
- * Wider than the phone bar's viewport. The view shows the bubble only for
- * a fine pointer; every desktop gets its status pill.
+/*
+ * `DESKTOP_QUERY`: wider than the phone bar's viewport. The view shows the
+ * bubble only for a fine pointer; every desktop gets its status pill.
  */
-const DESKTOP_QUERY = "(min-width: 768px)";
 const SCROLL_CONTAINER = ".document-editor-wrapper";
 
 /** Read after hydration (a ready flag, never at first render). */

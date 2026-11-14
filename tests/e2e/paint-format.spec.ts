@@ -551,4 +551,50 @@ test.describe("Your formats in the text style dropdown", () => {
       page.getByRole("menuitem", { name: "Warning", exact: true }),
     ).toBeVisible();
   });
+
+  test("after the pill, the palette offers Restore first; Enter puts it back in place", async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    await openDoc(page);
+    await select(page, "target");
+    await styleMenu(page).click();
+    await page.getByRole("menuitem", { name: "Remove a format" }).click();
+    await page
+      .getByRole("menu", { name: "Remove a format" })
+      .getByRole("menuitem", { name: "Warning" })
+      .click();
+    await expect(pill(page)).toContainText("Removed ‘Warning’");
+    // Undo on the pill lasts 5 s; a keyboard user can come back later.
+    await expect(pill(page)).toBeHidden({ timeout: 10_000 });
+    const stored = () =>
+      page.evaluate(() =>
+        JSON.parse(
+          localStorage.getItem("tinydocy-formats") ?? "{}",
+        ).formats.map((format: { name: string }) => format.name),
+      );
+    expect(await stored()).toEqual(["Note"]);
+
+    await page.locator(".tiptap").focus();
+    await page.keyboard.press("Alt+Slash");
+    const palette = page.locator("[data-command-palette]");
+    const suggested = palette.getByRole("group", { name: "Suggested here" });
+    const restore = suggested.getByRole("option").first();
+    await expect(restore).toHaveAccessibleName("Restore ‘Warning’");
+    await expect(restore).toHaveAttribute("aria-selected", "true");
+    // Only there.
+    await expect(
+      palette.getByRole("option", { name: "Restore ‘Warning’" }),
+    ).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(palette).toHaveCount(0);
+    await expect.poll(stored).toEqual(["Warning", "Note"]);
+    await expect(pill(page)).toContainText("Restored ‘Warning’");
+
+    // Done: the next open has no Restore, and Recent did not keep it.
+    await page.keyboard.press("Alt+Slash");
+    await expect(palette.getByRole("option").first()).toBeVisible();
+    await expect(palette.getByText(/^Restore ‘/)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
 });
