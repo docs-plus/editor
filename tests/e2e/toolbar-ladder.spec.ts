@@ -228,6 +228,18 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: /fold|Fold/ })).toBeVisible();
   await page.keyboard.press("Escape");
 
+  // The table's stand-in: Delete row and Delete column carry a trash icon.
+  await caretIn(page, "table");
+  await toolbar.getByRole("button", { name: "Table tools" }).click();
+  const tableMenu = page.getByRole("menu", { name: "Table tools" });
+  for (const name of ["Delete row", "Delete column"]) {
+    const item = tableMenu.getByRole("menuitem", { name });
+    await expect(item).not.toHaveAttribute("data-inset");
+    await expect(item.locator("svg")).toHaveClass(/lucide-trash/);
+  }
+  await page.keyboard.press("Escape");
+  await caretIn(page, "heading");
+
   await toolbar.getByRole("button", { name: "More formatting" }).click();
   await expect(
     page.getByRole("menuitem", { name: /Switch to (dark|light) mode/ }),
