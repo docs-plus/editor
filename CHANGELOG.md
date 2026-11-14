@@ -11,9 +11,9 @@ since the previous tag.
 
 ### "/" menu says why a pick was refused
 
-The editor chunk is unchanged (+19,270 B of the 23.5 KB budget, -13 B of
-chunk-hash noise); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB)
-and the first Alt+/ not at all; nothing to do when deploying.
+The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
+(4,794 B left); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB) and
+the first Alt+/ not at all; nothing to do when deploying.
 
 #### Fixed
 - A "/" menu row whose block could no longer go there (the document
