@@ -16,8 +16,6 @@ interface UseDocumentEditorEffectsOptions {
   playgroundRegenerateTrigger?: number;
   /** The server has confirmed the document (seeding waits for it). */
   serverSynced: boolean;
-  readInitialFilter: () => { slugs: string[]; mode: "or" | "and" } | null;
-  openFilterBar: () => void;
   toggleFilterBar: () => void;
   generatePlaygroundContent: () => JSONContent;
   defaultContent: JSONContent;
@@ -29,8 +27,6 @@ export function useDocumentEditorEffects({
   documentId,
   playgroundRegenerateTrigger,
   serverSynced,
-  readInitialFilter,
-  openFilterBar,
   toggleFilterBar,
   generatePlaygroundContent,
   defaultContent,
@@ -54,15 +50,6 @@ export function useDocumentEditorEffects({
     if (!editor) return;
     editor.commands.updateUser(getUserIdentity());
   }, [editor]);
-
-  useEffect(() => {
-    if (!editor) return;
-    const initial = readInitialFilter();
-    if (initial && initial.slugs.length > 0) {
-      editor.commands.applyFilter(initial.slugs, initial.mode);
-      openFilterBar();
-    }
-  }, [editor, openFilterBar, readInitialFilter]);
 
   // The trigger counter outlives this editor (it lives in EditorApp), so a
   // remount must not replay a click that an earlier editor already handled.
