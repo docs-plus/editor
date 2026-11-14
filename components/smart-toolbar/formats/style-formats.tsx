@@ -77,7 +77,7 @@ export function StyleFormats({
           />
         ))}
         <DescribedItem
-          label="Save selection as format…"
+          label={formatsSaveAction.label}
           description={save}
           disabled={save !== undefined}
           onClick={() => openPalette(editor, "save-format")}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type HeadingFilterCallbackState,
+  readFilterUrl,
   updateFilterUrl,
 } from "@/extensions/heading-filter";
 
@@ -13,6 +14,8 @@ const DEBOUNCE_MS = 250;
 interface UseHeadingFilterOptions {
   editor?: Editor | null;
   filterState: HeadingFilterCallbackState;
+  /** The server has confirmed the document; a `?filter=` link applies then. */
+  serverSynced: boolean;
 }
 
 export interface UseHeadingFilterReturn {
@@ -38,6 +41,7 @@ export interface UseHeadingFilterReturn {
 export function useHeadingFilter({
   editor: providedEditor,
   filterState,
+  serverSynced,
 }: UseHeadingFilterOptions): UseHeadingFilterReturn {
   // Only the instance is needed. Subscribing to editor state here would
   // re-render the caller, the whole editor shell, on every transaction.
@@ -47,6 +51,19 @@ export function useHeadingFilter({
   const [query, setQueryState] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  // The filter a shared `?filter=` link opened with: `undefined` until read
+  // on mount, `null` once applied (or when there is none).
+  const linkFilterRef = useRef<ReturnType<typeof readFilterUrl> | undefined>(
+    undefined,
+  );
+
+  // Read before any effect below writes the URL. The ref survives React's
+  // dev remount, whose cleanup strips the URL.
+  useEffect(() => {
+    if (linkFilterRef.current === undefined) {
+      linkFilterRef.current = readFilterUrl();
+    }
+  }, []);
 
   const setQuery = useCallback(
     (q: string) => {
@@ -107,7 +124,19 @@ export function useHeadingFilter({
     [editor],
   );
 
+  // Apply the link's filter once the server has the document: applied to an
+  // empty or stale device copy, it would fold the wrong sections.
   useEffect(() => {
+    const linkFilter = linkFilterRef.current;
+    if (!editor || !serverSynced || !linkFilter) return;
+    linkFilterRef.current = null;
+    editor.commands.applyFilter(linkFilter.slugs, linkFilter.mode);
+    openBar();
+  }, [editor, serverSynced, openBar]);
+
+  // The URL mirrors the filter, but keeps the link's until it is applied.
+  useEffect(() => {
+    if (linkFilterRef.current) return;
     updateFilterUrl(filterState.slugs, filterState.mode);
   }, [filterState.slugs, filterState.mode]);
 
