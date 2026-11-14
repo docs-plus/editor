@@ -11,8 +11,8 @@ since the previous tag.
 
 ### Previewed colours stay true under the phone sheet
 
-CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
-first Alt+/ chunk are unchanged; nothing to do when deploying.
+In the lazy phone bar and colour chunks: the editor chunk and the
+palette's first Alt+/ chunk are unchanged; nothing to do when deploying.
 
 #### Fixed
 - On a narrow window with a mouse, the "Text format" sheet's scrim dimmed
@@ -20,6 +20,10 @@ first Alt+/ chunk are unchanged; nothing to do when deploying.
   than applying it would. While a preview shows, the scrim now fades
   clear (it still catches taps) and comes back when the preview ends.
   Touch never previews, so its scrim is unchanged.
+- Opening that sheet with a mouse could preview a colour nobody pointed
+  at: the swatch that slid up past the still pointer kept the hover, so
+  its colour showed on the selection and the scrim cleared. A swatch now
+  previews only once the mouse moves over it.
 
 ### Colour preview from the keyboard on touch devices
 
