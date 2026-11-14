@@ -1,7 +1,8 @@
 /**
  * Hover preview (smart toolbar later phase): pointing at a colour swatch
  * with a mouse, or arrowing to one, shows it on the selection with
- * decorations only. Nothing is written, and touch shows nothing.
+ * decorations only. Nothing is written. On a touch-first device a tap or
+ * pointer shows nothing, while a hardware keyboard's arrows still preview.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -293,5 +294,48 @@ test.describe("hover preview on touch", () => {
     await swatch.tap();
     await expect(swatch).toHaveAttribute("aria-pressed", "true");
     await expect(previews(page)).toHaveCount(0);
+  });
+
+  test("touch with a hardware keyboard: arrows preview, a pointer does not; Esc clears", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    await selectText(page, "some words");
+    const before = await docJson(page);
+    // A keyboard open (Enter on the chevron) moves focus into the grid.
+    const chevron = row(page).getByRole("button", {
+      name: "More text colours",
+    });
+    await chevron.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Text colours" });
+    await expect(dialog.locator("button:focus")).toHaveCount(1);
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveCount(0);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(dialog.locator("button:focus")).toHaveAccessibleName(
+      "Gray text",
+    );
+    await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
+    await expect(previews(page)).toHaveText("some words");
+    await page.keyboard.press("ArrowRight");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+
+    // A pointer (an iPad trackpad reports "mouse") neither previews nor
+    // clears the keyboard's preview.
+    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.locator(".st-color-row-label").first().hover();
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+    expect(await docJson(page)).toBe(before);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(previews(page)).toHaveCount(0);
+    expect(await docJson(page)).toBe(before);
   });
 });
