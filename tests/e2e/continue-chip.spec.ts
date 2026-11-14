@@ -523,22 +523,36 @@ test.describe("continue where you left off: phone", () => {
       useInnerText: true,
     });
 
-    // A touch scroll is reading, not choosing a place: the chip stays.
+    // A touch pan is reading, not choosing a place: the chip stays. Raw
+    // touch events (CDP's synthesized scroll gesture does not scroll on
+    // headless Linux); the pan must reach the page as a pointerdown, the
+    // event that used to dismiss the chip, and ends without a click.
     const cdp = await context.newCDPSession(page);
-    const before = await page
-      .locator(".document-editor-wrapper")
-      .evaluate((el) => el.scrollTop);
-    await cdp.send("Input.synthesizeScrollGesture", {
-      x: 180,
-      y: 400,
-      yDistance: -300,
-      gestureSourceType: "touch",
+    await page.evaluate(() => {
+      const w = window as unknown as { __downs: number };
+      w.__downs = 0;
+      document.addEventListener("pointerdown", () => w.__downs++, true);
     });
-    await expect
-      .poll(() =>
-        page.locator(".document-editor-wrapper").evaluate((el) => el.scrollTop),
-      )
-      .toBeGreaterThan(before);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: 180, y: 450 }],
+    });
+    for (let y = 420; y >= 150; y -= 30) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: 180, y }],
+      });
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __downs: number }).__downs,
+      ),
+    ).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
     await expect(chip).toBeVisible();
 
     await chip.getByRole("button", { name: /^Go to/ }).tap();
