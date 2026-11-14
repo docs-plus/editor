@@ -138,8 +138,13 @@ export function deleteContinueEntry(documentName: string): void {
 }
 
 const LABEL_MAX = 40;
-/** Control and format characters: bidi controls, zero-width, BOM, soft hyphen. */
-const UNSAFE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
+/**
+ * Control and format characters (bidi controls, zero-width, BOM, soft
+ * hyphen) and the letters that render blank (Hangul fillers, braille
+ * blank). Combining marks stay: many scripts need them, and the label's
+ * `truncate` clips any stacked marks.
+ */
+const UNSAFE_LABEL_CHARS = /[\p{Cc}\p{Cf}\u115f\u1160\u2800\u3164\uffa0]/gu;
 
 /**
  * A heading's text as the chip shows it. Anyone can write a heading, so
@@ -148,8 +153,13 @@ const UNSAFE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
  * code points, with an ellipsis. Empty when nothing visible is left.
  */
 export function sectionLabel(text: string): string {
+  // A bounded prefix first: a heading can be as long as a document.
   const chars = Array.from(
-    text.replace(UNSAFE_LABEL_CHARS, "").replace(/\s+/g, " ").trim(),
+    text
+      .slice(0, LABEL_MAX * 8)
+      .replace(UNSAFE_LABEL_CHARS, "")
+      .replace(/\s+/g, " ")
+      .trim(),
   );
   if (chars.length <= LABEL_MAX) return chars.join("");
   return `${chars

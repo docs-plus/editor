@@ -233,8 +233,17 @@ describe("sectionLabel", () => {
     expect(sectionLabel(`${"😀".repeat(45)}`)).toBe(`${"😀".repeat(39)}…`);
   });
 
-  it("is empty when nothing visible is left", () => {
+  it("is empty when nothing visible is left, blank-looking letters included", () => {
     expect(sectionLabel("\u202e\u200b \u2066")).toBe("");
+    expect(sectionLabel("\u3164\u2800\u115f\u1160\uffa0")).toBe("");
+  });
+
+  it("keeps combining marks (needed by many scripts)", () => {
+    expect(sectionLabel("Cafe\u0301 नमस्ते")).toBe("Cafe\u0301 नमस्ते");
+  });
+
+  it("reads only a bounded prefix of a huge heading", () => {
+    expect(sectionLabel("x".repeat(1_000_000))).toBe(`${"x".repeat(39)}…`);
   });
 });
 
