@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Colour popover keeps clear of the selection
+
+The editor chunk goes from +19,283 B to +19,381 B of the 23.5 KB budget
+(4,683 B left; the avoidance itself is in the lazy colour chunk), and the
+first Alt+/ palette load is unchanged; nothing to do when deploying.
+
+#### Fixed
+- The text colour and highlight popovers, opened from the toolbar row with
+  the page at the top, covered the first lines of the document, hiding the
+  very words the hover preview colours. The popover now keeps off the
+  selection: it slides along the row while it still spans its button, or
+  else opens just below the selected lines, still under its button.
+  Keyboard focus, the selection bubble's popover and the phone's Aa sheet
+  are unchanged.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.
