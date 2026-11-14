@@ -9,6 +9,16 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Palette leak test baseline
+
+#### Fixed
+- **Tests:** `palette-leaks.spec.ts` compares window and document listener
+  counts only once two reads 1.5 s apart agree. A tab left within the last
+  second keeps its provider (and that provider's `pagehide` listener) until
+  `collab-session`'s deferred release, so on a slower runner the baseline
+  missed one listener the after-switches read still had (101 vs 102,
+  failing `main` since #37). A listener leaked per switch still fails.
+
 ### Toolbar menu alignment
 
 Three visual inconsistencies in the toolbar menus. The layout changes sit

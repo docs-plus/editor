@@ -45,6 +45,36 @@ async function listenerCounts(cdp: CDPSession): Promise<ListenerCounts> {
   };
 }
 
+/**
+ * Longer than `RELEASE_DELAY_MS` in `lib/collab-session.ts` (1 s): the tab
+ * just left keeps its provider, and that provider's `pagehide` listener on
+ * `window`, until then. A read inside that window counts one listener a
+ * later read does not, so a count is only comparable once it has settled.
+ */
+const SETTLE_MS = 1_500;
+const SETTLE_TRIES = 8;
+
+/**
+ * Listener counts once two reads `SETTLE_MS` apart agree (deferred
+ * releases flushed, late module listeners attached), at most
+ * `SETTLE_TRIES` reads. A real leak still shows: it stays after settling.
+ */
+async function settledListenerCounts(
+  page: Page,
+  cdp: CDPSession,
+): Promise<ListenerCounts> {
+  let counts = await listenerCounts(cdp);
+  for (let i = 1; i < SETTLE_TRIES; i++) {
+    await page.waitForTimeout(SETTLE_MS);
+    const next = await listenerCounts(cdp);
+    const same =
+      next.window === counts.window && next.document === counts.document;
+    counts = next;
+    if (same) break;
+  }
+  return counts;
+}
+
 async function liveEditors(cdp: CDPSession): Promise<number> {
   await cdp.send("HeapProfiler.collectGarbage");
   const { result: proto } = await cdp.send("Runtime.evaluate", {
@@ -113,7 +143,7 @@ test("listeners and heap return to baseline after 20 tab switches and 100 palett
   await switchTab(page, "playground");
   await switchTab(page, back);
   await paletteCycle(page);
-  const baseline = await listenerCounts(cdp);
+  const baseline = await settledListenerCounts(page, cdp);
   expect(baseline.paletteKeydown).toBe(1);
   const tabsHeapBefore = await heapUsed(cdp);
   const tabsEditorsBefore = await liveEditors(cdp);
@@ -121,7 +151,7 @@ test("listeners and heap return to baseline after 20 tab switches and 100 palett
   for (let i = 0; i < 20; i++) {
     await switchTab(page, i % 2 === 0 ? "playground" : back);
   }
-  const afterTabs = await listenerCounts(cdp);
+  const afterTabs = await settledListenerCounts(page, cdp);
   const tabsHeapAfter = await heapUsed(cdp);
   const tabsEditorsAfter = await liveEditors(cdp);
   console.log(
