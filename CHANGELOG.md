@@ -9,6 +9,18 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Continue chip phone test waits for the page to stop
+
+Test only; no app, schema or protocol change; no Deploy note.
+
+#### Fixed
+- The 375px touch test of "Continue where you left off" tapped Go 300 ms
+  after its touch pan, while the page was still coasting. On Linux,
+  Chromium treats a tap that stops a coasting page as stopping the scroll
+  rather than as a click, as phones do, so the chip stayed and `main`
+  went red. The test now checks that the pan scrolled the page and taps
+  Go once the page is at rest.
+
 ### "/" block menu
 
 Type "/" at the start of a line, or after a space, for a short menu of

@@ -527,6 +527,8 @@ test.describe("continue where you left off: phone", () => {
     // touch events (CDP's synthesized scroll gesture does not scroll on
     // headless Linux); the pan must reach the page as a pointerdown, the
     // event that used to dismiss the chip, and ends without a click.
+    const scroller = page.locator("main.document-editor-wrapper");
+    const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
     const cdp = await context.newCDPSession(page);
     await page.evaluate(() => {
       const w = window as unknown as { __downs: number };
@@ -552,7 +554,22 @@ test.describe("continue where you left off: phone", () => {
         () => (window as unknown as { __downs: number }).__downs,
       ),
     ).toBeGreaterThan(0);
-    await page.waitForTimeout(300);
+    expect(await scrollTop()).toBeGreaterThan(0);
+    // The pan leaves the page coasting. A tap that stops a coasting page
+    // only stops it, as on any phone (Chromium on Linux drops the click),
+    // so tap once the page is at rest.
+    let last = -1;
+    await expect
+      .poll(
+        async () => {
+          const top = await scrollTop();
+          const still = top === last;
+          last = top;
+          return still;
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
     await expect(chip).toBeVisible();
 
     await chip.getByRole("button", { name: /^Go to/ }).tap();
