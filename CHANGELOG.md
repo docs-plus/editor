@@ -22,6 +22,18 @@ beyond the usual Hocus restart.
   Hocuspocus still sends to the client as the refusal reason but does not
   log; refusals show up only in the per-minute `client_schema` aggregate.
 
+### Quiet production build: quoted highlight colour keys
+
+Build output only: the compiled CSS is byte-identical, so the editor chunk
+and the first Alt+/ palette chunk do not change; no Deploy note.
+
+#### Fixed
+- `next build` printed ten Sass warnings from the document highlight rules:
+  the token list held bare colour names (`gray`, `blue`, ...), which Sass
+  reads as colours and warns about when interpolated into a selector. The
+  names are now quoted strings, like the maps in `text-style-marks.scss`
+  already were, and the build compiles without Sass warnings.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.
