@@ -1,6 +1,8 @@
 .toc-sidebar {
   position: sticky;
-  top: 1rem;
+  // Sticks right below the sticky toolbar (same scroll container), never
+  // under it; its own top padding keeps the header clear of the row.
+  top: var(--tt-toolbar-height);
   align-self: flex-start;
   width: 270px;
   max-height: calc(100dvh - var(--tt-toolbar-height) - 38px - 2rem);
