@@ -15,7 +15,8 @@ import type { Swatch } from "./swatch";
 
 /**
  * Hover preview for colour swatches (smart toolbar later phase): the
- * selected text shows a swatch's colour before it is applied. This module
+ * selected text shows a swatch's colour before it is applied, when a mouse
+ * or pen rests on a swatch or arrow keys move to one. This module
  * is in the lazy colour-panel chunk and reaches the eager `ActionPreview`
  * extension only through its command, so it adds nothing to the editor
  * chunk (the type import is erased).
@@ -39,10 +40,25 @@ export const PREVIEW_MAX_POSITIONS = 20_000;
 const NO_TINT = "background-color: transparent";
 
 /**
+ * "Default text": inside a text colour mark, the colour the text has
+ * without it (`--tt-preview-plain-color`, set on the mark by
+ * `color-panel.scss`: the page's text colour, or a link's); elsewhere the
+ * context's own colour (inline code, a link), which applying keeps.
+ */
+const PLAIN_COLOR = "color: var(--tt-preview-plain-color, currentColor)";
+/**
+ * "No highlight": inside a highlight, what is under it (the page, or a
+ * header cell's tint over it); elsewhere nothing, so inline code and the
+ * cell show through.
+ */
+const PLAIN_BG = "background: var(--tt-preview-plain-bg, transparent)";
+
+/**
  * The decoration a swatch previews. A text colour carries the real mark's
- * token attribute, so the token CSS paints it. Backgrounds and "Default
- * text" are an inline style built from a palette token, which outranks the
- * selection paint. Null for a token outside the palette.
+ * token attribute, so the token CSS paints it. The rest is an inline style
+ * (it outranks the selection paint): a highlight's palette token, or for
+ * "Default text" and "No highlight" what the context renders without the
+ * mark. Null for a token outside the palette.
  */
 export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
   const { kind, token } = swatch;
@@ -50,7 +66,7 @@ export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
   if (kind === "text") {
     return token
       ? { [TEXT_COLOR_ATTR]: token, class: PREVIEW_CLASS, style: NO_TINT }
-      : { class: PREVIEW_CLASS, style: `color: var(--foreground); ${NO_TINT}` };
+      : { class: PREVIEW_CLASS, style: `${PLAIN_COLOR}; ${NO_TINT}` };
   }
   return token
     ? {
@@ -59,7 +75,7 @@ export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
         class: PREVIEW_CLASS,
         style: `background-color: var(--tt-color-highlight-${token})`,
       }
-    : { class: PREVIEW_CLASS, style: "background-color: var(--background)" };
+    : { class: PREVIEW_CLASS, style: PLAIN_BG };
 }
 
 /**
@@ -78,22 +94,33 @@ export function canPreview(editor: Editor): boolean {
 }
 
 /**
- * Previews need a mouse or pen that hovers, and are off in forced colours
- * (which override the colours a preview would show) and when
- * `NEXT_PUBLIC_ACTION_PREVIEW=0`. Read once at mount, like
- * `isCoarsePointer()`.
+ * Which inputs preview: "all" with a primary mouse or pen that hovers;
+ * "keys" (arrow keys only) on a touch-first device, so a tablet with a
+ * hardware keyboard keeps the keyboard preview while a tap, or an iPad
+ * trackpad, never previews; "off" in forced colours (which override the
+ * colours a preview would show) and when `NEXT_PUBLIC_ACTION_PREVIEW=0`.
+ * Read once at mount, like `isCoarsePointer()`.
  */
-function previewSupported(): boolean {
-  return (
-    process.env.NEXT_PUBLIC_ACTION_PREVIEW !== "0" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-    !window.matchMedia("(forced-colors: active)").matches
-  );
+type PreviewMode = "off" | "keys" | "all";
+
+function previewMode(): PreviewMode {
+  if (
+    process.env.NEXT_PUBLIC_ACTION_PREVIEW === "0" ||
+    typeof window.matchMedia !== "function" ||
+    window.matchMedia("(forced-colors: active)").matches
+  ) {
+    return "off";
+  }
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches
+    ? "all"
+    : "keys";
 }
 
 export interface SwatchPreview {
-  /** Pointer entered a swatch: preview it after the dwell (mouse or pen). */
+  /**
+   * Pointer entered a swatch: preview it after the dwell (mouse or pen,
+   * and only with a primary pointer that hovers).
+   */
   hover(event: { pointerType: string }, swatch: Swatch | null): void;
   /** Pointer left a swatch: clear after the dwell unless another takes over. */
   leave(): void;
@@ -119,11 +146,11 @@ const OFF: SwatchPreview = {
  * popover closing, Esc) cancels it and clears the preview.
  */
 export function useSwatchPreview(editor: Editor): SwatchPreview {
-  const [supported] = useState(previewSupported);
+  const [mode] = useState(previewMode);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const preview = useMemo<SwatchPreview>(() => {
-    if (!supported) return OFF;
+    if (mode === "off") return OFF;
     const set = (swatch: Swatch | null) => {
       clearTimeout(timer.current);
       if (editor.isDestroyed) return;
@@ -134,17 +161,22 @@ export function useSwatchPreview(editor: Editor): SwatchPreview {
       clearTimeout(timer.current);
       timer.current = setTimeout(set, PREVIEW_DWELL_MS, swatch);
     };
+    const keys = {
+      show: (swatch: Swatch | null, repeat?: boolean) =>
+        (repeat ? later : set)(swatch),
+      clear: () => set(null),
+    };
+    if (mode === "keys") return { ...OFF, ...keys };
     return {
+      ...keys,
       hover(event, swatch) {
         if (event.pointerType === "mouse" || event.pointerType === "pen") {
           later(swatch);
         }
       },
       leave: () => later(null),
-      show: (swatch, repeat) => (repeat ? later : set)(swatch),
-      clear: () => set(null),
     };
-  }, [editor, supported]);
+  }, [editor, mode]);
 
   useEffect(() => preview.clear, [preview]);
 
