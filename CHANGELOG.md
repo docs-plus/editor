@@ -9,6 +9,28 @@ since the previous tag.
 
 ## [Unreleased]
 
+### The outline follows a heading jump
+
+The editor chunk goes from +19,283 B to +19,355 B of the 23.5 KB budget
+(+72 B); nothing to do when deploying. Headings themselves land where they
+did: the editor's scroll area already keeps jump targets clear of the
+toolbar (`scroll-padding-top`, measured flush under it at 800 to 1440 px),
+and a heading `scroll-margin-top` on top of it would land them 44 px lower
+and make the outline mark the heading before as active. Whether the
+outline centres or tops its heading is unchanged.
+
+#### Fixed
+- After a jump (an outline pick, the Continue chip's Go) or a scroll, the
+  outline now keeps the active heading's row in view (as
+  `block: "nearest"`). Go to Section 45 of a long document used to leave
+  the outline showing Sections 1 to 25. Only the outline's own box
+  scrolls: `scrollIntoView` would also move the page the jump has just
+  positioned. A drag, or the drop that ends it, never scrolls it.
+- The docked outline stuck 16 px from the top of the scroll area, so its
+  top 28 px (the "Outline" header, or the active row) sat under the
+  sticky toolbar once the page scrolled. It now sticks right below the
+  toolbar (`--tt-toolbar-height`), where it already starts.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
