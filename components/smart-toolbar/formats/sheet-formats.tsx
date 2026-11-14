@@ -180,7 +180,7 @@ export function SheetFormats({
             openPalette(editor, "save-format");
           }}
         >
-          <span className="min-w-0 truncate">Save selection as format…</span>
+          <span className="min-w-0 truncate">{formatsSaveAction.label}</span>
         </ToolbarButton>
         <SheetReason id={saveReasonId} text={save} />
       </div>

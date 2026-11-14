@@ -222,7 +222,7 @@ export const repeatCopyAction = engineAction<string | undefined>({
 /** Arg: the format name. Saves the selection's set entries (M14). */
 export const formatsSaveAction = engineAction<string>({
   id: "formats.save",
-  label: "Save as format…",
+  label: "Save selection as format…",
   group: "format",
   contexts: "any",
 });
