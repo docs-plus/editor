@@ -37,6 +37,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * Scrolls the outline's own box so `row` shows, as `block: "nearest"`
+ * would. `scrollIntoView` also scrolls every ancestor, which would move
+ * the page a heading jump has just positioned (and restart its settle).
+ */
+function revealRow(list: HTMLElement, row: HTMLElement) {
+  const box = list.getBoundingClientRect();
+  const { top, bottom } = row.getBoundingClientRect();
+  if (top < box.top) list.scrollTop -= box.top - top;
+  else if (bottom > box.bottom) list.scrollTop += bottom - box.bottom;
+}
+
 interface TocSidebarProps {
   items: TableOfContentData;
   editor: Editor | null;
@@ -103,10 +115,18 @@ export function TocSidebar({
   const displayLevelRef = useRef<number | null>(null);
   const offsetLeftRef = useRef(0);
   const activeItemRef = useRef<TableOfContentData[number] | null>(null);
+  const listRef = useRef<HTMLElement>(null);
+  const activeHeadingId = items.find((item) => item.isActive)?.id;
 
+  // The outline follows the page: on open, and whenever the active heading
+  // changes (a heading jump, the Continue chip, scrolling), its row is kept
+  // in view. Not while a row is being dragged.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "nearest" });
-  }, []);
+    const list = listRef.current;
+    const row = activeRef.current;
+    if (activeHeadingId == null || activeId != null || !list || !row) return;
+    revealRow(list, row);
+  }, [activeHeadingId, activeId]);
 
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {
@@ -269,7 +289,7 @@ export function TocSidebar({
   );
 
   return (
-    <nav className="toc-sidebar" aria-label="Document outline">
+    <nav ref={listRef} className="toc-sidebar" aria-label="Document outline">
       <div className="toc-sidebar-header">Outline</div>
       {items.length === 0 ? (
         <p className="toc-sidebar-empty">Add headings to see an outline</p>
