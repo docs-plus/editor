@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Menu focus after a quick second open
+
+The editor chunk goes from +17,249 B to +17,285 B of the 23.5 KB budget
+(6,779 B left).
+
+#### Fixed
+- A toolbar menu opened while the previous one was still animating out
+  (Esc, then a click on another menu) closed again at once: when the old
+  popup unmounted, Base UI moved focus back to its trigger. Toolbar menus
+  and the desktop List menu now return focus to their trigger only while
+  it is still lost with the closing menu, as the Insert menu's step
+  already did. This turned `toolbar-ladder.spec.ts` red on slower CI
+  runners.
+
 ### Design sign-off follow-ups
 
 What the design sign-off of the smart toolbar design pass (#35) left
