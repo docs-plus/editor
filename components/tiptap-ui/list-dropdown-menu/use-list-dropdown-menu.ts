@@ -47,17 +47,17 @@ export interface ListOption {
 
 export const listOptions: ListOption[] = [
   {
-    label: "Bullet List",
+    label: "Bullet list",
     type: "bulletList",
     icon: ListIcon,
   },
   {
-    label: "Ordered List",
+    label: "Numbered list",
     type: "orderedList",
     icon: ListOrderedIcon,
   },
   {
-    label: "Task List",
+    label: "Task list",
     type: "taskList",
     icon: ListTodoIcon,
   },
