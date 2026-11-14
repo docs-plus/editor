@@ -9,6 +9,19 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Outdated-client refusals without a stack trace
+
+Server only; the editor chunk does not change. Nothing to do when deploying
+beyond the usual Hocus restart.
+
+#### Fixed
+- Every refused outdated client printed a Bun code frame and stack trace to
+  the Hocus error log. Hocuspocus logs a hook error whenever it has a
+  `message`, and Bun's code frame ignores the emptied `.stack`. `onConnect`
+  now throws a plain `{ reason: "client_outdated" }` value instead, which
+  Hocuspocus still sends to the client as the refusal reason but does not
+  log; refusals show up only in the per-minute `client_schema` aggregate.
+
 ### Quiet production build: quoted highlight colour keys
 
 Build output only: the compiled CSS is byte-identical, so the editor chunk

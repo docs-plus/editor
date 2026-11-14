@@ -57,16 +57,19 @@ export function isGateExempt(documentName: string): boolean {
   return documentName === TABS_DOC || documentName.startsWith(`${TABS_DOC}-`);
 }
 
+export type ClientOutdatedRefusal = {
+  readonly reason: typeof CLIENT_OUTDATED_REASON;
+};
+
 /**
- * The `onConnect` refusal for an outdated client. Not an abuse event: it is
- * logged only in the per-minute aggregate, and carries no stack trace.
+ * What `onConnect` throws for an outdated client. Not an abuse event: it is
+ * logged only in the per-minute aggregate. Hocuspocus sends `reason` to the
+ * client as the permission-denied reason, and logs a hook error (with Bun's
+ * code frame, which ignores `.stack`) only when it has a `message`, so this
+ * is a plain value without one.
  */
-export function clientOutdatedError(): Error & { reason: string } {
-  const error = Object.assign(new Error(CLIENT_OUTDATED_REASON), {
-    reason: CLIENT_OUTDATED_REASON,
-  });
-  error.stack = "";
-  return error;
+export function clientOutdatedRefusal(): ClientOutdatedRefusal {
+  return { reason: CLIENT_OUTDATED_REASON };
 }
 
 /**
