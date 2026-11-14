@@ -65,6 +65,7 @@ import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
+import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
@@ -294,6 +295,7 @@ function DocumentEditorContent({
   }, [editor]);
 
   const toolbarOff = useToolbarOffForTests();
+  const density = useToolbarDensity();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
@@ -301,7 +303,11 @@ function DocumentEditorContent({
         {/* Phones (< 768px) get the docked bar instead of the row (spec
             §4.7): one role="toolbar" either way, both reached by Alt+F10. */}
         {!toolbarOff && !isMobile && (
-          <Toolbar ref={setToolbarRef} onEscape={returnToEditor}>
+          <Toolbar
+            ref={setToolbarRef}
+            onEscape={returnToEditor}
+            data-toolbar-density={density}
+          >
             <Profiler id="toolbar" onRender={countToolbarCommit}>
               <MainToolbarContent
                 onTocToggle={() => setOutlineOpen((open) => !open)}
