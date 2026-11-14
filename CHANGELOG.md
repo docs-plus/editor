@@ -9,6 +9,38 @@ since the previous tag.
 
 ## [Unreleased]
 
+### WebKit compatibility pass
+
+A `webkit` Playwright project runs the core editing specs in Safari's
+engine (by hand; CI still runs Chromium only), and the Safari bugs it
+found are fixed. No schema or protocol change; no Deploy note. The editor
+chunk grows by 1 B, to +19,284 B of the 23.5 KB budget (4,780 B left);
+the palette's first Alt+/ is untouched.
+
+#### Added
+- `bun playwright test --project=webkit` (after
+  `bun playwright install webkit`): toolbar, selection bubble, Paint
+  format, palette, "/" menu, Continue chip, hover preview, phone bar,
+  collaboration and leak specs. Tests that need Chromium's DevTools
+  protocol (heap and listener counts, raw touch drags, CPU throttling) or
+  forced colours skip there; `tests/TESTING.md` lists what WebKit does
+  differently.
+
+#### Fixed
+- Safari: the selection bubble could open on top of the selected line
+  instead of above it, so a drag over the next words hit the bubble and
+  Paint format never applied. Safari keeps a loaded stylesheet inactive
+  while another one is still loading, so the bubble was placed before its
+  lazy stylesheet made the scroll container its containing block, then
+  dropped 38px when it did. That rule now lives with the container's own
+  styles.
+- Safari: the code language select in the phone's Aa sheet (below 360px)
+  was 22px tall; it is 44px, like every other target there.
+- Safari: Back (✕) on the phone's selection cells, pressed from the
+  keyboard, left focus on Insert instead of the bar's first cell: WebKit
+  fires no `focusout` for the removed button, so the toolbar's own focus
+  repair ran first.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.
