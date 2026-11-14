@@ -27,6 +27,92 @@ unchanged; nothing to do when deploying.
   stays on its label's line off macOS; reason lines wrap within that
   width instead of widening the menu.
 
+### One name for justified alignment
+
+The editor chunk goes from +19,283 B to +19,208 B of the 23.5 KB budget
+(4,856 B left); the first Alt+/ palette load is unchanged (20,475 B);
+nothing to do when deploying.
+
+#### Changed
+- The Align ▾ trigger now takes its name and icon from the `align.*`
+  registry action instead of its own copy of the labels, so the trigger,
+  the menu items, the ¶ menu, the palette and the phone Text format sheet
+  share one source: "Align left", "Align center", "Align right" and
+  "Justify". The old "Align justify" tooltip wording left with the
+  pre-registry text-align button; no visible wording changes.
+
+### Trash icon on Delete row and Delete column
+
+The editor chunk goes from +19,283 B to +19,282 B of the 23.5 KB budget
+(the icon is in the lazy menu chunk); nothing to do when deploying.
+
+#### Changed
+- In the table's Row ▾ and Column ▾ menus, and in the Table tools menu
+  that stands in for them on narrow windows and phones, Delete row and
+  Delete column now have a trash icon and line up with the other items,
+  instead of inset text with an empty icon column. The palette and the
+  phone "Text format" sheet are unchanged.
+
+### Image resize gripper survives plugin view rebuilds
+
+The editor chunk grows by 116 B gzipped (measured +19,283 B to +19,399 B
+of the 23.5 KB budget); nothing to do when deploying.
+
+#### Fixed
+- Hovering an image while a lazy chunk was still loading could hide its
+  resize gripper and media toolbar at once, and a resize drag could stop
+  midway. A lazy chunk that registers a plugin (the selection bubble's
+  `BubbleMenu`) reconfigures the editor; ProseMirror then destroys and
+  recreates every plugin view, and the destroy hooks of
+  `@docs.plus/extension-hypermultimedia`'s media controls hide the active
+  gripper and abort a running drag. The editor now uses
+  `extensions/hyper-multimedia/`'s `HyperMultimediaKit`, which skips those
+  two destroy hooks when only the plugin list changed; they still run when
+  the editor is destroyed or the plugin is removed. This retires the
+  "known, not fixed" note from the resize gripper test fix, and the test
+  no longer waits for the bubble's plugin before hovering.
+
+### Shared filter links apply on load
+
+The editor chunk goes from +19,283 B to +19,294 B of the 23.5 KB budget;
+nothing to do when deploying.
+
+#### Fixed
+- Opening a link with `?filter=…` never applied the heading filter: the
+  filter hook wrote its empty state to the URL on its first render, before
+  the editor existed, so the query was gone by the time it was read (and
+  React's development remount stripped it again). The link's filter is now
+  read on mount and applied after the first server sync, so it folds the
+  real sections, not an empty or stale device copy. The URL keeps the
+  filter until then, and mirrors it afterwards as before.
+- A hand-typed filter link with a bare `%` (`?filter=50%25`) threw while
+  decoding; that slug is now kept as typed.
+
+### Outdated-client refusals without a stack trace
+
+Server only; the editor chunk does not change. Nothing to do when deploying
+beyond the usual Hocus restart.
+
+#### Fixed
+- Every refused outdated client printed a Bun code frame and stack trace to
+  the Hocus error log. Hocuspocus logs a hook error whenever it has a
+  `message`, and Bun's code frame ignores the emptied `.stack`. `onConnect`
+  now throws a plain `{ reason: "client_outdated" }` value instead, which
+  Hocuspocus still sends to the client as the refusal reason but does not
+  log; refusals show up only in the per-minute `client_schema` aggregate.
+
+### Quiet production build: quoted highlight colour keys
+
+Build output only: the compiled CSS is byte-identical, so the editor chunk
+and the first Alt+/ palette chunk do not change; no Deploy note.
+
+#### Fixed
+- `next build` printed ten Sass warnings from the document highlight rules:
+  the token list held bare colour names (`gray`, `blue`, ...), which Sass
+  reads as colours and warns about when interpolated into a selector. The
+  names are now quoted strings, like the maps in `text-style-marks.scss`
+  already were, and the build compiles without Sass warnings.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.

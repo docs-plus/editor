@@ -31,6 +31,26 @@ describe("decodeFilterParams", () => {
     expect(decodeFilterParams("?filter=&mode=or")).toBeNull();
     expect(decodeFilterParams("?filter=|")).toBeNull();
   });
+
+  it("a hand-typed % keeps the slug as typed instead of throwing", () => {
+    expect(decodeFilterParams("?filter=50%25")?.slugs).toEqual(["50%"]);
+    expect(decodeFilterParams("?filter=100%")?.slugs).toEqual(["100%"]);
+    expect(decodeFilterParams("?filter=a%7C50%25%7Cb")?.slugs).toEqual([
+      "a",
+      "50%",
+      "b",
+    ]);
+  });
+
+  it("round-trips a slug with % written by updateFilterUrl", () => {
+    window.history.replaceState(null, "", "/");
+    updateFilterUrl(["50%", "a|b"], "and");
+    expect(decodeFilterParams(window.location.search)).toEqual({
+      slugs: ["50%", "a|b"],
+      mode: "and",
+    });
+    window.history.replaceState(null, "", "/");
+  });
 });
 
 describe("updateFilterUrl", () => {

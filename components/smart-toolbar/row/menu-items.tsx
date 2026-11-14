@@ -18,7 +18,8 @@ import {
   formatKeyCombo,
 } from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
-import type { KeyCombo } from "@/lib/editor-actions/types";
+import type { IconComponent, KeyCombo } from "@/lib/editor-actions/types";
+import { TrashIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +132,16 @@ function Shortcut({
 const insetProp = (inset: boolean) => (inset ? true : undefined);
 
 /**
+ * Icons these menus give registry actions that have none. Kept here, in
+ * the lazy menu chunk: an icon on the action would load with the registry
+ * in the editor chunk.
+ */
+const MENU_ICONS: Partial<Record<string, IconComponent>> = {
+  "table.deleteRow": TrashIcon,
+  "table.deleteColumn": TrashIcon,
+};
+
+/**
  * One registry action as a menu item, with its reason and shortcut. Every
  * menu listing these has iconed items, so one without an icon is inset.
  */
@@ -148,7 +159,7 @@ export function ActionMenuItem({
   const action = editorActions.get(id);
   if (!action || !view) return null;
   const reason = view.enabled === true ? undefined : view.enabled.reason;
-  const Icon = action.icon;
+  const Icon = action.icon ?? MENU_ICONS[id];
   const mac = isMac();
   const common = {
     inset: insetProp(Icon === undefined),

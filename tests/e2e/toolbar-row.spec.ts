@@ -512,6 +512,32 @@ test.describe("context slot", () => {
     ).toHaveAttribute("aria-haspopup", "menu");
   });
 
+  test("Row and Column menus give every item an icon, none inset", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Cell A");
+    const table = page.getByRole("group", { name: "Table tools" });
+    for (const [trigger, remove] of [
+      ["Row", "Delete row"],
+      ["Column", "Delete column"],
+    ]) {
+      await table.getByRole("button", { name: trigger, exact: true }).click();
+      const menu = page.getByRole("menu", { name: trigger });
+      const items = menu.getByRole("menuitem");
+      await expect(items).toHaveCount(3);
+      await expect(menu.locator("[data-inset]")).toHaveCount(0);
+      for (const item of await items.all()) {
+        await expect(item.locator("svg")).toHaveCount(1);
+      }
+      await expect(
+        menu.getByRole("menuitem", { name: remove }).locator("svg"),
+      ).toHaveClass(/lucide-trash/);
+      await page.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+    }
+  });
+
   test("Move section up moves the section and keeps focus on the button", async ({
     page,
   }) => {
