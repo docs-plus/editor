@@ -56,6 +56,12 @@ body {
 }
 
 .document-editor-wrapper {
+  // The selection bubble is appended here: as its containing block the
+  // bubble scrolls with the text instead of waiting for the plugin's
+  // debounced reposition. Here, not in the bubble's lazy stylesheet:
+  // Safari can run the bubble's chunk before that sheet applies, and the
+  // bubble, placed against the page, then dropped onto the selected line.
+  position: relative;
   width: 100%;
   flex: 1;
   overflow: auto;

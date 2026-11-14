@@ -118,7 +118,10 @@ async function switchTab(page: Page, id: string): Promise<void> {
 
 test("listeners and heap return to baseline after 20 tab switches and 100 palette cycles", async ({
   page,
+  browserName,
 }) => {
+  // Heap and listener counts come from Chromium's DevTools protocol.
+  test.skip(browserName !== "chromium", "CDP only");
   test.setTimeout(180_000);
   test.info().annotations.push({
     type: "known",

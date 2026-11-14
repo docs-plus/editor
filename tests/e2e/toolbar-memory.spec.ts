@@ -192,7 +192,12 @@ test.describe("Insert step focus", () => {
   // A slow device stretches the step's exit animation, so the next click
   // lands before Base UI returns focus; that return must not close the
   // menu just opened (CI run 43434733098).
-  test("a menu opened while the step closes stays open", async ({ page }) => {
+  test("a menu opened while the step closes stays open", async ({
+    page,
+    browserName,
+  }) => {
+    // CPU throttling goes through Chromium's DevTools protocol.
+    test.skip(browserName !== "chromium", "CDP only");
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
     await openTableStep(page);

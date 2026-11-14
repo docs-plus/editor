@@ -550,6 +550,9 @@ test.describe("safe areas", () => {
 
 test.describe("swipe down to close the sheet", () => {
   async function touch(page: Page): Promise<CDPSession> {
+    // Raw touch drags go through Chromium's DevTools protocol.
+    const browser = page.context().browser()?.browserType().name();
+    test.skip(browser !== "chromium", "CDP only");
     return page.context().newCDPSession(page);
   }
 

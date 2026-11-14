@@ -6,6 +6,12 @@ import { EditorPage } from "./editor-page";
 export type Rgb = [number, number, number];
 
 /**
+ * Skip reason for forced-colours checks off Chromium: WebKit has no forced
+ * colours mode (no `forced-color-adjust`, no system colour override).
+ */
+export const NO_FORCED_COLOURS = "WebKit has no forced colours mode";
+
+/**
  * Resolves any CSS colour to sRGB by painting it on a 1×1 canvas. Chromium
  * returns `oklch()` from `getComputedStyle`, which no contrast maths can read.
  */
@@ -67,6 +73,14 @@ export async function openToolbarTestDoc(page: Page): Promise<EditorPage> {
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /**
+ * Base UI's visually hidden focus guards around an open popup. On Safari
+ * Floating UI gives them `role="button"` (not `aria-hidden`) on purpose,
+ * so VoiceOver can move into the portal; axe reads them as nameless
+ * buttons.
+ */
+const FOCUS_GUARDS = "[data-base-ui-focus-guard]";
+
+/**
  * Runs axe on each `include` selector and fails on any serious or critical
  * violation, listing rule id, impact and targets. `wcag22aa` carries
  * `target-size` (2.5.8).
@@ -79,6 +93,7 @@ export async function expectNoSeriousA11yViolations(
   for (const selector of include) {
     const { violations } = await new AxeBuilder({ page })
       .include(selector)
+      .exclude(FOCUS_GUARDS)
       .withTags(AXE_TAGS)
       .analyze();
     for (const violation of violations) {

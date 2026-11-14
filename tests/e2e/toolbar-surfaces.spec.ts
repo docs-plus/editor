@@ -9,6 +9,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 import {
   expectNoSeriousA11yViolations,
+  NO_FORCED_COLOURS,
   openToolbarTestDoc,
   setTheme,
 } from "./helpers/a11y";
@@ -238,7 +239,9 @@ test("size spinbutton keeps Home, End and Enter from the toolbar", async ({
 
 test("colour swatches keep their colours in forced colours", async ({
   page,
+  browserName,
 }, testInfo) => {
+  test.skip(browserName !== "chromium", NO_FORCED_COLOURS);
   await page.emulateMedia({ forcedColors: "active" });
   await openRow(page);
   const more = toolbar(page).getByRole("button", {
