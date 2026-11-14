@@ -9,6 +9,25 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Image resize gripper survives plugin view rebuilds
+
+The editor chunk grows by 116 B gzipped (measured +19,283 B to +19,399 B
+of the 23.5 KB budget); nothing to do when deploying.
+
+#### Fixed
+- Hovering an image while a lazy chunk was still loading could hide its
+  resize gripper and media toolbar at once, and a resize drag could stop
+  midway. A lazy chunk that registers a plugin (the selection bubble's
+  `BubbleMenu`) reconfigures the editor; ProseMirror then destroys and
+  recreates every plugin view, and the destroy hooks of
+  `@docs.plus/extension-hypermultimedia`'s media controls hide the active
+  gripper and abort a running drag. The editor now uses
+  `extensions/hyper-multimedia/`'s `HyperMultimediaKit`, which skips those
+  two destroy hooks when only the plugin list changed; they still run when
+  the editor is destroyed or the plugin is removed. This retires the
+  "known, not fixed" note from the resize gripper test fix, and the test
+  no longer waits for the bubble's plugin before hovering.
+
 ### Shared filter links apply on load
 
 The editor chunk goes from +19,283 B to +19,294 B of the 23.5 KB budget;
