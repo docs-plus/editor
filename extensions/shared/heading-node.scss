@@ -36,12 +36,26 @@
     margin-bottom: 0.5em;
   }
 
+  // The empty title's placeholder: this rule's text, or the Placeholder
+  // extension's while focused. It wraps on narrow phones (two lines at
+  // 320px); out of flow (a zero-height float, or the extension's
+  // absolute `::before`) its second line covered the first body line. In
+  // flow, as an inline-block as wide as the line that takes no inline
+  // space (the negative margin), the title grows to the wrapped height and
+  // the caret still starts the first line.
+  > h1:first-child:has(> br:only-child)::before {
+    position: static;
+    display: inline-block;
+    width: 100%;
+    height: auto;
+    margin-inline-end: -100%;
+    vertical-align: top;
+    pointer-events: none;
+  }
+
   > h1:first-child:has(> br:only-child):not(.has-focus)::before {
     content: "Enter document name";
     color: var(--muted-foreground);
-    float: left;
-    height: 0;
-    pointer-events: none;
   }
 
   h2 {
