@@ -7,7 +7,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { HIGHLIGHT_PALETTE, TEXT_COLOR_PALETTE } from "@/lib/text-style-tokens";
 
-import { resolveRgb } from "./helpers/a11y";
+import { resolveRgb, setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 
 const text = (value: string, marks?: unknown[]) => ({
@@ -35,21 +35,167 @@ const DOC = {
   ],
 };
 
+const link = { type: "hyperlink", attrs: { href: "https://example.com" } };
+const code = { type: "inlineCode" };
+const textColor = (color: string) => ({ type: "textColor", attrs: { color } });
+const highlight = (color: string) => ({ type: "highlight", attrs: { color } });
+const cell = (type: string, ...content: unknown[]) => ({
+  type,
+  content: [paragraph(...content)],
+});
+
+/**
+ * The contexts a fixed colour used to misjudge for "Default text" and
+ * "No highlight": a coloured, highlighted link, inline code and a table
+ * header cell's tint. Each paragraph starts with a word that finds it.
+ */
+const CONTEXT_DOC = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+    paragraph(text("A plain line above the examples")),
+    paragraph(
+      text("Mix "),
+      text("red link", [link, textColor("red"), highlight("yellow")]),
+      text(" with "),
+      text("code", [code]),
+      text(" and "),
+      text("blue mark", [textColor("blue"), highlight("green")]),
+      text(" end"),
+    ),
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            cell(
+              "tableHeader",
+              text("Head "),
+              text("lit", [textColor("red"), highlight("yellow")]),
+              text(" "),
+              text("code", [code]),
+            ),
+            cell("tableHeader", text("Second")),
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            cell("tableCell", text("Cell")),
+            cell("tableCell", text("More")),
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 /** Past the 80 ms dwell, with room for a dev-server frame. */
 const DWELL = 250;
+
+/** Design-review screenshots (`PREVIEW_SCREENS_DIR=<dir>`). */
+const SCREENS = process.env.PREVIEW_SCREENS_DIR;
 
 const row = (page: Page) =>
   page.getByRole("toolbar", { name: "Formatting", exact: true });
 const bubble = (page: Page) => page.locator("[data-smart-bubble]");
 const previews = (page: Page) => page.locator(".tiptap .tt-preview");
 
-async function openDoc(page: Page): Promise<EditorPage> {
+async function openDoc(
+  page: Page,
+  content: unknown = DOC,
+): Promise<EditorPage> {
   const editorPage = new EditorPage(page);
   await editorPage.goto();
   await editorPage.waitForSync();
-  await editorPage.setContent(DOC);
+  // Next's dev indicator sits in the corner; keep it out of the pixels.
+  await page.addStyleTag({
+    content: "nextjs-portal { display: none !important; }",
+  });
+  await editorPage.setContent(content);
   return editorPage;
 }
+
+/** Selects the whole text of the textblock that starts with `start`. */
+async function selectBlock(page: Page, start: string) {
+  await page.evaluate((target) => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    let range: { from: number; to: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (range) return false;
+      if (node.isTextblock && node.textContent.startsWith(target)) {
+        range = { from: pos + 1, to: pos + node.nodeSize - 1 };
+      }
+      return !range;
+    });
+    if (!range) throw new Error(`no block starts with "${target}"`);
+    editor.chain().focus().setTextSelection(range).run();
+  }, start);
+}
+
+/** The viewport box of the paragraph that starts with `start`. */
+const blockClip = (page: Page, start: string) =>
+  page.evaluate((target) => {
+    const block = [...document.querySelectorAll(".tiptap p")].find((p) =>
+      p.textContent?.startsWith(target),
+    );
+    if (!block) throw new Error(`no paragraph starts with "${target}"`);
+    const { x, y, width, height } = block.getBoundingClientRect();
+    return { x, y, width, height };
+  }, start);
+
+/** A caret in the title: no selection paint, no bubble, no hover. */
+async function settleAfterApply(page: Page) {
+  await page.evaluate(() =>
+    window.__tiptap_editor?.chain().focus().setTextSelection(2).run(),
+  );
+  const viewport = page.viewportSize();
+  await page.mouse.move((viewport?.width ?? 800) - 2, 2);
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
+/**
+ * Pixels whose colour differs by more than 2 levels in any channel. Two
+ * renders of the same colours still differ at a few anti-aliased edges
+ * where a mark's element went away (a link's underline ends).
+ */
+const differingPixels = (page: Page, a: Buffer, b: Buffer) =>
+  page.evaluate(
+    async ([first, second]) => {
+      const pixels = async (base64: string) => {
+        // Not `fetch` on a data: URL, which the page's CSP refuses.
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const bitmap = await createImageBitmap(
+          new Blob([bytes], { type: "image/png" }),
+        );
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("2d canvas unavailable");
+        context.drawImage(bitmap, 0, 0);
+        return context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+      };
+      const [x, y] = await Promise.all([pixels(first), pixels(second)]);
+      if (x.length !== y.length) return Number.POSITIVE_INFINITY;
+      let count = 0;
+      for (let i = 0; i < x.length; i += 4) {
+        const diff = Math.max(
+          Math.abs(x[i] - y[i]),
+          Math.abs(x[i + 1] - y[i + 1]),
+          Math.abs(x[i + 2] - y[i + 2]),
+        );
+        if (diff > 2) count += 1;
+      }
+      return count;
+    },
+    [a.toString("base64"), b.toString("base64")] as const,
+  );
 
 /** Selects `needle` with a focused editor. */
 async function selectText(page: Page, needle: string) {
@@ -218,6 +364,59 @@ test.describe("hover preview", () => {
     ).toEqual(await resolveRgb(page, pageBackground));
   });
 
+  // Over a coloured, highlighted link, inline code and a header cell's tint,
+  // the preview renders what applying does, pixel for pixel: it reuses the
+  // colours those contexts render, never a fixed page colour.
+  for (const [swatch, kind] of [
+    ["Default text", "text"],
+    ["No highlight", "highlight"],
+  ] as const) {
+    for (const [where, start] of [
+      ["a link and inline code", "Mix"],
+      ["a table header cell", "Head"],
+    ] as const) {
+      for (const theme of ["light", "dark"] as const) {
+        test(`'${swatch}' over ${where} previews exactly what applying renders (${theme})`, async ({
+          page,
+        }) => {
+          await setTheme(page, theme);
+          await openDoc(page, CONTEXT_DOC);
+          await selectBlock(page, start);
+          const dialog = await openPopover(page, kind);
+          const button = dialog.getByRole("button", { name: swatch });
+          await button.hover();
+          await expect(previews(page).first()).toBeVisible();
+          const clip = await blockClip(page, start);
+          // The popover must not cover the pixels compared.
+          const box = await dialog.boundingBox();
+          expect(box && box.y + box.height <= clip.y).toBe(true);
+          const previewed = await page.screenshot({ clip });
+
+          await button.click();
+          await expect(button).toHaveAttribute("aria-pressed", "true");
+          await dialog.locator(".st-color-row-label").first().hover();
+          await expect(previews(page)).toHaveCount(0);
+          // The applied result under the same wrapper the preview used (it
+          // inherits every colour and only drops the blurred selection's
+          // tint), so the two renders differ in colour alone.
+          await page.evaluate(() =>
+            window.__tiptap_editor?.commands.setActionPreview({
+              class: "tt-preview",
+              style: "background-color: transparent",
+            }),
+          );
+          await expect(previews(page).first()).toBeVisible();
+          const applied = await page.screenshot({ clip });
+          // 0 to 2 pixels differ on macOS; a fixed page colour differed in
+          // 188 to 1,298. 40 leaves room for other platforms' anti-aliasing.
+          expect(
+            await differingPixels(page, previewed, applied),
+          ).toBeLessThanOrEqual(40);
+        });
+      }
+    }
+  }
+
   test("the bubble stays open while previewing from its popover", async ({
     page,
   }) => {
@@ -294,4 +493,64 @@ test.describe("hover preview on touch", () => {
     await expect(swatch).toHaveAttribute("aria-pressed", "true");
     await expect(previews(page)).toHaveCount(0);
   });
+});
+
+/**
+ * The colour swatches: the row's popover at desktop widths, the Aa sheet
+ * (its colour panel) on a phone-width bar used with a mouse.
+ */
+async function openSwatches(page: Page, kind: "text" | "highlight") {
+  const name = kind === "text" ? "More text colours" : "More highlight colours";
+  const inRow = row(page).getByRole("button", { name });
+  if (await inRow.isVisible()) return openPopover(page, kind);
+  await page.getByRole("button", { name: "Back to all tools" }).click();
+  await page.getByRole("button", { name: "Text format" }).click();
+  const sheet = page.locator("[data-format-sheet]");
+  await expect(sheet.locator(".st-swatch").first()).toBeVisible();
+  return sheet;
+}
+
+test.describe("hover preview design-review screenshots", () => {
+  test.skip(!SCREENS, "PREVIEW_SCREENS_DIR only");
+  test.use({ deviceScaleFactor: 2 });
+
+  for (const width of [1440, 375] as const) {
+    for (const theme of ["light", "dark"] as const) {
+      test(`'Default text' and 'No highlight' in context at ${width} (${theme})`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await setTheme(page, theme);
+        for (const [swatch, kind, slug] of [
+          ["Default text", "text", "default-text"],
+          ["No highlight", "highlight", "no-highlight"],
+        ] as const) {
+          for (const [start, where] of [
+            ["Mix", "link-code"],
+            ["Head", "header-cell"],
+          ] as const) {
+            const name = `${SCREENS}/${slug}-${where}-${width}-${theme}`;
+            await openDoc(page, CONTEXT_DOC);
+            await selectBlock(page, start);
+            const dialog = await openSwatches(page, kind);
+            const button = dialog.getByRole("button", { name: swatch });
+            await button.hover();
+            await expect(previews(page).first()).toBeVisible();
+            await page.screenshot({ path: `${name}.png` });
+            await page.screenshot({
+              path: `${name}-closeup.png`,
+              clip: await blockClip(page, start),
+            });
+            await button.click();
+            await page.keyboard.press("Escape");
+            await settleAfterApply(page);
+            await page.screenshot({
+              path: `${name}-applied-closeup.png`,
+              clip: await blockClip(page, start),
+            });
+          }
+        }
+      });
+    }
+  }
 });
