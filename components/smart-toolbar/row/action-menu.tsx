@@ -2,30 +2,19 @@
 
 import type { Editor } from "@tiptap/react";
 import { useCurrentEditor } from "@tiptap/react";
-import { type ReactNode, useCallback, useId, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuReason,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { useActionView } from "@/hooks/use-editor-context";
-import { editorActions } from "@/lib/editor-actions";
-import {
-  ariaKeyShortcuts,
-  formatKeyCombo,
-} from "@/lib/editor-actions/key-combo";
-import { runAction } from "@/lib/editor-actions/registry";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { ChevronDownIcon } from "@/lib/icons";
-import { isMac } from "@/lib/shortcuts";
+
+import { menuBody, prefetchMenuBodies, useMenuGate } from "../lazy-menu";
+
+const Content = menuBody((bodies) => bodies.ToolbarMenuContent);
 
 /** The editor from props, else from `EditorContext`. */
 export function useSurfaceEditor(provided?: Editor | null): Editor | null {
@@ -70,6 +59,7 @@ interface MenuTriggerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   finalFocus: () => HTMLElement | boolean;
+  /** A body from the menu chunk (`menuBody`): the editor chunk keeps none. */
   children: ReactNode;
   contentLabel?: string;
   /** Extra trigger classes, such as letting a long value shrink and truncate. */
@@ -84,8 +74,8 @@ interface MenuTriggerProps {
 
 /**
  * A toolbar menu button (spec §6.4): named by its visible value,
- * `aria-haspopup="menu"`, never `aria-pressed`. Its popup is marked
- * `data-toolbar-popup`, so focus inside it keeps the slot held.
+ * `aria-haspopup="menu"`, never `aria-pressed`. Its popup and items load
+ * with the menu chunk (`lazy-menu.tsx`), which the first open waits for.
  */
 export function ToolbarMenu({
   label,
@@ -101,9 +91,10 @@ export function ToolbarMenu({
   triggerClassName,
   short,
 }: MenuTriggerProps) {
+  const gate = useMenuGate(onOpenChange);
   const handleOpenChange = (next: boolean) => {
     if (next && readOnly) return;
-    onOpenChange(next);
+    gate.onOpenChange(next);
   };
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
@@ -119,6 +110,9 @@ export function ToolbarMenu({
             className={triggerClassName}
             disabled={readOnly}
             disabledReason={readOnly ? READ_ONLY_REASON : undefined}
+            onKeyDownCapture={gate.onKeyDownCapture}
+            onPointerEnter={prefetchMenuBodies}
+            onFocus={prefetchMenuBodies}
           />
         }
       >
@@ -132,135 +126,9 @@ export function ToolbarMenu({
         {showLabel ? <span className="min-w-0 truncate">{label}</span> : null}
         <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        finalFocus={finalFocus}
-        data-toolbar-popup=""
-        aria-label={contentLabel}
-        className="min-w-52"
-      >
+      <Content finalFocus={finalFocus} label={contentLabel}>
         {children}
-      </DropdownMenuContent>
+      </Content>
     </DropdownMenu>
   );
 }
-
-/** The visible reason line (design pass §10), indented past an icon. */
-function Reason({
-  id,
-  reason,
-  indent,
-}: {
-  id: string;
-  reason?: string;
-  indent?: boolean;
-}) {
-  return reason ? (
-    <DropdownMenuReason id={id} className={indent ? "ps-5.5" : undefined}>
-      {reason}
-    </DropdownMenuReason>
-  ) : null;
-}
-
-interface ActionItemProps {
-  id: string;
-  editor: Editor;
-  arg?: unknown;
-  onPicked: () => void;
-  /** Checkbox item (`menuitemcheckbox`) for toggles such as superscript. */
-  checkbox?: boolean;
-  label?: string;
-}
-
-/** One registry action as a menu item, with its reason and shortcut. */
-export function ActionMenuItem({
-  id,
-  editor,
-  arg,
-  onPicked,
-  checkbox = false,
-  label,
-}: ActionItemProps) {
-  const view = useActionView(id, editor);
-  const reasonId = useId();
-  const action = editorActions.get(id);
-  if (!action || !view) return null;
-  const reason = view.enabled === true ? undefined : view.enabled.reason;
-  const Icon = action.icon;
-  const { shortcut } = action;
-  const mac = isMac();
-  const common = {
-    disabled: reason !== undefined,
-    "aria-describedby": reason ? reasonId : undefined,
-    // The visible hint is hidden from the name ("Superscript", not
-    // "Superscript⌘."); the item announces its keys instead.
-    "aria-keyshortcuts": shortcut ? ariaKeyShortcuts(shortcut, mac) : undefined,
-    "data-action-id": id,
-    onClick: () => {
-      onPicked();
-      runAction(editor, action, arg);
-    },
-  };
-  const body = (
-    <>
-      {Icon ? <Icon aria-hidden="true" /> : null}
-      <span>{label ?? action.label}</span>
-      {shortcut ? (
-        <DropdownMenuShortcut aria-hidden="true">
-          {formatKeyCombo(shortcut, mac)}
-        </DropdownMenuShortcut>
-      ) : null}
-      <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
-    </>
-  );
-  return checkbox ? (
-    <DropdownMenuCheckboxItem {...common} checked={view.active} closeOnClick>
-      {body}
-    </DropdownMenuCheckboxItem>
-  ) : (
-    <DropdownMenuItem {...common}>{body}</DropdownMenuItem>
-  );
-}
-
-/** One registry action as a radio item of a value menu. */
-export function ActionRadioItem({
-  id,
-  editor,
-  value,
-  onPicked,
-  arg,
-  label,
-}: {
-  id: string;
-  editor: Editor;
-  value: string;
-  onPicked: () => void;
-  /** Passed to the action's run, such as a language for `code.language`. */
-  arg?: unknown;
-  label?: string;
-}) {
-  const view = useActionView(id, editor);
-  const reasonId = useId();
-  const action = editorActions.get(id);
-  if (!action || !view) return null;
-  const reason = view.enabled === true ? undefined : view.enabled.reason;
-  return (
-    <DropdownMenuRadioItem
-      value={value}
-      closeOnClick
-      disabled={reason !== undefined}
-      aria-describedby={reason ? reasonId : undefined}
-      data-action-id={id}
-      onClick={() => {
-        if (reason) return;
-        onPicked();
-        runAction(editor, action, arg);
-      }}
-    >
-      <span>{label ?? action.label}</span>
-      <Reason id={reasonId} reason={reason} />
-    </DropdownMenuRadioItem>
-  );
-}
-
-export { DropdownMenuRadioGroup };

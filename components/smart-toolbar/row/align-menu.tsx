@@ -12,13 +12,10 @@ import {
   AlignRightIcon,
 } from "@/lib/icons";
 
-import {
-  ActionRadioItem,
-  DropdownMenuRadioGroup,
-  ToolbarMenu,
-  useMenuFocus,
-  useSurfaceEditor,
-} from "./action-menu";
+import { menuBody } from "../lazy-menu";
+import { ToolbarMenu, useMenuFocus, useSurfaceEditor } from "./action-menu";
+
+const AlignMenuItems = menuBody((bodies) => bodies.AlignMenuItems);
 
 const ALIGNS = [
   ["left", "Align left", AlignLeftIcon],
@@ -50,17 +47,11 @@ export function AlignMenu({ editor: provided }: { editor?: Editor | null }) {
       finalFocus={menu.finalFocus}
       contentLabel="Alignment"
     >
-      <DropdownMenuRadioGroup value={value}>
-        {ALIGNS.map(([align]) => (
-          <ActionRadioItem
-            key={align}
-            id={`align.${align}`}
-            value={align}
-            editor={editor}
-            onPicked={menu.markPicked}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
+      <AlignMenuItems
+        editor={editor}
+        value={value}
+        onPicked={menu.markPicked}
+      />
     </ToolbarMenu>
   );
 }

@@ -4,18 +4,15 @@ import type { Editor } from "@tiptap/react";
 import { useRef } from "react";
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
+import { menuBody } from "@/components/smart-toolbar/lazy-menu";
 import {
-  ActionMenuItem,
-  DropdownMenuRadioGroup,
   ToolbarMenu,
   useMenuFocus,
   useSurfaceEditor,
 } from "@/components/smart-toolbar/row/action-menu";
-import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
 import { CODE_LANGUAGES } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
-import { runAction } from "@/lib/editor-actions/registry";
 import {
   type ContextKind,
   type IconComponent,
@@ -24,6 +21,10 @@ import {
 import { Columns3Icon, LockIcon, Rows3Icon } from "@/lib/icons";
 
 import { useSlotTarget, useToolbarHold } from "./use-slot-target";
+
+/* The menus' items are in the menu chunk (`slot-menu-bodies.tsx`). */
+const LanguageMenuItems = menuBody((bodies) => bodies.LanguageMenuItems);
+const ActionMenuItems = menuBody((bodies) => bodies.ActionMenuItems);
 
 /** Fixed width so the row never shifts as the context changes (spec §4.2). */
 const SLOT_WIDTH = 168;
@@ -66,21 +67,12 @@ function LanguageMenu({
       finalFocus={menu.finalFocus}
       contentLabel={tooltip}
     >
-      <DropdownMenuRadioGroup value={current?.value ?? ""}>
-        {CODE_LANGUAGES.map((option) => (
-          <DropdownMenuRadioItem
-            key={option.value}
-            value={option.value}
-            closeOnClick
-            onClick={() => {
-              menu.markPicked();
-              runAction(editor, action, option.value);
-            }}
-          >
-            {option.label}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
+      <LanguageMenuItems
+        action={action}
+        editor={editor}
+        value={current?.value ?? ""}
+        onPicked={menu.markPicked}
+      />
     </ToolbarMenu>
   );
 }
@@ -113,14 +105,7 @@ function ItemsMenu({
       finalFocus={menu.finalFocus}
       contentLabel={label}
     >
-      {ids.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          onPicked={menu.markPicked}
-        />
-      ))}
+      <ActionMenuItems ids={ids} editor={editor} onPicked={menu.markPicked} />
     </ToolbarMenu>
   );
 }

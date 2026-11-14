@@ -10,6 +10,7 @@ export const CHUNK_MARKERS = {
   insertStep: "function InsertStep",
   palette: "function CommandPalette({",
   engine: "const v11Engine = {",
+  menus: "function StyleMenuItems(",
 } as const;
 
 const CHUNKS = "**/_next/static/chunks/**";

@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { CircleAlertIcon } from "@/lib/icons";
 
+import { prefetchMenuBodies } from "./lazy-menu";
+
 /**
  * Surface chunks that are not on screen at first paint (owner decision
  * O1): the colour popover body and the Insert steps.
@@ -20,14 +22,16 @@ export const loadColorPanel = () => import("./color/color-panel");
 export const loadInsertStep = () => import("./insert/insert-step");
 
 /**
- * Fetches both chunks: on hover or focus of their triggers, and when the
- * browser is idle after the first server sync, so the service worker has
- * them before the user goes offline. A failed fetch is retried on open.
+ * Fetches both chunks and the menu chunk (`lazy-menu.tsx`): on hover or
+ * focus of their triggers, and when the browser is idle after the first
+ * server sync, so the service worker has them before the user goes
+ * offline. A failed fetch is retried on open.
  */
 export const preloadSurfaces = () => {
   for (const load of [loadColorPanel, loadInsertStep]) {
     load().catch(() => undefined);
   }
+  prefetchMenuBodies();
 };
 
 interface SurfaceBoundaryProps {

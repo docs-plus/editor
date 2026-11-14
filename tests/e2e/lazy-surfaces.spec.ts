@@ -21,6 +21,8 @@ const failChunk = (page: Page, marker: string) =>
 const hint = (name: string) => `Couldn’t load ${name}.Retry`;
 const PALETTE_FAILED =
   "Couldn’t open actions. Check your connection and try again.";
+const MENU_FAILED =
+  "Couldn’t open the menu. Check your connection and try again.";
 
 /** No failure hint on screen: the bubble just stays away. */
 const expectNoVisibleHint = (page: Page) =>
@@ -284,5 +286,88 @@ test.describe("lazy surface chunks", () => {
     await page.keyboard.type("repeat formatting");
     await expect(repeatRow).toContainText("Nothing to repeat yet");
     await page.keyboard.press("Escape");
+  });
+
+  test("a menu chunk that 404s says so on the pill; Retry opens the menu", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.menus);
+    await openToolbarTestDoc(page);
+    const trigger = row(page).getByRole("button", { name: "More formatting" });
+    const menu = page.getByRole("menu", { name: "More formatting" });
+    await trigger.click();
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText(MENU_FAILED, { timeout: 10_000 });
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await restore();
+    await pill.getByRole("button", { name: /^Retry/ }).click();
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitemcheckbox").first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expectEditorAlive(page, "afterMenu");
+  });
+
+  test("a menu chunk that 404s leaves the editor working; the next open loads it", async ({
+    page,
+  }) => {
+    const restore = await failChunk(page, CHUNK_MARKERS.menus);
+    await openToolbarTestDoc(page);
+    const trigger = row(page).getByRole("button", { name: "More formatting" });
+    await trigger.click();
+    await expect(page.locator('[data-status-pill="desktop"]')).toContainText(
+      MENU_FAILED,
+      { timeout: 10_000 },
+    );
+    await expectEditorAlive(page, "afterMenu");
+
+    await restore();
+    await trigger.click();
+    await expect(
+      page.getByRole("menu", { name: "More formatting" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+
+  test("a keyboard open that waits for the menu chunk loses no key", async ({
+    page,
+  }) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Before load, so the idle and focus preloads wait too.
+    const restore = await interceptChunk(
+      page,
+      CHUNK_MARKERS.menus,
+      async (route, response) => {
+        await held;
+        await route.fulfill({ response });
+      },
+    );
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "Held keys");
+    const trigger = row(page).getByRole("button", { name: "Normal text" });
+    await trigger.focus();
+    // Enter opens at the first item; two ArrowDowns reach Heading 2.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    // Held on the trigger: nothing moved along the toolbar meanwhile.
+    await expect(trigger).toBeFocused();
+    release();
+    const menu = page.getByRole("menu", { name: "Text style" });
+    await expect(menu).toBeVisible();
+    await expect(
+      menu.getByRole("menuitemradio", { name: "Heading 2" }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
+    await expect(
+      page.locator(".tiptap h2", { hasText: "Held keys" }),
+    ).toHaveCount(1);
+    await restore();
   });
 });

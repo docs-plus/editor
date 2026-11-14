@@ -10,20 +10,18 @@ import {
   useToolbarHold,
 } from "@/components/smart-toolbar/context-slot/use-slot-target";
 import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
+import { menuBody } from "@/components/smart-toolbar/lazy-menu";
 import {
-  ActionRadioItem,
-  DropdownMenuRadioGroup,
   ToolbarMenu,
   useMenuFocus,
 } from "@/components/smart-toolbar/row/action-menu";
-import { setListType } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
-import { DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
-import { editorActions } from "@/lib/editor-actions";
 import { ListIcon } from "@/lib/icons";
 
 const NO_LIST = "none";
-const LIST_IDS = ["list.bullet", "list.ordered", "list.task"];
+
+/** The menu's items are in the menu chunk (`phone-menu-bodies.tsx`). */
+const PhoneListMenuItems = menuBody((bodies) => bodies.PhoneListMenuItems);
 
 /** The current list action, or "none": the radio group's value. */
 function useListValue(editor: Editor): string {
@@ -55,41 +53,11 @@ function ListCell({ editor }: { editor: Editor }) {
       finalFocus={menu.finalFocus}
       contentLabel="List"
     >
-      <DropdownMenuRadioGroup value={value}>
-        <DropdownMenuRadioItem
-          value={NO_LIST}
-          closeOnClick
-          onClick={() => {
-            menu.markPicked();
-            setListType(editor, NO_LIST);
-          }}
-        >
-          No list
-        </DropdownMenuRadioItem>
-        {LIST_IDS.map((id) =>
-          // Re-tapping the checked type only closes the menu, as the row's
-          // menu does (its radio group reports changes only): a toggle here
-          // would remove the list.
-          id === value ? (
-            <DropdownMenuRadioItem
-              key={id}
-              value={id}
-              closeOnClick
-              data-action-id={id}
-            >
-              {editorActions.get(id)?.label}
-            </DropdownMenuRadioItem>
-          ) : (
-            <ActionRadioItem
-              key={id}
-              id={id}
-              value={id}
-              editor={editor}
-              onPicked={menu.markPicked}
-            />
-          ),
-        )}
-      </DropdownMenuRadioGroup>
+      <PhoneListMenuItems
+        editor={editor}
+        value={value}
+        onPicked={menu.markPicked}
+      />
     </ToolbarMenu>
   );
 }
@@ -126,9 +94,9 @@ function SlotCell({ editor }: { editor: Editor }) {
 /**
  * The phone bar's last cells (spec §4.7): List ▾, Indent, the context
  * slot and Insert ▾.
- * They reuse the row's menus, which the editor chunk already holds, so the
- * editor shell renders them and hands them to the lazy bar
- * (`mobile-toolbar-content.tsx`). Importing the menus from the bar's own
+ * They reuse the row's menu triggers, which the editor chunk already
+ * holds (their items are in the menu chunk), so the editor shell renders
+ * them and hands them to the lazy bar (`mobile-toolbar-content.tsx`). Importing the menus from the bar's own
  * chunk splits them into a shared chunk and costs the editor chunk group
  * about 1.5 KB gz in lost compression (contract A9).
  */
