@@ -126,14 +126,17 @@ describe("swatchPreviewAttrs", () => {
     });
   });
 
-  it("previews Default text and No highlight with the page's colours", () => {
+  it("previews Default text and No highlight with the context's colours", () => {
+    // Inside the mark, what the mark's own variable says is under it;
+    // outside one, the context shows through (inline code, a link, a cell).
     expect(swatchPreviewAttrs({ kind: "text", token: null })).toEqual({
       class: "tt-preview",
-      style: "color: var(--foreground); background-color: transparent",
+      style:
+        "color: var(--tt-preview-plain-color, currentColor); background-color: transparent",
     });
     expect(swatchPreviewAttrs({ kind: "highlight", token: null })).toEqual({
       class: "tt-preview",
-      style: "background-color: var(--background)",
+      style: "background: var(--tt-preview-plain-bg, transparent)",
     });
   });
 
@@ -283,8 +286,45 @@ describe("useSwatchPreview", () => {
     expect(shownCount(e)).toBe(0);
   });
 
-  it("is off without a fine hovering pointer", () => {
+  it("without a fine hovering pointer, arrow keys still preview", () => {
     mediaMatches = new Set(["(pointer: coarse)"]);
+    const e = setup();
+    e.commands.setTextSelection(LINE);
+    const preview = mount(e);
+    act(() => preview.current.show(RED));
+    expect(e.view.dom.querySelector('[data-text-color="red"]')).not.toBeNull();
+    act(() => preview.current.clear());
+    expect(shownCount(e)).toBe(0);
+  });
+
+  it("without a fine hovering pointer, a mouse or pen never shows or clears", async () => {
+    mediaMatches = new Set(["(pointer: coarse)"]);
+    const e = setup();
+    e.commands.setTextSelection(LINE);
+    const preview = mount(e);
+    act(() => preview.current.hover(mouse, RED));
+    act(() => preview.current.hover({ pointerType: "pen" }, BLUE));
+    await act(() => wait(PREVIEW_DWELL_MS + 30));
+    expect(shownCount(e)).toBe(0);
+    // A pointer leaving a swatch leaves a keyboard preview in place.
+    act(() => preview.current.show(RED));
+    act(() => preview.current.leave());
+    await act(() => wait(PREVIEW_DWELL_MS + 30));
+    expect(e.view.dom.querySelector('[data-text-color="red"]')).not.toBeNull();
+  });
+
+  it("without a fine hovering pointer, forced colours still turn it off", () => {
+    mediaMatches = new Set(["(pointer: coarse)", "(forced-colors: active)"]);
+    const e = setup();
+    e.commands.setTextSelection(LINE);
+    const preview = mount(e);
+    act(() => preview.current.show(RED));
+    expect(shownCount(e)).toBe(0);
+  });
+
+  it("without a fine hovering pointer, NEXT_PUBLIC_ACTION_PREVIEW=0 still disables it", () => {
+    mediaMatches = new Set(["(pointer: coarse)"]);
+    process.env.NEXT_PUBLIC_ACTION_PREVIEW = "0";
     const e = setup();
     e.commands.setTextSelection(LINE);
     const preview = mount(e);

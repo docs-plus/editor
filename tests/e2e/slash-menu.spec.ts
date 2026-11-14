@@ -142,6 +142,36 @@ async function openDoc(page: Page, docId?: string): Promise<EditorPage> {
 const typeAtEnd = (page: Page, text: string) =>
   typeInNewParagraphAtEnd(page, text);
 
+/**
+ * "/quo" lists Quote; then the line is wrapped in a quote while the menu
+ * is open (as a collaborator's edit would), and Enter picks the stale row.
+ */
+async function refusePick(page: Page) {
+  await typeAtEnd(page, "/quo");
+  await expect(options(page).first()).toHaveText(/Quote/);
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __tiptap_editor: { commands: { setBlockquote(): boolean } };
+      }
+    ).__tiptap_editor.commands.setBlockquote(),
+  );
+  await expect(options(page).first()).toHaveText(/Quote/);
+  await page.keyboard.press("Enter");
+  await expect(menu(page)).toHaveCount(0);
+}
+
+/** The refused pick's pill, once its enter animation has finished. */
+async function refusedShot(page: Page, pill: string, name: string) {
+  await refusePick(page);
+  const notice = page.locator(`[data-status-pill="${pill}"]`);
+  await expect(notice).toHaveText("Quote: Already in a quote.");
+  await notice.evaluate((el) =>
+    Promise.all(el.getAnimations().map((animation) => animation.finished)),
+  );
+  await page.screenshot({ path: `${SCREENS}/${name}.png` });
+}
+
 async function expectComboboxAttributes(page: Page) {
   const listbox = await editorDom(page).getAttribute("aria-controls");
   expect(listbox).toMatch(/^slash-menu-[\w-]+$/);
@@ -591,6 +621,27 @@ test.describe("slash menu", () => {
     ).toBe(false);
   });
 
+  test("a pick refused since the menu opened says why on the status pill", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await refusePick(page);
+    await expect(page.locator('[data-status-pill="desktop"]')).toHaveText(
+      "Quote: Already in a quote.",
+    );
+    // Spoken too, by the announcer's region (the menu's own has closed).
+    await expect(
+      page.locator('body > [role="status"][aria-live="polite"]'),
+    ).toHaveText("Quote: Already in a quote.");
+    // Nothing changed: "/quo" stays as typed, the caret after it.
+    expect(await caretBlock(page)).toMatchObject({
+      type: "paragraph",
+      text: "/quo",
+      offset: 4,
+    });
+    await expect(editorDom(page).locator("blockquote")).toHaveCount(1);
+  });
+
   test("near the bottom edge the list flips above the caret, clear of its line", async ({
     page,
   }) => {
@@ -915,6 +966,13 @@ test.describe("slash menu design-review screenshots", () => {
       await openDoc(page);
       await insertAndDiagramShots(page, `1440-${theme}`);
     });
+
+    test(`refused pick at 1440 (${theme})`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await setTheme(page, theme);
+      await openDoc(page);
+      await refusedShot(page, "desktop", `refused-1440-${theme}`);
+    });
   }
 });
 
@@ -949,6 +1007,12 @@ test.describe("slash menu design-review screenshots on touch", () => {
       await openDoc(page);
       await standInKeyboard(page);
       await insertAndDiagramShots(page, `375-${theme}`);
+    });
+
+    test(`refused pick at 375 (${theme})`, async ({ page }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await refusedShot(page, "phone", `refused-375-${theme}`);
     });
   }
 });
