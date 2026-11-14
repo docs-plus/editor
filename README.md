@@ -46,7 +46,7 @@ documents, so don't type anything private.
 | Area | What you get |
 |---|---|
 | **Structured documents** | Title-first schema (`heading block*`), with each section folded, dragged to a new position or filtered by heading. |
-| **Outline** | Table of contents sidebar: click to jump, drag to move whole sections. |
+| **Outline** | Table of contents sidebar: click to jump, drag to move whole sections. Reopening a document offers to continue in the section you left (remembered on this device only). |
 | **Real-time collaboration** | Live cursors and presence, conflict-free merging with Yjs CRDTs, and synced tabs shared by every visitor. |
 | **Rich content** | Lists, task lists, tables, blockquotes, code blocks with highlighting, live Mermaid diagrams and charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom, SoundCloud, Spotify, X). |
 | **Action palette and formatting memory** | Alt+/ (or Alt+Shift+Z) lists every toolbar action with search, Recent and Suggested here. Repeat formatting (⌘⌥V, Ctrl+Alt+V or F4) applies the last formatting you used as one undo step; Paint format (the bubble's brush) picks up formatting and paints it onto the next selection; Your formats live in the text style dropdown. A status pill says what happened, or why not; diagrams start from five templates. On phones a text selection swaps the bar to eight formatting cells. Your formats stay on the device; the Repeat bundle, Recent and the last template are remembered across reloads until "Forget my choices". |
@@ -162,7 +162,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` | unset | Data controller and contact on `/privacy`. Set both before enabling analytics. |
 | `NEXT_PUBLIC_SERVICE_WORKER` | on | `0` unregisters the worker and deletes its caches. See the [service worker runbook](docs/operations/service-worker-runbook.md). |
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
-| `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size): it shows the defaults and writes nothing. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`) and never reach the document, the server, URLs or analytics. |
+| `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size) and the "Continue where you left off" place: it shows the defaults and writes nothing. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`, `tinydocy-continue`) and never reach the document, the server, URLs or analytics. |
 | `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |

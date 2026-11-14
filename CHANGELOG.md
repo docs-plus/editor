@@ -9,6 +9,39 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Continue where you left off
+
+Reopening a document offers a way back to the section you were in (spec
+M15): a small chip above the title, "Continue where you left off ·
+*Section*", with Go and ✕. No schema or protocol change; nothing to
+deploy beyond the app.
+
+The editor chunk grows by 474 B, to +17,153 B of the 23.5 KB budget
+(6,911 B left); the budget is unchanged. The chip, its recorder and its
+styles load as one lazy chunk (2.4 KB gz) when the browser is idle. The
+palette's chunks are unchanged.
+
+#### Added
+- The place is remembered on this device only (`tinydocy-continue`: the
+  section heading's id and a time, never text; 30 documents, 14 days),
+  when you leave the text after choosing a place in it. A place in the
+  title or the first sections is not offered. `NEXT_PUBLIC_REMEMBER_CHOICES=0`
+  turns it off; "Forget my choices" keeps it, like the outline and folds.
+- The chip shows after the server confirms the document (not offline, not
+  in Playground, not when the heading is gone or hidden by a filter). It is
+  never focused or announced and moves nothing. Go unfolds the sections
+  hiding the heading, puts the caret at its end and scrolls it to the top,
+  as an outline pick does. Your first click, key or typing in the
+  document, Dismiss or Esc removes it until the next open; a touch scroll
+  does not.
+- Phones show "Continue · *Section*" above the presence chip and the bar;
+  touch tablets show it at the bottom too.
+
+#### Changed
+- The outline's jump to a heading is shared with the chip
+  (`lib/heading-navigation.ts`) and now scrolls without animation when you
+  prefer reduced motion.
+
 ### Lazy toolbar menus
 
 Every toolbar menu's popup and items move out of the editor chunk into one

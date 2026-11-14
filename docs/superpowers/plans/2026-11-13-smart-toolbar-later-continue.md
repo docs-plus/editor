@@ -75,7 +75,7 @@ CI= E2E_BASE_URL=http://localhost:6220 bun playwright test <spec> --project=chro
 - TOC rules (AGENTS.md): caret at the end of the heading, scroll deferred with `requestAnimationFrame` after selection and focus settle, headings looked up by id with `findTocAnchor`, never by a stored position.
 
 **Contract rules**
-- No frozen file is touched. `document-editor.tsx` is a §5.2 shared file, so its hunk is recorded as a contract amendment: **A14** (renumber at merge if another PR takes it). The simplified-toolbar session also edits `document-editor.tsx`, so the change there is one import and one JSX line.
+- No frozen file is touched. `document-editor.tsx` is a §5.2 shared file, so its hunk is recorded as a contract amendment: **A-next** (the coordinator assigns the number in merge order). The simplified-toolbar session also edits `document-editor.tsx`, so the change there is one import and one JSX line.
 - `STORAGE_KEYS` and `CHOICE_SLOTS` are pinned by `contract.test.ts` (`toEqual`), so `tinydocy-continue` is a separate constant in `lib/continue-position.ts`, like `tinydocy-folds-<id>` in `extensions/heading-fold/helpers/fold-storage.ts`.
 
 ## Schema and protocol
@@ -198,7 +198,7 @@ CI= E2E_BASE_URL=http://localhost:6220 bun playwright test <spec> --project=chro
 | `tests/e2e/helpers/lazy-chunk.ts` | `CHUNK_MARKERS.continueChip` | Modify |
 | `tests/unit/lib/continue-position.test.ts`, `tests/unit/lib/heading-navigation.test.ts`, `tests/unit/extensions/heading-fold-unfold.test.ts` | Unit tests | Create |
 | `tests/e2e/continue-chip.spec.ts`, `tests/e2e/lazy-surfaces.spec.ts` | e2e | Create / Modify |
-| `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` | Amendment A14 | Modify |
+| `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` | Amendment A-next | Modify |
 | `CHANGELOG.md`, `README.md`, `tests/TESTING.md`, `AGENTS.md` | Docs | Modify |
 
 ---
@@ -262,7 +262,7 @@ Commit: `feat(continue): offer a chip back to the section you left`
 ### Task 4: Leaks, accessibility, kill switch, amendment, docs and full verification
 
 - e2e: 20 tab switches return listeners to baseline; axe 0 serious or critical, light and dark; forced colours keep a border; kill switch (`E2E_REMEMBER_OFF=1` against 6221): no chip, no key.
-- Contract amendment A14: the `document-editor.tsx` hunk, the separate `tinydocy-continue` key, the fold command, the shared heading jump, the navigation port and the measured bytes.
+- Contract amendment A-next: the `document-editor.tsx` hunk, the separate `tinydocy-continue` key, the fold command, the shared heading jump, the navigation port and the measured bytes.
 - Docs: CHANGELOG (no schema or protocol change, no Deploy note), README feature line, `tests/TESTING.md` (spec row, ports), AGENTS.md (one line: M15 key, scope, recorder events, never in Yjs, lazy chunk imports no editor module).
 - Full verification:
 
@@ -274,7 +274,7 @@ CI= E2E_BASE_URL=http://localhost:6220 bun playwright test continue-chip toc fol
 
 - Design gate: screenshots at 1440 and 375 px, light and dark (the chip on reopen, after Go, after Dismiss); UI designer and UX designer reviews; fix their blockers.
 
-Commit: `test(continue): assert leaks, accessibility and the kill switch`, `docs(continue): record amendment A14 and the continue chip`
+Commit: `test(continue): assert leaks, accessibility and the kill switch`, `docs(continue): record the continue amendment and the continue chip`
 
 ## Acceptance criteria
 
@@ -302,4 +302,7 @@ Commit: `test(continue): assert leaks, accessibility and the kill switch`, `docs
 - **Budgets restated.** The 150 B allocation and the 307–641 B headroom predate the menu trim (#36, A13): +16,679 B of 23.5 KB on `4b55ec6`. The brief allows < 1,000 B eager and nothing in the palette chunk. The spike measured the split cost; hence the navigation port and the inline kill-switch read.
 - **Dismissal by input, not by transaction.** Load-time transactions (`toc-id-plugin`, schema repair, seeding, a filter URL's own selection) are local and would have dismissed the chip at once.
 - **Placement.** The host goes before the ProseMirror element inside the card (Tab order, no layout shift). On phones it sits above the connection chip, which the draft's `bottom: clearance + 8px` would have covered. The style follows the design pass's status pill.
-- **Ports and names.** 3610/1710 became 6220/4220 (3611 → 6221); `fold.spec.ts`, `toc-sidebar.spec.ts`, `outline-overlay.spec.ts` and the `toolbar-a11y*` axe specs are the real names; screenshots at 1440 and 375 px; base `4b55ec6`; the amendment is A14.
+- **Ports and names.** 3610/1710 became 6220/4220 (3611 → 6221); `fold.spec.ts`, `toc-sidebar.spec.ts`, `outline-overlay.spec.ts` and the `toolbar-a11y*` axe specs are the real names; screenshots at 1440 and 375 px; base `4b55ec6`; the amendment is A-next (numbered at merge).
+- **Design review (UI and UX designers, 2026-11-14).** Phones show "Continue · *Section*" so only the name truncates; the dismissing input in the document area is a `click`, not `pointerdown`, so a touch scroll keeps the chip; a tap on ✕ does not focus the text (no keyboard for nothing), while Esc, a keyboard press and a fine pointer still do; any coarse pointer (touch tablets too) uses the fixed bottom placement, centred at its own width above 480 px; fine pointers get 24 px buttons (`xs`, `icon-xs`) so the chip fits the card's top padding.
+- **Recorder arming.** Focus alone does not count (Dismiss focuses the text where it was): the recorder arms on the writer's first local selection or edit, ignoring remote, appended and history-less transactions, or at install when the text already has focus.
+- **Filter URLs.** On `main`, `useHeadingFilter` rewrites the URL with no filters on its first render, before the editor reads `?filter=`, so a filter link does not apply on load. The chip's filter rule is unit-tested through the navigation port; its e2e case waits for that bug's fix (follow-up).
