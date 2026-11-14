@@ -11,7 +11,7 @@ import {
 } from "../lib/security/activity-store";
 import { getPinnedClientIp, pinClientIp } from "../lib/security/client-ip";
 import {
-  clientOutdatedError,
+  clientOutdatedRefusal,
   createClientSchemaCounter,
   effectiveMinClientSchema,
   isClientOutdated,
@@ -169,7 +169,7 @@ const hocuspocus = new Hocuspocus({
         MIN_CLIENT_SCHEMA,
       );
       clientSchemaCounter.record(requestParameters, outdated);
-      if (outdated) throw clientOutdatedError();
+      if (outdated) throw clientOutdatedRefusal();
     }
     const decision = guardrails.canConnect(ip);
     if (!decision.allowed) {

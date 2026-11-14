@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
+import { Hocuspocus, type onConnectPayload } from "@hocuspocus/server";
 import * as encoding from "lib0/encoding";
 
 import { CLIENT_SCHEMA } from "@/lib/schema-version";
 import {
   CLIENT_OUTDATED_REASON,
   classifyClientSchema,
-  clientOutdatedError,
+  clientOutdatedRefusal,
   createClientSchemaCounter,
   effectiveMinClientSchema,
   isClientOutdated,
@@ -119,11 +120,20 @@ it("exempts only the tab lists", () => {
   ).toBe(false);
 });
 
-it("refuses without an abuse log", () => {
+it("refuses through Hocuspocus hooks without logging", async () => {
   const warn = spyOn(console, "warn");
-  const err = clientOutdatedError();
-  expect([err.reason, err.stack]).toEqual([CLIENT_OUTDATED_REASON, ""]);
-  expect(err.reason).toBe("client_outdated");
+  const error = spyOn(console, "error");
+  const hocuspocus = new Hocuspocus({
+    async onConnect() {
+      throw clientOutdatedRefusal();
+    },
+  });
+  const refusal = await hocuspocus
+    .hooks("onConnect", {} as onConnectPayload)
+    .catch((thrown: unknown) => thrown);
+  expect(refusal).toEqual({ reason: CLIENT_OUTDATED_REASON });
+  expect(CLIENT_OUTDATED_REASON).toBe("client_outdated");
+  expect(error).not.toHaveBeenCalled();
   expect(warn).not.toHaveBeenCalled();
 });
 

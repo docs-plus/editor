@@ -335,6 +335,94 @@ test.describe("Paint format", () => {
     await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("a pill already shown moves clear when the bubble appears over it, and back when it goes", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openDoc(page);
+    await page.evaluate((doc) => {
+      const filler = Array.from({ length: 40 }, (_, i) => ({
+        type: "paragraph",
+        content: [{ type: "text", text: `Filler line ${i + 1}` }],
+      }));
+      const [title, first, ...rest] = doc.content;
+      window.__tiptap_editor?.commands.setContent({
+        ...doc,
+        content: [
+          title,
+          {
+            ...first,
+            content: [
+              ...(first.content ?? []),
+              { type: "text", text: " and more words across the page" },
+            ],
+          },
+          ...rest,
+          ...filler,
+        ],
+      });
+    }, DOC);
+    await page.locator(".document-editor-wrapper").evaluate((el) => {
+      el.scrollTop = 30;
+    });
+    // The pill first, centred under the row, with no bubble.
+    await select(page, "Filler line 9");
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      editor?.commands.setTextSelection(editor.state.selection.to);
+    });
+    await page.keyboard.press(repeatKey);
+    await expect(pill(page)).toContainText("Nothing to repeat yet.");
+    // Held as if hovered (the mouse stays put): it outlasts its timer.
+    await pill(page).dispatchEvent("pointerenter");
+    await settle(pill(page));
+    const centred = await pill(page).boundingBox();
+    // Then the bubble, over the first body line under the column's centre.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const column = document
+        .querySelector(".document-editor-content")
+        ?.getBoundingClientRect();
+      const line = document.querySelector(".tiptap p")?.getBoundingClientRect();
+      if (!editor || !column || !line) throw new Error("editor missing");
+      const at = editor.view.posAtCoords({
+        left: column.left + column.width / 2,
+        top: line.top + line.height / 2,
+      });
+      if (!at) throw new Error("no position under the column's centre");
+      editor.commands.setTextSelection({ from: at.pos - 3, to: at.pos + 3 });
+    });
+    const panel = page.locator(
+      '[data-smart-bubble][data-state="open"] .st-bubble-panel',
+    );
+    await expect(panel).toBeVisible();
+    await settle(panel);
+    await settle(pill(page));
+    const [a, b] = await Promise.all([
+      pill(page).boundingBox(),
+      panel.boundingBox(),
+    ]);
+    if (!a || !b || !centred) throw new Error("pill or bubble missing");
+    // Beside the bubble, or below it when the row has no room beside.
+    expect(a).not.toEqual(centred);
+    const apart =
+      a.x >= b.x + b.width ||
+      b.x >= a.x + a.width ||
+      a.y >= b.y + b.height ||
+      b.y >= a.y + a.height;
+    expect(apart).toBe(true);
+    // The bubble goes (a caret): the pill goes back under the row's centre.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      editor?.commands.setTextSelection(editor.state.selection.to);
+    });
+    await expect(panel).toHaveCount(0);
+    await settle(pill(page));
+    const back = await pill(page).boundingBox();
+    expect(Math.abs((back?.x ?? 0) - centred.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs((back?.y ?? 0) - centred.y)).toBeLessThanOrEqual(1);
+  });
+
   test("Esc on the toolbar keeps the pill while armed; Esc in the text cancels and closes it", async ({
     page,
   }) => {
