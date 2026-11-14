@@ -79,10 +79,13 @@ export function AlignMenuItems({
   editor,
   value,
   onPicked,
+  inset = false,
 }: {
   editor: Editor;
   value: string;
   onPicked: () => void;
+  /** In the T3 ¶ menu: lines the text up with Outdent's and Indent's. */
+  inset?: boolean;
 }) {
   return (
     <DropdownMenuRadioGroup value={value}>
@@ -93,6 +96,7 @@ export function AlignMenuItems({
           value={align}
           editor={editor}
           onPicked={onPicked}
+          inset={inset}
         />
       ))}
     </DropdownMenuRadioGroup>
@@ -118,6 +122,8 @@ function ThemeMenuItem() {
   const Icon = dark ? SunIcon : MoonStarIcon;
   return (
     <DropdownMenuItem
+      // The toggles' check column, as on the commands above.
+      className="pr-8"
       onClick={() => {
         applyTheme(!dark);
         try {
@@ -199,7 +205,13 @@ export function OverflowMenuItems({
       ))}
       <DropdownMenuSeparator />
       {commands.map((id) => (
-        <ActionMenuItem key={id} id={id} editor={editor} onPicked={onPicked} />
+        <ActionMenuItem
+          key={id}
+          id={id}
+          editor={editor}
+          checkColumn
+          onPicked={onPicked}
+        />
       ))}
       <DropdownMenuSeparator />
       <DensityMenuItem editor={editor} />
