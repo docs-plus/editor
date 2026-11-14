@@ -100,13 +100,16 @@ function ColorCell({
 /**
  * After ✕ the cells unmount under focus. Once the bar re-renders its
  * normal cells, focus its first enabled one, so focus never drops to
- * `<body>` (spec §6.6). Does nothing if focus already moved elsewhere.
+ * `<body>` (spec §6.6). Does nothing if focus already moved out of the
+ * bar. In the bar it may already be: WebKit fires no `focusout` for the
+ * removed ✕, so the toolbar's own repair puts focus on the cell at ✕'s
+ * index (Insert) first.
  */
 function focusBarAfterBack(bar: Element | null): void {
   if (!bar) return;
   requestAnimationFrame(() => {
     const active = document.activeElement;
-    if (active && active !== document.body) return;
+    if (active && active !== document.body && !bar.contains(active)) return;
     const target =
       bar.querySelector<HTMLElement>(
         "button:not([disabled]):not([aria-disabled='true'])",
