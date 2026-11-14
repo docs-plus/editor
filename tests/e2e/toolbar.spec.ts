@@ -211,7 +211,7 @@ test.describe("toolbar focus and disabled controls", () => {
     await page.keyboard.type("Item");
     await toolbarButton(page, "List").click();
     await delayAnimationFrames(page);
-    await page.getByRole("menuitemradio", { name: "Bullet List" }).click();
+    await page.getByRole("menuitemradio", { name: "Bullet list" }).click();
     await page.keyboard.type("X");
     await expect(page.locator(".tiptap ul li")).toHaveText("ItemX");
     await expect(page.getByRole("menu")).toHaveCount(0);
