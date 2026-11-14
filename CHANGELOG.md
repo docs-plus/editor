@@ -9,6 +9,118 @@ since the previous tag.
 
 ## [Unreleased]
 
+### The outline follows a heading jump
+
+The editor chunk goes from +19,283 B to +19,355 B of the 23.5 KB budget
+(+72 B); nothing to do when deploying. Headings themselves land where they
+did: the editor's scroll area already keeps jump targets clear of the
+toolbar (`scroll-padding-top`, measured flush under it at 800 to 1440 px),
+and a heading `scroll-margin-top` on top of it would land them 44 px lower
+and make the outline mark the heading before as active. Whether the
+outline centres or tops its heading is unchanged.
+
+#### Fixed
+- After a jump (an outline pick, the Continue chip's Go) or a scroll, the
+  outline now keeps the active heading's row in view (as
+  `block: "nearest"`). Go to Section 45 of a long document used to leave
+  the outline showing Sections 1 to 25. Only the outline's own box
+  scrolls: `scrollIntoView` would also move the page the jump has just
+  positioned. A drag, or the drop that ends it, never scrolls it.
+- The docked outline stuck 16 px from the top of the scroll area, so its
+  top 28 px (the "Outline" header, or the active row) sat under the
+  sticky toolbar once the page scrolled. It now sticks right below the
+  toolbar (`--tt-toolbar-height`), where it already starts.
+
+### Colour popover keeps clear of the selection
+
+The editor chunk goes from +19,283 B to +19,381 B of the 23.5 KB budget
+(4,683 B left; the avoidance itself is in the lazy colour chunk), and the
+first Alt+/ palette load is unchanged; nothing to do when deploying.
+
+#### Fixed
+- The text colour and highlight popovers, opened from the toolbar row with
+  the page at the top, covered the first lines of the document, hiding the
+  very words the hover preview colours. The popover now keeps off the
+  selection: it slides along the row while it still spans its button, or
+  else opens just below the selected lines, still under its button.
+  Keyboard focus, the selection bubble's popover and the phone's Aa sheet
+  are unchanged.
+
+### Accurate "Default text" and "No highlight" previews
+
+No change to the editor chunk (the rules load with the colour popover);
+nothing to do when deploying.
+
+#### Fixed
+- Hovering "Default text" or "No highlight" now previews exactly what
+  applying gives over links, inline code and table header cells. The
+  preview used to paint the page's text colour and background, so a
+  coloured link previewed black instead of link blue, inline code lost
+  its grey box and colour, and a highlighted header cell lost its tint.
+  Inside the mark it previews away, the preview now reads what is under
+  that mark (the page, a link's colour, or the header tint over the
+  page); elsewhere it lets the context's own colours show through.
+
+### Previewed colours stay true under the phone sheet
+
+In the lazy phone bar and colour chunks: the editor chunk and the
+palette's first Alt+/ chunk are unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a narrow window with a mouse, the "Text format" sheet's scrim dimmed
+  the document, so a colour previewed by hovering a swatch showed darker
+  than applying it would. While a preview shows, the scrim now fades
+  clear (it still catches taps) and comes back when the preview ends.
+  Touch never previews, so its scrim is unchanged.
+- Opening that sheet with a mouse could preview a colour nobody pointed
+  at: the swatch that slid up past the still pointer kept the hover, so
+  its colour showed on the selection and the scrim cleared. A swatch now
+  previews only once the mouse moves over it.
+
+### Colour preview from the keyboard on touch devices
+
+The editor chunk is unchanged (+19,281 B of the 23.5 KB budget; the
+change is in the lazy colour chunk) and the first Alt+/ chunk is
+unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a touch-first device (`pointer: coarse`), such as an iPad or an
+  Android tablet with a hardware keyboard, arrowing through the colour
+  swatches showed no preview: the preview was gated as a whole on a fine
+  hovering pointer. Arrow keys now preview there as on a desktop, while a
+  tap, or a pointer such as an iPad trackpad, still previews nothing and
+  does not clear the keyboard's preview. Forced colours and
+  `NEXT_PUBLIC_ACTION_PREVIEW=0` still turn previews off everywhere.
+
+### Clear marker on the previewed colour swatch
+
+The editor chunk does not grow (the change is in the lazy colour panel);
+nothing to do when deploying.
+
+#### Fixed
+- In the colour popover the swatch under the mouse, the one previewed on
+  the selection, only darkened its border, while a mouse-opened popover
+  put its full focus ring on the pressed swatch, so the ring pointed at
+  the wrong colour. The swatch under a mouse or pen now wears the focus
+  ring (Highlight in forced colours, with or without a preview), and
+  keyboard focus on another swatch steps down to a dashed 1px ring until
+  an arrow key hands the ring back. Touch shows no marker; the Aa sheet's
+  colours behave the same.
+
+### "/" menu says why a pick was refused
+
+The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
+(4,794 B left); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB) and
+the first Alt+/ not at all; nothing to do when deploying.
+
+#### Fixed
+- A "/" menu row whose block could no longer go there (the document
+  changed after the menu opened, for example a collaborator wrapped the
+  line in a quote) closed the menu and did nothing, without a word. The
+  status pill, and the screen reader, now say why, in the menu's own
+  words ("Quote: Already in a quote."), and "/quo" stays as typed. A
+  pick that was allowed but did nothing still says nothing.
+
 ### Home, End, Page Up and Page Down in the "/" menu
 
 The code is in the lazy slash chunk only (5,509 B gz of its 6 KB budget);

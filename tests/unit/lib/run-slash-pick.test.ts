@@ -9,6 +9,8 @@ import {
   getSlashState,
   SlashTrigger,
 } from "@/extensions/slash-trigger/slash-trigger";
+import { dismissNotice, getNotice } from "@/lib/announce";
+import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent, type UiIntent } from "@/lib/editor-actions/ui-intents";
 import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
 import { runSlashPick } from "@/lib/slash-menu/run-slash-pick";
@@ -24,6 +26,8 @@ afterEach(() => {
   fixture?.destroy();
   fixture = undefined;
   localStorage.clear();
+  // The pill's store is module state shared by every test file.
+  dismissNotice();
 });
 
 function setup(): Editor {
@@ -53,14 +57,24 @@ function slashInNewParagraph(editor: Editor, query: string): void {
   expect(getSlashState(editor).open).toBe(true);
 }
 
-const item = (actionId: string, arg?: unknown): SlashItem => ({
+const item = (
+  actionId: string,
+  arg?: unknown,
+  label = actionId,
+): SlashItem => ({
   key: actionId,
   actionId,
   arg,
-  label: actionId,
+  label,
   keywords: [],
   section: "Text",
 });
+
+/** The pill's notice once `announceLater`'s import has settled. */
+const said = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return getNotice();
+};
 
 /** The top-level block at the caret (the trailing paragraph may follow it). */
 const caretBlock = (editor: Editor) => {
@@ -136,7 +150,7 @@ describe("runSlashPick", () => {
     off();
   });
 
-  it("a run that returns false puts the text back and leaves the caret after it", () => {
+  it("a run that returns false puts the text back and leaves the caret after it", async () => {
     const editor = setup();
     // Nobody answers the embed intent: the run returns false.
     slashInNewParagraph(editor, "emb");
@@ -147,23 +161,70 @@ describe("runSlashPick", () => {
     expect($head.parent.textContent).toBe("/emb");
     expect($head.parentOffset).toBe(4);
     expect(getSlashState(editor).open).toBe(false);
+    // The action could run here; it just did nothing: no reason to give.
+    expect(await said()).toBeNull();
   });
 
-  it("refuses when the document became read-only after the menu opened", () => {
+  it("a pick refused since the menu opened says why on the pill, changing nothing", async () => {
+    const editor = setup();
+    slashInNewParagraph(editor, "quo");
+    // A collaborator (or the writer, by shortcut) wraps the line in a quote.
+    editor.commands.setBlockquote();
+    expect(getSlashState(editor).open).toBe(true);
+    const before = editor.state.doc;
+    expect(runSlashPick(editor, item("insert.quote", undefined, "Quote"))).toBe(
+      false,
+    );
+    expect(editor.state.doc.eq(before)).toBe(true);
+    expect(getSlashState(editor).open).toBe(false);
+    expect(await said()).toMatchObject({ text: "Quote: Already in a quote." });
+    expect(getNotice()?.done).toBeUndefined();
+  });
+
+  it("a pick refused once its '/query' is gone says why and puts the text back", async () => {
+    const editor = setup();
+    slashInNewParagraph(editor, "quo");
+    // The document turns read-only as "/quo" is deleted: only the run
+    // sees it (a size refusal or a deletion lands mid-pick).
+    let armed = true;
+    const lock = () => {
+      if (!armed || editor.state.selection.$head.parent.textContent) return;
+      armed = false;
+      editor.setEditable(false);
+    };
+    editor.on("transaction", lock);
+    expect(runSlashPick(editor, item("insert.quote", undefined, "Quote"))).toBe(
+      false,
+    );
+    editor.off("transaction", lock);
+    expect(armed).toBe(false);
+    expect(await said()).toMatchObject({
+      text: `Quote: ${READ_ONLY_REASON}`,
+    });
+    const { $head } = editor.state.selection;
+    expect($head.parent.textContent).toBe("/quo");
+    expect($head.parentOffset).toBe(4);
+  });
+
+  it("refuses when the document became read-only after the menu opened", async () => {
     const editor = setup();
     slashInNewParagraph(editor, "h");
     editor.setEditable(false);
     const before = editor.state.doc;
     expect(runSlashPick(editor, item("style.heading2"))).toBe(false);
     expect(editor.state.doc.eq(before)).toBe(true);
+    // The host has closed the menu: nothing was picked, nothing is said.
+    expect(await said()).toBeNull();
   });
 
-  it("refuses an unknown action and an unavailable one, changing nothing", () => {
+  it("refuses an unknown action and an unavailable one, changing nothing", async () => {
     const editor = setup();
     slashInNewParagraph(editor, "x");
     const before = editor.state.doc;
     expect(runSlashPick(editor, item("nope.nothing"))).toBe(false);
     expect(editor.state.doc.eq(before)).toBe(true);
+    // A missing action is a bug, not something the writer can act on.
+    expect(await said()).toBeNull();
   });
 
   it("table pick inserts at the given size and remembers it", () => {
