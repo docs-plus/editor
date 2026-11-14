@@ -244,6 +244,166 @@ test.describe("sorted row", () => {
   });
 });
 
+/** Each align item's icon, label, check slot and shortcut boxes. */
+async function alignItemBoxes(page: Page) {
+  // Measured after the menu's open animation (it scales from 95%).
+  await page
+    .getByRole("menu")
+    .evaluate((menu) =>
+      Promise.all(menu.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
+  return page.getByRole("menuitemradio").evaluateAll((items) =>
+    items
+      .filter((item) =>
+        item.getAttribute("data-action-id")?.startsWith("align."),
+      )
+      .map((item) => {
+        const box = (selector: string) =>
+          item.querySelector(selector)?.getBoundingClientRect().toJSON() as
+            | DOMRect
+            | undefined;
+        return {
+          id: item.getAttribute("data-action-id"),
+          checked: item.getAttribute("aria-checked") === "true",
+          icon: box(":scope > svg"),
+          label: box(":scope > span:not([data-slot])"),
+          check: box('[data-slot="dropdown-menu-radio-item-indicator"]'),
+          shortcut: box('[data-slot="dropdown-menu-shortcut"]'),
+        };
+      }),
+  );
+}
+
+const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+
+test.describe("alignment items", () => {
+  test("Align ▾ shows icons and shortcuts, the check in a slot before them", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Align left").click();
+    await expect(
+      page.getByRole("menuitemradio", { name: "Align left", exact: true }),
+    ).toHaveAttribute("aria-keyshortcuts", /^(Meta|Control)\+Shift\+L$/);
+    const boxes = await alignItemBoxes(page);
+    expect(boxes.map((box) => box.id)).toEqual([
+      "align.left",
+      "align.center",
+      "align.right",
+      "align.justify",
+    ]);
+    for (const box of boxes) {
+      const { icon, label, check, shortcut } = box;
+      if (!icon || !label || !check || !shortcut) {
+        throw new Error(`${box.id} is missing a part`);
+      }
+      // Icon, label, check slot, shortcut: left to right on one line.
+      expect(icon.right).toBeLessThanOrEqual(label.left);
+      expect(check.width).toBe(16);
+      expect(check.left).toBeGreaterThan(label.right);
+      expect(check.right).toBeLessThanOrEqual(shortcut.left);
+      expect(Math.abs(check.top - shortcut.top)).toBeLessThan(8);
+    }
+    expect(boxes.find((box) => box.checked)?.id).toBe("align.left");
+    // Labels start in one column; shortcuts end at one edge.
+    expect(spread(boxes.map((box) => box.label?.left ?? 0))).toBeLessThan(1);
+    expect(spread(boxes.map((box) => box.shortcut?.right ?? 0))).toBeLessThan(
+      1,
+    );
+    await page.keyboard.press("Escape");
+  });
+
+  test("T3 ¶ ends align shortcuts at Outdent's and Indent's edge", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 860, height: 900 });
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Paragraph").click();
+    const indent = page.getByRole("menuitem", { name: /^Indent/ });
+    await expect(indent).toBeVisible();
+    const boxes = await alignItemBoxes(page);
+    const indentRight = await indent.evaluate(
+      (item) =>
+        item
+          .querySelector('[data-slot="dropdown-menu-shortcut"]')
+          ?.getBoundingClientRect().right ?? Number.NaN,
+    );
+    expect(boxes).toHaveLength(4);
+    for (const box of boxes) {
+      expect(box.icon, `${box.id} icon`).toBeTruthy();
+      expect(
+        Math.abs((box.shortcut?.right ?? 0) - indentRight),
+        `${box.id} shortcut edge`,
+      ).toBeLessThan(1);
+    }
+    await page.keyboard.press("Escape");
+  });
+
+  test("off macOS the menu grows so Ctrl+Shift+E stays on its label's line", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "userAgentData", {
+        value: { platform: "Windows" },
+      });
+    });
+    await page.setViewportSize({ width: 860, height: 900 });
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Paragraph").click();
+    await expect(
+      page.getByRole("menuitemradio", { name: "Align center", exact: true }),
+    ).toHaveAttribute("aria-keyshortcuts", "Control+Shift+E");
+    for (const box of await alignItemBoxes(page)) {
+      expect(
+        Math.abs((box.shortcut?.top ?? 0) - (box.label?.top ?? 0)),
+        `${box.id} shortcut on the label's line`,
+      ).toBeLessThan(4);
+    }
+    await page.keyboard.press("Escape");
+  });
+
+  // The hints are shown because the browser leaves these keys to the page:
+  // Mod+Shift+R (hard reload) and Mod+Shift+J (downloads on macOS) are not
+  // reserved, so the editor's keymap takes them first.
+  for (const [key, align] of [
+    ["L", "left"],
+    ["E", "center"],
+    ["R", "right"],
+    ["J", "justify"],
+  ] as const) {
+    test(`Mod+Shift+${key} aligns ${align} and stays on the page`, async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await caretIn(page, "Plain");
+      if (align === "left") {
+        await page.evaluate(() =>
+          window.__tiptap_editor?.commands.setTextAlign("center"),
+        );
+      }
+      let navigated = false;
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) navigated = true;
+      });
+      await page.keyboard.press(`ControlOrMeta+Shift+Key${key}`);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.__tiptap_editor?.state.selection.$head.parent.attrs
+                .textAlign,
+          ),
+        )
+        .toBe(align);
+      expect(navigated).toBe(false);
+      await expect(page.locator(".tiptap")).toBeFocused();
+    });
+  }
+});
+
 test.describe("keyboard model", () => {
   test("the toolbar is one Tab stop", async ({ page }) => {
     await openDoc(page);
