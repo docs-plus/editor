@@ -415,6 +415,56 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
   });
 }
 
+test("forced colours: the hovered swatch wears the Highlight ring; focus elsewhere drops to a dashed one", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await openToolbarTestDoc(page);
+  await selectWord(page);
+  const dialog = await openHighlightDialog(page);
+  const focused = dialog.locator("button:focus");
+  await expect(focused).toHaveAccessibleName("No highlight");
+  const outline = (swatch: Locator) =>
+    swatch.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const probe = document.createElement("div");
+      probe.style.color = "Highlight";
+      document.body.appendChild(probe);
+      const highlight = getComputedStyle(probe).color;
+      probe.remove();
+      const style =
+        cs.outlineStyle === "none"
+          ? "none"
+          : `${cs.outlineStyle} ${cs.outlineWidth}`;
+      return { style, inHighlight: cs.outlineColor === highlight };
+    });
+
+  // No preview in forced colours, but the pointer's swatch is still marked.
+  const red = highlights(dialog).getByRole("button", {
+    name: "Red highlight",
+  });
+  await red.hover();
+  await expect
+    .poll(() => outline(red))
+    .toEqual({ style: "solid 2px", inHighlight: true });
+  expect(await outline(focused)).toEqual({
+    style: "dashed 1px",
+    inHighlight: true,
+  });
+  // The ring is an outline: the swatch keeps its 1px system border.
+  expect(await red.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe(
+    "1px",
+  );
+
+  await page.keyboard.press("ArrowRight");
+  await expect(focused).toHaveAccessibleName("Gray highlight");
+  await expect
+    .poll(() => outline(focused))
+    .toEqual({ style: "solid 2px", inHighlight: true });
+  expect((await outline(red)).style).toBe("none");
+  await closeWithEscape(page, dialog);
+});
+
 const SCREENS = ".superpowers/screens-r2-popover";
 
 /**

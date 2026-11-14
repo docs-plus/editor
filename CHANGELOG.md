@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Clear marker on the previewed colour swatch
+
+The editor chunk does not grow (the change is in the lazy colour panel);
+nothing to do when deploying.
+
+#### Fixed
+- In the colour popover the swatch under the mouse, the one previewed on
+  the selection, only darkened its border, while a mouse-opened popover
+  put its full focus ring on the pressed swatch, so the ring pointed at
+  the wrong colour. The swatch under a mouse or pen now wears the focus
+  ring (Highlight in forced colours, with or without a preview), and
+  keyboard focus on another swatch steps down to a dashed 1px ring until
+  an arrow key hands the ring back. Touch shows no marker; the Aa sheet's
+  colours behave the same.
+
 ### "/" menu says why a pick was refused
 
 The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
