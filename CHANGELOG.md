@@ -9,6 +9,30 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Colour hover preview
+
+Pointing at a text colour or highlight swatch shows it on the selected
+text before you apply it (amendment A14). No schema or protocol change,
+and nothing to do when deploying.
+
+The editor chunk goes from +17,249 B to +17,464 B of the 23.5 KB budget
+(+215 B; 6,600 B left); the colour popover chunk grows by 641 B gz. The
+palette is unchanged.
+
+#### Added
+- Rest the mouse on a swatch for 80 ms, or move to one with the arrow
+  keys, and the selection shows that colour. Moving away, Esc, closing
+  the popover, applying, or your own change to the text or selection
+  removes it; a collaborator's edit keeps it on your moved selection.
+  Opening the popover previews nothing, and holding an arrow key waits
+  for it to settle. Works in the row and bubble popovers, and in the
+  Text format sheet with a mouse.
+- Previews are drawn with decorations only: nothing reaches the
+  document, the undo history or collaborators. They are off on touch, in
+  forced colours, when read-only, for an empty selection, and over more
+  than 200 blocks or 20,000 positions. `NEXT_PUBLIC_ACTION_PREVIEW=0`
+  turns them off.
+
 ### Simplified toolbar
 
 A "Simplified toolbar" setting in ⋯ (and in the Alt+/ palette) shows the
