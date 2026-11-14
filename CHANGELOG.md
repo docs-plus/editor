@@ -44,6 +44,17 @@ Alt+/ is unchanged at 20,444 B gz.
   the stop now moves to that group's stand-in (¶, View, colour) instead
   of whichever item is now at the same position.
 
+### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
+
+#### Fixed
+- **Tests:** `EditorPage.focusTitle()` waits for the frame in which
+  Tiptap's deferred `view.focus()` runs. In a touch context on a Mac
+  host, Tiptap takes the browser for iOS and focuses the editor at once,
+  so the helper returned early. The late focus then pulled focus back
+  from the toolbar after Alt+F10, and the touch-tablet "no tooltips"
+  test in `toolbar-surfaces.spec.ts` failed about one run in three under
+  three workers.
+
 ### Lazy toolbar menus
 
 Every toolbar menu's popup and items move out of the editor chunk into one
