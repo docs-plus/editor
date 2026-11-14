@@ -46,6 +46,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { ContinueChipLoader } from "@/components/document-editor/continue-chip-loader";
 import { DocumentNotice } from "@/components/document-editor/document-notice";
 import { EditorSurfaces } from "@/components/smart-toolbar/editor-surfaces";
 import { PhoneMenuCells } from "@/components/smart-toolbar/phone/phone-menu-cells";
@@ -383,6 +384,15 @@ function DocumentEditorContent({
         </div>
 
         {reason && <DocumentNotice reason={reason} />}
+        {/* Spec M15, lazy on idle (the contract's continue amendment). */}
+        {!toolbarOff && editor && (
+          <ContinueChipLoader
+            editor={editor}
+            documentName={documentId}
+            serverSynced={serverSynced}
+            rejectedReason={rejectedReason}
+          />
+        )}
         <CollabStatusGroup />
       </EditorContext.Provider>
     </main>
