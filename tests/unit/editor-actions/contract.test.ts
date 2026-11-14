@@ -468,6 +468,7 @@ describe("memory layer (PR D2)", () => {
       paletteRecent: "choices",
       mermaidTemplate: "choices",
       outlineOpen: "ui",
+      toolbarDensity: "ui",
     });
   });
 

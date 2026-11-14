@@ -8,6 +8,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 
 import { headingFoldPluginKey } from "@/extensions/heading-fold/heading-fold-plugin";
 import { computeSection } from "@/extensions/shared/compute-section";
+import { announceLater } from "@/lib/announce-later";
 import {
   CODE_LANGUAGE_CHOICE,
   CODE_LANGUAGES,
@@ -36,7 +37,12 @@ import {
   TableCellsMergeIcon,
   TableIcon,
 } from "@/lib/icons";
-import { rememberChoice } from "@/lib/remembered-choice";
+import {
+  REMEMBER_CHOICES_ENABLED,
+  readChoice,
+  rememberChoice,
+  TOOLBAR_DENSITY_CHOICE,
+} from "@/lib/remembered-choice";
 
 // --- Sections ------------------------------------------------------------
 
@@ -438,6 +444,48 @@ function viewAction(
   };
 }
 
+/**
+ * Simplified toolbar (A15): flips the remembered row density, which the
+ * shell reads (`useToolbarDensity`), and says so on the status pill with
+ * Undo (WCAG 4.1.3: the menu closes and the palette label is static).
+ * Without memory it could not outlive a reload, so the kill switch
+ * disables it. Blocked storage drops the write, as for every remembered
+ * control.
+ */
+function toggleDensity(): boolean {
+  const next =
+    readChoice(TOOLBAR_DENSITY_CHOICE).last === "simple" ? "full" : "simple";
+  rememberChoice(TOOLBAR_DENSITY_CHOICE, next);
+  // Both read as confirmations, so the pill's check fits either way.
+  announceLater(`${next === "simple" ? "Simplified" : "Full"} toolbar on`, {
+    done: true,
+    action: { label: "Undo", run: toggleDensity },
+  });
+  return true;
+}
+
+const simpleToolbarAction: AnyAction = {
+  id: "view.simpleToolbar",
+  label: "Simplified toolbar",
+  group: "view",
+  contexts: "any",
+  keywords: [
+    "compact",
+    "fewer tools",
+    "minimal",
+    "density",
+    "full toolbar",
+    "more tools",
+    "show all tools",
+  ],
+  mutates: false,
+  enabled: () =>
+    REMEMBER_CHOICES_ENABLED || {
+      reason: "Remembering choices is turned off.",
+    },
+  run: toggleDensity,
+};
+
 export const slotActions: readonly AnyAction[] = [
   foldAction,
   moveAction("up"),
@@ -465,4 +513,5 @@ export const slotActions: readonly AnyAction[] = [
   viewAction("view.outline", "Toggle outline", "outline.toggle", PanelLeftIcon),
   viewAction("view.filter", "Filter sections", "filter.toggle", FilterIcon),
   viewAction("view.theme", "Switch theme", "theme.toggle", MoonStarIcon),
+  simpleToolbarAction,
 ];

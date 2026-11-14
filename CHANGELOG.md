@@ -9,6 +9,100 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Continue where you left off
+
+Reopening a document offers a way back to the section you were in (spec
+M15): a small chip above the title, "Continue where you left off ·
+*Section*", with Go and ✕. No schema or protocol change; nothing to
+deploy beyond the app.
+
+The editor chunk grows by 475 B, to +17,724 B of the 23.5 KB budget
+(6,340 B left); the budget is unchanged. The chip, its recorder and its
+styles load as one lazy chunk (2.5 KB gz) when the browser is idle. The
+palette's chunks are unchanged.
+
+#### Added
+- The place is remembered on this device only (`tinydocy-continue`: the
+  section heading's id and a time, never text; 30 documents, 14 days),
+  when you leave the text after choosing a place in it. A place in the
+  title or the first sections is not offered. `NEXT_PUBLIC_REMEMBER_CHOICES=0`
+  turns it off; "Forget my choices" keeps it, like the outline and folds.
+- The chip shows after the server confirms the document (not offline, not
+  in Playground, not when the heading is gone or hidden by a filter). It is
+  never focused or announced and moves nothing. Go unfolds the sections
+  hiding the heading, puts the caret at its end and scrolls it to the top,
+  as an outline pick does. Your first click, key or typing in the
+  document, Dismiss or Esc removes it until the next open; a touch scroll
+  does not.
+- Phones show "Continue · *Section*" above the presence chip and the bar;
+  touch tablets show it at the bottom too.
+- The section name is shown without control, invisible or bidi-control
+  characters, so a collaborator's heading cannot spoof the chip.
+
+#### Changed
+- The outline's jump to a heading is shared with the chip
+  (`lib/heading-navigation.ts`) and now scrolls without animation when you
+  prefer reduced motion.
+
+### Colour hover preview
+
+Pointing at a text colour or highlight swatch shows it on the selected
+text before you apply it (amendment A14). No schema or protocol change,
+and nothing to do when deploying.
+
+The editor chunk goes from +17,249 B to +17,464 B of the 23.5 KB budget
+(+215 B; 6,600 B left); the colour popover chunk grows by 641 B gz. The
+palette is unchanged.
+
+#### Added
+- Rest the mouse on a swatch for 80 ms, or move to one with the arrow
+  keys, and the selection shows that colour. Moving away, Esc, closing
+  the popover, applying, or your own change to the text or selection
+  removes it; a collaborator's edit keeps it on your moved selection.
+  Opening the popover previews nothing, and holding an arrow key waits
+  for it to settle. Works in the row and bubble popovers, and in the
+  Text format sheet with a mouse.
+- Previews are drawn with decorations only: nothing reaches the
+  document, the undo history or collaborators. They are off on touch, in
+  forced colours, when read-only, for an empty selection, and over more
+  than 200 blocks or 20,000 positions. `NEXT_PUBLIC_ACTION_PREVIEW=0`
+  turns them off.
+
+### Simplified toolbar
+
+A "Simplified toolbar" setting in ⋯ (and in the Alt+/ palette) shows the
+row's compact set at every width (later-phase plan "progressive
+disclosure"; contract amendment A15). It is off by default, changes only
+when the writer turns it on or off, and never reorders the row. No schema
+or protocol change.
+
+The editor chunk goes from +17,249 B to +17,701 B of the 23.5 KB budget
+(+452 B; 6,363 B left); the budget is unchanged. The palette's first
+Alt+/ is unchanged at 20,475 B gz (the palette entry costs it nothing).
+
+#### Added
+- ⋯ → Simplified toolbar (a checkbox; focus returns to ⋯) and the palette
+  entry "Simplified toolbar" (keywords: compact, fewer tools, minimal,
+  full toolbar). The row then shows the ladder's T4 set at any width:
+  alignment and indent behind ¶, the context slot as one button, the
+  colour pair as one button, Outline and Filter behind View, size as one
+  menu, Insert without its label, Theme in ⋯. Every tool stays one click
+  away through those stand-ins; below the T4 width the ladder applies as
+  before.
+- The status pill confirms each change ("Simplified toolbar on" or "Full
+  toolbar on") with Undo.
+- The setting is remembered in this browser (`tinydocy-ui`), survives
+  "Forget my choices" and is read before the first paint, so the full row
+  never flashes on load. With `NEXT_PUBLIC_REMEMBER_CHOICES=0` the item is
+  disabled with "Remembering choices is turned off."
+- Turning it on or off keeps the row at one Tab stop, and a stop on a tool
+  it hides moves to that group's stand-in.
+
+#### Fixed
+- When the responsive ladder hides the item holding the row's Tab stop,
+  the stop now moves to that group's stand-in (¶, View, colour) instead
+  of whichever item is now at the same position.
+
 ### Palette leak test baseline
 
 #### Fixed

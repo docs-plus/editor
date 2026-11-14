@@ -25,51 +25,13 @@ import { createPortal } from "react-dom";
 
 import { SortableTocItem } from "@/components/toc-sidebar/sortable-toc-item";
 import { computeSection, findAllSections } from "@/extensions/shared";
-import { findTocAnchor } from "@/extensions/table-of-contents";
 import { moveSection } from "@/lib/editor-utils";
+import { goToHeading } from "@/lib/heading-navigation";
 import { cn } from "@/lib/utils";
 
 import "./toc-sidebar.scss";
 
 const LEVEL_STEP_PX = 30;
-/** How long a smooth scroll may run before its settle pass is dropped. */
-const SCROLL_SETTLE_TIMEOUT_MS = 5000;
-const SCROLL_TAKEOVER_EVENTS = [
-  "wheel",
-  "touchstart",
-  "keydown",
-  "pointerdown",
-];
-
-/**
- * Smooth-scrolls a heading to the middle of the viewport, then settles it
- * there. Blocks off screen are laid out with estimated heights
- * (`content-visibility: auto`) and diagrams render lazily, so the page can
- * change height under a long smooth scroll and stop it short; when the
- * scroll ends, the heading is re-centred without animation. The settle pass
- * is dropped if the user takes over or no scroll ends in time.
- */
-function scrollHeadingIntoView(dom: HTMLElement) {
-  const settle = new AbortController();
-  const options = { capture: true, signal: settle.signal };
-  const cancel = () => settle.abort();
-  document.addEventListener(
-    "scrollend",
-    (event) => {
-      if (!(event.target instanceof Node) || !event.target.contains(dom)) {
-        return;
-      }
-      cancel();
-      dom.scrollIntoView({ block: "center" });
-    },
-    options,
-  );
-  for (const type of SCROLL_TAKEOVER_EVENTS) {
-    document.addEventListener(type, cancel, options);
-  }
-  window.setTimeout(cancel, SCROLL_SETTLE_TIMEOUT_MS);
-  dom.scrollIntoView({ behavior: "smooth", block: "center" });
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -148,20 +110,11 @@ export function TocSidebar({
 
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {
-      if (!editor) return;
       // Items only refresh when the outline changes, so their positions and
-      // DOM nodes can trail edits; find the heading as it is now.
-      const anchor = findTocAnchor(editor.state.doc, item.id);
-      if (!anchor) return;
-      const { node, pos } = anchor;
-      editor.commands.setTextSelection(pos + node.nodeSize - 1);
-      editor.commands.focus();
+      // DOM nodes can trail edits: the heading is found by id. The outline
+      // centres it (`d92c64a`); the Continue chip uses the top.
+      if (!editor || !goToHeading(editor, item.id, "center")) return;
       onNavigate?.();
-      requestAnimationFrame(() => {
-        if (editor.isDestroyed) return;
-        const dom = editor.view.nodeDOM(pos);
-        if (dom instanceof HTMLElement) scrollHeadingIntoView(dom);
-      });
     },
     [editor, onNavigate],
   );
