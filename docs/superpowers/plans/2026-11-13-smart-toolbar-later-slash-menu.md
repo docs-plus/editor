@@ -5,9 +5,32 @@
 **Goal:** Typing "/" at the start of a paragraph, or after a space, opens a short menu of block actions under the caret: text styles, lists and Insert kinds. Typing filters it, and Enter or a click runs the pick. The pick removes the typed "/query" and applies the action as **one undo step**. The menu is one more view of the action registry (spec §2), so it adds no command of its own.
 
 **Architecture:**
-- **Eager, tiny:** a Tiptap extension, `SlashTrigger`, with one ProseMirror plugin. It watches local transactions for a typed "/" in an allowed place and keeps `{ from, query }` mapped through later transactions. While the menu is open it forwards ↑, ↓, Enter and Esc to the menu, and it sets the editor's combobox attributes through its own `props.attributes`. A small host, `SlashMenuHost`, is mounted by `EditorSurfaces`. It subscribes to the trigger's per-editor store and renders the lazy menu only while it is open.
-- **Lazy:** the menu UI, item building and matching, and the pick runner. They load on the first "/" and, like the colour and Insert chunks (A9), on idle after the first server sync.
+- **Eager, tiny:** a Tiptap extension, `SlashTrigger`, with one ProseMirror plugin and no props. It watches local transactions for a typed "/" in an allowed place and keeps `{ from, query }` mapped through later transactions. A small host, `SlashMenuHost`, is mounted by `EditorSurfaces`. It follows the editor's `transaction` and `update` events (`useSyncExternalStore`; `update` is how a `setEditable` reaches it) and renders the lazy menu only while the state is open.
+- **Keys and attributes live in the lazy menu** (as built, for the eager budget; see "As built" below): while mounted it takes ↑, ↓, Enter and Esc aimed at the editor in a `window` capture-phase `keydown` listener (the palette's pattern), before ProseMirror and its keymaps, and sets the combobox attributes directly on `view.dom`.
+- **Lazy:** the menu UI, item building and matching, and the pick runner. They load on the first "/" and, once per page, when the browser is idle. Like the menu bodies (A13), the host renders the loaded menu directly once its chunk is in (a module-level `loaded`), not through `lazy()`, whose first render suspends even for a cached chunk: at full typing speed "/h2" + Enter would otherwise reach the editor before the menu's key handler exists. Until the chunk lands nothing shows (Enter is still a line break); a failed load shows nothing and the next "/" retries.
 - **Focus stays in the editor.** The query is ordinary text in the document. The listbox is announced through `aria-activedescendant`, plus a polite live region for screen readers that ignore it on a contenteditable.
+
+## As built (2026-11-14)
+
+This plan was carried out on `4b55ec6`. Where the build differs from the tasks below, this section wins; the task blocks are kept as the record of the plan.
+
+- **Eager budget.** The first build, with keys (`handleKeyDown`, `priority` 1000), attributes (`props.attributes`), an active-option meta and a per-editor listener store in the trigger, measured **+1,398 B** eager, over the < 1,000 B cap. Keys, attributes, the active option and the listbox id moved into the lazy menu; the host follows the editor's own events; the menu chunk no longer waits for E's engine (before it lands, Diagram is one synchronous row). Final: **+923 B** (see the PR and contract amendment for the figures on the merged base).
+- **The trigger's API** is `SlashTrigger`, `slashTriggerKey`, `getSlashState(editor)`, `closeSlash(editor)` and `SLASH_MAX_QUERY`, imported from `extensions/slash-trigger/slash-trigger.ts` (no index module). The open state is `{ open: true, from, query }`; the close meta is `true`. A pick needs no meta: deleting the "/" closes it.
+- **Combobox attributes** (`aria-haspopup="listbox"`, `aria-autocomplete="list"`, `aria-controls`, `aria-activedescendant`) are set on `view.dom` by the menu in layout effects and removed on unmount. ProseMirror's `patchAttributes` removes only attributes it set, and its DOM observer ignores attribute mutations on the root, so this dispatches nothing and never calls `setOptions`.
+- **Design review** (UI and UX designers, against screenshots at 1440 and 375, light and dark) changed:
+  - an empty query lists Heading 1–3 only (H4–H6 are `searchOnly`; "/h4" and "/####" find them), and a list taller than its room ends halfway through a row, so the cut row shows there is more;
+  - matches are grouped by the section of their best match, so each heading shows once and ↑ ↓ follow the drawn order;
+  - a bare "/" has no active row (no `aria-activedescendant`; only "Block menu, N options." is announced) until an arrow or the pointer picks one, so "/" then Enter is a line break (a line may end in " /"); the first ↓ picks row 1, the first ↑ the last;
+  - templates match on their own name ("Sequence"), and the last used one leads ties, so "/dia" puts it first (§9);
+  - the list always stays inside the band between the sticky row and the phone bar plus keyboard, and is hidden while the caret is outside it; after a change of layout (first placement, a resize, the keyboard, content reflowing above), ProseMirror scrolls the caret back with `SCROLL_CLEARANCE`, never after the writer's own scroll; while open, a frame loop watches the "/"'s position in document coordinates and re-places the list in the same frame when content above the caret changes size (a diagram rendering, an image loading; in a short document the editor root keeps its minimum height, so a `ResizeObserver` on it misses these); the band ends at the lowest of the shared clearance, the docked bar's own top and the keyboard edge (`visualViewport` minus the bar), so a clearance not yet updated never lets the list over the bar, and a change of the bar's clearance style on the wrapper re-places it; after a reflow it follows the caret only while the list was in view (a collaborator's edit never pulls back a writer who scrolled away), and a hidden list takes only Esc;
+  - `MAX_HEIGHT` is 340 px, so the first desktop view shows Text, Lists and the start of Insert;
+  - a query with no match closes once it ends in whitespace (the writer moved on);
+  - the first announcement of an open is "Block menu, N options." (with the active row after it once a query is typed), and a row's note is spoken ("Table, 3 by 3, …");
+  - "—" in the query matches as "--" (Typography turns "/---" into "/—-");
+  - Markdown hints are key caps; below 640 px the list spans the screen with 16 px gutters; the side chosen at open is kept while it fits;
+  - Decision 6's template labels stay "Sequence diagram" and "State diagram" (a bare "Sequence" says too little when spoken or filtered), and Markdown hints stay on touch: design pass §6 hides key combos a phone cannot press, while hints are syntax a phone keyboard can type.
+- **axe:** `scrollable-region-focusable` is off for the list alone. axe exempts a scrolling listbox only when a `role="combobox"` controls it; this one is controlled by the editor's `textbox`, and a focusable list would take focus out of the editor and close it.
+- **Ports:** Next 6230, Hocus 4230.
 
 **Tech Stack:** Next.js 16 (Turbopack), React 19, Tiptap 3.33 + `@tiptap/y-tiptap` (`ySyncPluginKey`, `yUndoPluginKey`), `@tiptap/extension-collaboration` (`isChangeOrigin`), `@floating-ui/dom` 1.8 (already a dependency), `bun test` (happy-dom), Playwright with `@axe-core/playwright`. **No new dependency.** `@tiptap/suggestion` is not installed, and adding it would be a dependency request under contract §5.1. It is also larger than the trigger this plan needs.
 
@@ -15,7 +38,7 @@
 
 **Contract:** `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md`: §3.2 (only the palette and Insert list from the registry, so this plan adds a third lister through an amendment), §3.4 (key bindings), §5.1 (frozen files), §10 A7–A12 (budgets).
 
-**Base:** branch `feat/smart-toolbar-slash-menu` from `main` at or after `7abadc1`. Before Task 1, confirm:
+**Base:** `main` at or after `4b55ec6` (#36, the menu trim, contract A13; the design pass #35 is in too). Before Task 1, confirm:
 - `git grep -n "export function runAction" lib/editor-actions/registry.ts` finds `runAction(editor, action, arg)`;
 - `git grep -n "export function lazySurface" components/smart-toolbar/lazy-surface.tsx` finds it;
 - `git grep -n "EDITOR_CHUNK_BUDGET_BYTES = 23.5" scripts/check-editor-chunk-size.ts` finds the A12 budget.
@@ -40,17 +63,17 @@
 
 **Tests**
 - `bun run test` runs the unit tests in one process with a happy-dom preload. `mock.module` spreads the real module and is followed by `await import()`. Modules that read env at import time load through `importFresh()`, with `resetModules()` in `afterEach`.
-- Playwright runs against **Next 3620 + Hocus 1720**, never tiny.docs.plus. These ports are not taken by contract §5.4, D2 (3800/1934, 3801) or E (3900/2034). Run `lsof -i :3620 -i :1720` first, and stop only the servers you started.
+- Playwright runs against **Next 6230 + Hocus 4230**, never tiny.docs.plus. The later-phase sessions run in parallel, each on its own ports; 3000, 1234, 5000 and 6000 are off limits. Run `lsof -i :6230 -i :4230` first, and stop only the servers you started.
 
 ```bash
 # terminal 1: Hocus
 DOC_CREATION_RATE_LIMIT=2000 WS_CONNECTION_LIMIT=200 WS_SOCKETS_PER_IP=600 WS_UPGRADE_RATE_LIMIT=6000 \
-  HOCUS_THROTTLE=0 MAX_TOTAL_DOCUMENTS=1000000 HOCUS_PORT=1720 DB_PATH="$TMPDIR/tinydocy-slash.sqlite" \
+  HOCUS_THROTTLE=0 MAX_TOTAL_DOCUMENTS=1000000 HOCUS_PORT=4230 DB_PATH="$TMPDIR/tinydocy-slash.sqlite" \
   HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
 # terminal 2: Next (same DB_PATH: the DELETE route and Hocus share tombstones)
-NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1720 DB_PATH="$TMPDIR/tinydocy-slash.sqlite" bun next dev -p 3620
+NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:4230 DB_PATH="$TMPDIR/tinydocy-slash.sqlite" bun next dev -p 6230
 # tests
-CI= E2E_BASE_URL=http://localhost:3620 E2E_HOCUS_URL=ws://127.0.0.1:1720 bun playwright test <spec> --project=chromium
+CI= E2E_BASE_URL=http://localhost:6230 E2E_HOCUS_URL=ws://127.0.0.1:4230 bun playwright test <spec> --project=chromium
 ```
 
 - e2e types at full speed. Misplaced text means an app bug, not a missing wait.
@@ -61,10 +84,13 @@ CI= E2E_BASE_URL=http://localhost:3620 E2E_HOCUS_URL=ws://127.0.0.1:1720 bun pla
 - Actions run only through `runAction(editor, action, arg)`, which rechecks the live document.
 - Never call `editor.registerPlugin` from a lazy chunk. A changed plugin set makes prosemirror-view destroy and re-create **every** plugin view (`updatePluginViews`), including y-sync, carets, fold and the TOC. The trigger plugin is registered once, in the extensions array.
 - A lazy chunk never imports row modules (`components/smart-toolbar/row/**`, `main-toolbar-content.tsx`). When it did (A9), Turbopack split the shared modules out of the editor group, and the lost compression cost 344 B to 1.5 KB.
+- The slash chunk imports only modules the editor chunk already has, its own files and `@floating-ui/dom`. Never `components/smart-toolbar/palette/**` (not even its ranking), the menu chunk's `components/ui/dropdown-menu.tsx`, or `insert/diagram-templates.tsx`: Turbopack copies a module that only lazy chunks share into each of them, or splits it out, and either could move the palette's first Alt+/ (A7, 36 B left).
+- The menu's window capture listener runs before the list item, task item, table and StarterKit keymaps, so the trigger needs no `priority` and no `handleKeyDown`. `SlashTrigger` goes after `RepeatFormatting`, away from the array's tail, where other later-phase plans append.
+- While an IME composition is open (`view.composing`, `event.isComposing` or key code 229) the menu takes no key (`slashKey()`, `lib/slash-menu/slash-keys.ts`): Enter commits the candidate and the arrows move through candidates.
 
 **Contract rules**
 - Frozen files change only through a contract amendment: `lib/editor-actions/index.ts`, `components/smart-toolbar/editor-surfaces.tsx`, `components/smart-toolbar/types.ts` and `tests/unit/editor-actions/contract.test.ts`.
-- Amendments take the next free A-number at merge (A14 at the time of writing; A13 is the menu trim). Never hardcode the number in code comments.
+- Amendments take the next free A-number at merge (A14 at the time of writing; A13 is the menu trim; the hover-preview plan may claim it first, so the merger renumbers). Never hardcode the number in code comments.
 
 ## Schema and protocol
 
@@ -75,25 +101,18 @@ CI= E2E_BASE_URL=http://localhost:3620 E2E_HOCUS_URL=ws://127.0.0.1:1720 bun pla
 
 ## Budgets
 
-**Editor chunk (`scripts/check-editor-chunk-size.ts`, gz).** The script sums every file the editor's loader lists, **CSS included**. A production build of E's tip lists three `.css` files in the group, 14,467 B gz. The A12 budget is 24,064 B. A8 measured +23,423 B at E's tip (`4fcba67`), so about **641 B** were left. A build of `7abadc1` with uncommitted follow-up changes measured +23,757 B (307 B left), so the real figure on `main` must be measured first. The four later-phase plans share what is left:
+**Editor chunk (`scripts/check-editor-chunk-size.ts`, gz).** The script sums every file the editor's loader lists, CSS included. The figures this section first held (A12: 641 B, then 307 B left) are history: the menu trim (A13, #36) made every menu body lazy. Measured on `4b55ec6` (`bun run build`, then the script): **394,567 B gz, +16,679 B, 7,385 B under the 23.5 KB budget.** The later-phase plans run in parallel and share that headroom; the manager session merges them in order and re-measures.
 
 | Plan | Eager allocation | What is eager | Lazy |
 |---|---|---|---|
-| M15 Continue where you left off | 150 B | one lazy loader (about 118 B, A9) and its call after the first server sync | continue chunk ≤ 3 KB gz |
-| **"/" menu (this plan)** | **280 B** | trigger plugin, host, one lazy loader | slash chunk ≤ 6 KB gz |
-| Hover preview | 160 B | the decoration plugin; show and clear calls live in lazy chunks | ≤ +1 KB gz on the colour-panel chunk |
-| Progressive-disclosure toggle | 150 B | one registry action, the ⋯ checkbox item, one attribute, the simplified CSS rules | none |
-| **Total** | **740 B** | | |
+| **"/" menu (this plan)** | **< 1,000 B** (report the exact figure) | trigger plugin, host, one lazy loader | slash chunk ≤ 6 KB gz |
 
-**This is more than the headroom, and Turbopack's split cost comes on top.**
-- A lazy chunk that imports modules the editor chunk also uses makes Turbopack split those modules into separate, less compressible editor-group files. A8 measured about 344 B for the palette chunk and about 968 B for the split button inside the bubble chunk.
-- The continue chunk (`relative-range.ts`, the fold and filter plugin keys, `remembered-choice`, `hocuspocus`) and the slash chunk (registry, snapshot, memory) both import such modules.
-- The trim has landed (contract A13, menu bodies lazy): the editor chunk measured +16,679 B of the 23.5 KB budget, 7,385 B of headroom. Measure each plan against it; a new owner amendment is needed only if they outgrow it. The palette (A7) has 36 B left.
-- No plan raises the constant itself. Going over this plan's 280 B needs a trim or the owner's amendment.
+- A lazy chunk that imports modules the editor chunk also uses can make Turbopack split those modules into separate, less compressible editor-group files (A8: about 344 B for the palette chunk, about 968 B for the split button). The eager figure is measured with that cost included.
+- No plan raises the constant itself.
 
-Task 0 measures this before any feature code is written.
+**Palette (A7):** the first Alt+/ loads 20,444 B gz (402 B loader + 20,042 B chunk) against 20,480 B: **36 B left, reserved for another session. This plan must not change the palette's first Alt+/ at all.** Prove it file by file: run `palette.spec.ts` with `PALETTE_BUDGET=1` against `next start` on the base build and on this branch's build (same `NEXT_PUBLIC_*` values), and compare the logged per-file sizes.
 
-**Slash chunk:** ≤ 6 KB gz, measured on a production build the way `palette.spec.ts` measures the palette (`PALETTE_BUDGET=1` pattern, as `SLASH_BUDGET=1`). If the chunk shares modules with the palette chunk, re-check the palette's A7 budget (20 KB gz, 499 B left).
+**Slash chunk:** ≤ 6 KB gz, measured on a production build the way `palette.spec.ts` measures the palette (`PALETTE_BUDGET=1` pattern, as `SLASH_BUDGET=1`).
 
 **Performance:**
 - Typing p95 with the trigger mounted stays ≤ +10% and ≤ +16 ms against the trigger off (`--project=perf`, spec §7). The trigger inspects only single-step transactions whose slice is one character, so ordinary typing costs one length check.
@@ -110,8 +129,8 @@ Task 0 measures this before any feature code is written.
   - When the document turns read-only while the menu is open, the menu closes and the editor keeps focus.
   - No path ends on `<body>`.
 - **Roles:**
-  - The list is `role="listbox"` (`id` `slash-menu-<editorKey>`) with `role="group"` sections labelled "Text", "Lists" and "Insert". Rows are `role="option"` with `aria-selected`.
-  - While the menu is open, the editor carries `aria-expanded="true"`, `aria-controls`, `aria-autocomplete="list"` and `aria-activedescendant`. `aria-activedescendant` is allowed on a textbox.
+  - The list is `role="listbox"` (`id` `slash-menu-<editorKey>`) with `role="group"` sections labelled "Text", "Lists", "Insert" and "Diagrams". Rows are `role="option"` with `aria-selected`.
+  - While the menu is open, the editor carries `aria-haspopup="listbox"`, `aria-controls`, `aria-autocomplete="list"` and `aria-activedescendant`, all allowed on a `textbox`. **Not `aria-expanded`:** ARIA 1.2 does not allow it on `textbox` (axe `aria-allowed-attr`), and the editor's role never flips to `combobox` mid-edit.
   - When the menu is closed, none of these attributes are present.
 - **Announcements (4.1.3):** a polite live region, present for the editor's whole life, says "Heading 2, 3 of 9" when the active option changes, and "No matching blocks" when nothing matches. It is debounced by 150 ms so fast arrows don't queue a burst. This covers screen readers that do not follow `aria-activedescendant` on a contenteditable.
 - **Names (2.4.6, 2.5.3):** each option's accessible name starts with its visible label (sentence case). The Markdown hint (`## `, `> `, from `Action.markdownHint`) is visible and `aria-hidden`.
@@ -120,7 +139,7 @@ Task 0 measures this before any feature code is written.
 - **Focus not obscured (2.4.11):** the list flips above the caret when it would cover the caret line, the sticky row or the phone bar plus keyboard (`--mobile-bar-clearance`).
 - **Reduced motion:** no animation beyond a 100 ms opacity fade, and none under `prefers-reduced-motion`.
 
-## Upstream interfaces (as on `main` at `7abadc1`)
+## Upstream interfaces (as on `main` at `4b55ec6`)
 
 | # | Name | Where | Used for |
 |---|---|---|---|
@@ -129,7 +148,7 @@ Task 0 measures this before any feature code is written.
 | U3 | `computeContext(editor)` | `lib/editor-context/snapshot.ts` | a fresh snapshot per open (like the palette) |
 | U4 | `Action.label`, `keywords`, `icon`, `markdownHint`, `options(ctx)` | `lib/editor-actions/types.ts` | rows; `template.mermaid` expands to its templates |
 | U5 | `readChoice(TABLE_SIZE_CHOICE)` | `lib/remembered-choice.ts` | `insert.table` runs at the remembered size (M17a) |
-| U6 | `lazySurface`, `SurfaceBoundary`, `preloadSurfaces` | `components/smart-toolbar/lazy-surface.tsx` | the lazy menu, its failure path, the idle preload |
+| U6 | `lazySurface`, `SurfaceBoundary` | `components/smart-toolbar/lazy-surface.tsx` | the lazy menu's first load and its failure path |
 | U7 | `ySyncPluginKey`, `yUndoPluginKey` | `@tiptap/y-tiptap` | ignore remote steps; `undoManager.stopCapturing()` |
 | U8 | `isChangeOrigin(tr)` | `@tiptap/extension-collaboration` | ignore remote steps |
 | U9 | `CHUNK_MARKERS`, `interceptChunk` | `tests/e2e/helpers/lazy-chunk.ts` | the 404 and hold cases |
@@ -140,13 +159,13 @@ Task 0 measures this before any feature code is written.
 ## Decisions on spec ambiguities (owner can overrule)
 
 1. **Where "/" opens:** in a `paragraph` (including inside list items, quotes and table cells), with an empty selection, when the character before it is the block start or whitespace. Never in the title, a heading, a code block, Mermaid, inline code, or a read-only document. So "and/or" and URLs never open it.
-2. **Only a committed ASCII "/" in a local transaction opens it.** That is one `ReplaceStep` whose slice is the text "/", with no `ySyncPluginKey` meta and not `isChangeOrigin`. A collaborator's "/" never opens your menu, and a full-width "／" from an IME never opens it. The trigger reads the transaction, not `handleTextInput` or physical key codes ("/" is Shift+7 on German layouts, and Android composition input does not reliably reach `handleTextInput`). An open composition does not block the menu. On Android the list is operated by touch.
+2. **Only an ASCII "/" in a local transaction opens it.** That is one `ReplaceStep` whose slice is the text "/", with no `ySyncPluginKey` meta and not `isChangeOrigin`. A collaborator's "/" never opens your menu, and a full-width "／" from an IME never opens it. The trigger reads the transaction, not `handleTextInput` or physical key codes ("/" is Shift+7 on German layouts, and Android composition input does not reliably reach `handleTextInput`). A "/" that arrives through an IME still opens the menu, but while a composition is open the trigger forwards no key (Enter commits the candidate). On Android the list is operated by touch.
 3. **The query stays in the document** (Notion's model), and focus stays in the editor. A separate input would move focus on a keystroke (3.2.2) and close the phone keyboard.
 4. **Undo:** a pick is exactly one undo step. `stopCapturing()` runs, then one transaction deletes "/query", then `runAction` runs, then `stopCapturing()` runs again. Undo restores the "/query" text and the block as it was. If `runAction` returns false after the deletion, the runner puts the text back in the same capture group, and nothing else changes.
-5. **Unavailable items are hidden**, not listed with a reason (the palette lists them). The menu is position-bound and short. Everything stays reachable with its reason in the palette and the row.
-6. **Items:** Text (`style.paragraph`, `style.heading1`–`6`), Lists (`list.bullet`, `list.ordered`, `list.task`), Insert (every `insert`-group action in registry order, `template.mermaid` expanded to its options). `insert.table` runs with the remembered size (M17a), with no grid step. `insert.embed` deletes the query and then opens the row's embed step (`insert.open`); cancelling that step leaves the paragraph empty, and undo restores the text.
+5. **Unavailable items are hidden**, not listed with a reason (the palette lists them). The menu is position-bound and short. Everything stays reachable with its reason in the palette and the row. When a query matches only hidden items, the empty state says why for the best of them ("Quote: Already in a quote.", `slashEmptyNote`; UX review).
+6. **Items:** Text (`style.paragraph`, `style.heading1`–`6`), Lists (`list.bullet`, `list.ordered`, `list.task`), Insert (every `insert.*` action in registry order) and Diagrams. As in the Insert menu's one Diagram ▸ submenu (design pass §9), `insert.mermaid` and `template.mermaid` never both show: once E's engine is in, Diagram's place is a "Diagrams" section with the five templates (Flowchart, Sequence, State, Mind map, Pie chart, with the submenu's icons and its "Last used" note), labelled by template name with no repeated noun (design pass §8). Before the engine lands it is one "Diagram" row (`insert.mermaid`, synchronous); the menu chunk does not wait for the engine (eager budget, see "As built"), and the engine loads when the editor is created, so template rows, whose runs are synchronous once it is in, are the usual case. `insert.table` runs with the remembered size (M17a; 3 × 3 when nothing is remembered), with no grid step. `insert.embed` deletes the query and then opens the Insert button's embed step (`insert.open`); cancelling that step leaves the paragraph empty, and undo restores the text.
 7. **Matching:** case-insensitive word-prefix over label, keywords and the Markdown hint (`/h2`, `/##` and `/quote` all work). Ranked label prefix > word prefix > keyword > hint, ties in registry order.
-8. **Closing:** Esc, blur, a pick, the caret leaving the query, a deleted "/", a query containing "/" or two spaces, a query over 24 characters, or a read-only switch. With no match the menu stays open with "No matching blocks" until one of these happens, so typing "/usr/bin" just continues.
+8. **Closing:** Esc, blur, a pick, the caret leaving the query, a deleted "/", a query that starts with a space ("1 / 2") or contains "/" or two spaces, a query over 24 characters, or a read-only switch. With no match the menu stays open with "No matching blocks" until one of these happens, so typing "/usr/bin" just continues.
 9. **No memory.** The menu adds no Recent and writes nothing. Item actions write their own memory as usual: the list type, the table size and the Insert kind.
 10. **No placeholder hint.** Discoverability comes from the Markdown hints shown in the menu and a line in the README. A "Type / for blocks" placeholder would change the docs.plus Placeholder copy for every empty line.
 
@@ -178,8 +197,8 @@ Also out of scope:
 | `components/smart-toolbar/slash-menu-host.tsx` | Eager host: subscribes to the store, renders the lazy menu while open | Create |
 | `components/smart-toolbar/slash/slash-menu.tsx`, `slash/slash-menu.scss` | Lazy listbox UI, placement, live region | Create (lazy) |
 | `components/smart-toolbar/editor-surfaces.tsx` | Mounts `SlashMenuHost` | Modify (frozen: amendment) |
-| `components/smart-toolbar/lazy-surface.tsx` | `loadSlashMenu`, added to `preloadSurfaces` | Modify (allowed hunk under the amendment) |
-| `components/document-editor/document-editor-config.ts` | Appends `SlashTrigger` to the extensions array | Modify (shared, append-only) |
+| `components/smart-toolbar/slash-menu-host.tsx` | Also owns `loadSlashMenu` and its idle preload (once per page), so `lazy-surface.tsx`, which the small-fixes session changes, stays untouched | — |
+| `components/document-editor/document-editor-config.ts` | Adds `SlashTrigger` after `RepeatFormatting` | Modify (shared: one import line, one array line) |
 | `tests/e2e/helpers/lazy-chunk.ts` | `CHUNK_MARKERS.slashMenu` | Modify |
 | `tests/e2e/helpers/leak-metrics.ts` | Listener and heap helpers, extracted from `palette-leaks.spec.ts` | Create if missing |
 | `tests/unit/extensions/slash-trigger.test.ts`, `tests/unit/lib/slash-items.test.ts`, `tests/unit/lib/run-slash-pick.test.ts` | Unit tests | Create |
@@ -189,14 +208,9 @@ Also out of scope:
 
 ---
 
-### Task 0: Measure the headroom and the split cost (spike, not committed)
+### Task 0: Measure the base (done before any feature code)
 
-**Files:** a throwaway `components/smart-toolbar/slash/spike.tsx`. It renders nothing, but imports what the slash chunk will import: `editorActions`, `availability`, `computeContext`, `readChoice`, `yUndoPluginKey` and `@floating-ui/dom`. A `lazySurface` in `SlashMenuHost`'s future place mounts it. Revert everything after measuring.
-
-- [ ] **Step 1:** On a clean checkout of the base, run `bun run build && bun scripts/check-editor-chunk-size.ts`. Record the growth and the headroom.
-- [ ] **Step 2:** Add the spike chunk, an empty `SlashTrigger` extension and the host. Rebuild and measure again. The delta is the loader, the host and the split cost, before any feature code.
-- [ ] **Step 3:** If the delta already exceeds this plan's 280 B, or what is left of the shared headroom, **stop**. Report the numbers to the owner, with the trims you see (for example, moving `@floating-ui/dom` usage behind the chunk only), and wait for a decision or an amendment before Task 1.
-- [ ] **Step 4:** Revert the spike (`git checkout -- . && git clean -fd components/smart-toolbar/slash`). Put the numbers in the PR description.
+Headroom is no longer the bottleneck (A13), so the spike chunk is dropped. On a clean build of the base, record the editor chunk (394,567 B gz, +16,679 B) and the palette's first Alt+/ file by file (`PALETTE_BUDGET=1` against `next start`: 402 B + 20,042 B = 20,444 B). Task 6 measures the same two things on the branch.
 
 ---
 
@@ -227,7 +241,9 @@ Also out of scope:
   - It has exactly one `ReplaceStep` inserting the text "/", and the selection is empty right after it.
   - The context check passes: the parent is a `paragraph`; the title is not the top-level block 0 (`isTitle`); the position is not in a `codeBlock` or inside an `inlineCode` mark; the character before is the block start or `/\s/`; the editor is editable.
 - **While open:**
-  - `from` maps through `tr.mapping` (association −1, so text typed after "/" stays in the query).
+  - On a local transaction, `from` maps through `tr.mapping` (association −1, so text typed after "/" stays in the query).
+  - On a remote one (`ySyncPluginKey` meta), mapping is useless: the binding replaces each changed top-level block whole and restores the caret from Yjs relative positions. `from` is re-derived from the restored caret instead (`head − 1 − query.length` must still hold the "/" in the same textblock), else the menu closes.
+  - `setEditable(false)` dispatches no transaction, so the plugin view's `update` closes the menu (a deferred meta-only transaction), and `attributes` treat `!view.editable` as closed.
   - `query = doc.textBetween(from + 1, selection.head)`.
   - It closes per Decision 8, or on the `{ close: true }` meta.
 - **Keys:** `handleKeyDown` forwards ↑, ↓, Enter and Esc only while open **and** a handler is registered. Without a handler, Esc closes and every other key falls through, so Enter splits the line.
@@ -241,13 +257,14 @@ Also out of scope:
 it("opens on '/' at the start of a paragraph and after a space", () => {});
 it("never opens mid-word ('and/or'), in the title, a heading, a code block, inline code or read-only", () => {});
 it("never opens on a full-width '／' or on a pasted '/abc'", () => {});
+it("forwards no key while an IME composition is open", () => {});
 it("remote '/' never opens", () => { /* second client types '/' into the same paragraph */ });
 it("tracks the query and maps 'from' through remote inserts before it", () => {});
 it("remote deletion of the '/' closes", () => {});
 it("closes on Esc, blur, a '/' or two spaces in the query, > 24 chars, and when the caret leaves the query", () => {});
 it("Esc without a handler closes; Enter without a handler is not consumed", () => {});
 it("attributes come and go with the plugin state", () => {
-  // open -> view.dom has aria-expanded, aria-controls, aria-autocomplete; close -> none of them
+  // open -> view.dom has aria-haspopup, aria-controls, aria-autocomplete, aria-activedescendant; close -> none of them
   // editor.options.editorProps is the same object before and after (no setOptions)
 });
 it("meta-only transactions do not bump the toolbar version store", () => {
@@ -294,7 +311,7 @@ git commit -m "feat(editor): detect a typed slash for the block menu"
   ```
 - `buildSlashItems` keeps only actions whose `availability(action, ctx) === true` (Decision 5). It expands `options(ctx)` into one row each, labelled `"<label>: <option label>"` like the palette's rows, and gives `insert.table` the `tableSize` argument. Keys are `actionId` or `actionId:<option value>`.
 - `matchSlashItems("")` returns all items. Otherwise it ranks per Decision 7.
-- The module imports only types, `registry.ts` helpers and `remembered-choice.ts` types. It never imports `components/**` or the palette (the palette chunk has 499 B left, A7).
+- The module imports only types, `registry.ts` helpers and `remembered-choice.ts` types. It never imports `components/**` or the palette (the first Alt+/ has 36 B left, A7).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -363,7 +380,7 @@ it("table pick inserts at the remembered size and remembers it", () => {});
 
 **Files:**
 - Create: `components/smart-toolbar/slash-menu-host.tsx`, `components/smart-toolbar/slash/slash-menu.tsx`, `components/smart-toolbar/slash/slash-menu.scss`
-- Modify: `components/smart-toolbar/lazy-surface.tsx` (`loadSlashMenu`, added to `preloadSurfaces`), `tests/e2e/helpers/lazy-chunk.ts` (`slashMenu: "function SlashMenu("`)
+- Modify: `tests/e2e/helpers/lazy-chunk.ts` (`slashMenu: "function SlashMenu("`)
 - Test: `tests/e2e/slash-menu.spec.ts`
 
 **Interfaces:**
@@ -388,7 +405,7 @@ test("'/' opens the menu at the caret; typing filters; Enter applies Heading 2",
   // new paragraph, type "/h2", Enter -> the block is an h2 with no "/h2" text; one Ctrl+Z restores "/h2"
 });
 test("focus never leaves the editor, and the combobox attributes follow the menu", async ({ page }) => {
-  // activeElement is .ProseMirror throughout; aria-expanded true while open, absent after Esc
+  // activeElement is .ProseMirror throughout; aria-controls and aria-activedescendant while open, absent after Esc
 });
 test("Esc leaves '/query' as typed text and the caret after it", async ({ page }) => {});
 test("'and/or' and a URL never open it; a heading or the title never opens it", async ({ page }) => {});
@@ -403,9 +420,9 @@ test("touch: rows are 44px, the list stays above the bar and keyboard, a tap app
 test("read-only while open closes the menu and keeps focus in the editor", async ({ page }) => {});
 ```
 
-- [ ] **Step 2: Run them and confirm they fail.** Run: `CI= E2E_BASE_URL=http://localhost:3620 bun playwright test tests/e2e/slash-menu.spec.ts --project=chromium`. Expected: FAIL.
+- [ ] **Step 2: Run them and confirm they fail.** Run: `CI= E2E_BASE_URL=http://localhost:6230 bun playwright test tests/e2e/slash-menu.spec.ts --project=chromium`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Screenshot the menu in light and dark, at 1280 px and 375 px.
+- [ ] **Step 3: Implement.** Screenshot the menu in light and dark, at 1440 px and 375 px: open, filtered, no match, and near the bottom edge (flipped above the caret). A UI designer and a UX designer review them before merge.
 
 - [ ] **Step 4: Run them and confirm they pass.** Expected: PASS.
 
@@ -416,7 +433,7 @@ test("read-only while open closes the menu and keeps focus in the editor", async
 ### Task 5: Mount, failure path and the contract amendment
 
 **Files:**
-- Modify: `components/smart-toolbar/editor-surfaces.tsx` (one line: `<SlashMenuHost editor={editor} />`), `components/document-editor/document-editor-config.ts` (append `SlashTrigger`), `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` (§10 amendment), `tests/e2e/lazy-surfaces.spec.ts`
+- Modify: `components/smart-toolbar/editor-surfaces.tsx` (one line: `<SlashMenuHost editor={editor} />`), `components/document-editor/document-editor-config.ts` (`SlashTrigger` after `RepeatFormatting`), `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` (§10 amendment), `tests/e2e/lazy-surfaces.spec.ts`
 - Test: `tests/e2e/lazy-surfaces.spec.ts`
 
 **The amendment records:**
@@ -449,7 +466,7 @@ test("a slash chunk that fails to load leaves the editor working and retries on 
 
 **Files:**
 - Create: `tests/e2e/slash-menu-leaks.spec.ts`, `tests/e2e/helpers/leak-metrics.ts` (if missing)
-- Modify: `tests/e2e/toolbar-a11y.spec.ts`, `CHANGELOG.md`, `README.md` (features), `tests/TESTING.md` (new specs, ports 3620/1720, `SLASH_BUDGET=1`), `AGENTS.md` (one Learned Workspace Facts line: the trigger plugin, the lazy menu, and that the query stays in the doc)
+- Modify: `tests/e2e/toolbar-a11y.spec.ts`, `CHANGELOG.md`, `README.md` (features), `tests/TESTING.md` (new specs, ports 6230/4230, `SLASH_BUDGET=1`), `AGENTS.md` (one Learned Workspace Facts line: the trigger plugin, the lazy menu, and that the query stays in the doc)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -470,9 +487,9 @@ test("the slash chunk is at most 6 KB gz on the first '/'", async ({ page }) => 
 
 ```bash
 bun audit --audit-level=high && bun biome check . && bun run lint && bun run typecheck && bun run test && bun run build
-bun scripts/check-editor-chunk-size.ts      # record the eager delta against this plan's 280 B
-CI= E2E_BASE_URL=http://localhost:3620 bun playwright test --project=chromium --project=perf
-CI= E2E_BASE_URL=http://localhost:3620 bun playwright test tests/e2e/slash-menu.spec.ts --project=chromium --repeat-each=10 --workers=3
+bun scripts/check-editor-chunk-size.ts      # record the eager delta (< 1,000 B for this plan)
+CI= E2E_BASE_URL=http://localhost:6230 bun playwright test --project=chromium --project=perf
+CI= E2E_BASE_URL=http://localhost:6230 bun playwright test tests/e2e/slash-menu.spec.ts --project=chromium --repeat-each=10 --workers=3
 ```
 
 Expected: everything passes. Record these in the PR description: the eager delta, the slash chunk size, the palette chunk size (unchanged or within A7), typing p95 on and off, the leak numbers, and screenshots.
@@ -494,7 +511,7 @@ Expected: everything passes. Record these in the PR description: the eager delta
 | e2e | Listeners and heap after 100 cycles and 20 tab switches | `slash-menu-leaks.spec.ts` |
 | e2e | axe light and dark, forced colours | `toolbar-a11y.spec.ts` |
 | perf | Typing p95 ≤ +10% and ≤ +16 ms; ≤ 1 toolbar commit per settle | `--project=perf` |
-| size | Eager ≤ 280 B; slash chunk ≤ 6 KB gz; palette within A7 | `check-editor-chunk-size.ts`, `SLASH_BUDGET=1` |
+| size | Eager < 1,000 B; slash chunk ≤ 6 KB gz; palette's first Alt+/ unchanged file by file | `check-editor-chunk-size.ts`, `SLASH_BUDGET=1`, `PALETTE_BUDGET=1` |
 
 ## Acceptance criteria
 
@@ -502,7 +519,7 @@ Expected: everything passes. Record these in the PR description: the eager delta
 - Every pick is one undo step that restores "/query", and every item runs through `runAction`.
 - Focus is never dropped. axe reports 0 serious issues in both themes. The live region announces the active option. Touch rows are 44 px.
 - No schema or protocol change: `tests/fixtures/schema-snapshot.json`, `lib/schema-names.ts`, the Hocus gate and `contract.test.ts` are unchanged.
-- The eager delta is ≤ 280 B (or the owner recorded an amendment), the slash chunk is ≤ 6 KB gz, and the typing and leak budgets hold.
+- The eager delta is < 1,000 B, the slash chunk is ≤ 6 KB gz, the palette's first Alt+/ is unchanged, and the typing and leak budgets hold.
 - The contract amendment, CHANGELOG, README, TESTING and AGENTS entries are written.
 
 ## Risks
@@ -512,8 +529,8 @@ Expected: everything passes. Record these in the PR description: the eager delta
 | `aria-activedescendant` on a contenteditable is unevenly supported (NVDA and JAWS in browse mode) | The polite live region announces the active option. Manual pass with VoiceOver and NVDA recorded in the PR. |
 | Android IME delivers "/" inside a composition, or never sends Enter as a keydown | Detection reads the transaction, not key events. The list is operated by touch on Android. Manual check on a real Android device recorded in the PR. |
 | Embed pick leaves an empty paragraph when the step is cancelled | Decision 6. Undo restores the text, and the e2e covers it. |
-| Eager allocation overrun (the shared 740 B against a headroom of 307–641 B, plus split costs) | Measure at Task 0 and Task 6. Trim or ask for the owner's amendment, never raise the constant silently. |
-| A shared module splits out of the palette chunk and pushes it over A7 | The items module imports nothing from the palette, and `PALETTE_BUDGET=1` runs in Task 6. |
+| Eager allocation overrun (< 1,000 B of the 7,385 B the later-phase plans share, plus split costs) | Measure at Task 0 and Task 6. Trim, never raise the constant silently. |
+| A shared module splits out of the palette chunk and moves its first Alt+/ (36 B left) | The slash chunk imports nothing only lazy chunks share, and `PALETTE_BUDGET=1` runs on the base and the branch, compared file by file. |
 | The trigger fires on a programmatic insert of "/" (paste, Markdown import, playground generator) | Only a single one-character `ReplaceStep` matching the selection opens it. The paste and Markdown cases are in the unit matrix. |
 
 ## Self-review

@@ -11,6 +11,7 @@ export const CHUNK_MARKERS = {
   palette: "function CommandPalette({",
   engine: "const v11Engine = {",
   menus: "function StyleMenuItems(",
+  slashMenu: "function SlashMenu({",
   continueChip: "function ContinueChip(",
 } as const;
 
