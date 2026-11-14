@@ -17,8 +17,8 @@ disclosure"; contract amendment A-next). It is off by default, changes only
 when the writer turns it on or off, and never reorders the row. No schema
 or protocol change.
 
-The editor chunk goes from +16,679 B to +17,136 B of the 23.5 KB budget
-(+457 B; 6,928 B left); the budget is unchanged. The palette's first
+The editor chunk goes from +16,680 B to +17,137 B of the 23.5 KB budget
+(+457 B; 6,927 B left); the budget is unchanged. The palette's first
 Alt+/ is unchanged at 20,444 B gz.
 
 #### Added
