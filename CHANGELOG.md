@@ -52,6 +52,20 @@ palette chunk is untouched; nothing to do when deploying.
   (Shift+End, Ctrl+Home) and every key while the menu is closed stay
   caret keys.
 
+### Paint format keyboard test waits for the brush to arm
+
+Test only: no app code changes, and the editor chunk is unchanged (0 B).
+Nothing to do when deploying.
+
+#### Fixed
+- `paint-format.spec.ts` "activating the brush again applies to the new
+  selection" failed intermittently on loaded CI runners. It clicked the
+  brush and moved the selection at once. A click that lands before the
+  lazy formatting engine has loaded waits for it, and is dropped if the
+  selection has moved by then, as designed, so the brush never armed.
+  The test now waits for the brush to show as pressed before it selects
+  the next text, as the other Paint format tests do.
+
 ### Status pill stays clear of a bubble that appears later
 
 The editor chunk is unchanged (−2 B, loader hashes); the selection bubble
