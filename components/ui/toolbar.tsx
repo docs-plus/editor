@@ -71,6 +71,26 @@ export function focusRovingItem(toolbar: HTMLElement | null): boolean {
 }
 
 /**
+ * The item that takes over from `el` once the ladder or the simplified
+ * toolbar hid it: its group's stand-in (spec §4.6), else the item now at
+ * its old index.
+ */
+function replacementFor(
+  el: HTMLElement | null,
+  index: number,
+  items: HTMLElement[],
+): HTMLElement | undefined {
+  const tier = el?.closest<HTMLElement>("[data-collapse-tier]");
+  const group = tier?.parentElement?.querySelector(
+    `[data-collapse-standin="${tier.dataset.collapseTier}"]`,
+  );
+  // Matched against the collected items: a stand-in that was hidden until
+  // now is not stamped `data-toolbar-item` yet.
+  const standIn = group && items.find((item) => group.contains(item));
+  return standIn || items[Math.min(index, items.length - 1)];
+}
+
+/**
  * One Tab stop with a DOM-owned roving tabindex (WAI-ARIA toolbar): the
  * toolbar writes `tabindex` on every item (one `0`, the rest `-1`), the
  * stop follows focus, and arrow keys move from the focused item, computed
@@ -89,7 +109,7 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
       const items = collectToolbarItems(toolbar);
       if (items.length === 0) return items;
       if (!stop || !items.includes(stop)) {
-        stop = items[Math.min(stopIndex, items.length - 1)];
+        stop = replacementFor(stop, stopIndex, items) ?? items[0];
       }
       stopIndex = items.indexOf(stop);
       for (const el of items) setTabIndex(el, el === stop ? "0" : "-1");
@@ -218,14 +238,7 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
         ) {
           return;
         }
-        const tier = last.el.closest<HTMLElement>("[data-collapse-tier]");
-        const standIn = tier?.parentElement?.querySelector<HTMLElement>(
-          `[data-collapse-standin="${tier.dataset.collapseTier}"] [data-toolbar-item]`,
-        );
-        (standIn && items.includes(standIn)
-          ? standIn
-          : items[Math.min(last.index, items.length - 1)]
-        )?.focus();
+        replacementFor(last.el, last.index, items)?.focus();
       });
     });
 
@@ -236,7 +249,13 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["tabindex", "hidden", "disabled"],
+      // The simplified toolbar's density shows and hides groups by CSS.
+      attributeFilter: [
+        "tabindex",
+        "hidden",
+        "disabled",
+        "data-toolbar-density",
+      ],
     });
     toolbar.addEventListener("focusin", onFocusIn);
     toolbar.addEventListener("focusout", onFocusOut);
