@@ -209,6 +209,9 @@ test.describe("Paint format", () => {
     await openDoc(page);
     await select(page, "source");
     await brush(page).click();
+    // Armed before the selection moves: a click before the lazy engine
+    // lands waits for it and is dropped if the selection has moved since.
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
     await select(page, "another");
     await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
     await brush(page).focus();
