@@ -54,7 +54,7 @@ test.describe("M9: list face", () => {
     await expect(listFace).toHaveAttribute("data-list-face", "bulletList");
     await caretInBody(page);
     await row(page).getByRole("button", { name: "List", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: "Task List" }).click();
+    await page.getByRole("menuitemradio", { name: "Task list" }).click();
     expect(await countNodes(page, "taskList")).toBe(1);
     await expect(listFace).toHaveAttribute("data-list-face", "taskList");
 
