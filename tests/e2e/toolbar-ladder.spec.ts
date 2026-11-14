@@ -97,6 +97,19 @@ async function rememberWidestInsertFace(page: Page) {
   });
 }
 
+/** Simplified toolbar (A15): remembers the compact row before load. */
+async function rememberSimplified(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "tinydocy-ui",
+      JSON.stringify({
+        v: 1,
+        slots: { toolbarDensity: { last: "simple", recent: [] } },
+      }),
+    );
+  });
+}
+
 async function sweep(page: Page, widths: number[], tag: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openToolbarTestDoc(page);
@@ -129,8 +142,20 @@ test("mouse: the row fits with the widest Insert face remembered", async ({
   await sweep(page, [1440, 1300, 1290, 1281, ...MOUSE_WIDTHS], "mouse+face");
 });
 
+test("simplified: the row fits at every tier and context", async ({ page }) => {
+  await rememberSimplified(page);
+  await sweep(page, MOUSE_WIDTHS, "mouse simplified");
+});
+
 test.describe("touch", () => {
   test.use({ hasTouch: true });
+
+  test("simplified: the row fits at every touch tier and context", async ({
+    page,
+  }) => {
+    await rememberSimplified(page);
+    await sweep(page, TOUCH_WIDTHS, "touch simplified");
+  });
 
   test("the row fits at every touch tier and context", async ({ page }) => {
     await sweep(page, TOUCH_WIDTHS, "touch");

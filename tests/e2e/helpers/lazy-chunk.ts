@@ -12,6 +12,7 @@ export const CHUNK_MARKERS = {
   engine: "const v11Engine = {",
   menus: "function StyleMenuItems(",
   slashMenu: "function SlashMenu({",
+  continueChip: "function ContinueChip(",
 } as const;
 
 const CHUNKS = "**/_next/static/chunks/**";
