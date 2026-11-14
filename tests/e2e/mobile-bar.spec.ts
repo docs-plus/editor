@@ -973,6 +973,109 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     ).toBeVisible();
   });
 
+  test("the Aa sheet offers Restore ‘X’ for the last removed format, until the next removal or a reload", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // Seeded once: the reload below must keep what the test changed.
+      if (localStorage.getItem("tinydocy-formats")) return;
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [
+            { id: "fnote", name: "Note", bundle: { italic: true } },
+            { id: "fwarn", name: "Warning", bundle: { bold: true } },
+          ],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await openSheet(page);
+    const section = sheet(page).getByRole("region", { name: "Your formats" });
+    const restores = section.getByRole("button", { name: /^Restore / });
+    await expect(restores).toHaveCount(0);
+    await section.getByRole("button", { name: "Remove a format" }).tap();
+    const list = section.getByRole("list", { name: "Remove a format" });
+    await list.getByRole("button", { name: "Remove Note" }).tap();
+    const restoreNote = section.getByRole("button", { name: "Restore ‘Note’" });
+    await expect(restoreNote).toBeVisible();
+    expect(
+      (await restoreNote.boundingBox())?.height ?? 0,
+    ).toBeGreaterThanOrEqual(44);
+    // The next removal replaces it: one restore, the last removal's.
+    await list.getByRole("button", { name: "Remove Warning" }).tap();
+    await expect(restores).toHaveCount(1);
+    const restoreWarning = section.getByRole("button", {
+      name: "Restore ‘Warning’",
+    });
+    await restoreWarning.tap();
+    await expect(
+      section.getByRole("button", { name: "Warning", exact: true }),
+    ).toBeVisible();
+    await expect(restores).toHaveCount(0);
+    await expect(page.locator('[data-status-pill="phone"]')).toContainText(
+      "Restored ‘Warning’",
+    );
+    // Still the sheet: a restore keeps it open, like a pick.
+    await expect(sheet(page)).toBeVisible();
+    // Memory only: gone after a reload, with Warning still back.
+    await page.reload();
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await openSheet(page);
+    await expect(
+      section.getByRole("button", { name: "Warning", exact: true }),
+    ).toBeVisible();
+    await expect(
+      section.getByRole("button", { name: "Note", exact: true }),
+    ).toHaveCount(0);
+    await expect(restores).toHaveCount(0);
+  });
+
+  test("Restore ‘X’ says why on a visible line when the name came back meanwhile", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [{ id: "fnote", name: "Note", bundle: { italic: true } }],
+        }),
+      );
+    });
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha");
+    await openSheet(page);
+    const section = sheet(page).getByRole("region", { name: "Your formats" });
+    await section.getByRole("button", { name: "Remove a format" }).tap();
+    await section
+      .getByRole("list", { name: "Remove a format" })
+      .getByRole("button", { name: "Remove Note" })
+      .tap();
+    const restore = section.getByRole("button", { name: "Restore ‘Note’" });
+    await expect(restore).toBeEnabled();
+    // Another tab saves a new "Note".
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({
+          v: 1,
+          formats: [{ id: "fother", name: "Note", bundle: { bold: true } }],
+        }),
+      );
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "tinydocy-formats" }),
+      );
+    });
+    const reason = "‘Note’ is in Your formats already.";
+    await expect(restore).toHaveAttribute("aria-disabled", "true");
+    await expect(restore).toHaveAccessibleDescription(reason);
+    await expect(section.getByText(reason)).toBeVisible();
+  });
+
   test("the Save dialog's cap link opens the Aa sheet at Remove a format", async ({
     page,
   }) => {
@@ -1160,6 +1263,53 @@ for (const width of [320, 375]) {
       await expect(
         section.getByText("Select formatted text to save it."),
       ).toBeVisible();
+    });
+
+    test("Restore ‘X’ spans the width at 44px, with no sideways scroll", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem(
+          "tinydocy-formats",
+          JSON.stringify({
+            v: 1,
+            formats: [
+              { id: "fnote", name: "Note", bundle: { italic: true } },
+              {
+                id: "flong",
+                name: "A very long warning format name for phones",
+                bundle: { bold: true },
+              },
+            ],
+          }),
+        );
+      });
+      await openDoc(page);
+      await selectNewParagraph(page, "alpha");
+      await openSheet(page);
+      const section = sheet(page).getByRole("region", {
+        name: "Your formats",
+      });
+      const toggle = section.getByRole("button", { name: "Remove a format" });
+      await toggle.tap();
+      await section.getByRole("button", { name: /^Remove A very long/ }).tap();
+      const restore = section.getByRole("button", { name: /^Restore ‘A very/ });
+      await restore.scrollIntoViewIfNeeded();
+      const body = sheet(page).locator(".st-sheet-body");
+      await body.evaluate((el) => {
+        (el as HTMLElement).style.overflowX = "auto";
+      });
+      expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(
+        0,
+      );
+      const [restoreBox, toggleBox] = await Promise.all([
+        restore.boundingBox(),
+        toggle.boundingBox(),
+      ]);
+      if (!restoreBox || !toggleBox) throw new Error("controls missing");
+      expect(restoreBox.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(restoreBox.width)).toBe(Math.round(toggleBox.width));
+      expect(restoreBox.y).toBeGreaterThan(toggleBox.y);
     });
 
     test("with a caret, why no format applies is one full-width line", async ({

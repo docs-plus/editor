@@ -47,7 +47,10 @@ export { clearOfSelection } from "./clear-of-selection";
  * (design pass §11), but stay selectable and undimmed. Pointing at a
  * swatch with a mouse, or arrowing to one, previews it on the selection
  * (decorations only, `swatch-preview.ts`); the focus put on a swatch when
- * the popover opens previews nothing. Lazy chunk: loaded on first open.
+ * the popover opens previews nothing. The previewed swatch wears the
+ * focus ring: a pointed swatch takes it, and focus elsewhere shows a
+ * dashed one until an arrow key hands it back (`markPointed`). Lazy
+ * chunk: loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -158,6 +161,19 @@ function lowContrastNote(text: string | null | undefined): string {
   const token = paletteToken(text);
   const name = token ? swatchName({ kind: "text", token }) : "default text";
   return `Dotted: hard to read with ${name}`;
+}
+
+/**
+ * Marks the swatch under a mouse or pen (`data-pointed`, null for none)
+ * and the panel while one is (`data-pointing`), so the swatch being
+ * previewed wears the focus ring and keyboard focus on another swatch
+ * steps down to a dashed one (`color-panel.scss`). Straight on the DOM:
+ * pointing never re-renders the panel.
+ */
+function markPointed(panel: HTMLElement | null, swatch: Element | null) {
+  panel?.querySelector("[data-pointed]")?.removeAttribute("data-pointed");
+  swatch?.setAttribute("data-pointed", "");
+  panel?.toggleAttribute("data-pointing", swatch !== null);
 }
 
 function applySwatch(editor: Editor, swatch: Swatch): boolean {
@@ -287,6 +303,8 @@ export function ColorPanel({
     }
     event.preventDefault();
     if (next) {
+      // The keyboard takes over the preview, and with it the ring.
+      markPointed(gridRef.current, null);
       setActive(next);
       focusCell(next.row, next.col);
       preview.show(
@@ -364,10 +382,18 @@ export function ColorPanel({
                   style={swatchStyle(swatch)}
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
-                  onPointerEnter={(event) =>
-                    preview.hover(event, previewable(swatch))
-                  }
-                  onPointerLeave={preview.leave}
+                  onPointerEnter={(event) => {
+                    if (event.pointerType !== "touch") {
+                      markPointed(gridRef.current, event.currentTarget);
+                    }
+                    preview.hover(event, previewable(swatch));
+                  }}
+                  onPointerLeave={(event) => {
+                    if (event.currentTarget.hasAttribute("data-pointed")) {
+                      markPointed(gridRef.current, null);
+                    }
+                    preview.leave();
+                  }}
                   onClick={() => {
                     // The roving stop follows the pick. Focus moves only
                     // when it is in the grid: a tap-opened popover leaves

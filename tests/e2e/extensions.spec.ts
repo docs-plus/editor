@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { EditorPage } from "./helpers/editor-page";
 import { getPlaywrightModifierKey } from "./helpers/playwright-modifier-key";
@@ -58,22 +58,92 @@ async function insertFromMenu(page: Page, item: string): Promise<void> {
   await page.getByRole("menuitem", { name: new RegExp(`^${item}`) }).click();
 }
 
-/**
- * Waits until the selection bubble's plugin is registered. The bubble is a
- * lazy chunk whose `BubbleMenu` registers its plugin when the chunk lands,
- * and registering a plugin reconfigures the editor: ProseMirror destroys and
- * recreates every plugin view, and the media controls' view hides an active
- * gripper on destroy. On a loaded machine the chunk can land after a hover.
- */
-async function waitForBubblePlugin(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      window.__tiptap_editor?.state.plugins.some((plugin) =>
-        (plugin as unknown as { key: string }).key.startsWith(
-          "selectionBubble$",
-        ),
-      ) ?? false,
+/** A heading, then one 320×240 image between two runs of filler. */
+async function setImageDoc(editorPage: EditorPage): Promise<void> {
+  const svg = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#888"/></svg>',
   );
+  const filler = Array.from({ length: 12 }, (_, i) => ({
+    type: "paragraph",
+    content: [{ type: "text", text: `Filler paragraph ${i + 1}.` }],
+  }));
+  await editorPage.setContent({
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Media" }],
+      },
+      ...filler,
+      {
+        type: "image",
+        attrs: { src: `data:image/svg+xml,${svg}`, alt: "Sample" },
+      },
+      ...filler,
+    ],
+  });
+}
+
+/**
+ * Hovers the sample image and returns its active gripper, checked to cover
+ * the image. The gripper is a top-level widget positioned from its
+ * offsetParent; a host rule that makes it `position: relative` moves it off
+ * the media.
+ */
+async function hoverImageGripper(page: Page, image: Locator): Promise<Locator> {
+  await image.scrollIntoViewIfNeeded();
+  await image.hover();
+  const gripper = page.locator(".hypermultimedia__resize-gripper--active");
+  await expectGripperCovers(gripper, image);
+  return gripper;
+}
+
+async function expectGripperCovers(
+  gripper: Locator,
+  image: Locator,
+): Promise<void> {
+  await expect(gripper).toBeVisible();
+  const imageBox = await image.boundingBox();
+  const gripperBox = await gripper.boundingBox();
+  if (!imageBox || !gripperBox) throw new Error("missing boxes");
+  for (const key of ["x", "y", "width", "height"] as const) {
+    expect(Math.abs(gripperBox[key] - imageBox[key])).toBeLessThanOrEqual(2);
+  }
+}
+
+/**
+ * Registers (or removes) a probe plugin the way a lazy chunk's `BubbleMenu`
+ * does. Either reconfigures the editor, and ProseMirror then destroys and
+ * recreates every plugin view.
+ */
+async function toggleProbePlugin(
+  page: Page,
+  action: "register" | "unregister",
+): Promise<void> {
+  await page.evaluate((register) => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("no editor");
+    if (!register) {
+      editor.unregisterPlugin("gripperRebuildProbe");
+      return;
+    }
+    // The page exposes no ProseMirror classes; borrow them from a plugin.
+    const plugin = editor.state.plugins.find(({ spec }) => spec.key);
+    if (!plugin) throw new Error("no keyed plugin");
+    const PluginClass = plugin.constructor as new (spec: object) => never;
+    const KeyClass = plugin.spec.key?.constructor as new (
+      name: string,
+    ) => {
+      key: string;
+    };
+    editor.registerPlugin(
+      new PluginClass({
+        key: new KeyClass("gripperRebuildProbe"),
+        view: () => ({}),
+      }),
+    );
+  }, action === "register");
 }
 
 async function topLevelTypes(page: Page): Promise<string[]> {
@@ -219,45 +289,11 @@ test.describe("docs.plus extensions", () => {
   test("the resize gripper covers the hovered image and resizes it", async ({
     page,
   }) => {
-    const svg = encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#888"/></svg>',
-    );
-    const filler = Array.from({ length: 12 }, (_, i) => ({
-      type: "paragraph",
-      content: [{ type: "text", text: `Filler paragraph ${i + 1}.` }],
-    }));
-    await editorPage.setContent({
-      type: "doc",
-      content: [
-        {
-          type: "heading",
-          attrs: { level: 1 },
-          content: [{ type: "text", text: "Media" }],
-        },
-        ...filler,
-        {
-          type: "image",
-          attrs: { src: `data:image/svg+xml,${svg}`, alt: "Sample" },
-        },
-        ...filler,
-      ],
-    });
-
+    await setImageDoc(editorPage);
     const image = page.locator('.tiptap img[alt="Sample"]');
-    await waitForBubblePlugin(page);
-    await image.scrollIntoViewIfNeeded();
-    await image.hover();
-    const gripper = page.locator(".hypermultimedia__resize-gripper--active");
-    await expect(gripper).toBeVisible();
-
-    // The gripper is a top-level widget positioned from its offsetParent; a
-    // host rule that makes it `position: relative` moves it off the media.
+    const gripper = await hoverImageGripper(page, image);
     const imageBox = await image.boundingBox();
-    const gripperBox = await gripper.boundingBox();
-    if (!imageBox || !gripperBox) throw new Error("missing boxes");
-    for (const key of ["x", "y", "width", "height"] as const) {
-      expect(Math.abs(gripperBox[key] - imageBox[key])).toBeLessThanOrEqual(2);
-    }
+    if (!imageBox) throw new Error("missing image");
 
     const handle = gripper.locator(".media-resize-clamp--right");
     const handleBox = await handle.boundingBox();
@@ -271,5 +307,36 @@ test.describe("docs.plus extensions", () => {
     await expect
       .poll(async () => (await image.boundingBox())?.width ?? 0)
       .toBeGreaterThan(imageBox.width + 40);
+  });
+
+  test("the resize gripper and its drag survive a plugin registering", async ({
+    page,
+  }) => {
+    await setImageDoc(editorPage);
+    const image = page.locator('.tiptap img[alt="Sample"]');
+    const gripper = await hoverImageGripper(page, image);
+
+    await toggleProbePlugin(page, "register");
+    await expectGripperCovers(gripper, image);
+    await toggleProbePlugin(page, "unregister");
+    await expectGripperCovers(gripper, image);
+
+    // A plugin registering mid-drag must not abort the drag.
+    const imageBox = await image.boundingBox();
+    const handleBox = await gripper
+      .locator(".media-resize-clamp--right")
+      .boundingBox();
+    if (!imageBox || !handleBox) throw new Error("missing boxes");
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 40, startY, { steps: 4 });
+    await toggleProbePlugin(page, "register");
+    await page.mouse.move(startX + 80, startY, { steps: 4 });
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await image.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(imageBox.width + 60);
   });
 });
