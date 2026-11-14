@@ -104,6 +104,24 @@ const caretBlock = (page: Page) =>
     };
   });
 
+/**
+ * Home or End as a caret key on every platform: Chromium's line commands,
+ * which Linux and Windows run for these keys (macOS maps them to scrolling,
+ * so `keyboard.press` would not move the caret there).
+ */
+async function pressCaretKey(page: Page, key: "Home" | "End") {
+  const cdp = await page.context().newCDPSession(page);
+  const keyCode = key === "Home" ? 36 : 35;
+  const event = { key, code: key, windowsVirtualKeyCode: keyCode };
+  await cdp.send("Input.dispatchKeyEvent", {
+    ...event,
+    type: "rawKeyDown",
+    commands: [key === "Home" ? "moveToBeginningOfLine" : "moveToEndOfLine"],
+  });
+  await cdp.send("Input.dispatchKeyEvent", { ...event, type: "keyUp" });
+  await cdp.detach();
+}
+
 const editorFocused = (page: Page) =>
   page.evaluate(() =>
     Boolean(document.activeElement?.classList.contains("ProseMirror")),
@@ -362,15 +380,16 @@ test.describe("slash menu", () => {
         seen.push({ key: event.key, prevented: event.defaultPrevented });
       });
     });
-    await page.keyboard.press("Home");
-    // macOS maps Home and End to scrolling, not to the caret.
-    if (process.platform !== "darwin") {
-      expect(await caretBlock(page)).toMatchObject({ text: "ab /", offset: 0 });
-    }
-    await page.keyboard.press("End");
-    if (process.platform !== "darwin") {
-      expect(await caretBlock(page)).toMatchObject({ text: "ab /", offset: 4 });
-    }
+    // The browser moves the DOM caret; ProseMirror reads it on the
+    // asynchronous `selectionchange`, so the state catches up a beat later.
+    await pressCaretKey(page, "Home");
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ text: "ab /", offset: 0 });
+    await pressCaretKey(page, "End");
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ text: "ab /", offset: 4 });
     expect(
       await page.evaluate(
         () => (window as unknown as { __keys: unknown[] }).__keys,
