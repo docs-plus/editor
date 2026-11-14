@@ -15,8 +15,8 @@ Every toolbar menu's popup and items move out of the editor chunk into one
 lazy chunk (owner decision O1, the "menu bodies lazy" lead in contract A9;
 amendment A13). Nothing changes for the writer.
 
-The editor chunk goes from +23,994 B to +16,512 B of the 23.5 KB budget
-(7,552 B left, was 70 B); the budget is unchanged. The palette's first
+The editor chunk goes from +23,994 B to +16,679 B of the 23.5 KB budget
+(7,385 B left, was 70 B); the budget is unchanged. The palette's first
 Alt+/ loads 20,444 B gz of its 20,480 B budget (36 B left, was 8 B).
 
 #### Changed
