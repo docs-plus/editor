@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Save as format" (design pass §7), the palette's second view. Its own
+ * "Save selection as format" (design pass §7), the palette's second view. Its own
  * chunk, fetched only when the view opens, so the palette chunk stays in
  * its budget and this one can read the selection's bundle and the saved
  * formats directly: the preview, the "Replaces" note and the cap. It
@@ -91,7 +91,7 @@ export function SaveFormatForm({
         save();
       }}
     >
-      <DialogTitle>Save as format</DialogTitle>
+      <DialogTitle>Save selection as format</DialogTitle>
       <DialogDescription>
         Reuse this style anywhere. Saved on this device.
       </DialogDescription>
