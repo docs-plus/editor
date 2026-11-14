@@ -486,47 +486,13 @@ test.describe("continue where you left off: phone", () => {
     return [context, await context.newPage()];
   }
 
-  test("375px touch: above the connection chip and the bar, 44px targets, no sideways scroll", async ({
-    browser,
-  }) => {
-    const [context, page] = await phone(browser);
-    expect(
-      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
-    ).toBe(true);
-    const docId = newDocId();
-    await open(page, docId, sectionsDoc(30));
-    await leaveAt(page, docId, "Body 20 beta");
-    await reopen(page);
-
-    const chip = page.locator(CHIP);
-    await expect(chip).toBeVisible({ timeout: 15_000 });
-    const box = await chip.boundingBox();
-    const status = await page.locator("[data-collab-status]").boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) return;
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(375);
-    if (status) expect(box.y + box.height).toBeLessThanOrEqual(status.y);
-    for (const name of [/^Go to/, /^Dismiss$/]) {
-      const target = await chip.getByRole("button", { name }).boundingBox();
-      expect(target?.width).toBeGreaterThanOrEqual(44);
-      expect(target?.height).toBeGreaterThanOrEqual(44);
-    }
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
-    ).toBe(true);
-
-    // The section name is not cut: phones drop "where you left off".
-    await expect(chip).toContainText("Continue · Section 20", {
-      useInnerText: true,
-    });
-
-    // A touch pan is reading, not choosing a place: the chip stays. Raw
-    // touch events (CDP's synthesized scroll gesture does not scroll on
-    // headless Linux); the pan must reach the page as a pointerdown, the
-    // event that used to dismiss the chip, and ends without a click.
+  /**
+   * A touch pan is reading, not choosing a place: the chip stays. Raw
+   * touch events (CDP's synthesized scroll gesture does not scroll on
+   * headless Linux); the pan must reach the page as a pointerdown, the
+   * event that used to dismiss the chip, and ends without a click.
+   */
+  async function panKeepsChip(context: BrowserContext, page: Page) {
     const scroller = page.locator("main.document-editor-wrapper");
     const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
     const cdp = await context.newCDPSession(page);
@@ -570,6 +536,48 @@ test.describe("continue where you left off: phone", () => {
         { intervals: [250] },
       )
       .toBe(true);
+  }
+
+  test("375px touch: above the connection chip and the bar, 44px targets, no sideways scroll", async ({
+    browser,
+    browserName,
+  }) => {
+    const [context, page] = await phone(browser);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    const docId = newDocId();
+    await open(page, docId, sectionsDoc(30));
+    await leaveAt(page, docId, "Body 20 beta");
+    await reopen(page);
+
+    const chip = page.locator(CHIP);
+    await expect(chip).toBeVisible({ timeout: 15_000 });
+    const box = await chip.boundingBox();
+    const status = await page.locator("[data-collab-status]").boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(375);
+    if (status) expect(box.y + box.height).toBeLessThanOrEqual(status.y);
+    for (const name of [/^Go to/, /^Dismiss$/]) {
+      const target = await chip.getByRole("button", { name }).boundingBox();
+      expect(target?.width).toBeGreaterThanOrEqual(44);
+      expect(target?.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+
+    // The section name is not cut: phones drop "where you left off".
+    await expect(chip).toContainText("Continue · Section 20", {
+      useInnerText: true,
+    });
+
+    // Raw touch events go through Chromium's DevTools protocol.
+    if (browserName === "chromium") await panKeepsChip(context, page);
     await expect(chip).toBeVisible();
 
     await chip.getByRole("button", { name: /^Go to/ }).tap();
@@ -588,6 +596,9 @@ test.describe("continue where you left off: phone", () => {
 });
 
 test.describe("continue where you left off: hygiene", () => {
+  // Listener counts come from Chromium's DevTools protocol.
+  test.skip(({ browserName }) => browserName !== "chromium", "CDP only");
+
   async function listeners(cdp: CDPSession) {
     const count = async (expression: string) => {
       const { result } = await cdp.send("Runtime.evaluate", {

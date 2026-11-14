@@ -145,11 +145,29 @@ Binary search for the heading count ceiling where ProseMirror transaction time e
 
 ## Layer 2: E2E Tests (Playwright)
 
-Browser-based feature verification using Chromium. Tests interact with the real editor via the `EditorPage` page object model.
+Browser-based feature verification using Chromium (and, by hand, WebKit). Tests interact with the real editor via the `EditorPage` page object model.
 
 ```bash
 make test-e2e
 ```
+
+### WebKit (Safari's engine)
+
+The `webkit` project runs the core editing specs (`toolbar*`, `selection-bubble`, `paint-format`, `palette*`, `slash-menu`, `continue-chip`, `action-preview`, `mobile-bar*`, `collaboration`, `editor-leak`) in WebKit. CI does not run it; run it by hand before a change that touches layout, focus, selection or lazy surfaces:
+
+```bash
+bun playwright install webkit   # once
+CI= bun playwright test --project=webkit --workers=2
+```
+
+What WebKit does differently, and how the specs handle it:
+
+- **No DevTools protocol.** Tests that call `newCDPSession` (heap and listener counts, raw touch drags, CPU throttling) skip with "CDP only"; the continue-chip phone test skips only its raw-touch pan.
+- **No forced colours.** WebKit has no `forced-color-adjust` and no forced colours mode: forced-colours assertions skip (`NO_FORCED_COLOURS` in `helpers/a11y.ts`).
+- **Focus guards.** On Safari, Floating UI gives Base UI's hidden focus guards `role="button"` so VoiceOver can enter a portal; `expectNoSeriousA11yViolations` excludes them.
+- **Collapsed ranges measure 0×0**: measure the caret with `view.coordsAtPos`, not a DOM range.
+- **PageDown from a focused button scrolls nothing.**
+- **A loaded stylesheet stays inactive while another is still loading.** Lazy chunks' CSS can apply a moment after their component renders, so a surface placed against its own lazy CSS can be placed wrong (the selection bubble's containing block now lives in `document-editor.scss` for this reason). Under load the phone-bar layout specs can catch that first frame; rerun them with `--workers=1` before concluding.
 
 ### Feature Tests
 

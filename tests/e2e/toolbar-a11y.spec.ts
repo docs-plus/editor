@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   contrastRatio,
   expectNoSeriousA11yViolations,
+  NO_FORCED_COLOURS,
   openToolbarTestDoc,
   resolveRgb,
   setTheme,
@@ -354,8 +355,10 @@ const SWATCHES = ["Green", "Blue", "Red", "Purple", "Yellow"] as const;
 for (const mode of ["light", "dark", "forced colours"] as const) {
   test(`highlight check glyph is visible on every swatch (${mode})`, async ({
     page,
+    browserName,
   }, testInfo) => {
     const forced = mode === "forced colours";
+    test.skip(forced && browserName !== "chromium", NO_FORCED_COLOURS);
     if (forced) await page.emulateMedia({ forcedColors: "active" });
     else await setTheme(page, mode);
     await openToolbarTestDoc(page);
@@ -385,7 +388,8 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
           system,
         };
       });
-      expect(border.adjust, `${name} forced-color-adjust`).toBe(
+      // WebKit has no `forced-color-adjust`: there it is the default.
+      expect(border.adjust ?? "auto", `${name} forced-color-adjust`).toBe(
         forced ? "none" : "auto",
       );
       expect(border.width, `${name} border`).toBe("1px");
@@ -431,8 +435,10 @@ const LOW_CONTRAST_CASES = {
 for (const mode of ["light", "dark", "forced colours"] as const) {
   test(`colour popover marks low-contrast swatches dotted, undimmed and still selectable (${mode})`, async ({
     page,
+    browserName,
   }) => {
     const forced = mode === "forced colours";
+    test.skip(forced && browserName !== "chromium", NO_FORCED_COLOURS);
     const theme = forced ? "light" : mode;
     if (forced) await page.emulateMedia({ forcedColors: "active" });
     await setTheme(page, theme);

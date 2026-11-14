@@ -10,6 +10,7 @@ import { BUBBLE_ACTION_IDS } from "@/components/smart-toolbar/bubble/bubble-rule
 
 import {
   expectNoSeriousA11yViolations,
+  NO_FORCED_COLOURS,
   resolveRgb,
   setTheme,
 } from "./helpers/a11y";
@@ -579,21 +580,28 @@ test.describe("selection bubble", () => {
 
   test("PageDown from a bubble item never drops focus on body", async ({
     page,
+    browserName,
   }) => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    const bold = bubbleToolbar(page).getByRole("button", {
+      name: "Bold",
+      exact: true,
+    });
+    await expect(bold).toBeFocused();
     await page.keyboard.press("PageDown");
     await page.waitForTimeout(500);
     expect(
       await page.evaluate(() => document.activeElement === document.body),
     ).toBe(false);
-    await expect(bubble(page)).not.toHaveAttribute("data-state", "open");
     await expect(page.locator(".tiptap")).toBeFocused();
+    // The page scrolls, the selection leaves the view and focus goes back
+    // to the text. Restoring the selection there makes WebKit scroll it
+    // back into view, so in WebKit the bubble shows again.
+    if (browserName === "webkit") return;
+    await expect(bubble(page)).not.toHaveAttribute("data-state", "open");
   });
 
   test("the colour popover opens away from the selection", async ({ page }) => {
@@ -666,7 +674,9 @@ test.describe("selection bubble", () => {
 
   test("forced colours keep the panel border and mark pressed Bold with Highlight", async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName !== "chromium", NO_FORCED_COLOURS);
     await page.emulateMedia({ forcedColors: "active" });
     await openDoc(page);
     await selectText(page, "some words");

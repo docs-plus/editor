@@ -160,11 +160,13 @@ test.describe("slash menu", () => {
     await typeAtEnd(page, "/");
     await expect(menu(page)).toBeVisible();
     await expect(options(page).first()).toHaveText(/Normal text/);
-    // Under the "/", left-aligned with it.
+    // Under the "/", left-aligned with it. ProseMirror's coordinates: a
+    // collapsed DOM range measures 0×0 at the origin in WebKit.
     const caret = await page.evaluate(() => {
-      const range = window.getSelection()?.getRangeAt(0);
-      const rect = range?.getBoundingClientRect();
-      return rect ? { x: rect.x, bottom: rect.bottom } : null;
+      const view = window.__tiptap_editor?.view;
+      if (!view) return null;
+      const rect = view.coordsAtPos(view.state.selection.from);
+      return { x: rect.left, bottom: rect.bottom };
     });
     const box = await menu(page).boundingBox();
     expect(caret && box).toBeTruthy();
