@@ -71,8 +71,11 @@ import {
 } from "@/lib/mermaid-templates";
 import {
   FORMAT_REASONS,
+  lastRemovedFormat,
   MAX_SAVED_FORMATS,
   readSavedFormats,
+  restoreFormat,
+  restoreReason,
   sanitizeFormatName,
   saveFormat,
 } from "@/lib/saved-formats";
@@ -333,6 +336,27 @@ export const v11Engine: V11Engine = {
         if (!editor.commands.applyFormatBundle(format.bundle)) return false;
         rememberBundle(format.bundle);
         announce(`Applied ‘${format.name}’`, { done: true });
+        return true;
+      },
+    },
+    "formats.restore": {
+      keywords: ["undo", "removed", "your formats"],
+      enabled: () => {
+        const last = lastRemovedFormat();
+        return enabledFrom(last && restoreReason(last.format));
+      },
+      // Gone once it is back, however it came back (Undo, another tab).
+      options: (): readonly ActionOption<unknown>[] => {
+        const last = lastRemovedFormat();
+        if (!last || savedFormat(last.format.id)) return [];
+        const { id, name, bundle } = last.format;
+        return [{ value: id, label: `Restore ‘${name}’`, bundle }];
+      },
+      run: (_editor, id) => {
+        const last = lastRemovedFormat();
+        if (!last || last.format.id !== id) return false;
+        if (!restoreFormat(last.format, last.index)) return false;
+        announce(`Restored ‘${last.format.name}’`, { done: true });
         return true;
       },
     },

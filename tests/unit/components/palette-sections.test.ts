@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor } from "@tiptap/core";
 
+import { PALETTE_RECENT_CHOICE } from "@/components/smart-toolbar/palette/palette-recent";
 import {
   buildPaletteSections,
   MAX_SUGGESTED,
   PALETTE_GROUP_OF,
   PALETTE_HEADINGS,
+  recentKeyOf,
 } from "@/components/smart-toolbar/palette/palette-sections";
 import {
   rememberBundle,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/editor-actions/types";
 import { v11Actions } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { PaintbrushIcon, RepeatIcon } from "@/lib/icons";
 import {
   removeFormat,
   resetSavedFormatsCacheForTests,
@@ -229,6 +232,97 @@ describe("buildPaletteSections", () => {
       removeFormat(saved.format.id);
       resetSavedFormatsCacheForTests();
     }
+  });
+
+  it("names size rows once, and gives Repeat and Paint format their icons", () => {
+    const ed = setup();
+    ed.commands.setTextSelection({ from: 18, to: 23 });
+    const items = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...surfaceActions, ...v11Actions],
+      recentKeys: [],
+    }).flatMap((s) => s.items);
+    expect(items.find((i) => i.key === "size.set:xs")?.label).toBe(
+      "Extra small text",
+    );
+    expect(items.some((i) => i.label.startsWith("Font size:"))).toBe(false);
+    expect(items.find((i) => i.actionId === "repeat.copy")?.icon).toBe(
+      PaintbrushIcon,
+    );
+    expect(items.find((i) => i.actionId === "repeat.apply")?.icon).toBe(
+      RepeatIcon,
+    );
+  });
+
+  describe("Restore ‘X’ after a removal", () => {
+    afterEach(() => {
+      resetSavedFormatsCacheForTests();
+      localStorage.clear();
+    });
+
+    const sectionsNow = () => {
+      const ed = editor ?? setup();
+      ed.commands.setTextSelection({ from: 18, to: 23 });
+      return buildPaletteSections({
+        ctx: computeContext(ed),
+        actions: [...coreActions, ...surfaceActions, ...v11Actions],
+        recentKeys: [],
+      });
+    };
+    const restoreRows = (sections: ReturnType<typeof sectionsNow>) =>
+      sections
+        .flatMap((s) => s.items.map((i) => ({ ...i, heading: s.heading })))
+        .filter((i) => i.actionId === "formats.restore");
+
+    it("is nowhere until a format is removed", () => {
+      expect(restoreRows(sectionsNow())).toEqual([]);
+    });
+
+    it("leads Suggested here, bare, with the format's chip, and only there", () => {
+      const saved = saveFormat("Warning", { bold: true });
+      if (!saved.ok) throw new Error(saved.reason);
+      removeFormat(saved.format.id);
+      const sections = sectionsNow();
+      const rows = restoreRows(sections);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        heading: "Suggested here",
+        label: "Restore ‘Warning’",
+        arg: saved.format.id,
+        bundle: { bold: true },
+      });
+      expect(rows[0].disabledReason).toBeUndefined();
+      const suggested = sections.find((s) => s.heading === "Suggested here");
+      expect(suggested?.items[0]?.actionId).toBe("formats.restore");
+      // Never kept in Recent: its key is no action id.
+      expect(PALETTE_RECENT_CHOICE.validate(recentKeyOf(rows[0]))).toBe(false);
+    });
+
+    it("names only the last removal, and goes once the format is back", () => {
+      const one = saveFormat("One", { bold: true });
+      const two = saveFormat("Two", { italic: true });
+      if (!one.ok || !two.ok) throw new Error("save failed");
+      removeFormat(one.format.id);
+      removeFormat(two.format.id);
+      expect(restoreRows(sectionsNow()).map((r) => r.label)).toEqual([
+        "Restore ‘Two’",
+      ]);
+      // The pill's Undo (or the palette's run) puts it back.
+      const restore = v11Actions.find((a) => a.id === "formats.restore");
+      expect(restore?.run(editor as Editor, two.format.id)).toBe(true);
+      expect(restoreRows(sectionsNow())).toEqual([]);
+    });
+
+    it("says why when the name came back meanwhile", () => {
+      const saved = saveFormat("Note", { bold: true });
+      if (!saved.ok) throw new Error(saved.reason);
+      removeFormat(saved.format.id);
+      saveFormat("Note", { italic: true });
+      const rows = restoreRows(sectionsNow());
+      expect(rows[0]?.disabledReason).toBe(
+        "‘Note’ is in Your formats already.",
+      );
+    });
   });
 
   it("keeps disabled entries with their reason", () => {

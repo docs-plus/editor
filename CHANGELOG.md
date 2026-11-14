@@ -33,6 +33,59 @@ palette is unchanged.
   than 200 blocks or 20,000 positions. `NEXT_PUBLIC_ACTION_PREVIEW=0`
   turns them off.
 
+### Design sign-off follow-ups
+
+What the design sign-off of the smart toolbar design pass (#35) left
+open: two narrow-phone layout fixes, a palette way back from "Remove a
+format", palette polish, and an idle prefetch for cold offline starts.
+
+The editor chunk goes from +16,680 B to +17,249 B of the 23.5 KB budget
+(6,815 B left, was 7,384 B); the idle prefetch trigger is 58 B of that.
+The palette's first Alt+/ loads 20,475 B gz of its 20,480 B budget (5 B
+left, was 36 B); single-entry sets in `palette-sections.ts` became plain
+id checks to make room. Budgets are unchanged.
+
+#### Added
+- After a saved format is removed, the Alt+/ palette offers
+  "Restore ‘X’" first under Suggested here, until the next removal, a
+  restore or a reload. The pill's Undo lasts 5 s, which a keyboard user
+  may not reach. Restore puts the format back where it was; a row that
+  cannot run says why (the name is taken again, or the 20-format cap).
+  It is never kept in Recent.
+- When the browser is idle after the first server sync, the app also
+  fetches the formatting engine, the announcer and, on desktop, the
+  selection bubble with its status pill, so the service worker has them
+  and a load failure on a cold offline start is still said.
+
+#### Changed
+- Palette: Paint format and Repeat formatting show their icons
+  (Paintbrush, Repeat); the ⋯ menu's Paint format shows the brush too.
+  Size rows read "Extra small text" instead of "Font size: Extra small".
+- Phone Aa sheet: Save's reason line sits right under "Save selection as
+  format…" (about 2px, was about 13px), so the two read as one item.
+
+#### Fixed
+- On narrow phones (320px) the empty title's placeholder wraps to two
+  lines and covered the first body line. It is in flow now, so the title
+  grows with it; the caret still starts the first line.
+
+### Toolbar menu alignment
+
+Three visual inconsistencies in the toolbar menus. The layout changes sit
+in the lazy menu chunk; only the list labels are in the editor chunk,
+which grows by 1 B to +16,680 B of the 23.5 KB budget (7,384 B left).
+
+#### Fixed
+- Items without an icon start their text in the icon column, beside the
+  items that have one: Delete row and Delete column (Row ▾, Column ▾ and
+  the T3 Table tools menu), Paint format and All actions… (⋯ More
+  formatting), and the four align items in the T3 ¶ menu.
+- In ⋯ More formatting, the plain items keep the toggles' check column,
+  so every shortcut ends at the same edge.
+- The desktop List menu says "Bullet list", "Numbered list" and "Task
+  list", as the phone and the action registry do, and is as wide as its
+  longest label.
+
 ### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
 
 #### Fixed

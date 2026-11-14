@@ -30,7 +30,13 @@ export function ListMenuContent({
   finalFocus: () => HTMLElement | boolean;
 }) {
   return (
-    <DropdownMenuContent align="start" finalFocus={finalFocus}>
+    // As wide as its longest label, not the trigger: "Numbered list" wraps
+    // at the trigger's width.
+    <DropdownMenuContent
+      align="start"
+      finalFocus={finalFocus}
+      className="w-auto"
+    >
       <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
         <DropdownMenuRadioItem value="none" closeOnClick>
           No list
