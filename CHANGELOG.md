@@ -15,12 +15,13 @@ Type "/" at the start of a line, or after a space, for a short menu of
 text styles, lists and Insert kinds under the caret: one more view of the
 action registry, with no command of its own (plan
 `docs/superpowers/plans/2026-11-13-smart-toolbar-later-slash-menu.md`,
-contract amendment A-next, numbered at merge). No schema or protocol change; no Deploy note.
+contract amendment A17). No schema or protocol change; no Deploy note.
 
-The editor chunk grows by 923 B (+17,602 B of the 23.5 KB
-budget, 6,462 B left); the budget is unchanged. The menu is a lazy chunk
+The editor chunk grows by 888 B, to +19,248 B of the 23.5 KB budget
+(4,816 B left); the budget is unchanged. The menu is a lazy chunk
 of 5,291 B gz (budget 6 KB), fetched when the browser is idle. The
-palette's first Alt+/ is unchanged, file for file (402 B + 20,042 B = 20,444 B).
+palette's first Alt+/ is unchanged, file for file (403 B + 20,072 B =
+20,475 B).
 
 #### Added
 - Typing "/" in a paragraph (including list items, quotes and table
