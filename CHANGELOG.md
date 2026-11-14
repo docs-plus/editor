@@ -41,6 +41,278 @@ the palette's first Alt+/ is untouched.
   fires no `focusout` for the removed button, so the toolbar's own focus
   repair ran first.
 
+### The outline follows a heading jump
+
+The editor chunk goes from +19,283 B to +19,355 B of the 23.5 KB budget
+(+72 B); nothing to do when deploying. Headings themselves land where they
+did: the editor's scroll area already keeps jump targets clear of the
+toolbar (`scroll-padding-top`, measured flush under it at 800 to 1440 px),
+and a heading `scroll-margin-top` on top of it would land them 44 px lower
+and make the outline mark the heading before as active. Whether the
+outline centres or tops its heading is unchanged.
+
+#### Fixed
+- After a jump (an outline pick, the Continue chip's Go) or a scroll, the
+  outline now keeps the active heading's row in view (as
+  `block: "nearest"`). Go to Section 45 of a long document used to leave
+  the outline showing Sections 1 to 25. Only the outline's own box
+  scrolls: `scrollIntoView` would also move the page the jump has just
+  positioned. A drag, or the drop that ends it, never scrolls it.
+- The docked outline stuck 16 px from the top of the scroll area, so its
+  top 28 px (the "Outline" header, or the active row) sat under the
+  sticky toolbar once the page scrolled. It now sticks right below the
+  toolbar (`--tt-toolbar-height`), where it already starts.
+
+### Colour popover keeps clear of the selection
+
+The editor chunk goes from +19,283 B to +19,381 B of the 23.5 KB budget
+(4,683 B left; the avoidance itself is in the lazy colour chunk), and the
+first Alt+/ palette load is unchanged; nothing to do when deploying.
+
+#### Fixed
+- The text colour and highlight popovers, opened from the toolbar row with
+  the page at the top, covered the first lines of the document, hiding the
+  very words the hover preview colours. The popover now keeps off the
+  selection: it slides along the row while it still spans its button, or
+  else opens just below the selected lines, still under its button.
+  Keyboard focus, the selection bubble's popover and the phone's Aa sheet
+  are unchanged.
+
+### Accurate "Default text" and "No highlight" previews
+
+No change to the editor chunk (the rules load with the colour popover);
+nothing to do when deploying.
+
+#### Fixed
+- Hovering "Default text" or "No highlight" now previews exactly what
+  applying gives over links, inline code and table header cells. The
+  preview used to paint the page's text colour and background, so a
+  coloured link previewed black instead of link blue, inline code lost
+  its grey box and colour, and a highlighted header cell lost its tint.
+  Inside the mark it previews away, the preview now reads what is under
+  that mark (the page, a link's colour, or the header tint over the
+  page); elsewhere it lets the context's own colours show through.
+
+### Previewed colours stay true under the phone sheet
+
+CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
+first Alt+/ chunk are unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a narrow window with a mouse, the "Text format" sheet's scrim dimmed
+  the document, so a colour previewed by hovering a swatch showed darker
+  than applying it would. While a preview shows, the scrim now fades
+  clear (it still catches taps) and comes back when the preview ends.
+  Touch never previews, so its scrim is unchanged.
+
+### Colour preview from the keyboard on touch devices
+
+The editor chunk is unchanged (+19,281 B of the 23.5 KB budget; the
+change is in the lazy colour chunk) and the first Alt+/ chunk is
+unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a touch-first device (`pointer: coarse`), such as an iPad or an
+  Android tablet with a hardware keyboard, arrowing through the colour
+  swatches showed no preview: the preview was gated as a whole on a fine
+  hovering pointer. Arrow keys now preview there as on a desktop, while a
+  tap, or a pointer such as an iPad trackpad, still previews nothing and
+  does not clear the keyboard's preview. Forced colours and
+  `NEXT_PUBLIC_ACTION_PREVIEW=0` still turn previews off everywhere.
+
+### Clear marker on the previewed colour swatch
+
+The editor chunk does not grow (the change is in the lazy colour panel);
+nothing to do when deploying.
+
+#### Fixed
+- In the colour popover the swatch under the mouse, the one previewed on
+  the selection, only darkened its border, while a mouse-opened popover
+  put its full focus ring on the pressed swatch, so the ring pointed at
+  the wrong colour. The swatch under a mouse or pen now wears the focus
+  ring (Highlight in forced colours, with or without a preview), and
+  keyboard focus on another swatch steps down to a dashed 1px ring until
+  an arrow key hands the ring back. Touch shows no marker; the Aa sheet's
+  colours behave the same.
+
+### "/" menu says why a pick was refused
+
+The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
+(4,794 B left); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB) and
+the first Alt+/ not at all; nothing to do when deploying.
+
+#### Fixed
+- A "/" menu row whose block could no longer go there (the document
+  changed after the menu opened, for example a collaborator wrapped the
+  line in a quote) closed the menu and did nothing, without a word. The
+  status pill, and the screen reader, now say why, in the menu's own
+  words ("Quote: Already in a quote."), and "/quo" stays as typed. A
+  pick that was allowed but did nothing still says nothing.
+
+### Home, End, Page Up and Page Down in the "/" menu
+
+The code is in the lazy slash chunk only (5,509 B gz of its 6 KB budget);
+the editor chunk is unchanged (+19,282 B of the 23.5 KB budget) and the
+palette chunk is untouched; nothing to do when deploying.
+
+#### Added
+- The open "/" menu takes Home and End (first and last option) and Page Up
+  and Page Down (the farthest option still on one screen of the list with
+  the active one, never wrapping). The editor's `aria-activedescendant`
+  follows, and the active option scrolls into view. Modified keys
+  (Shift+End, Ctrl+Home) and every key while the menu is closed stay
+  caret keys.
+
+### Status pill stays clear of a bubble that appears later
+
+The editor chunk is unchanged (−2 B, loader hashes); the selection bubble
+and phone bar chunks, which hold the pill, grow by 136 B and 153 B gz; the
+palette's first Alt+/ is byte-identical. Nothing to do when deploying.
+
+#### Fixed
+- On desktop the status pill moved beside the selection bubble only if the
+  bubble was already there when the notice showed. A bubble that appeared
+  or moved afterwards (a new selection, a scroll) could sit under the pill,
+  covering the brush. While it shows, the pill now places itself again,
+  at most once a frame, whenever the bubble appears, moves, closes or
+  scrolls, and goes back under the row's centre once the bubble is gone.
+  Its observers stop when it closes.
+
+### Restore a removed format from the phone sheet
+
+The editor chunk goes from +19,283 B to +19,296 B of the 23.5 KB budget
+(13 B: one more export of the eager actions module); the code is in the
+lazy phone bar chunk (+142 B gz) and the first Alt+/ chunk is unchanged.
+Nothing to do when deploying.
+
+#### Added
+- On phones, the Aa sheet's Your formats offers "Restore ‘X’" for the
+  last removed format, until the next removal, a restore or a reload.
+  Phones have no Alt+/ palette, so the status pill's 5-second Undo was
+  the only way back. It runs the same `formats.restore` action as the
+  palette: it puts the format back where it was, keeps the sheet open
+  and, when it cannot run (the name was saved again, or the 20-format
+  cap), says why on a visible line. Full width, 44 px tall, no sideways
+  scroll at 320 px.
+
+### One label for saving a format
+
+The editor chunk goes from +19,283 B to +19,284 B of the 23.5 KB budget
+(4,780 B left); the first Alt+/ palette chunks stay at 20,475 B. Nothing to
+do when deploying.
+
+#### Changed
+- Saving a format is called "Save selection as format…" everywhere: the
+  Alt+/ palette said "Save as format…" while the text style dropdown and the
+  phone's Aa sheet said "Save selection as format…". The save view's title is
+  now "Save selection as format" too. The dropdown and the sheet read the
+  label from the `formats.save` action, so the three can no longer drift
+  apart. Typing "save as format" in the palette still finds it.
+
+### Align items with icons and shortcuts
+
+Menu chunk only: the editor chunk and the first Alt+/ palette load are
+unchanged; nothing to do when deploying.
+
+#### Changed
+- The four align items in Align ▾ and in the T3 ¶ (Paragraph) menu now
+  show their icons and shortcuts (Mod+Shift+L, E, R, J), like Outdent and
+  Indent beside them in ¶, which used to leave them as inset text. The
+  radio check sits in a fixed slot before the shortcut, so every shortcut
+  ends at one edge. Each item announces its keys with
+  `aria-keyshortcuts`. All four keys reach the editor in Chromium
+  (Mod+Shift+R does not reload and Mod+Shift+J does not open Downloads),
+  and `toolbar-row.spec.ts` now checks it.
+- A toolbar menu with these items grows to fit them, so "Ctrl+Shift+E"
+  stays on its label's line off macOS; reason lines wrap within that
+  width instead of widening the menu.
+
+### One name for justified alignment
+
+The editor chunk goes from +19,283 B to +19,208 B of the 23.5 KB budget
+(4,856 B left); the first Alt+/ palette load is unchanged (20,475 B);
+nothing to do when deploying.
+
+#### Changed
+- The Align ▾ trigger now takes its name and icon from the `align.*`
+  registry action instead of its own copy of the labels, so the trigger,
+  the menu items, the ¶ menu, the palette and the phone Text format sheet
+  share one source: "Align left", "Align center", "Align right" and
+  "Justify". The old "Align justify" tooltip wording left with the
+  pre-registry text-align button; no visible wording changes.
+
+### Trash icon on Delete row and Delete column
+
+The editor chunk goes from +19,283 B to +19,282 B of the 23.5 KB budget
+(the icon is in the lazy menu chunk); nothing to do when deploying.
+
+#### Changed
+- In the table's Row ▾ and Column ▾ menus, and in the Table tools menu
+  that stands in for them on narrow windows and phones, Delete row and
+  Delete column now have a trash icon and line up with the other items,
+  instead of inset text with an empty icon column. The palette and the
+  phone "Text format" sheet are unchanged.
+
+### Image resize gripper survives plugin view rebuilds
+
+The editor chunk grows by 116 B gzipped (measured +19,283 B to +19,399 B
+of the 23.5 KB budget); nothing to do when deploying.
+
+#### Fixed
+- Hovering an image while a lazy chunk was still loading could hide its
+  resize gripper and media toolbar at once, and a resize drag could stop
+  midway. A lazy chunk that registers a plugin (the selection bubble's
+  `BubbleMenu`) reconfigures the editor; ProseMirror then destroys and
+  recreates every plugin view, and the destroy hooks of
+  `@docs.plus/extension-hypermultimedia`'s media controls hide the active
+  gripper and abort a running drag. The editor now uses
+  `extensions/hyper-multimedia/`'s `HyperMultimediaKit`, which skips those
+  two destroy hooks when only the plugin list changed; they still run when
+  the editor is destroyed or the plugin is removed. This retires the
+  "known, not fixed" note from the resize gripper test fix, and the test
+  no longer waits for the bubble's plugin before hovering.
+
+### Shared filter links apply on load
+
+The editor chunk goes from +19,283 B to +19,294 B of the 23.5 KB budget;
+nothing to do when deploying.
+
+#### Fixed
+- Opening a link with `?filter=…` never applied the heading filter: the
+  filter hook wrote its empty state to the URL on its first render, before
+  the editor existed, so the query was gone by the time it was read (and
+  React's development remount stripped it again). The link's filter is now
+  read on mount and applied after the first server sync, so it folds the
+  real sections, not an empty or stale device copy. The URL keeps the
+  filter until then, and mirrors it afterwards as before.
+- A hand-typed filter link with a bare `%` (`?filter=50%25`) threw while
+  decoding; that slug is now kept as typed.
+
+### Outdated-client refusals without a stack trace
+
+Server only; the editor chunk does not change. Nothing to do when deploying
+beyond the usual Hocus restart.
+
+#### Fixed
+- Every refused outdated client printed a Bun code frame and stack trace to
+  the Hocus error log. Hocuspocus logs a hook error whenever it has a
+  `message`, and Bun's code frame ignores the emptied `.stack`. `onConnect`
+  now throws a plain `{ reason: "client_outdated" }` value instead, which
+  Hocuspocus still sends to the client as the refusal reason but does not
+  log; refusals show up only in the per-minute `client_schema` aggregate.
+
+### Quiet production build: quoted highlight colour keys
+
+Build output only: the compiled CSS is byte-identical, so the editor chunk
+and the first Alt+/ palette chunk do not change; no Deploy note.
+
+#### Fixed
+- `next build` printed ten Sass warnings from the document highlight rules:
+  the token list held bare colour names (`gray`, `blue`, ...), which Sass
+  reads as colours and warns about when interpolated into a selector. The
+  names are now quoted strings, like the maps in `text-style-marks.scss`
+  already were, and the build compiles without Sass warnings.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.

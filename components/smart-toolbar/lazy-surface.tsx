@@ -15,11 +15,19 @@ import { CircleAlertIcon } from "@/lib/icons";
 
 import { prefetchMenuBodies } from "./lazy-menu";
 
+let colorPanelModule: typeof import("./color/color-panel") | undefined;
+
 /**
  * Surface chunks that are not on screen at first paint (owner decision
  * O1): the colour popover body and the Insert steps.
  */
-export const loadColorPanel = () => import("./color/color-panel");
+export const loadColorPanel = () =>
+  import("./color/color-panel").then((module) => (colorPanelModule = module));
+/**
+ * The colour chunk once loaded, for code that must run synchronously (the
+ * popover's offset functions); hovering or focusing a trigger loads it.
+ */
+export const loadedColorPanel = () => colorPanelModule;
 export const loadInsertStep = () => import("./insert/insert-step");
 
 /**

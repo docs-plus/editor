@@ -53,9 +53,19 @@
     border-color: color-mix(in srgb, var(--foreground) 80%, transparent);
   }
 
-  &:focus-visible {
+  // The swatch under a mouse or pen (`data-pointed`, `color-panel.tsx`) is
+  // the one previewed, so it wears the focus ring. Keyboard focus on
+  // another swatch steps down to a dashed 1px ring in the same colour:
+  // still visible, never a second equal marker.
+  &:focus-visible,
+  &[data-pointed] {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
+  }
+
+  .st-color-panel[data-pointing] &:focus-visible:not([data-pointed]) {
+    outline-width: 1px;
+    outline-style: dashed;
   }
 
   &[aria-disabled="true"] {
@@ -72,9 +82,10 @@
     border-color: color-mix(in srgb, var(--foreground) 60%, transparent);
   }
 
-  // Opacity also fades the outline: a focused swatch drops the dimming so
-  // its ring keeps 3:1 (WCAG 1.4.11).
-  &[aria-disabled="true"]:focus-visible {
+  // Opacity also fades the outline: a focused or pointed swatch drops the
+  // dimming so its ring keeps 3:1 (WCAG 1.4.11).
+  &[aria-disabled="true"]:focus-visible,
+  &[aria-disabled="true"][data-pointed] {
     opacity: 1;
   }
 
@@ -97,7 +108,8 @@
       box-shadow: 0 0 0 2px Highlight;
     }
 
-    &:focus-visible {
+    &:focus-visible,
+    &[data-pointed] {
       outline-color: Highlight;
     }
 
@@ -143,6 +155,35 @@
   forced-color-adjust: auto;
 }
 
+// Hover preview of "Default text" and "No highlight" (`swatch-preview.ts`):
+// what the text shows once the mark is gone. The preview sits inside the
+// mark it previews away, so it reads these from the mark; outside one it
+// keeps the context's own colours (link, inline code, a header cell's
+// tint). The values mirror the context rules in `paragraph-node.scss`
+// and `table-node.scss`. Here, not in the editor chunk: only this panel
+// shows previews.
+.tiptap {
+  span[data-text-color] {
+    --tt-preview-plain-color: var(--foreground);
+  }
+
+  a span[data-text-color] {
+    --tt-preview-plain-color: var(--link-text-color);
+  }
+
+  mark[data-highlight] {
+    --tt-preview-plain-bg: var(--background);
+  }
+
+  // The header tint is translucent: layer it over the page, as the cell does.
+  th mark[data-highlight] {
+    --tt-preview-plain-bg: linear-gradient(
+        var(--tt-table-header-bg),
+        var(--tt-table-header-bg)
+      )
+      var(--background);
+  }
+}
 
 // Touch: every swatch is at least 44×44 (spec §6.7, §4.7).
 @media (pointer: coarse) {

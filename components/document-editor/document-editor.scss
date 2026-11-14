@@ -232,9 +232,10 @@ html:root {
 }
 
 // Token highlights (data-highlight set by TokenHighlight); palette lives in
-// styles/_variables.scss and switches with .dark.
-$highlight-tokens: gray, brown, red, orange, yellow, green, teal, blue, purple,
-  pink;
+// styles/_variables.scss and switches with .dark. Quoted: bare colour names
+// are Sass colours, which interpolation would warn about.
+$highlight-tokens: "gray", "brown", "red", "orange", "yellow", "green", "teal",
+  "blue", "purple", "pink";
 
 // Unknown, hex, var(--background) or hostile values render as plain text.
 .tiptap mark:not([data-highlight]) {

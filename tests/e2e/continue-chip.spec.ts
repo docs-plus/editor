@@ -12,6 +12,11 @@ import type { JSONContent } from "@tiptap/core";
 import { expectNoSeriousA11yViolations, setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 import { CHUNK_MARKERS, interceptChunk } from "./helpers/lazy-chunk";
+import {
+  activeOutlineRow,
+  editorScrollTops,
+  settledEditorScrollTop,
+} from "./helpers/outline";
 
 /**
  * "Continue where you left off" (spec M15): the chip offered on reopening
@@ -189,6 +194,17 @@ test.describe("continue where you left off", () => {
     await expect
       .poll(async () => landedUnderToolbar(page, target), { timeout: 6_000 })
       .toBe(true);
+    // The outline follows: its active row (below the first screenful of
+    // rows) is scrolled into view, without moving the page it landed on.
+    const settled = await settledEditorScrollTop(page);
+    await expect
+      .poll(() => activeOutlineRow(page))
+      .toEqual({ text: "Section 20", inView: true });
+    await page.waitForTimeout(300);
+    expect(new Set([settled, ...(await editorScrollTops(page))])).toEqual(
+      new Set([settled]),
+    );
+    expect(await landedUnderToolbar(page, target)).toBe(true);
   });
 
   test("a heading inside a folded section is unfolded and lands at the top", async ({

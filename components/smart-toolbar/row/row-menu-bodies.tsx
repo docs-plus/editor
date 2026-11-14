@@ -74,18 +74,18 @@ export function StyleMenuItems({
 
 const ALIGNS = ["left", "center", "right", "justify"] as const;
 
-/** Align ▾ (and the T3 ¶ menu's first group): the `align.*` actions. */
+/**
+ * Align ▾ (and the T3 ¶ menu's first group): the `align.*` actions, with
+ * their icons and shortcuts like Outdent and Indent beside them in ¶.
+ */
 export function AlignMenuItems({
   editor,
   value,
   onPicked,
-  inset = false,
 }: {
   editor: Editor;
   value: string;
   onPicked: () => void;
-  /** In the T3 ¶ menu: lines the text up with Outdent's and Indent's. */
-  inset?: boolean;
 }) {
   return (
     <DropdownMenuRadioGroup value={value}>
@@ -96,7 +96,7 @@ export function AlignMenuItems({
           value={align}
           editor={editor}
           onPicked={onPicked}
-          inset={inset}
+          decorated
         />
       ))}
     </DropdownMenuRadioGroup>

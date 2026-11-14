@@ -2,13 +2,22 @@ const FILTER_PARAM = "filter";
 const MODE_PARAM = "mode";
 const DELIMITER = "|";
 
+/** A hand-typed link can hold a bare `%`; keep that slug as typed. */
+function decodeSlug(slug: string): string {
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
+}
+
 export function decodeFilterParams(
   searchString: string,
 ): { slugs: string[]; mode: "or" | "and" } | null {
   const params = new URLSearchParams(searchString);
   const raw = params.get(FILTER_PARAM);
   if (!raw) return null;
-  const slugs = raw.split(DELIMITER).map(decodeURIComponent).filter(Boolean);
+  const slugs = raw.split(DELIMITER).map(decodeSlug).filter(Boolean);
   const mode = params.get(MODE_PARAM) === "and" ? "and" : "or";
   return slugs.length > 0 ? { slugs, mode } : null;
 }
