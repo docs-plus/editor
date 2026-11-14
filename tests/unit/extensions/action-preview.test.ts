@@ -247,16 +247,35 @@ describe("ActionPreview with collaboration", () => {
     expect(undoStack()).toBe(before);
   });
 
-  it("clears on a remote doc change", () => {
+  it("redraws on the new selection after a remote doc change", () => {
     const fixture = setupCollab();
     const { editor: e } = fixture;
-    e.commands.setTextSelection(HELLO);
+    // "world": the remote insert lands before it, not at its edge.
+    e.commands.setTextSelection({ from: 14, to: 19 });
     e.commands.setActionPreview(RED);
-    expect(shown(e)).toHaveLength(1);
     fixture.remote((frag) => {
       const paragraph = frag.get(1) as Y.XmlElement;
       (paragraph.get(0) as Y.XmlText).insert(0, "remote ");
     });
+    // The selection moved with the text; the preview follows it.
+    const { from, to } = e.state.selection;
+    expect(e.state.doc.textBetween(from, to)).toBe("world");
+    expect(from).toBe(21);
+    const decorations = shown(e);
+    expect(decorations).toHaveLength(1);
+    expect([decorations[0].from, decorations[0].to]).toEqual([from, to]);
+  });
+
+  it("a local edit after a remote one still clears it", () => {
+    const fixture = setupCollab();
+    const { editor: e } = fixture;
+    e.commands.setTextSelection(HELLO);
+    e.commands.setActionPreview(RED);
+    fixture.remote((frag) => {
+      const paragraph = frag.get(1) as Y.XmlElement;
+      (paragraph.get(0) as Y.XmlText).insert(0, "remote ");
+    });
+    e.view.dispatch(e.state.tr.insertText("!", e.state.doc.content.size - 1));
     expect(shown(e)).toHaveLength(0);
   });
 });

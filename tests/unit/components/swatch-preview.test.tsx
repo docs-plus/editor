@@ -244,6 +244,19 @@ describe("useSwatchPreview", () => {
     expect(shownCount(e)).toBe(0);
   });
 
+  it("a repeated arrow key waits the dwell, so holding a key does not flash", async () => {
+    const e = setup();
+    e.commands.setTextSelection(LINE);
+    const preview = mount(e);
+    act(() => {
+      preview.current.show(RED, true);
+      preview.current.show(BLUE, true);
+    });
+    expect(shownCount(e)).toBe(0);
+    await act(() => wait(PREVIEW_DWELL_MS + 30));
+    expect(e.view.dom.querySelector('[data-text-color="blue"]')).not.toBeNull();
+  });
+
   it("a touch pointer never shows", async () => {
     const e = setup();
     e.commands.setTextSelection(LINE);

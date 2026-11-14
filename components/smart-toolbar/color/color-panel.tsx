@@ -286,7 +286,10 @@ export function ColorPanel({
     if (next) {
       setActive(next);
       focusCell(next.row, next.col);
-      preview.show(previewable(rows[next.row].swatches[next.col]));
+      preview.show(
+        previewable(rows[next.row].swatches[next.col]),
+        event.repeat,
+      );
     }
   };
 

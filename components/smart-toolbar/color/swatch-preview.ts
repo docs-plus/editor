@@ -97,8 +97,11 @@ export interface SwatchPreview {
   hover(event: { pointerType: string }, swatch: Swatch | null): void;
   /** Pointer left a swatch: clear after the dwell unless another takes over. */
   leave(): void;
-  /** Arrow keys moved to a swatch: preview it at once. */
-  show(swatch: Swatch | null): void;
+  /**
+   * Arrow keys moved to a swatch: preview it at once, or after the dwell
+   * for a repeated key, so holding an arrow does not flash the text.
+   */
+  show(swatch: Swatch | null, repeat?: boolean): void;
   /** Focus left the grid: clear at once. */
   clear(): void;
 }
@@ -138,7 +141,7 @@ export function useSwatchPreview(editor: Editor): SwatchPreview {
         }
       },
       leave: () => later(null),
-      show: set,
+      show: (swatch, repeat) => (repeat ? later : set)(swatch),
       clear: () => set(null),
     };
   }, [editor, supported]);
