@@ -39,10 +39,25 @@ export const PREVIEW_MAX_POSITIONS = 20_000;
 const NO_TINT = "background-color: transparent";
 
 /**
+ * "Default text": inside a text colour mark, the colour the text has
+ * without it (`--tt-preview-plain-color`, set on the mark by
+ * `color-panel.scss`: the page's text colour, or a link's); elsewhere the
+ * context's own colour (inline code, a link), which applying keeps.
+ */
+const PLAIN_COLOR = "color: var(--tt-preview-plain-color, currentColor)";
+/**
+ * "No highlight": inside a highlight, what is under it (the page, or a
+ * header cell's tint over it); elsewhere nothing, so inline code and the
+ * cell show through.
+ */
+const PLAIN_BG = "background: var(--tt-preview-plain-bg, transparent)";
+
+/**
  * The decoration a swatch previews. A text colour carries the real mark's
- * token attribute, so the token CSS paints it. Backgrounds and "Default
- * text" are an inline style built from a palette token, which outranks the
- * selection paint. Null for a token outside the palette.
+ * token attribute, so the token CSS paints it. The rest is an inline style
+ * (it outranks the selection paint): a highlight's palette token, or for
+ * "Default text" and "No highlight" what the context renders without the
+ * mark. Null for a token outside the palette.
  */
 export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
   const { kind, token } = swatch;
@@ -50,7 +65,7 @@ export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
   if (kind === "text") {
     return token
       ? { [TEXT_COLOR_ATTR]: token, class: PREVIEW_CLASS, style: NO_TINT }
-      : { class: PREVIEW_CLASS, style: `color: var(--foreground); ${NO_TINT}` };
+      : { class: PREVIEW_CLASS, style: `${PLAIN_COLOR}; ${NO_TINT}` };
   }
   return token
     ? {
@@ -59,7 +74,7 @@ export function swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null {
         class: PREVIEW_CLASS,
         style: `background-color: var(--tt-color-highlight-${token})`,
       }
-    : { class: PREVIEW_CLASS, style: "background-color: var(--background)" };
+    : { class: PREVIEW_CLASS, style: PLAIN_BG };
 }
 
 /**

@@ -143,6 +143,35 @@
   forced-color-adjust: auto;
 }
 
+// Hover preview of "Default text" and "No highlight" (`swatch-preview.ts`):
+// what the text shows once the mark is gone. The preview sits inside the
+// mark it previews away, so it reads these from the mark; outside one it
+// keeps the context's own colours (link, inline code, a header cell's
+// tint). The values mirror the context rules in `paragraph-node.scss`
+// and `table-node.scss`. Here, not in the editor chunk: only this panel
+// shows previews.
+.tiptap {
+  span[data-text-color] {
+    --tt-preview-plain-color: var(--foreground);
+  }
+
+  a span[data-text-color] {
+    --tt-preview-plain-color: var(--link-text-color);
+  }
+
+  mark[data-highlight] {
+    --tt-preview-plain-bg: var(--background);
+  }
+
+  // The header tint is translucent: layer it over the page, as the cell does.
+  th mark[data-highlight] {
+    --tt-preview-plain-bg: linear-gradient(
+        var(--tt-table-header-bg),
+        var(--tt-table-header-bg)
+      )
+      var(--background);
+  }
+}
 
 // Touch: every swatch is at least 44×44 (spec §6.7, §4.7).
 @media (pointer: coarse) {
