@@ -15,7 +15,8 @@ import type { Swatch } from "./swatch";
 
 /**
  * Hover preview for colour swatches (smart toolbar later phase): the
- * selected text shows a swatch's colour before it is applied. This module
+ * selected text shows a swatch's colour before it is applied, when a mouse
+ * or pen rests on a swatch or arrow keys move to one. This module
  * is in the lazy colour-panel chunk and reaches the eager `ActionPreview`
  * extension only through its command, so it adds nothing to the editor
  * chunk (the type import is erased).
@@ -78,22 +79,33 @@ export function canPreview(editor: Editor): boolean {
 }
 
 /**
- * Previews need a mouse or pen that hovers, and are off in forced colours
- * (which override the colours a preview would show) and when
- * `NEXT_PUBLIC_ACTION_PREVIEW=0`. Read once at mount, like
- * `isCoarsePointer()`.
+ * Which inputs preview: "all" with a primary mouse or pen that hovers;
+ * "keys" (arrow keys only) on a touch-first device, so a tablet with a
+ * hardware keyboard keeps the keyboard preview while a tap, or an iPad
+ * trackpad, never previews; "off" in forced colours (which override the
+ * colours a preview would show) and when `NEXT_PUBLIC_ACTION_PREVIEW=0`.
+ * Read once at mount, like `isCoarsePointer()`.
  */
-function previewSupported(): boolean {
-  return (
-    process.env.NEXT_PUBLIC_ACTION_PREVIEW !== "0" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-    !window.matchMedia("(forced-colors: active)").matches
-  );
+type PreviewMode = "off" | "keys" | "all";
+
+function previewMode(): PreviewMode {
+  if (
+    process.env.NEXT_PUBLIC_ACTION_PREVIEW === "0" ||
+    typeof window.matchMedia !== "function" ||
+    window.matchMedia("(forced-colors: active)").matches
+  ) {
+    return "off";
+  }
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches
+    ? "all"
+    : "keys";
 }
 
 export interface SwatchPreview {
-  /** Pointer entered a swatch: preview it after the dwell (mouse or pen). */
+  /**
+   * Pointer entered a swatch: preview it after the dwell (mouse or pen,
+   * and only with a primary pointer that hovers).
+   */
   hover(event: { pointerType: string }, swatch: Swatch | null): void;
   /** Pointer left a swatch: clear after the dwell unless another takes over. */
   leave(): void;
@@ -119,11 +131,11 @@ const OFF: SwatchPreview = {
  * popover closing, Esc) cancels it and clears the preview.
  */
 export function useSwatchPreview(editor: Editor): SwatchPreview {
-  const [supported] = useState(previewSupported);
+  const [mode] = useState(previewMode);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const preview = useMemo<SwatchPreview>(() => {
-    if (!supported) return OFF;
+    if (mode === "off") return OFF;
     const set = (swatch: Swatch | null) => {
       clearTimeout(timer.current);
       if (editor.isDestroyed) return;
@@ -134,17 +146,22 @@ export function useSwatchPreview(editor: Editor): SwatchPreview {
       clearTimeout(timer.current);
       timer.current = setTimeout(set, PREVIEW_DWELL_MS, swatch);
     };
+    const keys = {
+      show: (swatch: Swatch | null, repeat?: boolean) =>
+        (repeat ? later : set)(swatch),
+      clear: () => set(null),
+    };
+    if (mode === "keys") return { ...OFF, ...keys };
     return {
+      ...keys,
       hover(event, swatch) {
         if (event.pointerType === "mouse" || event.pointerType === "pen") {
           later(swatch);
         }
       },
       leave: () => later(null),
-      show: (swatch, repeat) => (repeat ? later : set)(swatch),
-      clear: () => set(null),
     };
-  }, [editor, supported]);
+  }, [editor, mode]);
 
   useEffect(() => preview.clear, [preview]);
 
