@@ -120,13 +120,15 @@ export function TocSidebar({
 
   // The outline follows the page: on open, and whenever the active heading
   // changes (a heading jump, the Continue chip, scrolling), its row is kept
-  // in view. Not while a row is being dragged.
+  // in view. Not while a row is being dragged, nor when a drop ends.
   useEffect(() => {
     const list = listRef.current;
     const row = activeRef.current;
-    if (activeHeadingId == null || activeId != null || !list || !row) return;
+    if (activeHeadingId == null || activeItemRef.current || !list || !row) {
+      return;
+    }
     revealRow(list, row);
-  }, [activeHeadingId, activeId]);
+  }, [activeHeadingId]);
 
   const handleClick = useCallback(
     (item: TableOfContentData[number]) => {

@@ -137,6 +137,61 @@ test.describe("TOC sidebar follows the page", () => {
     );
   });
 
+  test("a drop does not pull the outline back to the active row", async ({
+    page,
+  }) => {
+    // Section 2 at the top of the page is active; the outline shows the
+    // rows around Section 40, far below it.
+    await page
+      .locator(".tiptap h2", { hasText: /^Section 2$/ })
+      .evaluate((el) => el.scrollIntoView({ block: "start" }));
+    await expect
+      .poll(async () => (await activeOutlineRow(page))?.text)
+      .toBe("Section 2");
+    const row = (n: number) =>
+      page.locator(".toc-sidebar-item-row", {
+        has: page.locator(".toc-sidebar-item", {
+          hasText: new RegExp(`^Section ${n}$`),
+        }),
+      });
+    await row(40).evaluate((el) => {
+      const list = el.closest(".toc-sidebar");
+      if (!list) return;
+      list.scrollTop +=
+        el.getBoundingClientRect().top -
+        list.getBoundingClientRect().top -
+        list.clientHeight / 2;
+    });
+    const outline = page.locator(".toc-sidebar");
+    const before = await outline.evaluate((el) => el.scrollTop);
+
+    // Drag Section 41 above Section 40, in the middle of the outline.
+    await row(41).hover();
+    const handle = await row(41)
+      .locator(".toc-sidebar-drag-handle")
+      .boundingBox();
+    const target = await row(40).boundingBox();
+    if (!handle || !target) throw new Error("no rows to drag");
+    const x = handle.x + handle.width / 2;
+    await page.mouse.move(x, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, target.y + target.height / 4, { steps: 10 });
+    await page.mouse.up();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          [...document.querySelectorAll(".tiptap h2")]
+            .map((h) => h.textContent)
+            .slice(38, 41),
+        ),
+      )
+      .toEqual(["Section 39", "Section 41", "Section 40"]);
+    await page.waitForTimeout(400); // the outline's next rebuild
+
+    expect(await outline.evaluate((el) => el.scrollTop)).toBe(before);
+    expect((await activeOutlineRow(page))?.inView).toBe(false);
+  });
+
   test("the outline never sits under the sticky toolbar", async ({ page }) => {
     await page
       .locator(".tiptap h2", { hasText: /^Section 30$/ })
