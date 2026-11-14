@@ -45,6 +45,17 @@ id checks to make room. Budgets are unchanged.
   lines and covered the first body line. It is in flow now, so the title
   grows with it; the caret still starts the first line.
 
+### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
+
+#### Fixed
+- **Tests:** `EditorPage.focusTitle()` waits for the frame in which
+  Tiptap's deferred `view.focus()` runs. In a touch context on a Mac
+  host, Tiptap takes the browser for iOS and focuses the editor at once,
+  so the helper returned early. The late focus then pulled focus back
+  from the toolbar after Alt+F10, and the touch-tablet "no tooltips"
+  test in `toolbar-surfaces.spec.ts` failed about one run in three under
+  three workers.
+
 ### Lazy toolbar menus
 
 Every toolbar menu's popup and items move out of the editor chunk into one

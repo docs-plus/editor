@@ -118,18 +118,31 @@ export class EditorPage {
     );
   }
 
-  /** Puts the caret at the end of the title and waits for DOM focus. */
+  /**
+   * Puts the caret at the end of the title and waits for DOM focus.
+   *
+   * Tiptap's `focus()` calls `view.focus()` in the next frame. Where it
+   * thinks it runs on iOS (a touch context on a Mac host: the UA says "Mac"
+   * and `ontouchend` exists) it also focuses at once, so the DOM check alone
+   * returns before that frame, and the late `view.focus()` pulls focus back
+   * from wherever the next key (Alt+F10) moved it. A frame requested after
+   * `run()` fires after Tiptap's.
+   */
   async focusTitle(): Promise<void> {
-    await this.page.evaluate(() => {
-      const editor = window.__tiptap_editor;
-      const title = editor?.state.doc.firstChild;
-      if (!editor || !title) return;
-      editor
-        .chain()
-        .focus()
-        .setTextSelection(title.nodeSize - 1)
-        .run();
-    });
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const editor = window.__tiptap_editor;
+          const title = editor?.state.doc.firstChild;
+          if (!editor || !title) return resolve();
+          editor
+            .chain()
+            .focus()
+            .setTextSelection(title.nodeSize - 1)
+            .run();
+          requestAnimationFrame(() => resolve());
+        }),
+    );
     await this.page.waitForFunction(
       () => document.activeElement?.classList.contains("ProseMirror") ?? false,
     );
