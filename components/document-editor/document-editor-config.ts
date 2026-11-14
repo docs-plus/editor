@@ -6,10 +6,7 @@ import {
   Hyperlink,
   previewHyperlinkPopover,
 } from "@docs.plus/extension-hyperlink";
-import {
-  HyperMultimediaKit,
-  isMediaUrl,
-} from "@docs.plus/extension-hypermultimedia";
+import { isMediaUrl } from "@docs.plus/extension-hypermultimedia";
 import { Indent } from "@docs.plus/extension-indent";
 import { InlineCode } from "@docs.plus/extension-inline-code";
 import { Mermaid } from "@docs.plus/extension-mermaid";
@@ -52,6 +49,7 @@ import {
 } from "@/extensions/heading-filter";
 import { HeadingFold, headingFoldPluginKey } from "@/extensions/heading-fold";
 import { HeadingScale } from "@/extensions/heading-scale";
+import { HyperMultimediaKit } from "@/extensions/hyper-multimedia/hyper-multimedia-kit";
 import {
   CaretBlockVisible,
   CollaborationRenderOnce,

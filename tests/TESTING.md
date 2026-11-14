@@ -52,7 +52,7 @@ tests/
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode)
-│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting
+│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
@@ -156,8 +156,8 @@ make test-e2e
 | Test | Validates |
 |------|-----------|
 | `drag.spec.ts` | Hovering a heading shows the drag handle |
-| `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected; the image resize gripper covers the hovered image and resizes it (it hovers only once the lazy selection bubble has registered its plugin: registering a plugin recreates every plugin view, and the media controls hide an active gripper when theirs is destroyed) |
-| `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches |
+| `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected; the image resize gripper covers the hovered image and resizes it, and it and a running drag survive a plugin being registered and removed (each recreates every plugin view, as the lazy selection bubble's `BubbleMenu` does when its chunk lands) |
+| `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches; a `?filter=alpha` link opens the bar with the chip once the doc syncs, folds the unmatched sections, keeps the URL, and Clear all filters removes it |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
