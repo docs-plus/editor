@@ -14,7 +14,7 @@ const readDensity = (): ToolbarDensity =>
 const serverDensity = (): ToolbarDensity => "full";
 
 /**
- * The remembered toolbar density (A-next). Unlike `useRememberedChoice`, it
+ * The remembered toolbar density (A15). Unlike `useRememberedChoice`, it
  * reads storage on the first client render: the editor never hydrates
  * (`ssr: false`), and a "ready" effect would paint the full row for a
  * frame before collapsing it. The constant server snapshot keeps it

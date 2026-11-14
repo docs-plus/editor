@@ -445,7 +445,7 @@ function viewAction(
 }
 
 /**
- * Simplified toolbar (A-next): flips the remembered row density, which the
+ * Simplified toolbar (A15): flips the remembered row density, which the
  * shell reads (`useToolbarDensity`), and says so on the status pill with
  * Undo (WCAG 4.1.3: the menu closes and the palette label is static).
  * Without memory it could not outlive a reload, so the kill switch

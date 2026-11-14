@@ -143,7 +143,7 @@ function ThemeMenuItem() {
 const SIMPLE_TOOLBAR = "view.simpleToolbar";
 
 /**
- * Simplified toolbar (A-next). Checked from the remembered density, which an
+ * Simplified toolbar (A15). Checked from the remembered density, which an
  * action's `isActive` may not read (contract §3.1). No icon (the only
  * fitting one is Fold section's), so it is inset like `ActionMenuItem`'s
  * icon-less items. Like Theme, it leaves focus on ⋯ (no `onPicked`), and

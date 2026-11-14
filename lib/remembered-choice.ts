@@ -49,7 +49,7 @@ export const CHOICE_SLOTS = {
   paletteRecent: "choices", // M11 (E)
   mermaidTemplate: "choices", // M17b (E)
   outlineOpen: "ui", // M6 (D2)
-  toolbarDensity: "ui", // simplified toolbar (A-next)
+  toolbarDensity: "ui", // simplified toolbar (A15)
 } as const satisfies Record<string, "choices" | "ui">;
 
 export type ChoiceSlot = keyof typeof CHOICE_SLOTS;
@@ -369,7 +369,7 @@ export const OUTLINE_OPEN_CHOICE: ChoiceSpec<boolean> = {
 export type ToolbarDensity = "full" | "simple";
 
 /**
- * Simplified toolbar (A-next): the row shows its compact set at every width.
+ * Simplified toolbar (A15): the row shows its compact set at every width.
  * Under `tinydocy-ui`, so Forget keeps it: a layout preference, not a
  * remembered formatting choice.
  */

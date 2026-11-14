@@ -97,7 +97,7 @@ async function rememberWidestInsertFace(page: Page) {
   });
 }
 
-/** Simplified toolbar (A-next): remembers the compact row before load. */
+/** Simplified toolbar (A15): remembers the compact row before load. */
 async function rememberSimplified(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem(

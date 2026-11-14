@@ -1,5 +1,5 @@
 /**
- * Simplified toolbar (contract A-next, later-phase plan "progressive
+ * Simplified toolbar (contract A15, later-phase plan "progressive
  * disclosure"): ⋯ or the palette turns on the T4 collapse set at every
  * width. It is remembered in `tinydocy-ui` (survives reload and Forget),
  * never flashes the full row on load, keeps one Tab stop and hands a
