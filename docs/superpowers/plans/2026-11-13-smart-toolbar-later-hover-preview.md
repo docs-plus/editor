@@ -9,7 +9,7 @@
 - Low-contrast highlight swatches are no longer dimmed. They keep a dotted border, and the note under Highlight reads "Dotted: hard to read with Red text" (design pass §11).
 - Every user-visible change has a status pill (design pass §5). A preview changes nothing, so it has no pill and no `announce()`.
 
-**Goal:** When a writer points at a text-colour or highlight swatch, or moves to one with the arrow keys, the selected text shows that colour **before** they commit. Moving away, Esc, closing the popover, applying, or any change to the document or selection removes the preview. It is drawn with ProseMirror **decorations only**, so it never touches the document, Yjs, the undo stack, collaborators or the toolbar. It is off on touch (spec §8 item 6: "decorations only, also on keyboard focus, off on touch").
+**Goal:** When a writer points at a text-colour or highlight swatch, or moves to one with the arrow keys, the selected text shows that colour **before** they commit. Moving away, Esc, closing the popover, applying, or a local change to the document or selection removes the preview; a collaborator's change redraws it on the moved selection. It is drawn with ProseMirror **decorations only**, so it never touches the document, Yjs, the undo stack, collaborators or the toolbar. It is off on touch (spec §8 item 6: "decorations only, also on keyboard focus, off on touch").
 
 **Architecture:**
 - **Eager, tiny:** an `ActionPreview` extension (`extensions/action-preview/`), registered once in the extensions array.
@@ -18,9 +18,9 @@
   - So the lazy side sends plain data and imports nothing the editor chunk also imports. A new shared import would make Turbopack split modules into extra editor-group files (A8 measured 344–968 B per split).
 - **Lazy:** everything else lives in the colour-panel chunk that already exists (A9).
   - `components/smart-toolbar/color/swatch-preview.ts`: the swatch → attributes mapping, the gates, the size cap and the `useSwatchPreview` hook.
-  - The preview CSS goes in `color-panel.scss`.
+  - No CSS file: the decorations carry token attributes and inline styles (Decision 7).
   - The row popover and the bubble popover both render `ColorPanel`, so one integration covers every pointer surface. The phone Aa sheet renders it too, and the touch gate keeps it off there.
-- **Rendering:** an inline decoration carries the same `data-*` attribute as the real mark (`span[data-text-color]`, `mark[data-highlight]`), so the existing token CSS styles it. ProseMirror renders inline decorations inside mark elements, so the preview wins over an existing colour. "Default text" and "No highlight" use preview-only classes.
+- **Rendering:** an inline decoration carries the same `data-*` attribute as the real mark (`span[data-text-color]`, `mark[data-highlight]`), so the existing token CSS styles it. ProseMirror renders inline decorations inside mark elements, so the preview wins over an existing colour. Highlights, "Default text" and "No highlight" carry an inline style built from a validated token, which also outranks the blurred selection's paint (Decision 8).
 
 **Tech Stack:** Tiptap 3.33 / ProseMirror (`Decoration.inline`, `DecorationSet`), React 19, `bun test` (happy-dom), Playwright with `@axe-core/playwright`. No new dependency.
 
@@ -138,15 +138,15 @@ CI= E2E_BASE_URL=http://localhost:6210 E2E_HOCUS_URL=ws://127.0.0.1:4210 bun pla
    - the colour split faces: they are eager row code, and they apply the remembered colour in one click;
    - Paint format and Repeat formatting (design pass §2, §3): no face shows a bundle.
 2. **No marker on the previewed text.** A preview shows exactly what Apply will produce, as in Word. The pressed swatch and the open popover say nothing is applied yet.
-3. **Clear on any change, never map.** Any doc change (local or remote) or selection change clears the preview. Mapping a preview through a collaborator's edit could leave it on the wrong text, so it is cleared, and the next hover or arrow key shows it again.
+3. **Never map; redraw after a collaborator's change.** A local doc or selection change clears the preview. Mapping the old ranges through a collaborator's edit could leave it on the wrong text, so after a remote change (`isChangeOrigin`) the plugin rebuilds it from the selection y-sync moved, with the same attributes. Clearing there instead (the first draft) made the preview vanish for good in a busy shared document, because the pointer resting on the swatch fires no new `pointerenter` (UX review).
 4. **Caret, node and cell selections:** no preview for a caret (nothing visible to colour) or a node selection. A `CellSelection` previews each range (`selection.ranges`).
 5. **Read-only and unavailable:** no preview when the editor is not editable or the swatch's kind cannot apply (inside code, for example).
 6. **Kill switch:** `NEXT_PUBLIC_ACTION_PREVIEW=0` disables previews. It is read in the lazy chunk (0 eager bytes) and listed in README's env table, following AGENTS.md's discoverable `NEXT_PUBLIC_*` rule.
 7. **"Default text" and "No highlight" previews:**
-   - `tt-preview--text-default` sets `color: var(--foreground)`, which overrides an outer coloured span.
-   - `tt-preview--highlight-none` sets `background-color: var(--background)` on the inner span, which covers an outer highlight on the page background.
+   - "Default text" sets `color: var(--foreground)` inline, which overrides an outer coloured span.
+   - "No highlight" sets `background-color: var(--background)` inline on the inner span, which covers an outer highlight on the page background.
    - Inside table header cells and other tinted backgrounds the cover can differ slightly. That is accepted, because the real Apply is one click away and undoable.
-8. **The blurred selection.** While the popover has focus, `Selection` paints the selected text with `--tt-selection-color`. A highlight preview's inner `mark` covers that paint, so the writer sees the highlight itself. A text-colour preview shows on top of the selection paint. Screenshots go to the design review.
+8. **The blurred selection.** While the popover has focus, `Selection` paints the selected text with `--tt-selection-color`, and its `selection` class lands on the preview element itself (measured: `<mark class="tt-preview selection">`), where `.tiptap.ProseMirror .selection` outranks the token CSS. So every preview sets its own background inline: the highlight's token, the page background for "No highlight", and transparent for text colours. The previewed words show without the tint, exactly as applying leaves them (blue text on the blue tint was unreadable in dark mode). The tint returns when the preview goes.
 
 ## Not in scope
 
@@ -170,7 +170,7 @@ CI= E2E_BASE_URL=http://localhost:6210 E2E_HOCUS_URL=ws://127.0.0.1:4210 bun pla
 |---|---|---|
 | `extensions/action-preview/action-preview.ts`, `extensions/action-preview/index.ts` | Plugin (meta-only state, clear on change), the `setActionPreview` command, `PreviewAttrs` type | Create (eager) |
 | `components/smart-toolbar/color/swatch-preview.ts` | Pure: `swatchPreviewAttrs`, `canPreview` (caret, node, read-only, cap); the `useSwatchPreview` hook (dwell, media gates, kill switch) | Create (lazy) |
-| `components/smart-toolbar/color/color-panel.tsx`, `color-panel.scss` | Attach the hook to each swatch and to arrow keys; clear on unmount and when focus leaves the grid; preview classes | Modify (D2 file, A6 grant) |
+| `components/smart-toolbar/color/color-panel.tsx` | Attach the hook to each swatch and to arrow keys; clear on unmount and when focus leaves the grid | Modify (D2 file, A6 grant) |
 | `components/document-editor/document-editor-config.ts` | Register `ActionPreview` | Modify (one import, one entry) |
 | `tests/unit/extensions/action-preview.test.ts`, `tests/unit/components/swatch-preview.test.tsx` | Unit tests | Create |
 | `tests/e2e/action-preview.spec.ts` | e2e | Create |
@@ -209,7 +209,8 @@ CI= E2E_BASE_URL=http://localhost:6210 E2E_HOCUS_URL=ws://127.0.0.1:4210 bun pla
 it("decorates each selection range with the attributes", () => {});
 it("is meta-only: 0 Yjs updates and 0 undo entries for show and clear", () => {});
 it("does not bump the toolbar version store", () => {});
-it("clears on a local doc change, a remote doc change and a selection change", () => {});
+it("clears on a local doc change and a selection change", () => {});
+it("redraws on the new selection after a remote doc change", () => {});
 it("keeps the preview across a transaction that changes neither", () => {});
 it("previews each range of a CellSelection", () => {});
 it("nests inside an existing mark: the preview renders inside span[data-text-color='blue']", () => {});
@@ -233,17 +234,17 @@ it("clearing with nothing shown dispatches nothing", () => {});
 
 **Interfaces:**
 - `swatchPreviewAttrs(swatch: Swatch): PreviewAttrs | null`
-  - text + token → `{ "data-text-color": token, class: "tt-preview" }` (rendered as a `span`).
-  - highlight + token → `{ nodeName: "mark", "data-highlight": token, class: "tt-preview" }`.
-  - text, no token → `{ class: "tt-preview tt-preview--text-default" }`.
-  - highlight, no token → `{ class: "tt-preview tt-preview--highlight-none" }`.
+  - text + token → `{ "data-text-color": token, class: "tt-preview", style: "background-color: transparent" }` (rendered as a `span`).
+  - highlight + token → `{ nodeName: "mark", "data-highlight": token, class: "tt-preview", style: "background-color: var(--tt-color-highlight-<token>)" }`.
+  - text, no token → `{ class: "tt-preview", style: "color: var(--foreground); background-color: transparent" }`.
+  - highlight, no token → `{ class: "tt-preview", style: "background-color: var(--background)" }`.
   - An invalid token → `null` (render-time enforcement, spec §3).
 - `canPreview(editor): boolean`: editable, a non-empty selection that is not a node selection, at most `PREVIEW_MAX_BLOCKS = 200` top-level blocks and `PREVIEW_MAX_POSITIONS = 20_000` positions.
 - `useSwatchPreview(editor): { hover(event, swatch | null), leave(), show(swatch | null), clear() }`
   - Off when `NEXT_PUBLIC_ACTION_PREVIEW=0`, without `(hover: hover) and (pointer: fine)`, or in forced colours. All read once at mount.
   - `hover`: only `pointerType` `mouse` or `pen`; shows after `PREVIEW_DWELL_MS = 80`.
   - `leave`: clears after the same delay, unless a hover or show takes over.
-  - `show` (arrow keys): at once. `clear`: at once. Unmount clears and cancels the timer.
+  - `show` (arrow keys): at once, or after the dwell for a repeated key (`event.repeat`), so holding an arrow does not flash a large selection (WCAG 2.3.1, UX review). `clear`: at once. Unmount clears and cancels the timer.
   - A `null` swatch (the kind cannot apply here) clears instead.
 
 - [ ] **Step 1: Write the failing tests**
@@ -269,7 +270,7 @@ it("unmount clears the preview and cancels the timer", () => {});
 ### Task 3: Swatch integration
 
 **Files:**
-- Modify: `components/smart-toolbar/color/color-panel.tsx`, `color-panel.scss`
+- Modify: `components/smart-toolbar/color/color-panel.tsx`
 - Test: `tests/e2e/action-preview.spec.ts`
 
 **Integration:**
@@ -277,7 +278,7 @@ it("unmount clears the preview and cancels the timer", () => {});
 - `onKeyDown`: after an arrow, Home or End moves focus, `show(next swatch)`.
 - The grid's `onBlur`: focus leaving the grid clears.
 - A swatch whose kind has a reason passes `null`.
-- CSS: `.tiptap .tt-preview--text-default { color: var(--foreground) }`, `.tiptap .tt-preview--highlight-none { background-color: var(--background) }`. No transition and no outline (Decision 2).
+- No CSS: no transition and no outline (Decision 2).
 
 - [ ] **Step 1: Write the failing e2e**
 
