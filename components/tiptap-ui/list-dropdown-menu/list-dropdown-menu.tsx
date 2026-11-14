@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/react";
 import { useCallback, useRef, useState } from "react";
 
 import {
+  focusLostOnClose,
   menuBody,
   prefetchMenuBodies,
   useMenuGate,
@@ -101,9 +102,10 @@ export function ListDropdownMenu({
   );
 
   // After a pick the editor already holds the selection, so focus goes
-  // there; Esc and outside clicks fall back to the trigger.
+  // there; Esc and outside clicks fall back to the trigger, unless focus
+  // has moved on (`focusLostOnClose`).
   const finalFocus = useCallback(() => {
-    if (!picked.current) return true;
+    if (!picked.current) return focusLostOnClose();
     picked.current = false;
     return editor?.view.dom ?? true;
   }, [editor]);
