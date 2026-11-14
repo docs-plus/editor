@@ -878,6 +878,54 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(page.locator("[data-command-palette] input")).toBeFocused();
   });
 
+  for (const [width, height] of [
+    [375, 812],
+    [320, 568],
+  ] as const) {
+    test(`${width}px: Save's reason line sits right under it, one item`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await openDoc(page);
+      // Plain text: nothing to save, so Save says why under itself.
+      await selectNewParagraph(page, "alpha");
+      await openSheet(page);
+      const section = sheet(page).getByRole("region", {
+        name: "Your formats",
+      });
+      const save = section.getByRole("button", {
+        name: "Save selection as format…",
+      });
+      await expect(save).toBeDisabled();
+      await expect(save).toHaveAccessibleDescription(
+        "Select formatted text to save it.",
+      );
+      await save.scrollIntoViewIfNeeded();
+      const gap = await save.evaluate((button) => {
+        const label = button.querySelector("span")?.getBoundingClientRect();
+        const reason = button.nextElementSibling;
+        if (!label || !reason?.firstChild) return null;
+        // The text's own boxes, not the elements' padding.
+        const range = document.createRange();
+        range.selectNodeContents(reason);
+        const text = range.getClientRects()[0];
+        return {
+          gap: text.top - label.bottom,
+          height: button.getBoundingClientRect().height,
+        };
+      });
+      expect(gap).not.toBeNull();
+      // One item: about 2px between the label and its reason.
+      expect(gap?.gap ?? 99).toBeGreaterThanOrEqual(0);
+      expect(gap?.gap ?? 99).toBeLessThanOrEqual(4);
+      // The disabled target keeps its 44px.
+      expect(gap?.height ?? 0).toBeGreaterThanOrEqual(44);
+      await page.screenshot({
+        path: `${SCREENS}/sheet-save-reason-${width}.png`,
+      });
+    });
+  }
+
   test("the Aa sheet's Remove a format removes at once, with Undo on the pill", async ({
     page,
   }) => {
