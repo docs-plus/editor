@@ -721,6 +721,15 @@ test.describe("hover preview under the phone sheet", () => {
     expect(
       await page.evaluate(() => matchMedia("(pointer: fine)").matches),
     ).toBe(true);
+    // The sheet slid up past the still mouse that clicked "Text format".
+    // A swatch passing under it gets an enter and no move (and often no
+    // leave): nothing previews until the mouse moves.
+    await sheet
+      .getByRole("button", { name: "Teal text" })
+      .dispatchEvent("pointerover", { pointerType: "mouse" });
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveCount(0);
+    await expect(sheet.locator("[data-pointed]")).toHaveCount(0);
     const dimmed = await scrimColor(page);
     expect(dimmed).not.toBe(TRANSPARENT);
 
