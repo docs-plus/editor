@@ -18,6 +18,7 @@ import {
   deleteContinueEntry,
   installContinueRecorder,
   readContinueEntry,
+  sectionLabel,
 } from "@/lib/continue-position";
 import { CloseIcon } from "@/lib/icons";
 
@@ -42,15 +43,6 @@ interface Offer {
   id: string;
   label: string;
 }
-
-const LABEL_MAX = 40;
-
-const truncate = (text: string) => {
-  const trimmed = text.trim();
-  return trimmed.length > LABEL_MAX
-    ? `${trimmed.slice(0, LABEL_MAX - 1).trimEnd()}…`
-    : trimmed;
-};
 
 /**
  * Keeps the phone chip 8px above the connection chip, whose height depends
@@ -120,7 +112,11 @@ export function ContinueChip({
     if (!anchor) return;
     if (state.doc.resolve(anchor.pos).index(0) < CONTINUE_MIN_BLOCK) return;
     if (nav.isFilteredOut(state, entry.id)) return;
-    setOffer({ id: entry.id, label: truncate(anchor.node.textContent) });
+    // A collaborator may have written the heading: strip what could spoof
+    // the chip or Go's accessible name (`<bdi>` also isolates direction).
+    const label = sectionLabel(anchor.node.textContent);
+    if (!label) return;
+    setOffer({ id: entry.id, label });
   }, [serverSynced, documentName, editor, nav]);
 
   useEffect(() => {

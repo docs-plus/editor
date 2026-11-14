@@ -137,6 +137,27 @@ export function deleteContinueEntry(documentName: string): void {
   if (entries.delete(documentName)) save(entries);
 }
 
+const LABEL_MAX = 40;
+/** Control and format characters: bidi controls, zero-width, BOM, soft hyphen. */
+const UNSAFE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * A heading's text as the chip shows it. Anyone can write a heading, so
+ * characters that could hide, reorder or spoof the chip's text or Go's
+ * accessible name are dropped and whitespace collapses; then the first 40
+ * code points, with an ellipsis. Empty when nothing visible is left.
+ */
+export function sectionLabel(text: string): string {
+  const chars = Array.from(
+    text.replace(UNSAFE_LABEL_CHARS, "").replace(/\s+/g, " ").trim(),
+  );
+  if (chars.length <= LABEL_MAX) return chars.join("");
+  return `${chars
+    .slice(0, LABEL_MAX - 1)
+    .join("")
+    .trimEnd()}…`;
+}
+
 /**
  * The section `pos` is in: the nearest heading at or before it, other than
  * the title. Null when there is none, or when that heading is one of the

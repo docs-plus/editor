@@ -11,6 +11,7 @@ import {
   installContinueRecorder,
   readContinueEntry,
   sectionHeadingAt,
+  sectionLabel,
   writeContinueEntry,
 } from "@/lib/continue-position";
 import { createTestEditor } from "@/tests/helpers/create-test-editor";
@@ -217,6 +218,25 @@ function posOf(editor: Editor, text: string): number {
 
 let editor: Editor;
 afterEach(() => editor?.destroy());
+
+describe("sectionLabel", () => {
+  it("drops bidi overrides, invisible and control characters and collapses whitespace", () => {
+    expect(
+      sectionLabel(
+        "\u202eLaunch\u200b  checklist\u0007 \u2066x\u2069\ufeff\u00ad",
+      ),
+    ).toBe("Launch checklist x");
+  });
+
+  it("keeps 40 code points, with an ellipsis", () => {
+    expect(sectionLabel("a".repeat(40))).toBe("a".repeat(40));
+    expect(sectionLabel(`${"😀".repeat(45)}`)).toBe(`${"😀".repeat(39)}…`);
+  });
+
+  it("is empty when nothing visible is left", () => {
+    expect(sectionLabel("\u202e\u200b \u2066")).toBe("");
+  });
+});
 
 describe("sectionHeadingAt", () => {
   beforeEach(() => {
