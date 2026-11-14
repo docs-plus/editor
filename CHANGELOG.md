@@ -15,8 +15,8 @@ What the design sign-off of the smart toolbar design pass (#35) left
 open: two narrow-phone layout fixes, a palette way back from "Remove a
 format", palette polish, and an idle prefetch for cold offline starts.
 
-The editor chunk goes from +16,679 B to +17,247 B of the 23.5 KB budget
-(6,817 B left, was 7,385 B); the idle prefetch trigger is 58 B of that.
+The editor chunk goes from +16,680 B to +17,249 B of the 23.5 KB budget
+(6,815 B left, was 7,384 B); the idle prefetch trigger is 58 B of that.
 The palette's first Alt+/ loads 20,475 B gz of its 20,480 B budget (5 B
 left, was 36 B); single-entry sets in `palette-sections.ts` became plain
 id checks to make room. Budgets are unchanged.
