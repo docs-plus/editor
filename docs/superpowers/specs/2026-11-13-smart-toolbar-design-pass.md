@@ -80,7 +80,7 @@ Items after the text styles, a separator, then the "Your formats" label:
 
 - **Each saved format:** a `menuitem` whose name is rendered in its own formatting (a CSS preview: weight, style, decoration, token colour, highlight fill, size). Its description is the long label. Applying it is one undo step.
 - **"Save selection as format…":** opens the Save dialog (§7). When the selection has nothing to save, it's disabled with "Select formatted text to save it".
-- **"Remove a format ▸":** shown only when at least one format exists. Its submenu lists the names; choosing one removes it at once, and the pill shows "Removed ‘X’" with an **Undo** action for 5 s. Five seconds is short for keyboard and screen reader users, so until the next removal, a restore or a reload the Alt+/ palette also offers **"Restore ‘X’"** first under Suggested here (with the format's chip), and nowhere else. It puts the format back where it was and announces "Restored ‘X’". When it cannot run it stays listed with why: "‘X’ is in Your formats already." (the name was saved again) or the 20-format cap reason. It is never kept in Recent.
+- **"Remove a format ▸":** shown only when at least one format exists. Its submenu lists the names; choosing one removes it at once, and the pill shows "Removed ‘X’" with an **Undo** action for 5 s. Five seconds is short for keyboard and screen reader users, so until the next removal, a restore or a reload the Alt+/ palette also offers **"Restore ‘X’"** first under Suggested here (with the format's chip). Phones have no palette, so the Aa sheet's Your formats offers it there instead (§6); nowhere else. It puts the format back where it was and announces "Restored ‘X’". When it cannot run it stays listed with why: "‘X’ is in Your formats already." (the name was saved again) or the 20-format cap reason. It is never kept in Recent.
 
 Also:
 - Remove "Repeat formatting: …" and "Copy formatting" from any dropdown.
@@ -145,6 +145,7 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
   - The formats fill the two-column grid. "Save selection as format…", the "Remove a format" toggle and the Remove list span its full width, below the formats, so a long label never widens the sheet (no sideways scroll at 320 px). Labels truncate with an ellipsis.
   - The Remove list is a grid of its own under the toggle, inset (`ps-3`), never between the apply buttons.
   - A disabled control's reason is a visible `text-xs text-muted-foreground` line under it (phones have no tooltips, §10): one line under the formats when none can apply, one under Save.
+  - After a removal, a full-width "Restore ‘X’" (undo icon, 44 px) follows the toggle and the Remove list, until the next removal, a restore or a reload (§4). A restore keeps the sheet open; when it cannot run, its reason is a visible line under it, like Save's.
 
 **Touch:**
 - No tooltips on a coarse pointer (`[data-slot="tooltip-content"] { display:none }` under `(pointer: coarse)`); the pill replaces them.
