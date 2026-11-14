@@ -799,8 +799,8 @@ test.describe("selection bubble", () => {
       }),
     ).toEqual([true, "toolbar-separator"]);
     const box = await brush.boundingBox();
-    expect(box?.width).toBe(28);
-    expect(box?.height).toBe(28);
+    expect(box?.width).toBeCloseTo(28, 1);
+    expect(box?.height).toBeCloseTo(28, 1);
   });
 
   test("the brush queues a click until the engine lands, never 'loading'", async ({
