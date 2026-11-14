@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Colour preview from the keyboard on touch devices
+
+The editor chunk is unchanged (+19,281 B of the 23.5 KB budget; the
+change is in the lazy colour chunk) and the first Alt+/ chunk is
+unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a touch-first device (`pointer: coarse`), such as an iPad or an
+  Android tablet with a hardware keyboard, arrowing through the colour
+  swatches showed no preview: the preview was gated as a whole on a fine
+  hovering pointer. Arrow keys now preview there as on a desktop, while a
+  tap, or a pointer such as an iPad trackpad, still previews nothing and
+  does not clear the keyboard's preview. Forced colours and
+  `NEXT_PUBLIC_ACTION_PREVIEW=0` still turn previews off everywhere.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
