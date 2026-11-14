@@ -9,6 +9,45 @@ since the previous tag.
 
 ## [Unreleased]
 
+### "/" block menu
+
+Type "/" at the start of a line, or after a space, for a short menu of
+text styles, lists and Insert kinds under the caret: one more view of the
+action registry, with no command of its own (plan
+`docs/superpowers/plans/2026-11-13-smart-toolbar-later-slash-menu.md`,
+contract amendment A-next, numbered at merge). No schema or protocol change; no Deploy note.
+
+The editor chunk grows by 923 B (+17,602 B of the 23.5 KB
+budget, 6,462 B left); the budget is unchanged. The menu is a lazy chunk
+of 5,291 B gz (budget 6 KB), fetched when the browser is idle. The
+palette's first Alt+/ is unchanged, file for file (402 B + 20,042 B = 20,444 B).
+
+#### Added
+- Typing "/" in a paragraph (including list items, quotes and table
+  cells) at the block start or after whitespace opens a listbox under the
+  caret: Text (Normal text, Heading 1–3; "/h4" finds 4–6), Lists, Insert
+  (the table at its last size, shown as "3 × 3") and Diagrams (the five
+  templates, the last used one noted). Typing filters by word prefix over
+  labels, keywords and Markdown shortcuts ("/h2", "/##", "/quo", "/pic");
+  each section shows once, best match first.
+- Enter or a click applies the block and removes "/query" as one undo
+  step; Esc leaves the text as typed. "/" then Enter, with nothing typed
+  or arrowed, stays a line break. A match that cannot go here says why
+  ("Quote: Already in a quote."); a finished word with no match closes the
+  menu, as do "1 / 2", "/usr/bin" and a query over 24 characters.
+- It never opens mid-word ("and/or"), in URLs, the title, headings, code,
+  inline code, a read-only document or from a collaborator's typing; a
+  collaborator deleting the "/" closes it.
+- Focus never leaves the editor: the editor carries `aria-controls`,
+  `aria-autocomplete`, `aria-haspopup` and `aria-activedescendant` while
+  the menu is open, and a polite live region says "Block menu, 18
+  options.", then each active row ("Table, 3 by 3, 9 of 18"). IME composition keeps its
+  keys. Rows are 44 px on touch, and a tap keeps the phone keyboard; the
+  list flips above the caret near the bottom, the phone bar and the
+  keyboard (never apart from its caret: when content above the caret
+  changes size or the keyboard opens, the caret is scrolled back into view
+  first), and spans the screen below 640 px.
+
 ### Lazy toolbar menus
 
 Every toolbar menu's popup and items move out of the editor chunk into one
