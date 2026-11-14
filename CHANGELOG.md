@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Status pill stays clear of a bubble that appears later
+
+The editor chunk is unchanged (−2 B, loader hashes); the selection bubble
+and phone bar chunks, which hold the pill, grow by 136 B and 153 B gz; the
+palette's first Alt+/ is byte-identical. Nothing to do when deploying.
+
+#### Fixed
+- On desktop the status pill moved beside the selection bubble only if the
+  bubble was already there when the notice showed. A bubble that appeared
+  or moved afterwards (a new selection, a scroll) could sit under the pill,
+  covering the brush. While it shows, the pill now places itself again,
+  at most once a frame, whenever the bubble appears, moves, closes or
+  scrolls, and goes back under the row's centre once the bubble is gone.
+  Its observers stop when it closes.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
