@@ -258,8 +258,12 @@ ul.st-sheet-list {
   padding-inline: 0.75rem;
 
   select {
+    // Safari draws its default select 23px tall whatever the CSS says; as
+    // `menulist-button` it keeps the native menu and takes `height` (not
+    // `min-height`), the border and the colours.
+    appearance: menulist-button;
     min-width: 0;
-    min-height: 44px;
+    height: 44px;
     padding-inline: 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-md, 0.375rem);
