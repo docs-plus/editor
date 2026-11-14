@@ -4,9 +4,11 @@ import type { Editor } from "@tiptap/react";
 import { useCallback, useRef, useState } from "react";
 
 import {
-  canToggleList,
-  type ListType,
-} from "@/components/tiptap-ui/list-button";
+  menuBody,
+  prefetchMenuBodies,
+  useMenuGate,
+} from "@/components/smart-toolbar/lazy-menu";
+import type { ListType } from "@/components/tiptap-ui/list-button";
 import {
   type ListValue,
   setListType,
@@ -14,11 +16,8 @@ import {
 } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu-trigger";
 import type { ToolbarButtonProps } from "@/components/ui/toolbar-button";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
@@ -34,6 +33,9 @@ const LIST_ACTIONS = Object.fromEntries(
     editorActions.get(id),
   ]),
 ) as Partial<Record<ListType, AnyAction>>;
+
+/** The popup is in the toolbar's menu chunk (`list-dropdown-menu-content`). */
+const ListMenuContent = menuBody((bodies) => bodies.ListMenuContent);
 
 export interface ListDropdownMenuProps
   extends Omit<ToolbarButtonProps, "type"> {
@@ -106,12 +108,14 @@ export function ListDropdownMenu({
     return editor?.view.dom ?? true;
   }, [editor]);
 
+  const openMenu = useMenuGate(handleOpenChange);
+
   if (!isVisible) {
     return null;
   }
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
+    <DropdownMenu open={isOpen} onOpenChange={openMenu}>
       <DropdownMenuTrigger
         disabled={!canToggle}
         render={
@@ -124,6 +128,8 @@ export function ListDropdownMenu({
             aria-haspopup="menu"
             tooltip="List"
             size="sm"
+            onPointerEnter={prefetchMenuBodies}
+            onFocus={prefetchMenuBodies}
             {...buttonProps}
           />
         }
@@ -132,23 +138,13 @@ export function ListDropdownMenu({
         <ChevronDownIcon className="size-3 opacity-60" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" finalFocus={finalFocus}>
-        <DropdownMenuRadioGroup value={value} onValueChange={handleValueChange}>
-          <DropdownMenuRadioItem value="none" closeOnClick>
-            No list
-          </DropdownMenuRadioItem>
-          {filteredLists.map((option) => (
-            <DropdownMenuRadioItem
-              key={option.type}
-              value={option.type}
-              closeOnClick
-              disabled={!canToggleList(editor, option.type)}
-            >
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
+      <ListMenuContent
+        editor={editor}
+        lists={filteredLists}
+        value={value}
+        onValueChange={handleValueChange}
+        finalFocus={finalFocus}
+      />
     </DropdownMenu>
   );
 }

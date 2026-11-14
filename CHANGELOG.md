@@ -9,6 +9,27 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Lazy toolbar menus
+
+Every toolbar menu's popup and items move out of the editor chunk into one
+lazy chunk (owner decision O1, the "menu bodies lazy" lead in contract A9;
+amendment A13). Nothing changes for the writer.
+
+The editor chunk goes from +23,994 B to +16,679 B of the 23.5 KB budget
+(7,385 B left, was 70 B); the budget is unchanged. The palette's first
+Alt+/ loads 20,444 B gz of its 20,480 B budget (36 B left, was 8 B).
+
+#### Changed
+- The triggers and Base UI's menu root stay in the editor chunk; the
+  popups, positioner and items (Text style, Alignment, List, Insert, ⋯,
+  the context slot's menus, the ladder stand-ins and the phone List cell)
+  load as one chunk on a trigger's hover or focus, when the browser is
+  idle after the first sync, or on the first open, which waits for it.
+  Keys pressed while it loads are replayed into the menu, so a keyboard
+  open still lands on the first item and loses no key.
+- A menu whose chunk does not load says "Couldn’t open the menu." on the
+  status pill, with Retry, as the palette does.
+
 ### Smart toolbar follow-ups
 
 Minors left by the a11y review of the smart toolbar (contract §10), and

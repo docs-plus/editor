@@ -1,15 +1,8 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
 import { useCallback, useRef } from "react";
 
-import {
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
-import { CODE_LANGUAGES } from "@/lib/code-language";
 import {
   FONT_SIZE_LABELS,
   FONT_SIZE_SHORT,
@@ -28,15 +21,16 @@ import { FONT_SIZE_LADDER, type FontSizeStep } from "@/lib/text-style-tokens";
 import { ColorPopoverButton } from "./color-controls";
 import { SLOT_LABELS } from "./context-slot/context-slot";
 import { useSlotTarget } from "./context-slot/use-slot-target";
-import {
-  ActionMenuItem,
-  ActionRadioItem,
-  DropdownMenuRadioGroup,
-  ToolbarMenu,
-  useMenuFocus,
-  useSurfaceEditor,
-} from "./row/action-menu";
+import { menuBody } from "./lazy-menu";
+import { ToolbarMenu, useMenuFocus, useSurfaceEditor } from "./row/action-menu";
 import type { SurfaceProps } from "./types";
+
+/* Each stand-in's items are in the menu chunk (`collapse-menu-bodies.tsx`). */
+const SizeMenuItems = menuBody((bodies) => bodies.SizeMenuItems);
+const ParagraphMenuItems = menuBody((bodies) => bodies.ParagraphMenuItems);
+const SlotMenuItems = menuBody((bodies) => bodies.SlotMenuItems);
+const ViewMenuItems = menuBody((bodies) => bodies.ViewMenuItems);
+const AaMenuItems = menuBody((bodies) => bodies.AaMenuItems);
 
 /*
  * Responsive ladder stand-ins (spec §4.6). Each renders inside a
@@ -73,24 +67,10 @@ export function SizeCollapseMenu({ editor: provided }: SurfaceProps) {
       finalFocus={menu.finalFocus}
       contentLabel="Font size"
     >
-      <DropdownMenuRadioGroup value={step}>
-        {FONT_SIZE_LADDER.map((size) => (
-          <ActionRadioItem
-            key={size}
-            id="size.set"
-            value={size}
-            arg={size}
-            label={FONT_SIZE_LABELS[size]}
-            editor={editor}
-            onPicked={menu.markPicked}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
+      <SizeMenuItems editor={editor} value={step} onPicked={menu.markPicked} />
     </ToolbarMenu>
   );
 }
-
-const ALIGN_VALUES = ["left", "center", "right", "justify"] as const;
 
 /** T3: align + indent → ¶ menu. */
 export function ParagraphCollapseMenu({ editor: provided }: SurfaceProps) {
@@ -110,25 +90,9 @@ export function ParagraphCollapseMenu({ editor: provided }: SurfaceProps) {
       finalFocus={menu.finalFocus}
       contentLabel="Paragraph"
     >
-      <DropdownMenuRadioGroup value={view.value ?? "left"}>
-        {ALIGN_VALUES.map((align) => (
-          <ActionRadioItem
-            key={align}
-            id={`align.${align}`}
-            value={align}
-            editor={editor}
-            onPicked={menu.markPicked}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
-      <ActionMenuItem
-        id="indent.outdent"
+      <ParagraphMenuItems
         editor={editor}
-        onPicked={menu.markPicked}
-      />
-      <ActionMenuItem
-        id="indent.indent"
-        editor={editor}
+        value={view.value ?? "left"}
         onPicked={menu.markPicked}
       />
     </ToolbarMenu>
@@ -152,38 +116,6 @@ const SLOT_ITEMS: Partial<Record<string, readonly string[]>> = {
   media: ["media.options"],
 };
 
-function SlotLanguageItems({
-  id,
-  editor,
-  onPicked,
-}: {
-  id: "code.language" | "mermaid.language";
-  editor: Editor;
-  onPicked: () => void;
-}) {
-  const view = useActionView(id, editor);
-  if (!view) return null;
-  // The value is the language's name, aliases resolved (`js` is JavaScript).
-  const current = CODE_LANGUAGES.find((option) => option.label === view.value);
-  return (
-    <DropdownMenuRadioGroup value={current?.value ?? ""}>
-      <DropdownMenuSeparator />
-      <DropdownMenuLabel>Language</DropdownMenuLabel>
-      {CODE_LANGUAGES.map((option) => (
-        <ActionRadioItem
-          key={option.value}
-          id={id}
-          value={option.value}
-          arg={option.value}
-          label={option.label}
-          editor={editor}
-          onPicked={onPicked}
-        />
-      ))}
-    </DropdownMenuRadioGroup>
-  );
-}
-
 /**
  * T3: the context slot → one 40px button with the slot's actions for the
  * current context. Nothing for paragraphs and lists (an empty slot).
@@ -195,12 +127,6 @@ export function SlotCollapseButton({ editor: provided }: SurfaceProps) {
   const ids = SLOT_ITEMS[kind];
   const label = SLOT_LABELS[kind];
   if (!editor || !ids || !label) return null;
-  const language =
-    kind === "code"
-      ? "code.language"
-      : kind === "mermaid"
-        ? "mermaid.language"
-        : null;
   return (
     <ToolbarMenu
       label={label}
@@ -213,22 +139,13 @@ export function SlotCollapseButton({ editor: provided }: SurfaceProps) {
       finalFocus={menu.finalFocus}
       contentLabel={label}
     >
-      {ids.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          arg={kind === "heading" ? headingId : undefined}
-          onPicked={menu.markPicked}
-        />
-      ))}
-      {language ? (
-        <SlotLanguageItems
-          id={language}
-          editor={editor}
-          onPicked={menu.markPicked}
-        />
-      ) : null}
+      <SlotMenuItems
+        editor={editor}
+        kind={kind}
+        ids={ids}
+        headingId={headingId}
+        onPicked={menu.markPicked}
+      />
     </ToolbarMenu>
   );
 }
@@ -290,36 +207,16 @@ export function ViewCollapseMenu({
       finalFocus={finalFocus}
       contentLabel="View"
     >
-      <ViewToggleItem
-        label="Outline"
-        checked={tocVisible}
-        onToggle={() => {
+      <ViewMenuItems
+        tocVisible={tocVisible}
+        filterActive={filterActive}
+        onTocToggle={() => {
           openingOverlay.current = outlineOverlay && !tocVisible;
           onTocToggle();
         }}
-      />
-      <ViewToggleItem
-        label="Filter document"
-        checked={filterActive}
-        onToggle={onFilterToggle}
+        onFilterToggle={onFilterToggle}
       />
     </ToolbarMenu>
-  );
-}
-
-function ViewToggleItem({
-  label,
-  checked,
-  onToggle,
-}: {
-  label: string;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <DropdownMenuCheckboxItem checked={checked} closeOnClick onClick={onToggle}>
-      {label}
-    </DropdownMenuCheckboxItem>
   );
 }
 
@@ -341,18 +238,7 @@ export function AaCollapseMenu({ editor: provided }: SurfaceProps) {
       finalFocus={menu.finalFocus}
       contentLabel="More text formatting"
     >
-      <ActionMenuItem
-        id="mark.underline"
-        editor={editor}
-        checkbox
-        onPicked={menu.markPicked}
-      />
-      <ActionMenuItem
-        id="mark.strike"
-        editor={editor}
-        checkbox
-        onPicked={menu.markPicked}
-      />
+      <AaMenuItems editor={editor} onPicked={menu.markPicked} />
     </ToolbarMenu>
   );
 }

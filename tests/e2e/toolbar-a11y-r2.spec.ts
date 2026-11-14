@@ -295,9 +295,14 @@ async function openStyleMenu(page: Page): Promise<Locator> {
   return menu;
 }
 
+/**
+ * Item heights, without items that carry a reason line (two lines, such as
+ * Your formats' "Save selection as format…", which lands with its own
+ * lazy chunk, sometimes before the measure and sometimes after).
+ */
 async function itemHeights(menu: Locator) {
   return menu
-    .locator('[role^="menuitem"]')
+    .locator('[role^="menuitem"]:not(:has([data-slot="dropdown-menu-reason"]))')
     .evaluateAll((items) =>
       items.map((item) => (item as HTMLElement).offsetHeight),
     );

@@ -35,11 +35,11 @@ import {
   loadV11Engine,
 } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
-import { CheckIcon } from "@/lib/icons";
 import "./command-palette.scss";
 import { isMac } from "@/lib/shortcuts";
 
 import { FormatPreview } from "../formats/format-preview";
+import { CheckIcon } from "../lazy-menu";
 import { readPaletteRecent, rememberPaletteRecent } from "./palette-recent";
 import {
   buildPaletteSections,

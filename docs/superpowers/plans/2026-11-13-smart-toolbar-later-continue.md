@@ -91,7 +91,7 @@ CI= E2E_BASE_URL=http://localhost:3610 E2E_HOCUS_URL=ws://127.0.0.1:1710 bun pla
 **This is more than the headroom, and Turbopack's split cost comes on top.**
 - A lazy chunk that imports modules the editor chunk also uses makes Turbopack split those modules into separate, less compressible editor-group files. A8 measured about 344 B for the palette chunk and about 968 B for the split button inside the bubble chunk.
 - The continue chunk (`relative-range.ts`, the fold and filter plugin keys, `remembered-choice`, `hocuspocus`) and the slash chunk (registry, snapshot, memory) both import such modules.
-- Expect the four plans together to need a new owner amendment, unless a trim lands first. The candidate is A9's untested "menu bodies lazy" lead, now unblocked.
+- The trim has landed (contract A13, menu bodies lazy): the editor chunk measured +16,679 B of the 23.5 KB budget, 7,385 B of headroom. Measure each plan against it; a new owner amendment is needed only if they outgrow it. The palette (A7) has 36 B left.
 - No plan raises the constant itself. Going over this plan's 150 B needs a trim or the owner's amendment.
 
 Task 0 measures this before any feature code is written.
