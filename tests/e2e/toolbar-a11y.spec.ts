@@ -705,6 +705,41 @@ for (const theme of ["light", "dark"] as const) {
       await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
     });
   }
+  test(`simplified toolbar has no serious axe violations (${theme})`, async ({
+    page,
+  }) => {
+    await setTheme(page, theme);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "tinydocy-ui",
+        JSON.stringify({
+          v: 1,
+          slots: { toolbarDensity: { last: "simple", recent: [] } },
+        }),
+      );
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openToolbarTestDoc(page);
+    await expect(page.getByRole("toolbar")).toHaveAttribute(
+      "data-toolbar-density",
+      "simple",
+    );
+    await expectNoSeriousA11yViolations(page, ['[role="toolbar"]']);
+    await page
+      .getByRole("toolbar")
+      .getByRole("button", { name: "More formatting" })
+      .click();
+    await expect(
+      page.getByRole("menuitemcheckbox", { name: "Simplified toolbar" }),
+    ).toHaveAttribute("aria-checked", "true");
+    // Axe reads colours mid fade-in as low contrast: let the menu settle.
+    await page
+      .getByRole("menu")
+      .evaluate((menu) =>
+        Promise.all(menu.getAnimations().map((each) => each.finished)),
+      );
+    await expectNoSeriousA11yViolations(page, ['[role="menu"]']);
+  });
   for (const popup of [
     "text style menu",
     "list menu",

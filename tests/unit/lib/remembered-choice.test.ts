@@ -19,6 +19,7 @@ import {
   subscribeChoices,
   TABLE_SIZE_CHOICE,
   TEXT_COLOR_CHOICE,
+  TOOLBAR_DENSITY_CHOICE,
   useRememberedChoice,
 } from "@/lib/remembered-choice";
 import { isTextColorToken, type TextColorToken } from "@/lib/text-style-tokens";
@@ -188,6 +189,30 @@ describe("remembered choices: tamper resistance", () => {
     } finally {
       Storage.prototype.getItem = original;
       Storage.prototype.setItem = originalSet;
+    }
+  });
+});
+
+describe("simplified toolbar: toolbarDensity", () => {
+  it("defaults to the full row", () => {
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("full");
+  });
+
+  it("lives in tinydocy-ui and survives Forget my choices", () => {
+    rememberChoice(TOOLBAR_DENSITY_CHOICE, "simple");
+    expect(choicesRaw()).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.ui)).toContain('"toolbarDensity"');
+    forgetChoices();
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("simple");
+  });
+
+  it("reads anything other than full or simple as full", () => {
+    for (const last of ["compact", 1, true, null, { v: "simple" }]) {
+      setRaw(
+        STORAGE_KEYS.ui,
+        JSON.stringify({ v: 1, slots: { toolbarDensity: { last } } }),
+      );
+      expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("full");
     }
   });
 });

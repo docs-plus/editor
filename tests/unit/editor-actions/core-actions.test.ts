@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { Editor, Extension, JSONContent } from "@tiptap/core";
 import { Subscript } from "@tiptap/extension-subscript";
@@ -11,6 +11,8 @@ import { coreActions } from "@/lib/editor-actions/core-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { readChoice, TOOLBAR_DENSITY_CHOICE } from "@/lib/remembered-choice";
+import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
 import {
   createTestEditor,
@@ -107,6 +109,7 @@ describe("core action list", () => {
       "section.fold",
       "view.filter",
       "view.outline",
+      "view.simpleToolbar",
       "view.theme",
     ]);
   });
@@ -118,6 +121,80 @@ describe("core action list", () => {
     for (const each of coreActions.filter((a) => a.mutates !== false)) {
       expect(availability(each, ctx)).toEqual({ reason: READ_ONLY_REASON });
     }
+  });
+});
+
+describe("view.simpleToolbar", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("flips the stored density and never changes the document", () => {
+    const target = make(para(t("x")));
+    const before = target.state.doc;
+    expect(runAction(target, action("view.simpleToolbar"))).toBe(true);
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("simple");
+    expect(runAction(target, action("view.simpleToolbar"))).toBe(true);
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("full");
+    expect(target.state.doc).toBe(before);
+  });
+
+  it("says so on the status pill, with Undo", async () => {
+    const { dismissNotice, getNotice } = await import("@/lib/announce");
+    const target = make(para(t("x")));
+    runAction(target, action("view.simpleToolbar"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const notice = getNotice();
+    expect(notice?.text).toBe("Simplified toolbar on");
+    expect(notice?.done).toBe(true);
+    expect(notice?.action?.label).toBe("Undo");
+    notice?.action?.run();
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("full");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getNotice()?.text).toBe("Full toolbar on");
+    dismissNotice();
+  });
+
+  it("runs in a read-only document", () => {
+    const target = make(para(t("x")));
+    target.setEditable(false);
+    expect(enabledIn(target, "view.simpleToolbar")).toBe(true);
+    expect(runAction(target, action("view.simpleToolbar"))).toBe(true);
+    expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("simple");
+  });
+
+  it("is listed for the palette with its keywords", () => {
+    const simple = action("view.simpleToolbar");
+    expect(simple.label).toBe("Simplified toolbar");
+    expect(simple.group).toBe("view");
+    expect(simple.contexts).toBe("any");
+    expect(simple.keywords).toEqual(
+      expect.arrayContaining([
+        "compact",
+        "fewer tools",
+        "minimal",
+        "full toolbar",
+      ]),
+    );
+  });
+});
+
+describe("view.simpleToolbar under the kill switch", () => {
+  const previous = process.env.NEXT_PUBLIC_REMEMBER_CHOICES;
+  afterEach(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_REMEMBER_CHOICES;
+    else process.env.NEXT_PUBLIC_REMEMBER_CHOICES = previous;
+    resetModules();
+  });
+
+  it("is disabled with a reason, since the choice could not be kept", async () => {
+    process.env.NEXT_PUBLIC_REMEMBER_CHOICES = "0";
+    const { slotActions } = await importFresh<
+      typeof import("@/lib/editor-actions/core/slot")
+    >("@/lib/editor-actions/core/slot");
+    const simple = slotActions.find((each) => each.id === "view.simpleToolbar");
+    const target = make(para(t("x")));
+    expect(simple?.enabled(computeContext(target))).toEqual({
+      reason: "Remembering choices is turned off.",
+    });
   });
 });
 

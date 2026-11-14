@@ -46,6 +46,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { ContinueChipLoader } from "@/components/document-editor/continue-chip-loader";
 import { DocumentNotice } from "@/components/document-editor/document-notice";
 import { EditorSurfaces } from "@/components/smart-toolbar/editor-surfaces";
 import { PhoneMenuCells } from "@/components/smart-toolbar/phone/phone-menu-cells";
@@ -65,6 +66,7 @@ import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
+import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
@@ -294,6 +296,7 @@ function DocumentEditorContent({
   }, [editor]);
 
   const toolbarOff = useToolbarOffForTests();
+  const density = useToolbarDensity();
 
   return (
     <main className="document-editor-wrapper" data-nosnippet>
@@ -301,7 +304,11 @@ function DocumentEditorContent({
         {/* Phones (< 768px) get the docked bar instead of the row (spec
             §4.7): one role="toolbar" either way, both reached by Alt+F10. */}
         {!toolbarOff && !isMobile && (
-          <Toolbar ref={setToolbarRef} onEscape={returnToEditor}>
+          <Toolbar
+            ref={setToolbarRef}
+            onEscape={returnToEditor}
+            data-toolbar-density={density}
+          >
             <Profiler id="toolbar" onRender={countToolbarCommit}>
               <MainToolbarContent
                 onTocToggle={() => setOutlineOpen((open) => !open)}
@@ -383,6 +390,15 @@ function DocumentEditorContent({
         </div>
 
         {reason && <DocumentNotice reason={reason} />}
+        {/* Spec M15, lazy on idle (the contract's continue amendment). */}
+        {!toolbarOff && editor && (
+          <ContinueChipLoader
+            editor={editor}
+            documentName={documentId}
+            serverSynced={serverSynced}
+            rejectedReason={rejectedReason}
+          />
+        )}
         <CollabStatusGroup />
       </EditorContext.Provider>
     </main>

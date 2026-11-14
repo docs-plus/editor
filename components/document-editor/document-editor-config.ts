@@ -43,6 +43,7 @@ import {
   IMAGE_UPLOAD_LIMIT,
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
+import { ActionPreview } from "@/extensions/action-preview";
 import { EditorActionShortcuts } from "@/extensions/editor-action-shortcuts";
 import { HeadingDrag } from "@/extensions/heading-drag";
 import {
@@ -228,6 +229,8 @@ export function buildDocumentEditorExtensions({
     Superscript,
     Subscript,
     Selection,
+    // Colour swatch previews: decorations only, never the doc (hover preview).
+    ActionPreview,
     Placeholder.configure({ placeholder: getPlaceholderText }),
     UniqueID.configure({
       types: ["heading"],

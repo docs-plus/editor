@@ -1,13 +1,19 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import { useId } from "react";
 
 import {
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
+  DropdownMenuReason,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { useActionView } from "@/hooks/use-editor-context";
+import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
 import { MoonStarIcon, SunIcon } from "@/lib/icons";
 import { applyTheme, THEME_CHANGE_EVENT, THEME_STORAGE_KEY } from "@/lib/theme";
 
@@ -134,10 +140,45 @@ function ThemeMenuItem() {
   );
 }
 
+const SIMPLE_TOOLBAR = "view.simpleToolbar";
+
+/**
+ * Simplified toolbar (A15). Checked from the remembered density, which an
+ * action's `isActive` may not read (contract §3.1). No icon (the only
+ * fitting one is Fold section's), so it is inset like `ActionMenuItem`'s
+ * icon-less items. Like Theme, it leaves focus on ⋯ (no `onPicked`), and
+ * closes first so the row never collapses under an open menu.
+ */
+function DensityMenuItem({ editor }: { editor: Editor }) {
+  const density = useToolbarDensity();
+  const view = useActionView(SIMPLE_TOOLBAR, editor);
+  const reasonId = useId();
+  const action = editorActions.get(SIMPLE_TOOLBAR);
+  if (!action || !view) return null;
+  const reason = view.enabled === true ? undefined : view.enabled.reason;
+  return (
+    <DropdownMenuCheckboxItem
+      inset
+      checked={density === "simple"}
+      closeOnClick
+      disabled={reason !== undefined}
+      aria-describedby={reason ? reasonId : undefined}
+      data-action-id={SIMPLE_TOOLBAR}
+      onClick={() => runAction(editor, action)}
+    >
+      <span>{action.label}</span>
+      {reason ? (
+        <DropdownMenuReason id={reasonId}>{reason}</DropdownMenuReason>
+      ) : null}
+    </DropdownMenuCheckboxItem>
+  );
+}
+
 /**
  * ⋯ More formatting: superscript, subscript, inline code, clear
- * formatting, then D2's and E's entries once registered, and Theme when
- * the row has moved it here (T2).
+ * formatting, then D2's and E's entries once registered, then the view
+ * settings: Simplified toolbar, and Theme when the row has moved it here
+ * (T2 or the simplified toolbar).
  */
 export function OverflowMenuItems({
   editor,
@@ -170,12 +211,9 @@ export function OverflowMenuItems({
           onPicked={onPicked}
         />
       ))}
-      {themeInMenu ? (
-        <>
-          <DropdownMenuSeparator />
-          <ThemeMenuItem />
-        </>
-      ) : null}
+      <DropdownMenuSeparator />
+      <DensityMenuItem editor={editor} />
+      {themeInMenu ? <ThemeMenuItem /> : null}
     </>
   );
 }

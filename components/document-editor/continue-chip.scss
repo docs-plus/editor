@@ -1,0 +1,52 @@
+// "Continue where you left off" (spec M15), loaded with the lazy chip.
+//
+// The host sits just before the text inside the page card
+// (`document-editor.scss`). Absolutely positioned with no offsets, it stays
+// at its static place, the card's top-left, over the text's 3rem top
+// padding: it moves nothing, and comes before the text in Tab order.
+.continue-chip-host {
+  position: absolute;
+  // Above the text, which is positioned and painted after it.
+  z-index: 1;
+  // Centred in the 3rem padding (the chip is 2.125rem tall), aligned with
+  // the text column.
+  margin-block-start: 0.4375rem;
+  margin-inline-start: 3rem;
+  width: max-content;
+  max-width: min(34.5rem, calc(100vw - 6rem));
+}
+
+// Phones, where the card's top padding is 1rem, and any touch screen (44px
+// buttons make the chip taller than the padding): fixed above the
+// connection chip (`--continue-chip-bottom`, measured) and the docked bar.
+@media screen and (max-width: 480px), (pointer: coarse) {
+  .continue-chip-host {
+    position: fixed;
+    inset-inline: 0.5rem;
+    bottom: max(
+      calc(var(--mobile-bar-clearance, 0px) + 0.5rem),
+      var(--continue-chip-bottom, 0px)
+    );
+    z-index: 50;
+    margin: 0;
+    width: auto;
+    max-width: none;
+  }
+}
+
+// Touch tablets: a chip at its own width, centred, not a bar.
+@media screen and (min-width: 481px) and (pointer: coarse) {
+  .continue-chip-host {
+    inset-inline: 0;
+    width: max-content;
+    max-width: calc(100vw - 1rem);
+    margin-inline: auto;
+  }
+}
+
+// Phones: "Continue · <section>", so the name is not cut.
+@media screen and (max-width: 480px) {
+  .continue-chip-long {
+    display: none;
+  }
+}

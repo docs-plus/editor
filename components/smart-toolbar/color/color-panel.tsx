@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
 import { type Swatch, swatchName, swatchStyle } from "./swatch";
+import { useSwatchPreview } from "./swatch-preview";
 import "./color-panel.scss";
 
 /**
@@ -40,8 +41,10 @@ import "./color-panel.scss";
  * Highlight swatches that would put the current text colour below AA
  * (Appendix A, O3) get a dotted border and the description "Low
  * contrast", with one visible line under Highlight naming the text colour
- * (design pass §11), but stay selectable and undimmed. Lazy chunk: loaded
- * on first open.
+ * (design pass §11), but stay selectable and undimmed. Pointing at a
+ * swatch with a mouse, or arrowing to one, previews it on the selection
+ * (decorations only, `swatch-preview.ts`); the focus put on a swatch when
+ * the popover opens previews nothing. Lazy chunk: loaded on first open.
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -219,6 +222,10 @@ export function ColorPanel({
 
   const gridRef = useRef<HTMLDivElement>(null);
   const idPrefix = useId();
+  const preview = useSwatchPreview(editor);
+  /** The swatch to preview, or null when its kind cannot apply here. */
+  const previewable = (swatch: Swatch) =>
+    reasons[swatch.kind] ? null : swatch;
   const focusCell = useCallback((row: number, col: number) => {
     gridRef.current
       ?.querySelector<HTMLButtonElement>(
@@ -279,6 +286,10 @@ export function ColorPanel({
     if (next) {
       setActive(next);
       focusCell(next.row, next.col);
+      preview.show(
+        previewable(rows[next.row].swatches[next.col]),
+        event.repeat,
+      );
     }
   };
 
@@ -290,6 +301,11 @@ export function ColorPanel({
       style={{ "--swatch-cols": columns } as CSSProperties}
       data-roving-group=""
       onKeyDown={onKeyDown}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          preview.clear();
+        }
+      }}
     >
       {(["text", "highlight"] as const).map((kind) => (
         <span key={kind} hidden>
@@ -345,6 +361,10 @@ export function ColorPanel({
                   style={swatchStyle(swatch)}
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
+                  onPointerEnter={(event) =>
+                    preview.hover(event, previewable(swatch))
+                  }
+                  onPointerLeave={preview.leave}
                   onClick={() => {
                     // The roving stop follows the pick. Focus moves only
                     // when it is in the grid: a tap-opened popover leaves
