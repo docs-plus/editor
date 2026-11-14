@@ -145,10 +145,9 @@ const SIMPLE_TOOLBAR = "view.simpleToolbar";
 /**
  * Simplified toolbar (A-next). Checked from the remembered density, which an
  * action's `isActive` may not read (contract §3.1). No icon (the only
- * fitting one is Fold section's); the label is inset to line up with
- * Theme's below it. Like Theme, it leaves
- * focus on ⋯ (no `onPicked`), and closes first so the row never collapses
- * under an open menu.
+ * fitting one is Fold section's), so it is inset like `ActionMenuItem`'s
+ * icon-less items. Like Theme, it leaves focus on ⋯ (no `onPicked`), and
+ * closes first so the row never collapses under an open menu.
  */
 function DensityMenuItem({ editor }: { editor: Editor }) {
   const density = useToolbarDensity();
@@ -159,6 +158,7 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
   const reason = view.enabled === true ? undefined : view.enabled.reason;
   return (
     <DropdownMenuCheckboxItem
+      inset
       checked={density === "simple"}
       closeOnClick
       disabled={reason !== undefined}
@@ -166,11 +166,9 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
       data-action-id={SIMPLE_TOOLBAR}
       onClick={() => runAction(editor, action)}
     >
-      <span className="ps-5.5">{action.label}</span>
+      <span>{action.label}</span>
       {reason ? (
-        <DropdownMenuReason id={reasonId} className="ps-5.5">
-          {reason}
-        </DropdownMenuReason>
+        <DropdownMenuReason id={reasonId}>{reason}</DropdownMenuReason>
       ) : null}
     </DropdownMenuCheckboxItem>
   );
