@@ -83,14 +83,21 @@ describe("clearOfSelection", () => {
       document.documentElement,
       "clientWidth",
     ),
-    innerHeight: window.innerHeight,
+    innerHeight: Object.getOwnPropertyDescriptor(window, "innerHeight"),
   };
+  /** Another file may leave `innerHeight` read-only: define, don't assign. */
+  const setInnerHeight = (value: number) =>
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      writable: true,
+      value,
+    });
   beforeEach(() => {
     Object.defineProperty(document.documentElement, "clientWidth", {
       configurable: true,
       value: VIEWPORT.width,
     });
-    window.innerHeight = VIEWPORT.height;
+    setInnerHeight(VIEWPORT.height);
   });
   afterEach(() => {
     if (saved.clientWidth) {
@@ -102,7 +109,11 @@ describe("clearOfSelection", () => {
     } else {
       delete (document.documentElement as { clientWidth?: number }).clientWidth;
     }
-    window.innerHeight = saved.innerHeight;
+    if (saved.innerHeight) {
+      Object.defineProperty(window, "innerHeight", saved.innerHeight);
+    } else {
+      delete (window as { innerHeight?: number }).innerHeight;
+    }
   });
 
   it("does not move for a caret, a missing trigger or a destroyed editor", () => {
@@ -181,7 +192,7 @@ describe("clearOfSelection", () => {
   });
 
   it("stays put when dropping below would leave the viewport", () => {
-    window.innerHeight = 300;
+    setInnerHeight(300);
     expect(
       clearOfSelection(UNDER_BUTTON, CHEVRON, BOTTOM, SIDE_OFFSET),
     ).toEqual([0, 0]);
