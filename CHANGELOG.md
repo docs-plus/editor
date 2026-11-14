@@ -16,9 +16,9 @@ M15): a small chip above the title, "Continue where you left off ·
 *Section*", with Go and ✕. No schema or protocol change; nothing to
 deploy beyond the app.
 
-The editor chunk grows by 474 B, to +17,153 B of the 23.5 KB budget
-(6,911 B left); the budget is unchanged. The chip, its recorder and its
-styles load as one lazy chunk (2.4 KB gz) when the browser is idle. The
+The editor chunk grows by 474 B, to +17,154 B of the 23.5 KB budget
+(6,910 B left); the budget is unchanged. The chip, its recorder and its
+styles load as one lazy chunk (2.5 KB gz) when the browser is idle. The
 palette's chunks are unchanged.
 
 #### Added
@@ -36,6 +36,8 @@ palette's chunks are unchanged.
   does not.
 - Phones show "Continue · *Section*" above the presence chip and the bar;
   touch tablets show it at the bottom too.
+- The section name is shown without control, invisible or bidi-control
+  characters, so a collaborator's heading cannot spoof the chip.
 
 #### Changed
 - The outline's jump to a heading is shared with the chip
