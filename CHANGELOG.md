@@ -26,6 +26,15 @@ Nothing to do when deploying.
   cap), says why on a visible line. Full width, 44 px tall, no sideways
   scroll at 320 px.
 
+### Selection bubble brush size test tolerates sub-pixel boxes
+
+Test only; no app, schema or protocol change; no Deploy note.
+
+#### Fixed
+- `selection-bubble.spec.ts` checked the Paint format brush's box with an
+  exact `toBe(28)`, and a CI runner measured 28.000015 px. It now uses
+  `toBeCloseTo(28, 1)` for the width and height.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
