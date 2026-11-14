@@ -9,6 +9,50 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Colour preview from the keyboard on touch devices
+
+The editor chunk is unchanged (+19,281 B of the 23.5 KB budget; the
+change is in the lazy colour chunk) and the first Alt+/ chunk is
+unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a touch-first device (`pointer: coarse`), such as an iPad or an
+  Android tablet with a hardware keyboard, arrowing through the colour
+  swatches showed no preview: the preview was gated as a whole on a fine
+  hovering pointer. Arrow keys now preview there as on a desktop, while a
+  tap, or a pointer such as an iPad trackpad, still previews nothing and
+  does not clear the keyboard's preview. Forced colours and
+  `NEXT_PUBLIC_ACTION_PREVIEW=0` still turn previews off everywhere.
+
+### Clear marker on the previewed colour swatch
+
+The editor chunk does not grow (the change is in the lazy colour panel);
+nothing to do when deploying.
+
+#### Fixed
+- In the colour popover the swatch under the mouse, the one previewed on
+  the selection, only darkened its border, while a mouse-opened popover
+  put its full focus ring on the pressed swatch, so the ring pointed at
+  the wrong colour. The swatch under a mouse or pen now wears the focus
+  ring (Highlight in forced colours, with or without a preview), and
+  keyboard focus on another swatch steps down to a dashed 1px ring until
+  an arrow key hands the ring back. Touch shows no marker; the Aa sheet's
+  colours behave the same.
+
+### "/" menu says why a pick was refused
+
+The editor chunk goes from +19,283 B to +19,270 B of the 23.5 KB budget
+(4,794 B left); the "/" menu chunk grows by 50 B gz (5,341 B of 6 KB) and
+the first Alt+/ not at all; nothing to do when deploying.
+
+#### Fixed
+- A "/" menu row whose block could no longer go there (the document
+  changed after the menu opened, for example a collaborator wrapped the
+  line in a quote) closed the menu and did nothing, without a word. The
+  status pill, and the screen reader, now say why, in the menu's own
+  words ("Quote: Already in a quote."), and "/quo" stays as typed. A
+  pick that was allowed but did nothing still says nothing.
+
 ### Home, End, Page Up and Page Down in the "/" menu
 
 The code is in the lazy slash chunk only (5,509 B gz of its 6 KB budget);
