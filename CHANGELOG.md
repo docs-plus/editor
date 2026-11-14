@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### One name for justified alignment
+
+The editor chunk goes from +19,283 B to +19,208 B of the 23.5 KB budget
+(4,856 B left); the first Alt+/ palette load is unchanged (20,475 B);
+nothing to do when deploying.
+
+#### Changed
+- The Align ▾ trigger now takes its name and icon from the `align.*`
+  registry action instead of its own copy of the labels, so the trigger,
+  the menu items, the ¶ menu, the palette and the phone Text format sheet
+  share one source: "Align left", "Align center", "Align right" and
+  "Justify". The old "Align justify" tooltip wording left with the
+  pre-registry text-align button; no visible wording changes.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
