@@ -237,4 +237,35 @@ test.describe("offline editing", () => {
     });
     await context.setOffline(false);
   });
+
+  test("a cold offline start still says what did not load", async ({
+    page,
+    context,
+  }) => {
+    await openControlled(page);
+    await expect(page.locator(".tiptap")).toBeVisible({ timeout: 30_000 });
+    // The idle prefetch after the first sync, into the static cache.
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(
+      () => new Promise((resolve) => requestIdleCallback(resolve)),
+    );
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    await context.setOffline(true);
+    try {
+      await page.reload();
+      await expect(page.locator(".tiptap")).toBeVisible({ timeout: 30_000 });
+      await page.locator(".tiptap").click();
+      // The palette chunk was never fetched online, so it cannot load; the
+      // announcer was, so the failure is said, not silent.
+      await page.keyboard.press("Alt+Slash");
+      await expect(page.locator('[data-status-pill="desktop"]')).toContainText(
+        "Couldn’t open actions.",
+        { timeout: 15_000 },
+      );
+    } finally {
+      await context.setOffline(false);
+    }
+  });
 });

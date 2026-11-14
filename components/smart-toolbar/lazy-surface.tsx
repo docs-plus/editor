@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
 import { CircleAlertIcon } from "@/lib/icons";
 
 import { prefetchMenuBodies } from "./lazy-menu";
@@ -22,15 +23,39 @@ export const loadColorPanel = () => import("./color/color-panel");
 export const loadInsertStep = () => import("./insert/insert-step");
 
 /**
- * Fetches both chunks and the menu chunk (`lazy-menu.tsx`): on hover or
- * focus of their triggers, and when the browser is idle after the first
- * server sync, so the service worker has them before the user goes
- * offline. A failed fetch is retried on open.
+ * The desktop selection bubble, which carries the desktop status pill
+ * (`selection-bubble.tsx`). Phones never fetch it: below `DESKTOP_QUERY`
+ * the phone bar carries its own pill.
+ */
+export const loadSelectionBubble = () =>
+  import("./bubble/selection-bubble-view");
+export const DESKTOP_QUERY = "(min-width: 768px)";
+
+/**
+ * The announcer, as `announceLater()` imports it to say that a chunk did
+ * not load: without it a failure offline is silent.
+ */
+const loadAnnouncer = () => import("@/lib/announce");
+
+/**
+ * Fetches both chunks and the menu chunk (`lazy-menu.tsx`) on hover or
+ * focus of their triggers. When the browser is idle after the first
+ * server sync it also fetches the formatting engine, the announcer and,
+ * on desktop, the bubble with its pill, so the service worker has all of
+ * them before the user goes offline, and a load failure on a cold offline
+ * start is still said. A failed fetch is retried on open.
  */
 export const preloadSurfaces = () => {
-  for (const load of [loadColorPanel, loadInsertStep]) {
-    load().catch(() => undefined);
+  const loads: (() => Promise<unknown>)[] = [
+    loadColorPanel,
+    loadInsertStep,
+    loadV11Engine,
+    loadAnnouncer,
+  ];
+  if (window.matchMedia?.(DESKTOP_QUERY).matches) {
+    loads.push(loadSelectionBubble);
   }
+  for (const load of loads) load().catch(() => undefined);
   prefetchMenuBodies();
 };
 

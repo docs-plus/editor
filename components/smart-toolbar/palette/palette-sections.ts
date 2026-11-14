@@ -5,7 +5,8 @@
  * lists the saved formats by name. An action shown under Suggested here is
  * not repeated in its home group. Disabled entries stay listed with their
  * reason, after the runnable ones of their group. Pure: tested without
- * React.
+ * React. After a format is removed, "Restore ‘X’" leads Suggested here
+ * until the next removal or a reload, and shows nowhere else.
  */
 import type { Swatch } from "@/components/smart-toolbar/color/swatch";
 import type { FormatBundle } from "@/extensions/repeat-formatting/bundle";
@@ -70,16 +71,24 @@ export const SUGGESTED_GROUPS: readonly ActionGroup[] = [
 export const MAX_RECENT = 5;
 export const MAX_SUGGESTED = 4;
 
-/** Ids the palette never lists (itself) or lists through a custom flow. */
-const HIDDEN_IDS = new Set(["palette.open"]);
+/** The one id the palette never lists: itself. */
+const HIDDEN = "palette.open";
 /** First in Format, in this order; the rest keep registry order. */
 const FORMAT_FIRST = ["repeat.apply", "repeat.copy"];
 const formatRank = (action: AnyAction) => {
   const index = FORMAT_FIRST.indexOf(action.id);
   return index < 0 ? FORMAT_FIRST.length : index;
 };
-/** Saved formats and saving one: the "Your formats" group. */
-const YOUR_FORMATS = new Set(["formats.apply", "formats.save"]);
+/**
+ * Restore ‘X’ (`formats.restore`): offered only, first in Suggested. Its
+ * key is no action id, so Recent (`isRecentKey`) never keeps a one-off.
+ */
+const RESTORE = "formats.restore";
+/**
+ * Saved formats and saving one, the other `formats.` actions, are the
+ * "Your formats" group.
+ */
+const FORMATS = "formats.";
 
 /**
  * Repeat: its `value()` is the row's second line (what it would apply),
@@ -88,17 +97,18 @@ const YOUR_FORMATS = new Set(["formats.apply", "formats.save"]);
  */
 const REPEAT = "repeat.apply";
 /**
- * Actions whose `value()` describes their own target, so it belongs in the
+ * The action whose `value()` describes its own target, so it belongs in the
  * row's name ("Merge cells"). Others (style, align) return the selection's
  * current state, which would misname every row of the group ("Heading 1:
  * Normal text"; WCAG 2.4.6).
  */
-const VALUE_IN_LABEL = new Set(["table.mergeOrSplit"]);
+const VALUE_IN_LABEL = "table.mergeOrSplit";
 /**
- * Groups whose option labels name themselves ("Orange text"), so the
- * action's label is not repeated before them (design pass §8).
+ * Groups whose option labels name themselves ("Orange text", "Extra small
+ * text"), so the action's label is not repeated before them (design pass
+ * §8). So do the saved formats' options: a name, "Restore ‘X’".
  */
-const BARE_OPTION_GROUPS: ReadonlySet<ActionGroup> = new Set(["color"]);
+const BARE_OPTION_GROUPS: ReadonlySet<ActionGroup> = new Set(["color", "size"]);
 /** Groups of mutually exclusive choices: the active row is marked current. */
 const CURRENT_GROUPS: ReadonlySet<ActionGroup> = new Set(["style", "align"]);
 
@@ -147,7 +157,7 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
   const keywords = [...(action.keywords ?? [])];
   const options = action.options?.(ctx) ?? [];
   const bare =
-    BARE_OPTION_GROUPS.has(action.group) || action.id === "formats.apply";
+    BARE_OPTION_GROUPS.has(action.group) || action.id.startsWith(FORMATS);
   if (options.length > 0) {
     return options.map((option) => ({
       ...base,
@@ -161,10 +171,10 @@ function itemsOf(action: AnyAction, ctx: Ctx): PaletteItem[] {
     }));
   }
   const value =
-    VALUE_IN_LABEL.has(action.id) || action.id === REPEAT
+    action.id === VALUE_IN_LABEL || action.id === REPEAT
       ? action.value?.(ctx)
       : null;
-  const inLabel = value && VALUE_IN_LABEL.has(action.id);
+  const inLabel = value && action.id === VALUE_IN_LABEL;
   const current =
     CURRENT_GROUPS.has(action.group) && action.isActive?.(ctx) === true;
   return [
@@ -202,9 +212,13 @@ export function buildPaletteSections(input: {
   const offered: PaletteItem[] = [];
   const ordered = [...actions].sort((a, b) => formatRank(a) - formatRank(b));
   for (const action of ordered) {
-    if (HIDDEN_IDS.has(action.id)) continue;
+    if (action.id === HIDDEN) continue;
     const items = itemsOf(action, ctx);
-    const heading = YOUR_FORMATS.has(action.id)
+    if (action.id === RESTORE) {
+      if (items[0].arg) offered.unshift({ ...items[0], key: "restore" });
+      continue;
+    }
+    const heading = action.id.startsWith(FORMATS)
       ? "Your formats"
       : PALETTE_GROUP_OF[action.group];
     const list = byHeading.get(heading) ?? [];

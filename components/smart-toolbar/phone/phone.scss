@@ -240,6 +240,14 @@ ul.st-sheet-list {
   padding: 0 0.75rem 0.25rem;
 }
 
+// Under a button of its own (Save): pulled up into the 44px button's lower
+// padding, about 2px under the centred label, so the two read as one
+// item. The button only has a reason while disabled, so the overlap
+// covers no live target.
+.st-sheet-wide > button + .st-sheet-reason {
+  margin-top: -0.6875rem;
+}
+
 // The slot's language picker (below 360px): a native select, 44px tall.
 .st-sheet-select {
   display: flex;

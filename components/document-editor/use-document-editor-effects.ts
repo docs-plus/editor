@@ -106,8 +106,9 @@ export function useDocumentEditorEffects({
     defaultContent,
   ]);
 
-  // After the first server sync, fetch the colour and Insert chunks when
-  // idle, so the service worker has them for offline use.
+  // After the first server sync, fetch the lazy surfaces, the formatting
+  // engine and the announcer when idle, so the service worker has them for
+  // offline use (`preloadSurfaces`).
   useEffect(() => {
     if (!serverSynced) return;
     (window.requestIdleCallback ?? setTimeout)(preloadSurfaces);
