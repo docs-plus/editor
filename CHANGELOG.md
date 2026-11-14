@@ -25,13 +25,24 @@ palette is unchanged.
   the popover, applying, or your own change to the text or selection
   removes it; a collaborator's edit keeps it on your moved selection.
   Opening the popover previews nothing, and holding an arrow key waits
-  for it to settle. Works in the row and bubble
-  popovers, and in the Text format sheet with a mouse.
+  for it to settle. Works in the row and bubble popovers, and in the
+  Text format sheet with a mouse.
 - Previews are drawn with decorations only: nothing reaches the
   document, the undo history or collaborators. They are off on touch, in
   forced colours, when read-only, for an empty selection, and over more
   than 200 blocks or 20,000 positions. `NEXT_PUBLIC_ACTION_PREVIEW=0`
   turns them off.
+
+### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
+
+#### Fixed
+- **Tests:** `EditorPage.focusTitle()` waits for the frame in which
+  Tiptap's deferred `view.focus()` runs. In a touch context on a Mac
+  host, Tiptap takes the browser for iOS and focuses the editor at once,
+  so the helper returned early. The late focus then pulled focus back
+  from the toolbar after Alt+F10, and the touch-tablet "no tooltips"
+  test in `toolbar-surfaces.spec.ts` failed about one run in three under
+  three workers.
 
 ### Lazy toolbar menus
 
