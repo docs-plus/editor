@@ -155,6 +155,40 @@ async function openSheet(page: Page) {
   );
 }
 
+test("320px: the empty title grows with its wrapped placeholder, focused or not", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openDoc(page);
+  const measure = () =>
+    page.evaluate(() => {
+      const title = document.querySelector(".tiptap > h1");
+      const next = title?.nextElementSibling;
+      if (!title || !next) throw new Error("title missing");
+      const box = title.getBoundingClientRect();
+      const lineHeight = Number.parseFloat(getComputedStyle(title).lineHeight);
+      const caret = window.__tiptap_editor?.view.coordsAtPos(1);
+      return {
+        lines: Math.round(box.height / lineHeight),
+        overlap: box.bottom - next.getBoundingClientRect().top,
+        caretTop: caret ? caret.top - box.top : null,
+        caretLeft: caret ? caret.left - box.left : null,
+      };
+    });
+  // Focused (the Placeholder extension's text): two lines, in flow.
+  const focused = await measure();
+  expect(focused.lines).toBe(2);
+  expect(focused.overlap).toBeLessThanOrEqual(0);
+  // The caret starts the first line.
+  expect(focused.caretTop).toBeCloseTo(0, 0);
+  expect(focused.caretLeft).toBeCloseTo(0, 0);
+  // Not focused (the title's own placeholder): the same.
+  await page.evaluate(() => window.__tiptap_editor?.commands.blur());
+  const blurred = await measure();
+  expect(blurred.lines).toBe(2);
+  expect(blurred.overlap).toBeLessThanOrEqual(0);
+});
+
 for (const [width, height] of [
   [390, 844],
   [375, 812],
@@ -843,6 +877,54 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(sheet(page)).toBeHidden();
     await expect(page.locator("[data-command-palette] input")).toBeFocused();
   });
+
+  for (const [width, height] of [
+    [375, 812],
+    [320, 568],
+  ] as const) {
+    test(`${width}px: Save's reason line sits right under it, one item`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await openDoc(page);
+      // Plain text: nothing to save, so Save says why under itself.
+      await selectNewParagraph(page, "alpha");
+      await openSheet(page);
+      const section = sheet(page).getByRole("region", {
+        name: "Your formats",
+      });
+      const save = section.getByRole("button", {
+        name: "Save selection as format…",
+      });
+      await expect(save).toBeDisabled();
+      await expect(save).toHaveAccessibleDescription(
+        "Select formatted text to save it.",
+      );
+      await save.scrollIntoViewIfNeeded();
+      const gap = await save.evaluate((button) => {
+        const label = button.querySelector("span")?.getBoundingClientRect();
+        const reason = button.nextElementSibling;
+        if (!label || !reason?.firstChild) return null;
+        // The text's own boxes, not the elements' padding.
+        const range = document.createRange();
+        range.selectNodeContents(reason);
+        const text = range.getClientRects()[0];
+        return {
+          gap: text.top - label.bottom,
+          height: button.getBoundingClientRect().height,
+        };
+      });
+      expect(gap).not.toBeNull();
+      // One item: about 2px between the label and its reason.
+      expect(gap?.gap ?? 99).toBeGreaterThanOrEqual(0);
+      expect(gap?.gap ?? 99).toBeLessThanOrEqual(4);
+      // The disabled target keeps its 44px.
+      expect(gap?.height ?? 0).toBeGreaterThanOrEqual(44);
+      await page.screenshot({
+        path: `${SCREENS}/sheet-save-reason-${width}.png`,
+      });
+    });
+  }
 
   test("the Aa sheet's Remove a format removes at once, with Undo on the pill", async ({
     page,

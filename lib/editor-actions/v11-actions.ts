@@ -32,6 +32,7 @@ import {
   type Enabled,
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
+import { PaintbrushIcon, RepeatIcon } from "@/lib/icons";
 
 /** The Repeat "extend" session of one editor (memory only). */
 export interface RepeatSession {
@@ -65,6 +66,7 @@ type EngineActionId =
   | "repeat.copy"
   | "formats.save"
   | "formats.apply"
+  | "formats.restore"
   | "template.mermaid";
 
 /** What `v11-engine.ts` provides once loaded. */
@@ -205,6 +207,7 @@ export const repeatApplyAction = engineAction({
   group: "format",
   contexts: "any",
   shortcut: "Mod-Alt-v",
+  icon: RepeatIcon,
 });
 
 /** Paint format (design pass §2); arg "touch" from a tapped brush. */
@@ -213,6 +216,7 @@ export const repeatCopyAction = engineAction<string | undefined>({
   label: "Paint format",
   group: "format",
   contexts: "any",
+  icon: PaintbrushIcon,
 });
 
 /** Arg: the format name. Saves the selection's set entries (M14). */
@@ -231,6 +235,19 @@ export const formatsApplyAction = engineAction<string>({
   contexts: "any",
 });
 
+/**
+ * Arg: the last removed format's id. Its one option, "Restore ‘X’", exists
+ * from a removal until the next one, a restore or a reload; the palette
+ * offers it under Suggested here only (design pass §4).
+ */
+export const formatsRestoreAction = engineAction<string>({
+  id: "formats.restore",
+  label: "Restore format",
+  group: "format",
+  contexts: "any",
+  mutates: false,
+});
+
 /** Arg: a template id; defaults to the last one used (M17b). */
 export const templateMermaidAction = engineAction<string | undefined>({
   id: "template.mermaid",
@@ -245,5 +262,6 @@ export const v11Actions: readonly AnyAction[] = [
   repeatCopyAction,
   formatsSaveAction,
   formatsApplyAction,
+  formatsRestoreAction,
   templateMermaidAction,
 ] as readonly AnyAction[];
