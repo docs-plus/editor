@@ -295,3 +295,85 @@ test.describe("hover preview on touch", () => {
     await expect(previews(page)).toHaveCount(0);
   });
 });
+
+/**
+ * The phone "Text format" sheet on a narrow window. Its scrim dims the
+ * page; while a swatch previews, it clears so the previewed colour shows
+ * true, and comes back when the preview ends. Touch never previews, so
+ * its scrim never changes.
+ */
+const PHONE = { width: 375, height: 812 };
+const scrim = (page: Page) => page.locator('[data-slot="sheet-overlay"]');
+const scrimColor = (page: Page) =>
+  scrim(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+const TRANSPARENT = "rgba(0, 0, 0, 0)";
+
+/** Selects `needle`, then opens the sheet from the bar's Aa cell. */
+async function openSheetOn(page: Page, needle: string, touch: boolean) {
+  await openDoc(page);
+  await selectText(page, needle);
+  const press = (target: Locator) => (touch ? target.tap() : target.click());
+  await press(
+    page
+      .getByRole("toolbar", { name: "Selection formatting" })
+      .getByRole("button", { name: "Back to all tools" }),
+  );
+  await press(row(page).getByRole("button", { name: "Text format" }));
+  const sheet = page.locator("[data-format-sheet]");
+  await expect(sheet.getByRole("button", { name: "Red text" })).toBeVisible();
+  await sheet.evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
+  return sheet;
+}
+
+test.describe("hover preview under the phone sheet", () => {
+  test.use({ viewport: PHONE });
+
+  test("the scrim clears while a swatch previews and returns after", async ({
+    page,
+  }) => {
+    const sheet = await openSheetOn(page, "some words", false);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: fine)").matches),
+    ).toBe(true);
+    const dimmed = await scrimColor(page);
+    expect(dimmed).not.toBe(TRANSPARENT);
+
+    await sheet.getByRole("button", { name: "Red text" }).hover();
+    await expect(previews(page)).toHaveText("some words");
+    await expect.poll(() => scrimColor(page)).toBe(TRANSPARENT);
+    // Still a modal sheet: the scrim keeps catching taps on the page.
+    await expect(scrim(page)).toBeVisible();
+
+    // Swatch to swatch keeps it clear; leaving the grid brings it back.
+    await sheet.getByRole("button", { name: "Yellow highlight" }).hover();
+    await expect(previews(page)).toHaveAttribute("data-highlight", "yellow");
+    expect(await scrimColor(page)).toBe(TRANSPARENT);
+    await sheet.getByRole("heading", { name: "Style" }).hover();
+    await expect(previews(page)).toHaveCount(0);
+    await expect.poll(() => scrimColor(page)).toBe(dimmed);
+  });
+});
+
+test.describe("hover preview under the phone sheet on touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
+
+  test("touch: the scrim never changes; a tap applies as before", async ({
+    page,
+  }) => {
+    const sheet = await openSheetOn(page, "some words", true);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    const dimmed = await scrimColor(page);
+    const swatch = sheet.getByRole("button", { name: "Red text" });
+    await swatch.hover();
+    await page.waitForTimeout(DWELL);
+    await expect(previews(page)).toHaveCount(0);
+    expect(await scrimColor(page)).toBe(dimmed);
+    await swatch.tap();
+    await expect(swatch).toHaveAttribute("aria-pressed", "true");
+    expect(await scrimColor(page)).toBe(dimmed);
+  });
+});

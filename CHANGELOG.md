@@ -9,6 +9,18 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Previewed colours stay true under the phone sheet
+
+CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
+first Alt+/ chunk are unchanged; nothing to do when deploying.
+
+#### Fixed
+- On a narrow window with a mouse, the "Text format" sheet's scrim dimmed
+  the document, so a colour previewed by hovering a swatch showed darker
+  than applying it would. While a preview shows, the scrim now fades
+  clear (it still catches taps) and comes back when the preview ends.
+  Touch never previews, so its scrim is unchanged.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
