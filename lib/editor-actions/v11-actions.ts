@@ -32,6 +32,7 @@ import {
   type Enabled,
 } from "@/lib/editor-actions/types";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
+import { PaintbrushIcon, RepeatIcon } from "@/lib/icons";
 
 /** The Repeat "extend" session of one editor (memory only). */
 export interface RepeatSession {
@@ -206,6 +207,7 @@ export const repeatApplyAction = engineAction({
   group: "format",
   contexts: "any",
   shortcut: "Mod-Alt-v",
+  icon: RepeatIcon,
 });
 
 /** Paint format (design pass §2); arg "touch" from a tapped brush. */
@@ -214,6 +216,7 @@ export const repeatCopyAction = engineAction<string | undefined>({
   label: "Paint format",
   group: "format",
   contexts: "any",
+  icon: PaintbrushIcon,
 });
 
 /** Arg: the format name. Saves the selection's set entries (M14). */

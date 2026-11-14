@@ -104,11 +104,11 @@ const REPEAT = "repeat.apply";
  */
 const VALUE_IN_LABEL = "table.mergeOrSplit";
 /**
- * Groups whose option labels name themselves ("Orange text"), so the
- * action's label is not repeated before them (design pass §8). So do the
- * saved formats' options: a name, "Restore ‘X’".
+ * Groups whose option labels name themselves ("Orange text", "Extra small
+ * text"), so the action's label is not repeated before them (design pass
+ * §8). So do the saved formats' options: a name, "Restore ‘X’".
  */
-const BARE_OPTION_GROUPS: ReadonlySet<ActionGroup> = new Set(["color"]);
+const BARE_OPTION_GROUPS: ReadonlySet<ActionGroup> = new Set(["color", "size"]);
 /** Groups of mutually exclusive choices: the active row is marked current. */
 const CURRENT_GROUPS: ReadonlySet<ActionGroup> = new Set(["style", "align"]);
 

@@ -23,6 +23,7 @@ import {
 } from "@/lib/editor-actions/types";
 import { v11Actions } from "@/lib/editor-actions/v11-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { PaintbrushIcon, RepeatIcon } from "@/lib/icons";
 import {
   removeFormat,
   resetSavedFormatsCacheForTests,
@@ -231,6 +232,26 @@ describe("buildPaletteSections", () => {
       removeFormat(saved.format.id);
       resetSavedFormatsCacheForTests();
     }
+  });
+
+  it("names size rows once, and gives Repeat and Paint format their icons", () => {
+    const ed = setup();
+    ed.commands.setTextSelection({ from: 18, to: 23 });
+    const items = buildPaletteSections({
+      ctx: computeContext(ed),
+      actions: [...surfaceActions, ...v11Actions],
+      recentKeys: [],
+    }).flatMap((s) => s.items);
+    expect(items.find((i) => i.key === "size.set:xs")?.label).toBe(
+      "Extra small text",
+    );
+    expect(items.some((i) => i.label.startsWith("Font size:"))).toBe(false);
+    expect(items.find((i) => i.actionId === "repeat.copy")?.icon).toBe(
+      PaintbrushIcon,
+    );
+    expect(items.find((i) => i.actionId === "repeat.apply")?.icon).toBe(
+      RepeatIcon,
+    );
   });
 
   describe("Restore ‘X’ after a removal", () => {
