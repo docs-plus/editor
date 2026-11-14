@@ -27,7 +27,7 @@ import {
 export const STORAGE_KEYS = {
   /** M1–M5, M7, M9–M11, M17 */
   choices: "tinydocy-choices",
-  /** M6 outline state; survives Forget */
+  /** M6 outline state and the simplified toolbar; survive Forget */
   ui: "tinydocy-ui",
   /** M14 saved formats (PR E, `lib/saved-formats.ts`); survives Forget */
   formats: "tinydocy-formats",
@@ -49,6 +49,7 @@ export const CHOICE_SLOTS = {
   paletteRecent: "choices", // M11 (E)
   mermaidTemplate: "choices", // M17b (E)
   outlineOpen: "ui", // M6 (D2)
+  toolbarDensity: "ui", // simplified toolbar (A-next)
 } as const satisfies Record<string, "choices" | "ui">;
 
 export type ChoiceSlot = keyof typeof CHOICE_SLOTS;
@@ -363,4 +364,19 @@ export const OUTLINE_OPEN_CHOICE: ChoiceSpec<boolean> = {
   maxRecent: 0,
   validate: (value: unknown): value is boolean => typeof value === "boolean",
   fallback: true,
+};
+
+export type ToolbarDensity = "full" | "simple";
+
+/**
+ * Simplified toolbar (A-next): the row shows its compact set at every width.
+ * Under `tinydocy-ui`, so Forget keeps it: a layout preference, not a
+ * remembered formatting choice.
+ */
+export const TOOLBAR_DENSITY_CHOICE: ChoiceSpec<ToolbarDensity> = {
+  slot: "toolbarDensity",
+  maxRecent: 0,
+  validate: (value: unknown): value is ToolbarDensity =>
+    value === "full" || value === "simple",
+  fallback: "full",
 };

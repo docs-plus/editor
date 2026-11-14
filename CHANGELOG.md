@@ -9,6 +9,41 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Simplified toolbar
+
+A "Simplified toolbar" setting in ⋯ (and in the Alt+/ palette) shows the
+row's compact set at every width (later-phase plan "progressive
+disclosure"; contract amendment A-next). It is off by default, changes only
+when the writer turns it on or off, and never reorders the row. No schema
+or protocol change.
+
+The editor chunk goes from +17,249 B to +17,701 B of the 23.5 KB budget
+(+452 B; 6,363 B left); the budget is unchanged. The palette's first
+Alt+/ is unchanged at 20,475 B gz (the palette entry costs it nothing).
+
+#### Added
+- ⋯ → Simplified toolbar (a checkbox; focus returns to ⋯) and the palette
+  entry "Simplified toolbar" (keywords: compact, fewer tools, minimal,
+  full toolbar). The row then shows the ladder's T4 set at any width:
+  alignment and indent behind ¶, the context slot as one button, the
+  colour pair as one button, Outline and Filter behind View, size as one
+  menu, Insert without its label, Theme in ⋯. Every tool stays one click
+  away through those stand-ins; below the T4 width the ladder applies as
+  before.
+- The status pill confirms each change ("Simplified toolbar on" or "Full
+  toolbar on") with Undo.
+- The setting is remembered in this browser (`tinydocy-ui`), survives
+  "Forget my choices" and is read before the first paint, so the full row
+  never flashes on load. With `NEXT_PUBLIC_REMEMBER_CHOICES=0` the item is
+  disabled with "Remembering choices is turned off."
+- Turning it on or off keeps the row at one Tab stop, and a stop on a tool
+  it hides moves to that group's stand-in.
+
+#### Fixed
+- When the responsive ladder hides the item holding the row's Tab stop,
+  the stop now moves to that group's stand-in (¶, View, colour) instead
+  of whichever item is now at the same position.
+
 ### Palette leak test baseline
 
 #### Fixed

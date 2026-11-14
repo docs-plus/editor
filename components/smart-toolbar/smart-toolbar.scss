@@ -39,35 +39,49 @@ span[data-collapse-standin],
   display: none;
 }
 
+// One tier's collapse: hide its groups, show its stand-ins. The ladder
+// includes it inside container queries (no parent selector); the
+// simplified toolbar includes it under the row (`&`), which already gives
+// the Insert "+" rule its specificity.
+@mixin collapse-tier($tier) {
+  span[data-collapse-tier="#{$tier}"] {
+    display: none;
+  }
+
+  span[data-collapse-standin="#{$tier}"] {
+    display: contents;
+  }
+
+  @if $tier == t2 {
+    .st-insert-label {
+      display: none;
+    }
+
+    // M10: the face is gone, so the menu trigger shows its "+" again.
+    @if & {
+      .st-insert-trigger--split .st-insert-plus {
+        display: block;
+      }
+    } @else {
+      [data-slot="toolbar"] .st-insert-trigger--split .st-insert-plus {
+        display: block;
+      }
+    }
+  }
+
+  // Below T3 the slot's stand-in renders nothing in the title either.
+  @if $tier == t3 {
+    [data-toolbar-group="slot"]:has(> [data-collapse-standin]:empty)
+      + [data-slot="toolbar-separator"] {
+      display: none;
+    }
+  }
+}
+
 @mixin ladder($tiers) {
   @each $tier, $width in $tiers {
     @container smart-toolbar (width < #{$width}) {
-      span[data-collapse-tier="#{$tier}"] {
-        display: none;
-      }
-
-      span[data-collapse-standin="#{$tier}"] {
-        display: contents;
-      }
-
-      @if $tier == t2 {
-        .st-insert-label {
-          display: none;
-        }
-
-        // M10: the face is gone, so the menu trigger shows its "+" again.
-        [data-slot="toolbar"] .st-insert-trigger--split .st-insert-plus {
-          display: block;
-        }
-      }
-
-      // Below T3 the slot's stand-in renders nothing in the title either.
-      @if $tier == t3 {
-        [data-toolbar-group="slot"]:has(> [data-collapse-standin]:empty)
-          + [data-slot="toolbar-separator"] {
-          display: none;
-        }
-      }
+      @include collapse-tier($tier);
 
       // T5: the style menu shows its short value ("H2"); separators go.
       @if $tier == t5 {
@@ -85,6 +99,15 @@ span[data-collapse-standin],
       }
     }
   }
+}
+
+// Simplified toolbar (A-next): the T4 collapse set at every width, by the
+// writer's explicit choice. Below the T4/T5 widths the ladder still
+// applies, so it never shows more than the ladder would.
+[data-slot="toolbar"][data-variant="fixed"][data-toolbar-density="simple"] {
+  @include collapse-tier(t2);
+  @include collapse-tier(t3);
+  @include collapse-tier(t4);
 }
 
 @media (pointer: fine), (pointer: none) {

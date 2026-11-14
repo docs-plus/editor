@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -350,5 +350,67 @@ describe("Toolbar roving tabindex", () => {
     const toolbar = container.querySelector<HTMLElement>('[role="toolbar"]');
     expect(focusRovingItem(toolbar)).toBe(true);
     expect(document.activeElement?.getAttribute("aria-label")).toBe("B");
+  });
+
+  describe("density change (simplified toolbar)", () => {
+    // The simplified set as smart-toolbar.scss compiles it, minus the tiers.
+    let style: HTMLStyleElement;
+    beforeEach(() => {
+      style = document.createElement("style");
+      style.textContent = [
+        "span[data-collapse-standin] { display: none }",
+        '[data-toolbar-density="simple"] span[data-collapse-tier] { display: none }',
+        '[data-toolbar-density="simple"] span[data-collapse-standin] { display: contents }',
+      ].join("\n");
+      document.head.appendChild(style);
+    });
+    afterEach(() => style.remove());
+
+    const LABELS = ["Undo", "View", "Paragraph", "More"];
+    const group = (kind: "tier" | "standin", tier: string, labels: string[]) =>
+      createElement(
+        "span",
+        { key: `${kind}-${tier}`, [`data-collapse-${kind}`]: tier },
+        ...labels.map((label) => button(label)),
+      );
+    const row = [
+      button("Undo"),
+      group("tier", "t4", ["Outline"]),
+      group("standin", "t4", ["View"]),
+      group("tier", "t3", ["Align", "Outdent", "Indent"]),
+      group("standin", "t3", ["Paragraph"]),
+      button("More"),
+    ];
+    const visibleStops = (container: HTMLElement) =>
+      LABELS.filter(
+        (label) => byLabel(container, label)?.getAttribute("tabindex") === "0",
+      );
+
+    async function toggleWithStopOn(label: string) {
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      const container = mountWith(row, { "data-toolbar-density": "full" });
+      await settle();
+      act(() => byLabel(container, label)?.focus());
+      act(() => input.focus());
+      act(() => {
+        container
+          .querySelector('[role="toolbar"]')
+          ?.setAttribute("data-toolbar-density", "simple");
+      });
+      await settle();
+      input.remove();
+      return container;
+    }
+
+    it("keeps one Tab stop when the density reveals stand-ins", async () => {
+      const container = await toggleWithStopOn("Undo");
+      expect(visibleStops(container)).toEqual(["Undo"]);
+    });
+
+    it("hands a hidden Tab stop to its group's stand-in", async () => {
+      const container = await toggleWithStopOn("Indent");
+      expect(visibleStops(container)).toEqual(["Paragraph"]);
+    });
   });
 });
