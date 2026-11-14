@@ -379,7 +379,13 @@ export function ColorPanel({
                   style={swatchStyle(swatch)}
                   onFocus={() => setActive({ row: rowIndex, col: colIndex })}
                   onMouseDown={(event) => event.preventDefault()}
-                  onPointerEnter={(event) => {
+                  // A move, not an enter: a swatch the opening sheet slides
+                  // under a still mouse gets an enter (and no leave once it
+                  // slides on), which would preview a colour nobody chose.
+                  onPointerMove={(event) => {
+                    if (event.currentTarget.hasAttribute("data-pointed")) {
+                      return;
+                    }
                     if (event.pointerType !== "touch") {
                       markPointed(gridRef.current, event.currentTarget);
                     }
