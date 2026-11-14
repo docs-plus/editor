@@ -394,6 +394,88 @@ describe("besideBubble (desktop pill placement)", () => {
   });
 });
 
+describe("desktop StatusPill follows the bubble", () => {
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      width,
+      height,
+      x: left,
+      y: top,
+    }) as DOMRect;
+  const frames = () =>
+    act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+  const realRect = HTMLElement.prototype.getBoundingClientRect;
+  const realFrame = window.requestAnimationFrame;
+  let wrapper: HTMLElement | null = null;
+
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = realRect;
+    window.requestAnimationFrame = realFrame;
+    wrapper?.remove();
+    wrapper = null;
+  });
+
+  it("moves beside the bubble when it appears or moves, and stops watching once closed", async () => {
+    // The pill centred under the row; the bubble's panel over it.
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (this.hasAttribute("data-status-pill")) return rect(400, 60, 240, 36);
+      if (this.classList.contains("st-bubble-panel")) {
+        return this.parentElement?.dataset.at === "far"
+          ? rect(380, 400, 260, 40)
+          : rect(380, 70, 260, 40);
+      }
+      return rect(0, 0, 0, 0);
+    };
+    wrapper = document.createElement("div");
+    wrapper.className = "document-editor-wrapper";
+    document.body.appendChild(wrapper);
+    mount(createElement(StatusPill, { placement: "desktop" }));
+    act(() => announce("Nothing to repeat yet."));
+    const pill = () =>
+      document.querySelector<HTMLElement>('[data-status-pill="desktop"]');
+    expect(pill()?.style.translate).toBe("-50% 0");
+
+    // The bubble appears over the pill.
+    const bubble = document.createElement("div");
+    bubble.dataset.smartBubble = "";
+    bubble.dataset.state = "open";
+    const panel = document.createElement("div");
+    panel.className = "st-bubble-panel";
+    bubble.appendChild(panel);
+    wrapper.appendChild(bubble);
+    await frames();
+    expect(pill()?.style.left).toBe("648px");
+    expect(pill()?.style.translate).toBe("none");
+
+    // It moves away (the plugin's inline style), then back over the pill.
+    bubble.dataset.at = "far";
+    bubble.style.top = "400px";
+    await frames();
+    expect(pill()?.style.translate).toBe("-50% 0");
+    delete bubble.dataset.at;
+    bubble.style.top = "70px";
+    await frames();
+    expect(pill()?.style.left).toBe("648px");
+
+    // Closed: nothing watches the bubble any more.
+    act(() => dismissNotice());
+    let scheduled = 0;
+    window.requestAnimationFrame = (callback) => {
+      scheduled += 1;
+      return realFrame(callback);
+    };
+    bubble.style.top = "300px";
+    bubble.remove();
+    wrapper.dispatchEvent(new Event("scroll"));
+    await frames();
+    expect(scheduled).toBe(0);
+  });
+});
+
 describe("StatusPill Esc", () => {
   it("closes it, unless Paint format is armed", () => {
     const el = mount(createElement(StatusPill, { placement: "phone" }));
