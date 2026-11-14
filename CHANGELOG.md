@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Align items with icons and shortcuts
+
+Menu chunk only: the editor chunk and the first Alt+/ palette load are
+unchanged; nothing to do when deploying.
+
+#### Changed
+- The four align items in Align ▾ and in the T3 ¶ (Paragraph) menu now
+  show their icons and shortcuts (Mod+Shift+L, E, R, J), like Outdent and
+  Indent beside them in ¶, which used to leave them as inset text. The
+  radio check sits in a fixed slot before the shortcut, so every shortcut
+  ends at one edge. Each item announces its keys with
+  `aria-keyshortcuts`. All four keys reach the editor in Chromium
+  (Mod+Shift+R does not reload and Mod+Shift+J does not open Downloads),
+  and `toolbar-row.spec.ts` now checks it.
+- A toolbar menu with these items grows to fit them, so "Ctrl+Shift+E"
+  stays on its label's line off macOS; reason lines wrap within that
+  width instead of widening the menu.
+
 ### One name for justified alignment
 
 The editor chunk goes from +19,283 B to +19,208 B of the 23.5 KB budget
