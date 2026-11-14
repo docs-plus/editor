@@ -9,6 +9,23 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Restore a removed format from the phone sheet
+
+The editor chunk goes from +19,283 B to +19,296 B of the 23.5 KB budget
+(13 B: one more export of the eager actions module); the code is in the
+lazy phone bar chunk (+142 B gz) and the first Alt+/ chunk is unchanged.
+Nothing to do when deploying.
+
+#### Added
+- On phones, the Aa sheet's Your formats offers "Restore ‘X’" for the
+  last removed format, until the next removal, a restore or a reload.
+  Phones have no Alt+/ palette, so the status pill's 5-second Undo was
+  the only way back. It runs the same `formats.restore` action as the
+  palette: it puts the format back where it was, keeps the sheet open
+  and, when it cannot run (the name was saved again, or the 20-format
+  cap), says why on a visible line. Full width, 44 px tall, no sideways
+  scroll at 320 px.
+
 ### One label for saving a format
 
 The editor chunk goes from +19,283 B to +19,284 B of the 23.5 KB budget
