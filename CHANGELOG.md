@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Accurate "Default text" and "No highlight" previews
+
+No change to the editor chunk (the rules load with the colour popover);
+nothing to do when deploying.
+
+#### Fixed
+- Hovering "Default text" or "No highlight" now previews exactly what
+  applying gives over links, inline code and table header cells. The
+  preview used to paint the page's text colour and background, so a
+  coloured link previewed black instead of link blue, inline code lost
+  its grey box and colour, and a highlighted header cell lost its tint.
+  Inside the mark it previews away, the preview now reads what is under
+  that mark (the page, a link's colour, or the header tint over the
+  page); elsewhere it lets the context's own colours show through.
+
 ### Selection bubble brush size test tolerates sub-pixel boxes
 
 Test only; no app, schema or protocol change; no Deploy note.
