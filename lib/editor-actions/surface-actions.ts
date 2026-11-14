@@ -409,8 +409,12 @@ const sizeDecrease = defineAction({
   run: (editor) => stepSize(editor, -1),
 });
 
+/**
+ * The palette lists these bare, so each names its noun ("Extra small
+ * text", like "Orange text"; design pass §8). Only the palette reads them.
+ */
 const sizeOptions: readonly ActionOption<FontSizeStep>[] = FONT_SIZE_LADDER.map(
-  (step) => ({ value: step, label: FONT_SIZE_LABELS[step] }),
+  (step) => ({ value: step, label: `${FONT_SIZE_LABELS[step]} text` }),
 );
 
 const sizeSet = defineAction<FontSizeStep>({

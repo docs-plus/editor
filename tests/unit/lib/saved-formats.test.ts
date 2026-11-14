@@ -4,11 +4,13 @@ import { STORAGE_KEYS } from "@/lib/remembered-choice";
 import {
   FORMAT_REASONS,
   FORMATS_STORAGE_KEY,
+  lastRemovedFormat,
   MAX_SAVED_FORMATS,
   readSavedFormats,
   removeFormat,
   resetSavedFormatsCacheForTests,
   restoreFormat,
+  restoreReason,
   sanitizeFormatName,
   saveFormat,
   subscribeSavedFormats,
@@ -215,6 +217,45 @@ describe("saved formats", () => {
     // Already back (or its name taken): nothing doubles.
     expect(restoreFormat(two.format, 1)).toBe(false);
     expect(readSavedFormats()).toHaveLength(3);
+  });
+
+  it("remembers the last removal and where it was, until a restore", () => {
+    expect(lastRemovedFormat()).toBeNull();
+    const one = saveFormat("One", { bold: true });
+    const two = saveFormat("Two", { italic: true });
+    if (!one.ok || !two.ok) throw new Error("not saved");
+    removeFormat(two.format.id);
+    expect(lastRemovedFormat()).toEqual({ format: two.format, index: 1 });
+    // The next removal replaces it.
+    removeFormat(one.format.id);
+    expect(lastRemovedFormat()).toEqual({ format: one.format, index: 0 });
+    // Restoring another format leaves it; restoring it clears it.
+    expect(restoreFormat(two.format, 1)).toBe(true);
+    expect(lastRemovedFormat()?.format.id).toBe(one.format.id);
+    expect(restoreFormat(one.format, 0)).toBe(true);
+    expect(lastRemovedFormat()).toBeNull();
+    // An unknown id removes nothing and keeps nothing.
+    removeFormat("missing");
+    expect(lastRemovedFormat()).toBeNull();
+  });
+
+  it("says why a removed format cannot come back", () => {
+    const note = saveFormat("Note", { bold: true });
+    if (!note.ok) throw new Error("not saved");
+    removeFormat(note.format.id);
+    expect(restoreReason(note.format)).toBeNull();
+    saveFormat("note", { italic: true });
+    expect(restoreReason(note.format)).toBe(
+      "‘Note’ is in Your formats already.",
+    );
+    expect(restoreFormat(note.format, 0)).toBe(false);
+    localStorage.clear();
+    resetSavedFormatsCacheForTests();
+    for (let i = 0; i < MAX_SAVED_FORMATS; i++) {
+      saveFormat(`F${i}`, { bold: true });
+    }
+    expect(restoreReason(note.format)).toBe(FORMAT_REASONS.cap);
+    expect(restoreFormat(note.format, 0)).toBe(false);
   });
 
   it("survives clearing the choices key (Forget my choices)", () => {
