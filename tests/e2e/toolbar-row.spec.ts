@@ -295,6 +295,33 @@ test.describe("keyboard model", () => {
   });
 });
 
+test.describe("menu focus", () => {
+  test("a menu opened while the last one animates out keeps focus and stays open", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    // A slow machine's exit animation, so the next open always lands in it.
+    await page.addStyleTag({
+      content:
+        '[role="menu"][data-closed] { animation-duration: 800ms !important; }',
+    });
+    await toolbarButton(page, "Align left").click();
+    await expect(page.getByRole("menu", { name: "Alignment" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await toolbarButton(page, "More formatting").click();
+    const more = page.getByRole("menu", { name: "More formatting" });
+    await expect(more).toBeVisible();
+    // Past the closing menu's unmount, when Base UI returns its focus.
+    await expect(page.getByRole("menu", { name: "Alignment" })).toHaveCount(0);
+    await page.waitForTimeout(100);
+    await expect(more).not.toHaveAttribute("data-closed");
+    expect(
+      await more.evaluate((menu) => menu.contains(document.activeElement)),
+    ).toBe(true);
+  });
+});
+
 test.describe("context slot", () => {
   test("follows the selection and hides from AT when empty", async ({
     page,

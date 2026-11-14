@@ -12,7 +12,12 @@ import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { ChevronDownIcon } from "@/lib/icons";
 
-import { menuBody, prefetchMenuBodies, useMenuGate } from "../lazy-menu";
+import {
+  focusLostOnClose,
+  menuBody,
+  prefetchMenuBodies,
+  useMenuGate,
+} from "../lazy-menu";
 
 const Content = menuBody((bodies) => bodies.ToolbarMenuContent);
 
@@ -26,7 +31,7 @@ export function useSurfaceEditor(provided?: Editor | null): Editor | null {
  * Focus after a menu closes: after a pick the editor already holds the
  * selection, so focus goes there at once (a keystroke typed before Base UI's
  * exit animation would otherwise go to the menu); Esc and outside clicks
- * fall back to the trigger.
+ * fall back to the trigger, unless focus has moved on (`focusLostOnClose`).
  */
 export function useMenuFocus(editor: Editor | null) {
   const [open, setOpen] = useState(false);
@@ -39,7 +44,7 @@ export function useMenuFocus(editor: Editor | null) {
     [editor],
   );
   const finalFocus = useCallback(() => {
-    if (!picked.current) return true;
+    if (!picked.current) return focusLostOnClose();
     picked.current = false;
     return editor?.view.dom ?? true;
   }, [editor]);

@@ -68,6 +68,24 @@ export function menuBody<P extends object>(
   };
 }
 
+/**
+ * A menu's `finalFocus` when nothing was picked: back to its trigger
+ * (`true`) only while focus is lost with the closing menu, on the body,
+ * detached or still in its popup. Base UI returns focus after the exit
+ * animation and, for a `finalFocus` function, moves it unconditionally
+ * (only a plain `true` keeps its own check), so a menu opened meanwhile,
+ * such as one clicked right after Esc, would lose focus and close.
+ */
+export function focusLostOnClose(): boolean {
+  const active = document.activeElement;
+  return (
+    !active ||
+    active === document.body ||
+    !active.isConnected ||
+    active.closest('[role="menu"][data-closed]') !== null
+  );
+}
+
 /** Why a menu did not open (design pass §12): never stay silent. */
 const LOAD_FAILED =
   "Couldn’t open the menu. Check your connection and try again.";
