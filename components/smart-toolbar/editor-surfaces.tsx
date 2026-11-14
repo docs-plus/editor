@@ -2,6 +2,7 @@
 
 import { CommandPaletteHost } from "./command-palette-host";
 import { SelectionBubble } from "./selection-bubble";
+import { SlashMenuHost } from "./slash-menu-host";
 import type { SurfaceProps } from "./types";
 
 /**
@@ -14,6 +15,7 @@ export function EditorSurfaces({ editor }: SurfaceProps) {
     <>
       <SelectionBubble editor={editor} />
       <CommandPaletteHost editor={editor} />
+      <SlashMenuHost editor={editor} />
     </>
   );
 }

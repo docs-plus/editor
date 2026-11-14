@@ -423,4 +423,36 @@ test.describe("lazy surface chunks", () => {
       "Cancel by click still here",
     );
   });
+
+  test("a slash chunk that 404s leaves the editor working; the next '/' loads it", async ({
+    page,
+  }) => {
+    let served = () => {};
+    const failed = new Promise<void>((resolve) => {
+      served = resolve;
+    });
+    const restore = await interceptChunk(
+      page,
+      CHUNK_MARKERS.slashMenu,
+      async (route) => {
+        await route.fulfill({ status: 404 });
+        served();
+      },
+    );
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "/");
+    await failed;
+    await page.waitForTimeout(300);
+    await expect(page.locator("[data-slash-menu]")).toHaveCount(0);
+    await expectNoVisibleHint(page);
+    // Typing goes on; Enter is a newline (no menu took it).
+    await page.keyboard.type("h");
+    await page.keyboard.press("Enter");
+    await expectEditorAlive(page, "Slash survived");
+    await restore();
+    await page.keyboard.type(" /");
+    await expect(page.locator("[data-slash-menu]")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-slash-menu]")).toHaveCount(0);
+  });
 });
