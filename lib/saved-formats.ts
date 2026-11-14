@@ -205,30 +205,54 @@ export function saveFormat(
     : { ok: false, reason: "Formats cannot be saved in this browser." };
 }
 
+/**
+ * The last format removed in this tab and where it was, for "Restore ‘X’"
+ * in the palette (design pass §4): the pill's Undo lasts 5 s, which a
+ * keyboard user may not reach. Memory only: kept until the next removal,
+ * a restore, or a reload.
+ */
+let removed: { format: SavedFormat; index: number } | null = null;
+
+export const lastRemovedFormat = () => removed;
+
 export function removeFormat(id: string): void {
   cache = null;
-  const formats = readSavedFormats().filter((format) => format.id !== id);
+  const formats = [...readSavedFormats()];
+  const index = formats.findIndex((format) => format.id === id);
+  if (index < 0) return;
+  removed = { format: formats[index], index };
+  formats.splice(index, 1);
   write(formats);
+}
+
+/** Why `format` cannot come back now (its name is taken, or the cap). */
+export function restoreReason(format: SavedFormat): string | null {
+  const formats = readSavedFormats();
+  const name = format.name.toLowerCase();
+  if (formats.some((kept) => kept.name.toLowerCase() === name)) {
+    return `‘${format.name}’ is in Your formats already.`;
+  }
+  return formats.length >= MAX_SAVED_FORMATS ? FORMAT_REASONS.cap : null;
 }
 
 /**
  * Undo of a removal: puts `format` back at `index`, unless its name or id
- * came back meanwhile (another tab) or the cap is reached.
+ * came back meanwhile (another tab) or the cap is reached. Restoring the
+ * last removed format clears it.
  */
 export function restoreFormat(format: SavedFormat, index: number): boolean {
   cache = null;
   const formats = [...readSavedFormats()];
-  const name = format.name.toLowerCase();
   if (
-    formats.length >= MAX_SAVED_FORMATS ||
-    formats.some(
-      (kept) => kept.id === format.id || kept.name.toLowerCase() === name,
-    )
+    formats.some((kept) => kept.id === format.id) ||
+    restoreReason(format) !== null
   ) {
     return false;
   }
   formats.splice(Math.min(Math.max(index, 0), formats.length), 0, format);
-  return write(formats);
+  if (!write(formats)) return false;
+  if (removed?.format.id === format.id) removed = null;
+  return true;
 }
 
 /** In-tab writes and other tabs' `storage` events. */
@@ -243,4 +267,5 @@ export function subscribeSavedFormats(listener: () => void): () => void {
 /** Test hook: drop the parsed cache. */
 export function resetSavedFormatsCacheForTests(): void {
   cache = null;
+  removed = null;
 }

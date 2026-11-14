@@ -65,6 +65,7 @@ type EngineActionId =
   | "repeat.copy"
   | "formats.save"
   | "formats.apply"
+  | "formats.restore"
   | "template.mermaid";
 
 /** What `v11-engine.ts` provides once loaded. */
@@ -231,6 +232,19 @@ export const formatsApplyAction = engineAction<string>({
   contexts: "any",
 });
 
+/**
+ * Arg: the last removed format's id. Its one option, "Restore ‘X’", exists
+ * from a removal until the next one, a restore or a reload; the palette
+ * offers it under Suggested here only (design pass §4).
+ */
+export const formatsRestoreAction = engineAction<string>({
+  id: "formats.restore",
+  label: "Restore format",
+  group: "format",
+  contexts: "any",
+  mutates: false,
+});
+
 /** Arg: a template id; defaults to the last one used (M17b). */
 export const templateMermaidAction = engineAction<string | undefined>({
   id: "template.mermaid",
@@ -245,5 +259,6 @@ export const v11Actions: readonly AnyAction[] = [
   repeatCopyAction,
   formatsSaveAction,
   formatsApplyAction,
+  formatsRestoreAction,
   templateMermaidAction,
 ] as readonly AnyAction[];

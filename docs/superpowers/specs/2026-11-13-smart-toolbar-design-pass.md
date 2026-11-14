@@ -80,7 +80,7 @@ Items after the text styles, a separator, then the "Your formats" label:
 
 - **Each saved format:** a `menuitem` whose name is rendered in its own formatting (a CSS preview: weight, style, decoration, token colour, highlight fill, size). Its description is the long label. Applying it is one undo step.
 - **"Save selection as format…":** opens the Save dialog (§7). When the selection has nothing to save, it's disabled with "Select formatted text to save it".
-- **"Remove a format ▸":** shown only when at least one format exists. Its submenu lists the names; choosing one removes it at once, and the pill shows "Removed ‘X’" with an **Undo** action for 5 s.
+- **"Remove a format ▸":** shown only when at least one format exists. Its submenu lists the names; choosing one removes it at once, and the pill shows "Removed ‘X’" with an **Undo** action for 5 s. Five seconds is short for keyboard and screen reader users, so until the next removal, a restore or a reload the Alt+/ palette also offers **"Restore ‘X’"** first under Suggested here (with the format's chip), and nowhere else. It puts the format back where it was and announces "Restored ‘X’". When it cannot run it stays listed with why: "‘X’ is in Your formats already." (the name was saved again) or the 20-format cap reason. It is never kept in Recent.
 
 Also:
 - Remove "Repeat formatting: …" and "Copy formatting" from any dropdown.
