@@ -238,7 +238,8 @@ export const formatsApplyAction = engineAction<string>({
 /**
  * Arg: the last removed format's id. Its one option, "Restore ‘X’", exists
  * from a removal until the next one, a restore or a reload; the palette
- * offers it under Suggested here only (design pass §4).
+ * offers it under Suggested here only, and phones in the Aa sheet's Your
+ * formats (design pass §4, §6).
  */
 export const formatsRestoreAction = engineAction<string>({
   id: "formats.restore",

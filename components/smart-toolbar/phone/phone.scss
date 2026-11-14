@@ -221,9 +221,9 @@
   }
 }
 
-// Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle and
-// the Remove list take the full width, under the formats, never between
-// them; the list is a grid of its own (`ps-3` insets it).
+// Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle,
+// the Remove list and Restore take the full width, under the formats,
+// never between them; the list is a grid of its own (`ps-3` insets it).
 .st-sheet-wide {
   grid-column: 1 / -1;
   min-width: 0;

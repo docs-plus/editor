@@ -207,7 +207,7 @@ export function saveFormat(
 
 /**
  * The last format removed in this tab and where it was, for "Restore ‘X’"
- * in the palette (design pass §4): the pill's Undo lasts 5 s, which a
+ * in the palette and the phone's Aa sheet (design pass §4, §6): the pill's Undo lasts 5 s, which a
  * keyboard user may not reach. Memory only: kept until the next removal,
  * a restore, or a reload.
  */
