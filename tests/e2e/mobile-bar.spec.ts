@@ -155,6 +155,40 @@ async function openSheet(page: Page) {
   );
 }
 
+test("320px: the empty title grows with its wrapped placeholder, focused or not", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openDoc(page);
+  const measure = () =>
+    page.evaluate(() => {
+      const title = document.querySelector(".tiptap > h1");
+      const next = title?.nextElementSibling;
+      if (!title || !next) throw new Error("title missing");
+      const box = title.getBoundingClientRect();
+      const lineHeight = Number.parseFloat(getComputedStyle(title).lineHeight);
+      const caret = window.__tiptap_editor?.view.coordsAtPos(1);
+      return {
+        lines: Math.round(box.height / lineHeight),
+        overlap: box.bottom - next.getBoundingClientRect().top,
+        caretTop: caret ? caret.top - box.top : null,
+        caretLeft: caret ? caret.left - box.left : null,
+      };
+    });
+  // Focused (the Placeholder extension's text): two lines, in flow.
+  const focused = await measure();
+  expect(focused.lines).toBe(2);
+  expect(focused.overlap).toBeLessThanOrEqual(0);
+  // The caret starts the first line.
+  expect(focused.caretTop).toBeCloseTo(0, 0);
+  expect(focused.caretLeft).toBeCloseTo(0, 0);
+  // Not focused (the title's own placeholder): the same.
+  await page.evaluate(() => window.__tiptap_editor?.commands.blur());
+  const blurred = await measure();
+  expect(blurred.lines).toBe(2);
+  expect(blurred.overlap).toBeLessThanOrEqual(0);
+});
+
 for (const [width, height] of [
   [390, 844],
   [375, 812],
