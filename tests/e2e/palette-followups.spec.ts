@@ -52,7 +52,7 @@ async function openPalette(page: Page) {
 
 async function openSaveView(page: Page) {
   await openPalette(page);
-  await page.keyboard.type("save as format");
+  await page.keyboard.type("save selection as format");
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Name")).toBeFocused();
 }

@@ -169,6 +169,50 @@ async function expectComboboxAttributes(page: Page) {
   );
 }
 
+/**
+ * The active option (at `index`, when given): selected, named by the
+ * editor's `aria-activedescendant` and fully shown inside the list.
+ * Returns its index and whether the option after it is fully shown too.
+ */
+async function expectActiveOption(page: Page, index?: number) {
+  const selected = menu(page).locator('[role="option"][aria-selected="true"]');
+  await expect(selected).toHaveCount(1);
+  if (index !== undefined) {
+    await expect(options(page).nth(index)).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  }
+  await expect(editorDom(page)).toHaveAttribute(
+    "aria-activedescendant",
+    (await selected.getAttribute("id")) ?? "",
+  );
+  const state = await page.evaluate((selector) => {
+    const box = document.querySelector(`${selector} [role="listbox"]`);
+    const rows = [...document.querySelectorAll(`${selector} [role="option"]`)];
+    const at = rows.findIndex(
+      (row) => row.getAttribute("aria-selected") === "true",
+    );
+    const view = box?.getBoundingClientRect();
+    const shown = (row?: Element) => {
+      const rect = row?.getBoundingClientRect();
+      return Boolean(
+        view &&
+          rect &&
+          rect.top >= view.top - 0.5 &&
+          rect.bottom <= view.bottom + 0.5,
+      );
+    };
+    return {
+      index: at,
+      fullyShown: shown(rows[at]),
+      nextFullyShown: shown(rows[at + 1]),
+    };
+  }, MENU);
+  expect(state.fullyShown).toBe(true);
+  return state;
+}
+
 async function expectNoComboboxAttributes(page: Page) {
   for (const name of [
     "aria-controls",
@@ -266,6 +310,76 @@ test.describe("slash menu", () => {
     await page.keyboard.press("Escape");
     await expect(menu(page)).toHaveCount(0);
     await expectNoComboboxAttributes(page);
+  });
+
+  test("Home, End, Page Up and Page Down move the active option; Home and End are caret keys once it closes", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "ab /");
+    await expect(menu(page)).toBeVisible();
+    const count = await options(page).count();
+    const caret = await caretBlock(page);
+
+    // End: the last option, scrolled into the list; the caret stays put.
+    await page.keyboard.press("End");
+    await expectActiveOption(page, count - 1);
+    expect(await caretBlock(page)).toEqual(caret);
+    // Home: the first option, the list back at its top.
+    await page.keyboard.press("Home");
+    await expectActiveOption(page, 0);
+    expect(await caretBlock(page)).toEqual(caret);
+
+    // Page Down: the last option fully shown with the first (the list ends
+    // halfway through a row, so the next one is cut).
+    await page.keyboard.press("PageDown");
+    const firstPage = await expectActiveOption(page);
+    expect(firstPage.index).toBeGreaterThan(1);
+    expect(firstPage.nextFullyShown).toBe(false);
+    // Page Down again goes a page further and scrolls it into view.
+    await page.keyboard.press("PageDown");
+    const secondPage = await expectActiveOption(page);
+    expect(secondPage.index).toBeGreaterThan(firstPage.index + 1);
+    // Page Down at the end stays on the last option (no wrap).
+    await page.keyboard.press("End");
+    await page.keyboard.press("PageDown");
+    await expectActiveOption(page, count - 1);
+    // Page Up goes back by a page, never past the first option.
+    await page.keyboard.press("PageUp");
+    const back = await expectActiveOption(page);
+    expect(back.index).toBeLessThan(count - 2);
+    for (let i = 0; i < 6; i++) await page.keyboard.press("PageUp");
+    await expectActiveOption(page, 0);
+    expect(await editorFocused(page)).toBe(true);
+
+    // Closed: Home and End reach the editor again, unprevented.
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    await page.evaluate(() => {
+      const seen: { key: string; prevented: boolean }[] = [];
+      (window as unknown as { __keys: typeof seen }).__keys = seen;
+      document.addEventListener("keydown", (event) => {
+        seen.push({ key: event.key, prevented: event.defaultPrevented });
+      });
+    });
+    await page.keyboard.press("Home");
+    // macOS maps Home and End to scrolling, not to the caret.
+    if (process.platform !== "darwin") {
+      expect(await caretBlock(page)).toMatchObject({ text: "ab /", offset: 0 });
+    }
+    await page.keyboard.press("End");
+    if (process.platform !== "darwin") {
+      expect(await caretBlock(page)).toMatchObject({ text: "ab /", offset: 4 });
+    }
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __keys: unknown[] }).__keys,
+      ),
+    ).toEqual([
+      { key: "Home", prevented: false },
+      { key: "End", prevented: false },
+    ]);
+    await expect(menu(page)).toHaveCount(0);
   });
 
   test("Esc leaves '/query' as typed text and the caret after it", async ({
