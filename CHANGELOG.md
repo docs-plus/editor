@@ -9,6 +9,18 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Trash icon on Delete row and Delete column
+
+The editor chunk goes from +19,283 B to +19,282 B of the 23.5 KB budget
+(the icon is in the lazy menu chunk); nothing to do when deploying.
+
+#### Changed
+- In the table's Row ▾ and Column ▾ menus, and in the Table tools menu
+  that stands in for them on narrow windows and phones, Delete row and
+  Delete column now have a trash icon and line up with the other items,
+  instead of inset text with an empty icon column. The palette and the
+  phone "Text format" sheet are unchanged.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
