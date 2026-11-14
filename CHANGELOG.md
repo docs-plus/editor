@@ -9,6 +9,41 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Continue where you left off
+
+Reopening a document offers a way back to the section you were in (spec
+M15): a small chip above the title, "Continue where you left off ·
+*Section*", with Go and ✕. No schema or protocol change; nothing to
+deploy beyond the app.
+
+The editor chunk grows by 475 B, to +17,724 B of the 23.5 KB budget
+(6,340 B left); the budget is unchanged. The chip, its recorder and its
+styles load as one lazy chunk (2.5 KB gz) when the browser is idle. The
+palette's chunks are unchanged.
+
+#### Added
+- The place is remembered on this device only (`tinydocy-continue`: the
+  section heading's id and a time, never text; 30 documents, 14 days),
+  when you leave the text after choosing a place in it. A place in the
+  title or the first sections is not offered. `NEXT_PUBLIC_REMEMBER_CHOICES=0`
+  turns it off; "Forget my choices" keeps it, like the outline and folds.
+- The chip shows after the server confirms the document (not offline, not
+  in Playground, not when the heading is gone or hidden by a filter). It is
+  never focused or announced and moves nothing. Go unfolds the sections
+  hiding the heading, puts the caret at its end and scrolls it to the top,
+  as an outline pick does. Your first click, key or typing in the
+  document, Dismiss or Esc removes it until the next open; a touch scroll
+  does not.
+- Phones show "Continue · *Section*" above the presence chip and the bar;
+  touch tablets show it at the bottom too.
+- The section name is shown without control, invisible or bidi-control
+  characters, so a collaborator's heading cannot spoof the chip.
+
+#### Changed
+- The outline's jump to a heading is shared with the chip
+  (`lib/heading-navigation.ts`) and now scrolls without animation when you
+  prefer reduced motion.
+
 ### Colour hover preview
 
 Pointing at a text colour or highlight swatch shows it on the selected
@@ -37,7 +72,7 @@ palette is unchanged.
 
 A "Simplified toolbar" setting in ⋯ (and in the Alt+/ palette) shows the
 row's compact set at every width (later-phase plan "progressive
-disclosure"; contract amendment A-next). It is off by default, changes only
+disclosure"; contract amendment A15). It is off by default, changes only
 when the writer turns it on or off, and never reorders the row. No schema
 or protocol change.
 
