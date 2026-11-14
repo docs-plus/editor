@@ -49,9 +49,9 @@ export const listIcons = {
 };
 
 export const listLabels: Record<ListType, string> = {
-  bulletList: "Bullet List",
-  orderedList: "Ordered List",
-  taskList: "Task List",
+  bulletList: "Bullet list",
+  orderedList: "Numbered list",
+  taskList: "Task list",
 };
 
 export const LIST_SHORTCUT_KEYS: Record<ListType, string> = {
@@ -106,7 +106,7 @@ export function shouldShowListButton(props: {
  *
  *   if (!isVisible) return null
  *
- *   return <button onClick={handleToggle}>Bullet List</button>
+ *   return <button onClick={handleToggle}>Bullet list</button>
  * }
  *
  * // Advanced usage with configuration

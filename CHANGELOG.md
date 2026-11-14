@@ -48,6 +48,34 @@ palette's first Alt+/ is unchanged, file for file (402 B + 20,042 B = 20,444 B).
   changes size or the keyboard opens, the caret is scrolled back into view
   first), and spans the screen below 640 px.
 
+### Toolbar menu alignment
+
+Three visual inconsistencies in the toolbar menus. The layout changes sit
+in the lazy menu chunk; only the list labels are in the editor chunk,
+which grows by 1 B to +16,680 B of the 23.5 KB budget (7,384 B left).
+
+#### Fixed
+- Items without an icon start their text in the icon column, beside the
+  items that have one: Delete row and Delete column (Row ▾, Column ▾ and
+  the T3 Table tools menu), Paint format and All actions… (⋯ More
+  formatting), and the four align items in the T3 ¶ menu.
+- In ⋯ More formatting, the plain items keep the toggles' check column,
+  so every shortcut ends at the same edge.
+- The desktop List menu says "Bullet list", "Numbered list" and "Task
+  list", as the phone and the action registry do, and is as wide as its
+  longest label.
+
+### Touch-tablet toolbar test flake (fix/e2e-focus-title-race)
+
+#### Fixed
+- **Tests:** `EditorPage.focusTitle()` waits for the frame in which
+  Tiptap's deferred `view.focus()` runs. In a touch context on a Mac
+  host, Tiptap takes the browser for iOS and focuses the editor at once,
+  so the helper returned early. The late focus then pulled focus back
+  from the toolbar after Alt+F10, and the touch-tablet "no tooltips"
+  test in `toolbar-surfaces.spec.ts` failed about one run in three under
+  three workers.
+
 ### Lazy toolbar menus
 
 Every toolbar menu's popup and items move out of the editor chunk into one
