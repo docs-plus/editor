@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Shared filter links apply on load
+
+The editor chunk goes from +19,283 B to +19,294 B of the 23.5 KB budget;
+nothing to do when deploying.
+
+#### Fixed
+- Opening a link with `?filter=…` never applied the heading filter: the
+  filter hook wrote its empty state to the URL on its first render, before
+  the editor existed, so the query was gone by the time it was read (and
+  React's development remount stripped it again). The link's filter is now
+  read on mount and applied after the first server sync, so it folds the
+  real sections, not an empty or stale device copy. The URL keeps the
+  filter until then, and mirrors it afterwards as before.
+- A hand-typed filter link with a bare `%` (`?filter=50%25`) threw while
+  decoding; that slug is now kept as typed.
+
 ### Outdated-client refusals without a stack trace
 
 Server only; the editor chunk does not change. Nothing to do when deploying
