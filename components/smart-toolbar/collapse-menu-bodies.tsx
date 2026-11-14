@@ -61,7 +61,7 @@ export function ParagraphMenuItems({
 }) {
   return (
     <>
-      <AlignMenuItems editor={editor} value={value} onPicked={onPicked} />
+      <AlignMenuItems editor={editor} value={value} onPicked={onPicked} inset />
       <ActionMenuItem id="indent.outdent" editor={editor} onPicked={onPicked} />
       <ActionMenuItem id="indent.indent" editor={editor} onPicked={onPicked} />
     </>

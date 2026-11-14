@@ -75,16 +75,32 @@ interface ActionItemProps {
   onPicked: () => void;
   /** Checkbox item (`menuitemcheckbox`) for toggles such as superscript. */
   checkbox?: boolean;
+  /**
+   * Keeps a checkbox item's check column free on a plain item, so its
+   * shortcut lines up with theirs in a menu that mixes both (⋯).
+   */
+  checkColumn?: boolean;
   label?: string;
 }
 
-/** One registry action as a menu item, with its reason and shortcut. */
+/**
+ * An item's `inset` prop, which starts its text in the icon column. Only
+ * `true` or absent, never `false`: the primitives would write
+ * `data-inset="false"`, which still matches `data-inset:`.
+ */
+const insetProp = (inset: boolean) => (inset ? true : undefined);
+
+/**
+ * One registry action as a menu item, with its reason and shortcut. Every
+ * menu listing these has iconed items, so one without an icon is inset.
+ */
 export function ActionMenuItem({
   id,
   editor,
   arg,
   onPicked,
   checkbox = false,
+  checkColumn = false,
   label,
 }: ActionItemProps) {
   const view = useActionView(id, editor);
@@ -96,6 +112,7 @@ export function ActionMenuItem({
   const { shortcut } = action;
   const mac = isMac();
   const common = {
+    inset: insetProp(Icon === undefined),
     disabled: reason !== undefined,
     "aria-describedby": reason ? reasonId : undefined,
     // The visible hint is hidden from the name ("Superscript", not
@@ -124,7 +141,9 @@ export function ActionMenuItem({
       {body}
     </DropdownMenuCheckboxItem>
   ) : (
-    <DropdownMenuItem {...common}>{body}</DropdownMenuItem>
+    <DropdownMenuItem {...common} className={checkColumn ? "pr-8" : undefined}>
+      {body}
+    </DropdownMenuItem>
   );
 }
 
@@ -136,6 +155,7 @@ export function ActionRadioItem({
   onPicked,
   arg,
   label,
+  inset = false,
 }: {
   id: string;
   editor: Editor;
@@ -144,6 +164,8 @@ export function ActionRadioItem({
   /** Passed to the action's run, such as a language for `code.language`. */
   arg?: unknown;
   label?: string;
+  /** Starts the text in the icon column, beside iconed items (T3 ¶). */
+  inset?: boolean;
 }) {
   const view = useActionView(id, editor);
   const reasonId = useId();
@@ -154,6 +176,7 @@ export function ActionRadioItem({
     <DropdownMenuRadioItem
       value={value}
       closeOnClick
+      inset={insetProp(inset)}
       disabled={reason !== undefined}
       aria-describedby={reason ? reasonId : undefined}
       data-action-id={id}
