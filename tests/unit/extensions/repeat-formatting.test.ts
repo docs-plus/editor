@@ -393,7 +393,7 @@ describe("RepeatFormatting: applying", () => {
     });
   });
 
-  it("Save as format is unavailable, with the reason, without formatting", () => {
+  it("Save selection as format is unavailable, with the reason, without formatting", () => {
     sel("world");
     expect(availability(formatsSaveAction, computeContext(editor))).toEqual({
       reason: FORMAT_REASONS.empty,

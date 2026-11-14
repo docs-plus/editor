@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### One label for saving a format
+
+The editor chunk goes from +19,283 B to +19,284 B of the 23.5 KB budget
+(4,780 B left); the first Alt+/ palette chunks stay at 20,475 B. Nothing to
+do when deploying.
+
+#### Changed
+- Saving a format is called "Save selection as format…" everywhere: the
+  Alt+/ palette said "Save as format…" while the text style dropdown and the
+  phone's Aa sheet said "Save selection as format…". The save view's title is
+  now "Save selection as format" too. The dropdown and the sheet read the
+  label from the `formats.save` action, so the three can no longer drift
+  apart. Typing "save as format" in the palette still finds it.
+
 ### Menu focus after a quick second open
 
 The editor chunk goes from +19,248 B to +19,283 B of the 23.5 KB budget
