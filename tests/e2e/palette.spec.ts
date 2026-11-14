@@ -95,7 +95,7 @@ async function runFromPalette(page: Page, query: string): Promise<void> {
 async function openSaveView(page: Page): Promise<void> {
   await page.keyboard.press("Alt+Slash");
   await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
-  await page.keyboard.type("save as format");
+  await page.keyboard.type("save selection as format");
   await page
     .locator(`${PALETTE} [cmdk-item][data-action-id="formats.save"]`)
     .first()
@@ -412,7 +412,9 @@ test.describe("action palette", () => {
       page.locator(`${PALETTE} [cmdk-item][data-selected="true"]`),
     ).not.toHaveAttribute("data-unavailable", /.*/);
     await expect(
-      page.getByRole("option", { name: /^Save as format… ?, unavailable/ }),
+      page.getByRole("option", {
+        name: /^Save selection as format… ?, unavailable/,
+      }),
     ).toBeVisible();
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
     await page.keyboard.type("repeat formatting");
@@ -428,10 +430,10 @@ test.describe("action palette", () => {
     await page.keyboard.press("ControlOrMeta+u");
     await page.keyboard.press("Alt+Slash");
     await expect(page.getByPlaceholder("Search actions…")).toBeFocused();
-    await page.keyboard.type("save as format");
+    await page.keyboard.type("save selection as format");
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("heading", { name: "Save as format" }),
+      page.getByRole("heading", { name: "Save selection as format" }),
     ).toBeVisible();
     const name = page.getByLabel("Name");
     await expect(name).toHaveValue("");
@@ -858,7 +860,7 @@ test.describe("palette accessibility", () => {
 
       await expectNoSeriousA11yViolations(page, [PALETTE]);
 
-      await page.keyboard.type("save as format");
+      await page.keyboard.type("save selection as format");
       await page.keyboard.press("Enter");
       await expect(page.getByLabel("Name")).toBeFocused();
       await expect(page.locator("[data-format-preview]")).toBeVisible();

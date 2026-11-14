@@ -201,6 +201,10 @@ describe("hocus-server client schema gate", () => {
         });
         expect(counts.refused).toBeGreaterThanOrEqual(3);
         expect(line).not.toContain("abc");
+        // Refusals reach the log only through the aggregate: no per-attempt
+        // hook error, no code frame.
+        expect(server.logs()).not.toContain("[onConnect]");
+        expect(server.logs()).not.toContain("client_outdated");
       },
       TIMEOUT_MS,
     );
