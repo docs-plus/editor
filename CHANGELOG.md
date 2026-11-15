@@ -9,6 +9,29 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Toolbar roving skips Base UI focus guards
+
+The toolbar's roving tabindex no longer takes over the focus guards Base
+UI renders around an open menu or popover's trigger. No schema or
+protocol change; no Deploy note. The editor chunk grows by 25 B; the
+palette's first Alt+/ is untouched (it does not load the toolbar).
+
+#### Fixed
+- With a menu open and focus back on its trigger (a screen reader's
+  cursor can do this), ArrowRight closed the menu and threw focus out of
+  the toolbar into the document: the toolbar counted Base UI's
+  `tabindex="0"` guards as items, stamped them `tabindex="-1"` and
+  `data-toolbar-item`, and roved onto them. It now skips them, in every
+  engine (on Safari they also carry `role="button"`), and never rewrites
+  their `tabindex`. Tab and Shift+Tab out of an open menu, and from its
+  trigger, behave as before.
+
+#### Added
+- `toolbar-focus-guards.spec.ts`: the guards keep `tabindex="0"` and no
+  `data-toolbar-item` with the text style and list menus open; Tab and
+  Shift+Tab out of an open menu and from its trigger; arrows from the
+  trigger of an open menu reach the same items as with it closed.
+
 ### Filtered sections re-fold after collaborator edits
 
 With a heading filter applied, the folds now follow edits that change

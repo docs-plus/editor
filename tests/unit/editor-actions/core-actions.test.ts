@@ -139,16 +139,25 @@ describe("view.simpleToolbar", () => {
 
   it("says so on the status pill, with Undo", async () => {
     const { dismissNotice, getNotice } = await import("@/lib/announce");
+    // The announcer is lazy: an earlier test's notice can still land late,
+    // so start clean and wait for the expected text, not one tick.
+    dismissNotice();
+    const noticeSays = async (text: string) => {
+      for (let waited = 0; waited < 1000; waited += 10) {
+        if (getNotice()?.text === text) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    };
     const target = make(para(t("x")));
     runAction(target, action("view.simpleToolbar"));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await noticeSays("Simplified toolbar on");
     const notice = getNotice();
     expect(notice?.text).toBe("Simplified toolbar on");
     expect(notice?.done).toBe(true);
     expect(notice?.action?.label).toBe("Undo");
     notice?.action?.run();
     expect(readChoice(TOOLBAR_DENSITY_CHOICE).last).toBe("full");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await noticeSays("Full toolbar on");
     expect(getNotice()?.text).toBe("Full toolbar on");
     dismissNotice();
   });
