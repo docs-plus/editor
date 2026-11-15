@@ -21,8 +21,7 @@ palette's first Alt+/ is untouched.
 - After a remove from a hardware keyboard, focus moves to the next
   remove button (the previous one after the last), or to the "Your
   formats" heading once the list is empty, with the buttons' focus ring.
-- After "Restore ‘X’", focus moves to the restored format's button,
-  also when the formatting engine chunk loads first.
+- After "Restore ‘X’", focus moves to the restored format's button.
 - Opening the sheet at its Remove list (the Save dialog's cap link)
   focuses the first remove button once; before, every new first row
   took focus again, e.g. after a restore.
