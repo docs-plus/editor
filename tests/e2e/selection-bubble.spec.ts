@@ -57,11 +57,22 @@ const bubbleToolbar = (page: Page) =>
 const row = (page: Page) =>
   page.getByRole("toolbar", { name: "Formatting", exact: true });
 
-async function openDoc(page: Page): Promise<EditorPage> {
+/**
+ * Loads `doc` outside the undo history, as the app seeds a document: an
+ * undo in a test then reverts the test's own edit, never the fixture.
+ */
+async function openDoc(page: Page, doc: object = DOC): Promise<EditorPage> {
   const editorPage = new EditorPage(page);
   await editorPage.goto();
   await editorPage.waitForSync();
-  await editorPage.setContent(DOC);
+  await page.evaluate((content) => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    editor.chain().setMeta("addToHistory", false).setContent(content).run();
+  }, doc);
+  // The settle time `EditorPage.setContent` gives: a mouse drag right after
+  // the content lands opens no bubble in Chromium (not investigated here).
+  await page.waitForTimeout(200);
   return editorPage;
 }
 
@@ -380,7 +391,17 @@ test.describe("selection bubble", () => {
   });
 
   test("bubble-in-row matrix", async ({ page }) => {
-    await openDoc(page);
+    // No filler. Playwright scrolls its target on a click retry (the bubble
+    // is still sliding in); on the long page that brought the text under
+    // the sticky row, the bubble flipped below it between mousedown and
+    // mouseup, and the click was lost. This page scrolls by the row's
+    // height at most, which keeps the text well clear of the row.
+    await openDoc(page, { ...DOC, content: DOC.content.slice(0, 6) });
+    // The fixture is not an undo step (y-tiptap patch): each `undo()` below
+    // reverts exactly the mark the click applied.
+    await expect(
+      row(page).locator('[data-action-id="history.undo"]'),
+    ).toHaveAttribute("aria-disabled", "true");
     // Every bubble action is also in the row at desktop width.
     for (const id of BUBBLE_ACTION_IDS) {
       const inRow =
