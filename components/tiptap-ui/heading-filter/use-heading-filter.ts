@@ -1,7 +1,13 @@
 "use client";
 
 import { type Editor, useCurrentEditor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type HeadingFilterCallbackState,
@@ -10,6 +16,16 @@ import {
 } from "@/extensions/heading-filter";
 
 const DEBOUNCE_MS = 250;
+
+type PreviewTimer = RefObject<ReturnType<typeof setTimeout> | null>;
+
+/**
+ * Drops the pending preview. Landing after a commit, a close or a clear,
+ * it would stick (and pause the filter's re-folds).
+ */
+function cancelPreview(timer: PreviewTimer) {
+  clearTimeout(timer.current ?? undefined);
+}
 
 interface UseHeadingFilterOptions {
   editor?: Editor | null;
@@ -69,7 +85,7 @@ export function useHeadingFilter({
     (q: string) => {
       setQueryState(q);
 
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      cancelPreview(debounceRef);
       debounceRef.current = setTimeout(() => {
         editor?.commands.filterPreview(q);
       }, DEBOUNCE_MS);
@@ -84,6 +100,7 @@ export function useHeadingFilter({
 
   const closeBar = useCallback(() => {
     setIsBarOpen(false);
+    cancelPreview(debounceRef);
     editor?.commands.filterPreview("");
     setQueryState("");
     editor?.commands.focus();
@@ -100,6 +117,7 @@ export function useHeadingFilter({
   const commitFilter = useCallback(() => {
     const trimmed = query.trim();
     if (!trimmed) return;
+    cancelPreview(debounceRef);
     editor?.commands.commitFilter(trimmed);
     setQueryState("");
   }, [editor, query]);
@@ -112,6 +130,7 @@ export function useHeadingFilter({
   );
 
   const clearAllFilters = useCallback(() => {
+    cancelPreview(debounceRef);
     editor?.commands.clearFilter();
     setQueryState("");
     updateFilterUrl([], "or");
@@ -142,7 +161,7 @@ export function useHeadingFilter({
 
   useEffect(() => {
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      cancelPreview(debounceRef);
       updateFilterUrl([], "or");
     };
   }, []);

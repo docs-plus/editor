@@ -116,15 +116,18 @@
 
 // The presence and Privacy chips float just above the bar; under its
 // layer (z-40), so the status pill (inside the bar, 8px above it) is
-// never covered by them (design pass §5). While the selection bar shows
-// they hide: the pill and the bar's cells are what the writer needs then,
-// and the chips would show through behind the pill.
+// never covered by them (design pass §5). They hide while the selection
+// bar shows, and while a status pill shows: the pill spans the bar's
+// width in the chips' band, so it would cover them (and they would show
+// through behind it); the pill and the bar's cells are what the writer
+// needs then. The chips come back when the pill closes.
 @media (max-width: 767.98px) {
   [data-collab-status] {
     z-index: 30;
   }
 
-  [data-bar-mode="selection"]:not([hidden]) ~ [data-collab-status] {
+  [data-bar-mode="selection"]:not([hidden]) ~ [data-collab-status],
+  [data-mobile-bar]:not([hidden]):has([data-status-pill]) ~ [data-collab-status] {
     display: none;
   }
 }

@@ -92,6 +92,29 @@ function createDb(dbPath: string): Database {
   return db;
 }
 
+/**
+ * After `stop()` (stderr drains asynchronously): a guardrail refusal writes
+ * its one `ws_guardrail_rejected` abuse line and nothing else to stderr, so
+ * no hook error and no code frame.
+ */
+function expectRefusalLoggedOnce(
+  server: SpawnedHocus,
+  reason: string,
+  documentName: string,
+) {
+  const lines = server
+    .stderr()
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
+    type: "abuse",
+    event: "ws_guardrail_rejected",
+    reason,
+    documentName,
+  });
+}
+
 afterEach(async () => {
   for (const provider of providers.splice(0)) provider.destroy();
   for (const socket of sockets.splice(0)) socket.destroy();
@@ -141,6 +164,22 @@ describe("hocus-server client schema gate", () => {
       });
       const socket = openSocket(server, "1");
       expect(await attach(socket, name).outcome).toBe("document_deleted");
+      await server.stop();
+      expectRefusalLoggedOnce(server, "document_deleted", name);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "refuses an invalid document name with only its abuse line",
+    async () => {
+      const server = await start({ HOCUS_MIN_CLIENT_SCHEMA: "2" });
+      const socket = openSocket(server, "2");
+      expect(await attach(socket, "bad.name").outcome).toBe(
+        "invalid_document_name",
+      );
+      await server.stop();
+      expectRefusalLoggedOnce(server, "invalid_document_name", "bad.name");
     },
     TIMEOUT_MS,
   );
