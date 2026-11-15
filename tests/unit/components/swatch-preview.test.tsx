@@ -58,7 +58,7 @@ function setup(paragraphs = 2): Editor {
   return editor;
 }
 
-const shownAttrs = (e: Editor) =>
+const shownSpec = (e: Editor) =>
   actionPreviewKey.getState(e.state)?.find()[0]?.spec;
 const shownCount = (e: Editor) =>
   actionPreviewKey.getState(e.state)?.find().length ?? 0;
@@ -199,10 +199,40 @@ describe("useSwatchPreview", () => {
     e.commands.setTextSelection(LINE);
     const preview = mount(e);
     act(() => preview.current.show(RED));
-    expect(shownAttrs(e)).toBeDefined();
+    expect(shownSpec(e)).toBeDefined();
     expect(e.view.dom.querySelector('[data-text-color="red"]')).not.toBeNull();
     act(() => preview.current.clear());
     expect(shownCount(e)).toBe(0);
+  });
+
+  it("previews each kind's mark, so text it cannot go on is skipped", () => {
+    const e = setup();
+    e.commands.setContent({
+      type: "doc",
+      content: [
+        doc(0).content[0],
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "line " },
+            { type: "text", text: "code", marks: [{ type: "inlineCode" }] },
+          ],
+        },
+      ],
+    });
+    e.commands.setTextSelection({ from: 8, to: 17 });
+    const preview = mount(e);
+    for (const [swatch, mark] of [
+      [RED, "textColor"],
+      [YELLOW, "highlight"],
+      [{ kind: "text", token: null }, "textColor"],
+      [{ kind: "highlight", token: null }, "highlight"],
+    ] as const) {
+      act(() => preview.current.show(swatch));
+      expect(shownSpec(e)?.mark).toBe(mark);
+      const shown = actionPreviewKey.getState(e.state)?.find() ?? [];
+      expect(shown.map((d) => [d.from, d.to])).toEqual([[8, 13]]);
+    }
   });
 
   it("a mouse shows after the dwell", async () => {

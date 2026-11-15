@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { InlineCode } from "@docs.plus/extension-inline-code";
 import type { Editor, Extension } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
+import { DecorationSet } from "@tiptap/pm/view";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 
 import { ActionPreview, actionPreviewKey } from "@/extensions/action-preview";
+import { TextColor } from "@/extensions/text-style-marks";
 import { getEditorVersionStore } from "@/hooks/use-tiptap-editor";
 import {
   type CollabEditorFixture,
@@ -16,7 +19,10 @@ import {
   DEFAULT_EXTENSIONS,
 } from "@/tests/helpers/create-test-editor";
 
-const RED = { "data-text-color": "red", class: "tt-preview" };
+const RED = {
+  attrs: { "data-text-color": "red", class: "tt-preview" },
+  mark: "textColor",
+};
 
 const DOC = {
   type: "doc",
@@ -176,9 +182,12 @@ describe("ActionPreview", () => {
     const e = setup();
     e.commands.setTextSelection(HELLO);
     e.commands.setActionPreview({
-      nodeName: "mark",
-      "data-highlight": "yellow",
-      class: "tt-preview",
+      attrs: {
+        nodeName: "mark",
+        "data-highlight": "yellow",
+        class: "tt-preview",
+      },
+      mark: "highlight",
     });
     const mark = e.view.dom.querySelector('mark[data-highlight="yellow"]');
     expect(mark?.textContent).toBe("hello");
@@ -192,6 +201,109 @@ describe("ActionPreview", () => {
     expect(dom.innerHTML).toContain("hello");
     expect(dom.innerHTML).not.toContain("tt-preview");
     expect(dom.innerHTML).not.toContain("data-text-color");
+  });
+
+  describe("only where applying adds the mark", () => {
+    /** Title, then "run " + `bun` (inline code) + " now" at 8..19. */
+    const WITH_CODE = {
+      type: "doc",
+      content: [
+        DOC.content[0],
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "run " },
+            { type: "text", text: "bun", marks: [{ type: "inlineCode" }] },
+            { type: "text", text: " now" },
+          ],
+        },
+      ],
+    };
+    const ranges = (e: Editor) => shown(e).map((d) => [d.from, d.to]);
+
+    for (const preview of [
+      RED,
+      { attrs: { "data-highlight": "yellow" }, mark: "highlight" },
+    ]) {
+      it(`skips inline code, which excludes every mark (${preview.mark})`, () => {
+        const e = setup(WITH_CODE);
+        e.commands.setTextSelection({ from: 8, to: 19 });
+        e.commands.setActionPreview(preview);
+        expect(ranges(e)).toEqual([
+          [8, 12],
+          [15, 19],
+        ]);
+        expect(e.view.dom.querySelector("code [data-text-color]")).toBeNull();
+        expect(e.view.dom.querySelector("[data-text-color] code")).toBeNull();
+        expect(e.view.dom.querySelector("code [data-highlight]")).toBeNull();
+        expect(e.view.dom.querySelector("[data-highlight] code")).toBeNull();
+        // Exactly what applying marks.
+        e.chain()
+          .setMark(preview.mark, { color: "red" })
+          .setTextSelection(1)
+          .run();
+        const marked: number[][] = [];
+        e.state.doc.descendants((node, pos) => {
+          if (node.marks.some((m) => m.type.name === preview.mark)) {
+            marked.push([pos, pos + node.nodeSize]);
+          }
+        });
+        expect(marked).toEqual([
+          [8, 12],
+          [15, 19],
+        ]);
+      });
+    }
+
+    it("shows nothing over a selection of inline code alone", () => {
+      const e = setup(WITH_CODE);
+      e.commands.setTextSelection({ from: 12, to: 15 });
+      e.commands.setActionPreview(RED);
+      expect(actionPreviewKey.getState(e.state)).toBe(DecorationSet.empty);
+    });
+
+    it("skips a code block, which allows no marks", () => {
+      const e = setup({
+        type: "doc",
+        content: [
+          DOC.content[0],
+          DOC.content[1],
+          {
+            type: "codeBlock",
+            content: [{ type: "text", text: "let x" }],
+          },
+        ],
+      });
+      // "hello world" (8..19) through "let x" (21..26).
+      e.commands.setTextSelection({ from: 8, to: 26 });
+      e.commands.setActionPreview(RED);
+      expect(ranges(e)).toEqual([[8, 19]]);
+      expect(e.view.dom.querySelector("pre [data-text-color]")).toBeNull();
+    });
+
+    it("covers adjacent text with other marks as one decoration", () => {
+      const e = setup({
+        type: "doc",
+        content: [
+          DOC.content[0],
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "hello " },
+              { type: "text", text: "bold", marks: [{ type: "bold" }] },
+              {
+                type: "text",
+                text: " red",
+                marks: [{ type: "textColor", attrs: { color: "red" } }],
+              },
+            ],
+          },
+        ],
+      });
+      e.commands.setTextSelection({ from: 8, to: 22 });
+      e.commands.setActionPreview(RED);
+      expect(ranges(e)).toEqual([[8, 22]]);
+    });
   });
 
   it("previews each range of a CellSelection", () => {
@@ -227,7 +339,9 @@ describe("ActionPreview", () => {
 
 describe("ActionPreview with collaboration", () => {
   function setupCollab() {
-    collab = createCollabEditor({ extensions: [ActionPreview] });
+    collab = createCollabEditor({
+      extensions: [ActionPreview, InlineCode, TextColor],
+    });
     return collab;
   }
 
@@ -264,6 +378,38 @@ describe("ActionPreview with collaboration", () => {
     const decorations = shown(e);
     expect(decorations).toHaveLength(1);
     expect([decorations[0].from, decorations[0].to]).toEqual([from, to]);
+  });
+
+  it("still skips inline code when it redraws after a remote change", () => {
+    const fixture = setupCollab();
+    const { editor: e } = fixture;
+    e.commands.setContent({
+      type: "doc",
+      content: [
+        DOC.content[0],
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "run " },
+            { type: "text", text: "bun", marks: [{ type: "inlineCode" }] },
+            { type: "text", text: " now" },
+          ],
+        },
+      ],
+    });
+    // "un bun now": the remote insert lands before it, not at its edge.
+    e.commands.setTextSelection({ from: 9, to: 19 });
+    e.commands.setActionPreview(RED);
+    fixture.remote((frag) => {
+      const paragraph = frag.get(1) as Y.XmlElement;
+      (paragraph.get(0) as Y.XmlText).insert(0, "go ");
+    });
+    const { from, to } = e.state.selection;
+    expect(e.state.doc.textBetween(from, to)).toBe("un bun now");
+    expect(shown(e).map((d) => [d.from, d.to])).toEqual([
+      [12, 15],
+      [18, 22],
+    ]);
   });
 
   it("a local edit after a remote one still clears it", () => {
