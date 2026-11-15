@@ -43,6 +43,22 @@ host. A release that needs extra operator steps says so in its CHANGELOG
 
 ## One-time setup
 
+0. **Check the host.** Run these on the host from a plain SSH command, not an
+   interactive login, because the forced command doesn't get a login shell:
+   ```bash
+   ssh <user>@<host> 'command -v bun git flock curl; git -C /opt/projects/editor.docs.plus remote -v'
+   ssh <user>@<host> 'git -C /opt/projects/editor.docs.plus fetch --dry-run origin main && echo fetch-ok'
+   ```
+   - `bun` must resolve (the script adds `~/.bun/bin` to PATH).
+   - The fetch must work without your SSH agent. A public HTTPS `origin` does.
+   - Every deploy restarts both apps with `--update-env` from
+     `ecosystem.config.cjs`, so compare what the running apps have with the
+     file and move anything missing into the file on `main` first:
+     ```bash
+     bunx pm2@6.0.14 env 4   # editor-hocus
+     bunx pm2@6.0.14 env 2   # editor-next
+     ```
+
 1. **Deploy key**, on your own machine. It needs no passphrase and is used for
    nothing else:
    ```bash
@@ -73,11 +89,30 @@ host. A release that needs extra operator steps says so in its CHANGELOG
    # only if SSH is not on port 22:
    gh secret set DEPLOY_PORT --env production --body "<port>"
    ```
-   Adding required reviewers to the `production` environment makes every
-   deploy wait for approval in GitHub.
-5. **Test it.** `gh workflow run deploy.yml` with the commit already
-   deployed: the script finds nothing to fast-forward, rebuilds, and restarts
-   both apps.
+   Then allow only `main` to deploy to it, so a workflow edited on another
+   branch can never read these secrets:
+   ```bash
+   gh api -X PUT repos/docs-plus/editor/environments/production \
+     -F 'deployment_branch_policy[protected_branches]=false' \
+     -F 'deployment_branch_policy[custom_branch_policies]=true'
+   gh api -X POST repos/docs-plus/editor/environments/production/deployment-branch-policies \
+     -f name=main -f type=branch
+   ```
+   (Or in Settings → Environments → production → Deployment branches and tags.)
+   Adding required reviewers there makes every deploy wait for approval in
+   GitHub.
+5. **Bring the script onto the host once.** The forced command runs
+   `scripts/deploy.sh` from the live checkout, which only has it after it
+   is pulled. Pull once by hand, with no install or restart. Hocus keeps
+   running from memory, and Next.js keeps serving `.next`:
+   ```bash
+   ssh <user>@<host> 'cd /opt/projects/editor.docs.plus && git pull --ff-only'
+   ```
+   Changes to `deploy.sh` always take effect on the deploy after the one that
+   pulls them in.
+6. **Test it.** `gh workflow run deploy.yml`. If the host is already at the
+   tip of `main`, the script finds nothing to fast-forward, then rebuilds and
+   restarts both apps.
 
 ## Rollback
 

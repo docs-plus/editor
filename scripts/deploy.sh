@@ -15,7 +15,11 @@
 #      restart Next.js, keeping the previous build in .next.prev;
 #   4. check both answer, and put the previous build back if Next.js does not.
 # It only moves forward along main. Roll back with the runbook.
+# The body is one function, so bash has read all of it before the
+# fast-forward replaces this file. Changes to it apply from the next deploy.
 set -euo pipefail
+
+main() {
 
 sha="${SSH_ORIGINAL_COMMAND:-${1:-}}"
 if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -30,6 +34,16 @@ HOCUS_PORT="${DEPLOY_HOCUS_PORT:-3848}"
 export PATH="$HOME/.bun/bin:$PATH"
 pm2() { bunx pm2@6.0.14 "$@"; }
 log() { printf '\n== %s\n' "$*"; }
+
+# A forced-command session is not a login shell: fail before touching
+# anything if a tool is missing from its PATH.
+local tool
+for tool in bun bunx git flock curl; do
+  if ! command -v "$tool" > /dev/null; then
+    echo "deploy: $tool is not on PATH ($PATH)" >&2
+    exit 9
+  fi
+done
 
 # One deploy at a time.
 exec 9>"/tmp/tinydocy-deploy.lock"
@@ -106,3 +120,6 @@ fi
 
 log "Deployed $(git log -1 --format='%h %s')"
 pm2 logs editor-hocus --lines 5 --nostream || true
+}
+
+main "$@"

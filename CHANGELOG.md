@@ -37,17 +37,21 @@ See `docs/operations/deploy-runbook.md`.
 
 #### Deploy
 
-One-time setup, done by the operator:
+One-time setup, done by the operator (the runbook gives the commands):
 
-- create a deploy key;
-- add it to the host's `authorized_keys` with the
+- check that the host's plain SSH session finds `bun`, `git`, `flock` and
+  `curl` and can `git fetch`, and move any env the running PM2 apps have but
+  `ecosystem.config.cjs` lacks into the file first;
+- create a deploy key and add it to the host's `authorized_keys` with the
   `restrict,command="…/scripts/deploy.sh"` prefix;
-- create the `production` environment with the `DEPLOY_HOST`, `DEPLOY_USER`,
-  `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS` secrets (`DEPLOY_PORT` if not 22).
+- create the `production` environment, limited to `main`, with the
+  `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`
+  secrets (`DEPLOY_PORT` if SSH is not on 22);
+- `git pull --ff-only` once on the host, so the script exists there before
+  the first run.
 
-The runbook gives the commands. Production env now has to live in
-`ecosystem.config.cjs`, because every deploy restarts with `--update-env`
-from that file.
+Production env now has to live in `ecosystem.config.cjs`, because every
+deploy restarts with `--update-env` from that file.
 
 ### Seed out of undo history; stable bubble-in-row matrix
 
