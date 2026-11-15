@@ -9,6 +9,39 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Seed out of undo history; stable bubble-in-row matrix
+
+The selection bubble's "bubble-in-row matrix" e2e test failed about one
+run in seven under load, in Chromium and WebKit. It had two causes, one
+of them in the app. The editor chunk grows by 18 B (the y-tiptap patch);
+the palette's first Alt+/ is unchanged.
+
+#### Fixed
+- Undo could remove a document's seeded content. A change made with
+  `addToHistory: false` (the Playground seed, which has headings) still
+  became an undo step: UniqueID and the outline add heading ids in a
+  transaction appended to it, and y-tiptap took the history flag from
+  that last transaction. Undo was enabled on a fresh Playground, and Undo
+  wiped it, together with any edit made within the next 500 ms (the Yjs
+  undo manager merges changes that close). `@tiptap/y-tiptap` 3.3.0 is
+  patched (`patches/@tiptap%2Fy-tiptap@3.3.0.patch`) so an appended
+  transaction keeps its root transaction's `addToHistory: false`. User
+  edits stay undoable as before.
+- `selection-bubble.spec.ts`: the matrix test loaded its fixture as an
+  undo step, so its first Bold could join the fixture and the undo after
+  it wiped the page ("some words" not found). Fixtures in that spec now
+  load outside the undo history, as the app seeds a document.
+- The same test lost a click on the bubble (the Link popover never
+  opened, or a mark was missing): when the bubble was still sliding in,
+  Playwright retried the click and scrolled the page, which brought the
+  text under the sticky row; the bubble flipped below the text between
+  mousedown and mouseup, and the click landed on the page. The matrix now
+  runs on a page too short to bring the text under the row.
+
+#### Deploy
+- Run `bun install` before `bun run build`: the new `patchedDependencies`
+  entry patches `@tiptap/y-tiptap` at install time.
+
 ### Guardrail refusals without a stack trace
 
 Server only; the editor chunk and the palette's first Alt+/ do not change.
