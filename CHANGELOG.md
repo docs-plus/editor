@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### A refused "/" pick puts the query back in the right place
+
+No schema or protocol change; no Deploy note. The editor chunk and the
+palette's first Alt+/ are unchanged (0 B); the "/" menu's chunk grows by
+224 B, to 5,784 B of its 6 KB budget.
+
+#### Fixed
+- When a "/" menu pick was refused after its "/query" had been removed
+  (the run declined, or the document changed under it), the text went
+  back at the position it had before the pick, ignoring anything
+  dispatched in between: a wrap in a quote or a paragraph added above
+  left "/query" in the wrong block and the caret one character off. The
+  position is now mapped through every change made meanwhile, in the
+  order they applied; nothing is put back when the line itself is gone.
+
 ### Filter links carry at most 8 words
 
 A `?filter=` link applies on load, and each of its words is matched
