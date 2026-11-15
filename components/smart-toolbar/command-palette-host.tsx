@@ -6,6 +6,7 @@ import { lazy, useEffect, useSyncExternalStore } from "react";
 import { announceLater } from "@/lib/announce-later";
 import { emitUiIntent, onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
+import { stylesApplied } from "@/lib/styles-applied";
 
 import { SurfaceBoundary } from "./lazy-surface";
 import {
@@ -21,13 +22,16 @@ import type { SurfaceProps } from "./types";
 /**
  * The palette chunk (cmdk included), after the E engine it reads through
  * `getV11Engine()` (usually there already: editors load it on create).
- * Without the engine it still opens, and E's rows run once it lands.
+ * Without the engine it still opens, and E's rows run once it lands. It
+ * renders once its CSS applies, so Safari never shows it unstyled.
  */
 const loadPalette = () =>
   loadV11Engine()
     .catch(() => undefined)
     .then(() => import("./palette/command-palette"))
-    .then((module) => ({ default: module.CommandPalette }));
+    .then((module) =>
+      stylesApplied().then(() => ({ default: module.CommandPalette })),
+    );
 
 /** Loaded on the first open only. */
 let CommandPalette = lazy(loadPalette);

@@ -15,6 +15,14 @@ export const CHUNK_MARKERS = {
   continueChip: "function ContinueChip(",
 } as const;
 
+/**
+ * A part of the URL of a lazy surface's own CSS chunk, under `next dev`
+ * (the source path). Production hashes these names away.
+ */
+export const CSS_CHUNK_URLS = {
+  colorPanel: "color-panel_scss",
+} as const;
+
 const CHUNKS = "**/_next/static/chunks/**";
 
 /**

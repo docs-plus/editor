@@ -9,6 +9,25 @@ since the previous tag.
 
 ## [Unreleased]
 
+### No unstyled flash of lazy surfaces in Safari
+
+The editor chunk goes from +19,519 B to +19,679 B of the 23.5 KB budget
+(+160 B); the palette's first Alt+/ is unchanged (20,475 B). Nothing to do
+when deploying.
+
+#### Fixed
+- Safari: the phone bar could show unstyled for a moment (Redo and the
+  Insert label shown, cells narrower than 44px), and the colour popover
+  as a column of bare icons, when another lazy stylesheet was still
+  loading, such as a window narrowed below 768px while the desktop
+  surfaces were still preloading. Safari keeps a loaded stylesheet inactive until every other
+  one has loaded or failed, so a lazy chunk could render before its own
+  CSS applied. The phone bar, every lazy surface (colour popover, Insert
+  steps, selection bubble, diagram templates, Your formats, the Continue
+  chip) and the palette now render once the CSS loaded so far applies
+  (`lib/styles-applied.ts`), at once outside Safari. A stylesheet that
+  failed (offline) does not count, and none waits longer than 1.5 s.
+
 ### Paint format pressed before the formatting tools load
 
 No schema or protocol change; no Deploy note. The editor chunk grows by
