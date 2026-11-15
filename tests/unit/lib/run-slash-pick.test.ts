@@ -4,6 +4,7 @@ import { HyperMultimediaKit } from "@docs.plus/extension-hypermultimedia";
 import type { Editor, Extension } from "@tiptap/core";
 import { TableKit } from "@tiptap/extension-table";
 import { TextSelection } from "@tiptap/pm/state";
+import * as Y from "yjs";
 
 import {
   getSlashState,
@@ -225,6 +226,117 @@ describe("runSlashPick", () => {
     expect(editor.state.doc.eq(before)).toBe(true);
     // A missing action is a bug, not something the writer can act on.
     expect(await said()).toBeNull();
+  });
+
+  describe("puts the text back where it was after changes made mid-pick", () => {
+    /**
+     * Picks "/emb" with an embed step that runs `meanwhile` (with "/emb"
+     * gone) and then declines, so the text goes back.
+     */
+    function refuseAfter(editor: Editor, meanwhile: () => void): void {
+      const off = onUiIntent(editor, () => {
+        meanwhile();
+        return false;
+      });
+      slashInNewParagraph(editor, "emb");
+      expect(runSlashPick(editor, item("insert.embed"))).toBe(false);
+      off();
+    }
+
+    /** Every top-level block as "type: text". */
+    const blocks = (editor: Editor) => {
+      const out: string[] = [];
+      editor.state.doc.forEach((node) => {
+        out.push(`${node.type.name}: ${node.textContent}`);
+      });
+      return out;
+    };
+
+    const expectCaretAfterEmb = (editor: Editor) => {
+      const { $head, empty } = editor.state.selection;
+      expect(empty).toBe(true);
+      expect($head.parent.textContent).toBe("/emb");
+      expect($head.parentOffset).toBe(4);
+      expect(getSlashState(editor).open).toBe(false);
+    };
+
+    it("the line wrapped in a quote: inside the quote's paragraph", () => {
+      const editor = setup();
+      refuseAfter(editor, () => editor.commands.setBlockquote());
+      expect(caretBlock(editor)).toEqual({
+        type: "blockquote",
+        level: undefined,
+        text: "/emb",
+      });
+      expect(editor.state.selection.$head.parent.type.name).toBe("paragraph");
+      expectCaretAfterEmb(editor);
+    });
+
+    it("a collaborator adds a paragraph above: on its own line", () => {
+      const editor = setup();
+      refuseAfter(editor, () =>
+        fixture?.remote((frag) => {
+          const p = new Y.XmlElement("paragraph");
+          p.insert(0, [new Y.XmlText("from a collaborator")]);
+          frag.insert(1, [p]);
+        }),
+      );
+      expect(blocks(editor)).toEqual([
+        "heading: Title",
+        "paragraph: from a collaborator",
+        "paragraph: hello world",
+        "paragraph: /emb",
+      ]);
+      expectCaretAfterEmb(editor);
+    });
+
+    it("changes heard out of order (dispatched from a listener)", () => {
+      const editor = setup();
+      // Registered first, so its wrap is heard before the insert that
+      // set it off, though it applies after it.
+      let armed = false;
+      const wrapOnce = () => {
+        if (!armed) return;
+        armed = false;
+        editor.commands.setBlockquote();
+      };
+      editor.on("transaction", wrapOnce);
+      refuseAfter(editor, () => {
+        armed = true;
+        // A collaborator's paragraph after the title; the caret stays put.
+        const { schema, doc } = editor.state;
+        const above = schema.nodes.paragraph.create(null, schema.text("above"));
+        editor.view.dispatch(
+          editor.state.tr.insert(doc.firstChild?.nodeSize ?? 0, above),
+        );
+      });
+      editor.off("transaction", wrapOnce);
+      expect(armed).toBe(false);
+      expect(blocks(editor)).toEqual([
+        "heading: Title",
+        "paragraph: above",
+        "paragraph: hello world",
+        "blockquote: /emb",
+        // The trailing node after the quote.
+        "paragraph: ",
+      ]);
+      expectCaretAfterEmb(editor);
+    });
+
+    it("its line deleted: nothing comes back", () => {
+      const editor = setup();
+      refuseAfter(editor, () => {
+        const { $head } = editor.state.selection;
+        editor.view.dispatch(
+          editor.state.tr.delete($head.before(), $head.after()),
+        );
+      });
+      expect(JSON.stringify(editor.getJSON())).not.toContain("/emb");
+      expect(blocks(editor)).toEqual([
+        "heading: Title",
+        "paragraph: hello world",
+      ]);
+    });
   });
 
   it("table pick inserts at the given size and remembers it", () => {

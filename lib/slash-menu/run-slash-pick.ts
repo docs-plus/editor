@@ -1,5 +1,6 @@
-import type { Editor } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import type { Editor, EditorEvents } from "@tiptap/core";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import { Mapping } from "@tiptap/pm/transform";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 
 import {
@@ -32,13 +33,48 @@ function refusal(editor: Editor, item: SlashItem, action: AnyAction) {
 }
 
 /**
+ * Runs `run` and returns what it returned, with the mapping from the
+ * document before it to the one after, through every change dispatched
+ * meanwhile (its own steps, a collaborator's edit, a wrap in a quote).
+ * Changes are chained by the document each began from, not by the order
+ * they were heard: a listener that dispatches from its own `transaction`
+ * handler is heard before the change that set it off. The mapping is null
+ * if they do not lead to the live document.
+ */
+function withMapping(editor: Editor, run: () => boolean) {
+  const start = editor.state.doc;
+  const heard: Transaction[] = [];
+  const hear = (event: EditorEvents["transaction"]) => {
+    for (const tr of [event.transaction, ...event.appendedTransactions]) {
+      if (tr.docChanged) heard.push(tr);
+    }
+  };
+  editor.on("transaction", hear);
+  let ok: boolean;
+  try {
+    ok = run();
+  } finally {
+    editor.off("transaction", hear);
+  }
+  const mapping = new Mapping();
+  let doc = start;
+  for (let tr = heard.find((t) => t.before === doc); tr; ) {
+    mapping.appendMapping(tr.mapping);
+    doc = tr.doc;
+    tr = heard.find((t) => t.before === doc);
+  }
+  return { ok, mapping: doc === editor.state.doc ? mapping : null };
+}
+
+/**
  * Runs a "/" menu pick as one undo step: removes the typed "/query",
  * then runs the action through `runAction` (which rechecks the live
  * document). `stopCapturing()` before and after keeps the typing before
  * and after it apart; the sync plugin writes each transaction to Yjs as
  * it is dispatched, so both land in one capture. If the action refuses
  * after the text is gone, the text goes back in the same capture and the
- * caret after it, so nothing changes. Returns whether the action ran.
+ * caret after it, so nothing changes: at its place mapped through any
+ * change made in between. Returns whether the action ran.
  *
  * Rows are only what could run when the menu opened, so a refusal means
  * the document changed since (a collaborator's edit, a shortcut): the
@@ -66,14 +102,21 @@ export function runSlashPick(editor: Editor, item: SlashItem): boolean {
     // Without its "/" the trigger closes.
     editor.state.tr.delete(from, to),
   );
-  const ok = runAction(editor, action, item.arg);
+  const { ok, mapping } = withMapping(editor, () =>
+    runAction(editor, action, item.arg),
+  );
   if (!ok) {
     // Judged on the document the run saw, before the text goes back.
     const why = refusal(editor, item, action);
-    const tr = editor.state.tr.replace(from, from, typed);
-    editor.view.dispatch(
-      tr.setSelection(TextSelection.create(tr.doc, from + typed.size)),
-    );
+    // Where the "/" was in the live document; nowhere if its line is gone.
+    const at = mapping?.mapResult(from);
+    const { doc } = editor.state;
+    if (at && !at.deleted && doc.resolve(at.pos).parent.inlineContent) {
+      const tr = editor.state.tr.replace(at.pos, at.pos, typed);
+      editor.view.dispatch(
+        tr.setSelection(TextSelection.create(tr.doc, at.pos + typed.size)),
+      );
+    }
     if (why) announceLater(why);
   }
   undo?.stopCapturing();
