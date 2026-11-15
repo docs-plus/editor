@@ -42,6 +42,117 @@ the palette's first Alt+/ is unchanged.
 - Run `bun install` before `bun run build`: the new `patchedDependencies`
   entry patches `@tiptap/y-tiptap` at install time.
 
+### No unstyled flash of lazy surfaces in Safari
+
+The editor chunk goes from +19,519 B to +19,679 B of the 23.5 KB budget
+(+160 B); the palette's first Alt+/ is unchanged (20,475 B). Nothing to do
+when deploying.
+
+#### Fixed
+- Safari: the phone bar could show unstyled for a moment (Redo and the
+  Insert label shown, cells narrower than 44px), and the colour popover
+  as a column of bare icons, when another lazy stylesheet was still
+  loading, such as a window narrowed below 768px while the desktop
+  surfaces were still preloading. Safari keeps a loaded stylesheet inactive until every other
+  one has loaded or failed, so a lazy chunk could render before its own
+  CSS applied. The phone bar, every lazy surface (colour popover, Insert
+  steps, selection bubble, diagram templates, Your formats, the Continue
+  chip) and the palette now render once the CSS loaded so far applies
+  (`lib/styles-applied.ts`), at once outside Safari. A stylesheet that
+  failed (offline) does not count, and none waits longer than 1.5 s.
+
+### Paint format pressed before the formatting tools load
+
+No schema or protocol change; no Deploy note. The editor chunk grows by
+10 B (the shared "Couldn’t load formatting tools." string); the palette's
+first Alt+/ is unchanged (20,475 B).
+
+#### Fixed
+- The Paint format brush (selection bubble and phone selection cells)
+  pressed before the lazy formatting engine had loaded did nothing
+  visible, and the press was dropped as soon as the user selected the
+  text to paint: early actions run only if the selection has not moved,
+  and for the brush the next selection is the point. The brush now shows
+  pressed at once, with the copy cursor and the pill, keeps the text it
+  was pressed on (following edits, a collaborator's too), and once the
+  engine lands arms on that text and paints a mouse selection made
+  meanwhile (on touch, the second tap) if it is still the selection then.
+  As when armed, the mouse selection is read a frame after the pointer-up
+  and only a non-empty one counts: a plain click then Shift+arrows only
+  arms, and the keyboard selection takes the brush or ⌘⌥V. A second press
+  on the same text or Esc cancels; a failed load says so with Retry.
+  Other early actions still run only on an unmoved selection.
+
+### No colour preview over inline code
+
+The hover preview of a colour swatch now shows only what applying does.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+109 B, to +19,628 B of the 23.5 KB budget (4,436 B left); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- Resting on a text colour or highlight swatch painted the colour over
+  inline code and code blocks in the selection, although applying never
+  colours them (inline code excludes every mark; a code block allows
+  none). The preview now skips the text the mark cannot go on, decided by
+  the editor schema the same way applying is, so that text keeps its
+  selection tint. `setActionPreview` takes `{ attrs, mark }`.
+
+### Phone sheet: Remove and Restore keep keyboard focus
+
+In the phone "Text format" sheet, Remove a format and "Restore ‘X’"
+unmounted the button that had keyboard focus, which fell to the sheet
+itself. No schema or protocol change; no Deploy note. The editor chunk
+measures 1 B more (build noise: only lazy phone-bar code changed); the
+palette's first Alt+/ is untouched.
+
+#### Fixed
+- After a remove from a hardware keyboard, focus moves to the next
+  remove button (the previous one after the last), or to the "Your
+  formats" heading once the list is empty, with the buttons' focus ring.
+- After "Restore ‘X’", focus moves to the restored format's button.
+- Opening the sheet at its Remove list (the Save dialog's cap link)
+  focuses the first remove button once; before, every new first row
+  took focus again, e.g. after a restore.
+- Taps leave focus where it was, and the status pill's announcements are
+  unchanged.
+
+### Phone status pill clear of the footer chips
+
+CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
+first Alt+/ are untouched. Nothing to do when deploying.
+
+#### Fixed
+- On a phone the status pill (a refused "/" pick, a removed format's Undo,
+  an unavailable cell's reason) covered the presence chip and the
+  Discord, GitHub and Privacy chips: it spans the bar's width 8 px above
+  it, in the chips' band. The chips now hide while a pill shows on the
+  bar, as they already did for the selection bar, and come back when it
+  closes (design pass §5).
+
+### Toolbar roving skips Base UI focus guards
+
+The toolbar's roving tabindex no longer takes over the focus guards Base
+UI renders around an open menu or popover's trigger. No schema or
+protocol change; no Deploy note. The editor chunk grows by 25 B; the
+palette's first Alt+/ is untouched (it does not load the toolbar).
+
+#### Fixed
+- With a menu open and focus back on its trigger (a screen reader's
+  cursor can do this), ArrowRight closed the menu and threw focus out of
+  the toolbar into the document: the toolbar counted Base UI's
+  `tabindex="0"` guards as items, stamped them `tabindex="-1"` and
+  `data-toolbar-item`, and roved onto them. It now skips them, in every
+  engine (on Safari they also carry `role="button"`), and never rewrites
+  their `tabindex`. Tab and Shift+Tab out of an open menu, and from its
+  trigger, behave as before.
+
+#### Added
+- `toolbar-focus-guards.spec.ts`: the guards keep `tabindex="0"` and no
+  `data-toolbar-item` with the text style and list menus open; Tab and
+  Shift+Tab out of an open menu and from its trigger; arrows from the
+  trigger of an open menu reach the same items as with it closed.
+
 ### Filtered sections re-fold after collaborator edits
 
 With a heading filter applied, the folds now follow edits that change

@@ -4,28 +4,60 @@ import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 /**
- * Attributes of the inline decoration a preview draws over each selection
- * range: the real mark's `data-*` token (styled by the existing token CSS),
- * a `class`, and `nodeName` ("mark" for highlights, else a span).
+ * Attributes of the inline decoration a preview draws over the selection:
+ * the real mark's `data-*` token (styled by the existing token CSS), a
+ * `class`, and `nodeName` ("mark" for highlights, else a span).
  */
 export type PreviewAttrs = Readonly<Record<string, string>>;
 
+/**
+ * A preview: `attrs` over the selection wherever applying `mark` (a mark
+ * name, e.g. "textColor") would change the text, and nowhere else.
+ */
+export interface PreviewSpec {
+  readonly attrs: PreviewAttrs;
+  readonly mark: string;
+}
+
 export const actionPreviewKey = new PluginKey<DecorationSet>("actionPreview");
 
-/** One inline decoration per selection range; `attrs` doubles as its spec. */
-const build = (state: EditorState, attrs: PreviewAttrs) =>
-  DecorationSet.create(
+/**
+ * Inline decorations over the inline nodes of each selection range that
+ * applying the mark changes, decided by the schema as `addMark` decides:
+ * the parent allows the mark (a code block allows none) and no mark on the
+ * node excludes it (inline code excludes all; `Mark.addToSet`). Adjacent
+ * nodes share one decoration; `spec` doubles as its spec.
+ */
+const build = (state: EditorState, spec: PreviewSpec) => {
+  const type = state.schema.marks[spec.mark];
+  const runs: number[][] = [];
+  for (const { $from, $to } of state.selection.ranges) {
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos, parent) => {
+      if (
+        !node.isInline ||
+        !parent?.type.allowsMarkType(type) ||
+        node.marks.some((m) => m.type.excludes(type) && !type.excludes(m.type))
+      ) {
+        return;
+      }
+      const from = Math.max(pos, $from.pos);
+      const to = Math.min(pos + node.nodeSize, $to.pos);
+      const last = runs[runs.length - 1];
+      if (last?.[1] === from) last[1] = to;
+      else runs.push([from, to]);
+    });
+  }
+  return DecorationSet.create(
     state.doc,
-    state.selection.ranges.map(({ $from, $to }) =>
-      Decoration.inline($from.pos, $to.pos, attrs, attrs),
-    ),
+    runs.map(([from, to]) => Decoration.inline(from, to, spec.attrs, spec)),
   );
+};
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     actionPreview: {
-      /** Shows `attrs` over the selection, or clears with null. */
-      setActionPreview: (attrs: PreviewAttrs | null) => ReturnType;
+      /** Shows `preview` over the selection, or clears with null. */
+      setActionPreview: (preview: PreviewSpec | null) => ReturnType;
     };
   }
 }
@@ -48,16 +80,19 @@ export const ActionPreview = Extension.create({
   addCommands() {
     return {
       setActionPreview:
-        (attrs) =>
+        (preview) =>
         ({ tr, state }) => {
           // Clearing with nothing shown: no transaction at all.
           if (
-            !attrs &&
+            !preview &&
             actionPreviewKey.getState(state) === DecorationSet.empty
           ) {
             tr.setMeta("preventDispatch", true);
           } else {
-            tr.setMeta(actionPreviewKey, attrs).setMeta("addToHistory", false);
+            tr.setMeta(actionPreviewKey, preview).setMeta(
+              "addToHistory",
+              false,
+            );
           }
           return true;
         },
@@ -71,16 +106,16 @@ export const ActionPreview = Extension.create({
         state: {
           init: () => DecorationSet.empty,
           apply(tr, set, _old, state) {
-            const attrs: PreviewAttrs | null | undefined =
+            const preview: PreviewSpec | null | undefined =
               tr.getMeta(actionPreviewKey);
-            if (attrs !== undefined) {
-              return attrs ? build(state, attrs) : DecorationSet.empty;
+            if (preview !== undefined) {
+              return preview ? build(state, preview) : DecorationSet.empty;
             }
             if (set === DecorationSet.empty) return set;
             if (!tr.docChanged && !tr.selectionSet) return set;
             // A collaborator's change: redraw on the selection it moved,
             // never map the old ranges. A local change or selection clears.
-            const shown: PreviewAttrs | undefined = set.find()[0]?.spec;
+            const shown: PreviewSpec | undefined = set.find()[0]?.spec;
             return isChangeOrigin(tr) && shown
               ? build(state, shown)
               : DecorationSet.empty;

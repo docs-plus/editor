@@ -15,6 +15,14 @@ export const CHUNK_MARKERS = {
   continueChip: "function ContinueChip(",
 } as const;
 
+/**
+ * A part of the URL of a lazy surface's own CSS chunk, under `next dev`
+ * (the source path). Production hashes these names away.
+ */
+export const CSS_CHUNK_URLS = {
+  colorPanel: "color-panel_scss",
+} as const;
+
 const CHUNKS = "**/_next/static/chunks/**";
 
 /**
@@ -49,4 +57,25 @@ export async function interceptChunk(
     while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
     await page.unroute(CHUNKS, handler);
   };
+}
+
+/**
+ * Holds the chunk that defines `marker` until `release()`; `restore()`
+ * waits until it has been served. Call before load, so the editor's own
+ * preload waits too.
+ */
+export async function holdChunk(page: Page, marker: string) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const restore = await interceptChunk(
+    page,
+    marker,
+    async (route, response) => {
+      await held;
+      await route.fulfill({ response });
+    },
+  );
+  return { release, restore };
 }

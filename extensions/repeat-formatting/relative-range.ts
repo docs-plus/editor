@@ -31,7 +31,7 @@ function bindingOf(state: EditorState): Binding | null {
 
 export function toSessionRange(
   state: EditorState,
-  selection: Selection,
+  selection: Range,
 ): SessionRange {
   const binding = bindingOf(state);
   if (binding) {

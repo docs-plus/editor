@@ -15,7 +15,7 @@ import {
   setTheme,
 } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
-import { CHUNK_MARKERS, interceptChunk } from "./helpers/lazy-chunk";
+import { CHUNK_MARKERS, holdChunk, interceptChunk } from "./helpers/lazy-chunk";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
 
@@ -834,21 +834,10 @@ test.describe("selection bubble", () => {
     expect(box?.height).toBeCloseTo(28, 1);
   });
 
-  test("the brush queues a click until the engine lands, never 'loading'", async ({
+  test("the brush is pressed at once before the engine lands, never 'loading'", async ({
     page,
   }) => {
-    let release = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const unroute = await interceptChunk(
-      page,
-      CHUNK_MARKERS.engine,
-      async (route, response) => {
-        await held;
-        await route.fulfill({ response });
-      },
-    );
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
@@ -857,13 +846,17 @@ test.describe("selection bubble", () => {
     });
     await expect(brush).not.toHaveAttribute("aria-disabled", "true");
     await brush.click();
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
     await expect(
       page.getByText("Formatting tools are still loading."),
     ).toHaveCount(0);
-    release();
-    // The queued click arms it once the engine lands.
+    engine.release();
+    // The press arms it on the same text once the engine lands.
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Picked up / }),
+    ).toBeAttached();
     await expect(brush).toHaveAttribute("aria-pressed", "true");
-    await unroute();
+    await engine.restore();
   });
 
   test("the brush is disabled with the reason on inline code", async ({
