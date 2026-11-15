@@ -4,6 +4,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 import {
   canMapDecorations,
+  computeSection,
   filterSections,
   findAllSections,
   matchSections,
@@ -43,6 +44,17 @@ export interface HeadingFilterPluginOptions {
 export const headingFilterPluginKey = new PluginKey<HeadingFilterState>(
   "headingFilter",
 );
+
+/**
+ * How long after an edit that re-matched the sections (a heading renamed,
+ * added or moved, often by a collaborator) the folds follow, as often as
+ * the outline rebuilds.
+ */
+export const FILTER_REFOLD_MS = 250;
+
+/** The sections a filter folds away: every one it does not match. */
+const unmatchedSections = (doc: PMNode, matched: Set<string>) =>
+  findAllSections(doc).filter((s) => !matched.has(s.id));
 
 function buildFilterDecorations(
   doc: PMNode,
@@ -166,6 +178,8 @@ export function createHeadingFilterPlugin(
   let prevMode: "or" | "and" = "or";
   let prevMatchedIds: Set<string> = new Set();
   let savedFoldIds: Set<string> | null = null;
+  // The sections this filter last folded away (or left open for the caret).
+  let filterFolds = new Set<string>();
 
   return new Plugin<HeadingFilterState>({
     key: headingFilterPluginKey,
@@ -229,7 +243,45 @@ export function createHeadingFilterPlugin(
       },
     },
 
-    view() {
+    view(view) {
+      let refoldTimer: ReturnType<typeof setTimeout> | undefined;
+
+      // Moves only the folds whose section changed sides since the filter
+      // last folded, so the reader's own folds and unfolds stay; a section
+      // holding the caret is never folded under it.
+      const refold = () => {
+        refoldTimer = undefined;
+        const filter = headingFilterPluginKey.getState(view.state);
+        const adapter = options.foldAdapter;
+        if (!adapter || !filter?.slugs.length || filter.previewQuery) return;
+
+        const { doc, selection } = view.state;
+        const folds = new Set(adapter.getFoldedIds(view.state));
+        const before = filterFolds;
+        let changed = false;
+        filterFolds = new Set();
+        for (const { id, pos, level } of unmatchedSections(
+          doc,
+          filter.matchedSectionIds,
+        )) {
+          filterFolds.add(id);
+          if (
+            before.has(id) ||
+            folds.has(id) ||
+            (selection.head >= pos &&
+              selection.head < computeSection(doc, pos, level).to)
+          )
+            continue;
+          folds.add(id);
+          changed = true;
+        }
+        for (const id of before) {
+          if (!filterFolds.has(id) && folds.delete(id)) changed = true;
+        }
+        if (changed)
+          view.dispatch(adapter.setTemporaryFolds(view.state.tr, folds));
+      };
+
       return {
         update(view) {
           const current = headingFilterPluginKey.getState(view.state);
@@ -272,9 +324,18 @@ export function createHeadingFilterPlugin(
           const hadFilters = prevSlugs.length > 0;
           const hasFilters = current.slugs.length > 0;
 
+          // A new set means the state re-matched the sections: a heading's
+          // text or the structure changed (a mapped edit keeps the set).
+          const rematched = current.matchedSectionIds !== prevMatchedIds;
           if (slugsChanged) prevSlugs = [...current.slugs];
           if (modeChanged) prevMode = current.mode;
-          if (matchedIdsChanged) prevMatchedIds = current.matchedSectionIds;
+          prevMatchedIds = current.matchedSectionIds;
+
+          // After a change of words or mode too: by then the folds below
+          // match, so it finds nothing to move.
+          if (hasFilters && rematched) {
+            refoldTimer ??= setTimeout(refold, FILTER_REFOLD_MS);
+          }
 
           if (options.foldAdapter && (slugsChanged || modeChanged)) {
             try {
@@ -285,17 +346,16 @@ export function createHeadingFilterPlugin(
               }
 
               if (hasFilters) {
-                const allSections = findAllSections(view.state.doc);
-                const sectionsToFold = new Set<string>();
-                for (const s of allSections) {
-                  if (!current.matchedSectionIds.has(s.id)) {
-                    sectionsToFold.add(s.id);
-                  }
-                }
+                filterFolds = new Set(
+                  unmatchedSections(
+                    view.state.doc,
+                    current.matchedSectionIds,
+                  ).map((s) => s.id),
+                );
 
                 const tr = options.foldAdapter.setTemporaryFolds(
                   view.state.tr,
-                  sectionsToFold,
+                  filterFolds,
                 );
                 view.dispatch(tr);
               } else if (hadFilters && !hasFilters) {
@@ -347,6 +407,7 @@ export function createHeadingFilterPlugin(
         },
 
         destroy() {
+          clearTimeout(refoldTimer);
           prevSlugs = [];
           prevMode = "or";
           prevMatchedIds = new Set();

@@ -67,6 +67,7 @@ tests/
 │   ├── drag.spec.ts                      # Heading drag handle visibility
 │   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds, image resize gripper
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
+│   ├── filter-collab.spec.ts             # Filter folds follow a collaborator's heading edits
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── toolbar-perf.spec.ts              # Toolbar catch-up render and arrow p95 on 500 headings (perf project)
@@ -132,7 +133,7 @@ Verify the `heading block*` schema (TitleDocument extension) — first node is a
 
 ### Plugin Tests
 
-Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDrag after dispatching specific transactions. Validates decoration rebuilds, fold toggling, filter matching, `canMapDecorations` fast-path behavior, and `moveSection` atomicity (reorder, level change, combined, undo).
+Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDrag after dispatching specific transactions. Validates decoration rebuilds, fold toggling, filter matching, `canMapDecorations` fast-path behavior, and `moveSection` atomicity (reorder, level change, combined, undo). With a filter applied, an edit that re-matches the sections (a heading renamed or added, as a collaborator's edit arrives) moves the folds `FILTER_REFOLD_MS` (250 ms) later: only sections that changed sides, never the reader's own folds or the caret's section, and not while a preview query is typed (`tests/unit/components/use-heading-filter.test.tsx` checks the bar drops a pending preview on commit, close and clear).
 
 ### Fuzz Tests
 
@@ -176,6 +177,7 @@ What WebKit does differently, and how the specs handle it:
 | `drag.spec.ts` | Hovering a heading shows the drag handle |
 | `extensions.spec.ts` | Link preview + `Mod-K` create; backtick inline code; Tab indent; Mermaid renders; media embeds stack and unsafe URLs are rejected; the image resize gripper covers the hovered image and resizes it, and it and a running drag survive a plugin being registered and removed (each recreates every plugin view, as the lazy selection bubble's `BubbleMenu` does when its chunk lands) |
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches; a `?filter=alpha` link opens the bar with the chip once the doc syncs, folds the unmatched sections, keeps the URL, and Clear all filters removes it; a link of 10 words applies only the first 8 (the 9th and 10th match nothing, and the URL drops them) |
+| `filter-collab.spec.ts` | With A's filter "alpha" applied, B renames the folded "Beta Section" to "Alpha Beta Section": A unfolds it (and its body) while Gamma stays folded; a non-matching section B adds arrives folded on A |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
