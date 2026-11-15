@@ -19,8 +19,8 @@ when deploying.
 - Safari: the phone bar could show unstyled for a moment (Redo and the
   Insert label shown, cells narrower than 44px), and the colour popover
   as a column of bare icons, when another lazy stylesheet was still
-  loading, such as on rotating to portrait while the desktop surfaces
-  preloaded. Safari keeps a loaded stylesheet inactive until every other
+  loading, such as a window narrowed below 768px while the desktop
+  surfaces were still preloading. Safari keeps a loaded stylesheet inactive until every other
   one has loaded or failed, so a lazy chunk could render before its own
   CSS applied. The phone bar, every lazy surface (colour popover, Insert
   steps, selection bubble, diagram templates, Your formats, the Continue
