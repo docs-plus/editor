@@ -196,6 +196,16 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--foreground);
+
+  // Keeps the place when Your formats' Remove list empties: the buttons'
+  // ring, not the browser's, with room for it at the sheet's top edge.
+  scroll-margin-block: 0.5rem;
+
+  &:focus-visible {
+    border-radius: 0.25rem;
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
 }
 
 .st-format-sheet {

@@ -9,6 +9,25 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phone sheet: Remove and Restore keep keyboard focus
+
+In the phone "Text format" sheet, Remove a format and "Restore ‘X’"
+unmounted the button that had keyboard focus, which fell to the sheet
+itself. No schema or protocol change; no Deploy note. The editor chunk
+measures 1 B more (build noise: only lazy phone-bar code changed); the
+palette's first Alt+/ is untouched.
+
+#### Fixed
+- After a remove from a hardware keyboard, focus moves to the next
+  remove button (the previous one after the last), or to the "Your
+  formats" heading once the list is empty, with the buttons' focus ring.
+- After "Restore ‘X’", focus moves to the restored format's button.
+- Opening the sheet at its Remove list (the Save dialog's cap link)
+  focuses the first remove button once; before, every new first row
+  took focus again, e.g. after a restore.
+- Taps leave focus where it was, and the status pill's announcements are
+  unchanged.
+
 ### Phone status pill clear of the footer chips
 
 CSS in the lazy phone bar chunk, plus a slash menu load retry that adds

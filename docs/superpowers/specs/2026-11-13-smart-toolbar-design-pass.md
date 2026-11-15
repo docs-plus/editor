@@ -146,6 +146,7 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
   - The Remove list is a grid of its own under the toggle, inset (`ps-3`), never between the apply buttons.
   - A disabled control's reason is a visible `text-xs text-muted-foreground` line under it (phones have no tooltips, §10): one line under the formats when none can apply, one under Save.
   - After a removal, a full-width "Restore ‘X’" (undo icon, 44 px) follows the toggle and the Remove list, until the next removal, a restore or a reload (§4). A restore keeps the sheet open; when it cannot run, its reason is a visible line under it, like Save's.
+  - Keyboard focus keeps its place when a Remove or Restore button it was on goes away: after a removal, the next remove button (the previous one after the last, the "Your formats" heading once the list is empty); after a restore, the restored format's button. A tap moves no focus.
 
 **Touch:**
 - No tooltips on a coarse pointer (`[data-slot="tooltip-content"] { display:none }` under `(pointer: coarse)`); the pill replaces them.
