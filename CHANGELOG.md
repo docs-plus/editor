@@ -9,6 +9,33 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Filtered sections re-fold after collaborator edits
+
+With a heading filter applied, the folds now follow edits that change
+which sections match, such as a collaborator renaming or adding a heading.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+198 B (gzip, measured against `main` on the same machine); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- A heading filter folded the unmatched sections only when its words or
+  mode changed. A collaborator renaming a heading so it now matches (or no
+  longer matches), or adding a section, left the folds stale. Now, 250 ms
+  after such an edit (as often as the outline rebuilds), the filter
+  unfolds the sections that started to match and folds the ones that
+  stopped matching. Folds you set yourself stay as they are, the section
+  holding your caret is never folded, and nothing moves while you type a
+  new filter word.
+- Pressing Enter within 250 ms of typing a filter word committed it, but
+  the word's pending preview landed afterwards and stayed applied. Closing
+  the filter bar or clearing the filters had the same race. A pending
+  preview is now dropped on commit, close and clear.
+
+#### Added
+- `tests/e2e/filter-collab.spec.ts`: a collaborator's rename unfolds the
+  section on a filtered reader's screen, and a section they add that does
+  not match arrives folded.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
