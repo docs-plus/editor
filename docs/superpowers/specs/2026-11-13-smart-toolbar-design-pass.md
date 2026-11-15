@@ -97,7 +97,7 @@ Also:
 
 **Placement:**
 - **Desktop:** 8 px under the sticky row, centred over the page column. When that would cover the open selection bubble (near the top of the page), it goes 8 px right of the bubble, level with it, when that fits the viewport, else 8 px below it, so the armed brush stays clickable.
-- **Phone:** a sibling of the bar's scroller, never inside a masked element: `absolute inset-x-2 bottom-[calc(100%+8px)] z-50`. The presence and Privacy footer chips sit below the bar layer, and hide while the docked selection bar shows. While the Aa sheet is open the pill sits 8 px above the sheet's top edge.
+- **Phone:** a sibling of the bar's scroller, never inside a masked element: `absolute inset-x-2 bottom-[calc(100%+8px)] z-50`. The presence and Privacy footer chips sit below the bar layer, and hide while the docked selection bar shows or a pill shows on the bar (the pill spans the bar's width in the chips' band, so it would cover them); they come back when it closes. While the Aa sheet is open the pill sits 8 px above the sheet's top edge.
 
 **Style:**
 
@@ -146,6 +146,7 @@ B  I  U  A▁  ✎▁  🔗  🖌  ✕
   - The Remove list is a grid of its own under the toggle, inset (`ps-3`), never between the apply buttons.
   - A disabled control's reason is a visible `text-xs text-muted-foreground` line under it (phones have no tooltips, §10): one line under the formats when none can apply, one under Save.
   - After a removal, a full-width "Restore ‘X’" (undo icon, 44 px) follows the toggle and the Remove list, until the next removal, a restore or a reload (§4). A restore keeps the sheet open; when it cannot run, its reason is a visible line under it, like Save's.
+  - Keyboard focus keeps its place when a Remove or Restore button it was on goes away: after a removal, the next remove button (the previous one after the last, the "Your formats" heading once the list is empty); after a restore, the restored format's button. A tap moves no focus.
 
 **Touch:**
 - No tooltips on a coarse pointer (`[data-slot="tooltip-content"] { display:none }` under `(pointer: coarse)`); the pill replaces them.

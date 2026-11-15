@@ -10,6 +10,7 @@ import {
   openToolbarTestDoc,
   setTheme,
 } from "./helpers/a11y";
+import { CHUNK_MARKERS, holdChunk } from "./helpers/lazy-chunk";
 
 const PHONE = { width: 390, height: 844 };
 const SCREENS = ".superpowers/screens-r2-phone";
@@ -728,6 +729,38 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(pill).toHaveText("Formatting applied");
   });
 
+  test("Paint format tapped before the engine lands: pressed at once, the second tap paints once it lands", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await selectionBar(page)
+      .getByRole("button", { name: "Italic", exact: true })
+      .tap();
+    expect(await lastMark(page, "italic")).toBe(true);
+    const brush = selectionBar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await brush.tap();
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    const pill = page.locator("[data-status-pill]");
+    await expect(pill).toHaveText("Select text, then tap the brush again");
+
+    // A new paragraph (an edit) and selection while it loads.
+    await selectText(page, "beta");
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    await brush.tap();
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    expect(await lastMark(page, "italic")).toBeNull();
+
+    engine.release();
+    await expect.poll(() => lastMark(page, "italic")).toBe(true);
+    await expect(brush).toHaveAttribute("aria-pressed", "false");
+    await expect(pill).toHaveText("Formatting applied");
+    await engine.restore();
+  });
+
   test("a tap on an unavailable cell says why on the pill", async ({
     page,
   }) => {
@@ -1372,6 +1405,57 @@ test("the presence and Privacy chips hide while the selection bar shows", async 
     .tap();
   await expect(chips).toBeVisible();
 });
+
+for (const width of [375, 320]) {
+  test.describe(`status pill and footer chips at ${width}px`, () => {
+    test.use({ viewport: { width, height: 812 } });
+
+    test("the pill never overlaps the presence and Privacy chips", async ({
+      page,
+    }) => {
+      await openDoc(page);
+      const chips = page.locator("[data-collab-status]");
+      await expect(chips).toBeVisible();
+      // The normal cells (where the chips show), the text in code: Bold
+      // is unavailable, and a tap on it says why on the pill.
+      await selectNewParagraph(page, "alpha");
+      await page.evaluate(() =>
+        window.__tiptap_editor?.commands.setMark("inlineCode"),
+      );
+      const bold = bar(page).getByRole("button", { name: "Bold" });
+      await expect(bold).toHaveAttribute("aria-disabled", "true");
+      await bold.tap({ force: true });
+      const pill = page.locator('[data-status-pill="phone"]');
+      await expect(pill).toBeVisible();
+      await pill.evaluate((el) =>
+        Promise.all(el.getAnimations().map((animation) => animation.finished)),
+      );
+      // No visible chip card shares a pixel with the pill.
+      const overlaps = () =>
+        page.evaluate(() => {
+          const pill = document.querySelector("[data-status-pill]");
+          if (!pill) return ["no pill"];
+          const a = pill.getBoundingClientRect();
+          return [...document.querySelectorAll("[data-collab-status] > *")]
+            .map((card) => card.getBoundingClientRect())
+            .filter(
+              (b) =>
+                b.width > 0 &&
+                b.height > 0 &&
+                a.left < b.right &&
+                b.left < a.right &&
+                a.top < b.bottom &&
+                b.top < a.bottom,
+            )
+            .map((b) => `${b.left},${b.top} ${b.width}×${b.height}`);
+        });
+      await expect.poll(overlaps).toEqual([]);
+      // The chips come back once the pill closes.
+      await expect(pill).toBeHidden();
+      await expect(chips).toBeVisible();
+    });
+  });
+}
 
 test.describe("selection cells at 375px (design pass §6)", () => {
   test.use({ viewport: { width: 375, height: 812 } });

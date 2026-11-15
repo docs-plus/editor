@@ -185,6 +185,15 @@
   }
 }
 
+// A preview drops the blurred selection's tint (`swatch-preview.ts`). A
+// span preview takes the selection's class onto itself, but a highlight's
+// `mark` cannot: when a previewed run starts after the selection does (past
+// inline code the preview skips), ProseMirror nests the selection's span
+// inside the mark, where its tint would cover the previewed colour.
+.tiptap.ProseMirror .tt-preview .selection {
+  background-color: transparent;
+}
+
 // Touch: every swatch is at least 44×44 (spec §6.7, §4.7).
 @media (pointer: coarse) {
   .st-swatch {

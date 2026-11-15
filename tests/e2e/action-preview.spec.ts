@@ -92,6 +92,25 @@ const CONTEXT_DOC = {
   ],
 };
 
+/** A line of text and inline code: colours mark only the text. */
+const CODE_DOC = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+    paragraph(
+      text("Run "),
+      text("bun install", [code]),
+      text(" then "),
+      text("bun test", [code]),
+      text(" to check"),
+    ),
+  ],
+};
+/** The text runs of `CODE_DOC`'s line, without the code. */
+const CODE_DOC_TEXT = ["Run ", " then ", " to check"];
+const textsOf = (elements: Element[]) =>
+  elements.map((element) => element.textContent);
+
 /** Past the 80 ms dwell, with room for a dev-server frame. */
 const DWELL = 250;
 
@@ -417,12 +436,18 @@ test.describe("hover preview", () => {
           await expect(previews(page)).toHaveCount(0);
           // The applied result under the same wrapper the preview used (it
           // inherits every colour and only drops the blurred selection's
-          // tint), so the two renders differ in colour alone.
-          await page.evaluate(() =>
-            window.__tiptap_editor?.commands.setActionPreview({
-              class: "tt-preview",
-              style: "background-color: transparent",
-            }),
+          // tint, skipping the same inline code), so the two renders differ
+          // in colour alone.
+          await page.evaluate(
+            (mark) =>
+              window.__tiptap_editor?.commands.setActionPreview({
+                attrs: {
+                  class: "tt-preview",
+                  style: "background-color: transparent",
+                },
+                mark,
+              }),
+            kind === "text" ? "textColor" : "highlight",
           );
           await expect(previews(page).first()).toBeVisible();
           const applied = await page.screenshot({ clip });
@@ -434,6 +459,47 @@ test.describe("hover preview", () => {
         });
       }
     }
+  }
+
+  // Inline code excludes every mark, so applying a colour over text and
+  // code colours the text alone; the preview skips the code the same way.
+  for (const [kind, swatch, attr] of [
+    ["text", "Red text", "data-text-color"],
+    ["highlight", "Yellow highlight", "data-highlight"],
+  ] as const) {
+    test(`'${swatch}' over text and inline code previews only the text, as applying does`, async ({
+      page,
+    }) => {
+      await openDoc(page, CODE_DOC);
+      await selectBlock(page, "Run");
+      const dialog = await openPopover(page, kind);
+      const button = dialog.getByRole("button", { name: swatch });
+      await button.hover();
+      await expect
+        .poll(() => previews(page).evaluateAll(textsOf))
+        .toEqual(CODE_DOC_TEXT);
+      await expect(previews(page).first()).toHaveAttribute(attr, /.+/);
+      await expect(page.locator(".tiptap code .tt-preview")).toHaveCount(0);
+      await expect(page.locator(".tiptap .tt-preview code")).toHaveCount(0);
+      // The last run starts after the selection does, so ProseMirror nests
+      // the selection's span in a highlight's mark: its tint stays off.
+      const tints = await page
+        .locator(".tiptap .tt-preview .selection")
+        .evaluateAll((els) =>
+          els.map((el) => getComputedStyle(el).backgroundColor),
+        );
+      expect(tints.filter((color) => color !== TRANSPARENT)).toEqual([]);
+
+      // The selection stays mixed (its code has no colour), so the swatch
+      // is not pressed: wait for the marks instead.
+      await button.click();
+      const marked = page.locator(`.tiptap [${attr}]:not(.tt-preview)`);
+      await expect
+        .poll(() => marked.evaluateAll(textsOf))
+        .toEqual(CODE_DOC_TEXT);
+      await expect(page.locator(`.tiptap code [${attr}]`)).toHaveCount(0);
+      await expect(page.locator(`.tiptap [${attr}] code`)).toHaveCount(0);
+    });
   }
 
   test("the bubble stays open while previewing from its popover", async ({

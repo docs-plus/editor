@@ -1,13 +1,12 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 import { useRememberedBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { useActionView } from "@/hooks/use-editor-context";
 import { availability } from "@/lib/editor-actions/registry";
 import type { AnyAction } from "@/lib/editor-actions/types";
-import { getV11Engine } from "@/lib/editor-actions/v11-actions";
 import { useV11EngineReady } from "@/lib/editor-actions/v11-engine-ready";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import {
@@ -35,24 +34,6 @@ export function useEActionReason(
     getEditorContextStore(editor).getContext(),
   );
   return enabled === true ? undefined : enabled.reason;
-}
-
-const noop = () => undefined;
-
-/** Whether Paint format is armed on `editor`; re-renders when it changes. */
-export function usePainting(editor: Editor): boolean {
-  const ready = useV11EngineReady();
-  // A new subscribe once the engine lands, so the store is subscribed.
-  const subscribe = useCallback(
-    (listener: () => void) =>
-      (ready && getV11Engine()?.paint.subscribe(listener)) || noop,
-    [ready],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => getV11Engine()?.paint.isPainting(editor) ?? false,
-    () => false,
-  );
 }
 
 const NO_FORMATS: readonly SavedFormat[] = [];

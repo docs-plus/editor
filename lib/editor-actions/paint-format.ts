@@ -10,6 +10,7 @@
  * while armed.
  */
 import type { Editor } from "@tiptap/core";
+import { EditorState, TextSelection } from "@tiptap/pm/state";
 
 import { applyDisabledReason } from "@/extensions/repeat-formatting/apply-bundle";
 import {
@@ -19,15 +20,16 @@ import {
 } from "@/extensions/repeat-formatting/bundle";
 import { rememberBundle } from "@/extensions/repeat-formatting/bundle-memory";
 import { announce, dismissNotice } from "@/lib/announce";
+import {
+  PAINT_PILLS,
+  PAINTING_CLASS,
+} from "@/lib/editor-actions/paint-format-ui";
 
-/** On the editor's `EditorContent` element (ProseMirror owns `view.dom`'s class). */
-export const PAINTING_CLASS = "is-painting";
-
-export const PAINT_PILLS = {
-  pointer: "Select text to paint · Esc to cancel",
-  touch: "Select text, then tap the brush again",
-  applied: "Formatting applied",
-} as const;
+/** A document range to pick up from instead of the selection. */
+export interface PaintSource {
+  from: number;
+  to: number;
+}
 
 interface Armed {
   bundle: FormatBundle;
@@ -149,13 +151,21 @@ function listen(editor: Editor): () => void {
 }
 
 /**
- * Picks up the formatting at the selection or caret, the full read (plain
- * text picks up "plain", as in Docs). It becomes the remembered Repeat
- * bundle only once applied (`applyPaint`).
+ * Picks up the formatting at the selection or caret (or at `source`), the
+ * full read (plain text picks up "plain", as in Docs). It becomes the
+ * remembered Repeat bundle only once applied (`applyPaint`).
  */
-function arm(editor: Editor, touch: boolean): void {
-  const bundle = readBundleAt(editor.state);
-  const { from, to } = editor.state.selection;
+function arm(editor: Editor, touch: boolean, source?: PaintSource): void {
+  const { state } = editor;
+  const { from, to } = source ?? state.selection;
+  const bundle = readBundleAt(
+    source
+      ? EditorState.create({
+          doc: state.doc,
+          selection: TextSelection.create(state.doc, from, to),
+        })
+      : state,
+  );
   armed.set(editor, { bundle, from, to, stop: listen(editor) });
   emit();
   announce(`Picked up ${bundleSetLabel(bundle)}. Select text to apply.`, {
@@ -167,12 +177,18 @@ function arm(editor: Editor, touch: boolean): void {
  * The brush, the palette's and ⋯'s "Paint format": arms; armed, applies
  * to a new non-empty selection, or cancels on the one it was armed on
  * (or a caret). `touch` picks the pill that says to tap the brush again.
+ * `source` arms on that range instead of the selection: a brush pressed
+ * before the engine landed (`paint-pending.ts`), the selection since moved.
  */
-export function togglePaint(editor: Editor, touch = false): boolean {
+export function togglePaint(
+  editor: Editor,
+  touch = false,
+  source?: PaintSource,
+): boolean {
   if (!editor.isEditable) return false;
   const state = armed.get(editor);
   if (!state) {
-    arm(editor, touch);
+    arm(editor, touch, source);
     return true;
   }
   const { from, to, empty } = editor.state.selection;

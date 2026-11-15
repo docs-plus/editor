@@ -4,15 +4,12 @@ import type { Editor } from "@tiptap/react";
 import { useRef } from "react";
 
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import {
-  getV11Engine,
-  repeatCopyAction,
-  runWithEngine,
-} from "@/lib/editor-actions/v11-actions";
+import { repeatCopyAction } from "@/lib/editor-actions/v11-actions";
 import { PaintbrushIcon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
-import { useEActionReason, usePainting } from "./use-e-action";
+import { pressBrush, usePainting } from "./paint-pending";
+import { useEActionReason } from "./use-e-action";
 
 const TOOLTIP = (
   <span className="flex flex-col">
@@ -29,8 +26,9 @@ const TOOLTIP = (
  * state, which lives in the engine, so it survives the brush unmounting.
  * A click arms; armed, it applies to a new selection or cancels. A tap
  * says so in its pill ("then tap 🖌 to apply"); touch never auto-applies.
- * Before the engine lands the click waits for it (`runWithEngine`); a
- * failed load says so on the pill, with Retry.
+ * Before the engine lands the click shows pressed at once and keeps the
+ * text it was on, so the next selection is painted once the engine lands
+ * (`paint-pending.ts`); a failed load says so on the pill, with Retry.
  */
 export function PaintFormatButton({
   editor,
@@ -63,9 +61,7 @@ export function PaintFormatButton({
       onClick={() => {
         const touch = pointer.current === "touch";
         pointer.current = "mouse";
-        runWithEngine(editor, () =>
-          getV11Engine()?.paint.toggle(editor, touch),
-        );
+        pressBrush(editor, touch);
       }}
     >
       <PaintbrushIcon className="tiptap-button-icon" aria-hidden="true" />

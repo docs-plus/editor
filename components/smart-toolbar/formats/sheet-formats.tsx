@@ -1,7 +1,13 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useId, useState } from "react";
+import {
+  type MouseEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { bundleSetLabel } from "@/extensions/repeat-formatting/bundle";
@@ -20,10 +26,46 @@ import { FormatPreview } from "./format-preview";
 import { removeFormatWithUndo } from "./remove-format";
 import { useEActionReason, useSavedFormats } from "./use-e-action";
 
-/** Brings the first format to remove into view once the sheet settles. */
-const focusSoon = (button: HTMLButtonElement | null) => {
-  if (button) requestAnimationFrame(() => button.focus());
-};
+/**
+ * Where keyboard focus goes once the button it was on unmounts: the
+ * restored format's own button, or the remove button that took the
+ * removed one's place.
+ */
+type FocusAfter = { restored: string } | { removedAt: number };
+
+/** Records where focus goes next, when the activated button had it. */
+type KeepFocus = (
+  event: MouseEvent<HTMLButtonElement>,
+  after: FocusAfter,
+) => void;
+
+/**
+ * The control that keeps the place after `after`: the restored format,
+ * else the next remove button (the previous one after the last), else,
+ * with the list gone, the section's heading.
+ */
+function focusTarget(
+  root: HTMLElement,
+  list: HTMLElement | null,
+  saved: readonly SavedFormat[],
+  after: FocusAfter,
+): HTMLElement | null {
+  if ("restored" in after) {
+    const index = saved.findIndex((format) => format.id === after.restored);
+    const apply = root.querySelectorAll<HTMLElement>("[data-saved-format]");
+    return apply[index] ?? null;
+  }
+  const removes = list?.querySelectorAll("button") ?? [];
+  if (removes.length > 0) {
+    return removes[Math.min(after.removedAt, removes.length - 1)];
+  }
+  const labelledBy = root.closest("[aria-labelledby]");
+  const heading = document.getElementById(
+    labelledBy?.getAttribute("aria-labelledby") ?? "",
+  );
+  if (heading) heading.tabIndex = -1;
+  return heading;
+}
 
 function SheetFormat({
   editor,
@@ -87,9 +129,11 @@ function SheetReason({ id, text }: { id: string; text: string | undefined }) {
 function SheetRestore({
   editor,
   format,
+  keepFocus,
 }: {
   editor: Editor;
   format: SavedFormat;
+  keepFocus: KeepFocus;
 }) {
   const reason = useEActionReason(formatsRestoreAction, editor);
   const reasonId = useId();
@@ -102,11 +146,12 @@ function SheetRestore({
         aria-describedby={reason ? reasonId : undefined}
         disabled={reason !== undefined}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() =>
+        onClick={(event) => {
+          keepFocus(event, { restored: format.id });
           runWithEngine(editor, () =>
             runAction(editor, formatsRestoreAction, format.id),
-          )
-        }
+          );
+        }}
       >
         <Undo2Icon aria-hidden="true" />
         <span className="min-w-0 truncate">Restore ‘{format.name}’</span>
@@ -156,8 +201,41 @@ export function SheetFormats({
   const saveReasonId = useId();
   const applyReason = saved.length > 0 ? apply : undefined;
   const removed = restorable(saved);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const focusAfter = useRef<FocusAfter | null>(null);
+  const focusFirst = useRef(startRemoving);
+
+  // A remove or restore unmounts the button that had keyboard focus, which
+  // then falls to the sheet: move it on before paint. One-shot, on the
+  // next change (a restore can wait for the engine chunk), and only while
+  // focus is still dropped, so a user who moved on meanwhile stays put.
+  useLayoutEffect(() => {
+    const after = focusAfter.current;
+    const root = rootRef.current;
+    focusAfter.current = null;
+    if (!after || !root || !document.activeElement?.contains(root)) return;
+    const target = focusTarget(root, listRef.current, saved, after);
+    target?.focus();
+    // Its scroll margin too, so the ring clears the sheet's edge.
+    target?.scrollIntoView({ block: "nearest" });
+  }, [saved]);
+
+  const keepFocus: KeepFocus = (event, after) => {
+    if (event.currentTarget === document.activeElement) {
+      focusAfter.current = after;
+    }
+  };
+
+  /** The Remove list's first button, once, when the sheet opens at it. */
+  const focusFirstOnce = (button: HTMLButtonElement | null) => {
+    if (!button || !focusFirst.current) return;
+    focusFirst.current = false;
+    requestAnimationFrame(() => button.focus());
+  };
+
   return (
-    <div className="st-sheet-list">
+    <div ref={rootRef} className="st-sheet-list">
       {saved.map((format) => (
         <SheetFormat
           key={format.id}
@@ -200,6 +278,7 @@ export function SheetFormats({
       ) : null}
       {removing && saved.length > 0 ? (
         <ul
+          ref={listRef}
           id={removeId}
           aria-label="Remove a format"
           className="st-sheet-list st-sheet-wide ps-3"
@@ -207,13 +286,16 @@ export function SheetFormats({
           {saved.map((format, index) => (
             <li key={format.id} className="min-w-0">
               <ToolbarButton
-                ref={index === 0 && startRemoving ? focusSoon : undefined}
+                ref={index === 0 ? focusFirstOnce : undefined}
                 type="button"
                 data-surface="phone"
                 size="sm"
                 aria-label={`Remove ${format.name}`}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => removeFormatWithUndo(format, index)}
+                onClick={(event) => {
+                  keepFocus(event, { removedAt: index });
+                  removeFormatWithUndo(format, index);
+                }}
               >
                 <TrashIcon aria-hidden="true" />
                 <span className="min-w-0 truncate">{format.name}</span>
@@ -223,7 +305,12 @@ export function SheetFormats({
         </ul>
       ) : null}
       {removed ? (
-        <SheetRestore key={removed.id} editor={editor} format={removed} />
+        <SheetRestore
+          key={removed.id}
+          editor={editor}
+          format={removed}
+          keepFocus={keepFocus}
+        />
       ) : null}
     </div>
   );
