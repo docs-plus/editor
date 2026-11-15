@@ -9,6 +9,46 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Deploy workflow
+
+Production now deploys through a manual GitHub workflow,
+`.github/workflows/deploy.yml`. `gh workflow run deploy.yml` deploys the tip
+of `main`; `-f ref=<sha>` deploys a specific commit of `main`.
+
+- **Checks before deploying.** The workflow refuses a commit unless it is on
+  `main` and its CI run on `main` passed, waiting for that run if needed. It
+  never checks out or runs repository code on the runner.
+- **SSH.** It connects to the host with strict host-key checking. The key's
+  `authorized_keys` entry is a forced command, so the key can only run
+  `scripts/deploy.sh`.
+- **On the host, `scripts/deploy.sh`:**
+  - accepts only a full SHA on `origin/main`, never moves backwards, and
+    refuses a checkout with local changes;
+  - builds Next.js in a second checkout while the site keeps serving;
+  - restarts Hocus from `ecosystem.config.cjs`, then swaps `.next` (the
+    previous build stays in `.next.prev`) and restarts Next.js;
+  - puts the previous build back if Next.js does not answer within 90 s.
+- **Serialised.** One deploy at a time, by the workflow's concurrency group
+  and a lock on the host.
+- **Tests.** A unit test checks that the script refuses anything but a
+  full SHA before it runs anything.
+
+See `docs/operations/deploy-runbook.md`.
+
+#### Deploy
+
+One-time setup, done by the operator:
+
+- create a deploy key;
+- add it to the host's `authorized_keys` with the
+  `restrict,command="…/scripts/deploy.sh"` prefix;
+- create the `production` environment with the `DEPLOY_HOST`, `DEPLOY_USER`,
+  `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS` secrets (`DEPLOY_PORT` if not 22).
+
+The runbook gives the commands. Production env now has to live in
+`ecosystem.config.cjs`, because every deploy restarts with `--update-env`
+from that file.
+
 ### Seed out of undo history; stable bubble-in-row matrix
 
 The selection bubble's "bubble-in-row matrix" e2e test failed about one

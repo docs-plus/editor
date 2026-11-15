@@ -1,0 +1,90 @@
+name: Deploy
+
+# Deploys a commit of main to production (tiny.docs.plus). Run it by hand once
+# a pull request has merged and CI on main is green:
+#   gh workflow run deploy.yml                 # the tip of main
+#   gh workflow run deploy.yml -f ref=<sha>    # a commit of main
+# It refuses commits that are not on main or whose CI on main did not pass,
+# then SSHes to the host, whose key only runs scripts/deploy.sh (an SSH forced
+# command). One-time setup and rollback: docs/operations/deploy-runbook.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "main, or a commit SHA on main"
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://tiny.docs.plus
+    # Never checks out or runs repository code on the runner.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Resolve the commit and require green CI on main
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REF" =~ ^(main|[0-9a-f]{7,40})$ ]]; then
+            echo "::error::ref must be main or a commit SHA"; exit 1
+          fi
+          sha=$(gh api "repos/$GH_REPO/commits/$REF" --jq .sha)
+          status=$(gh api "repos/$GH_REPO/compare/$sha...main" --jq .status)
+          case "$status" in
+            identical|ahead) ;;
+            *) echo "::error::$sha is not on main ($status)"; exit 1 ;;
+          esac
+          run=$(gh run list --workflow ci.yml --branch main --commit "$sha" --limit 1 \
+            --json databaseId,status --jq '.[0] | "\(.databaseId) \(.status)"')
+          if [ -z "$run" ]; then
+            echo "::error::no CI run on main for $sha"; exit 1
+          fi
+          id=${run%% *}
+          if [ "${run#* }" != completed ]; then
+            echo "Waiting for CI run $id"
+            gh run watch "$id" --interval 30 > /dev/null || true
+          fi
+          conclusion=$(gh run view "$id" --json conclusion --jq .conclusion)
+          if [ "$conclusion" != success ]; then
+            echo "::error::CI on main for $sha is $conclusion"; exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha (CI run $id passed)"
+
+      - name: Deploy over SSH
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$SHA"
