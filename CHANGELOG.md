@@ -9,6 +9,19 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phone status pill clear of the footer chips
+
+CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
+first Alt+/ are untouched. Nothing to do when deploying.
+
+#### Fixed
+- On a phone the status pill (a refused "/" pick, a removed format's Undo,
+  an unavailable cell's reason) covered the presence chip and the
+  Discord, GitHub and Privacy chips: it spans the bar's width 8 px above
+  it, in the chips' band. The chips now hide while a pill shows on the
+  bar, as they already did for the selection bar, and come back when it
+  closes (design pass §5).
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
