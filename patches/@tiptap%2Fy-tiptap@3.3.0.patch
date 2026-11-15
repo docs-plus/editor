@@ -1,0 +1,26 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 309e68f4a77be4ab8e7b2ca271a6098a9182a245..0a64cb585233cbac0972e3de24fd0f4a1af31fcc 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1499,7 +1499,7 @@ const ySyncPlugin = (yXmlFragment, { colors = defaultColors, colorMapping = /* @
+ 			apply: (tr, pluginState) => {
+ 				const change = tr.getMeta(ySyncPluginKey);
+ 				if (change !== void 0) pluginState = Object.assign({}, pluginState, change);
+-				if (tr.docChanged) pluginState.addToHistory = tr.getMeta("addToHistory") !== false;
++				if (tr.docChanged) pluginState.addToHistory = tr.getMeta("addToHistory") !== false && tr.getMeta("appendedTransaction")?.getMeta("addToHistory") !== false;
+ 				pluginState.isChangeOrigin = change !== void 0 && !!change.isChangeOrigin;
+ 				pluginState.isUndoRedoOperation = change !== void 0 && !!change.isChangeOrigin && !!change.isUndoRedoOperation;
+ 				if (binding.prosemirrorView === null || change === void 0 || change.snapshot == null && change.prevSnapshot == null) return pluginState;
+diff --git a/dist/index.js b/dist/index.js
+index 64482faff4203574f1326cfab8f847cd00c2d850..e0f584eb2cc9cb9a221cfcd92f63308b7ed86e86 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1466,7 +1466,7 @@ const ySyncPlugin = (yXmlFragment, { colors = defaultColors, colorMapping = /* @
+ 			apply: (tr, pluginState) => {
+ 				const change = tr.getMeta(ySyncPluginKey);
+ 				if (change !== void 0) pluginState = Object.assign({}, pluginState, change);
+-				if (tr.docChanged) pluginState.addToHistory = tr.getMeta("addToHistory") !== false;
++				if (tr.docChanged) pluginState.addToHistory = tr.getMeta("addToHistory") !== false && tr.getMeta("appendedTransaction")?.getMeta("addToHistory") !== false;
+ 				pluginState.isChangeOrigin = change !== void 0 && !!change.isChangeOrigin;
+ 				pluginState.isUndoRedoOperation = change !== void 0 && !!change.isChangeOrigin && !!change.isUndoRedoOperation;
+ 				if (binding.prosemirrorView === null || change === void 0 || change.snapshot == null && change.prevSnapshot == null) return pluginState;
