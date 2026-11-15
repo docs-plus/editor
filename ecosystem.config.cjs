@@ -63,6 +63,9 @@ module.exports = {
         // Room for the long-document showcase (about 1.4 MB); images are
         // downscaled to 256 KB, so ordinary documents stay far below this.
         MAX_DOC_SIZE_BYTES: "2097152",
+        // Rewrites stored legacy highlight colours to tokens on load. Safe
+        // since release N tabs are gone (on in production from 2026-11-15).
+        HOCUS_REWRITE_LEGACY_HIGHLIGHTS: "1",
       },
       instances: 1,
       exec_mode: "fork",
