@@ -39,7 +39,10 @@ const CLOSED: SlashState = { open: false };
  * read-only closes the menu. The chunk is fetched when the browser is
  * idle after the host mounts, and at the latest on the first "/"; a chunk
  * that does not load shows nothing (the "/" stays text) and the next "/"
- * tries again. The menu renders directly once loaded, never through
+ * tries again. A failed load is fetched once more at once: a "/" typed
+ * while an earlier fetch was still failing (the runtime retries a chunk
+ * once, later) joined that fetch, and nothing else would retry while the
+ * menu stays open. The menu renders directly once loaded, never through
  * `lazy()`, whose first render suspends even for a cached chunk (A13). The
  * polite live region lives here for the editor's whole life, so the
  * menu's first announcement is read.
@@ -68,7 +71,10 @@ export function SlashMenuHost({ editor = null }: SurfaceProps) {
 
   useEffect(() => {
     if (loaded) return;
-    const load = () => loadSlashMenu().then(setLoaded, () => undefined);
+    const load = () =>
+      loadSlashMenu()
+        .catch(loadSlashMenu)
+        .then(setLoaded, () => undefined);
     if (open) load();
     else (window.requestIdleCallback ?? setTimeout)(load);
   }, [open]);

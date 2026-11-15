@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phone status pill clear of the footer chips
+
+CSS in the lazy phone bar chunk, plus a slash menu load retry that adds
+3 B gzipped to the editor chunk; the palette's first Alt+/ is untouched.
+Nothing to do when deploying.
+
+#### Fixed
+- On a phone the status pill (a refused "/" pick, a removed format's Undo,
+  an unavailable cell's reason) covered the presence chip and the
+  Discord, GitHub and Privacy chips: it spans the bar's width 8 px above
+  it, in the chips' band. The chips now hide while a pill shows on the
+  bar, as they already did for the selection bar, and come back when it
+  closes (design pass §5).
+- After the "/" menu's chunk failed to load, a "/" typed while that
+  failed fetch was still settling (the runtime fetches a failed chunk once
+  more, a moment later) never opened the menu, even once the chunk could
+  load. A failed load is now fetched once more at once.
+
 ### Toolbar roving skips Base UI focus guards
 
 The toolbar's roving tabindex no longer takes over the focus guards Base
