@@ -207,6 +207,90 @@ describe("Toolbar roving tabindex", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("C");
   });
 
+  describe("Base UI focus guards (an open popup)", () => {
+    const guard = (id: string) =>
+      createElement("span", {
+        key: id,
+        "data-testid": id,
+        "data-base-ui-focus-guard": "",
+        tabIndex: 0,
+      });
+    const guardsOf = (container: HTMLElement) =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>("[data-base-ui-focus-guard]"),
+      ).map((el) => ({
+        tabindex: el.getAttribute("tabindex"),
+        item: el.hasAttribute("data-toolbar-item"),
+      }));
+    const untouched = { tabindex: "0", item: false };
+
+    it("are never collected, stamped or roved onto", async () => {
+      const container = mountWith([
+        button("A"),
+        guard("pre"),
+        button("B"),
+        guard("post"),
+        button("C"),
+      ]);
+      await settle();
+      act(() => byLabel(container, "B")?.focus());
+      await settle();
+      const { collectToolbarItems } = await import("@/components/ui/toolbar");
+      const toolbar = container.querySelector<HTMLElement>('[role="toolbar"]');
+      expect(
+        toolbar &&
+          collectToolbarItems(toolbar).map((el) =>
+            el.getAttribute("aria-label"),
+          ),
+      ).toEqual(["A", "B", "C"]);
+      expect(guardsOf(container)).toEqual([untouched, untouched]);
+      keydown("ArrowRight");
+      expect(document.activeElement?.getAttribute("aria-label")).toBe("C");
+      keydown("ArrowLeft");
+      keydown("ArrowLeft");
+      expect(document.activeElement?.getAttribute("aria-label")).toBe("A");
+      expect(guardsOf(container)).toEqual([untouched, untouched]);
+    });
+
+    it("keep tabindex 0 when they mount while focus is in the popup", async () => {
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      mounted.push({ root, container });
+      const render = (open: boolean) =>
+        act(() => {
+          root.render(
+            createElement(
+              Toolbar,
+              null,
+              button("A"),
+              open ? guard("pre") : null,
+              button("B"),
+              open ? guard("post") : null,
+            ),
+          );
+        });
+      render(false);
+      await settle();
+      // Focus in a portalled popup: the fast path stamps new items only.
+      input.focus();
+      render(true);
+      await settle();
+      expect(guardsOf(container)).toEqual([untouched, untouched]);
+      expect(tabindexes(container, ["A", "B"])).toEqual(["0", "-1"]);
+      // A tabindex change on a guard is Base UI's: never re-stamped.
+      const pre = container.querySelector<HTMLElement>('[data-testid="pre"]');
+      act(() => pre?.setAttribute("tabindex", "-1"));
+      await settle();
+      act(() => pre?.setAttribute("tabindex", "0"));
+      await settle();
+      expect(guardsOf(container)).toEqual([untouched, untouched]);
+      input.remove();
+    });
+  });
+
   it("calls onEscape for Esc on an item", async () => {
     let escaped = 0;
     const container = mountWith([button("A")], {

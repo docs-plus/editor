@@ -30,7 +30,14 @@ interface ToolbarProps extends BaseProps {
 const ITEM_SELECTOR =
   'button, [role="button"], [tabindex="0"], [data-toolbar-item]';
 const ROVING_GROUP_SELECTOR = "[data-roving-group]";
-const SKIP_SELECTOR = "[data-roving-skip], [hidden]";
+/**
+ * Base UI's focus guards: `tabindex="0"` spans it renders around an open
+ * popup's trigger and portal, which route Tab into and out of the popup.
+ * Never roving items: an arrow onto one would close the popup and throw
+ * focus out of the toolbar, and their `tabindex` is Base UI's to own.
+ */
+const FOCUS_GUARD_SELECTOR = "[data-base-ui-focus-guard]";
+const SKIP_SELECTOR = `[data-roving-skip], [hidden], ${FOCUS_GUARD_SELECTOR}`;
 const MOVES: Record<string, (current: number, last: number) => number> = {
   ArrowRight: (current) => current + 1,
   ArrowLeft: (current) => current - 1,
@@ -132,6 +139,7 @@ function useRovingTabindex(toolbarRef: React.RefObject<HTMLDivElement | null>) {
     /** Marks items mounted while focus is elsewhere: no layout reads. */
     const stampInactive = (el: Element) => {
       if (!(el instanceof HTMLElement) || el === stop) return;
+      if (el.matches(FOCUS_GUARD_SELECTOR)) return;
       if (el.closest(ROVING_GROUP_SELECTOR)) return;
       setTabIndex(el, "-1");
     };
