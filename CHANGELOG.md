@@ -9,6 +9,28 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Paint format pressed before the formatting tools load
+
+No schema or protocol change; no Deploy note. The editor chunk grows by
+10 B (the shared "Couldn’t load formatting tools." string); the palette's
+first Alt+/ is unchanged (20,475 B).
+
+#### Fixed
+- The Paint format brush (selection bubble and phone selection cells)
+  pressed before the lazy formatting engine had loaded did nothing
+  visible, and the press was dropped as soon as the user selected the
+  text to paint: early actions run only if the selection has not moved,
+  and for the brush the next selection is the point. The brush now shows
+  pressed at once, with the copy cursor and the pill, keeps the text it
+  was pressed on (following edits, a collaborator's too), and once the
+  engine lands arms on that text and paints a mouse selection made
+  meanwhile (on touch, the second tap) if it is still the selection then.
+  As when armed, the mouse selection is read a frame after the pointer-up
+  and only a non-empty one counts: a plain click then Shift+arrows only
+  arms, and the keyboard selection takes the brush or ⌘⌥V. A second press
+  on the same text or Esc cancels; a failed load says so with Retry.
+  Other early actions still run only on an unmoved selection.
+
 ### No colour preview over inline code
 
 The hover preview of a colour swatch now shows only what applying does.

@@ -50,3 +50,24 @@ export async function interceptChunk(
     await page.unroute(CHUNKS, handler);
   };
 }
+
+/**
+ * Holds the chunk that defines `marker` until `release()`; `restore()`
+ * waits until it has been served. Call before load, so the editor's own
+ * preload waits too.
+ */
+export async function holdChunk(page: Page, marker: string) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const restore = await interceptChunk(
+    page,
+    marker,
+    async (route, response) => {
+      await held;
+      await route.fulfill({ response });
+    },
+  );
+  return { release, restore };
+}
