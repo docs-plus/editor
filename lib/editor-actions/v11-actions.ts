@@ -91,8 +91,16 @@ export interface V11Engine {
   paint: {
     isPainting(editor: Editor): boolean;
     subscribe(listener: () => void): () => void;
-    /** Arms; armed, applies to a new selection or cancels. */
-    toggle(editor: Editor, touch?: boolean): boolean;
+    /**
+     * Arms (on `source` instead of the selection when given: a brush
+     * pressed before the engine landed); armed, applies to a new
+     * selection or cancels.
+     */
+    toggle(
+      editor: Editor,
+      touch?: boolean,
+      source?: { from: number; to: number },
+    ): boolean;
   };
 }
 
@@ -127,9 +135,13 @@ export function loadV11Engine(): Promise<V11Engine> {
   return loading;
 }
 
+/** The pill when the engine chunk cannot load (offline, a replaced chunk). */
+export const ENGINE_LOAD_FAILED = "Couldn’t load formatting tools.";
+
 /**
  * Runs `run` now when the engine is in; otherwise once it lands, if the
- * selection has not moved. Loading itself is never shown (design pass,
+ * selection has not moved (Paint format's brushes keep a press across a
+ * move instead: `paint-pending.ts`). Loading itself is never shown (design pass,
  * principle 4); a failed load (offline, a replaced chunk) says so on the
  * pill with Retry, which tries again (§5).
  */
@@ -144,7 +156,7 @@ export function runWithEngine(editor: Editor, run: () => void): void {
       if (!editor.isDestroyed && editor.state.selection.eq(selection)) run();
     },
     () =>
-      announceLater("Couldn’t load formatting tools.", {
+      announceLater(ENGINE_LOAD_FAILED, {
         action: { label: "Retry", run: () => runWithEngine(editor, run) },
       }),
   );

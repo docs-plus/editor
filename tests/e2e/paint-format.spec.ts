@@ -1,12 +1,17 @@
 /**
  * Smart toolbar design pass (§1–5) on desktop: the bubble's Paint format
  * brush (mouse, keyboard, Esc), Repeat with nothing remembered, the
- * status pill, and Your formats in the text style dropdown. Touch Paint
- * format and the phone pill are in `mobile-bar.spec.ts`.
+ * status pill, a brush click before the lazy engine lands, and Your
+ * formats in the text style dropdown. Touch Paint format and the phone
+ * pill are in `mobile-bar.spec.ts`.
  */
+import { mkdirSync } from "node:fs";
+
 import { expect, type Page, test } from "@playwright/test";
 
+import { setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
+import { CHUNK_MARKERS, holdChunk } from "./helpers/lazy-chunk";
 
 const text = (value: string, marks?: unknown[]) => ({
   type: "text",
@@ -460,6 +465,199 @@ test.describe("Paint format", () => {
     await expect
       .poll(() => marksOf(page, "target"))
       .toEqual(["bold", "highlight"]);
+  });
+});
+
+/**
+ * The brush clicked before the lazy engine has landed: pressed at once,
+ * and the next selection is painted with what was under the click once
+ * it lands.
+ */
+test.describe("Paint format before the engine lands", () => {
+  const BOLD_YELLOW = ["bold", "highlight"];
+
+  test("pressed at once; a drag made while it loads is painted when it lands", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(pill(page)).toHaveText("Select text to paint · Esc to cancel");
+    await expect(page.locator(".document-editor-content")).toHaveClass(
+      /is-painting/,
+    );
+
+    await dragSelect(page, "target");
+    // The bubble follows the new selection, brush still pressed.
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    expect(await marksOf(page, "target")).toEqual([]);
+
+    engine.release();
+    await expect.poll(() => marksOf(page, "target")).toEqual(BOLD_YELLOW);
+    expect(await marksOf(page, "source")).toEqual(BOLD_YELLOW);
+    await expect(pill(page)).toHaveText("Formatting applied");
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".document-editor-content")).not.toHaveClass(
+      /is-painting/,
+    );
+    await engine.restore();
+  });
+
+  test("the picked-up range follows edits made while it loads", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    // A plain paragraph before the source's: an unmapped range would now
+    // cover "plain words" and paint plain.
+    const { from } = await rangeOf(page, "source");
+    await page.evaluate((at) => {
+      window.__tiptap_editor?.commands.insertContentAt(at - 1, {
+        type: "paragraph",
+        content: [{ type: "text", text: "plain words" }],
+      });
+    }, from);
+    expect((await rangeOf(page, "source")).from).toBeGreaterThan(from + 6);
+    await dragSelect(page, "target");
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+
+    engine.release();
+    await expect.poll(() => marksOf(page, "target")).toEqual(BOLD_YELLOW);
+    expect(await marksOf(page, "plain words")).toEqual([]);
+    await engine.restore();
+  });
+
+  test("a second click or Esc while it loads cancels; nothing is painted", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(pill(page)).toHaveCount(0);
+
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".document-editor-content")).not.toHaveClass(
+      /is-painting/,
+    );
+
+    await dragSelect(page, "target");
+    // `v11-engine.ts` fires this as it installs.
+    await page.evaluate(() => {
+      document.documentElement.dataset.engineLanded = "no";
+      window.addEventListener("tinydocy:v11-engine", () => {
+        document.documentElement.dataset.engineLanded = "yes";
+      });
+    });
+    engine.release();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-engine-landed",
+      "yes",
+    );
+    await engine.restore();
+    // A frame for anything queued on the landing.
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(resolve)),
+    );
+    expect(await marksOf(page, "target")).toEqual([]);
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("selecting by keyboard while it loads, then ⌘⌥V, paints", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+    await select(page, "target");
+    await page.keyboard.press(repeatKey);
+    engine.release();
+    await expect.poll(() => marksOf(page, "target")).toEqual(BOLD_YELLOW);
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
+    await engine.restore();
+  });
+});
+
+/**
+ * Design-review screenshots of an early brush click (engine chunk held),
+ * at 1440 (bubble, mouse) and 375 (phone cells, touch), light and dark:
+ * right after the click, after selecting the target, and once it lands.
+ * `PAINT_EARLY_SCREENS_DIR=<dir>` turns them on.
+ */
+const EARLY_SCREENS = process.env.PAINT_EARLY_SCREENS_DIR;
+
+async function shootEarly(
+  page: Page,
+  name: string,
+  { touch }: { touch: boolean },
+) {
+  if (!EARLY_SCREENS) return;
+  mkdirSync(EARLY_SCREENS, { recursive: true });
+  for (const theme of ["light", "dark"] as const) {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await setTheme(page, theme);
+    await openDoc(page);
+    await page.addStyleTag({
+      content: "nextjs-portal { display: none !important; }",
+    });
+    const shot = async (state: string) => {
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: `${EARLY_SCREENS}/${name}-${state}-${theme}.png`,
+      });
+    };
+    await select(page, "source");
+    const brushNow = page
+      .getByRole("toolbar", { name: "Selection formatting" })
+      .getByRole("button", { name: "Paint format" });
+    if (touch) await brushNow.tap();
+    else await brushNow.click();
+    await shot("1-clicked");
+    if (touch) {
+      await select(page, "target");
+      await brushNow.tap();
+    } else {
+      await dragSelect(page, "target");
+    }
+    await shot("2-target-selected");
+    engine.release();
+    await engine.restore();
+    await shot("3-landed");
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+}
+
+test.describe("early brush screenshots (1440)", () => {
+  test.skip(!EARLY_SCREENS, "PAINT_EARLY_SCREENS_DIR only");
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test("bubble", async ({ page }) => {
+    await shootEarly(page, "1440-bubble", { touch: false });
+  });
+});
+
+test.describe("early brush screenshots (375)", () => {
+  test.skip(!EARLY_SCREENS, "PAINT_EARLY_SCREENS_DIR only");
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 375, height: 812 },
+  });
+  test("phone cells", async ({ page }) => {
+    await shootEarly(page, "375-phone", { touch: true });
   });
 });
 

@@ -10,6 +10,7 @@ import {
   openToolbarTestDoc,
   setTheme,
 } from "./helpers/a11y";
+import { CHUNK_MARKERS, holdChunk } from "./helpers/lazy-chunk";
 
 const PHONE = { width: 390, height: 844 };
 const SCREENS = ".superpowers/screens-r2-phone";
@@ -726,6 +727,38 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect.poll(() => lastMark(page, "italic")).toBe(true);
     await expect(armed).toHaveAttribute("aria-pressed", "false");
     await expect(pill).toHaveText("Formatting applied");
+  });
+
+  test("Paint format tapped before the engine lands: pressed at once, the second tap paints once it lands", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await selectNewParagraph(page, "alpha", { keepSelectionCells: true });
+    await selectionBar(page)
+      .getByRole("button", { name: "Italic", exact: true })
+      .tap();
+    expect(await lastMark(page, "italic")).toBe(true);
+    const brush = selectionBar(page).getByRole("button", {
+      name: "Paint format",
+    });
+    await brush.tap();
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    const pill = page.locator("[data-status-pill]");
+    await expect(pill).toHaveText("Select text, then tap the brush again");
+
+    // A new paragraph (an edit) and selection while it loads.
+    await selectText(page, "beta");
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    await brush.tap();
+    await expect(brush).toHaveAttribute("aria-pressed", "true");
+    expect(await lastMark(page, "italic")).toBeNull();
+
+    engine.release();
+    await expect.poll(() => lastMark(page, "italic")).toBe(true);
+    await expect(brush).toHaveAttribute("aria-pressed", "false");
+    await expect(pill).toHaveText("Formatting applied");
+    await engine.restore();
   });
 
   test("a tap on an unavailable cell says why on the pill", async ({
