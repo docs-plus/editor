@@ -1,9 +1,16 @@
 /**
  * Phone bar follow-ups (spec §4.7, contract §10 A6): the context slot cell
  * and its width rules, the safe areas, swipe down to close the "Text
- * format" sheet, and List re-taps. Every case runs as a touch phone.
+ * format" sheet, List re-taps and keyboard focus in the sheet's Your
+ * formats. Every case runs as a touch phone.
  */
-import { type CDPSession, expect, type Page, test } from "@playwright/test";
+import {
+  type CDPSession,
+  expect,
+  type Locator,
+  type Page,
+  test,
+} from "@playwright/test";
 
 import {
   expectNoSeriousA11yViolations,
@@ -728,4 +735,157 @@ test("List: re-tapping the checked type keeps the list, like the row", async ({
   await list.tap();
   await menu.getByRole("menuitemradio", { name: /numbered|ordered/i }).tap();
   await expect.poll(listType).toBe("orderedList");
+});
+
+test.describe("Your formats keep keyboard focus in the sheet", () => {
+  const FORMATS = [
+    { id: "fnote", name: "Note", bundle: { italic: true } },
+    { id: "fwarn", name: "Warning", bundle: { bold: true } },
+    { id: "ftip", name: "Tip", bundle: { underline: true } },
+  ];
+
+  const yourFormats = (page: Page) =>
+    sheet(page).getByRole("region", { name: "Your formats" });
+  const removeList = (page: Page) =>
+    yourFormats(page).getByRole("list", { name: "Remove a format" });
+  const removeButton = (page: Page, name: string) =>
+    removeList(page).getByRole("button", { name: `Remove ${name}` });
+  const pill = (page: Page) => page.locator('[data-status-pill="phone"]');
+
+  /** Activates `button` from a hardware keyboard. */
+  async function pressOn(page: Page, button: Locator) {
+    await button.focus();
+    await expect(button).toBeFocused();
+    await page.keyboard.press("Enter");
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((formats) => {
+      localStorage.setItem(
+        "tinydocy-formats",
+        JSON.stringify({ v: 1, formats }),
+      );
+    }, FORMATS);
+    await openDoc(page);
+    await openSheet(page);
+    const toggle = yourFormats(page).getByRole("button", {
+      name: "Remove a format",
+    });
+    await pressOn(page, toggle);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("Remove moves to the next format, then the previous, then the heading", async ({
+    page,
+  }) => {
+    await pressOn(page, removeButton(page, "Warning"));
+    await expect(removeButton(page, "Warning")).toHaveCount(0);
+    await expect(removeButton(page, "Tip")).toBeFocused();
+    await expect(pill(page)).toContainText("Removed ‘Warning’");
+    // The last one: back to the one before it.
+    await page.keyboard.press("Enter");
+    await expect(removeButton(page, "Tip")).toHaveCount(0);
+    await expect(removeButton(page, "Note")).toBeFocused();
+    // The list empties: the section's heading keeps the place.
+    await page.keyboard.press("Enter");
+    await expect(removeList(page)).toHaveCount(0);
+    await expect(
+      yourFormats(page).getByRole("heading", { name: "Your formats" }),
+    ).toBeFocused();
+    await expect(pill(page)).toContainText("Removed ‘Note’");
+    await expectNoSeriousA11yViolations(page, ["[data-format-sheet]"]);
+  });
+
+  test("Restore ‘X’ moves to the restored format", async ({ page }) => {
+    await pressOn(page, removeButton(page, "Warning"));
+    await expect(removeButton(page, "Tip")).toBeFocused();
+    const restore = yourFormats(page).getByRole("button", {
+      name: "Restore ‘Warning’",
+    });
+    await pressOn(page, restore);
+    await expect(restore).toHaveCount(0);
+    await expect(
+      yourFormats(page).getByRole("button", { name: "Warning", exact: true }),
+    ).toBeFocused();
+    await expect(pill(page)).toContainText("Restored ‘Warning’");
+  });
+
+  test("a tap leaves focus where it was", async ({ page }) => {
+    const before = await page.evaluate(() => {
+      document.activeElement?.setAttribute("data-focus-before", "");
+      return document.activeElement?.tagName;
+    });
+    expect(before).not.toBe("BODY");
+    await removeButton(page, "Note").tap();
+    const restore = yourFormats(page).getByRole("button", {
+      name: "Restore ‘Note’",
+    });
+    await restore.tap();
+    await expect(restore).toHaveCount(0);
+    await expect(
+      yourFormats(page).getByRole("button", { name: "Note", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("[data-focus-before]")).toBeFocused();
+  });
+});
+
+test("from the Save dialog's cap link, a removal and Restore keep focus", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const formats = Array.from({ length: 20 }, (_, i) => ({
+      id: `f${i}`,
+      name: `Format ${i}`,
+      bundle: { bold: true },
+    }));
+    localStorage.setItem("tinydocy-formats", JSON.stringify({ v: 1, formats }));
+  });
+  await openDoc(page);
+  // Bold text selected, so Save is available and stops at the cap.
+  await page.evaluate(() => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    const from = editor.state.doc.content.size;
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(from, {
+        type: "paragraph",
+        content: [{ type: "text", text: "alpha", marks: [{ type: "bold" }] }],
+      })
+      .run();
+    editor.commands.setTextSelection({ from: from + 1, to: from + 6 });
+  });
+  const selectionBar = page.getByRole("toolbar", {
+    name: "Selection formatting",
+  });
+  await selectionBar.getByRole("button", { name: "Back to all tools" }).tap();
+  await expect(bar(page)).toBeVisible();
+  await openSheet(page);
+  const formats = sheet(page).getByRole("region", { name: "Your formats" });
+  await formats
+    .getByRole("button", { name: "Save selection as format…" })
+    .tap();
+  const palette = page.locator("[data-command-palette]");
+  await expect(palette.locator("input")).toBeFocused();
+  await palette.locator("input").fill("Another");
+  await palette.getByRole("button", { name: "Remove a format" }).tap();
+  await expect(palette).toHaveCount(0);
+  const list = formats.getByRole("list", { name: "Remove a format" });
+  const first = list.getByRole("button", { name: "Remove Format 0" });
+  await expect(first).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(first).toHaveCount(0);
+  await expect(
+    list.getByRole("button", { name: "Remove Format 1", exact: true }),
+  ).toBeFocused();
+  const restore = formats.getByRole("button", { name: "Restore ‘Format 0’" });
+  await restore.focus();
+  await expect(restore).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(restore).toHaveCount(0);
+  // The first row comes back, but the list's opening focus does not fire again.
+  await expect(
+    formats.getByRole("button", { name: "Format 0", exact: true }),
+  ).toBeFocused();
 });

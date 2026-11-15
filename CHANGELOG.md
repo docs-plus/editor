@@ -31,6 +31,152 @@ first Alt+/ is unchanged (20,475 B).
   on the same text or Esc cancels; a failed load says so with Retry.
   Other early actions still run only on an unmoved selection.
 
+### No colour preview over inline code
+
+The hover preview of a colour swatch now shows only what applying does.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+109 B, to +19,628 B of the 23.5 KB budget (4,436 B left); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- Resting on a text colour or highlight swatch painted the colour over
+  inline code and code blocks in the selection, although applying never
+  colours them (inline code excludes every mark; a code block allows
+  none). The preview now skips the text the mark cannot go on, decided by
+  the editor schema the same way applying is, so that text keeps its
+  selection tint. `setActionPreview` takes `{ attrs, mark }`.
+
+### Phone sheet: Remove and Restore keep keyboard focus
+
+In the phone "Text format" sheet, Remove a format and "Restore ‘X’"
+unmounted the button that had keyboard focus, which fell to the sheet
+itself. No schema or protocol change; no Deploy note. The editor chunk
+measures 1 B more (build noise: only lazy phone-bar code changed); the
+palette's first Alt+/ is untouched.
+
+#### Fixed
+- After a remove from a hardware keyboard, focus moves to the next
+  remove button (the previous one after the last), or to the "Your
+  formats" heading once the list is empty, with the buttons' focus ring.
+- After "Restore ‘X’", focus moves to the restored format's button.
+- Opening the sheet at its Remove list (the Save dialog's cap link)
+  focuses the first remove button once; before, every new first row
+  took focus again, e.g. after a restore.
+- Taps leave focus where it was, and the status pill's announcements are
+  unchanged.
+
+### Phone status pill clear of the footer chips
+
+CSS only, in the lazy phone bar chunk: the editor chunk and the palette's
+first Alt+/ are untouched. Nothing to do when deploying.
+
+#### Fixed
+- On a phone the status pill (a refused "/" pick, a removed format's Undo,
+  an unavailable cell's reason) covered the presence chip and the
+  Discord, GitHub and Privacy chips: it spans the bar's width 8 px above
+  it, in the chips' band. The chips now hide while a pill shows on the
+  bar, as they already did for the selection bar, and come back when it
+  closes (design pass §5).
+
+### Toolbar roving skips Base UI focus guards
+
+The toolbar's roving tabindex no longer takes over the focus guards Base
+UI renders around an open menu or popover's trigger. No schema or
+protocol change; no Deploy note. The editor chunk grows by 25 B; the
+palette's first Alt+/ is untouched (it does not load the toolbar).
+
+#### Fixed
+- With a menu open and focus back on its trigger (a screen reader's
+  cursor can do this), ArrowRight closed the menu and threw focus out of
+  the toolbar into the document: the toolbar counted Base UI's
+  `tabindex="0"` guards as items, stamped them `tabindex="-1"` and
+  `data-toolbar-item`, and roved onto them. It now skips them, in every
+  engine (on Safari they also carry `role="button"`), and never rewrites
+  their `tabindex`. Tab and Shift+Tab out of an open menu, and from its
+  trigger, behave as before.
+
+#### Added
+- `toolbar-focus-guards.spec.ts`: the guards keep `tabindex="0"` and no
+  `data-toolbar-item` with the text style and list menus open; Tab and
+  Shift+Tab out of an open menu and from its trigger; arrows from the
+  trigger of an open menu reach the same items as with it closed.
+
+### Filtered sections re-fold after collaborator edits
+
+With a heading filter applied, the folds now follow edits that change
+which sections match, such as a collaborator renaming or adding a heading.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+198 B (gzip, measured against `main` on the same machine); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- A heading filter folded the unmatched sections only when its words or
+  mode changed. A collaborator renaming a heading so it now matches (or no
+  longer matches), or adding a section, left the folds stale. Now, 250 ms
+  after such an edit (as often as the outline rebuilds), the filter
+  unfolds the sections that started to match and folds the ones that
+  stopped matching. Folds you set yourself stay as they are, the section
+  holding your caret is never folded, and nothing moves while you type a
+  new filter word.
+- Pressing Enter within 250 ms of typing a filter word committed it, but
+  the word's pending preview landed afterwards and stayed applied. Closing
+  the filter bar or clearing the filters had the same race. A pending
+  preview is now dropped on commit, close and clear.
+
+#### Added
+- `tests/e2e/filter-collab.spec.ts`: a collaborator's rename unfolds the
+  section on a filtered reader's screen, and a section they add that does
+  not match arrives folded.
+
+### A refused "/" pick puts the query back in the right place
+
+No schema or protocol change; no Deploy note. The editor chunk and the
+palette's first Alt+/ are unchanged (0 B); the "/" menu's chunk grows by
+224 B, to 5,784 B of its 6 KB budget.
+
+#### Fixed
+- When a "/" menu pick was refused after its "/query" had been removed
+  (the run declined, or the document changed under it), the text went
+  back at the position it had before the pick, ignoring anything
+  dispatched in between: a wrap in a quote or a paragraph added above
+  left "/query" in the wrong block and the caret one character off. The
+  position is now mapped through every change made meanwhile, in the
+  order they applied; nothing is put back when the line itself is gone.
+
+### Filter links carry at most 8 words
+
+A `?filter=` link applies on load, and each of its words is matched
+against every section, then again on every edit, so a crafted link with
+thousands of words could stall the reader's tab. No schema or protocol
+change; no Deploy note. The editor chunk goes from +19,519 B to +19,595 B
+of the 23.5 KB budget (4,469 B left); the palette's first Alt+/ is
+untouched (20,475 B).
+
+#### Security
+- A filter link keeps its first 8 distinct words, each cut to 64
+  characters (never inside an emoji), and drops the rest; the URL then
+  shows only the words applied. Real filters are a few short words, so
+  the cap bounds the matching work at 8 × 64 characters per section
+  (`MAX_FILTER_WORDS`, `MAX_FILTER_WORD_LENGTH` in
+  `extensions/heading-filter/helpers/filter-url.ts`). Filters added in
+  the filter bar are not capped.
+
+### Guardrail refusals without a stack trace
+
+Server only; the editor chunk and the palette's first Alt+/ do not change.
+Nothing to do when deploying beyond the usual Hocus restart.
+
+#### Fixed
+- Every guardrail refusal (`document_deleted`, `invalid_document_name`,
+  `ws_connection_limit_exceeded`, `doc_creation_rate_limit_exceeded`,
+  `max_total_documents_exceeded`) printed a Bun code frame and an
+  `[onConnect]` or `[onLoadDocument]` hook error to the Hocus error log next
+  to its `ws_guardrail_rejected` abuse line: emptying `.stack` does not stop
+  Bun's code frame. Hooks now throw a plain `{ reason }` value
+  (`guardrailRefusal()` in `lib/security/guardrail-refusal.ts`), as
+  outdated-client refusals already do, so each refusal writes only its abuse
+  line. Clients get the same reasons and the abuse lines are unchanged.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
