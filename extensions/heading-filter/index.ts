@@ -8,7 +8,10 @@ export type {
   HeadingFilterMeta,
   HeadingFilterState,
 } from "./heading-filter-plugin";
-export { headingFilterPluginKey } from "./heading-filter-plugin";
+export {
+  FILTER_REFOLD_MS,
+  headingFilterPluginKey,
+} from "./heading-filter-plugin";
 export {
   decodeFilterParams,
   readFilterUrl,
