@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { loadV11Engine } from "@/lib/editor-actions/v11-actions";
 import { CircleAlertIcon } from "@/lib/icons";
+import { stylesApplied } from "@/lib/styles-applied";
 
 import { prefetchMenuBodies } from "./lazy-menu";
 
@@ -139,14 +140,21 @@ export class SurfaceBoundary extends Component<
  * Retry, or the next mount, fetches the chunk again. Swapping any earlier
  * (in the rejection) would make React's retry render start a new fetch at
  * once, in a loop. Retry re-renders this wrapper as well as the boundary:
- * the boundary's children were made from the rejected `lazy()`.
+ * the boundary's children were made from the rejected `lazy()`. The
+ * surface renders once its CSS applies (`stylesApplied`), so Safari never
+ * shows it unstyled.
  */
 export function lazySurface<P extends object>(
   load: () => Promise<ComponentType<P>>,
   fallback?: ReactNode,
   name?: string | ((props: P) => string),
 ) {
-  const make = () => lazy(() => load().then((loaded) => ({ default: loaded })));
+  const make = () =>
+    lazy(() =>
+      load().then((loaded) =>
+        stylesApplied().then(() => ({ default: loaded })),
+      ),
+    );
   let Lazy = make();
   const swap = () => {
     Lazy = make();

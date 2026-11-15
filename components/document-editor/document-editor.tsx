@@ -67,6 +67,7 @@ import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
+import { stylesApplied } from "@/lib/styles-applied";
 import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
@@ -102,11 +103,12 @@ const getServerGuardState = (): SchemaGuardState => "ok";
 /**
  * The phone bar and its Aa sheet are one lazy chunk (contract A9): only
  * phones (< 768px) render it, so desktop never fetches it. Its menu cells
- * (`PhoneMenuCells`) come from here, out of the editor chunk.
+ * (`PhoneMenuCells`) come from here, out of the editor chunk. It renders
+ * once its CSS applies, so Safari never shows it unstyled.
  */
 const MobileToolbarContent = lazy(() =>
-  import("@/components/document-editor/mobile-toolbar-content").then(
-    (module) => ({ default: module.MobileToolbarContent }),
+  import("@/components/document-editor/mobile-toolbar-content").then((module) =>
+    stylesApplied().then(() => ({ default: module.MobileToolbarContent })),
   ),
 );
 
