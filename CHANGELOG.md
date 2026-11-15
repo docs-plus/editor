@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### No colour preview over inline code
+
+The hover preview of a colour swatch now shows only what applying does.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+109 B, to +19,628 B of the 23.5 KB budget (4,436 B left); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- Resting on a text colour or highlight swatch painted the colour over
+  inline code and code blocks in the selection, although applying never
+  colours them (inline code excludes every mark; a code block allows
+  none). The preview now skips the text the mark cannot go on, decided by
+  the editor schema the same way applying is, so that text keeps its
+  selection tint. `setActionPreview` takes `{ attrs, mark }`.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
