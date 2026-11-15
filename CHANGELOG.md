@@ -9,6 +9,50 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Deploy workflow
+
+Production now deploys through a manual GitHub workflow,
+`.github/workflows/deploy.yml`. `gh workflow run deploy.yml` deploys the tip
+of `main`; `-f ref=<sha>` deploys a specific commit of `main`.
+
+- **Checks before deploying.** The workflow refuses a commit unless it is on
+  `main` and its CI run on `main` passed, waiting for that run if needed. It
+  never checks out or runs repository code on the runner.
+- **SSH.** It connects to the host with strict host-key checking. The key's
+  `authorized_keys` entry is a forced command, so the key can only run
+  `scripts/deploy.sh`.
+- **On the host, `scripts/deploy.sh`:**
+  - accepts only a full SHA on `origin/main`, never moves backwards, and
+    refuses a checkout with local changes;
+  - builds Next.js in a second checkout while the site keeps serving;
+  - restarts Hocus from `ecosystem.config.cjs`, then swaps `.next` (the
+    previous build stays in `.next.prev`) and restarts Next.js;
+  - puts the previous build back if Next.js does not answer within 90 s.
+- **Serialised.** One deploy at a time, by the workflow's concurrency group
+  and a lock on the host.
+- **Tests.** A unit test checks that the script refuses anything but a
+  full SHA before it runs anything.
+
+See `docs/operations/deploy-runbook.md`.
+
+#### Deploy
+
+One-time setup, done by the operator (the runbook gives the commands):
+
+- check that the host's plain SSH session finds `bun`, `git`, `flock` and
+  `curl` and can `git fetch`, and move any env the running PM2 apps have but
+  `ecosystem.config.cjs` lacks into the file first;
+- create a deploy key and add it to the host's `authorized_keys` with the
+  `restrict,command="…/scripts/deploy.sh"` prefix;
+- create the `production` environment, limited to `main`, with the
+  `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`
+  secrets (`DEPLOY_PORT` if SSH is not on 22);
+- `git pull --ff-only` once on the host, so the script exists there before
+  the first run.
+
+Production env now has to live in `ecosystem.config.cjs`, because every
+deploy restarts with `--update-env` from that file.
+
 ### Legacy highlight rewrite on in the PM2 config
 
 `ecosystem.config.cjs` now sets `HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` for

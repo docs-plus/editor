@@ -199,11 +199,17 @@ Production runs as three PM2 processes defined in `ecosystem.config.cjs`:
 Next.js on 3847, Hocuspocus on 3848, and an optional Redis on 6380. They sit
 behind a TLS-terminating reverse proxy.
 
-To deploy or update:
+To deploy, run the **Deploy** workflow after a pull request merges and CI on
+`main` is green:
 
 ```bash
-git pull && bun install --frozen-lockfile && bun run build && bunx pm2@6.0.14 restart ecosystem.config.cjs --update-env
+gh workflow run deploy.yml
 ```
+
+It SSHes to the host with a key that can only run `scripts/deploy.sh`. The
+script builds in a second checkout, restarts Hocus, swaps the build in, and
+puts the old build back if Next.js does not come up. Setup and rollback are in
+the [deploy runbook](docs/operations/deploy-runbook.md).
 
 Requirements:
 
@@ -275,6 +281,7 @@ approve pull requests" in the repository's Actions settings.
 | [Abuse guardrails runbook](docs/operations/abuse-guardrails-runbook.md) | Limits, abuse events, alerts, scheduled jobs, content takedown. |
 | [Schema rollout runbook](docs/operations/schema-rollout-runbook.md) | Client version gate, ingress allowlist, release order, rollback rules, update banners. |
 | [Service worker runbook](docs/operations/service-worker-runbook.md) | Caching rules, kill switch, deployment checks. |
+| [Deploy runbook](docs/operations/deploy-runbook.md) | The Deploy workflow, its one-time SSH setup, and rollback. |
 | [Analytics runbook](docs/operations/analytics-runbook.md) | GA4 setup, privacy settings, event list. |
 | [tests/TESTING.md](tests/TESTING.md) | Test layers and how to run them. |
 | [AGENTS.md](AGENTS.md) | Repository conventions and project facts. |
