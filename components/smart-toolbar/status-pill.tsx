@@ -29,7 +29,7 @@ const SCROLL_CONTAINER = ".document-editor-wrapper";
 const BUBBLE_ROOT = ":scope > [data-smart-bubble]";
 
 const BUBBLE_PANEL = '[data-smart-bubble][data-state="open"] .st-bubble-panel';
-/** `PAINTING_CLASS` (`paint-format.ts`, the lazy engine: never imported here). */
+/** `PAINTING_CLASS` (`paint-format-ui.ts`, kept out of this chunk). */
 const PAINTING = ".is-painting";
 const GAP = 8;
 
