@@ -8,8 +8,10 @@
  * kept here, shown at once like the armed state (pressed brush, copy
  * cursor, pill), and the picked-up range follows edits (Yjs relative
  * positions in a collaborative editor). Once the engine lands it arms on
- * that range and, if a mouse selection of other text ended meanwhile or
- * the brush was pressed again on one (touch), paints it.
+ * that range and paints the selection only if it is still the one a mouse
+ * selection of other text ended on meanwhile (read a frame after the
+ * pointer-up, as when armed) or the brush was pressed again on (touch).
+ * A caret click, or a keyboard selection, only arms.
  *
  * Only the brushes import this (lazy surface chunks), never the engine,
  * and its listeners exist only while a press is pending.
@@ -22,6 +24,7 @@ import {
   fromSessionRange,
   mapSessionRange,
   type SessionRange,
+  sameRange,
   toSessionRange,
 } from "@/extensions/repeat-formatting/relative-range";
 import { announce, dismissNotice } from "@/lib/announce";
@@ -50,11 +53,15 @@ interface Pressed {
 interface Pending extends Pressed {
   touch: boolean;
   /**
-   * Paint the selection on landing if it is other text: a mouse selection
-   * ended, or the brush was pressed again on new text (touch).
+   * The selection to paint on landing, if still selected then: other text
+   * a mouse selection ended on, or the brush was pressed again on (touch).
+   * Null (a caret click since, or none yet): landing only arms.
    */
-  apply: boolean;
-  /** A mouse button that went down in the text is still down. */
+  target: SessionRange | null;
+  /**
+   * A mouse press that went down in the text is not read yet: still down,
+   * or its pointer-up's frame has not run.
+   */
   dragging: boolean;
   /** The engine landed mid-drag: land at its pointer-up. */
   landOnUp: boolean;
@@ -154,7 +161,18 @@ function onOtherText(editor: Editor, entry: Pending): boolean {
   );
 }
 
-/** Arms on the source (gone: drops quietly), then paints if asked. */
+/** Keeps the selection as the target if it is other text, else none. */
+function keepTarget(editor: Editor, entry: Pending): void {
+  const { state } = editor;
+  entry.target = onOtherText(editor, entry)
+    ? toSessionRange(state, state.selection)
+    : null;
+}
+
+/**
+ * Arms on the source (gone: drops quietly), then paints the selection if
+ * it is still the target.
+ */
 function land(editor: Editor, entry: Pending): void {
   if (pending.get(editor) !== entry) return;
   if (entry.dragging) {
@@ -163,7 +181,11 @@ function land(editor: Editor, entry: Pending): void {
   }
   const paint = getV11Engine()?.paint;
   const range = pressedRange(editor, entry);
-  const apply = entry.apply && onOtherText(editor, entry);
+  const { state } = editor;
+  const apply =
+    entry.target !== null &&
+    sameRange(fromSessionRange(state, entry.target), state.selection) &&
+    onOtherText(editor, entry);
   clear(editor);
   if (!paint || !range || paint.isPainting(editor)) {
     dismissNotice();
@@ -184,14 +206,16 @@ function listen(editor: Editor, entry: Pending): () => void {
       event.target instanceof Node &&
       editor.view.dom.contains(event.target);
   };
+  // A frame after the pointer-up, once ProseMirror has the selection (the
+  // armed listener's timing); a landing meanwhile waits for it.
   const onPointerUp = () => {
     if (!entry.dragging) return;
-    entry.dragging = false;
-    entry.apply = true;
-    if (!entry.landOnUp) return;
-    // A frame later, once ProseMirror has the selection.
     cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => land(editor, entry));
+    frame = requestAnimationFrame(() => {
+      entry.dragging = false;
+      keepTarget(editor, entry);
+      if (entry.landOnUp) land(editor, entry);
+    });
   };
   // Esc in the text cancels; on a toolbar item or in a menu it is theirs.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -207,6 +231,9 @@ function listen(editor: Editor, entry: Pending): () => void {
   };
   const onTransaction = ({ transaction }: { transaction: Transaction }) => {
     entry.source = mapSessionRange(entry.source, transaction);
+    if (entry.target) {
+      entry.target = mapSessionRange(entry.target, transaction);
+    }
   };
   const onUpdate = () => {
     if (!editor.isEditable) cancel(editor);
@@ -235,7 +262,7 @@ function wait(editor: Editor, pressed: Pressed, touch: boolean): void {
   const entry: Pending = {
     ...pressed,
     touch,
-    apply: false,
+    target: null,
     dragging: false,
     landOnUp: false,
     stop: () => undefined,
@@ -275,7 +302,7 @@ export function pressBrush(editor: Editor, touch: boolean): void {
   const entry = pending.get(editor);
   const paint = getV11Engine()?.paint;
   if (entry) {
-    if (onOtherText(editor, entry)) entry.apply = true;
+    if (onOtherText(editor, entry)) keepTarget(editor, entry);
     else cancel(editor);
   } else if (paint) {
     paint.toggle(editor, touch);

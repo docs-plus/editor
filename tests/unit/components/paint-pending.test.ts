@@ -2,8 +2,10 @@
  * The Paint format brush pressed before the lazy engine lands
  * (`paint-pending.ts`): it keeps the pressed text across a moved
  * selection and edits, arms there once the engine lands and paints the
- * new selection when asked; a landing mid-drag waits for the pointer-up;
- * a second press on the same text and Esc cancel.
+ * new selection only if it is still the one a mouse selection ended on
+ * (a caret click then a keyboard selection only arms); a landing mid-drag
+ * waits for the pointer-up; a second press on the same text and Esc
+ * cancel.
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
@@ -75,6 +77,28 @@ function pointer(type: "pointerdown" | "pointerup", target: EventTarget) {
   );
 }
 
+/**
+ * Holds `requestAnimationFrame` callbacks until `runFrames()`. The engine
+ * import is cached here, so its promise settles at the first await: holding
+ * the pointer-up's frame lets a test move the selection after it (as a
+ * keyboard selection does a frame or more later) before the engine lands.
+ */
+const FRAME = "requestAnimationFrame";
+const frameDescriptor = Object.getOwnPropertyDescriptor(globalThis, FRAME);
+let frames: FrameRequestCallback[] = [];
+
+function holdFrames(): void {
+  Object.defineProperty(globalThis, FRAME, {
+    configurable: true,
+    writable: true,
+    value: (callback: FrameRequestCallback) => frames.push(callback),
+  });
+}
+
+function runFrames(): void {
+  for (const callback of frames.splice(0)) callback(0);
+}
+
 beforeEach(() => {
   resetBundleMemoryForTests();
   resetV11EngineForTests();
@@ -87,6 +111,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (frameDescriptor)
+    Object.defineProperty(globalThis, FRAME, frameDescriptor);
+  frames = [];
   (editor.options.element as HTMLElement).remove();
   f?.destroy();
   f = null;
@@ -140,6 +167,48 @@ describe("Paint format pressed before the engine lands", () => {
     expect(isPaintPending(editor)).toBe(true);
     expect(marksOf("world")).toEqual([]);
     pointer("pointerup", document);
+    await settle();
+    expect(isPaintPending(editor)).toBe(false);
+    expect(marksOf("world")).toEqual(["bold"]);
+  });
+
+  it("a mouse selection is painted only if still selected when it lands", async () => {
+    holdFrames();
+    pressBrush(editor, false);
+    pointer("pointerdown", editor.view.dom);
+    sel("world");
+    pointer("pointerup", document);
+    runFrames(); // the pointer-up's frame keeps "world"
+    sel("wor"); // Shift+Arrow since: not the selection the mouse made
+    installV11Engine(v11Engine);
+    await settle();
+    expect(isPaintPending(editor)).toBe(false);
+    expect(v11Engine.paint.isPainting(editor)).toBe(true);
+    expect(marksOf("world")).toEqual([]);
+  });
+
+  it("a caret click then a keyboard selection only arms; nothing is painted", async () => {
+    holdFrames();
+    pressBrush(editor, false);
+    pointer("pointerdown", editor.view.dom);
+    editor.commands.setTextSelection(editor.state.selection.to + 2);
+    pointer("pointerup", document);
+    runFrames(); // the pointer-up's frame reads a caret
+    sel("wor"); // Shift+Arrow from the caret
+    installV11Engine(v11Engine);
+    await settle();
+    expect(isPaintPending(editor)).toBe(false);
+    expect(v11Engine.paint.isPainting(editor)).toBe(true);
+    expect(marksOf("wor")).toEqual([]);
+    expect(getNotice()?.text).toBe(PAINT_PILLS.pointer);
+  });
+
+  it("a landing right after the pointer-up waits for its frame", async () => {
+    pressBrush(editor, false);
+    pointer("pointerdown", editor.view.dom);
+    sel("world");
+    pointer("pointerup", document);
+    installV11Engine(v11Engine); // lands before the pointer-up's frame
     await settle();
     expect(isPaintPending(editor)).toBe(false);
     expect(marksOf("world")).toEqual(["bold"]);

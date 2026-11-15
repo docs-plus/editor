@@ -575,6 +575,54 @@ test.describe("Paint format before the engine lands", () => {
     await expect(brush(page)).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("a click in the text then Shift+arrows while it loads only arms; nothing is painted", async ({
+    page,
+  }) => {
+    const engine = await holdChunk(page, CHUNK_MARKERS.engine);
+    await openDoc(page);
+    await select(page, "source");
+    await brush(page).click();
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+
+    // A plain click leaves a caret in "target", then the keyboard selects.
+    const { from } = await rangeOf(page, "target");
+    const at = await page.evaluate((pos) => {
+      const coords = window.__tiptap_editor?.view.coordsAtPos(pos);
+      if (!coords) throw new Error("editor missing");
+      return { x: coords.left + 1, y: (coords.top + coords.bottom) / 2 };
+    }, from + 1);
+    await page.mouse.click(at.x, at.y);
+    const selection = () =>
+      page.evaluate(() => {
+        const sel = window.__tiptap_editor?.state.selection;
+        return sel ? sel.to - sel.from : -1;
+      });
+    await expect.poll(selection).toBe(0);
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect.poll(selection).toBe(2);
+
+    engine.release();
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Picked up / }),
+    ).toBeAttached();
+    await engine.restore();
+    // A frame for anything queued on the landing.
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(resolve)),
+    );
+    const marked = await page.evaluate(() => {
+      const texts: string[] = [];
+      window.__tiptap_editor?.state.doc.descendants((node) => {
+        if (node.isText && node.marks.length > 0) texts.push(node.text ?? "");
+      });
+      return texts;
+    });
+    expect(marked).toEqual(["source"]);
+    expect(await selection()).toBe(2);
+    await expect(brush(page)).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("selecting by keyboard while it loads, then ⌘⌥V, paints", async ({
     page,
   }) => {
