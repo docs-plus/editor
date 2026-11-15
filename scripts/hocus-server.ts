@@ -37,6 +37,7 @@ import {
   WS_SOCKETS_PER_IP,
   WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
 } from "../lib/security/guardrail-config";
+import { guardrailRefusal } from "../lib/security/guardrail-refusal";
 import { DocumentGuard } from "../lib/security/hocus-document-guard";
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
@@ -77,20 +78,6 @@ function getPort(): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 1234;
   return parsed;
-}
-
-/**
- * A rejection the client sees as a reason, logged once as a structured
- * abuse event instead of a stack trace per attempt.
- */
-function reject(
-  reason: string,
-  details: Record<string, unknown>,
-): Error & { reason: string } {
-  logAbuseEvent("ws_guardrail_rejected", { reason, ...details });
-  const error = Object.assign(new Error(reason), { reason });
-  error.stack = "";
-  return error;
 }
 
 if (process.env.NODE_ENV === "production") {
@@ -159,7 +146,7 @@ const hocuspocus = new Hocuspocus({
     // Also when the document is still in memory (onLoadDocument is skipped),
     // so a reconnecting offline copy cannot reach a deleted document.
     if (isTombstoned(db, documentName)) {
-      throw reject("document_deleted", { ip, documentName });
+      throw guardrailRefusal("document_deleted", { ip, documentName });
     }
     // Outdated bundles must not write with a schema the server no longer
     // accepts. Not abuse: counted in the aggregate, never logged per attempt.
@@ -173,7 +160,7 @@ const hocuspocus = new Hocuspocus({
     }
     const decision = guardrails.canConnect(ip);
     if (!decision.allowed) {
-      throw reject(decision.reason, { ip, documentName });
+      throw guardrailRefusal(decision.reason, { ip, documentName });
     }
   },
   async connected({ requestHeaders }) {
@@ -186,13 +173,13 @@ const hocuspocus = new Hocuspocus({
   async onLoadDocument({ documentName, requestHeaders }) {
     const ip = getPinnedClientIp(requestHeaders);
     if (!isValidWsDocumentName(documentName)) {
-      throw reject("invalid_document_name", {
+      throw guardrailRefusal("invalid_document_name", {
         ip,
         documentName: documentName.slice(0, 80),
       });
     }
     if (isTombstoned(db, documentName)) {
-      throw reject("document_deleted", { ip, documentName });
+      throw guardrailRefusal("document_deleted", { ip, documentName });
     }
     if (isSystemDocumentId(documentName) || documentExists(db, documentName)) {
       return;
@@ -202,7 +189,7 @@ const hocuspocus = new Hocuspocus({
       countNonSystemDocuments(db),
     );
     if (!decision.allowed) {
-      throw reject(decision.reason, { ip, documentName });
+      throw guardrailRefusal(decision.reason, { ip, documentName });
     }
   },
   // Runs once per load, after persistence applies the stored state and before

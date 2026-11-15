@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Guardrail refusals without a stack trace
+
+Server only; the editor chunk and the palette's first Alt+/ do not change.
+Nothing to do when deploying beyond the usual Hocus restart.
+
+#### Fixed
+- Every guardrail refusal (`document_deleted`, `invalid_document_name`,
+  `ws_connection_limit_exceeded`, `doc_creation_rate_limit_exceeded`,
+  `max_total_documents_exceeded`) printed a Bun code frame and an
+  `[onConnect]` or `[onLoadDocument]` hook error to the Hocus error log next
+  to its `ws_guardrail_rejected` abuse line: emptying `.stack` does not stop
+  Bun's code frame. Hooks now throw a plain `{ reason }` value
+  (`guardrailRefusal()` in `lib/security/guardrail-refusal.ts`), as
+  outdated-client refusals already do, so each refusal writes only its abuse
+  line. Clients get the same reasons and the abuse lines are unchanged.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
