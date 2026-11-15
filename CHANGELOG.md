@@ -53,6 +53,20 @@ One-time setup, done by the operator (the runbook gives the commands):
 Production env now has to live in `ecosystem.config.cjs`, because every
 deploy restarts with `--update-env` from that file.
 
+### Legacy highlight rewrite on in the PM2 config
+
+`ecosystem.config.cjs` now sets `HOCUS_REWRITE_LEGACY_HIGHLIGHTS=1` for
+`editor-hocus`, so Hocus rewrites stored legacy highlight colours
+(`var(--tt-color-highlight-X)`) to their token as each document loads.
+Production has run with it since 2026-11-15 (set with
+`pm2 restart --update-env` and `pm2 save`); the config now matches, so
+`pm2 start` or `pm2 reload ecosystem.config.cjs` keeps it.
+
+#### Deploy
+
+No action: the running process already has the flag. The next
+`git pull` brings the config in line with it.
+
 ### Seed out of undo history; stable bubble-in-row matrix
 
 The selection bubble's "bubble-in-row matrix" e2e test failed about one
