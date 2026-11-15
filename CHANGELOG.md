@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Filter links carry at most 8 words
+
+A `?filter=` link applies on load, and each of its words is matched
+against every section, then again on every edit, so a crafted link with
+thousands of words could stall the reader's tab. No schema or protocol
+change; no Deploy note. The editor chunk goes from +19,519 B to +19,595 B
+of the 23.5 KB budget (4,469 B left); the palette's first Alt+/ is
+untouched (20,475 B).
+
+#### Security
+- A filter link keeps its first 8 distinct words, each cut to 64
+  characters (never inside an emoji), and drops the rest; the URL then
+  shows only the words applied. Real filters are a few short words, so
+  the cap bounds the matching work at 8 × 64 characters per section
+  (`MAX_FILTER_WORDS`, `MAX_FILTER_WORD_LENGTH` in
+  `extensions/heading-filter/helpers/filter-url.ts`). Filters added in
+  the filter bar are not capped.
+
 ### Guardrail refusals without a stack trace
 
 Server only; the editor chunk and the palette's first Alt+/ do not change.
