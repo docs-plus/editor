@@ -24,9 +24,12 @@ first Alt+/ is unchanged (20,475 B).
   pressed at once, with the copy cursor and the pill, keeps the text it
   was pressed on (following edits, a collaborator's too), and once the
   engine lands arms on that text and paints a mouse selection made
-  meanwhile (on touch, the second tap). A second press on the same text
-  or Esc cancels; a failed load says so with Retry. Other early actions
-  still run only on an unmoved selection.
+  meanwhile (on touch, the second tap) if it is still the selection then.
+  As when armed, the mouse selection is read a frame after the pointer-up
+  and only a non-empty one counts: a plain click then Shift+arrows only
+  arms, and the keyboard selection takes the brush or ⌘⌥V. A second press
+  on the same text or Esc cancels; a failed load says so with Retry.
+  Other early actions still run only on an unmoved selection.
 
 ### WebKit compatibility pass
 
