@@ -7,8 +7,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PreviewAttrs } from "@/extensions/action-preview";
 import {
   HIGHLIGHT_ATTR,
+  HIGHLIGHT_MARK,
   isTextColorToken,
   TEXT_COLOR_ATTR,
+  TEXT_COLOR_MARK,
 } from "@/lib/text-style-tokens";
 
 import type { Swatch } from "./swatch";
@@ -52,6 +54,15 @@ const PLAIN_COLOR = "color: var(--tt-preview-plain-color, currentColor)";
  * cell show through.
  */
 const PLAIN_BG = "background: var(--tt-preview-plain-bg, transparent)";
+
+/**
+ * The mark a swatch kind applies (or removes): the preview skips the text
+ * that mark cannot go on, such as inline code and code blocks.
+ */
+const SWATCH_MARK = {
+  text: TEXT_COLOR_MARK,
+  highlight: HIGHLIGHT_MARK,
+} as const satisfies Record<Swatch["kind"], string>;
 
 /**
  * The decoration a swatch previews. A text colour carries the real mark's
@@ -155,7 +166,9 @@ export function useSwatchPreview(editor: Editor): SwatchPreview {
       clearTimeout(timer.current);
       if (editor.isDestroyed) return;
       const attrs = swatch && canPreview(editor) && swatchPreviewAttrs(swatch);
-      editor.commands.setActionPreview(attrs || null);
+      editor.commands.setActionPreview(
+        attrs ? { attrs, mark: SWATCH_MARK[swatch.kind] } : null,
+      );
     };
     const later = (swatch: Swatch | null) => {
       clearTimeout(timer.current);
