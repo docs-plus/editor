@@ -32,6 +32,82 @@ palette's first Alt+/ is untouched (it does not load the toolbar).
   Shift+Tab out of an open menu and from its trigger; arrows from the
   trigger of an open menu reach the same items as with it closed.
 
+### Filtered sections re-fold after collaborator edits
+
+With a heading filter applied, the folds now follow edits that change
+which sections match, such as a collaborator renaming or adding a heading.
+No schema or protocol change; no Deploy note. The editor chunk grows by
+198 B (gzip, measured against `main` on the same machine); the palette's
+first Alt+/ is untouched.
+
+#### Fixed
+- A heading filter folded the unmatched sections only when its words or
+  mode changed. A collaborator renaming a heading so it now matches (or no
+  longer matches), or adding a section, left the folds stale. Now, 250 ms
+  after such an edit (as often as the outline rebuilds), the filter
+  unfolds the sections that started to match and folds the ones that
+  stopped matching. Folds you set yourself stay as they are, the section
+  holding your caret is never folded, and nothing moves while you type a
+  new filter word.
+- Pressing Enter within 250 ms of typing a filter word committed it, but
+  the word's pending preview landed afterwards and stayed applied. Closing
+  the filter bar or clearing the filters had the same race. A pending
+  preview is now dropped on commit, close and clear.
+
+#### Added
+- `tests/e2e/filter-collab.spec.ts`: a collaborator's rename unfolds the
+  section on a filtered reader's screen, and a section they add that does
+  not match arrives folded.
+
+### A refused "/" pick puts the query back in the right place
+
+No schema or protocol change; no Deploy note. The editor chunk and the
+palette's first Alt+/ are unchanged (0 B); the "/" menu's chunk grows by
+224 B, to 5,784 B of its 6 KB budget.
+
+#### Fixed
+- When a "/" menu pick was refused after its "/query" had been removed
+  (the run declined, or the document changed under it), the text went
+  back at the position it had before the pick, ignoring anything
+  dispatched in between: a wrap in a quote or a paragraph added above
+  left "/query" in the wrong block and the caret one character off. The
+  position is now mapped through every change made meanwhile, in the
+  order they applied; nothing is put back when the line itself is gone.
+
+### Filter links carry at most 8 words
+
+A `?filter=` link applies on load, and each of its words is matched
+against every section, then again on every edit, so a crafted link with
+thousands of words could stall the reader's tab. No schema or protocol
+change; no Deploy note. The editor chunk goes from +19,519 B to +19,595 B
+of the 23.5 KB budget (4,469 B left); the palette's first Alt+/ is
+untouched (20,475 B).
+
+#### Security
+- A filter link keeps its first 8 distinct words, each cut to 64
+  characters (never inside an emoji), and drops the rest; the URL then
+  shows only the words applied. Real filters are a few short words, so
+  the cap bounds the matching work at 8 × 64 characters per section
+  (`MAX_FILTER_WORDS`, `MAX_FILTER_WORD_LENGTH` in
+  `extensions/heading-filter/helpers/filter-url.ts`). Filters added in
+  the filter bar are not capped.
+
+### Guardrail refusals without a stack trace
+
+Server only; the editor chunk and the palette's first Alt+/ do not change.
+Nothing to do when deploying beyond the usual Hocus restart.
+
+#### Fixed
+- Every guardrail refusal (`document_deleted`, `invalid_document_name`,
+  `ws_connection_limit_exceeded`, `doc_creation_rate_limit_exceeded`,
+  `max_total_documents_exceeded`) printed a Bun code frame and an
+  `[onConnect]` or `[onLoadDocument]` hook error to the Hocus error log next
+  to its `ws_guardrail_rejected` abuse line: emptying `.stack` does not stop
+  Bun's code frame. Hooks now throw a plain `{ reason }` value
+  (`guardrailRefusal()` in `lib/security/guardrail-refusal.ts`), as
+  outdated-client refusals already do, so each refusal writes only its abuse
+  line. Clients get the same reasons and the abuse lines are unchanged.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's
