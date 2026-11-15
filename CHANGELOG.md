@@ -24,6 +24,40 @@ palette's first Alt+/ are unchanged (0 B); the "/" menu's chunk grows by
   position is now mapped through every change made meanwhile, in the
   order they applied; nothing is put back when the line itself is gone.
 
+### Filter links carry at most 8 words
+
+A `?filter=` link applies on load, and each of its words is matched
+against every section, then again on every edit, so a crafted link with
+thousands of words could stall the reader's tab. No schema or protocol
+change; no Deploy note. The editor chunk goes from +19,519 B to +19,595 B
+of the 23.5 KB budget (4,469 B left); the palette's first Alt+/ is
+untouched (20,475 B).
+
+#### Security
+- A filter link keeps its first 8 distinct words, each cut to 64
+  characters (never inside an emoji), and drops the rest; the URL then
+  shows only the words applied. Real filters are a few short words, so
+  the cap bounds the matching work at 8 × 64 characters per section
+  (`MAX_FILTER_WORDS`, `MAX_FILTER_WORD_LENGTH` in
+  `extensions/heading-filter/helpers/filter-url.ts`). Filters added in
+  the filter bar are not capped.
+
+### Guardrail refusals without a stack trace
+
+Server only; the editor chunk and the palette's first Alt+/ do not change.
+Nothing to do when deploying beyond the usual Hocus restart.
+
+#### Fixed
+- Every guardrail refusal (`document_deleted`, `invalid_document_name`,
+  `ws_connection_limit_exceeded`, `doc_creation_rate_limit_exceeded`,
+  `max_total_documents_exceeded`) printed a Bun code frame and an
+  `[onConnect]` or `[onLoadDocument]` hook error to the Hocus error log next
+  to its `ws_guardrail_rejected` abuse line: emptying `.stack` does not stop
+  Bun's code frame. Hooks now throw a plain `{ reason }` value
+  (`guardrailRefusal()` in `lib/security/guardrail-refusal.ts`), as
+  outdated-client refusals already do, so each refusal writes only its abuse
+  line. Clients get the same reasons and the abuse lines are unchanged.
+
 ### WebKit compatibility pass
 
 A `webkit` Playwright project runs the core editing specs in Safari's

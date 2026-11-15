@@ -24,6 +24,8 @@ export type SpawnedHocus = {
   pid: number;
   /** Everything the server wrote to stdout and stderr so far. */
   logs(): string;
+  /** What the server wrote to stderr alone (abuse events, hook errors). */
+  stderr(): string;
   /**
    * SIGTERM, then SIGKILL after `timeoutMs`; waits for exit and for the
    * output to drain, then removes the temp DB unless the caller owns it.
@@ -121,15 +123,26 @@ async function startOnce(
   void proc.exited.then(() => running.delete(proc));
 
   let output = "";
+  let errorOutput = "";
   let onOutput = () => {};
-  const drain = async (stream: ReadableStream<Uint8Array>) => {
+  const drain = async (
+    stream: ReadableStream<Uint8Array>,
+    onText?: (text: string) => void,
+  ) => {
     const decoder = new TextDecoder();
     for await (const chunk of stream) {
-      output += decoder.decode(chunk, { stream: true });
+      const text = decoder.decode(chunk, { stream: true });
+      output += text;
+      onText?.(text);
       onOutput();
     }
   };
-  const drained = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
+  const drained = Promise.all([
+    drain(proc.stdout),
+    drain(proc.stderr, (text) => {
+      errorOutput += text;
+    }),
+  ]);
 
   const ready = await new Promise<boolean>((resolve) => {
     const timer = setTimeout(() => resolve(false), READY_TIMEOUT_MS);
@@ -166,6 +179,7 @@ async function startOnce(
     dbPath,
     pid: proc.pid,
     logs: () => output,
+    stderr: () => errorOutput,
     async stop({ timeoutMs = STOP_TIMEOUT_MS } = {}) {
       if (proc.exitCode === null && proc.signalCode === null) {
         proc.kill("SIGTERM");

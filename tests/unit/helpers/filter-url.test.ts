@@ -2,9 +2,73 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 
 import {
   decodeFilterParams,
+  MAX_FILTER_WORD_LENGTH,
+  MAX_FILTER_WORDS,
   readFilterUrl,
   updateFilterUrl,
 } from "@/extensions/heading-filter";
+
+const words = (count: number, prefix = "w") =>
+  Array.from({ length: count }, (_, i) => `${prefix}${i + 1}`);
+
+describe("decodeFilterParams caps what a link can carry", () => {
+  it("keeps small limits: 8 words of 64 characters", () => {
+    expect(MAX_FILTER_WORDS).toBe(8);
+    expect(MAX_FILTER_WORD_LENGTH).toBe(64);
+  });
+
+  it("keeps only the first 8 words of a longer link", () => {
+    const result = decodeFilterParams(
+      `?filter=${words(20).join("|")}&mode=and`,
+    );
+    expect(result).toEqual({ slugs: words(8), mode: "and" });
+  });
+
+  it("keeps all of a link at the cap", () => {
+    const result = decodeFilterParams(`?filter=${words(8).join("|")}`);
+    expect(result?.slugs).toEqual(words(8));
+  });
+
+  it("does not count empty segments toward the cap", () => {
+    const raw = `||${words(8).join("||")}||extra`;
+    expect(decodeFilterParams(`?filter=${raw}`)?.slugs).toEqual(words(8));
+  });
+
+  it("does not let repeated words use up the cap", () => {
+    const raw = [...Array(50).fill("a"), "b", "a", "c"].join("|");
+    expect(decodeFilterParams(`?filter=${raw}`)?.slugs).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("cuts a word to 64 characters", () => {
+    const long = "x".repeat(100);
+    expect(decodeFilterParams(`?filter=${long}|y`)?.slugs).toEqual([
+      "x".repeat(64),
+      "y",
+    ]);
+    const exact = "z".repeat(64);
+    expect(decodeFilterParams(`?filter=${exact}`)?.slugs).toEqual([exact]);
+  });
+
+  it("measures a word after decoding, not as encoded in the link", () => {
+    // 21 × "é" is 126 encoded characters but 21 decoded ones.
+    const word = "é".repeat(21);
+    const result = decodeFilterParams(`?filter=${encodeURIComponent(word)}`);
+    expect(result?.slugs).toEqual([word]);
+  });
+
+  it("never splits a surrogate pair at the cut", () => {
+    // 63 characters, then an emoji whose two halves straddle the cap.
+    const word = `${"a".repeat(63)}😀tail`;
+    const slug = decodeFilterParams(`?filter=${encodeURIComponent(word)}`)
+      ?.slugs[0] as string;
+    expect(slug).toBe("a".repeat(63));
+    expect(() => encodeURIComponent(slug)).not.toThrow();
+  });
+});
 
 describe("decodeFilterParams", () => {
   it("valid params → correct { slugs, mode }", () => {

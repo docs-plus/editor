@@ -11,6 +11,8 @@ export type {
 export { headingFilterPluginKey } from "./heading-filter-plugin";
 export {
   decodeFilterParams,
+  MAX_FILTER_WORD_LENGTH,
+  MAX_FILTER_WORDS,
   readFilterUrl,
   updateFilterUrl,
 } from "./helpers/filter-url";
