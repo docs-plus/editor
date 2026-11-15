@@ -455,4 +455,49 @@ test.describe("lazy surface chunks", () => {
     await page.keyboard.press("Escape");
     await expect(page.locator("[data-slash-menu]")).toHaveCount(0);
   });
+
+  test("a '/' typed while a failed slash chunk is still failing loads it once it can", async ({
+    page,
+  }) => {
+    // The runtime fetches a failed chunk once more, a moment later
+    // (Turbopack's `CHUNK_LOAD_RETRY_MAX_ATTEMPTS`); that retry is held
+    // here while the chunk becomes reachable and the next "/" is typed, so
+    // the "/" joins a fetch that then fails. (Were the runtime to stop
+    // retrying, `retried` never resolves and this times out.)
+    let failing = true;
+    let fetches = 0;
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let onRetry = () => {};
+    const retried = new Promise<void>((resolve) => {
+      onRetry = resolve;
+    });
+    await page.route("**/_next/static/chunks/**", async (route) => {
+      const response = await route.fetch();
+      const slash = (await response.text()).includes(CHUNK_MARKERS.slashMenu);
+      if (!failing || !slash) return route.fulfill({ response });
+      fetches += 1;
+      if (fetches > 1) {
+        onRetry();
+        await held;
+      }
+      await route.fulfill({ status: 404 });
+    });
+    await openToolbarTestDoc(page);
+    await typeInNewParagraphAtEnd(page, "/");
+    await retried;
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Back online");
+    failing = false;
+    await page.keyboard.type(" /");
+    await expect
+      .poll(() => page.evaluate(() => window.__tiptap_editor?.getText()))
+      .toContain("Back online /");
+    release();
+    await expect(page.locator("[data-slash-menu]")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-slash-menu]")).toHaveCount(0);
+  });
 });
