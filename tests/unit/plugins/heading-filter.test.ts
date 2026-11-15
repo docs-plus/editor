@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { Extension } from "@tiptap/core";
 
 import {
+  FILTER_REFOLD_MS,
   HeadingFilter,
   headingFilterPluginKey,
 } from "@/extensions/heading-filter";
@@ -327,6 +328,143 @@ describe("HeadingFilter plugin state", () => {
     expect(stateAfter?.slugs).toEqual(stateBefore?.slugs ?? []);
     const decosAfter = stateAfter?.decos.find() ?? [];
     expect(decosAfter.length).toBe(decosBefore.length);
+    editor.destroy();
+  });
+});
+
+describe("HeadingFilter re-folds after document edits", () => {
+  type TestEditor = ReturnType<typeof createTestEditor>;
+  const wait = () => Bun.sleep(FILTER_REFOLD_MS + 50);
+  const folded = (editor: TestEditor) =>
+    headingFoldPluginKey.getState(editor.state)?.foldedIds;
+
+  function filtered(slug: string) {
+    const editor = createTestEditor({ content: FILTER_CONTENT });
+    editor.commands.commitFilter(slug);
+    return editor;
+  }
+
+  /** Replaces a heading node whole, as y-tiptap applies a remote edit. */
+  function renameHeading(editor: TestEditor, id: string, text: string) {
+    const pos = (headingPosById(editor, id) ?? 1) - 1;
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node) throw new Error(`No heading ${id}`);
+    const { schema } = editor.state;
+    editor.view.dispatch(
+      editor.state.tr.replaceWith(
+        pos,
+        pos + node.nodeSize,
+        schema.nodes.heading.create(node.attrs, schema.text(text)),
+      ),
+    );
+  }
+
+  function appendSection(editor: TestEditor, id: string, text: string) {
+    const { schema, doc } = editor.state;
+    editor.view.dispatch(
+      editor.state.tr.insert(doc.content.size, [
+        schema.nodes.heading.create(
+          { level: 2, "data-toc-id": id },
+          schema.text(text),
+        ),
+        schema.nodes.paragraph.create(null, schema.text(`${text} body`)),
+      ]),
+    );
+  }
+
+  it("unfolds a section renamed to match, after the throttle", async () => {
+    const editor = filtered("section b");
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1"]));
+
+    renameHeading(editor, "sec-a", "Section B notes");
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1"]));
+
+    await wait();
+    expect(folded(editor)).toEqual(new Set());
+    editor.destroy();
+  });
+
+  it("folds a section renamed so it no longer matches", async () => {
+    const editor = filtered("section b");
+
+    renameHeading(editor, "sec-b", "Other");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1", "sec-b"]));
+    editor.destroy();
+  });
+
+  it("folds a new section that does not match", async () => {
+    const editor = filtered("section b");
+
+    appendSection(editor, "sec-c", "Section C");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1", "sec-c"]));
+    editor.destroy();
+  });
+
+  it("keeps the reader's own folds on unrelated edits", async () => {
+    const editor = filtered("section b");
+    // The reader opens a filtered-out section and folds a matched one.
+    editor.view.dispatch(
+      editor.state.tr.setMeta(headingFoldPluginKey, {
+        type: "set",
+        ids: new Set(["sec-a1", "sec-b"]),
+        persist: false,
+      }),
+    );
+
+    appendSection(editor, "sec-c", "Section C");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a1", "sec-b", "sec-c"]));
+    editor.destroy();
+  });
+
+  it("never folds the section holding the caret", async () => {
+    const editor = filtered("section b");
+    const secB = headingPosById(editor, "sec-b") ?? 1;
+    editor.commands.setTextSelection(secB + 2);
+
+    renameHeading(editor, "sec-b", "Other");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1"]));
+
+    // Nor later, while it still does not match.
+    appendSection(editor, "sec-c", "Section C");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1", "sec-c"]));
+    editor.destroy();
+  });
+
+  it("leaves folds alone while a preview query is typed", async () => {
+    const editor = filtered("section b");
+    editor.commands.filterPreview("content");
+
+    renameHeading(editor, "sec-a", "Section B notes");
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-a", "sec-a1"]));
+    editor.destroy();
+  });
+
+  it("still restores the folds from before the filter on clear", async () => {
+    const editor = createTestEditor({ content: FILTER_CONTENT });
+    editor.view.dispatch(
+      editor.state.tr.setMeta(headingFoldPluginKey, {
+        type: "set",
+        ids: new Set(["sec-b"]),
+        persist: true,
+      }),
+    );
+    editor.commands.commitFilter("section b");
+
+    renameHeading(editor, "sec-a", "Section B notes");
+    await wait();
+    renameHeading(editor, "sec-a", "Other");
+    editor.commands.clearFilter();
+    expect(folded(editor)).toEqual(new Set(["sec-b"]));
+
+    // The re-fold pending when the filter went dies with it.
+    await wait();
+    expect(folded(editor)).toEqual(new Set(["sec-b"]));
     editor.destroy();
   });
 });
