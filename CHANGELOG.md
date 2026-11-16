@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### System theme
+
+New browsers follow the system's light or dark setting, from the first paint and live as it changes.
+
+#### Added
+
+- ⋯ › Appearance offers System, Light and Dark. The row button still switches between light and dark.
+
+#### Fixed
+
+- The palette's Switch theme works.
+
+#### Changed
+
+- Browsers that used TinyDocy before keep Light (written once on the next load) or the Dark they chose.
+
 ### Desktop local-first planning documents
 
 Adds the planning set for TinyDocy Desktop: the installable app for macOS,

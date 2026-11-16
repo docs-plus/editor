@@ -68,6 +68,7 @@ import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { stylesApplied } from "@/lib/styles-applied";
+import { setTheme } from "@/lib/theme";
 import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
@@ -282,6 +283,13 @@ function DocumentEditorContent({
           return true;
         case "filter.toggle":
           toggleFilterBar();
+          return true;
+        case "theme.toggle":
+          setTheme(
+            document.documentElement.classList.contains("dark")
+              ? "light"
+              : "dark",
+          );
           return true;
         default:
           return false;

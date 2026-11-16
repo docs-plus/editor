@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import { GoogleAnalytics } from "@/components/analytics";
 import { ServiceWorkerRegistration } from "@/components/pwa";
+import { ThemeRuntime } from "@/components/theme/theme-runtime";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   SITE_DESCRIPTION,
@@ -73,6 +74,7 @@ export default function RootLayout({
         <TooltipProvider>{children}</TooltipProvider>
         <GoogleAnalytics />
         <ServiceWorkerRegistration />
+        <ThemeRuntime />
       </body>
     </html>
   );
