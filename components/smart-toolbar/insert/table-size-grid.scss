@@ -19,7 +19,7 @@
 
   &[data-in-range="true"] {
     background: color-mix(in srgb, var(--primary) 22%, var(--background));
-    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+    border-color: color-mix(in srgb, var(--primary-ink) 60%, transparent);
   }
 
   &:focus-visible {

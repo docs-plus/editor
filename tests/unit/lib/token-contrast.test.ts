@@ -70,10 +70,30 @@ describe("design token contrast", () => {
 
   it("never uses --primary as a text or border colour", () => {
     const hits: string[] = [];
+    // Tailwind utilities in TSX.
     for (const pattern of ["components/**/*.tsx", "app/**/*.tsx"]) {
       for (const file of new Bun.Glob(pattern).scanSync(ROOT)) {
         const source = readFileSync(join(ROOT, file), "utf8");
         if (/\b(text|border)-primary(?![-\w])/.test(source)) hits.push(file);
+      }
+    }
+    // Text and border declarations in stylesheets; fills (background) may
+    // keep --primary.
+    const declaration =
+      /(?:^|[;{\s])((?:color|border[\w-]*|outline[\w-]*|text-decoration[\w-]*|caret-color|column-rule[\w-]*)\s*:[^;{}]*var\(--primary[,)][^;{}]*)/g;
+    for (const pattern of [
+      "app/**/*.{css,scss}",
+      "components/**/*.{css,scss}",
+      "extensions/**/*.{css,scss}",
+      "styles/**/*.{css,scss}",
+    ]) {
+      for (const file of new Bun.Glob(pattern).scanSync(ROOT)) {
+        const source = readFileSync(join(ROOT, file), "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/^\s*\/\/.*$/gm, "");
+        for (const [, found] of source.matchAll(declaration)) {
+          hits.push(`${file}: ${found.trim()}`);
+        }
       }
     }
     expect(hits.sort()).toEqual([]);
