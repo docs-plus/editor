@@ -266,7 +266,7 @@ export function FormatSheetBody({
             />
           ))}
           <LinkRow editor={editor} onClose={onClose} />
-          <ThemeToggle />
+          <ThemeToggle cycle />
         </div>
       </Section>
     </div>

@@ -276,3 +276,12 @@ describe("watchSystemTheme", () => {
     expect(media.listeners.size).toBe(0);
   });
 });
+
+describe("nextThemePreference", () => {
+  it("cycles System → Light → Dark → System", async () => {
+    const theme = await importFresh<ThemeModule>("@/lib/theme");
+    expect(theme.nextThemePreference("system")).toBe("light");
+    expect(theme.nextThemePreference("light")).toBe("dark");
+    expect(theme.nextThemePreference("dark")).toBe("system");
+  });
+});

@@ -54,6 +54,7 @@ export {
   ListTodo as ListTodoIcon,
   Lock as LockIcon,
   Minus as MinusIcon,
+  Monitor as MonitorIcon,
   MonitorDown as InstallAppIcon,
   MonitorPlay as MediaEmbedIcon,
   MoonStar as MoonStarIcon,

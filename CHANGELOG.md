@@ -16,6 +16,7 @@ New browsers follow the system's light or dark setting, from the first paint and
 #### Added
 
 - ⋯ › Appearance offers System, Light and Dark. The row button still switches between light and dark.
+- On phones, which have no ⋯ menu, the theme button in the Aa sheet steps through System, Light and Dark. Its label says what comes next.
 
 #### Fixed
 

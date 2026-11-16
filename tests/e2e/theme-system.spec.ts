@@ -138,6 +138,14 @@ test.describe("System theme", () => {
     await expect(html(page)).not.toHaveClass(/\bdark\b/);
     await expect(themeColor(page)).toHaveAttribute("content", LIGHT);
     expect(await stored(page)).toBe("system");
+
+    // Following the OS again, both ways.
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(html(page)).toHaveClass(/\bdark\b/);
+    await expect(themeColor(page)).toHaveAttribute("content", DARK);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(html(page)).not.toHaveClass(/\bdark\b/);
+    await expect(themeColor(page)).toHaveAttribute("content", LIGHT);
   });
 
   test("palette Switch theme flips the theme", async ({ page }) => {
@@ -153,5 +161,69 @@ test.describe("System theme", () => {
 
     await expect(html(page)).toHaveClass(/\bdark\b/);
     expect(await stored(page)).toBe("dark");
+  });
+});
+
+test.describe("System theme on a phone (375 px)", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 375, height: 812 },
+  });
+
+  const sheet = (page: Page) =>
+    page.getByRole("dialog", { name: "Text format" });
+
+  test("the Aa sheet's theme button cycles System → Light → Dark → System", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await openEditorAsNewVisitor(page);
+    // Next's dev indicator sits over the bar and eats taps.
+    await page.addStyleTag({
+      content: "nextjs-portal { display: none !important; }",
+    });
+    await page.locator(".tiptap h1").first().tap();
+    await page
+      .getByRole("toolbar", { name: "Formatting" })
+      .getByRole("button", { name: "Text format" })
+      .tap();
+    await sheet(page).getByRole("button", { name: "Heading 1" }).waitFor();
+
+    const toggle = (name: string) =>
+      sheet(page).getByRole("button", { name, exact: true });
+    /** The visible label fits its half-width cell (no ellipsis). */
+    const expectNotClipped = async (name: string) =>
+      expect(
+        await toggle(name)
+          .locator("span")
+          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      ).toBe(true);
+
+    const fromSystem = toggle("Theme: System, switch to light mode");
+    await expect(fromSystem).toHaveText("Switch to light mode");
+    await expectNotClipped("Theme: System, switch to light mode");
+    await fromSystem.tap();
+    expect(await stored(page)).toBe("light");
+    await expect(html(page)).not.toHaveClass(/\bdark\b/);
+
+    const fromLight = toggle("Theme: Light, switch to dark mode");
+    await expect(fromLight).toHaveText("Switch to dark mode");
+    await expectNotClipped("Theme: Light, switch to dark mode");
+    await fromLight.tap();
+    expect(await stored(page)).toBe("dark");
+    await expect(html(page)).toHaveClass(/\bdark\b/);
+
+    const fromDark = toggle("Theme: Dark, use system theme");
+    await expect(fromDark).toHaveText("Use system theme");
+    await expectNotClipped("Theme: Dark, use system theme");
+    await fromDark.tap();
+    expect(await stored(page)).toBe("system");
+    await expect(html(page)).not.toHaveClass(/\bdark\b/);
+    await expect(toggle("Theme: System, switch to light mode")).toBeVisible();
+
+    // Back on System, the OS drives it again.
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(html(page)).toHaveClass(/\bdark\b/);
   });
 });

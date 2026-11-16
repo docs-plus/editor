@@ -21,6 +21,14 @@ export const THEME_PREFERENCES: readonly ThemePreference[] = [
   "dark",
 ];
 
+/** The phone sheet's cycle: System → Light → Dark → System. */
+export function nextThemePreference(
+  preference: ThemePreference,
+): ThemePreference {
+  const index = THEME_PREFERENCES.indexOf(preference);
+  return THEME_PREFERENCES[(index + 1) % THEME_PREFERENCES.length];
+}
+
 /**
  * Any localStorage key with this prefix, other than the theme key, marks a
  * browser that used TinyDocy before System existed (preferences spec §5.6).
