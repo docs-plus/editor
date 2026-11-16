@@ -101,6 +101,12 @@ async function launch(name: string, env: Record<string, string> = {}) {
     .locator('.ProseMirror[contenteditable="true"]')
     .first()
     .waitFor({ timeout: 60_000 });
+  // Typing before the first server sync can race the seed; wait for it.
+  await page
+    .locator('.document-editor-content[data-server-synced="true"]')
+    .first()
+    .waitFor({ timeout: 60_000 })
+    .catch(() => undefined);
   return { app, page, netlog };
 }
 

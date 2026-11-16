@@ -143,12 +143,15 @@ jobs:
         if: always() && runner.os == 'Linux'
         continue-on-error: true
         run: |
-          export SPIKE_DICT_PRESEED_DIR="$RUNNER_TEMP/dict" S1_RESULTS_TAG=dict-preseed
+          # Chromium looks for the exact-case name (en-US-10-1.bdic) on Linux.
+          mkdir -p "$RUNNER_TEMP/dict-preseed"
+          cp "$RUNNER_TEMP/dict/en-us-10-1.bdic" "$RUNNER_TEMP/dict-preseed/en-US-10-1.bdic"
+          export SPIKE_DICT_PRESEED_DIR="$RUNNER_TEMP/dict-preseed" S1_RESULTS_TAG=dict-preseed
           xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g spellcheck
 
       - name: Export payload files (segment prefetch check)
         if: always()
-        run: find out -name '*.txt' | sort
+        run: find out -name '*.txt' | sort | head -40
 
       - name: Summary
         if: always()
