@@ -74,6 +74,20 @@ export const TOMBSTONE_RETENTION_DAYS = parseEnvInt(
 );
 
 /**
+ * Days a closed tab stays restorable (default 7). List and restore treat older
+ * closures as gone; the daily retention purge then deletes and tombstones them.
+ */
+export const CLOSED_RETENTION_DAYS = parseEnvInt(
+  process.env.CLOSED_RETENTION_DAYS,
+  7,
+  1,
+);
+
+/** `0` turns off the Recently closed list (restore keeps working). */
+export const CLOSED_DOCUMENTS_LIST =
+  process.env.CLOSED_DOCUMENTS_LIST?.trim() !== "0";
+
+/**
  * `1` lets clients open per-test `global-tabs-<id>` documents (Playwright
  * isolation). Dev and test only: never set it in production.
  */

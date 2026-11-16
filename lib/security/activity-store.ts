@@ -15,6 +15,14 @@ export function bootstrapDocumentActivityTable(db: Database): void {
       name TEXT PRIMARY KEY,
       deleted_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS document_closures (
+      name TEXT PRIMARY KEY,
+      tabs_doc TEXT NOT NULL,
+      closed_at INTEGER NOT NULL,
+      title TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS document_closures_tabs_closed_at
+      ON document_closures (tabs_doc, closed_at);
   `);
 }
 
@@ -26,7 +34,7 @@ export function isTombstoned(db: Database, name: string): boolean {
 }
 
 /**
- * Deletes a document and its activity row and records a tombstone, in one
+ * Deletes a document, its activity and closure rows and records a tombstone, in one
  * transaction. The Hocuspocus process may still hold the document in memory;
  * the tombstone stops it from writing the document back (resurrection) and
  * from loading it again. Returns whether a stored document existed.
@@ -41,6 +49,7 @@ export function deleteDocumentPermanently(
     const existed = documentExists(db, name);
     db.prepare("DELETE FROM documents WHERE name = ?").run(name);
     db.prepare("DELETE FROM document_activity WHERE name = ?").run(name);
+    db.prepare("DELETE FROM document_closures WHERE name = ?").run(name);
     db.prepare(
       `INSERT INTO document_tombstones (name, deleted_at) VALUES (?, ?)
        ON CONFLICT(name) DO UPDATE SET deleted_at = excluded.deleted_at`,
@@ -129,6 +138,9 @@ export function purgeStaleDocuments(
     const deleteActivity = db.prepare(
       "DELETE FROM document_activity WHERE name = ?",
     );
+    const deleteClosure = db.prepare(
+      "DELETE FROM document_closures WHERE name = ?",
+    );
     // Expired documents stay blocked like deleted ones, so an offline copy
     // shows them as deleted instead of silently recreating them.
     const tombstone = db.prepare(
@@ -139,6 +151,7 @@ export function purgeStaleDocuments(
     for (const name of candidates) {
       deleteDocument.run(name);
       deleteActivity.run(name);
+      deleteClosure.run(name);
       tombstone.run(name, nowMs);
     }
 

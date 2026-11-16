@@ -130,4 +130,41 @@ describe("activity-store", () => {
     expect(purgeTombstones(db, 6001)).toBe(1);
     expect(isTombstoned(db, id)).toBe(false);
   });
+  it("deleteDocumentPermanently removes the closure row", () => {
+    db = new Database(":memory:");
+    seedDocumentsTable();
+    bootstrapDocumentActivityTable(db);
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      "doc-a",
+      Buffer.from("{}"),
+    );
+    db.prepare(
+      "INSERT INTO document_closures (name, tabs_doc, closed_at, title) VALUES (?, ?, ?, ?)",
+    ).run("doc-a", "global-tabs", 1000, "A");
+
+    deleteDocumentPermanently(db, "doc-a", 2000);
+
+    expect(
+      db.prepare("SELECT 1 FROM document_closures WHERE name = ?").get("doc-a"),
+    ).toBeNull();
+  });
+
+  it("purgeStaleDocuments removes the closure row of a purged document", () => {
+    db = new Database(":memory:");
+    seedDocumentsTable();
+    bootstrapDocumentActivityTable(db);
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      "doc-a",
+      Buffer.from("{}"),
+    );
+    upsertDocumentActivity(db, "doc-a", 2, 100);
+    db.prepare(
+      "INSERT INTO document_closures (name, tabs_doc, closed_at, title) VALUES (?, ?, ?, ?)",
+    ).run("doc-a", "global-tabs", 100, "A");
+
+    expect(purgeStaleDocuments(db, 1_000).deletedNames).toEqual(["doc-a"]);
+    expect(
+      db.prepare("SELECT 1 FROM document_closures WHERE name = ?").get("doc-a"),
+    ).toBeNull();
+  });
 });

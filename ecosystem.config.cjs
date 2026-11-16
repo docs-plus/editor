@@ -25,7 +25,14 @@ module.exports = {
       cwd: __dirname,
       script: "bun",
       args: "run start",
-      env: { NODE_ENV: "production", PORT: 3847, TRUSTED_PROXY: "1" },
+      env: {
+        NODE_ENV: "production",
+        PORT: 3847,
+        TRUSTED_PROXY: "1",
+        // Days a closed tab stays restorable. The daily retention purge cron
+        // must use the same value (docs/operations/abuse-guardrails-runbook.md).
+        CLOSED_RETENTION_DAYS: "7",
+      },
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
