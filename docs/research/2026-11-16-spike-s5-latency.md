@@ -41,15 +41,15 @@ Ratios use the runner→renderer measure (below). Bold = fails the rule's thresh
 - Why the stall shows: the main-thread arm commits back to back on main, about 4 ms per commit
   with `fullfsync` on macOS. A key that arrives during a commit waits for it, so the
   runner→renderer p95 rises 3 ms at 50 headings (8 → 11 ms on the M5 Max), and main's event loop
-  stalls up to 86 ms (M5 Max), 417 ms (`ubuntu-24.04`) or 664 ms (`windows-latest`). The renderer-side measure barely moves
-  (1.04 at 50 headings): Review Focus #2, confirmed.
+  stalls up to 86 ms (M5 Max), 417 ms (`ubuntu-24.04`) or 664 ms (`windows-latest`). The
+  renderer-side measure barely moves (1.04 at 50 headings): Review Focus #2, confirmed.
 
-Spec lines this settles (to fold into the Phase 1 amendments; the S2/S3 write-up in
-[#90](https://github.com/docs-plus/editor/pull/90) leaves D-A1 to this rule): arch §1 D-A1 ("**Decided by
-S2/S5** … If commits on main's own thread stay within budget, the worker is dropped") and the
-design doc's D-A1 row → "Decided by S5: the worker stays." The worker's own pass row
-(ratio ≤ 1.10 against idle) is measured on the M5 Max at 1.00 / 1.00; its verdict rows are also
-pending owner hardware.
+Spec lines this changes (amended in this PR): arch §1 D-A1 ("**Decided by S2/S5** … If commits
+on main's own thread stay within budget, the worker is dropped") and the design doc's §4 D-A1 row
+now read "keep the storage worker", provisional until the owner's machines are measured. The
+S2/S3 write-up ([#90](https://github.com/docs-plus/editor/pull/90)) left D-A1 to this rule.
+The worker's own pass row (ratio ≤ 1.10 against idle) is measured on the M5 Max at
+1.00 / 1.00; its verdict rows are also pending owner hardware.
 
 ## The question
 
@@ -246,7 +246,7 @@ Windows), and its Defender state is unknown, so it isn't the plan's Defender-on 
 
 ## Issues to open (P2.5)
 
-Not filed by this spike; the lead files them with the amendments.
+Not filed by this spike; the lead files them.
 
 - Windows typing verdict (Electron vs Chrome, Defender on): pending the owner's laptop (plan's
   owner-prerequisite fallback).

@@ -24,6 +24,12 @@ commits on main's own thread. Documentation only; no app or server change.
   machines' rows (the owner's M1, a Windows laptop with Defender on) and the
   IME checks are pending owner hardware.
 
+#### Changed
+
+- **Docs:** the D-A1 rows in the desktop architecture and design specs now
+  say "keep the storage worker", provisional until the owner's machines are
+  measured.
+
 ### Automatic deploys and a daily retention purge, both off until turned on
 
 The Deploy workflow can now deploy by itself after CI passes on `main`, and
