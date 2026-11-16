@@ -113,7 +113,7 @@ export function FilterBar({
               className={cn(
                 "inline-flex items-center h-5 px-1 border rounded text-[0.5625rem] font-semibold uppercase tracking-wider cursor-pointer transition-colors",
                 isAnd
-                  ? "text-primary border-primary"
+                  ? "text-primary-ink border-primary-ink"
                   : "text-muted-foreground border-border hover:text-foreground hover:border-foreground",
               )}
               onClick={() => setMode(isAnd ? "or" : "and")}

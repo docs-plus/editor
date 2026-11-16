@@ -68,7 +68,7 @@
       left: 8px;
       right: 8px;
       height: 2px;
-      background: var(--primary, var(--tt-brand-color-500));
+      background: var(--primary-ink, var(--tt-brand-color-500));
       pointer-events: none;
       z-index: 1;
     }
@@ -80,7 +80,7 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--primary, var(--tt-brand-color-500));
+      background: var(--primary-ink, var(--tt-brand-color-500));
       pointer-events: none;
       z-index: 1;
     }

@@ -42,6 +42,7 @@ tests/
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
+│   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex for contrast tests
 │   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no `bun:test` dep)
 ├── fixtures/                             # Static JSON document fixtures
@@ -51,7 +52,7 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
-│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), identity validation and blocked storage (`user-identity.test.ts`)
+│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets), identity validation and blocked storage (`user-identity.test.ts`)
 │   ├── components/                       # Toolbar and menu components; the identity dialog's inline name errors and the normalised broadcast (`user-identity-dialog.test.tsx`)
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds, remote caret names and colours clamped at render (`safe-caret-render.test.ts`)
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
