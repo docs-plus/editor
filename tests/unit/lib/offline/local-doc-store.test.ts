@@ -562,26 +562,24 @@ describe("merge on save", () => {
     ).toBeLessThan(200);
   });
 
-  it("returns the update untouched when the stamp matches", () => {
+  it("returns the update untouched when the write id matches", () => {
     const stored = {
       key: storeKey("ws.example", "a"),
       name: "a",
       update: Uint8Array.from([255, 255, 255]),
       updatedAt: 1_000_000,
+      writeId: "own-write",
     };
     const update = yState("next");
     // Undecodable bytes: only a skipped merge can succeed.
-    expect(
-      mergeIntoStored(stored, update, 1_000_001, {
-        updatedAt: 1_000_000,
-        byteLength: 3,
-      }),
-    ).toBe(update);
+    expect(mergeIntoStored(stored, update, 1_000_001, "own-write")).toBe(
+      update,
+    );
     expect(() =>
-      mergeIntoStored(stored, update, 1_000_001, {
-        updatedAt: 999,
-        byteLength: 3,
-      }),
+      mergeIntoStored(stored, update, 1_000_001, "another-write"),
+    ).toThrow();
+    expect(() =>
+      mergeIntoStored({ ...stored, writeId: undefined }, update, 1_000_001),
     ).toThrow();
   });
 
@@ -704,5 +702,42 @@ describe("two tabs saving one document", () => {
     expect(text).toContain("typed in tab A");
     expect(text).toContain("typed in tab B");
     for (const tab of tabs) tab.binding.destroy();
+  });
+});
+
+describe("write stamps across tabs", () => {
+  /** A doc with a fixed client id, so two docs' states have equal length. */
+  function docOf(clientID: number, text: string): Y.Doc {
+    const doc = new Y.Doc();
+    doc.clientID = clientID;
+    doc.getText("t").insert(0, text);
+    return doc;
+  }
+
+  it("merges another tab's write of the same length in the same millisecond", async () => {
+    const backend = createMemoryBackend();
+    const key = storeKey("ws.example", "a");
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const doc = docOf(0x7000_0001, "");
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    await binding.hydrated;
+    doc.getText("t").insert(0, "typed in tab A");
+    await binding.flush();
+    const own = await backend.get(key);
+    if (!own) throw new Error("no copy saved");
+    // Another tab replaces the copy in the same millisecond with one of the
+    // same byte length: the `{updatedAt, byteLength}` stamp cannot tell.
+    const tabB = Y.encodeStateAsUpdate(docOf(0x7000_0002, "typed in tab B"));
+    expect(tabB.byteLength).toBe(own.update.byteLength);
+    await backend.putMerged(
+      { key, name: "a", updatedAt: 1_000_000 },
+      () => tabB,
+    );
+    doc.getText("t").insert(0, "more ");
+    await binding.flush();
+    const text = textOf((await backend.get(key))?.update);
+    expect(text).toContain("typed in tab B");
+    expect(text).toContain("more typed in tab A");
+    binding.destroy();
   });
 });

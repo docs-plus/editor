@@ -17,6 +17,8 @@ transaction.
 #### Fixed
 
 - A second tab's save no longer drops the first tab's offline edits.
+- Each save carries its own id, so a tab never mistakes another tab's save
+  for its own, even one of the same size in the same millisecond.
 
 ### Offline copies keep unsynced edits after a slow read
 
