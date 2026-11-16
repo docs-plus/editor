@@ -8,12 +8,14 @@ export {
   type LocalBinding,
   LocalDocStore,
   legacyStoreKey,
+  mergeIntoStored,
   OFFLINE_CACHE_EPOCH,
   OFFLINE_DOC_MAX_AGE_DAYS,
   OFFLINE_MAX_DOCS,
   OFFLINE_NAMESPACE,
   type StoredDoc,
   storeKey,
+  type WriteStamp,
 } from "./local-doc-store";
 export {
   clearOfflineData,

@@ -53,6 +53,8 @@ import {
   useToolbarOffForTests,
 } from "@/components/document-editor/toolbar-test-hooks";
 import { generatePlaygroundContent } from "@/components/document-editor/playground-scenarios";
+import { PLAYGROUND_ID } from "@/lib/constants";
+import { markPlaygroundEditor } from "@/lib/editor-actions/playground";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import {
   FilterBar,
@@ -68,6 +70,7 @@ import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { stylesApplied } from "@/lib/styles-applied";
+import { setTheme } from "@/lib/theme";
 import { EDITOR_FRAGMENT_NAME } from "@/lib/yjs-mark-migration";
 
 import { useDocumentEditorEffects } from "./use-document-editor-effects";
@@ -86,6 +89,8 @@ interface DocumentEditorProps {
   onTitleChange?: (title: string) => void;
   initialContent?: JSONContent;
   playgroundRegenerateTrigger?: number;
+  /** The Playground tab's Regenerate, also run from the palette. */
+  onPlaygroundRegenerate?: () => void;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -145,6 +150,7 @@ function DocumentEditorContent({
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
+  onPlaygroundRegenerate,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -283,11 +289,36 @@ function DocumentEditorContent({
         case "filter.toggle":
           toggleFilterBar();
           return true;
+        case "theme.toggle":
+          setTheme(
+            document.documentElement.classList.contains("dark")
+              ? "light"
+              : "dark",
+          );
+          return true;
         default:
           return false;
       }
     });
   }, [editor, setOutlineOpen, toggleFilterBar]);
+
+  // Palette › Regenerate Playground (the keyboard path to the tab's button):
+  // offered only while this editor shows the Playground, and run through
+  // the button's own callback.
+  useEffect(() => {
+    if (!editor || documentId !== PLAYGROUND_ID || !onPlaygroundRegenerate)
+      return;
+    const unmark = markPlaygroundEditor(editor);
+    const off = onUiIntent(editor, (intent) => {
+      if (intent.type !== "playground.regenerate") return false;
+      onPlaygroundRegenerate();
+      return true;
+    });
+    return () => {
+      unmark();
+      off();
+    };
+  }, [editor, documentId, onPlaygroundRegenerate]);
 
   // Esc on a toolbar item returns to the document with its selection.
   // `view.focus()` restores the selection at once; Tiptap's `focus()` waits
@@ -411,6 +442,7 @@ export function DocumentEditor({
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
+  onPlaygroundRegenerate,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, provider, synced, serverSynced, rejectedReason } =
@@ -436,6 +468,7 @@ export function DocumentEditor({
       onTitleChange={onTitleChange}
       initialContent={initialContent}
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+      onPlaygroundRegenerate={onPlaygroundRegenerate}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />

@@ -13,11 +13,13 @@ interface Step {
 }
 
 interface Job {
+  if?: string;
   permissions?: Permissions;
   steps?: Step[];
 }
 
 interface Workflow {
+  on?: Record<string, unknown> | string | string[];
   permissions?: Permissions;
   jobs: Record<string, Job>;
 }
@@ -30,6 +32,11 @@ const WORKFLOW_FILES = readdirSync(WORKFLOWS_DIR).filter((f) =>
 // Commands that execute (or install) third-party package code.
 const RUNS_DEPENDENCIES = /\bbun (install|update|run (test|build|lint))\b/;
 const PINNED_USES = /@[0-9a-f]{40}( #.*)?$/;
+// A local reusable workflow resolves at the caller's own commit.
+const LOCAL_WORKFLOW = /^\.\/\.github\/workflows\/[\w.-]+\.ya?ml$/;
+
+const isPinned = (ref: string) =>
+  LOCAL_WORKFLOW.test(ref) || PINNED_USES.test(ref);
 
 const actionRefs = (source: string): string[] =>
   source
@@ -89,9 +96,55 @@ describe.each(WORKFLOW_FILES)("workflow %s", (file) => {
 
   it("pins every action to a full commit SHA", () => {
     for (const ref of actionRefs(source)) {
-      expect(ref).toMatch(PINNED_USES);
+      expect(isPinned(ref), ref).toBe(true);
     }
   });
+});
+
+const triggers = (workflow: Workflow): string[] => {
+  const on = workflow.on;
+  if (typeof on === "string") return [on];
+  if (Array.isArray(on)) return on;
+  return Object.keys(on ?? {});
+};
+
+const WORKFLOW_RUN_FILES = WORKFLOW_FILES.filter((file) =>
+  triggers(readWorkflow(file).workflow).includes("workflow_run"),
+);
+
+// A workflow_run workflow runs with secrets after another workflow, which may
+// have run for a pull request from a fork. It must never run that code, and
+// must only act on runs that came from a push.
+describe.each(WORKFLOW_RUN_FILES)("workflow_run workflow %s", (file) => {
+  const { workflow } = readWorkflow(file);
+  const jobs = Object.entries(workflow.jobs);
+
+  it("never checks out or runs repository code", () => {
+    for (const [name, job] of jobs) {
+      for (const step of job.steps ?? []) {
+        expect(step.uses?.startsWith("actions/checkout@") ?? false, name).toBe(
+          false,
+        );
+      }
+      expect(runsDependencies(job), name).toBe(false);
+    }
+  });
+
+  it("acts only on successful runs from a push", () => {
+    for (const [name, job] of jobs) {
+      const condition = job.if ?? "";
+      expect(condition, name).toContain(
+        "github.event.workflow_run.conclusion == 'success'",
+      );
+      expect(condition, name).toContain(
+        "github.event.workflow_run.event == 'push'",
+      );
+    }
+  });
+});
+
+it("finds the workflow_run workflows", () => {
+  expect(WORKFLOW_RUN_FILES).toContain("deploy.yml");
 });
 
 // A workflow may use no actions at all (release.yml only runs gh), but the
@@ -101,4 +154,14 @@ it("finds the actions the workflows use", () => {
     actionRefs(readWorkflow(file).source),
   );
   expect(all.length).toBeGreaterThan(0);
+});
+
+it("accepts local reusable workflows and nothing unpinned", () => {
+  expect(isPinned("./.github/workflows/desktop-smoke.yml")).toBe(true);
+  expect(
+    isPinned("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7"),
+  ).toBe(true);
+  expect(isPinned("actions/checkout@v7")).toBe(false);
+  expect(isPinned("./.github/actions/setup")).toBe(false);
+  expect(isPinned("docs-plus/editor/.github/workflows/x.yml@main")).toBe(false);
 });

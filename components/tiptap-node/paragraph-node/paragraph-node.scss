@@ -10,7 +10,7 @@
 
   .dark & {
     --tt-collaboration-carets-label: var(--tt-gray-dark-100);
-    --link-text-color: #1a73e8;
+    --link-text-color: #5b9cf2;
     --thread-text: var(--tt-gray-dark-900);
     --placeholder-color: var(--tt-gray-dark-a-400);
     --thread-bg-color: var(--tt-color-yellow-dec-2);
@@ -127,6 +127,10 @@
       top: -1.3em;
       user-select: none;
       white-space: nowrap;
+      // A collaborator's name is drawn as sent: clip anything taller than
+      // one line (stacked combining marks) instead of covering the text.
+      max-height: 1.5em;
+      overflow: hidden;
     }
   }
 }
@@ -148,6 +152,7 @@
   a {
     color: var(--link-text-color);
     text-decoration: underline;
+    text-underline-offset: 0.15em;
   }
 }
 

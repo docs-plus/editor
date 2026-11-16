@@ -459,7 +459,7 @@ The palette's budget rule (A7, 20 KB gz) applies to the web chunk. On desktop th
 | Quick Open | ⌘O | Ctrl+O | none; bends the HIG meaning (§4.3) | P2.7 |
 | Import a file | ⌥⌘O | menu only | AltGr | P2.8 |
 | Command palette | ⌘⇧P, Alt+/ | Ctrl+Shift+P, Alt+/ | none (§4.4) | P2.9a |
-| Settings | ⌘, | Ctrl+, | **Collides with Subscript `Mod-,`** (`inline.ts:165`, `@tiptap/extension-subscript`). Decision Q2. | P1.2 (proposed) |
+| Settings | ⌘, | Ctrl+, | **Collides with Subscript `Mod-,`** (`inline.ts:165`, `@tiptap/extension-subscript`). Decision Q2. | P1.2 (Subscript key); binding P2.9a |
 | Close Tab | ⌘W | Ctrl+W, Ctrl+F4 | Never deletes (web: deletes) | P2.9a |
 | Close Window | ⌘⇧W | Ctrl+Shift+W | none | P2.9a |
 | Reopen Closed Tab | ⌘⇧T | Ctrl+Shift+T | none | P2.9a |
@@ -498,7 +498,7 @@ The palette's budget rule (A7, 20 KB gz) applies to the web chunk. On desktop th
 
 #### Editor keys (unchanged; listed so nothing above collides)
 
-⌘B / I / U, ⌘⇧S Strike (P1.2 pending), ⌘. Superscript, ⌘, Subscript (see Q2), ⌘E Inline code, ⌘K Link, ⌘\ Clear formatting, ⌘Z / ⌘⇧Z / ⌘Y Undo/Redo, ⌘⇧L/E/R/J Align (P1.2 pending for ⌘⇧R), ⌘⌥0–6 Paragraph and headings, ⌘⇧7/8/9 Lists, ⌘⇧B Blockquote, ⌘⇧H Highlight, ⌘⌥C Code block, ⌘⌥V Repeat formatting (and F4 off macOS), ⌘↵ Hard break, ⌘⌫ / ⌘⌦, ⌘A, ⌘⇧F Heading filter, Alt+/ Palette, Alt+F10 Toolbar. On macOS the Emacs keys ⌃A, ⌃E, ⌃H and ⌃D are also in use.
+⌘B / I / U, ⌘⇧S Strike, ⌘. Superscript, ⌘, Subscript (see Q2), ⌘E Inline code, ⌘K Link, ⌘\ Clear formatting, ⌘Z / ⌘⇧Z / ⌘Y Undo/Redo, ⌘⇧L/E/R/J Align, ⌘⌥0–6 Paragraph and headings, ⌘⇧7/8/9 Lists, ⌘⇧B Blockquote, ⌘⇧H Highlight, ⌘⌥C Code block, ⌘⌥V Repeat formatting (and F4 off macOS), ⌘↵ Hard break, ⌘⌫ / ⌘⌦, ⌘A, ⌘⇧F Heading filter, Alt+/ Palette, Alt+F10 Toolbar. On macOS the Emacs keys ⌃A, ⌃E, ⌃H and ⌃D are also in use.
 
 #### Region keys
 

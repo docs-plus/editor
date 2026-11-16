@@ -163,9 +163,14 @@ test.describe("theme-color and iOS metadata", () => {
     await expect(themeColor(page)).toHaveAttribute("content", DARK);
   });
 
-  test("the OS colour scheme does not change the title bar", async ({
-    page,
-  }) => {
+  test("a legacy browser ignores the OS colour scheme", async ({ page }) => {
+    // Any `tinydocy-*` key marks a browser that used TinyDocy before System
+    // existed: it keeps Light (F3, preferences spec §5.6).
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("tinydocy-user")) {
+        localStorage.setItem("tinydocy-user", "{}");
+      }
+    });
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/about");
     await expect(themeColor(page)).toHaveAttribute("content", LIGHT);

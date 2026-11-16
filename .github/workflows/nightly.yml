@@ -11,6 +11,8 @@ name: Nightly
 #                  from 3 clients against Hocuspocus (spec §7 abuse soak)
 #   mixed-version  N+1, release N and pre-N clients on one document with
 #                  the gate env at its default (spec §3.1 N+1 ship gate)
+#   desktop-smoke  the D-A12 Electron smoke (desktop-smoke.yml) on macOS,
+#                  Windows and Linux
 #
 # Read-only token and no secrets, like CI. A red run means a regression in
 # offline editing, long sessions, concurrency or schema rollout safety that
@@ -351,3 +353,11 @@ jobs:
             ${{ runner.temp }}/hocus.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # D-A12: node:sqlite, WAL, a worker thread and a custom app protocol in the
+  # pinned Electron build, on the nightly schedule (no cron of its own).
+  desktop-smoke:
+    name: Desktop smoke (D-A12)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-smoke.yml

@@ -28,21 +28,33 @@ export type StoredDoc = {
   name: string;
   update: Uint8Array;
   updatedAt: number;
+  /**
+   * Unique per save, so a tab can tell its own last write from another
+   * tab's. Absent on copies written by older bundles.
+   */
+  writeId?: string;
 };
 
 /** Persistence backend: IndexedDB in browsers, a Map in tests. */
 export interface DocStoreBackend {
   get(key: string): Promise<StoredDoc | undefined>;
   put(doc: StoredDoc): Promise<void>;
+  /**
+   * Writes `{ ...doc, update: merge(stored) }` under `doc.key`, reading and
+   * writing with no other writer in between, so two tabs saving one
+   * document never drop each other's edits. `merge` is synchronous; if it
+   * throws, nothing is written and the promise rejects with that error.
+   */
+  putMerged(
+    doc: Omit<StoredDoc, "update">,
+    merge: (stored: StoredDoc | undefined) => Uint8Array,
+  ): Promise<void>;
   delete(key: string): Promise<void>;
   /**
    * Deletes `key` only if it still holds a copy with this `updatedAt` and
    * byte length, checked and deleted atomically. True if it was deleted.
    */
-  deleteIfUnchanged(
-    key: string,
-    expected: { updatedAt: number; byteLength: number },
-  ): Promise<boolean>;
+  deleteIfUnchanged(key: string, expected: WriteStamp): Promise<boolean>;
   all(): Promise<StoredDoc[]>;
   clear(): Promise<void>;
 }
@@ -56,6 +68,9 @@ export function legacyStoreKey(serverHost: string, name: string): string {
   return `${OFFLINE_CACHE_EPOCH}:${serverHost}:${name}`;
 }
 
+/** When a copy was saved and how many bytes it stored (legacy copies). */
+export type WriteStamp = { updatedAt: number; byteLength: number };
+
 /** The saved copy plus a legacy copy still waiting to be merged. */
 export type LoadedCopy = {
   current: Uint8Array | null;
@@ -64,7 +79,7 @@ export type LoadedCopy = {
 
 function isUnchanged(
   doc: StoredDoc | undefined,
-  expected: { updatedAt: number; byteLength: number },
+  expected: WriteStamp,
 ): boolean {
   return (
     doc !== undefined &&
@@ -78,6 +93,56 @@ function isCurrent(doc: StoredDoc, now: number): boolean {
     doc.key.startsWith(`${OFFLINE_CACHE_EPOCH}:`) &&
     now - doc.updatedAt < OFFLINE_DOC_MAX_AGE_DAYS * DAY_MS
   );
+}
+
+/**
+ * `mergeIntoStored`, plus whether the result holds nothing beyond `update`
+ * (`own`): only then may the caller's next save skip the merge on this
+ * write's id. A write that took in edits the caller lacks (a copy read
+ * after the hydrate timeout, another tab's save) must be merged again, or
+ * the next save would drop them.
+ */
+function mergeStored(
+  stored: StoredDoc | undefined,
+  update: Uint8Array,
+  now: number,
+  lastWriteId?: string,
+): { merged: Uint8Array; own: boolean } {
+  if (!stored || !isCurrent(stored, now)) return { merged: update, own: true };
+  if (lastWriteId !== undefined && stored.writeId === lastWriteId) {
+    return { merged: update, own: true };
+  }
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, update);
+    const before = Y.snapshot(doc);
+    Y.applyUpdate(doc, stored.update);
+    if (Y.equalSnapshots(before, Y.snapshot(doc))) {
+      return { merged: update, own: true };
+    }
+    return { merged: Y.encodeStateAsUpdate(doc), own: false };
+  } finally {
+    doc.destroy();
+  }
+}
+
+/**
+ * What to store when saving `update` over `stored`: both merged, so a save
+ * never drops edits only the stored copy holds (a copy read after the
+ * hydrate timeout, another tab's save). Returns `update` itself when there
+ * is nothing to keep: no copy, an expired or other-epoch copy, the caller's
+ * own last write (`lastWriteId`), or a copy `update` already contains.
+ * Merges through a temporary doc, not `Y.mergeUpdates`, so deleted content
+ * is garbage-collected instead of kept forever. Throws if either update
+ * does not decode.
+ */
+export function mergeIntoStored(
+  stored: StoredDoc | undefined,
+  update: Uint8Array,
+  now: number,
+  lastWriteId?: string,
+): Uint8Array {
+  return mergeStored(stored, update, now, lastWriteId).merged;
 }
 
 /** Local copies of collaborative documents, scoped to one collab server. */
@@ -153,20 +218,40 @@ export class LocalDocStore {
     return this.removals.get(name) ?? 0;
   }
 
-  /** Saves `update`, unless `name` was removed since `generation`. */
+  /**
+   * Merges `update` into the stored copy, unless `name` was removed since
+   * `generation`. `lastWriteId` is the id this caller's previous save
+   * resolved with; when the stored copy still carries it, the merge is
+   * skipped. The copy is read, merged and written in one backend step (one
+   * IndexedDB transaction), so another tab's save cannot land in between.
+   * Resolves this write's id when the written copy holds nothing beyond
+   * `update`; undefined when the save was dropped or took in edits the
+   * caller lacks, so its next save merges again. A failed read or merge
+   * rejects and leaves the stored copy untouched.
+   */
   save(
     name: string,
     update: Uint8Array,
     generation = this.generation(name),
-  ): Promise<void> {
+    lastWriteId?: string,
+  ): Promise<string | undefined> {
     return this.serialize(name, async () => {
-      if (generation !== this.generation(name)) return;
-      await this.backend.put({
-        key: storeKey(this.serverHost, name),
-        name,
-        update,
-        updatedAt: this.now(),
-      });
+      if (generation !== this.generation(name)) return undefined;
+      const key = storeKey(this.serverHost, name);
+      const now = this.now();
+      const writeId = crypto.randomUUID();
+      // Until the backend runs the merge, assume it took in edits, so an id
+      // is never resolved for bytes this save did not produce.
+      let own = false;
+      await this.backend.putMerged(
+        { key, name, updatedAt: now, writeId },
+        (stored) => {
+          const result = mergeStored(stored, update, now, lastWriteId);
+          own = result.own;
+          return result.merged;
+        },
+      );
+      return own ? writeId : undefined;
     });
   }
 
@@ -251,9 +336,9 @@ export type LocalBinding = {
 
 /**
  * Mirrors `doc` into the store: applies the saved copy first (with
- * LOCAL_ORIGIN), then saves the compacted state shortly after every change,
- * local or remote. A legacy copy is merged too, saved under the current key,
- * and only then retired. Storage errors never break editing; they only
+ * LOCAL_ORIGIN), then merges its state into the stored copy shortly after
+ * every change, local or remote. A legacy copy is merged too, saved under
+ * the current key, and only then retired. Storage errors never break editing; they only
  * disable the local copy for this document.
  */
 export function bindLocalCopy(
@@ -280,12 +365,19 @@ export function bindLocalCopy(
   let destroyed = false;
   let disabled = false;
   let migration: Promise<void> | undefined;
+  // The id of this binding's last write, set only when that write held
+  // nothing `doc` lacks: while the stored copy still carries it, the next
+  // save skips the merge.
+  let lastWriteId: string | undefined;
+  const save = async (update: Uint8Array) => {
+    lastWriteId = await store.save(name, update, generation, lastWriteId);
+  };
 
   const write = async () => {
     timer = undefined;
     if (disabled || destroyed) return;
     try {
-      await store.save(name, Y.encodeStateAsUpdate(doc), generation);
+      await save(Y.encodeStateAsUpdate(doc));
     } catch {
       disabled = true;
     }
@@ -304,7 +396,7 @@ export function bindLocalCopy(
   const migrate = async (legacy: StoredDoc, merged: Uint8Array) => {
     if (destroyed) return;
     try {
-      await store.save(name, merged, generation);
+      await save(merged);
     } catch {
       disabled = true;
       return;
@@ -406,6 +498,25 @@ export function createIndexedDbBackend(): DocStoreBackend | null {
       commit<void>((s) => {
         s.put(doc);
       }),
+    // Read, merge and write in one transaction with no await in between,
+    // so another tab's save cannot land after the read.
+    putMerged: (doc, merge) => {
+      let mergeError: unknown;
+      return commit<void>((s) => {
+        const req = s.get(doc.key);
+        req.onsuccess = () => {
+          try {
+            s.put({
+              ...doc,
+              update: merge(req.result as StoredDoc | undefined),
+            });
+          } catch (error) {
+            mergeError = error;
+            s.transaction.abort();
+          }
+        };
+      }).catch((error) => Promise.reject(mergeError ?? error));
+    },
     delete: (key) =>
       commit<void>((s) => {
         s.delete(key);
@@ -439,6 +550,9 @@ export function createMemoryBackend(): DocStoreBackend {
     get: async (key) => docs.get(key),
     put: async (doc) => {
       docs.set(doc.key, doc);
+    },
+    putMerged: async (doc, merge) => {
+      docs.set(doc.key, { ...doc, update: merge(docs.get(doc.key)) });
     },
     delete: async (key) => {
       docs.delete(key);

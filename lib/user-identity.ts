@@ -1,3 +1,5 @@
+import { cleanText } from "@/lib/clean-text";
+
 export type UserIdentity = {
   name: string;
   color: string;
@@ -15,6 +17,31 @@ export const CARET_COLORS = [
 ] as const;
 
 const STORAGE_KEY = "tinydocy-user";
+
+/** Longest display name, in user-perceived characters (graphemes). */
+export const NAME_MAX_GRAPHEMES = 32;
+/** Drawn for a collaborator whose colour is not a `#rrggbb` value. */
+export const UNKNOWN_CARET_COLOR = "#9E9E9E";
+/**
+ * Longest display name in UTF-16 code units. One grapheme can be unbounded
+ * (an emoji ZWJ chain), so the grapheme count alone does not bound width.
+ * 320 fits 32 three-person family emoji (8 units each) with room to spare.
+ */
+const NAME_MAX_CODE_UNITS = 320;
+/** A remote name is cut to this many code units before it is cleaned. */
+const REMOTE_NAME_MAX_CODE_UNITS = 1024;
+/**
+ * Runs of combining marks are cut to 4. Real text needs few (Persian vowel marks,
+ * an emoji's variation selector); thousands stack into a "Zalgo" tower that
+ * draws over the document.
+ */
+const LONG_MARK_RUN = /(\p{M}{4})\p{M}+/gu;
+
+export type NameResult =
+  | { ok: true; name: string }
+  | { ok: false; error: "empty" | "too_long" };
+
+type CaretColor = (typeof CARET_COLORS)[number];
 
 const ADJECTIVES = [
   "Bold",
@@ -70,30 +97,171 @@ function generateRandomName(): string {
   return `${randomItem(ADJECTIVES)} ${randomItem(ANIMALS)}`;
 }
 
-export function getUserIdentity(): UserIdentity {
-  if (typeof window === "undefined") {
-    return { name: generateRandomName(), color: randomItem(CARET_COLORS) };
-  }
+function randomIdentity(): UserIdentity {
+  return { name: generateRandomName(), color: randomItem(CARET_COLORS) };
+}
 
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as UserIdentity;
-      if (typeof parsed.name === "string" && typeof parsed.color === "string")
-        return parsed;
-    } catch {
-      /* regenerate below */
-    }
-  }
+let segmenter: Intl.Segmenter | null = null;
 
-  const identity: UserIdentity = {
-    name: generateRandomName(),
-    color: randomItem(CARET_COLORS),
+/**
+ * User-perceived characters. Without `Intl.Segmenter` (Firefox before 125)
+ * this counts code points instead, so an emoji sequence counts as several.
+ */
+function graphemes(text: string): string[] {
+  if (typeof Intl.Segmenter !== "function") return Array.from(text);
+  segmenter ??= new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  return Array.from(segmenter.segment(text), (part) => part.segment);
+}
+
+/** Cleans a display name and checks it holds 1–32 graphemes. */
+/** `cleanText`, then each run of combining marks cut to 4. */
+function cleanName(raw: string): string {
+  return cleanText(raw).replace(LONG_MARK_RUN, "$1");
+}
+
+/** The first `max` code units, never ending on half a surrogate pair. */
+function sliceCodeUnits(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const last = text.charCodeAt(max - 1);
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+}
+
+export function normalizeName(raw: unknown): NameResult {
+  if (typeof raw !== "string") return { ok: false, error: "empty" };
+  const name = cleanName(raw);
+  if (name === "") return { ok: false, error: "empty" };
+  if (
+    name.length > NAME_MAX_CODE_UNITS ||
+    graphemes(name).length > NAME_MAX_GRAPHEMES
+  ) {
+    return { ok: false, error: "too_long" };
+  }
+  return { ok: true, name };
+}
+
+/**
+ * A collaborator's name as drawn on their caret: cleaned and cut to 32
+ * graphemes. May return `""`, which renders an empty label.
+ */
+export function clampRemoteName(raw: string): string {
+  const name = cleanName(sliceCodeUnits(raw, REMOTE_NAME_MAX_CODE_UNITS));
+  let clamped = "";
+  for (const grapheme of graphemes(name).slice(0, NAME_MAX_GRAPHEMES)) {
+    if (clamped.length + grapheme.length > NAME_MAX_CODE_UNITS) break;
+    clamped += grapheme;
+  }
+  return clamped;
+}
+
+/** The palette entry matching `raw` (case-insensitive), else `null`. */
+export function toCaretColor(raw: unknown): CaretColor | null {
+  if (typeof raw !== "string") return null;
+  const upper = raw.toUpperCase();
+  return CARET_COLORS.find((color) => color === upper) ?? null;
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * A collaborator's caret colour: a palette entry in its canonical form, any
+ * other `#rrggbb` as sent (so a real caret never disappears), else grey.
+ */
+export function toRemoteCaretColor(raw: unknown): string {
+  const palette = toCaretColor(raw);
+  if (palette) return palette;
+  return typeof raw === "string" && HEX_COLOR.test(raw)
+    ? raw
+    : UNKNOWN_CARET_COLOR;
+}
+
+/**
+ * Parses the stored identity, repairing each invalid field from `fallback`.
+ * Never throws.
+ */
+export function parseStoredIdentity(
+  raw: string | null,
+  fallback: UserIdentity,
+): UserIdentity {
+  let parsed: unknown = null;
+  try {
+    parsed = raw === null ? null : JSON.parse(raw);
+  } catch {
+    /* repaired below */
+  }
+  const record =
+    parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  const name = normalizeName(record.name);
+  return {
+    name: name.ok ? name.name : fallback.name,
+    color: toCaretColor(record.color) ?? fallback.color,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+}
+
+/**
+ * The session's identity when storage is blocked, empty or not writable, so
+ * every caller sees the same one. Updated by every successful read and save.
+ */
+let memory: UserIdentity | null = null;
+/**
+ * Set while the last write failed (blocked or full storage): storage then
+ * holds an older identity than `memory`, so reads return `memory`.
+ */
+let writeFailed = false;
+
+function sessionIdentity(): UserIdentity {
+  memory ??= randomIdentity();
+  return memory;
+}
+
+function readStored(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(identity: UserIdentity): void {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+    writeFailed = false;
+  } catch {
+    // Blocked or full: the in-memory identity lasts for the session.
+    writeFailed = true;
+  }
+}
+
+export function getUserIdentity(): UserIdentity {
+  if (typeof window === "undefined") return randomIdentity();
+
+  const fallback = sessionIdentity();
+  if (writeFailed) return fallback;
+  const raw = readStored();
+  if (raw === null) {
+    writeStored(fallback);
+    return fallback;
+  }
+
+  const identity = parseStoredIdentity(raw, fallback);
+  if (JSON.stringify(identity) !== raw) writeStored(identity);
+  memory = identity;
   return identity;
 }
 
-export function saveUserIdentity(identity: UserIdentity): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+/**
+ * Validates and stores the identity. An invalid name is refused and nothing
+ * changes; a colour outside the palette keeps the current one. Never throws.
+ */
+export function saveUserIdentity(identity: UserIdentity): NameResult {
+  const result = normalizeName(identity.name);
+  if (!result.ok) return result;
+  const next: UserIdentity = {
+    name: result.name,
+    color: toCaretColor(identity.color) ?? sessionIdentity().color,
+  };
+  memory = next;
+  writeStored(next);
+  return result;
 }

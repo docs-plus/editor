@@ -30,6 +30,14 @@ export const loadColorPanel = () =>
  */
 export const loadedColorPanel = () => colorPanelModule;
 export const loadInsertStep = () => import("./insert/insert-step");
+/**
+ * The identity dialog (`user-identity-button.tsx`), needed only after "Edit
+ * identity" is clicked.
+ */
+export const loadIdentityDialog = () =>
+  import("@/components/tiptap-ui/user-identity-dialog").then(
+    (module) => module.UserIdentityDialog,
+  );
 
 /**
  * The desktop selection bubble, which carries the desktop status pill
@@ -49,7 +57,8 @@ const loadAnnouncer = () => import("@/lib/announce");
 /**
  * Fetches both chunks and the menu chunk (`lazy-menu.tsx`) on hover or
  * focus of their triggers. When the browser is idle after the first
- * server sync it also fetches the formatting engine, the announcer and,
+ * server sync it also fetches the formatting engine, the announcer, the
+ * identity dialog and,
  * on desktop, the bubble with its pill, so the service worker has all of
  * them before the user goes offline, and a load failure on a cold offline
  * start is still said. A failed fetch is retried on open.
@@ -60,6 +69,7 @@ export const preloadSurfaces = () => {
     loadInsertStep,
     loadV11Engine,
     loadAnnouncer,
+    loadIdentityDialog,
   ];
   if (window.matchMedia?.(DESKTOP_QUERY).matches) {
     loads.push(loadSelectionBubble);

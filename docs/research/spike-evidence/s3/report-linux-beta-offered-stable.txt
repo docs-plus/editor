@@ -1,0 +1,47 @@
+=== update-test linux-beta-offered-stable: PASS
+kind=appimage start=0.0.3-beta.1 feed=0.0.4 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.4 expected 0.0.4
+  [x] marker intact
+  [x] netlog files=2
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=41
+  [x] feed log matches /^[^\n]*serving[^\n]*\n[^\n]*GET /feed/beta-linux\.yml[\s\S]*GET /feed/tinydocy-0\.0\.4-x86_64\.AppImage 200[\s\S]*GET /feed/latest-linux\.yml/
+  [x] probe log matches /v0\.0\.3-beta\.1 .*default computed=beta/
+  [x] probe log matches /v0\.0\.3-beta\.1 .*Found version 0\.0\.4/
+--- feed log
+2026-11-16T17:16:45.719Z serving /home/runner/work/editor/editor/spikes/s3-packaging/release/0.0.4 at http://127.0.0.1:8787/feed/
+2026-11-16T17:16:47.292Z GET /feed/beta-linux.yml?noCache=1k7ilp09i 200
+2026-11-16T17:16:47.303Z GET /feed/tinydocy-0.0.4-x86_64.AppImage 200
+2026-11-16T17:16:49.128Z GET /feed/latest-linux.yml?noCache=1k7ilp22i 200
+--- probe log
+2026-11-16T17:16:46.789Z v0.0.3-beta.1 pid=5926 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_TinyDotUvu4s/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/out/linux-beta-offered-stable/TinyDocy.AppImage argv=[]
+2026-11-16T17:16:47.210Z v0.0.3-beta.1 pid=5926 window shown renderer-pid=5984
+2026-11-16T17:16:47.273Z v0.0.3-beta.1 pid=5926 after construction allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:16:47.274Z v0.0.3-beta.1 pid=5926 channel pref unset: default computed=beta (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:16:47.274Z v0.0.3-beta.1 pid=5926 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:16:47.274Z v0.0.3-beta.1 pid=5926 [updater] Checking for update
+2026-11-16T17:16:47.274Z v0.0.3-beta.1 pid=5926 event checking-for-update
+2026-11-16T17:16:47.281Z v0.0.3-beta.1 pid=5926 [updater] Generated new staging user ID: 079b874b-8a0b-545b-9848-84380d9f7d3b
+2026-11-16T17:16:47.298Z v0.0.3-beta.1 pid=5926 [updater] Found version 0.0.4 (url: tinydocy-0.0.4-x86_64.AppImage, tinydocy_0.0.4_amd64.deb, tinydocy_0.0.4_amd64.deb, tinydocy_0.0.4_amd64.deb)
+2026-11-16T17:16:47.299Z v0.0.3-beta.1 pid=5926 event update-available version=0.0.4
+2026-11-16T17:16:47.299Z v0.0.3-beta.1 pid=5926 [updater] Downloading update from tinydocy-0.0.4-x86_64.AppImage, tinydocy_0.0.4_amd64.deb, tinydocy_0.0.4_amd64.deb, tinydocy_0.0.4_amd64.deb
+2026-11-16T17:16:47.300Z v0.0.3-beta.1 pid=5926 [updater:debug] updater cache dir: /home/runner/.cache/tinydocy-updater
+2026-11-16T17:16:47.300Z v0.0.3-beta.1 pid=5926 check result version=0.0.4 isUpdateAvailable=true
+2026-11-16T17:16:47.301Z v0.0.3-beta.1 pid=5926 [updater] Cached update sha512 checksum doesn't match the latest available update. New update must be downloaded. Cached: 7pGO6Sda/xLw9EE9FQqLokRO2F82ZGOzyqvbwfUTbb75vutltBi8w6ho1Vjjorgbnh9PQ5H1heHljRogr+gkwg==, expected: nk6zzOnf/f0SJyKx4metSN5k/sBzfAr1k9VuvcCwo930PqMZrgwXbJ0AHiQk750VP5Yavim9J5M2+DAFv+esJQ==. Directory for cached update will be cleaned
+2026-11-16T17:16:47.603Z v0.0.3-beta.1 pid=5926 [updater] New version 0.0.4 has been downloaded to /home/runner/.cache/tinydocy-updater/pending/tinydocy-0.0.4-x86_64.AppImage
+2026-11-16T17:16:47.604Z v0.0.3-beta.1 pid=5926 event update-downloaded version=0.0.4 file=/home/runner/.cache/tinydocy-updater/pending/tinydocy-0.0.4-x86_64.AppImage
+2026-11-16T17:16:47.604Z v0.0.3-beta.1 pid=5926 calling quitAndInstall(true, true)
+2026-11-16T17:16:47.604Z v0.0.3-beta.1 pid=5926 [updater] Install on explicit quitAndInstall
+2026-11-16T17:16:47.604Z v0.0.3-beta.1 pid=5926 [updater] Install: isSilent: true, isForceRunAfter: true
+2026-11-16T17:16:47.613Z v0.0.3-beta.1 pid=5926 [updater] Executing: /home/runner/work/editor/editor/spikes/s3-packaging/out/linux-beta-offered-stable/TinyDocy.AppImage with args: 
+2026-11-16T17:16:48.703Z v0.0.4 pid=6019 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_TinyDodk8xBf/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/out/linux-beta-offered-stable/TinyDocy.AppImage argv=[]
+2026-11-16T17:16:49.095Z v0.0.4 pid=6019 window shown renderer-pid=6079
+2026-11-16T17:16:49.097Z v0.0.4 pid=6019 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:49.098Z v0.0.4 pid=6019 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:49.098Z v0.0.4 pid=6019 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:49.098Z v0.0.4 pid=6019 [updater] Checking for update
+2026-11-16T17:16:49.098Z v0.0.4 pid=6019 event checking-for-update
+2026-11-16T17:16:49.136Z v0.0.4 pid=6019 [updater] Update for version 0.0.4 is not available (latest version: 0.0.4, downgrade is disallowed).
+2026-11-16T17:16:49.137Z v0.0.4 pid=6019 event update-not-available latest=0.0.4
+2026-11-16T17:16:49.137Z v0.0.4 pid=6019 probe-exit reason=update-not-available
+2026-11-16T17:16:49.138Z v0.0.4 pid=6019 check result version=0.0.4 isUpdateAvailable=false

@@ -1,0 +1,116 @@
+### Record runner (before any change)
+image: ubuntu24 20261111.370.1
+Linux runnervm8axu0 7.0.0-1017-azure #17~24.04.1-Ubuntu SMP PREEMPT Thu Sep 24 18:46:57 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+Ubuntu 24.04.5 LTS
+kernel.apparmor_restrict_unprivileged_userns=1
+libfuse2t64: dpkg-query: no packages found matching libfuse2t64
+ls: cannot access '/usr/lib/x86_64-linux-gnu/libfuse.so.2*': No such file or directory
+
+### AppImage AppRun sandbox handling
+--- AppImage AppRun: sandbox handling
+36-isEulaAccepted=1
+37-
+38:HAVE_NO_SANDBOX=0
+39-for arg in "${args[@]}" ; do
+40:  if [ "$arg" = --no-sandbox ] ; then
+41:    HAVE_NO_SANDBOX=1
+42-    break
+43-  fi
+44-done
+45:NO_SANDBOX=()
+46:# Use 'unshare -Ur true' as a heuristic to detect whether user namespaces are available.
+47-# Notes:
+48:#   - When running as root, this check will always succeed even if the sandbox configuration
+49-#     actually relies on unprivileged user namespaces. In practice, Chrome/Electron usually
+50:#     disables or adjusts the sandbox separately when running as root, so this probe is mostly
+51-#     a no-op in that scenario.
+52:#   - On minimal systems (e.g. Alpine or stripped-down containers) 'unshare' may not exist.
+53-#     In that case the shell will return exit code 127 ("command not found"), which will cause
+54:#     us to add '--no-sandbox'. This is an intentional fail-safe: we prefer the app to start
+55:#     without sandboxing rather than crash on startup.
+56:if [ $HAVE_NO_SANDBOX -eq 0 ] && ! unshare -Ur true 2>/dev/null ; then
+57:  NO_SANDBOX=(--no-sandbox)
+58-fi
+59-
+60-atexit()
+61-{
+62-  if [ $isEulaAccepted == 1 ] ; then
+63-    if [ $NUMBER_OF_ARGS -eq 0 ] ; then
+64:      exec "$BIN" "${NO_SANDBOX[@]}"
+65-    else
+66:      exec "$BIN" "${NO_SANDBOX[@]}" "${args[@]}"
+67-    fi
+68-  fi
+69-}
+70-
+
+### deb contents, desktop file, MIME XML, xdg-mime
+-rw-r--r-- 0/0             229 2026-11-16 17:09 ./opt/TinyDocy/resources/apparmor-profile
+-rwxr-xr-x 0/0           15216 2026-11-16 17:09 ./opt/TinyDocy/chrome-sandbox
+--- /usr/share/applications/tinydocy.desktop
+[Desktop Entry]
+Name=TinyDocy
+Exec=/opt/TinyDocy/tinydocy %U
+Terminal=false
+Type=Application
+Icon=tinydocy
+StartupWMClass=TinyDocy
+Comment=TinyDocy S3 packaging spike (hello world)
+MimeType=application/x-tinydoc;x-scheme-handler/tinydocy;
+Categories=Office;
+--- /usr/share/mime/packages/tinydocy.xml
+<?xml version="1.0" encoding="utf-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+<mime-type type="application/x-tinydoc">
+  <glob pattern="*.tinydoc"/>
+    <comment>TinyDocy document</comment>
+  <icon name="x-office-document" />
+</mime-type>
+</mime-info>--- xdg-mime (XDG_CURRENT_DESKTOP=GNOME, gio + shared-mime-info)
+application/x-tinydoc
+tinydocy.desktop
+--- xdg-mime (no desktop set: generic fallback)
+text/plain
+tinydocy.desktop
+-rwxr-xr-x+ 1 root root 15216 Nov 16 17:09 /opt/TinyDocy/chrome-sandbox
+
+### Sandbox probes
+kernel.apparmor_restrict_unprivileged_userns=1
+=== probe appimage-runner-default: release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+kernel.apparmor_restrict_unprivileged_userns=1
+started without --no-sandbox: yes (pid 3743 alive after 12 s)
+renderer pid 3788: Seccomp:	0
+renderer cmdline: --enable-sandbox --no-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"
+=== probe deb-runner-default: /opt/TinyDocy/tinydocy
+kernel.apparmor_restrict_unprivileged_userns=1
+started without --no-sandbox: yes (pid 3911 alive after 12 s)
+renderer pid 3958: Seccomp:	2
+renderer cmdline: --enable-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"
+kernel.apparmor_restrict_unprivileged_userns = 1
+=== probe appimage-restrict-1: release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+kernel.apparmor_restrict_unprivileged_userns=1
+started without --no-sandbox: yes (pid 4278 alive after 12 s)
+renderer pid 4333: Seccomp:	0
+renderer cmdline: --enable-sandbox --no-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"
+=== probe deb-restrict-1: /opt/TinyDocy/tinydocy
+kernel.apparmor_restrict_unprivileged_userns=1
+started without --no-sandbox: yes (pid 4491 alive after 12 s)
+renderer pid 4590: Seccomp:	2
+renderer cmdline: --enable-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"
+kernel.apparmor_restrict_unprivileged_userns = 0
+=== probe appimage-restrict-0: release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+kernel.apparmor_restrict_unprivileged_userns=0
+started without --no-sandbox: yes (pid 4704 alive after 12 s)
+renderer pid 4763: Seccomp:	2
+renderer cmdline: --enable-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"
+=== probe deb-restrict-0: /opt/TinyDocy/tinydocy
+kernel.apparmor_restrict_unprivileged_userns=0
+started without --no-sandbox: yes (pid 5091 alive after 12 s)
+renderer pid 5195: Seccomp:	2
+renderer cmdline: --enable-sandbox 
+window 0x200002: WM_CLASS(STRING) = "tinydocy", "TinyDocy"

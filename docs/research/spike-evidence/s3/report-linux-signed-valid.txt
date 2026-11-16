@@ -1,0 +1,52 @@
+=== update-test linux-signed-valid: PASS
+kind=appimage start=0.0.1 feed=signed mode=update pref=unset signed=true control=false
+  [x] version.txt=0.0.2 expected 0.0.2
+  [x] marker intact
+  [x] netlog files=2
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=59
+  [x] feed log matches /latest-linux\.yml\.sig/
+  [x] probe log matches /signature valid=true/
+--- feed log
+2026-11-16T17:16:23.346Z serving /home/runner/work/editor/editor/spikes/s3-packaging/feeds/signed at http://127.0.0.1:8787/feed/
+2026-11-16T17:16:24.880Z GET /feed/latest-linux.yml?noCache=1k7iloacu 200
+2026-11-16T17:16:24.887Z GET /feed/latest-linux.yml.sig?noCache=1k7iloacu 200
+2026-11-16T17:16:24.902Z GET /feed/tinydocy-0.0.2-x86_64.AppImage 200
+2026-11-16T17:16:26.718Z GET /feed/latest-linux.yml?noCache=1k7iloc64 200
+2026-11-16T17:16:26.727Z GET /feed/latest-linux.yml.sig?noCache=1k7iloc64 200
+--- probe log
+2026-11-16T17:16:24.419Z v0.0.1 pid=5571 start mode=update pref=unset signed=true electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_TinyDoI367qr/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/out/linux-signed-valid/TinyDocy.AppImage argv=[]
+2026-11-16T17:16:24.854Z v0.0.1 pid=5571 window shown renderer-pid=5628
+2026-11-16T17:16:24.856Z v0.0.1 pid=5571 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:24.857Z v0.0.1 pid=5571 signed provider set allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:24.857Z v0.0.1 pid=5571 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:24.857Z v0.0.1 pid=5571 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:24.857Z v0.0.1 pid=5571 [updater] Checking for update
+2026-11-16T17:16:24.857Z v0.0.1 pid=5571 event checking-for-update
+2026-11-16T17:16:24.860Z v0.0.1 pid=5571 [updater] Generated new staging user ID: ac20bc18-de55-52f2-acdf-14d76321fa6f
+2026-11-16T17:16:24.894Z v0.0.1 pid=5571 signed-provider latest-linux.yml signature valid=true
+2026-11-16T17:16:24.898Z v0.0.1 pid=5571 [updater] Found version 0.0.2 (url: tinydocy-0.0.2-x86_64.AppImage, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb)
+2026-11-16T17:16:24.898Z v0.0.1 pid=5571 event update-available version=0.0.2
+2026-11-16T17:16:24.898Z v0.0.1 pid=5571 [updater] Downloading update from tinydocy-0.0.2-x86_64.AppImage, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb
+2026-11-16T17:16:24.898Z v0.0.1 pid=5571 check result version=0.0.2 isUpdateAvailable=true
+2026-11-16T17:16:24.899Z v0.0.1 pid=5571 [updater:debug] updater cache dir: /home/runner/.cache/tinydocy-updater
+2026-11-16T17:16:24.900Z v0.0.1 pid=5571 [updater] Cached update file doesn't exist
+2026-11-16T17:16:25.204Z v0.0.1 pid=5571 [updater] New version 0.0.2 has been downloaded to /home/runner/.cache/tinydocy-updater/pending/tinydocy-0.0.2-x86_64.AppImage
+2026-11-16T17:16:25.205Z v0.0.1 pid=5571 event update-downloaded version=0.0.2 file=/home/runner/.cache/tinydocy-updater/pending/tinydocy-0.0.2-x86_64.AppImage
+2026-11-16T17:16:25.205Z v0.0.1 pid=5571 calling quitAndInstall(true, true)
+2026-11-16T17:16:25.205Z v0.0.1 pid=5571 [updater] Install on explicit quitAndInstall
+2026-11-16T17:16:25.205Z v0.0.1 pid=5571 [updater] Install: isSilent: true, isForceRunAfter: true
+2026-11-16T17:16:25.214Z v0.0.1 pid=5571 [updater] Executing: /home/runner/work/editor/editor/spikes/s3-packaging/out/linux-signed-valid/TinyDocy.AppImage with args: 
+2026-11-16T17:16:26.293Z v0.0.2 pid=5663 start mode=update pref=unset signed=true electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_TinyDo2KYRii/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/out/linux-signed-valid/TinyDocy.AppImage argv=[]
+2026-11-16T17:16:26.686Z v0.0.2 pid=5663 window shown renderer-pid=5721
+2026-11-16T17:16:26.688Z v0.0.2 pid=5663 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:26.689Z v0.0.2 pid=5663 signed provider set allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:26.689Z v0.0.2 pid=5663 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:26.689Z v0.0.2 pid=5663 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:26.689Z v0.0.2 pid=5663 [updater] Checking for update
+2026-11-16T17:16:26.689Z v0.0.2 pid=5663 event checking-for-update
+2026-11-16T17:16:26.733Z v0.0.2 pid=5663 signed-provider latest-linux.yml signature valid=true
+2026-11-16T17:16:26.735Z v0.0.2 pid=5663 [updater] Update for version 0.0.2 is not available (latest version: 0.0.2, downgrade is disallowed).
+2026-11-16T17:16:26.736Z v0.0.2 pid=5663 event update-not-available latest=0.0.2
+2026-11-16T17:16:26.736Z v0.0.2 pid=5663 probe-exit reason=update-not-available
+2026-11-16T17:16:26.736Z v0.0.2 pid=5663 check result version=0.0.2 isUpdateAvailable=false
