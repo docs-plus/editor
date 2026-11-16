@@ -9,6 +9,14 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Storage and packaging spike results (S2, S3)
+
+- **Docs:** Phase 1 storage and packaging spike results (S2, S3) and the
+  decisions they settle: the storage worker stands until S5 decides D-A1,
+  `bun electron-builder` with no `node` exception, the update-channel
+  mapping with `allowDowngrade` reset last, and signed Linux manifests.
+  Documentation only; no app or server change.
+
 ### Two tabs editing one document offline keep each other's edits
 
 Each save now reads, merges and writes the device copy in one IndexedDB

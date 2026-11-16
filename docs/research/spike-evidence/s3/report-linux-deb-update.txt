@@ -1,0 +1,56 @@
+=== update-test linux-deb-update: PASS (informational)
+kind=deb start=0.0.1 feed=0.0.2 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.2 expected 0.0.2
+  [x] marker intact
+  [x] netlog files=2
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=41
+  [x] feed log matches /tinydocy_0\.0\.2_amd64\.deb/
+--- feed log
+2026-11-16T17:17:30.464Z serving /home/runner/work/editor/editor/spikes/s3-packaging/release/0.0.2 at http://127.0.0.1:8787/feed/
+2026-11-16T17:17:31.400Z GET /feed/latest-linux.yml?noCache=1k7ilqbc2 200
+2026-11-16T17:17:31.595Z GET /feed/tinydocy_0.0.2_amd64.deb 200
+2026-11-16T17:17:39.207Z GET /feed/latest-linux.yml?noCache=1k7ilqivv 200
+--- probe log
+2026-11-16T17:17:31.132Z v0.0.1 pid=6639 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/opt/TinyDocy/tinydocy appimage=- argv=[]
+2026-11-16T17:17:31.240Z v0.0.1 pid=6639 window shown renderer-pid=6684
+2026-11-16T17:17:31.246Z v0.0.1 pid=6639 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:31.314Z v0.0.1 pid=6639 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:31.346Z v0.0.1 pid=6639 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:31.363Z v0.0.1 pid=6639 [updater] Checking for update
+2026-11-16T17:17:31.373Z v0.0.1 pid=6639 event checking-for-update
+2026-11-16T17:17:31.380Z v0.0.1 pid=6639 [updater] Generated new staging user ID: 25756ba4-dca6-5e57-92aa-90640f5926b3
+2026-11-16T17:17:31.403Z v0.0.1 pid=6639 [updater] Found version 0.0.2 (url: tinydocy-0.0.2-x86_64.AppImage, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb)
+2026-11-16T17:17:31.453Z v0.0.1 pid=6639 event update-available version=0.0.2
+2026-11-16T17:17:31.503Z v0.0.1 pid=6639 [updater] Downloading update from tinydocy-0.0.2-x86_64.AppImage, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb, tinydocy_0.0.2_amd64.deb
+2026-11-16T17:17:31.534Z v0.0.1 pid=6639 [updater:debug] updater cache dir: /home/runner/.cache/tinydocy-updater
+2026-11-16T17:17:31.534Z v0.0.1 pid=6639 check result version=0.0.2 isUpdateAvailable=true
+2026-11-16T17:17:31.535Z v0.0.1 pid=6639 [updater] Cached update sha512 checksum doesn't match the latest available update. New update must be downloaded. Cached: vlo+/se7xoMyfCvNiQMa1dJTyHU6FIbezQYDDn5pxjLdpCahweTnBvP/ACpTIhmwUtyUr+7RwtZz8LBRDksICA==, expected: b1DZhaPnsyH3xLs/miY8eYHVaUoetkUW2CuYmTZP2CxVlzf9tLPi7jnkAqSlXs6Qz2DrEw2nzp36vQNPepOgVA==. Directory for cached update will be cleaned
+2026-11-16T17:17:31.951Z v0.0.1 pid=6639 [updater] New version 0.0.2 has been downloaded to /home/runner/.cache/tinydocy-updater/pending/tinydocy_0.0.2_amd64.deb
+2026-11-16T17:17:31.952Z v0.0.1 pid=6639 event update-downloaded version=0.0.2 file=/home/runner/.cache/tinydocy-updater/pending/tinydocy_0.0.2_amd64.deb
+2026-11-16T17:17:31.952Z v0.0.1 pid=6639 calling quitAndInstall(true, true)
+2026-11-16T17:17:31.952Z v0.0.1 pid=6639 [updater] Install on explicit quitAndInstall
+2026-11-16T17:17:31.952Z v0.0.1 pid=6639 [updater] Install: isSilent: true, isForceRunAfter: true
+2026-11-16T17:17:31.952Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,dpkg
+2026-11-16T17:17:31.960Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,dpkg
+2026-11-16T17:17:31.965Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,gksudo
+2026-11-16T17:17:31.970Z v0.0.1 pid=6639 [updater:error] 
+2026-11-16T17:17:32.061Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,kdesudo
+2026-11-16T17:17:32.067Z v0.0.1 pid=6639 [updater:error] 
+2026-11-16T17:17:32.067Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,pkexec
+2026-11-16T17:17:32.072Z v0.0.1 pid=6639 [updater:error] 
+2026-11-16T17:17:32.072Z v0.0.1 pid=6639 [updater] Executing: command with args: -v,beesu
+2026-11-16T17:17:32.077Z v0.0.1 pid=6639 [updater:error] 
+2026-11-16T17:17:32.077Z v0.0.1 pid=6639 [updater] Running as non-root user, using sudo to install: sudo
+2026-11-16T17:17:32.077Z v0.0.1 pid=6639 [updater] Executing: sudo with args: /bin/bash,-c,'dpkg -i /home/runner/.cache/tinydocy-updater/pending/tinydocy_0.0.2_amd64.deb'
+2026-11-16T17:17:39.133Z v0.0.2 pid=6782 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/opt/TinyDocy/tinydocy appimage=- argv=[]
+2026-11-16T17:17:39.193Z v0.0.2 pid=6782 window shown renderer-pid=6826
+2026-11-16T17:17:39.195Z v0.0.2 pid=6782 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:39.195Z v0.0.2 pid=6782 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:39.195Z v0.0.2 pid=6782 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:17:39.195Z v0.0.2 pid=6782 [updater] Checking for update
+2026-11-16T17:17:39.195Z v0.0.2 pid=6782 event checking-for-update
+2026-11-16T17:17:39.210Z v0.0.2 pid=6782 [updater] Update for version 0.0.2 is not available (latest version: 0.0.2, downgrade is disallowed).
+2026-11-16T17:17:39.210Z v0.0.2 pid=6782 event update-not-available latest=0.0.2
+2026-11-16T17:17:39.210Z v0.0.2 pid=6782 probe-exit reason=update-not-available
+2026-11-16T17:17:39.210Z v0.0.2 pid=6782 check result version=0.0.2 isUpdateAvailable=false

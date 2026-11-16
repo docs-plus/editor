@@ -1,0 +1,18 @@
+version: 0.0.4
+files:
+  - url: tinydocy-0.0.4-x86_64.AppImage
+    sha512: X8j0t8t5p76FENF7Wil+ZSjaqCdqG7cVt9LQKhrAD8awGcKWTDpZ82+inIhQFroIvwdTOQgIJQyUkzjOt+Kr7w==
+    size: 126111897
+    blockMapSize: 135341
+  - url: tinydocy_0.0.4_amd64.deb
+    sha512: T1oakdOKRbqNnl3ZrJptaAL9Bdo3PIDSsGMGJn5FQs+JWqprpoSUtvCmJfME8KHocZCI0azm58ngxX19wuurZQ==
+    size: 101339912
+  - url: tinydocy_0.0.4_amd64.deb
+    sha512: T1oakdOKRbqNnl3ZrJptaAL9Bdo3PIDSsGMGJn5FQs+JWqprpoSUtvCmJfME8KHocZCI0azm58ngxX19wuurZQ==
+    size: 101339912
+  - url: tinydocy_0.0.4_amd64.deb
+    sha512: T1oakdOKRbqNnl3ZrJptaAL9Bdo3PIDSsGMGJn5FQs+JWqprpoSUtvCmJfME8KHocZCI0azm58ngxX19wuurZQ==
+    size: 101339912
+path: tinydocy-0.0.4-x86_64.AppImage
+sha512: X8j0t8t5p76FENF7Wil+ZSjaqCdqG7cVt9LQKhrAD8awGcKWTDpZ82+inIhQFroIvwdTOQgIJQyUkzjOt+Kr7w==
+releaseDate: '2026-11-16T16:54:23.031Z'

@@ -272,7 +272,7 @@ Versions are built in one job: N-1 `0.0.1`, N `0.0.2`, beta `0.0.3-beta.1`, stab
   - A `-beta.N` build requests `beta.yml` (`beta-mac.yml` on macOS, `beta-linux.yml` on Linux).
   - "Stable builds also write `beta.yml`": a stable build with `generateUpdatesFilesForAllChannels` writes all three beta files, and a beta-channel `0.0.3-beta.1` install is offered stable `0.0.4` once that is published.
   - Record the mapping table from `prefs.updates.channel` (Stable/Beta) to electron-updater's `channel` and `allowPrerelease`. The default channel is computed, never stored.
-- [ ] **`allowDowngrade` stays off.** Both the `channel` setter and `generateUpdatesFilesForAllChannels` turn it on, so it "must be set to `false` explicitly".
+- [ ] **`allowDowngrade` stays off.** Both the `channel` setter and `generateUpdatesFilesForAllChannels` turn it on, so it "must be set to `false` explicitly". *(S3 correction: in electron-updater 6.8.11 only the `channel` setter turns it on; the flag is build-time only.)*
   - Log `allowDowngrade` after construction, after the channel setter and before each `checkForUpdates`.
   - `allowDowngrade = false` is the last assignment before every check.
   - A feed offering `0.0.0` installs nothing (`version.txt` unchanged) on the default path (no channel set) and on the Beta→Stable path (a `0.0.3-beta.1` install switched to Stable).
