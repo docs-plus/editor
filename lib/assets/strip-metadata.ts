@@ -12,6 +12,10 @@
  * - GIF passes through unchanged so animations keep working. Its comment and
  *   XMP application extensions pass through with it.
  *
+ * - A JPEG the canvas encoder produced (Safari, which cannot encode WebP)
+ *   loses the Exif and Photoshop segments that encoder adds on its own
+ *   (`stripJpegMetadata`), so no inserted JPEG carries an APP1.
+ *
  * Pure: no DOM, so the policy is unit-tested. `null` means "re-encode
  * instead": malformed or truncated input, bytes that are not the declared
  * container, a rotation, or Exif that cannot be read.
@@ -184,4 +188,59 @@ export function stripImageMetadata(
   type: "image/png" | "image/webp",
 ): Uint8Array<ArrayBuffer> | null {
   return type === "image/png" ? stripPng(bytes) : stripWebp(bytes);
+}
+
+/**
+ * JPEG segments kept before the first scan: JFIF (APP0), ICC profile (APP2),
+ * Adobe colour transform (APP14), tables, frame headers and restart interval.
+ * Exif and XMP (APP1), Photoshop (APP13), every other APPn and comments drop.
+ */
+function keepJpegSegment(marker: number): boolean {
+  if (marker === 0xe0 || marker === 0xe2 || marker === 0xee) return true;
+  if (marker === 0xdb || marker === 0xdd) return true; // DQT, DRI
+  return marker >= 0xc0 && marker <= 0xcf && marker !== 0xc8; // SOFn, DHT, DAC
+}
+
+/**
+ * Removes metadata segments from a JPEG produced by the canvas encoder, or
+ * returns `null` when the bytes are not a complete JPEG. Only for encoder
+ * output: a source JPEG must be re-encoded instead, because dropping its
+ * APP1 would also drop its rotation. Bytes after EOI are dropped.
+ */
+export function stripJpegMetadata(
+  bytes: Uint8Array,
+): Uint8Array<ArrayBuffer> | null {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const data = view(bytes);
+  const kept: Uint8Array[] = [bytes.subarray(0, 2)];
+  let length = 2;
+  let offset = 2;
+
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) return null;
+    const marker = bytes[offset + 1];
+    if (marker === 0xff) {
+      offset += 1; // fill byte
+      continue;
+    }
+    const end = offset + 2 + data.getUint16(offset + 2);
+    if (end > bytes.length) return null;
+    if (marker === 0xda) {
+      // Entropy-coded data escapes 0xFF as FF 00 or a restart marker, so the
+      // first FF D9 after the scan header is EOI.
+      for (let i = end; i + 1 < bytes.length; i++) {
+        if (bytes[i] === 0xff && bytes[i + 1] === 0xd9) {
+          kept.push(bytes.subarray(offset, i + 2));
+          return join(kept, length + i + 2 - offset);
+        }
+      }
+      return null;
+    }
+    if (keepJpegSegment(marker)) {
+      kept.push(bytes.subarray(offset, end));
+      length += end - offset;
+    }
+    offset = end;
+  }
+  return null;
 }

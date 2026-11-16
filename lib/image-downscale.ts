@@ -7,6 +7,18 @@
  * later edit would be lost, so raster images are downscaled and re-encoded
  * until their data URL fits `MAX_EMBED_IMAGE_BYTES`.
  *
+ * Privacy (I3): no inserted image keeps camera or location metadata.
+ * - JPEG is always re-encoded. The canvas applies the Exif rotation and the
+ *   output has no Exif, GPS or other APP segments (Safari's JPEG encoder adds
+ *   its own Exif and Photoshop segments; those are removed too).
+ * - PNG and WebP that fit keep their pixels; `lib/assets/strip-metadata.ts`
+ *   (loaded on demand) drops text, time, Exif, XMP and unknown chunks. When
+ *   it returns `null` (malformed, not that container, or an Exif rotation),
+ *   the file is re-encoded instead.
+ * - GIF passes through unchanged when its bytes start with a GIF signature,
+ *   so animations keep working (comment and XMP extensions pass with it);
+ *   anything else labelled GIF is re-encoded.
+ *
  * The decision logic is pure and unit-tested; only `prepareImageForEmbed`
  * touches the DOM (canvas, Image, FileReader).
  */
@@ -47,14 +59,6 @@ const QUALITY_STEPS = [0.85, 0.7, 0.55] as const;
 
 /** Decoded-pixel ceiling; guards against decompression bombs. */
 export const MAX_DECODE_PIXELS = 40_000_000;
-
-/** Types that are embedded unchanged when they already fit the cap. */
-const PASSTHROUGH_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-]);
 
 export function formatKilobytes(bytes: number): string {
   return `${Math.round(bytes / 1024)} KB`;
@@ -108,6 +112,7 @@ export function* encodeAttempts(
 
 export type EmbedPlan =
   | { kind: "passthrough" }
+  | { kind: "strip"; type: "image/png" | "image/webp" }
   | { kind: "reencode" }
   | { kind: "reject"; reason: string };
 
@@ -135,9 +140,10 @@ export function planImageEmbed(
           reason: `GIFs must be under ${formatKilobytes(maxBytes)} to embed (animations aren't resized).`,
         };
   }
-  return fits && PASSTHROUGH_TYPES.has(type)
-    ? { kind: "passthrough" }
-    : { kind: "reencode" };
+  if (fits && (type === "image/png" || type === "image/webp")) {
+    return { kind: "strip", type };
+  }
+  return { kind: "reencode" };
 }
 
 export interface EncodedImage {
@@ -198,6 +204,41 @@ function readAsDataUrl(blob: Blob, signal?: AbortSignal): Promise<string> {
     signal?.addEventListener("abort", onAbort, { once: true });
     reader.readAsDataURL(blob);
   });
+}
+
+/** True when `file` starts with `GIF87a` or `GIF89a`. */
+async function hasGifSignature(file: Blob): Promise<boolean> {
+  const head = new Uint8Array(await file.slice(0, 6).arrayBuffer());
+  return /^GIF8[79]a$/.test(String.fromCharCode(...head));
+}
+
+/** The stripped file as a data URL, or `null` to re-encode instead. */
+async function stripToDataUrl(
+  file: File,
+  type: "image/png" | "image/webp",
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const { stripImageMetadata } = await import("@/lib/assets/strip-metadata");
+  throwIfAborted(signal);
+  const stripped = stripImageMetadata(
+    new Uint8Array(await file.arrayBuffer()),
+    type,
+  );
+  return stripped
+    ? readAsDataUrl(new Blob([stripped], { type }), signal)
+    : null;
+}
+
+/**
+ * Safari's JPEG encoder adds its own Exif (colour space, pixel size) and
+ * Photoshop segments. They hold nothing from the source, but no inserted
+ * JPEG should carry an APP1, so they are dropped.
+ */
+async function withoutEncoderMetadata(blob: Blob): Promise<Blob> {
+  if (blob.type !== "image/jpeg") return blob;
+  const { stripJpegMetadata } = await import("@/lib/assets/strip-metadata");
+  const stripped = stripJpegMetadata(new Uint8Array(await blob.arrayBuffer()));
+  return stripped ? new Blob([stripped], { type: blob.type }) : blob;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -285,7 +326,13 @@ export async function prepareImageForEmbed(
 ): Promise<string> {
   const plan = planImageEmbed(file, maxBytes);
   if (plan.kind === "reject") throw new Error(plan.reason);
-  if (plan.kind === "passthrough") return readAsDataUrl(file, signal);
+  if (plan.kind === "passthrough" && (await hasGifSignature(file))) {
+    return readAsDataUrl(file, signal);
+  }
+  if (plan.kind === "strip") {
+    const stripped = await stripToDataUrl(file, plan.type, signal);
+    if (stripped) return stripped;
+  }
 
   const url = URL.createObjectURL(file);
   try {
@@ -311,7 +358,7 @@ export async function prepareImageForEmbed(
         );
       }
       onProgress?.(90);
-      return await readAsDataUrl(blob, signal);
+      return await readAsDataUrl(await withoutEncoderMetadata(blob), signal);
     } finally {
       encoder.dispose();
     }

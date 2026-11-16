@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { stripImageMetadata } from "@/lib/assets/strip-metadata";
+import {
+  stripImageMetadata,
+  stripJpegMetadata,
+} from "@/lib/assets/strip-metadata";
 import {
   ascii,
   buildExifApp1,
@@ -195,5 +198,72 @@ describe("stripImageMetadata: WebP", () => {
       stripImageMetadata(webp.subarray(0, webp.length - 4), "image/webp"),
     ).toBeNull();
     expect(stripImageMetadata(buildPng([]), "image/webp")).toBeNull();
+  });
+});
+
+/** One JPEG marker segment: FF, marker, big-endian length, payload. */
+function segment(marker: number, payload: Uint8Array): Uint8Array {
+  const length = payload.length + 2;
+  return concat(
+    new Uint8Array([0xff, marker, length >> 8, length & 0xff]),
+    payload,
+  );
+}
+
+const SOI = new Uint8Array([0xff, 0xd8]);
+const EOI = new Uint8Array([0xff, 0xd9]);
+const APP0 = segment(0xe0, ascii("JFIF\x00\x01\x01\x00\x00H\x00H\x00\x00"));
+const DQT = segment(0xdb, new Uint8Array(65));
+const SOF0 = segment(0xc0, new Uint8Array([8, 0, 1, 0, 1, 1, 1, 0x11, 0]));
+const DHT = segment(0xc4, new Uint8Array(29));
+const APP14 = segment(0xee, ascii("Adobe\x00\x64\x00\x00\x00\x00\x01"));
+// SOS header, then entropy-coded data with a stuffed FF 00 and a restart marker.
+const SCAN = concat(
+  segment(0xda, new Uint8Array([1, 1, 0, 0, 0x3f, 0])),
+  new Uint8Array([0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56]),
+);
+const CLEAN_JPEG = concat(SOI, APP0, APP14, DQT, SOF0, DHT, SCAN, EOI);
+
+describe("stripJpegMetadata (encoder output)", () => {
+  it("drops Exif, Photoshop, XMP and comment segments and keeps the image", () => {
+    const encoderExif = segment(0xe1, buildExifApp1({}));
+    const photoshop = segment(0xed, ascii("Photoshop 3.0\x008BIM"));
+    const xmp = segment(0xe1, ascii("http://ns.adobe.com/xap/1.0/\x00<x/>"));
+    const comment = segment(0xfe, ascii("made by an encoder"));
+    const input = concat(
+      SOI,
+      APP0,
+      encoderExif,
+      photoshop,
+      APP14,
+      xmp,
+      comment,
+      DQT,
+      SOF0,
+      DHT,
+      SCAN,
+      EOI,
+    );
+    expect(stripJpegMetadata(input)).toEqual(CLEAN_JPEG);
+  });
+
+  it("keeps an ICC profile segment (APP2)", () => {
+    const icc = segment(0xe2, ascii("ICC_PROFILE\x00\x01\x01"));
+    const input = concat(SOI, APP0, icc, DQT, SOF0, DHT, SCAN, EOI);
+    expect(stripJpegMetadata(input)).toEqual(input);
+  });
+
+  it("drops bytes after EOI", () => {
+    expect(stripJpegMetadata(concat(CLEAN_JPEG, ascii("GPS 52.37")))).toEqual(
+      CLEAN_JPEG,
+    );
+  });
+
+  it("returns null for bytes that are not a complete JPEG", () => {
+    expect(stripJpegMetadata(buildPng([]))).toBeNull();
+    expect(stripJpegMetadata(CLEAN_JPEG.subarray(0, 20))).toBeNull();
+    expect(
+      stripJpegMetadata(CLEAN_JPEG.subarray(0, CLEAN_JPEG.length - 2)),
+    ).toBeNull();
   });
 });
