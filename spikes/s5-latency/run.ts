@@ -1,8 +1,11 @@
 // Spike S5 runner: a loopback Hocus (temp DB, throttle off) and the app on
 // 127.0.0.1, then the latency spec. Every server is local; never the live site.
 //
-//   bun spikes/s5-latency/run.ts            # serves the production build (`next start`)
-//   S5_SERVE=out bun spikes/s5-latency/run.ts  # serves the static export `out/`
+//   bun spikes/s5-latency/run.ts               # serves the static export `out/`
+//   S5_SERVE=next bun spikes/s5-latency/run.ts # serves a production build (`next start`)
+//
+// The Chrome arms load http://127.0.0.1:<port>; the Electron arms load the
+// same out/ through S1's shell on app://tinydocy.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,7 +16,7 @@ const HOCUS_PORT = Number(process.env.S5_HOCUS_PORT ?? 1290);
 const origin = `http://127.0.0.1:${APP_PORT}`;
 const tmp = mkdtempSync(join(tmpdir(), "s5-hocus-"));
 
-const hocus = Bun.spawn(["bun", "run", "hocus"], {
+const hocus = Bun.spawn(["bun", "scripts/hocus-server.ts"], {
   cwd: root,
   env: {
     ...process.env,
@@ -21,7 +24,7 @@ const hocus = Bun.spawn(["bun", "run", "hocus"], {
     DB_PATH: join(tmp, "db.sqlite"),
     HOCUS_THROTTLE: "0",
     HOCUS_ALLOW_ISOLATED_TABS_DOCS: "1",
-    HOCUS_ALLOWED_ORIGINS: origin,
+    HOCUS_ALLOWED_ORIGINS: `${origin},app://tinydocy`,
     WS_CONNECTION_LIMIT: "200",
     WS_SOCKETS_PER_IP: "600",
     WS_UPGRADE_RATE_LIMIT: "6000",
@@ -32,7 +35,7 @@ const hocus = Bun.spawn(["bun", "run", "hocus"], {
 });
 
 const app =
-  process.env.S5_SERVE === "out"
+  process.env.S5_SERVE !== "next"
     ? Bun.spawn(["bun", join(import.meta.dir, "serve-out.ts")], {
         cwd: root,
         env: { ...process.env, S5_APP_PORT: String(APP_PORT) },
@@ -91,7 +94,13 @@ try {
     ],
     {
       cwd: root,
-      env: { ...process.env, CI: "", S5_BASE_URL: origin },
+      env: {
+        ...process.env,
+        CI: "",
+        S5_BASE_URL: origin,
+        SPIKE_HOCUS_URL: `ws://127.0.0.1:${HOCUS_PORT}`,
+        SPIKE_OUT_DIR: join(root, "out"),
+      },
       stdout: "inherit",
       stderr: "inherit",
     },

@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/main.cjs",
   "scripts": {
-    "build": "bun build main.ts worker.ts --target=node --format=cjs --external electron --entry-naming '[name].cjs' --outdir dist"
+    "build": "bun build main.ts worker.ts ../s1-shell/preload.ts --target=node --format=cjs --external electron --entry-naming '[name].cjs' --outdir dist"
   },
   "devDependencies": {
     "@types/node": "24",

@@ -52,7 +52,10 @@ const ROUNDS = Number(env.PERF_ROUNDS ?? 7);
 const CPU_THROTTLE = Number(env.PERF_CPU_THROTTLE ?? 4);
 const KEYSTROKES = Number(env.KEYSTROKES ?? 220);
 const WARMUP_KEYSTROKES = Number(env.WARMUP_KEYSTROKES ?? 20);
+/** The Chrome arms load out/ over http (serve-out.ts). */
 const BASE_URL = env.S5_BASE_URL ?? "http://127.0.0.1:3900";
+/** The Electron arms load out/ through S1's shell, on its own origin. */
+const ELECTRON_BASE_URL = env.S5_ELECTRON_BASE_URL ?? "app://tinydocy";
 const MACHINE = env.S5_MACHINE ?? `${platform()}-${arch()}`;
 const HERE = import.meta.dirname ?? __dirname;
 const RESULTS = resolve(HERE, "results");
@@ -142,7 +145,8 @@ const open = async (arm: Arm): Promise<Session> => {
   const page = await app.firstWindow();
   // EditorPage navigates to "/"; an Electron context has no baseURL.
   const goto = page.goto.bind(page);
-  page.goto = (url, options) => goto(new URL(url, BASE_URL).href, options);
+  page.goto = (url, options) =>
+    goto(new URL(url, ELECTRON_BASE_URL).href, options);
   const versions = await app.evaluate(
     () => (globalThis as S5Global).__s5.versions,
   );

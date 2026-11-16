@@ -70,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           bun playwright install-deps chromium
-          sudo apt-get install -y xvfb
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb
 
       # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
       # The runner image ships Node, so a stub makes any call to it fail
@@ -86,14 +86,25 @@ jobs:
           chmod +x "$RUNNER_TEMP/no-node/node"
           echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
 
-      - name: Build the app (production, spike hooks on)
-        env:
-          NEXT_PUBLIC_SPIKE_HOOKS: "1"
-          NEXT_PUBLIC_SERVICE_WORKER: "0"
-          NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1290
-        run: bun run build
+      # Windows resolves `node` through PATHEXT, so the stub needs a .cmd twin.
+      - name: Block Node.js (Windows twin)
+        if: runner.os == 'Windows'
+        run: |
+          printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
 
-      - name: Build the Electron main and worker
+      - name: Workflow rules
+        if: runner.os == 'Linux'
+        run: bun test tests/unit/ci/workflow-permissions.test.ts
+
+      # S1's recipe: the static export with the editor exposed for setContent.
+      - name: Desktop export
+        env:
+          NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR: "1"
+          NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1290
+        run: bun spikes/s1-shell/build-export.ts
+
+      # S5 instrumentation + S1's main and preload + S2's storage worker.
+      - name: Electron bundles (CJS)
         run: cd spikes/s5-latency && bun run build
 
       - name: Allow the Chromium sandbox (electron/electron#42510)
