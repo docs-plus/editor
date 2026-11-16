@@ -1,0 +1,152 @@
+name: Spike S2 (storage worker)
+
+# Phase 1 spike S2 (throwaway, never merged): node:sqlite in an Electron
+# worker thread, crash atomicity under SIGKILL, and commit-time context.
+# Gate rows run on macos-26, windows-latest and ubuntu-24.04; the other
+# runners are informational.
+
+on:
+  push:
+    branches: [spike/s2-storage]
+    paths: [spikes/s2-storage/**, .github/workflows/spike-s2.yml]
+  workflow_dispatch:
+    inputs:
+      kills:
+        description: Kills per harness target
+        default: "200"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-s2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  storage:
+    name: S2 ${{ matrix.target }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    # Gate rows: macos-26, windows-latest, ubuntu-24.04. The rest inform.
+    continue-on-error: ${{ !contains(fromJSON('["macos-26","windows-latest","ubuntu-24.04"]'), matrix.os) }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-26
+          - windows-latest
+          - ubuntu-24.04
+          - macos-26-intel
+          - windows-11-arm
+          - ubuntu-24.04-arm
+        # One kill target per job keeps each job well inside the timeout.
+        target: [checks, append, compaction, append-off, append-dense]
+    defaults:
+      run:
+        shell: bash
+        working-directory: spikes/s2-storage
+    env:
+      KILLS: ${{ github.event.inputs.kills || '200' }}
+      OUT: ${{ github.workspace }}/spikes/s2-storage/harness-out
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No secrets or environments in this workflow
+        working-directory: .
+        # Bracketed so the pattern doesn't match its own line.
+        run: "! grep -nE 'secrets[.]|environ[m]ent:' .github/workflows/spike-s2.yml"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          bun -e 'console.log(require("electron"))'
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          echo "XVFB=xvfb-run -a" >> "$GITHUB_ENV"
+
+      - name: Defender state (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AMRunningMode | Format-List | Tee-Object -FilePath defender.txt
+          Get-Content defender.txt >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Build
+        run: bun run build
+
+      - name: Pragmas (worker opens node:sqlite)
+        run: |
+          mkdir -p "$OUT"
+          echo "$TARGET" > "$OUT/target.txt"
+          $XVFB bun electron dist/main.cjs --mode=pragmas --db "$RUNNER_TEMP/s2-pragmas.sqlite" | tee "$OUT/pragmas.txt"
+          grep '^RESULT ' "$OUT/pragmas.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Appends and compaction round trip
+        if: ${{ !cancelled() && matrix.target == 'checks' }}
+        run: |
+          $XVFB bun electron dist/main.cjs --mode=roundtrip --db "$RUNNER_TEMP/s2-roundtrip.sqlite" | tee "$OUT/roundtrip.txt"
+          grep '^RESULT ' "$OUT/roundtrip.txt" >> "$GITHUB_STEP_SUMMARY"
+          grep -q '"ok":true' "$OUT/roundtrip.txt"
+
+      - name: Commit times, 4 KB (context only on hosted VMs)
+        if: ${{ !cancelled() && matrix.target == 'checks' }}
+        run: |
+          for thread in worker main; do
+            $XVFB bun electron dist/main.cjs --mode=commit-loop --thread=$thread --count=1000 --db "$RUNNER_TEMP/s2-commit-$thread.sqlite" | grep '^RESULT ' | tee -a "$OUT/commit-times.txt"
+          done
+          $XVFB bun electron dist/main.cjs --mode=commit-loop --synchronous=OFF --count=1000 --db "$RUNNER_TEMP/s2-commit-off.sqlite" | grep '^RESULT ' | tee -a "$OUT/commit-times.txt"
+          cat "$OUT/commit-times.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Kill harness, append
+        if: ${{ !cancelled() && matrix.target == 'append' }}
+        run: $XVFB bun kill-harness.ts --kills "$KILLS" --target append --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Kill harness, compaction
+        if: ${{ !cancelled() && matrix.target == 'compaction' }}
+        run: $XVFB bun kill-harness.ts --kills "$KILLS" --target compaction --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Kill harness, append control (synchronous=OFF)
+        if: ${{ !cancelled() && matrix.target == 'append-off' }}
+        run: $XVFB bun kill-harness.ts --kills "$KILLS" --target append --synchronous=OFF --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Kill harness, dense append (extra evidence)
+        if: ${{ !cancelled() && matrix.target == 'append-dense' }}
+        run: $XVFB bun kill-harness.ts --kills 100 --target append --dense --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload harness logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s2-${{ matrix.os }}-${{ matrix.target }}
+          path: spikes/s2-storage/harness-out/
+          if-no-files-found: warn
+          retention-days: 90

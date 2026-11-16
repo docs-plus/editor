@@ -1,0 +1,18 @@
+{
+  "name": "s2-storage",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "bun build main.ts worker.ts --target=node --format=cjs --external electron --entry-naming '[name].cjs' --outdir dist"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "24",
+    "electron": "45.3.1",
+    "yjs": "13.6.33"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}
