@@ -199,12 +199,13 @@ Production runs as PM2 processes defined in `ecosystem.config.cjs`: Next.js
 on 3847, Hocuspocus on 3848, an optional Redis on 6380, and `editor-purge`, the
 daily retention purge. The servers sit behind a TLS-terminating reverse proxy.
 
-The **Deploy** workflow deploys each push to `main` once its CI passes. To
-pause that, or to deploy by hand:
+Run the **Deploy** workflow to deploy. Once the one-time setup is done, the
+owner can also turn on automatic deploys, which deploy each push to `main`
+after its CI passes:
 
 ```bash
-gh variable set AUTO_DEPLOY --body off   # pause automatic deploys
 gh workflow run deploy.yml               # deploy the tip of main by hand
+gh variable set AUTO_DEPLOY --body on    # deploy automatically after CI (off by default)
 ```
 
 It SSHes to the host with a key that can only run `scripts/deploy.sh`. The
@@ -221,7 +222,9 @@ Requirements:
   `/_next/static/service-worker/sw.js`; it must stay
   `public, max-age=0, must-revalidate`.
 - **Retention.** `editor-purge` runs `scripts/purge-retention.ts` daily at
-  03:17 (host time). Rotate the PM2 logs; abuse events contain IP addresses.
+  03:17 (host time). It is a dry run until `PURGE_MODE` is `on`; then it backs
+  the database up before deleting. Rotate the PM2 logs; abuse events contain
+  IP addresses.
 - **Taking content down.** Delete the document; never reset its stored state,
   because offline copies would push it back.
 

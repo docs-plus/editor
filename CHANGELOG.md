@@ -9,33 +9,44 @@ since the previous tag.
 
 ## [Unreleased]
 
-### Automatic deploys and a daily retention purge
+### Automatic deploys and a daily retention purge, both off until turned on
 
-Production now deploys by itself after CI passes on `main`, and the
-retention purge runs every day. Until now it never ran in production,
-because nothing scheduled it.
+The Deploy workflow can now deploy by itself after CI passes on `main`, and
+a daily PM2 job runs the retention purge, which has never run in production.
+Both start off: automatic deploys wait for the owner to set `AUTO_DEPLOY`,
+and the purge only logs what it would delete until `PURGE_MODE` is `on`.
 
 #### Added
 
-- **Automatic deploys.** The Deploy workflow also runs when CI completes on
-  `main` (`workflow_run`). It deploys that commit only if the CI run passed
-  and came from a push, never from a pull request or a fork. The on-`main`
-  and green-CI checks and the `production` environment are unchanged, and
-  the runner still checks out no code. Only runs that will deploy join the
-  `deploy-production` concurrency group, so a skipped run (failed CI, a
-  fork's `main`, the switch off) cannot cancel a deploy waiting its turn.
-  `gh variable set AUTO_DEPLOY --body off` pauses automatic deploys;
-  `gh workflow run deploy.yml` still deploys by hand.
+- **Automatic deploys (opt-in).** The Deploy workflow also runs when CI
+  completes on `main` (`workflow_run`). It deploys that commit only if the
+  repository variable `AUTO_DEPLOY` is `on` and the CI run passed and came
+  from a push, never from a pull request or a fork. Unset means off. The
+  on-`main` and green-CI checks and the `production` environment are
+  unchanged, and the runner still checks out no code.
+  `gh workflow run deploy.yml` still deploys by hand at any time.
+- Only runs that will deploy join the `deploy-production` concurrency group,
+  so a skipped run (failed CI, a fork's `main`, automatic deploys off) cannot
+  cancel a deploy waiting its turn.
 - **`editor-purge`**, a PM2 app in `ecosystem.config.cjs`, runs
   `scripts/purge-retention.ts` daily at 03:17 (host time, `cron_restart`,
   `autorestart: false`). It shares `DB_PATH` with `editor-next` and
   `editor-hocus` through one `storageEnv` object, where retention settings
-  also belong.
-- `scripts/deploy.sh` starts or restarts `editor-purge` with `--update-env`
-  after the new build is live, which also runs one purge.
-- Tests: `workflow_run` workflows must not check out code and must require a
-  successful CI run from a push; the ecosystem file, `deploy.sh` and the
-  Deploy trigger are checked against each other
+  also belong. `scripts/deploy.sh` starts or restarts it with `--update-env`
+  after the new build is live, which also runs it once.
+- **`PURGE_MODE`** for the purge: `off`; `dry-run` (the default, and the
+  file's value), which logs `retention_purge_dry_run` with the documents an
+  `on` run would delete (`wouldDeleteNames`), the whole backlog
+  (`staleTotal`) and the expiring tombstones, and changes nothing; and `on`.
+  An `on` run first copies the database with `VACUUM INTO` to
+  `backups/db-<UTC time>.sqlite` next to `DB_PATH`, keeping the newest 7,
+  and deletes nothing if that fails (exit 1, `retention_purge_backup_failed`).
+  An unknown value is refused.
+- Tests: the purge modes, the dry run (it writes nothing and lists exactly
+  what the purge deletes), the backup and its rotation, and the CLI in each
+  mode, including a failed backup; `workflow_run` workflows must not check
+  out code and must require a successful CI run from a push; the ecosystem
+  file, `deploy.sh` and the Deploy workflow are checked against each other
   (`tests/unit/ci/deploy-config.test.ts`).
 
 See "Automatic deploys" and "Scheduled jobs" in
@@ -43,23 +54,30 @@ See "Automatic deploys" and "Scheduled jobs" in
 
 #### Deploy
 
-- **If the one-time deploy setup is not done yet** (secrets, deploy key; see
-  the runbook), run `gh variable set AUTO_DEPLOY --body off` before merging.
-  Otherwise every merge to `main` starts a Deploy run that fails at SSH.
-- Merging deploys this change by itself. That deploy runs the host's previous
-  `scripts/deploy.sh` (script changes apply from the next deploy), so it does
-  not start `editor-purge`.
-- The first purge deletes real documents: up to 100 of the oldest that have
-  been idle for more than 30 days, then up to 100 per run until the backlog
-  is gone. Back up `db.sqlite` first if you want a copy.
-- Start the purge once by hand, then save the PM2 list so it survives a
-  reboot:
-  ```bash
-  cd /opt/projects/editor.docs.plus
-  bunx pm2@6.0.14 start ecosystem.config.cjs --only editor-purge
-  bunx pm2@6.0.14 save
-  ```
-  If you skip this, the next deploy starts it; run `pm2 save` after that.
+Nothing deploys by itself and nothing is deleted on merge. In order:
+
+1. **Finish the one-time setup** in the deploy runbook if it is not done:
+   the deploy key on the host, the `production` environment limited to
+   `main` with its secrets, and `git pull --ff-only` once on the host.
+2. **Deploy by hand:** `gh workflow run deploy.yml`. The deploy that first
+   brings this change runs the host's previous `scripts/deploy.sh` (script
+   changes apply from the next deploy), so it may not start `editor-purge`.
+   If `bunx pm2@6.0.14 ls` does not list it, start it, then save the PM2
+   list so it survives a reboot:
+   ```bash
+   cd /opt/projects/editor.docs.plus
+   bunx pm2@6.0.14 start ecosystem.config.cjs --only editor-purge
+   bunx pm2@6.0.14 save
+   ```
+   It runs in dry-run mode and deletes nothing.
+3. **Turn automatic deploys on** only after a manual deploy has succeeded:
+   `gh variable set AUTO_DEPLOY --body on`.
+4. **Turning the purge on** is a later, separate change. Read the
+   `retention_purge_dry_run` lines from a few daily runs
+   (`bunx pm2@6.0.14 logs editor-purge`). If the listed documents should go,
+   set `PURGE_MODE: "on"` in `ecosystem.config.cjs` in a pull request. Every
+   `on` run then backs up to `backups/` (keeps 7; check the disk has room for
+   7 copies of `db.sqlite`) before it deletes up to 100 documents.
 
 ### Dark primary text contrast
 

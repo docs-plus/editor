@@ -83,6 +83,10 @@ Search logs for these JSON event names:
 - `documents_delete_throttled`
 - `documents_delete_invalid_id`
 - `documents_delete_failed`
+- `retention_purge_dry_run` (`PURGE_MODE=dry-run`: what a purge would delete)
+- `retention_purge_skipped` (`PURGE_MODE=off`)
+- `retention_purge_backup_written` / `retention_purge_backup_failed` (an `on`
+  run's backup; a failed backup deletes nothing)
 - `retention_purge_completed`
 - `retention_purge_completed_retry`
 - `document_store_rejected` (document over its size cap; not persisted)
@@ -152,7 +156,8 @@ offline copy would push the old content straight back on reconnect.
 - Retention: the `editor-purge` PM2 app in `ecosystem.config.cjs` runs
   `scripts/purge-retention.ts` daily at 03:17 (host time) and on every deploy. It
   deletes documents idle for `RETENTION_DAYS` and tombstones older than
-  `TOMBSTONE_RETENTION_DAYS`. See "Scheduled jobs" in `deploy-runbook.md`.
+  `TOMBSTONE_RETENTION_DAYS`, but only with `PURGE_MODE=on`, after a backup;
+  the file ships `dry-run`. See "Scheduled jobs" in `deploy-runbook.md`.
 - Rotate PM2 logs (`pm2-logrotate`, 14 days): abuse events contain IP addresses.
 
 ## Client IP Extraction Policy

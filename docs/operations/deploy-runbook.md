@@ -1,33 +1,34 @@
 # Deploy runbook
 
 Production (tiny.docs.plus) deploys through the **Deploy** GitHub workflow
-(`.github/workflows/deploy.yml`). It starts by itself when CI passes on a push
-to `main` (a merged pull request) and deploys that commit. It can also be
-started by hand.
+(`.github/workflows/deploy.yml`). It can be started by hand at any time. Once
+the owner turns automatic deploys on, it also starts by itself when CI passes
+on a push to `main` (a merged pull request) and deploys that commit.
 
 ## Automatic deploys
 
-The workflow listens for the **CI** workflow to complete on `main`
+Automatic deploys are **off** until the repository variable `AUTO_DEPLOY` is
+`on`. Turn them on only after the [one-time setup](#one-time-setup) is done,
+including the first manual deploy (its last step).
+
+```bash
+gh variable set AUTO_DEPLOY --body on    # turn on
+gh variable set AUTO_DEPLOY --body off   # turn off (deleting the variable also turns it off)
+```
+
+When on, the workflow listens for the **CI** workflow to complete on `main`
 (`workflow_run`). It deploys only when that CI run succeeded and was started
 by a push; CI runs for pull requests, forks included, never deploy. GitHub
 runs the copy of `deploy.yml` on `main`, so a pull request cannot change what
-it does.
+it does. Deploys by hand work whatever the variable says.
 
 CI on `main` cancels a run when a newer push arrives, so when several pull
 requests merge close together, only the last one's CI finishes and deploys.
 Deploys run one at a time, and a newer commit includes everything before it.
 
-**Kill switch.** Pause automatic deploys with a repository variable; deploys
-by hand keep working:
-
-```bash
-gh variable set AUTO_DEPLOY --body off   # pause
-gh variable delete AUTO_DEPLOY           # resume (any value but "off" also resumes)
-```
-
-While paused, the Deploy runs that CI starts show as skipped. Resuming does
-not deploy what merged in the meantime: deploy by hand, or wait for the next
-merge.
+While automatic deploys are off, the Deploy runs that CI starts show as
+skipped. Turning them on does not deploy what merged in the meantime: deploy
+by hand, or wait for the next merge.
 
 ## Deploying by hand
 
@@ -71,8 +72,8 @@ Deploys are serialised by the workflow's `deploy-production` concurrency group
 and by a lock on the host. Only runs that will deploy join that group; a
 skipped run gets a group of its own, so it can never cancel a deploy that is
 waiting. A release that needs extra operator steps says so in its CHANGELOG
-"Deploy" note. With automatic deploys, pause them (`AUTO_DEPLOY=off`) before
-merging such a release, do the steps, deploy by hand, then resume.
+"Deploy" note. With automatic deploys on, turn them off before merging such a
+release, do the steps, deploy by hand, then turn them on again.
 
 ## Scheduled jobs
 
@@ -80,24 +81,62 @@ Production has one, defined in `ecosystem.config.cjs` and run by PM2:
 
 | App | Runs | What it does |
 | --- | --- | --- |
-| `editor-purge` | daily at 03:17, host-local time (`cron_restart: "17 3 * * *"`) | `bun scripts/purge-retention.ts`: deletes documents idle for `RETENTION_DAYS` (30) and tombstones older than `TOMBSTONE_RETENTION_DAYS` (90). |
+| `editor-purge` | daily at 03:17, host-local time (`cron_restart: "17 3 * * *"`) | `bun scripts/purge-retention.ts`: deletes documents idle for `RETENTION_DAYS` (30) and tombstones older than `TOMBSTONE_RETENTION_DAYS` (90), as `PURGE_MODE` allows. |
 
 - It is a job, not a server: it exits when done (`autorestart: false`), so
   `pm2 ls` shows it as `stopped` between runs. PM2 starts it again at the
   cron time.
 - Every deploy runs `pm2 startOrRestart ecosystem.config.cjs --only
-  editor-purge --update-env`, which also runs one purge straight away. The
-  purge is safe to run again.
+  editor-purge --update-env`, which also runs it once straight away.
 - It shares `storageEnv` (`DB_PATH` and any retention variables) with
   `editor-next` and `editor-hocus`, so it purges the database they use with
   the same windows. Put new retention settings in `storageEnv`.
-- Its output (`retention_purge_completed` with the deleted names) is in
-  `bunx pm2@6.0.14 logs editor-purge`.
-- Run it by hand: `bunx pm2@6.0.14 restart editor-purge`.
-- After it is first added, run `bunx pm2@6.0.14 save`, so it survives a host
-  reboot with the other apps.
+- Its output is in `bunx pm2@6.0.14 logs editor-purge`. Run it by hand with
+  `bunx pm2@6.0.14 restart editor-purge`.
+- After it is first started, run `bunx pm2@6.0.14 save`, so it survives a
+  host reboot with the other apps.
+
+### `PURGE_MODE`
+
+A purge deletes documents for good. `PURGE_MODE` in the `editor-purge` env
+says what a run may do:
+
+| Value | What a run does | Log event |
+| --- | --- | --- |
+| `off` | nothing | `retention_purge_skipped` |
+| `dry-run` (the file's value, and the default) | lists what an `on` run would delete; changes nothing | `retention_purge_dry_run` |
+| `on` | backs the database up, then deletes | `retention_purge_backup_written`, then `retention_purge_completed` |
+
+- **Dry run.** `wouldDeleteNames` (`wouldDeleteCount`) is exactly what an
+  `on` run would delete now: at most 100 documents, the longest idle first.
+  `staleTotal` is the whole backlog; an `on` run works through it 100 per
+  run. `expiredTombstoneCount` is the tombstones it would drop.
+- **Backup.** Before deleting anything, an `on` run copies the database with
+  `VACUUM INTO` to `backups/db-<UTC time>.sqlite` next to `DB_PATH`
+  (`/opt/projects/editor.docs.plus/backups/`, git-ignored, mode 700) and
+  keeps the newest 7. If the backup fails, the run logs
+  `retention_purge_backup_failed`, exits 1 and deletes nothing. A deploy
+  also runs the purge, so on busy days the 7 backups can cover less than a
+  week. Check there is room for 7 copies of `db.sqlite`.
+- **Restore** a document from a backup by copying its `documents` row back
+  and deleting its `document_tombstones` row, with Hocus stopped. Restoring
+  the whole file loses every edit made since the backup.
+- **Turning it on.** The file ships with `dry-run`. Review the
+  `retention_purge_dry_run` lines from a few daily runs:
+  ```bash
+  bunx pm2@6.0.14 logs editor-purge --lines 50 --nostream | grep retention_purge
+  ```
+  When the listed documents are ones that should go, change `PURGE_MODE` to
+  `on` in `ecosystem.config.cjs` in a pull request. The deploy after it merges
+  takes the first backup and runs the first real purge. To stop purging,
+  set `off` (or back to `dry-run`) the same way. For an immediate stop on
+  the host, `bunx pm2@6.0.14 stop editor-purge` (the next deploy starts it
+  again).
 
 ## One-time setup
+
+Do these in order. Automatic deploys stay off (`AUTO_DEPLOY` unset) until the
+last step.
 
 0. **Check the host.** Run these on the host from a plain SSH command, not an
    interactive login, because the forced command doesn't get a login shell:
@@ -135,10 +174,7 @@ Production has one, defined in `ecosystem.config.cjs` and run by PM2:
    ssh-keyscan -t ed25519 <host> > /tmp/tinydocy_known_hosts
    ssh-keygen -lf /tmp/tinydocy_known_hosts
    ```
-4. **GitHub environment and secrets** (repository admin). Until they exist,
-   every merge to `main` starts a Deploy run that fails at the SSH step, so
-   pause automatic deploys first (`gh variable set AUTO_DEPLOY --body off`)
-   and resume after step 6:
+4. **GitHub environment and secrets** (repository admin):
    ```bash
    gh api -X PUT repos/docs-plus/editor/environments/production
    gh secret set DEPLOY_HOST --env production --body "<host>"
@@ -169,10 +205,20 @@ Production has one, defined in `ecosystem.config.cjs` and run by PM2:
    ```
    Changes to `deploy.sh` always take effect on the deploy after the one that
    pulls them in.
-6. **Test it.** `gh workflow run deploy.yml`. If the host is already at the
-   tip of `main`, the script finds nothing to fast-forward, then rebuilds and
-   restarts both apps. Then resume automatic deploys
-   (`gh variable delete AUTO_DEPLOY`).
+6. **First manual deploy.** `gh workflow run deploy.yml`, then watch it. If
+   the host is already at the tip of `main`, the script finds nothing to
+   fast-forward, then rebuilds and restarts both apps. It also starts
+   `editor-purge`, in dry-run mode: save the PM2 list so the job survives a
+   reboot:
+   ```bash
+   ssh <user>@<host> 'cd /opt/projects/editor.docs.plus && bunx pm2@6.0.14 save'
+   ```
+   (That is a normal login, not the deploy key, which can only run the
+   script.)
+7. **Turn automatic deploys on**, only once step 6 succeeded:
+   ```bash
+   gh variable set AUTO_DEPLOY --body on
+   ```
 
 ## Rollback
 
@@ -188,6 +234,6 @@ Production has one, defined in `ecosystem.config.cjs` and run by PM2:
 
 ## Revoking
 
-Pause automatic deploys (`gh variable set AUTO_DEPLOY --body off`), then
+Turn automatic deploys off (`gh variable set AUTO_DEPLOY --body off`), then
 delete the key's line from the host's `~/.ssh/authorized_keys` and the
 `DEPLOY_SSH_KEY` secret. The workflow then fails at the SSH step.
