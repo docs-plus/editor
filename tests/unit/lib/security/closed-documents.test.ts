@@ -1,5 +1,8 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import * as Y from "yjs";
 
@@ -12,6 +15,7 @@ import {
   listClosedDocuments,
   purgeClosedDocuments,
   restoreClosedDocument,
+  restoreClosedDocuments,
 } from "@/lib/security/closed-documents";
 
 let db: Database;
@@ -46,6 +50,66 @@ function tombstone(name: string, deletedAt = 1): void {
   db.prepare(
     "INSERT INTO document_tombstones (name, deleted_at) VALUES (?, ?)",
   ).run(name, deletedAt);
+}
+
+/** A real SQLITE_BUSY: a second connection holds the write lock. */
+function captureBusyError(): unknown {
+  const dir = mkdtempSync(path.join(tmpdir(), "busy-"));
+  const file = path.join(dir, "db.sqlite");
+  const holder = new Database(file);
+  const waiter = new Database(file);
+  try {
+    holder.exec("PRAGMA journal_mode = WAL; CREATE TABLE t (x)");
+    waiter.exec("PRAGMA busy_timeout = 0");
+    holder.exec("BEGIN IMMEDIATE");
+    try {
+      waiter.exec("BEGIN IMMEDIATE");
+    } catch (error) {
+      return error;
+    } finally {
+      holder.exec("ROLLBACK");
+    }
+    throw new Error("expected SQLITE_BUSY");
+  } finally {
+    holder.close();
+    waiter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** `db`, except that the `failAt`-th closure delete throws `error`. */
+function failingClosureDelete(
+  db: Database,
+  failAt: number,
+  error: unknown,
+): Database {
+  let deletes = 0;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (sql: string) => {
+          const statement = target.prepare(sql);
+          if (!sql.startsWith("DELETE FROM document_closures"))
+            return statement;
+          return new Proxy(statement, {
+            get(stmt, key) {
+              if (key === "run") {
+                return (...args: unknown[]) => {
+                  deletes++;
+                  if (deletes === failAt) throw error;
+                  return (stmt.run as (...a: unknown[]) => unknown)(...args);
+                };
+              }
+              const value = Reflect.get(stmt, key);
+              return typeof value === "function" ? value.bind(stmt) : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 describe("closed-documents", () => {
@@ -138,6 +202,33 @@ describe("closed-documents", () => {
     expect(activityOf("a")).toBe(5000);
     expect(hasRow("document_closures", "a")).toBe(false);
     expect(restoreClosedDocument(db, "a", 0, 6000)).toBe("not_closed");
+  });
+
+  it("restores a batch in one transaction: a busy failure on the second id changes nothing", () => {
+    for (const name of ["a", "b"]) {
+      seedDocument(name);
+      setActivity(name, 0);
+      closeDocumentSoftly(db, name, name, "global-tabs", 1000);
+    }
+    const busy = captureBusyError();
+    expect((busy as { code?: string }).code).toBe("SQLITE_BUSY");
+
+    expect(() =>
+      restoreClosedDocuments(
+        failingClosureDelete(db, 2, busy),
+        ["a", "b"],
+        0,
+        5000,
+      ),
+    ).toThrow();
+    expect(hasRow("document_closures", "a")).toBe(true);
+    expect(hasRow("document_closures", "b")).toBe(true);
+    expect(activityOf("a")).toBe(1000);
+
+    expect(restoreClosedDocuments(db, ["a", "b"], 0, 5000)).toEqual({
+      a: "restored",
+      b: "restored",
+    });
   });
 
   it("restore past the window is gone", () => {

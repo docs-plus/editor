@@ -1,12 +1,11 @@
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
-import { isValidUserDocumentId } from "@/lib/security/doc-id-validator";
+import {
+  isTab,
+  isValidTabEntry,
+  MAX_TAB_TITLE_LENGTH,
+  type Tab,
+} from "@/lib/tab-entry";
 import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
-
-export type Tab = {
-  id: string;
-  title: string;
-  createdAt: number;
-};
 
 const TABS_KEY = "tinydocy-tabs";
 
@@ -46,34 +45,6 @@ export function resolveActiveTabId(tabs: Tab[], preferredId: string): string {
   return tabs.some((t) => t.id === preferredId)
     ? preferredId
     : (tabs[0]?.id ?? PLAYGROUND_ID);
-}
-
-export function isTab(value: unknown): value is Tab {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "id" in value &&
-    typeof (value as Tab).id === "string" &&
-    "title" in value &&
-    typeof (value as Tab).title === "string" &&
-    "createdAt" in value &&
-    typeof (value as Tab).createdAt === "number"
-  );
-}
-
-export const MAX_TAB_TITLE_LENGTH = 200;
-
-/**
- * True for an entry any client may render: a well-formed tab whose id is the
- * playground or a valid user document id. The tab list is shared and writable
- * by every anonymous visitor, so nothing in it is trusted.
- */
-export function isValidTabEntry(value: unknown): value is Tab {
-  return (
-    isTab(value) &&
-    Number.isFinite(value.createdAt) &&
-    (value.id === PLAYGROUND_ID || isValidUserDocumentId(value.id))
-  );
 }
 
 /**

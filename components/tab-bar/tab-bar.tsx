@@ -40,7 +40,7 @@ import {
   PlusIcon,
   RefreshCwIcon,
 } from "@/lib/icons";
-import type { Tab } from "@/lib/tab-api";
+import type { Tab } from "@/lib/tab-entry";
 import "./tab-bar.scss";
 
 // The menu loads through the lazy restore chunk (fetched when the button

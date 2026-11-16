@@ -5,7 +5,7 @@ import * as Y from "yjs";
 import { cleanText } from "@/lib/clean-text";
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
 import { CLOSED_RETENTION_DAYS } from "@/lib/security/guardrail-config";
-import { isValidTabEntry, MAX_TAB_TITLE_LENGTH } from "@/lib/tab-api";
+import { isValidTabEntry, MAX_TAB_TITLE_LENGTH } from "@/lib/tab-entry";
 
 /**
  * Closed tabs (soft deletes). Closing writes a `document_closures` row and
@@ -88,29 +88,57 @@ export function closeDocumentSoftly(
   });
 }
 
+export type RestoreResult = "restored" | "not_closed" | "gone";
+
+/** One restore inside the caller's transaction. */
+function restoreOne(
+  db: Database,
+  name: string,
+  cutoffMs: number,
+  nowMs: number,
+): RestoreResult {
+  if (isTombstonedName(db, name)) return "gone";
+  const closure = db
+    .prepare("SELECT closed_at FROM document_closures WHERE name = ?")
+    .get(name) as { closed_at: number } | null;
+  if (!closure) return "not_closed";
+  if (closure.closed_at < cutoffMs) return "gone";
+  db.prepare("DELETE FROM document_closures WHERE name = ?").run(name);
+  db.prepare(
+    "UPDATE document_activity SET last_persisted_at = ? WHERE name = ?",
+  ).run(nowMs, name);
+  return "restored";
+}
+
 /**
- * Removes a closure. `"gone"` when tombstoned or closed before `cutoffMs`
- * (the row stays for the purge); `"not_closed"` when there is no closure.
+ * Removes the closures of `names` in one `BEGIN IMMEDIATE`: a failure on any
+ * name rolls back the whole batch, so no tab is restored without its answer.
+ * Per name: `"gone"` when tombstoned or closed before `cutoffMs` (the row
+ * stays for the purge); `"not_closed"` when there is no closure.
  */
+export function restoreClosedDocuments(
+  db: Database,
+  names: readonly string[],
+  cutoffMs: number,
+  nowMs: number = Date.now(),
+): Record<string, RestoreResult> {
+  return inImmediateTransaction(db, () => {
+    const results: Record<string, RestoreResult> = {};
+    for (const name of names) {
+      results[name] = restoreOne(db, name, cutoffMs, nowMs);
+    }
+    return results;
+  });
+}
+
+/** {@link restoreClosedDocuments} for one name. */
 export function restoreClosedDocument(
   db: Database,
   name: string,
   cutoffMs: number,
   nowMs: number = Date.now(),
-): "restored" | "not_closed" | "gone" {
-  return inImmediateTransaction(db, () => {
-    if (isTombstonedName(db, name)) return "gone";
-    const closure = db
-      .prepare("SELECT closed_at FROM document_closures WHERE name = ?")
-      .get(name) as { closed_at: number } | null;
-    if (!closure) return "not_closed";
-    if (closure.closed_at < cutoffMs) return "gone";
-    db.prepare("DELETE FROM document_closures WHERE name = ?").run(name);
-    db.prepare(
-      "UPDATE document_activity SET last_persisted_at = ? WHERE name = ?",
-    ).run(nowMs, name);
-    return "restored";
-  });
+): RestoreResult {
+  return restoreClosedDocuments(db, [name], cutoffMs, nowMs)[name];
 }
 
 /** Restorable closures of one tab list, newest first. */

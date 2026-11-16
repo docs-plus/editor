@@ -6,13 +6,16 @@ const ROOT = path.resolve(import.meta.dir, "../../..");
 const transpiler = new Bun.Transpiler({ loader: "tsx" });
 
 /**
- * Packages reachable from `entry` through static (runtime) imports. Type-only
- * imports are erased by the transpiler; dynamic `import()` is a separate
- * chunk and is not followed.
+ * Project files and packages reachable from `entry` through static (runtime)
+ * imports. Type-only imports are erased by the transpiler; dynamic
+ * `import()` is a separate chunk and is not followed.
  */
-function staticPackages(entry: string): Set<string> {
-  const packages = new Set<string>();
+function staticImports(entry: string): {
+  files: Set<string>;
+  packages: Set<string>;
+} {
   const seen = new Set<string>();
+  const packages = new Set<string>();
   const visit = (file: string) => {
     if (seen.has(file)) return;
     seen.add(file);
@@ -28,11 +31,14 @@ function staticPackages(entry: string): Set<string> {
     }
   };
   visit(path.join(ROOT, entry));
-  return packages;
+  return {
+    files: new Set([...seen].map((file) => path.relative(ROOT, file))),
+    packages,
+  };
 }
 
 // Server code: the API routes, the retention cron and the Hocus server must
-// never load the browser collaboration provider.
+// never load the client tab API or the browser collaboration provider.
 const SERVER_ENTRIES = [
   "app/api/documents/[id]/route.ts",
   "app/api/documents/restore/route.ts",
@@ -44,8 +50,10 @@ const SERVER_ENTRIES = [
 
 describe("import boundaries", () => {
   for (const entry of SERVER_ENTRIES) {
-    it(`${entry} does not import @hocuspocus/provider`, () => {
-      expect([...staticPackages(entry)]).not.toContain("@hocuspocus/provider");
+    it(`${entry} imports neither the client tab API nor @hocuspocus/provider`, () => {
+      const { files, packages } = staticImports(entry);
+      expect([...files]).not.toContain("lib/tab-api.ts");
+      expect([...packages]).not.toContain("@hocuspocus/provider");
     });
   }
 });

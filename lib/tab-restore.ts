@@ -4,7 +4,8 @@ import { trackEvent } from "@/lib/analytics";
 import { announceLater } from "@/lib/announce-later";
 import { restoreDocuments } from "@/lib/closed-tabs-api";
 import { MAX_TABS_PER_CLIENT } from "@/lib/constants";
-import { findRawTabIndex, sanitizeTabs, type Tab } from "@/lib/tab-api";
+import { findRawTabIndex, sanitizeTabs } from "@/lib/tab-api";
+import type { Tab } from "@/lib/tab-entry";
 
 /**
  * Undo and restore for closed tabs. A lazy chunk: `useSyncedTabs` and the

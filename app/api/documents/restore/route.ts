@@ -6,7 +6,7 @@ import { bootstrapDocumentActivityTable } from "@/lib/security/activity-store";
 import { getClientIpFromHeaders } from "@/lib/security/client-ip";
 import {
   closedCutoffMs,
-  restoreClosedDocument,
+  restoreClosedDocuments,
 } from "@/lib/security/closed-documents";
 import {
   isSystemDocumentId,
@@ -28,8 +28,6 @@ const restoreLimiter = createSlidingWindowLimiter({
   limit: HTTP_MUTATION_RATE_LIMIT_PER_MINUTE,
   windowMs: ONE_MINUTE_MS,
 });
-
-type RestoreResult = ReturnType<typeof restoreClosedDocument>;
 
 function isRestorableId(value: unknown): value is string {
   return (
@@ -75,11 +73,12 @@ export async function POST(request: Request) {
     try {
       bootstrapDocumentActivityTable(db);
       const cutoffMs = closedCutoffMs(Date.now());
-      const results: Record<string, RestoreResult> = {};
+      // One transaction for the batch, retried as a whole when busy: a
+      // failure never leaves some closures removed behind a 500.
+      const results = withBusyRetry(() =>
+        restoreClosedDocuments(db, ids, cutoffMs),
+      );
       for (const id of ids) {
-        results[id] = withBusyRetry(() =>
-          restoreClosedDocument(db, id, cutoffMs),
-        );
         if (results[id] === "restored") {
           logAbuseEvent("document_restored", { ip, id });
         }

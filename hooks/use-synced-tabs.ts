@@ -22,18 +22,16 @@ import {
   generateId,
   getDefaultBootstrap,
   getMigrationTabs,
-  isTab,
   loadActiveTabIdFromStorage,
-  MAX_TAB_TITLE_LENGTH,
   persistActiveTabId,
   resolveActiveTabId,
   sanitizeTabs,
-  type Tab,
 } from "@/lib/tab-api";
+import { isTab, MAX_TAB_TITLE_LENGTH, type Tab } from "@/lib/tab-entry";
 import type { RestorableTab, TabList } from "@/lib/tab-restore";
 import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
-export type { Tab } from "@/lib/tab-api";
+export type { Tab } from "@/lib/tab-entry";
 export type { RestorableTab } from "@/lib/tab-restore";
 
 /** Undo and restore live in a lazy chunk, fetched on the first close. */
