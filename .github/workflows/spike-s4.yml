@@ -1,0 +1,121 @@
+name: Spike S4 (Electron e2e relaunch)
+
+# Throwaway spike (Phase 1, plan S4). Runs only on the spike branch; never
+# merged to main. No secrets and no environments: the grep step checks it.
+
+on:
+  push:
+    branches: [spike/s4-electron-e2e]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-s4-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  relaunch:
+    name: S4 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-latest, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+    env:
+      NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1294
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No secrets or environments in this workflow
+        # The bracketed letters keep the pattern from matching this line.
+        run: "! grep -nE 'secret[s][[:space:]]*[.[]|environmen[t][[:space:]]*:' .github/workflows/spike-s4.yml"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install the spike (Electron, electron-builder)
+        working-directory: spikes/s4-electron-e2e
+        run: |
+          bun install --frozen-lockfile
+          bun install-electron
+
+      - name: Linux tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # Windows resolves `node` through PATHEXT, so the stub needs a .cmd twin.
+      - name: Block Node.js (Windows twin)
+        if: runner.os == 'Windows'
+        run: |
+          printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
+
+      - name: Desktop export and bundles
+        run: |
+          bun spikes/s1-shell/build-export.ts
+          bun spikes/s1-shell/build.ts
+          bun spikes/s4-electron-e2e/stage.ts
+
+      - name: Package unpacked (bun electron-builder --dir)
+        working-directory: spikes/s4-electron-e2e
+        run: bun electron-builder --dir --publish never 2>&1 | tee "$RUNNER_TEMP/builder.log"
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Relaunch spec, repeated 10 times
+        run: |
+          start=$(date +%s)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            CI= xvfb-run -a bun playwright test -c spikes/s4-electron-e2e/playwright.config.ts --repeat-each=10
+          else
+            CI= bun playwright test -c spikes/s4-electron-e2e/playwright.config.ts --repeat-each=10
+          fi
+          echo "wall seconds for 10 runs: $(( $(date +%s) - start ))"
+
+      - name: Summary
+        if: always()
+        run: |
+          cat spikes/s4-electron-e2e/evidence/*/s4-log.txt || true
+          grep -c "node was called" "$RUNNER_TEMP/builder.log" || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spike-s4-${{ matrix.os }}
+          retention-days: 90
+          path: |
+            spikes/s4-electron-e2e/evidence/
+            spikes/s4-electron-e2e/playwright-report/
+            spikes/s4-electron-e2e/test-results/

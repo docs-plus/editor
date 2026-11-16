@@ -44,7 +44,10 @@ const HERE = app.getAppPath().endsWith(".cjs")
   ? join(app.getAppPath(), "..")
   : app.getAppPath();
 const OUT_DIR = resolve(
-  process.env.SPIKE_OUT_DIR ?? join(HERE, "../../../out"),
+  process.env.SPIKE_OUT_DIR ??
+    (app.isPackaged
+      ? join(app.getAppPath(), "renderer")
+      : join(HERE, "../../../out")),
 );
 const HOCUS_URL = process.env.SPIKE_HOCUS_URL ?? "ws://127.0.0.1:1234";
 const STYLE_MODE: StyleMode =

@@ -1,0 +1,12 @@
+{
+  "name": "s4-electron-e2e",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}

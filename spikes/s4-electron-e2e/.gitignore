@@ -1,0 +1,6 @@
+node_modules/
+stage/
+release/
+evidence/
+playwright-report/
+test-results/

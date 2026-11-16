@@ -1,0 +1,13 @@
+# S4: package the S1 shell with the real export (arch §3.1 step 3 staging).
+# Based on spikes/s3-packaging/electron-builder.yml, unpacked (--dir) only.
+appId: plus.docs.tinydocy.spike
+productName: TinyDocy
+electronVersion: 45.3.2
+directories:
+  app: stage
+  output: release
+asar: true
+mac:
+  identity: null
+linux:
+  executableName: tinydocy
