@@ -13,7 +13,8 @@
 #   2. build Next.js in a second checkout (the live site keeps serving);
 #   3. restart Hocus (it runs from source), then swap the build in and
 #      restart Next.js, keeping the previous build in .next.prev;
-#   4. check both answer, and put the previous build back if Next.js does not.
+#   4. check both answer, and put the previous build back if Next.js does not;
+#   5. (re)start the daily retention purge (editor-purge), which runs it once.
 # It only moves forward along main. Roll back with the runbook.
 # The body is one function, so bash has read all of it before the
 # fast-forward replaces this file. Changes to it apply from the next deploy.
@@ -116,6 +117,13 @@ if ! wait_for "http://127.0.0.1:$NEXT_PORT/" 90; then
   mv .next.prev .next
   pm2 restart ecosystem.config.cjs --only editor-next --update-env
   exit 8
+fi
+
+# After the site is live: a failure here leaves the new build serving.
+log "Scheduling the retention purge"
+if ! pm2 startOrRestart ecosystem.config.cjs --only editor-purge --update-env; then
+  echo "deploy: the site is deployed, but editor-purge did not start" >&2
+  exit 10
 fi
 
 log "Deployed $(git log -1 --format='%h %s')"
