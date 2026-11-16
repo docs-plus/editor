@@ -45,7 +45,14 @@ test.describe("System theme", () => {
       });
     });
     await page.emulateMedia({ colorScheme: "dark" });
+    // Chromium may render once <body> exists, and a loaded parser can yield
+    // before the body's first script (seen on a busy CI runner). A 20× CPU
+    // throttle makes that frame likely, so the boot script must run in
+    // <head>, before <body> is inserted.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
     await page.goto("/about");
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
 
     await expect
       .poll(() =>
@@ -62,6 +69,15 @@ test.describe("System theme", () => {
     expect(
       messages.filter((text) => /hydrat|did not match/i.test(text)),
     ).toEqual([]);
+  });
+
+  test("the boot script runs in <head>, before rendering can start", async ({
+    page,
+  }) => {
+    const source = await (await page.request.get("/about")).text();
+    const boot = source.indexOf('var k="tinydocy-theme"');
+    expect(boot).toBeGreaterThan(-1);
+    expect(boot).toBeLessThan(source.indexOf("</head>"));
   });
 
   test("new visitor, OS light: light, stored system", async ({ page }) => {
