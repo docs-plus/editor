@@ -9,6 +9,16 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Dark primary text contrast
+
+In dark mode, primary-coloured text and borders (the heading filter's ALL
+button and link-style buttons) use a new `--primary-ink` token.
+
+#### Fixed
+
+- Dark primary text reads at 9.3:1 on the page instead of 2.8:1. Light mode
+  and filled primary buttons are unchanged.
+
 ### Desktop local-first planning documents
 
 Adds the planning set for TinyDocy Desktop: the installable app for macOS,
