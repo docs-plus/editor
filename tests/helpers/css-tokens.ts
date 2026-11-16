@@ -79,3 +79,59 @@ export function oklchToHex(value: string): string {
     })
     .join("")}`;
 }
+
+const ROOT = join(import.meta.dir, "../..");
+
+/** The text between the `{` at `open` and its matching `}`. */
+function blockBody(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) {
+      return source.slice(open + 1, i);
+    }
+  }
+  throw new Error("unbalanced braces");
+}
+
+/** `body` with every nested `{ … }` block removed. */
+function topLevelOnly(body: string): string {
+  let depth = 0;
+  let out = "";
+  for (const char of body) {
+    if (char === "{") depth++;
+    else if (char === "}") depth--;
+    else if (depth === 0) out += char;
+  }
+  return out;
+}
+
+/**
+ * The literal value of custom property `--name` in an editor SCSS file
+ * (path from the repo root). `":root"` reads the declarations directly in
+ * the file's first top-level `.tiptap.ProseMirror` block; `".dark"` reads
+ * that block's nested `.dark & { … }` block.
+ */
+export function readScssVar(
+  file: string,
+  selector: ".dark" | ":root",
+  name: string,
+): string {
+  const scss = readFileSync(join(ROOT, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  const outer = /^\.tiptap\.ProseMirror\s*\{/m.exec(scss);
+  if (!outer) throw new Error(`no top-level .tiptap.ProseMirror in ${file}`);
+  let body = blockBody(scss, outer.index + outer[0].length - 1);
+  if (selector === ".dark") {
+    const dark = /\.dark\s*&\s*\{/.exec(body);
+    if (!dark) throw new Error(`no nested .dark & block in ${file}`);
+    body = blockBody(body, dark.index + dark[0].length - 1);
+  }
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`(?<![\\w-])${escaped}\\s*:\\s*([^;]+);`).exec(
+    topLevelOnly(body),
+  );
+  if (!match) throw new Error(`${name} not set for ${selector} in ${file}`);
+  return match[1].trim();
+}

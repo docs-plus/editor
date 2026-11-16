@@ -44,7 +44,7 @@ tests/
 │   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── editor-keymap.ts                  # collectEditorKeys(): every combo the editor's extensions bind; normalizeCombo()
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
-│   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex for contrast tests
+│   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex, readScssVar (editor SCSS custom properties) for contrast tests
 │   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no `bun:test` dep)
 ├── fixtures/                             # Static JSON document fixtures
@@ -75,6 +75,7 @@ tests/
 │   ├── filter-collab.spec.ts             # Filter folds follow a collaborator's heading edits
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── image-metadata.spec.ts            # Inserted images lose Exif/GPS/text metadata, keep orientation and pixels, get alt=""
+│   ├── link-underlines.spec.ts           # Document links underlined, 0.15em offset, in paragraph, heading, list, table
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── toolbar-perf.spec.ts              # Toolbar catch-up render and arrow p95 on 500 headings (perf project)
 │   ├── toolbar-focus-guards.spec.ts      # Roving tabindex leaves Base UI's popup focus guards alone
@@ -190,6 +191,7 @@ What WebKit does differently, and how the specs handle it:
 | `filter-collab.spec.ts` | With A's filter "alpha" applied, B renames the folded "Beta Section" to "Alpha Beta Section": A unfolds it (and its body) while Gamma stays folded; a non-matching section B adds arrives folded on A |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `image-metadata.spec.ts` | A 40×20 JPEG with Exif orientation 6 and GPS, pasted through the media kit's `editorFileUpload` event, embeds as WebP (JPEG on WebKit) with no APP1, `EXIF` or `XMP ` segment, decodes to 20×40 with red on top and blue below; a PNG with `eXIf` and `tEXt` embeds byte-identical to the same PNG without them; JPEG bytes labelled `image/png` or `image/gif` are re-encoded; a PNG still inserts, re-encoded, when the stripper chunk fails to load (offline, or replaced by a deploy); every inserted image, including one from the upload node's file input, has `alt=""` and no `title`. Fixtures come from `tests/helpers/image-bytes.ts` |
+| `link-underlines.spec.ts` | Exactly five links (paragraph, H2, bullet item, table cell, and a bold red link wrapping its marks) are each underlined with `text-underline-offset` at 0.15 × their font size (WCAG 1.4.1) |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |
