@@ -1,6 +1,6 @@
 import { RATE_LIMIT_MAX_KEYS } from "@/lib/security/guardrail-config";
 
-type RateLimitDecision = {
+export type RateLimitDecision = {
   allowed: boolean;
   retryAfterSeconds: number;
   remaining: number;
