@@ -31,18 +31,19 @@ protocol.registerSchemesAsPrivileged([
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
 ]);
-app.setPath("userData", mkdtempSync(path.join(tmpdir(), "tinydocy-smoke-")));
+// One fixed profile: Chromium still writes to it while the app exits, so it
+// is reused rather than deleted.
+app.setPath("userData", path.join(tmpdir(), "tinydocy-smoke-user-data"));
 app.disableHardwareAcceleration();
+// Only `app.exit` ends the smoke: closing the window must not quit with 0.
+app.on("window-all-closed", () => {});
 
 const workDir = mkdtempSync(path.join(tmpdir(), "tinydocy-smoke-db-"));
 // Not `__dirname`: Bun.build inlines the source directory for a
 // `"type": "module"` package. The app path is the directory of main.cjs.
 const appDir = app.getAppPath();
 
-const cleanUp = () => {
-  rmSync(workDir, { recursive: true, force: true });
-  rmSync(app.getPath("userData"), { recursive: true, force: true });
-};
+const cleanUp = () => rmSync(workDir, { recursive: true, force: true });
 
 const fail = (check: Check | "timeout", detail: unknown): never => {
   process.stderr.write(`SMOKE_FAIL ${check} ${String(detail)}\n`);
