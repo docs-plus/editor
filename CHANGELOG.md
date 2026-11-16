@@ -9,6 +9,23 @@ since the previous tag.
 
 ## [Unreleased]
 
+### System theme
+
+New browsers follow the system's light or dark setting, from the first paint and live as it changes.
+
+#### Added
+
+- ⋯ › Appearance offers System, Light and Dark. The row button still switches between light and dark.
+- On phones, which have no ⋯ menu, the theme button in the Aa sheet steps through System, Light and Dark. Its label says what comes next.
+
+#### Fixed
+
+- The palette's Switch theme works.
+
+#### Changed
+
+- Browsers that used TinyDocy before keep Light (written once on the next load) or the Dark they chose.
+
 ### Shortcut clashes
 
 ⌘⇧R only aligns right, also on the Playground, and outside the editor it

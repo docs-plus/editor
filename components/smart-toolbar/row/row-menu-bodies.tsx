@@ -1,21 +1,28 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import {
   DropdownMenuCheckboxItem,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuReason,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
 import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
-import { MoonStarIcon, SunIcon } from "@/lib/icons";
-import { applyTheme, THEME_CHANGE_EVENT, THEME_STORAGE_KEY } from "@/lib/theme";
+import {
+  readThemePreference,
+  setTheme,
+  THEME_PREFERENCES,
+  type ThemePreference,
+} from "@/lib/theme";
 
 import { lazySurface } from "../lazy-surface";
 import { ActionMenuItem, ActionRadioItem } from "./menu-items";
@@ -117,26 +124,51 @@ const COMMANDS = [
   "palette.open",
 ];
 
-function ThemeMenuItem() {
-  const dark = document.documentElement.classList.contains("dark");
-  const Icon = dark ? SunIcon : MoonStarIcon;
+const THEME_LABELS: Record<ThemePreference, string> = {
+  system: "System",
+  light: "Light",
+  dark: "Dark",
+};
+
+/**
+ * Appearance ▸ System, Light, Dark (F3), at every width. The row button
+ * and the phone sheet only flip Light and Dark; System lives here until the
+ * Settings dialog (W13). Read when the submenu opens, so a change made by
+ * the row button or the OS listener is never stale. Inset and icon-less,
+ * like Simplified toolbar.
+ */
+function AppearanceMenu() {
+  const [value, setValue] = useState<ThemePreference>("system");
   return (
-    <DropdownMenuItem
-      // The toggles' check column, as on the commands above.
-      className="pr-8"
-      onClick={() => {
-        applyTheme(!dark);
-        try {
-          localStorage.setItem(THEME_STORAGE_KEY, dark ? "light" : "dark");
-        } catch {
-          // Private mode: the choice lasts for this page only.
-        }
-        window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+    <DropdownMenuSub
+      onOpenChange={(open) => {
+        if (open) setValue(readThemePreference());
       }}
     >
-      <Icon aria-hidden="true" />
-      <span>{`Switch to ${dark ? "light" : "dark"} mode`}</span>
-    </DropdownMenuItem>
+      <DropdownMenuSubTrigger inset>
+        <span>Appearance</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-32">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => {
+            const preference = next as ThemePreference;
+            setValue(preference);
+            setTheme(preference);
+          }}
+        >
+          {THEME_PREFERENCES.map((preference) => (
+            <DropdownMenuRadioItem
+              key={preference}
+              value={preference}
+              closeOnClick
+            >
+              {THEME_LABELS[preference]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -177,17 +209,14 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
 /**
  * ⋯ More formatting: superscript, subscript, inline code, clear
  * formatting, then D2's and E's entries once registered, then the view
- * settings: Simplified toolbar, and Theme when the row has moved it here
- * (T2 or the simplified toolbar).
+ * settings: Simplified toolbar and Appearance.
  */
 export function OverflowMenuItems({
   editor,
   onPicked,
-  themeInMenu,
 }: {
   editor: Editor;
   onPicked: () => void;
-  themeInMenu: boolean;
 }) {
   const commands = COMMANDS.filter((id) => editorActions.has(id));
   return (
@@ -213,7 +242,7 @@ export function OverflowMenuItems({
       ))}
       <DropdownMenuSeparator />
       <DensityMenuItem editor={editor} />
-      {themeInMenu ? <ThemeMenuItem /> : null}
+      <AppearanceMenu />
     </>
   );
 }
