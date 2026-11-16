@@ -3,8 +3,12 @@ import type { KeyCombo } from "@/lib/editor-actions/types";
 /** Opens Settings. Desktop only; nothing binds it on the web. */
 export const SETTINGS_SHORTCUT: KeyCombo = "Mod-,";
 
-/** Toggles subscript. */
-export const SUBSCRIPT_SHORTCUT: KeyCombo = "Mod-,";
+/**
+ * Toggles subscript. Desktop builds move it to ⌘⇧, so that ⌘, can open
+ * Settings; the web keeps ⌘,. A literal comparison, so Next.js inlines it.
+ */
+export const SUBSCRIPT_SHORTCUT: KeyCombo =
+  process.env.NEXT_PUBLIC_APP_TARGET === "desktop" ? "Mod-Shift-," : "Mod-,";
 
 export type TabBarCommand = "newTab" | "closeTab" | "previousTab" | "nextTab";
 
