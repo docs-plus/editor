@@ -9,6 +9,16 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Playwright CI job gets 45 minutes
+
+The Playwright job was cancelled at its 30-minute limit on busy runners
+before its tests finished, failing pull requests whose tests all passed.
+
+#### Changed
+
+- The Playwright (Chromium) job's `timeout-minutes` rises from 30 to 45. The
+  lint, typecheck, unit test and build job stays at 20.
+
 ### Dark primary text contrast
 
 In dark mode, primary-coloured text, borders and lines (the heading filter's
