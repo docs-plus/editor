@@ -26,6 +26,7 @@ import { DISCORD_INVITE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 import { DiscordIcon, GithubIcon, PencilIcon } from "@/lib/icons";
 import {
   getUserIdentity,
+  type NameResult,
   saveUserIdentity,
   type UserIdentity,
 } from "@/lib/user-identity";
@@ -113,6 +114,26 @@ function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
   return users;
 }
 
+type IdentityBroadcaster = {
+  commands: { updateUser: (user: UserIdentity) => unknown };
+};
+
+/**
+ * Stores the dialog's draft and, when its name is valid, sends the
+ * normalised identity (never the raw draft) to collaborators.
+ */
+export function saveIdentityDraft(
+  draft: UserIdentity,
+  editor: IdentityBroadcaster | null | undefined,
+): { result: NameResult; saved?: UserIdentity } {
+  const result = saveUserIdentity(draft);
+  if (!result.ok) return { result };
+  // Read back what was stored: the colour is canonicalised there too.
+  const saved = getUserIdentity();
+  editor?.commands.updateUser(saved);
+  return { result, saved };
+}
+
 /** Reports the peak peer bucket per document view: at most 5 events. */
 function useTrackPeakPeers(count: number, connected: boolean): void {
   const peakRankRef = useRef(-1);
@@ -143,10 +164,10 @@ export function UserIdentityButton() {
 
   if (!identity) return null;
 
-  const handleSave = (next: UserIdentity) => {
-    saveUserIdentity(next);
-    setIdentity(next);
-    editor?.commands.updateUser(next);
+  const handleSave = (draft: UserIdentity): NameResult => {
+    const { result, saved } = saveIdentityDraft(draft, editor);
+    if (saved) setIdentity(saved);
+    return result;
   };
 
   return (
