@@ -492,10 +492,20 @@ test("spellcheck: no network, word flagged", async () => {
     process.env.S1_DICT_URL ? { SPIKE_DICT_URL: process.env.S1_DICT_URL } : {},
   );
   try {
-    await focusEnd(page);
-    await page.keyboard.press("Enter");
-    await page.keyboard.type("This sentance has a mispeled wrod ");
-    await page.waitForTimeout(2500);
+    const typeProbe = async () => {
+      await focusEnd(page);
+      await page.keyboard.type("This sentance has a mispeled wrod ");
+      await page.waitForTimeout(2500);
+      return page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        return editor?.state.selection.$from.parent.textContent ?? null;
+      });
+    };
+    // Typed text is recorded as it landed (catches autocorrect or lost keys);
+    // one retry if the first attempt did not land.
+    const typed = [await typeProbe()];
+    if (!typed[0]?.includes("mispeled")) typed.push(await typeProbe());
+    record("spellcheckTypedText", typed);
     const box = await page.evaluate(() => {
       const walker = document.createTreeWalker(
         document.querySelector(".ProseMirror") as Node,
@@ -525,7 +535,10 @@ test("spellcheck: no network, word flagged", async () => {
     const para = page
       .locator(".ProseMirror p", { hasText: "mispeled" })
       .first();
-    await para.screenshot({ path: shot("spellcheck") });
+    await para
+      .screenshot({ path: shot("spellcheck"), timeout: 5000 })
+      .catch(() => undefined);
+    expect(s.contextMenus.some((m) => m.misspelled === "mispeled")).toBe(true);
   } finally {
     await app.close();
   }
