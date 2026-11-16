@@ -97,10 +97,15 @@ jobs:
         run: bun test tests/unit/ci/workflow-permissions.test.ts
 
       # S1's recipe: the static export with the editor exposed for setContent.
+      # TMP/TEMP on the checkout's drive: build-export.ts parks files with
+      # renameSync, and Windows can't rename from D: to C: (EXDEV).
       - name: Desktop export
         env:
           NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR: "1"
           NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1290
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: bun spikes/s1-shell/build-export.ts
 
       # S5 instrumentation + S1's main and preload + S2's storage worker.
