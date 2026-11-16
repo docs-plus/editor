@@ -9,6 +9,17 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Offline copies keep unsynced edits after a slow read
+
+When the device copy took longer than 1 s to read, the next save replaced it
+with the server's state and edits made offline were lost. Saves now merge into
+the stored copy.
+
+#### Fixed
+
+- A copy read after the 1 s timeout stays on the device and opens on the next
+  visit.
+
 ### Playwright CI job gets 45 minutes
 
 The Playwright job was cancelled at its 30-minute limit on busy runners
