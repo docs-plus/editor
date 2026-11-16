@@ -1,0 +1,421 @@
+name: Spike S3 (packaging, update feed, channels)
+
+# Phase 1 spike S3: throwaway, never merged. Unsigned builds only (signing
+# enrolment D35 is pending), a local generic feed on 127.0.0.1:8787 and
+# hello-world app code under spikes/s3-packaging/.
+
+on:
+  push:
+    branches: [spike/s3-packaging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-s3-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: spikes/s3-packaging
+
+jobs:
+  check:
+    name: Workflow guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No secret references or deployment environment
+        run: bash spikes/s3-packaging/check-workflow.sh
+
+  linux:
+    name: Linux (deb + AppImage, updates, sandbox, MIME)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # Before anything changes the host: the values a desktop would have.
+      - name: Record runner (before any change)
+        run: |
+          echo "image: $ImageOS $ImageVersion"
+          uname -a
+          lsb_release -ds
+          echo "kernel.apparmor_restrict_unprivileged_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)"
+          echo "libfuse2t64: $(dpkg-query -W -f='${Status} ${Version}' libfuse2t64 2>&1)"
+          ls -l /usr/lib/x86_64-linux-gnu/libfuse.so.2* 2>&1 || true
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libfuse2t64 xvfb x11-utils xdg-utils \
+            libglib2.0-bin desktop-file-utils shared-mime-info
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Throwaway manifest key (Ed25519, never committed)
+        run: |
+          which node
+          bun sign-manifests.ts keygen --dir "$RUNNER_TEMP/keys"
+          echo "TINYDOCY_MANIFEST_KEY_DIR=$RUNNER_TEMP/keys" >> "$GITHUB_ENV"
+          echo "TINYDOCY_MANIFEST_PUBKEY_FILE=$RUNNER_TEMP/keys/manifest-key.pub.pem" >> "$GITHUB_ENV"
+          cat "$RUNNER_TEMP/keys/manifest-key.pub.pem"
+
+      - name: bun electron-builder (deb + AppImage, five versions)
+        run: bun release.ts --versions 0.0.1,0.0.2,0.0.3-beta.1,0.0.4,0.0.0 -- --linux deb AppImage --x64
+
+      - name: Node stub hits in the builder logs
+        run: |
+          echo "node was called: $(cat logs/builder-*.log | grep -c 'node was called' || true)"
+          ! grep -h 'node was called' logs/builder-*.log
+
+      - name: Feed files and installer sizes
+        run: |
+          for v in 0.0.1 0.0.2 0.0.3-beta.1 0.0.4 0.0.0; do
+            echo "== release/$v"; ls -l "release/$v" | grep -vE '^d|^total'
+          done
+          for f in release/0.0.4/latest-linux.yml release/0.0.4/beta-linux.yml \
+                   release/0.0.3-beta.1/beta-linux.yml release/0.0.2/latest-linux.yml; do
+            echo "--- $f"; cat "$f"
+          done
+          echo "--- 0.0.3-beta.1 app-update.yml (AppImage)"
+          unsquashfs -l release/0.0.3-beta.1/tinydocy-0.0.3-beta.1-x86_64.AppImage >/dev/null 2>&1 || true
+          cat release/0.0.3-beta.1/linux-unpacked/resources/app-update.yml
+
+      - name: deb contents and MIME registration
+        run: |
+          deb=release/0.0.1/tinydocy_0.0.1_amd64.deb
+          dpkg -c "$deb" | grep -E 'mime|\.desktop|apparmor|chrome-sandbox'
+          dpkg-deb -e "$deb" "$RUNNER_TEMP/deb-control"
+          echo "--- postinst"; cat "$RUNNER_TEMP/deb-control/postinst"
+          sudo apt-get install -y "./$deb"
+          echo "--- /usr/share/applications/tinydocy.desktop"
+          cat /usr/share/applications/tinydocy.desktop
+          echo "--- /usr/share/mime/packages/tinydocy.xml"
+          cat /usr/share/mime/packages/tinydocy.xml
+          printf 'hello' > "$RUNNER_TEMP/sample.tinydoc"
+          echo "--- xdg-mime (XDG_CURRENT_DESKTOP=GNOME, gio + shared-mime-info)"
+          XDG_CURRENT_DESKTOP=GNOME xdg-mime query filetype "$RUNNER_TEMP/sample.tinydoc"
+          XDG_CURRENT_DESKTOP=GNOME xdg-mime query default application/x-tinydoc
+          echo "--- xdg-mime (no desktop set: generic fallback)"
+          xdg-mime query filetype "$RUNNER_TEMP/sample.tinydoc" || true
+          xdg-mime query default application/x-tinydoc || true
+          ls -l /opt/TinyDocy/chrome-sandbox
+
+      - name: Sandbox probe at the runner's own sysctl value
+        run: |
+          xvfb-run -a bash linux-probe.sh appimage-runner-default release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+          xvfb-run -a bash linux-probe.sh deb-runner-default /opt/TinyDocy/tinydocy
+
+      - name: Sandbox probe at the Ubuntu desktop default (restrict=1)
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          xvfb-run -a bash linux-probe.sh appimage-restrict-1 release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+          xvfb-run -a bash linux-probe.sh deb-restrict-1 /opt/TinyDocy/tinydocy
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Sandbox probe and WM_CLASS with the sysctl (restrict=0)
+        run: |
+          xvfb-run -a bash linux-probe.sh appimage-restrict-0 release/0.0.1/tinydocy-0.0.1-x86_64.AppImage
+          xvfb-run -a bash linux-probe.sh deb-restrict-0 /opt/TinyDocy/tinydocy
+
+      # Gate-blocking: N-1 -> N on the AppImage.
+      - name: "Update: AppImage 0.0.1 -> 0.0.2 (gate)"
+        run: xvfb-run -a bun scenarios.ts linux-gate
+
+      - name: "Update: signed manifest, valid signature"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-signed-valid
+
+      - name: "Update: signed manifest, tampered (must be refused)"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-signed-tampered
+
+      - name: "Channels: 0.0.3-beta.1 requests beta-linux.yml, is offered 0.0.4"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-beta-offered-stable
+
+      - name: "allowDowngrade: 0.0.1 vs a 0.0.0 feed (default path)"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-downgrade-default
+
+      - name: "allowDowngrade: 0.0.3-beta.1 switched to Stable vs 0.0.0"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-beta-to-stable-downgrade
+
+      - name: "allowDowngrade: negative control (reset skipped)"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-downgrade-control
+
+      - name: "Update: deb 0.0.1 -> 0.0.2 (records the install command)"
+        continue-on-error: true
+        run: xvfb-run -a bun scenarios.ts linux-deb-update
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s3-linux
+          path: |
+            spikes/s3-packaging/logs/
+            spikes/s3-packaging/out/
+            spikes/s3-packaging/release/*/*.yml
+            spikes/s3-packaging/feeds/*/*.yml
+            spikes/s3-packaging/feeds/*/*.sig
+            !spikes/s3-packaging/out/**/*.AppImage
+          if-no-files-found: warn
+          retention-days: 90
+
+  windows:
+    name: Windows (NSIS, updates)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Record runner
+        run: |
+          echo "image: $ImageOS $ImageVersion"
+          cmd //c ver
+          uname -a
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # Windows complement: CreateProcess and libuv spawns never run the
+      # extensionless sh stub above, so put a node.exe in the same directory.
+      - name: Block Node.js (node.exe for Windows spawns)
+        run: bun build --compile node-stub.ts --outfile "$RUNNER_TEMP/no-node/node.exe"
+
+      - name: Prove the stub is first on PATH
+        shell: pwsh
+        run: |
+          where.exe node
+          node --version
+          "exit code: $LASTEXITCODE"
+          exit 0
+
+      - name: bun electron-builder (NSIS, five versions)
+        run: bun release.ts --versions 0.0.1,0.0.2,0.0.3-beta.1,0.0.4,0.0.0 -- --win nsis --x64
+
+      - name: Node stub hits in the builder logs
+        run: |
+          echo "node was called: $(cat logs/builder-*.log | grep -c 'node was called' || true)"
+          ! grep -h 'node was called' logs/builder-*.log
+
+      - name: Feed files and installer sizes
+        run: |
+          for v in 0.0.1 0.0.2 0.0.3-beta.1 0.0.4 0.0.0; do
+            echo "== release/$v"; ls -l "release/$v" | grep -vE '^d|^total'
+          done
+          for f in release/0.0.4/latest.yml release/0.0.4/beta.yml release/0.0.3-beta.1/beta.yml; do
+            echo "--- $f"; cat "$f"
+          done
+
+      # Gate-blocking: N-1 -> N with a silent NSIS install.
+      - name: "Update: NSIS 0.0.1 -> 0.0.2 (gate)"
+        run: bun scenarios.ts win-gate
+
+      - name: "Channels: 0.0.3-beta.1 requests beta.yml, is offered 0.0.4"
+        continue-on-error: true
+        run: bun scenarios.ts win-beta-offered-stable
+
+      - name: "allowDowngrade: 0.0.1 vs a 0.0.0 feed (default path)"
+        continue-on-error: true
+        run: bun scenarios.ts win-downgrade-default
+
+      - name: "allowDowngrade: 0.0.3-beta.1 switched to Stable vs 0.0.0"
+        continue-on-error: true
+        run: bun scenarios.ts win-beta-to-stable-downgrade
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s3-windows
+          path: |
+            spikes/s3-packaging/logs/
+            spikes/s3-packaging/out/
+            spikes/s3-packaging/release/*/*.yml
+          if-no-files-found: warn
+          retention-days: 90
+
+  macos:
+    name: macOS ${{ matrix.runner }} (DMG + zip, icons, feed)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            scenarios: mac-arm64-update mac-beta-offered-stable
+            extra_versions: 0.0.3-beta.1,0.0.4
+          - runner: macos-26-intel
+            scenarios: mac-x64-update
+            extra_versions: ""
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Record runner
+        run: |
+          echo "image: $ImageOS $ImageVersion"
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun actool --version | grep -A1 short-bundle-version | tail -1
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # The ICNS is packed by make-icons.ts (no iconutil); iconutil only
+      # verifies it here by unpacking it.
+      - name: Icons (script-packed ICNS verified by iconutil)
+        run: |
+          iconutil -c iconset build/icon.icns -o "$RUNNER_TEMP/roundtrip.iconset"
+          ls "$RUNNER_TEMP/roundtrip.iconset"
+
+      - name: bun electron-builder (DMG + zip, arm64 and x64 in one invocation)
+        run: bun release.ts --versions 0.0.1,0.0.2 -- --mac dmg zip --arm64 --x64
+
+      - name: bun electron-builder (zip, arm64, channel builds)
+        if: matrix.extra_versions != ''
+        run: bun release.ts --versions ${{ matrix.extra_versions }} -- --mac zip --arm64
+
+      - name: Node stub hits in the builder logs
+        run: |
+          echo "node was called: $(cat logs/builder-*.log | grep -c 'node was called' || true)"
+          ! grep -h 'node was called' logs/builder-*.log
+
+      - name: Feed files, installer sizes, Info.plist, Assets.car
+        run: |
+          for d in release/*/; do
+            echo "== $d"; ls -l "$d" | grep -vE '^d|^total'
+          done
+          for f in release/0.0.2/latest-mac.yml release/0.0.4/beta-mac.yml release/0.0.3-beta.1/beta-mac.yml; do
+            [ -f "$f" ] && { echo "--- $f"; cat "$f"; }
+          done
+          for app in release/0.0.2/mac*/TinyDocy.app; do
+            echo "--- $app"
+            lipo -archs "$app/Contents/MacOS/TinyDocy"
+            plutil -p "$app/Contents/Info.plist" | grep -E 'CFBundleIcon|CFBundleShortVersionString|LSMinimumSystemVersion|CFBundleIdentifier'
+            ls -l "$app/Contents/Resources" | grep -E 'Assets.car|\.icns'
+            cat "$app/Contents/Resources/app-update.yml"
+          done
+          xcrun assetutil --info release/0.0.2/mac-arm64/TinyDocy.app/Contents/Resources/Assets.car | grep -E '"(AssetType|Name|RenditionName|Idiom)"' | sort | uniq -c | head -30
+
+      - name: Icon export (NSWorkspace.iconForFile -> PNG)
+        run: |
+          mkdir -p out/evidence
+          for app in release/0.0.2/mac*/TinyDocy.app; do
+            arch=$(basename "$(dirname "$app")")
+            osascript -l JavaScript export-icon.js "$PWD/$app" "$PWD/out/evidence/icon-${{ matrix.runner }}-$arch.png" 256
+          done
+          ls -l out/evidence
+
+      - name: Update scenarios (unsigned; Squirrel.Mac expected to refuse)
+        continue-on-error: true
+        run: |
+          status=0
+          for s in ${{ matrix.scenarios }}; do bun scenarios.ts "$s" || status=1; done
+          exit $status
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s3-${{ matrix.runner }}
+          path: |
+            spikes/s3-packaging/logs/
+            spikes/s3-packaging/out/
+            spikes/s3-packaging/release/*/*.yml
+            !spikes/s3-packaging/out/**/app/**
+          if-no-files-found: warn
+          retention-days: 90

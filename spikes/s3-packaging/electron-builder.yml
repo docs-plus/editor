@@ -1,0 +1,68 @@
+# S3 spike packaging config. Versions are set per build by release.ts with
+# -c.extraMetadata.version=<v> -c.directories.output=release/<v>.
+appId: plus.docs.tinydocy.spike # placeholder; the first signed Gate 3 build locks it
+productName: TinyDocy
+copyright: Copyright © 2026 docs.plus
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - static/**
+  - package.json
+asar: true
+
+publish:
+  provider: generic
+  url: http://127.0.0.1:8787/feed/
+# Stable builds also write beta*.yml and alpha*.yml.
+generateUpdatesFilesForAllChannels: true
+
+fileAssociations:
+  - ext: tinydoc
+    name: TinyDocy document
+    description: TinyDocy document
+    mimeType: application/x-tinydoc
+    role: Editor
+protocols:
+  - name: TinyDocy
+    schemes: [tinydocy]
+
+mac:
+  target: [dmg, zip]
+  # Icon Composer bundle: compiled by actool into Assets.car + CFBundleIconName.
+  icon: build/icon.icon
+  identity: null # unsigned until D35 enrolment
+  category: public.app-category.productivity
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
+  # Ship the ICNS fallback beside Assets.car for macOS before 26.
+  extraResources:
+    - from: build/icon.icns
+      to: icon.icns
+  extendInfo:
+    CFBundleIconFile: icon.icns
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: true
+  perMachine: false
+  artifactName: ${name}-${version}-setup.${ext}
+
+linux:
+  target: [deb, AppImage]
+  executableName: tinydocy
+  icon: build/icons
+  category: Office
+  synopsis: TinyDocy S3 packaging spike
+  artifactName: ${name}-${version}-${arch}.${ext}
+  desktop:
+    entry:
+      # X11 WM_CLASS class is the productName; Wayland app_id comes from
+      # package.json desktopName (tinydocy.desktop -> tinydocy).
+      StartupWMClass: TinyDocy
+deb:
+  artifactName: ${name}_${version}_${arch}.${ext}
