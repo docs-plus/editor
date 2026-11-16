@@ -689,11 +689,11 @@ One inline script string serves both platforms. It runs first in `<body>`, as to
   - **If feasible**, a `<link rel="preload" as="font" type="font/woff2" crossorigin>` for the chosen bundled font's Latin file. That needs the bundler's hashed URL inside `boot-script.ts`. P2.9c-2 checks whether Turbopack exposes it to a server module. If it doesn't, there is no preload, and the `size-adjust` fallbacks (§5.13) keep the swap reflow small.
 
 - **Size.** About 1.3 KB minified, inline in every HTML response. Today's script is about 0.4 KB.
-- **Desktop CSP.** `script-src 'self' 'sha256-<boot>'`. The hash is computed at build from the exact string, and a build test asserts that the hash in the CSP matches the script. W4's strict library CSP uses the same hash.
+- **Desktop CSP.** `script-src 'self' 'sha256-<boot>'`, plus the hashes main computes per response for the export's other inline scripts (S1). The boot hash is computed at build from the exact string, and a build test asserts that the hash in the CSP matches the script. W4's strict library CSP uses the same hash.
 - **One applier only.**
-  - S1 verifies whether the preload can set attributes on `document.documentElement` before first paint (the DOM is shared with the isolated world).
-  - If it can, the preload applies the attributes and sets `data-prefs="1"`, and the inline script returns at once when it sees `data-prefs`.
-  - If it can't, the inline script does the work.
+  - **S1 result: the preload wins, through a `MutationObserver`.** When the sandboxed preload runs, `document.documentElement` is still `null`, so it can't set attributes directly. A `MutationObserver` on `document`, installed by the preload, sets them as the parser inserts `<html>`. In S1, the first inline `<head>` script already saw the attribute on macOS, Windows and Linux.
+  - So on desktop the preload applies the attributes and sets `data-prefs="1"`, and the inline script returns at once when it sees `data-prefs`.
+  - On the web, the inline script does the work.
   - Either way there is one applier per load.
 - **Parity test.** `bun test` evaluates the string in happy-dom against a table of about 40 stored payloads and media states. It asserts the attributes equal `resolveBoot()` from `schema.ts`. That is the guard against the string and the module drifting.
 

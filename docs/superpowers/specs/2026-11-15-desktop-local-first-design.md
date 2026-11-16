@@ -245,7 +245,7 @@ flowchart LR
 | D-A8 | **Search covers metadata, never document body text** (D24), on desktop and in the web library: titles, tags, folder names and document properties (dates, Local/Live, template kind). One shared normalizer (diacritics, Arabic→Persian letter folding, Persian/Arabic-Indic digits → ASCII) makes Quick Open and list filters accent- and case-insensitive. Metadata operators: `tag:`, `in:folder`, `is:live`. Templates (`kind='template'`) are skipped. Identity stays in localStorage (`tinydocy-user`, validated by F2) until P4.0 moves it into `meta('identity')`. | Cuts FTS5, the text extractor and any body index from v1 ("contents search is heavy", D24). Full-text search is later (§15). |
 | D-A9 | **Local release ports:** `DocSession`, `DocStore`, `DocumentIndex`, `AppShell`, and `BlobStore` for images (D4). The Live release adds `SyncAttachment`, `ShareService` and `SecretStore`. The adapter is chosen inside the component tree, never at module load. `page.web` and `page.desktop` are picked with `pageExtensions` (S1 verifies). Hand-written guards run in main only. The IPC build version is checked at startup. | Keeps the renderer bundle and web chunk unchanged. |
 | D-A10 | **Sync state is a pure reducer.** Sync and editability are separate parts, and app health is tracked on its own. | Every state in §5.5 is derived, never set ad hoc. |
-| D-A11 | **Origin:** S1 decides between `app://` with a Referer rewrite for YouTube, and an https-style origin. | Neither option has been run yet. |
+| D-A11 | **Origin: `app://tinydocy`** with a Referer rewrite for YouTube subframes (S1, 2026-11-16; the owner confirms). | S1 ran both on macOS, Windows and Linux. Both passed with one header fix each, and without it YouTube shows Error 153 on both. `app://` intercepts no https traffic, and its WebSocket `Origin` is not `null`. |
 | D-A12 | **CI smoke test on every Electron bump:** `node:sqlite` is present, WAL works, SQLite works in a worker, and the protocol handler serves the app. | Electron 37.2.0 shipped without `node:sqlite` (electron/electron#47671). |
 
 **Durability bound (Goal 2).** No saved document is lost. A power cut can lose at most the last second of typing.
@@ -565,14 +565,15 @@ Each server PR carries a CHANGELOG Deploy note.
 **Native dialogs.** Going live and joining use dialogs owned by the main process, so a compromised renderer can't publish a document quietly.
 
 **Third-party content**
-- On desktop, X embeds render as link cards in v1, so no `widgets.js` runs.
+- On desktop, X embeds render as link cards in v1, so no `widgets.js` runs. The kit has no card mode (S1), so desktop sets `X: false` and P2.5 builds the card.
 - YouTube stays in its cross-origin iframe.
 - Remote images are placeholders until the user clicks "Load images".
 
 **Desktop CSP**
 - Built at runtime by main.
-- No `'unsafe-inline'`: the one preferences boot script is allowed by its SHA-256 hash, which a build test checks (preferences design §5.3).
-- Stored images are served from `/_asset/<hex>` on the app origin, so they need no `blob:` and no new `img-src` host (image store design §3.2).
+- No `'unsafe-inline'` in `script-src`. Main hashes every inline script of each HTML response: the preferences boot script, plus the export's own inline scripts (10 on `/`, 16 on `/about` in S1). A build test checks the boot script's hash (preferences design §5.3).
+- Styles (S1's pre-registered amendment): `style-src-elem 'self'` plus hashes, and `style-src-attr 'unsafe-inline'`, because ProseMirror and node views set `style` attributes (49 to 51 violations without it). Tiptap's injected `<style>` is turned off (`injectCSS: false`) and its CSS ships as a stylesheet.
+- Stored images are served from `/_asset/<hex>` on the app origin, so they need no `blob:` and no new `img-src` host (image store design §3.2). `img-src` is `'self' data:`, because eight CSS-inlined SVG icons are `data:` URIs (S1). The alternative is moving those icons to files.
 - No X script hosts.
 - `connect-src` lists only the default server.
 
@@ -589,8 +590,8 @@ Each server PR carries a CHANGELOG Deploy note.
 **Permissions** are denied by default.
 
 **Origin**
-- S1 chooses the origin (D-A11): either `app://tinydocy` with a Referer rewrite for YouTube, or an https-style origin with `bypassCustomProtocolHandlers`. Either way it is fixed before the first release.
-- If S1 confirms the `protocol.handle('https')` approach, it uses `bypassCustomProtocolHandlers` for every other host.
+- `app://tinydocy` (D-A11, S1). It is fixed before the first release, because the device copy and IndexedDB are keyed by origin.
+- Main sets `Referer` on YouTube `subFrame` requests that arrive with none. YouTube checks the header server-side; `document.referrer` may stay empty.
 
 **Updates**
 - Windows and macOS updates are signature-checked.

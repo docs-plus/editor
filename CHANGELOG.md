@@ -9,6 +9,30 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phase 1 shell spike results (S1, S4)
+
+Records what the Electron shell spikes found and the decisions they settle.
+Documentation only; no app or server change. The spike code stays on its
+`spike/*` branches.
+
+#### Added
+
+- `docs/research/2026-11-16-spike-s1-shell-origin.md`: the static export in
+  Electron on both candidate origins, on macOS, Windows and Linux (CSP,
+  embeds, spellcheck, preload, sender check, menus), with screenshots in
+  `docs/research/spike-evidence/s1/`.
+- `docs/research/2026-11-16-spike-s4-electron-e2e.md`: Playwright `_electron`
+  relaunches the packaged app and the text comes back offline; the spec is
+  kept as a reference for P2.5.
+
+#### Changed
+
+- Desktop specs: the app origin is `app://tinydocy` with a YouTube Referer
+  rewrite (D-A11); `pageExtensions` covers pages and routes while metadata
+  files are moved aside for the desktop build (D-A9); the desktop CSP gains
+  `style-src-attr 'unsafe-inline'` and `img-src data:`; the preload sets the
+  boot attributes through a `MutationObserver` (preferences §5.3).
+
 ### Dark primary text contrast
 
 In dark mode, primary-coloured text, borders and lines (the heading filter's

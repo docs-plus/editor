@@ -26,9 +26,9 @@
 | D-A6 | **Safety core:** WAL, `synchronous=FULL`, `fullfsync` on macOS, `quick_check` after an unclean exit, the `format_version` read-only guard, `VACUUM INTO` before every migration, and a daily `VACUUM INTO` keeping 7 copies. The daily copies are the Local release's restore points ("Restore from a daily snapshot"). | One mechanism covers both restore points and protection against corruption, with no `versions` table. |
 | D-A7 | **Readable backups:** changed documents are mirrored as `.tinydoc` plus `.md` into `~/TinyDocy Backups`, each written to a temp file and renamed. The renderer makes the Markdown on idle and on close with the existing Tiptap Markdown serializer and sends it to main. Retention is by count. | No DOM-free walker. Counting copies needs no clock-jump guard. |
 | D-A8 | **Search matches metadata only, never document body text. No FTS5** (owner D24, plan v7). Searched: titles, tags, folder names and document properties (dates, Local/Live, template kind), on desktop and in the web library. One shared normalizer (`lib/search/normalize.ts`: diacritics, Arabic→Persian letter folding, Persian/Arabic-Indic digits → ASCII; `Intl.Segmenter` only if titles need it) makes Quick Open and list filters accent- and case-insensitive. Metadata operators: `tag:`, `in:folder`, `is:live`. Rows with `kind='template'` are skipped. Full-text body search is later and not planned. Identity stays in `localStorage` (`tinydocy-user`, validated by F2: try/catch, a 32-grapheme name, an allowlisted colour) until P4.0 moves it into `meta('identity')`. | Cuts the walker, the FTS table, the text extractor and the identity migration from v1. Metadata is already in `docs`, `folders` and `doc_tags`, so search needs no new index. |
-| D-A9 | **Local-release ports:** `DocSession`, `DocStore`, `DocumentIndex`, `AppShell`, and `BlobStore` for images (D4). (Live) adds `SyncAttachment`, `ShareService` and `SecretStore`. Each port is chosen inside a composition-root component. The two roots are `app/page.web.tsx` and `app/page.desktop.tsx`, picked through `pageExtensions` (**decided by S1**). Hand-written guards run in main only. The IPC build version is checked at startup. The staged app folder holds CJS bundles made by Bun.build (**decided by S1/S3**). | One literal decides the target. Neither build carries the other's import graph. The signed main bundle gets no validation dependency. |
+| D-A9 | **Local-release ports:** `DocSession`, `DocStore`, `DocumentIndex`, `AppShell`, and `BlobStore` for images (D4). (Live) adds `SyncAttachment`, `ShareService` and `SecretStore`. Each port is chosen inside a composition-root component. The two roots are `app/page.web.tsx` and `app/page.desktop.tsx`, picked through `pageExtensions` (S1: honoured for `page` and `route` files; the metadata files use the prebuild move-aside in §3.1). Hand-written guards run in main only. The IPC build version is checked at startup. The staged app folder holds CJS bundles made by Bun.build (S1 confirmed CJS; S3 packages it). | One literal decides the target. Neither build carries the other's import graph. The signed main bundle gets no validation dependency. |
 | D-A10 | **The state machine is a pure reducer.** Sync and editability are separate parts, and app health is kept apart. Live-only states are marked. | One table drives the chip and the notices, and it can be tested without a UI. |
-| D-A11 | **App origin:** either `app://tinydocy` with a Referer rewrite for YouTube embeds, or an https-style origin through `protocol.handle("https")` with `bypassCustomProtocolHandlers`. **Decided by S1.** | YouTube refuses embeds that send no Referer. The https-style option intercepts a scheme that every request uses. |
+| D-A11 | **App origin: `app://tinydocy`** (S1, 2026-11-16; the owner confirms). The scheme is registered privileged (`standard`, `secure`, `supportFetchAPI`). Main sets `Referer` on YouTube `subFrame` requests that carry none or an `app:` one (`session.webRequest.onBeforeSendHeaders`). Both candidates passed every S1 row with one header fix each. The https-style origin also had to copy `request.referrer` into the forwarded `Referer` header (`net.fetch` drops it), and it routes every https request through main. | Without the fix, YouTube shows Error 153 on both origins: it checks the Referer header server-side. `app://` intercepts no scheme the web uses, and the WebSocket `Origin` it sends is `app://tinydocy`, not `null`. |
 | D-A12 | **CI smoke test on every Electron bump:** `node:sqlite` is present, WAL works, `node:sqlite` works inside a `worker_thread`, and the protocol handler serves the export. | Electron ships a major version every 8 weeks (K13), and each of these four could silently break. |
 
 ### 1.1 What this changes in plan v3 §4
@@ -93,8 +93,9 @@ flowchart LR
 ```text
 app/
   page.web.tsx                 # web root: <EditorApp/>
-  page.desktop.tsx             # desktop root: dynamic <DesktopRoot/> (pageExtensions, decided by S1)
-  privacy/page.web.tsx, sitemap.web.ts, robots.web.ts, llms.txt/route.web.ts, api/documents/[id]/route.web.ts
+  page.desktop.tsx             # desktop root: dynamic <DesktopRoot/> (pageExtensions, S1)
+  privacy/page.web.tsx, llms.txt/route.web.ts, api/documents/[id]/route.web.ts, offline/page.web.tsx, pwa-icons/[id]/route.web.tsx
+  sitemap.ts, robots.ts, opengraph-image.tsx, manifest.ts, apple-icon.tsx   # web-only metadata, moved aside for desktop (§3.1)
 components/
   editor-app/                  # web shell; provides the web DocSession factory
   document-editor/             # provider optional, stable Awareness; imports no platform code
@@ -134,10 +135,13 @@ desktop/
 
 1. **Renderer.** `NEXT_PUBLIC_APP_TARGET=desktop bun next build`.
    - `next.config.ts` switches three things on that literal: `output: "export"`, `headers()` (web only), and `pageExtensions`: web `["web.tsx", "web.ts", "tsx", "ts"]`, desktop `["desktop.tsx", "tsx", "ts"]`.
-   - **Decided by S1:** whether Turbopack honours `pageExtensions` for `sitemap`, `robots` and `opengraph-image`. The fallback is a prebuild step that writes an `app/` overlay.
+   - **S1 (2026-11-16):** Turbopack honours `pageExtensions` for `page` and `route` files but not for metadata files: in the web build `sitemap.web.ts` became the route `/sitemap.web`. So `sitemap`, `robots`, `opengraph-image`, `manifest` and `apple-icon` keep their plain names, and a prebuild step moves them out of `app/` for the desktop build and puts them back (the overlay fallback).
+     - It parks them inside the checkout: a rename across drives fails with `EXDEV` on Windows runners.
+     - `icon.tsx` needs `export const dynamic = "force-static"`, and `tsconfig.json` excludes `out/` (the export copies the service worker's `.ts` source into `out/_next/static/media/`).
 2. **Main, worker and preload.** `bun desktop/build/build.ts` calls `Bun.build({ target: "node", format: "cjs", external: ["electron"] })` on `main/index.ts`, `storage/worker.ts` and `preload/index.ts`.
    - `node:*` stays external, and `electron-updater` is bundled into `main.cjs`.
-   - CJS everywhere, because a sandboxed preload must be CJS (**decided by S1**).
+   - `Bun.build` inlines `__dirname` as the absolute source directory, so main finds its sibling files through `app.getAppPath()` (S1, S2).
+   - CJS everywhere, because a sandboxed preload must be CJS (S1 confirmed: the preload's only `require` is `electron`).
 3. **Stage.** Write `dist/desktop-app/`: a `package.json` with only `name`, `version` and `main`, the three bundles, and `renderer/` copied from `out/`.
    - electron-builder points `directories.app` here, so the root `dependencies` (next, react…) never reach the asar.
    - Run it as `bun electron-builder` (**decided by S3**, which also confirms nothing calls the `node` stub).
@@ -418,7 +422,7 @@ export const events = {                          // main → renderer (webConten
   - They run **in main only**, the one trust boundary. The worker trusts main, and the renderer trusts replies, so the renderer bundle doesn't grow.
   - **Why hand-written instead of zod or valibot:** the messages are flat, the caps are one-liners, and the signed main bundle stays free of a dependency (K6, `minimumReleaseAge`). Revisit past about 60 channels.
   - A fuzz test checks that no guard throws and none accepts input out of bounds.
-- **Sender checks.** Every handler checks that `event.senderFrame` is the top frame of a window main created, that its URL has the app origin (**decided by S1**), and that the channel is in `calls`. For `doc.append`, `doc.compact`, `doc.markdown` and `asset.put`, the registry must hold `docId` open **for this window**. The YouTube iframe gets no preload.
+- **Sender checks.** Every handler checks that `event.senderFrame` is the top frame of a window main created, that its URL has the app origin, compared as `` `${protocol}//${host}` `` against `app://tinydocy` because Node's `URL.origin` is `"null"` for `app:` (S1), and that the channel is in `calls`. For `doc.append`, `doc.compact`, `doc.markdown` and `asset.put`, the registry must hold `docId` open **for this window**. The YouTube iframe gets no preload.
 - **No path from the renderer, ever.** Import, export, the backup folder and Reveal all take paths from main's native dialogs or settings.
 - **Error envelope.** Nothing is thrown across IPC:
 
