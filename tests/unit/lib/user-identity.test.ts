@@ -90,6 +90,26 @@ describe("normalizeName", () => {
     });
   });
 
+  it("keeps at most 4 combining marks in a row (no Zalgo towers)", () =>
+    expect(m.normalizeName(`a${"\u0301".repeat(5000)}`)).toEqual({
+      ok: true,
+      name: `\u00E1${"\u0301".repeat(4)}`,
+    }));
+
+  it("refuses a name too long in code units even as one grapheme", () =>
+    expect(m.normalizeName("\u{1F600}\u200D".repeat(200))).toEqual({
+      ok: false,
+      error: "too_long",
+    }));
+
+  it("keeps Persian vowel marks", () => {
+    const name = "\u0645\u064F\u062D\u064E\u0645\u0651\u064E\u062F";
+    expect(m.normalizeName(name)).toEqual({
+      ok: true,
+      name: name.normalize("NFC"),
+    });
+  });
+
   it("rejects empty after stripping", () => {
     expect(m.normalizeName(" \u202A ")).toEqual({ ok: false, error: "empty" });
     expect(m.normalizeName("\u200B")).toEqual({ ok: false, error: "empty" });
@@ -206,4 +226,18 @@ describe("clampRemoteName", () => {
     );
     expect(m.clampRemoteName("\u202E\u200B")).toBe("");
   });
+
+  it("trims combining-mark runs and never ends on half a surrogate pair", () => {
+    expect(m.clampRemoteName(`a${"\u0301".repeat(5000)}`)).toBe(
+      `\u00E1${"\u0301".repeat(4)}`,
+    );
+    expect(m.clampRemoteName(`a${"\u0301".repeat(1022)}\u{1F600}`)).toBe(
+      `\u00E1${"\u0301".repeat(4)}`,
+    );
+  });
+
+  it("caps a remote name in code units", () =>
+    expect(
+      m.clampRemoteName("\u{1F600}\u200D".repeat(200)).length,
+    ).toBeLessThanOrEqual(320));
 });

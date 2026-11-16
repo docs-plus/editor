@@ -22,8 +22,20 @@ const STORAGE_KEY = "tinydocy-user";
 export const NAME_MAX_GRAPHEMES = 32;
 /** Drawn for a collaborator whose colour is not a `#rrggbb` value. */
 export const UNKNOWN_CARET_COLOR = "#9E9E9E";
+/**
+ * Longest display name in UTF-16 code units. One grapheme can be unbounded
+ * (an emoji ZWJ chain), so the grapheme count alone does not bound width.
+ * 320 fits 32 three-person family emoji (8 units each) with room to spare.
+ */
+const NAME_MAX_CODE_UNITS = 320;
 /** A remote name is cut to this many code units before it is cleaned. */
 const REMOTE_NAME_MAX_CODE_UNITS = 1024;
+/**
+ * Runs of combining marks are cut to 4. Real text needs few (Persian vowel marks,
+ * an emoji's variation selector); thousands stack into a "Zalgo" tower that
+ * draws over the document.
+ */
+const LONG_MARK_RUN = /(\p{M}{4})\p{M}+/gu;
 
 export type NameResult =
   | { ok: true; name: string }
@@ -97,11 +109,26 @@ function graphemes(text: string): string[] {
 }
 
 /** Cleans a display name and checks it holds 1–32 graphemes. */
+/** `cleanText`, then each run of combining marks cut to 4. */
+function cleanName(raw: string): string {
+  return cleanText(raw).replace(LONG_MARK_RUN, "$1");
+}
+
+/** The first `max` code units, never ending on half a surrogate pair. */
+function sliceCodeUnits(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const last = text.charCodeAt(max - 1);
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+}
+
 export function normalizeName(raw: unknown): NameResult {
   if (typeof raw !== "string") return { ok: false, error: "empty" };
-  const name = cleanText(raw);
+  const name = cleanName(raw);
   if (name === "") return { ok: false, error: "empty" };
-  if (graphemes(name).length > NAME_MAX_GRAPHEMES) {
+  if (
+    name.length > NAME_MAX_CODE_UNITS ||
+    graphemes(name).length > NAME_MAX_GRAPHEMES
+  ) {
     return { ok: false, error: "too_long" };
   }
   return { ok: true, name };
@@ -112,8 +139,13 @@ export function normalizeName(raw: unknown): NameResult {
  * graphemes. May return `""`, which renders an empty label.
  */
 export function clampRemoteName(raw: string): string {
-  const name = cleanText(raw.slice(0, REMOTE_NAME_MAX_CODE_UNITS));
-  return graphemes(name).slice(0, NAME_MAX_GRAPHEMES).join("");
+  const name = cleanName(sliceCodeUnits(raw, REMOTE_NAME_MAX_CODE_UNITS));
+  let clamped = "";
+  for (const grapheme of graphemes(name).slice(0, NAME_MAX_GRAPHEMES)) {
+    if (clamped.length + grapheme.length > NAME_MAX_CODE_UNITS) break;
+    clamped += grapheme;
+  }
+  return clamped;
 }
 
 /** The palette entry matching `raw` (case-insensitive), else `null`. */

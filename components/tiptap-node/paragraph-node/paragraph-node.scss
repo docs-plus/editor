@@ -127,6 +127,10 @@
       top: -1.3em;
       user-select: none;
       white-space: nowrap;
+      // A collaborator's name is drawn as sent: clip anything taller than
+      // one line (stacked combining marks) instead of covering the text.
+      max-height: 1.5em;
+      overflow: hidden;
     }
   }
 }
