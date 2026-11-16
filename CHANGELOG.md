@@ -32,18 +32,24 @@ and the purge only logs what it would delete until `PURGE_MODE` is `on`.
   `scripts/purge-retention.ts` daily at 03:17 (host time, `cron_restart`,
   `autorestart: false`). It shares `DB_PATH` with `editor-next` and
   `editor-hocus` through one `storageEnv` object, where retention settings
-  also belong. `scripts/deploy.sh` starts or restarts it with `--update-env`
-  after the new build is live, which also runs it once.
+  also belong. Only the cron purges: `scripts/deploy.sh` registers or
+  updates it (`startOrRestart --update-env`) after the new build is live,
+  and writes a marker, `.purge-skip-next`, first. The run PM2 starts then
+  exits without purging (`retention_purge_registered`). Starting it by hand
+  or `pm2 resurrect` does run it.
 - **`PURGE_MODE`** for the purge: `off`; `dry-run` (the default, and the
   file's value), which logs `retention_purge_dry_run` with the documents an
   `on` run would delete (`wouldDeleteNames`), the whole backlog
   (`staleTotal`) and the expiring tombstones, and changes nothing; and `on`.
-  An `on` run first copies the database with `VACUUM INTO` to
-  `backups/db-<UTC time>.sqlite` next to `DB_PATH`, keeping the newest 7,
-  and deletes nothing if that fails (exit 1, `retention_purge_backup_failed`).
-  An unknown value is refused.
+  An `on` run first copies the database with `VACUUM INTO` into `backups/`
+  next to `DB_PATH`, and deletes nothing if that fails (exit 1,
+  `retention_purge_backup_failed`). The first backup, `db-first.sqlite`, is
+  kept forever; later `db-<UTC time>.sqlite` copies are deleted after 14
+  days by age, not count. Copies are written as `*.partial` and renamed when
+  complete. An unknown value is refused.
 - Tests: the purge modes, the dry run (it writes nothing and lists exactly
-  what the purge deletes), the backup and its rotation, and the CLI in each
+  what the purge deletes), the backups (the first kept forever, 14-day age
+  rotation), the deploy marker, and the CLI in each
   mode, including a failed backup; `workflow_run` workflows must not check
   out code and must require a successful CI run from a push; the ecosystem
   file, `deploy.sh` and the Deploy workflow are checked against each other
@@ -62,22 +68,26 @@ Nothing deploys by itself and nothing is deleted on merge. In order:
 2. **Deploy by hand:** `gh workflow run deploy.yml`. The deploy that first
    brings this change runs the host's previous `scripts/deploy.sh` (script
    changes apply from the next deploy), so it may not start `editor-purge`.
-   If `bunx pm2@6.0.14 ls` does not list it, start it, then save the PM2
-   list so it survives a reboot:
+   If `bunx pm2@6.0.14 ls` does not list it, register it the way
+   `deploy.sh` does (the marker makes that first run exit at once), then save
+   the PM2 list so it survives a reboot:
    ```bash
    cd /opt/projects/editor.docs.plus
+   date +%s > .purge-skip-next
    bunx pm2@6.0.14 start ecosystem.config.cjs --only editor-purge
    bunx pm2@6.0.14 save
    ```
-   It runs in dry-run mode and deletes nothing.
+   Its first real run is the next 03:17, as a dry run: it deletes nothing.
 3. **Turn automatic deploys on** only after a manual deploy has succeeded:
    `gh variable set AUTO_DEPLOY --body on`.
 4. **Turning the purge on** is a later, separate change. Read the
    `retention_purge_dry_run` lines from a few daily runs
    (`bunx pm2@6.0.14 logs editor-purge`). If the listed documents should go,
-   set `PURGE_MODE: "on"` in `ecosystem.config.cjs` in a pull request. Every
-   `on` run then backs up to `backups/` (keeps 7; check the disk has room for
-   7 copies of `db.sqlite`) before it deletes up to 100 documents.
+   set `PURGE_MODE: "on"` in `ecosystem.config.cjs` in a pull request. From
+   the next 03:17 run, every run backs up to `backups/` before it deletes up
+   to 100 documents: the first to `db-first.sqlite` (kept forever), then
+   dated copies kept 14 days. Check the disk has room for about 16 copies of
+   `db.sqlite`.
 
 ### Dark primary text contrast
 

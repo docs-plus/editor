@@ -60,8 +60,8 @@ On the host, `scripts/deploy.sh`:
 4. Swaps the new `.next` in (the old one becomes `.next.prev`), restarts
    `editor-next` and waits for port 3847 to answer. If it doesn't, the old
    build goes back.
-5. Starts or restarts `editor-purge` (see [Scheduled jobs](#scheduled-jobs)),
-   which runs the retention purge once. If that fails, the run fails, but the
+5. Registers `editor-purge` with PM2, or updates it, without purging (see
+   [Scheduled jobs](#scheduled-jobs)). If that fails, the run fails, but the
    new build stays live.
 
 PM2 restarts use `ecosystem.config.cjs --only <app> --update-env`, so the env
@@ -86,13 +86,22 @@ Production has one, defined in `ecosystem.config.cjs` and run by PM2:
 - It is a job, not a server: it exits when done (`autorestart: false`), so
   `pm2 ls` shows it as `stopped` between runs. PM2 starts it again at the
   cron time.
-- Every deploy runs `pm2 startOrRestart ecosystem.config.cjs --only
-  editor-purge --update-env`, which also runs it once straight away.
+- **Only the cron purges.** Every deploy runs `pm2 startOrRestart
+  ecosystem.config.cjs --only editor-purge --update-env` to add the app or
+  update its env. PM2 cannot do that without starting a run, so `deploy.sh`
+  first writes a marker, `.purge-skip-next` (the time, next to `db.sqlite`).
+  The run finds it, deletes it, logs `retention_purge_registered` and exits
+  without reading or backing up anything. A marker older than 10 minutes is
+  ignored.
+- A deploy during a cron run (03:17) stops that run. The purge's batch rolls
+  back and a half-written backup is never kept, so the next night's run
+  simply does the work.
+- Other starts do run it: `bunx pm2@6.0.14 restart editor-purge` (a run by
+  hand) and `pm2 resurrect` after a host reboot.
 - It shares `storageEnv` (`DB_PATH` and any retention variables) with
   `editor-next` and `editor-hocus`, so it purges the database they use with
   the same windows. Put new retention settings in `storageEnv`.
-- Its output is in `bunx pm2@6.0.14 logs editor-purge`. Run it by hand with
-  `bunx pm2@6.0.14 restart editor-purge`.
+- Its output is in `bunx pm2@6.0.14 logs editor-purge`.
 - After it is first started, run `bunx pm2@6.0.14 save`, so it survives a
   host reboot with the other apps.
 
@@ -112,12 +121,19 @@ says what a run may do:
   `staleTotal` is the whole backlog; an `on` run works through it 100 per
   run. `expiredTombstoneCount` is the tombstones it would drop.
 - **Backup.** Before deleting anything, an `on` run copies the database with
-  `VACUUM INTO` to `backups/db-<UTC time>.sqlite` next to `DB_PATH`
-  (`/opt/projects/editor.docs.plus/backups/`, git-ignored, mode 700) and
-  keeps the newest 7. If the backup fails, the run logs
-  `retention_purge_backup_failed`, exits 1 and deletes nothing. A deploy
-  also runs the purge, so on busy days the 7 backups can cover less than a
-  week. Check there is room for 7 copies of `db.sqlite`.
+  `VACUUM INTO` into `backups/` next to `DB_PATH`
+  (`/opt/projects/editor.docs.plus/backups/`, git-ignored, mode 700). The
+  copy is written as `*.partial` and renamed when complete. If the backup
+  fails, the run logs `retention_purge_backup_failed`, exits 1 and deletes
+  nothing.
+  - The very first backup is `db-first.sqlite`: the state before any purge.
+    It is **kept forever**; delete it by hand only when it is no longer
+    wanted.
+  - Later ones are `db-<UTC time>.sqlite`, deleted after **14 days** by age,
+    not by count, so extra runs cannot push out the copies from before a
+    purge.
+  - Check there is room for about 16 copies of `db.sqlite` (the first, 14
+    daily, and the one being written).
 - **Restore** a document from a backup by copying its `documents` row back
   and deleting its `document_tombstones` row, with Hocus stopped. Restoring
   the whole file loses every edit made since the backup.
@@ -128,10 +144,11 @@ says what a run may do:
   ```
   When the listed documents are ones that should go, change `PURGE_MODE` to
   `on` in `ecosystem.config.cjs` in a pull request. The deploy after it merges
-  takes the first backup and runs the first real purge. To stop purging,
+  updates the app (without purging); the next 03:17 run writes
+  `db-first.sqlite` and does the first real purge. To stop purging,
   set `off` (or back to `dry-run`) the same way. For an immediate stop on
-  the host, `bunx pm2@6.0.14 stop editor-purge` (the next deploy starts it
-  again).
+  the host, `bunx pm2@6.0.14 stop editor-purge`, which also stops its cron
+  (the next deploy registers it again).
 
 ## One-time setup
 
@@ -207,9 +224,9 @@ last step.
    pulls them in.
 6. **First manual deploy.** `gh workflow run deploy.yml`, then watch it. If
    the host is already at the tip of `main`, the script finds nothing to
-   fast-forward, then rebuilds and restarts both apps. It also starts
-   `editor-purge`, in dry-run mode: save the PM2 list so the job survives a
-   reboot:
+   fast-forward, then rebuilds and restarts both apps. It also registers
+   `editor-purge` (no run; its first is the next 03:17, as a dry run): save
+   the PM2 list so the job survives a reboot:
    ```bash
    ssh <user>@<host> 'cd /opt/projects/editor.docs.plus && bunx pm2@6.0.14 save'
    ```

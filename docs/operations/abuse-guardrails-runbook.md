@@ -85,6 +85,7 @@ Search logs for these JSON event names:
 - `documents_delete_failed`
 - `retention_purge_dry_run` (`PURGE_MODE=dry-run`: what a purge would delete)
 - `retention_purge_skipped` (`PURGE_MODE=off`)
+- `retention_purge_registered` (a deploy registered the app; nothing ran)
 - `retention_purge_backup_written` / `retention_purge_backup_failed` (an `on`
   run's backup; a failed backup deletes nothing)
 - `retention_purge_completed`
@@ -154,7 +155,7 @@ offline copy would push the old content straight back on reconnect.
 ## Scheduled Jobs
 
 - Retention: the `editor-purge` PM2 app in `ecosystem.config.cjs` runs
-  `scripts/purge-retention.ts` daily at 03:17 (host time) and on every deploy. It
+  `scripts/purge-retention.ts` daily at 03:17 (host time); deploys never run it. It
   deletes documents idle for `RETENTION_DAYS` and tombstones older than
   `TOMBSTONE_RETENTION_DAYS`, but only with `PURGE_MODE=on`, after a backup;
   the file ships `dry-run`. See "Scheduled jobs" in `deploy-runbook.md`.
