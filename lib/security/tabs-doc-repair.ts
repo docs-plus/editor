@@ -1,6 +1,6 @@
 import type * as Y from "yjs";
 
-import { isValidTabEntry } from "@/lib/tab-api";
+import { isValidTabEntry } from "@/lib/tab-entry";
 
 /**
  * Deletes malformed, duplicate and deleted (tombstoned) entries from a

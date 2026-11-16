@@ -8,12 +8,11 @@ import {
   ensurePlaygroundTab,
   getDefaultBootstrap,
   getMigrationTabs,
-  isTab,
   loadActiveTabIdFromStorage,
   persistActiveTabId,
   resolveActiveTabId,
-  type Tab,
 } from "@/lib/tab-api";
+import { isTab, type Tab } from "@/lib/tab-entry";
 
 const tab = (id: string, title = "T"): Tab => ({
   id,

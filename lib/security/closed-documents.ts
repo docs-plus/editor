@@ -5,7 +5,7 @@ import * as Y from "yjs";
 import { cleanText } from "@/lib/clean-text";
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
 import { CLOSED_RETENTION_DAYS } from "@/lib/security/guardrail-config";
-import { isValidTabEntry, MAX_TAB_TITLE_LENGTH } from "@/lib/tab-api";
+import { isValidTabEntry, MAX_TAB_TITLE_LENGTH } from "@/lib/tab-entry";
 
 /**
  * Closed tabs (soft deletes). Closing writes a `document_closures` row and

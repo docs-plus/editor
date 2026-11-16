@@ -2,7 +2,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { expect, test } from "@playwright/test";
 import * as Y from "yjs";
 
-import { isValidTabEntry } from "../../lib/tab-api";
+import { isValidTabEntry } from "../../lib/tab-entry";
 import { EditorPage } from "./helpers/editor-page";
 
 /** Same server the app under test uses (`make dev` default). */
