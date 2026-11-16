@@ -7,7 +7,10 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InstallAppButton } from "@/components/pwa";
-import { lazySurface } from "@/components/smart-toolbar/lazy-surface";
+import {
+  lazySurface,
+  loadIdentityDialog,
+} from "@/components/smart-toolbar/lazy-surface";
 import { ConnectionStatus } from "@/components/tiptap-ui/connection-status";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -116,14 +119,10 @@ function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
 }
 
 /**
- * The identity dialog is its own chunk: it is needed only after "Edit
- * identity" is clicked. It is fetched when the browser is first idle (so it
- * opens offline too) and on hover or focus of the trigger.
+ * The identity dialog is its own chunk, needed only after "Edit identity"
+ * is clicked. `preloadSurfaces` fetches it when the browser is idle after
+ * the first server sync (so it opens offline); hover and focus fetch it too.
  */
-const loadIdentityDialog = () =>
-  import("@/components/tiptap-ui/user-identity-dialog").then(
-    (module) => module.UserIdentityDialog,
-  );
 const prefetchIdentityDialog = () => {
   loadIdentityDialog().catch(() => undefined);
 };
@@ -177,12 +176,6 @@ export function UserIdentityButton() {
 
   useEffect(() => {
     setIdentity(getUserIdentity());
-    if (!window.requestIdleCallback) {
-      const id = window.setTimeout(prefetchIdentityDialog, 1000);
-      return () => window.clearTimeout(id);
-    }
-    const id = window.requestIdleCallback(prefetchIdentityDialog);
-    return () => window.cancelIdleCallback(id);
   }, []);
 
   if (!identity) return null;

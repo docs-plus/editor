@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { EditorPage } from "./helpers/editor-page";
+import { CHUNK_MARKERS } from "./helpers/lazy-chunk";
 
 test.describe("identity dialog", () => {
   test("shows inline errors, saves a Persian name and starts fresh on reopen", async ({
@@ -49,16 +50,19 @@ test.describe("identity dialog", () => {
     page,
     context,
   }) => {
+    // The idle preload after the first server sync fetches the dialog
+    // chunk: wait for that response, not a fixed delay (a fresh `next dev`
+    // compiles the chunk on first request).
+    const dialogChunk = page.waitForResponse(
+      async (response) =>
+        response.url().includes("/_next/static/chunks/") &&
+        (await response.text()).includes(CHUNK_MARKERS.identityDialog),
+      { timeout: 60_000 },
+    );
     const editor = new EditorPage(page);
     await editor.goto();
     await editor.waitForSync();
-    // The dialog chunk is fetched on the first idle callback after mount.
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) =>
-          requestIdleCallback(() => setTimeout(resolve, 500)),
-        ),
-    );
+    await dialogChunk;
     await context.setOffline(true);
     await page.getByRole("button", { name: /^Edit identity: / }).click();
     await expect(page.locator("#user-identity-name")).toBeVisible();
