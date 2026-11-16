@@ -5,7 +5,7 @@ import {
   renderCaretSelection,
 } from "@/extensions/collaboration-caret/safe-caret-render";
 
-/** happy-dom may report a colour as `rgb(…)`: compare as lowercase hex. */
+/** happy-dom may report a colour as `rgb(\u2026)`: compare as lowercase hex. */
 function toHex(css: string): string {
   const rgb = css.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (!rgb) return css.toLowerCase();
@@ -21,7 +21,7 @@ const labelOf = (el: HTMLElement) =>
 describe("renderCaret", () => {
   it("keeps the upstream DOM and repairs a hostile name and colour", () => {
     const el = renderCaret({
-      name: `‮evil${"x".repeat(100)}`,
+      name: `\u202Eevil${"x".repeat(100)}`,
       color: "red;background:url(//x)",
     });
     expect(el.className).toBe("collaboration-carets__caret");
@@ -44,7 +44,7 @@ describe("renderCaret", () => {
 
   it("renders an empty label for a name that cleans to nothing or is not a string", () => {
     expect(
-      labelOf(renderCaret({ name: "​", color: "#E57373" }))?.textContent,
+      labelOf(renderCaret({ name: "\u200B", color: "#E57373" }))?.textContent,
     ).toBe("");
     expect(
       labelOf(renderCaret({ name: 5, color: "#E57373" }))?.textContent,

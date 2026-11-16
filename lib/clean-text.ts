@@ -5,7 +5,8 @@
  * isolate. ZWNJ (U+200C) and ZWJ (U+200D) are kept: Persian names and emoji
  * sequences need them.
  */
-export const UNSAFE_TEXT_CHARS = /[\p{Cc}​‎‏؜⁠﻿‪-‮⁦-⁩]/gu;
+export const UNSAFE_TEXT_CHARS =
+  /[\p{Cc}\u200B\u200E\u200F\u061C\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/gu;
 
 const WHITESPACE_RUN = /\s+/gu;
 
