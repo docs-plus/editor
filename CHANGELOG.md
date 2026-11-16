@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Shortcut clashes
+
+⌘⇧R only aligns right, also on the Playground, and outside the editor it
+reloads the page again. Regenerate Playground is in the Alt+/ palette, the
+keyboard path to the Playground tab's Regenerate button.
+
+#### Added
+
+- Alt+/ › Regenerate Playground, listed only on the Playground (no key).
+
+#### Fixed
+
+- ⌘⇧R no longer regenerates the Playground; the Regenerate button's tooltip
+  no longer shows it.
+
+#### Changed
+
+- Desktop builds (`NEXT_PUBLIC_APP_TARGET=desktop`) bind Subscript to ⌘⇧, so
+  that ⌘, can open Settings. The web keeps ⌘,; Strikethrough keeps ⌘⇧S.
+
 ### Image privacy
 
 Inserted and pasted images no longer carry camera metadata.

@@ -10,6 +10,8 @@ export type UiIntent =
   | { type: "filter.toggle" }
   | { type: "theme.toggle" }
   | { type: "palette.open" }
+  /** Replace the Playground with new sample content (its tab's button). */
+  | { type: "playground.regenerate" }
   | { type: "colors.open"; kind: "text" | "highlight" }
   | { type: "insert.open"; kind: "table" | "image" | "embed" }
   /** Alt+F10: focus the open selection bubble's toolbar, else the row. */
