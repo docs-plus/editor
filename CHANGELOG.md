@@ -26,6 +26,20 @@ New browsers follow the system's light or dark setting, from the first paint and
 
 - Browsers that used TinyDocy before keep Light (written once on the next load) or the Dark they chose.
 
+### Dark primary text contrast
+
+In dark mode, primary-coloured text, borders and lines (the heading filter's
+ALL button, link-style buttons, the outline's drag drop line, the privacy
+notice border and the table picker's cell borders) use a new `--primary-ink`
+token.
+
+#### Fixed
+
+- Dark primary text reads at 9.3:1 on the page instead of 2.8:1. Light mode
+  and filled primary buttons are unchanged.
+- The outline's drop line reads at 8.4:1 on the dark sidebar instead of
+  2.5:1.
+
 ### Desktop local-first planning documents
 
 Adds the planning set for TinyDocy Desktop: the installable app for macOS,
