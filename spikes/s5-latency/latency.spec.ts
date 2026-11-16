@@ -155,7 +155,18 @@ const open = async (arm: Arm): Promise<Session> => {
     app,
     cdp: () => app.context().newCDPSession(page),
     version: `Electron ${versions.electron} (Chromium ${versions.chrome}, Node ${versions.node})`,
-    close: () => app.close(),
+    // After measuring, so it can't skew a sample: at 500 headings
+    // app.close() can hang (the shell never exits), so bound it.
+    close: async () => {
+      const closed = app.close().then(() => true);
+      const timeout = new Promise<false>((r) =>
+        setTimeout(() => r(false), 10_000),
+      );
+      if (!(await Promise.race([closed, timeout]))) {
+        console.log("electron close timed out; killing");
+        app.process().kill("SIGKILL");
+      }
+    },
   };
 };
 
@@ -186,7 +197,7 @@ const runTrial = async (arm: Arm, doc: JSONContent): Promise<Trial> => {
     const cdp = await s.cdp();
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_THROTTLE });
     await page.click(".tiptap p");
-    await waitForMainThreadIdle(page);
+    await waitForMainThreadIdle(page, { timeoutMs: 30_000 });
     const { visible, focused } = await page.evaluate(() => ({
       visible: document.visibilityState === "visible",
       focused: document.hasFocus(),
@@ -226,6 +237,18 @@ const runTrial = async (arm: Arm, doc: JSONContent): Promise<Trial> => {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Trials retried after a setup failure (a slow runner missing a wait). */
+const retried: string[] = [];
+const trialWithRetry = async (arm: Arm, doc: JSONContent, label: string) => {
+  try {
+    return await runTrial(arm, doc);
+  } catch (error) {
+    retried.push(`${label} ${arm}: ${String(error).split("\n")[0]}`);
+    console.log(`retrying ${label} ${arm}: ${String(error).split("\n")[0]}`);
+    return runTrial(arm, doc);
+  }
+};
+
 test.describe("spike S5 typing latency", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -252,14 +275,14 @@ test.describe("spike S5 typing latency", () => {
     test(`arms at ${n} headings`, async () => {
       const doc = generateLargeDocument(n, { shape: "flat" });
       // A discarded warm-up trial per arm (first-launch caches).
-      for (const arm of ARMS) await runTrial(arm, doc);
+      for (const arm of ARMS) await trialWithRetry(arm, doc, `n=${n} warm-up`);
       const trials: Trial[] = [];
       for (let round = 0; round < ROUNDS; round++) {
         const order = ARMS.map(
           (_, i) => ARMS[(i + round) % ARMS.length] as Arm,
         );
         for (const arm of order) {
-          const t = await runTrial(arm, doc);
+          const t = await trialWithRetry(arm, doc, `n=${n} r=${round}`);
           console.log(
             `n=${n} r=${round} ${arm}: observer p95 ${t.observerP95.toFixed(1)} runner p95 ${t.runnerP95.toFixed(1)}` +
               (t.main
@@ -379,6 +402,7 @@ test.describe("spike S5 typing latency", () => {
             arms: ARMS,
             byArm,
             ratios,
+            retried: retried.filter((r) => r.startsWith(`n=${n} `)),
             trials,
           },
           null,

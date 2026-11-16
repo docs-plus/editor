@@ -23,6 +23,9 @@ const hocus = Bun.spawn(["bun", "scripts/hocus-server.ts"], {
     HOCUS_PORT: String(HOCUS_PORT),
     DB_PATH: join(tmp, "db.sqlite"),
     HOCUS_THROTTLE: "0",
+    // Production's cap (ecosystem.config.cjs, nightly.yml): the 500-heading
+    // document is over the 1 MiB default, which makes the editor read-only.
+    MAX_DOC_SIZE_BYTES: "2097152",
     HOCUS_ALLOW_ISOLATED_TABS_DOCS: "1",
     HOCUS_ALLOWED_ORIGINS: `${origin},app://tinydocy`,
     WS_CONNECTION_LIMIT: "200",
