@@ -141,7 +141,7 @@ desktop/
    - Bundles find each other through `app.getAppPath()`, never `__dirname`: for a `"type": "module"` package, `Bun.build` inlines the *source* directory into `__dirname` (found in S2).
 3. **Stage.** Write `dist/desktop-app/`: a `package.json` with only `name`, `version` and `main`, the three bundles, and `renderer/` copied from `out/`.
    - electron-builder points `directories.app` here, so the root `dependencies` (next, react…) never reach the asar.
-   - Run it as `bun electron-builder` (**decided by S3**, which also confirms nothing calls the `node` stub).
+   - Run it as `bun electron-builder` (**confirmed by S3**, [write-up](../../research/2026-11-16-spike-s3-packaging-updates.md)): electron-builder 26.18.0 builds the DMG and zip, NSIS, `.deb` and AppImage with the `node` stub on PATH, and no step needs a `node` exception. On Windows, CI pairs the sh stub with a compiled `node.exe` stub, because Windows spawns never run the extensionless one.
 4. **Checks.** `scripts/check-editor-chunk-size.ts` runs on both targets (`--dir out/_next` for desktop). A unit test asserts that the main and worker bundles contain no `bun:` imports and no React.
 
 ### 3.2 TypeScript projects

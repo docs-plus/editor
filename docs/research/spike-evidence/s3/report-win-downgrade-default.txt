@@ -1,0 +1,27 @@
+=== update-test win-downgrade-default: PASS
+kind=nsis start=0.0.1 feed=0.0.0 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.1 expected 0.0.1
+  [x] marker intact
+  [x] netlog files=1
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=16
+  [x] feed log lacks /setup\.exe/
+  [x] probe log matches /after construction allowDowngrade=false/
+  [x] probe log matches /before checkForUpdates allowDowngrade=false/
+  [x] probe log matches /downgrade is disallowed/
+--- feed log
+2026-11-16T17:15:29.414Z serving D:\a\editor\editor\spikes\s3-packaging\release\0.0.0 at http://127.0.0.1:8787/feed/
+2026-11-16T17:15:42.512Z GET /feed/latest.yml?noCache=1k7iln115 200
+--- probe log
+2026-11-16T17:15:42.234Z v0.0.1 pid=9932 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=win32 arch=x64 exec=C:\Users\runneradmin\AppData\Local\Programs\tinydocy\TinyDocy.exe appimage=- argv=[]
+2026-11-16T17:15:42.490Z v0.0.1 pid=9932 window shown renderer-pid=4140
+2026-11-16T17:15:42.491Z v0.0.1 pid=9932 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:15:42.492Z v0.0.1 pid=9932 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:15:42.492Z v0.0.1 pid=9932 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:15:42.493Z v0.0.1 pid=9932 [updater] Checking for update
+2026-11-16T17:15:42.493Z v0.0.1 pid=9932 event checking-for-update
+2026-11-16T17:15:42.500Z v0.0.1 pid=9932 [updater] Generated new staging user ID: 4b5690ba-4b2f-59d1-96f9-14eb5f3555a5
+2026-11-16T17:15:42.515Z v0.0.1 pid=9932 [updater] Update for version 0.0.1 is not available (latest version: 0.0.0, downgrade is disallowed).
+2026-11-16T17:15:42.516Z v0.0.1 pid=9932 event update-not-available latest=0.0.0
+2026-11-16T17:15:42.516Z v0.0.1 pid=9932 probe-exit reason=update-not-available
+2026-11-16T17:15:42.516Z v0.0.1 pid=9932 check result version=0.0.0 isUpdateAvailable=false

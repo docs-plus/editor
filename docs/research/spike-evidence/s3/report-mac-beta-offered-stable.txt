@@ -1,0 +1,26 @@
+=== update-test mac-beta-offered-stable: PASS
+kind=mac-zip start=0.0.3-beta.1 feed=0.0.4 mode=check pref=unset signed=false control=false
+  [x] version.txt=0.0.3-beta.1 expected 0.0.3-beta.1
+  [x] marker intact
+  [x] netlog files=1
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=16
+  [x] feed log matches /GET /feed/beta-mac\.yml/
+  [x] feed log lacks /latest-mac\.yml/
+  [x] probe log matches /isUpdateAvailable=true/
+--- feed log
+2026-11-16T17:20:59.338Z serving /Users/runner/work/editor/editor/spikes/s3-packaging/release/0.0.4 at http://127.0.0.1:8787/feed/
+2026-11-16T17:21:02.884Z GET /feed/beta-mac.yml?noCache=1k7im0ps0 200
+--- probe log
+2026-11-16T17:21:01.884Z v0.0.3-beta.1 pid=11683 start mode=check pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=darwin arch=arm64 exec=/Users/runner/work/editor/editor/spikes/s3-packaging/out/mac-beta-offered-stable/app/TinyDocy.app/Contents/MacOS/TinyDocy appimage=- argv=[]
+2026-11-16T17:21:02.834Z v0.0.3-beta.1 pid=11683 window shown renderer-pid=11696
+2026-11-16T17:21:02.835Z v0.0.3-beta.1 pid=11683 after construction allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:21:02.835Z v0.0.3-beta.1 pid=11683 channel pref unset: default computed=beta (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:21:02.836Z v0.0.3-beta.1 pid=11683 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=true
+2026-11-16T17:21:02.836Z v0.0.3-beta.1 pid=11683 [updater] Checking for update
+2026-11-16T17:21:02.836Z v0.0.3-beta.1 pid=11683 event checking-for-update
+2026-11-16T17:21:02.845Z v0.0.3-beta.1 pid=11683 [updater] Generated new staging user ID: e1e34652-9625-5790-bd1a-5bb6f34e7215
+2026-11-16T17:21:02.896Z v0.0.3-beta.1 pid=11683 [updater] Found version 0.0.4 (url: tinydocy-0.0.4-mac-arm64.zip)
+2026-11-16T17:21:02.917Z v0.0.3-beta.1 pid=11683 event update-available version=0.0.4
+2026-11-16T17:21:02.918Z v0.0.3-beta.1 pid=11683 check result version=0.0.4 isUpdateAvailable=true
+2026-11-16T17:21:02.918Z v0.0.3-beta.1 pid=11683 probe-exit reason=check-done available=true
