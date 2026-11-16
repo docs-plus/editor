@@ -8,7 +8,7 @@
     "name": "docs.plus",
     "email": "spike@docs.plus"
   },
-  "desktopName": "tinydocy.desktop",
+  "desktopName": "TinyDocy.desktop",
   "type": "module",
   "private": true,
   "main": "dist/main.cjs",

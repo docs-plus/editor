@@ -61,8 +61,11 @@ linux:
   artifactName: ${name}-${version}-${arch}.${ext}
   desktop:
     entry:
-      # X11 WM_CLASS class is the productName; Wayland app_id comes from
-      # package.json desktopName (tinydocy.desktop -> tinydocy).
+      # Electron 45 takes both the X11 WM_CLASS and the Wayland app_id from
+      # package.json desktopName minus ".desktop" (run 43911539534 measured
+      # "tinydocy", "tinydocy" with desktopName tinydocy.desktop), so
+      # desktopName is TinyDocy.desktop while the installed file stays
+      # tinydocy.desktop (executableName, syncDesktopName off).
       StartupWMClass: TinyDocy
 deb:
   artifactName: ${name}_${version}_${arch}.${ext}

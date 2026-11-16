@@ -111,12 +111,14 @@ const scenarios: Record<string, () => Args> = {
     "release/0.0.4",
     "--expect-version",
     "0.0.4",
+    // The beta install asks for beta-linux.yml first; only the relaunched
+    // 0.0.4 (a stable build) asks for latest-linux.yml afterwards.
     "--expect-feed",
-    "GET /feed/beta-linux\\.yml",
-    "--forbid-feed",
-    "latest-linux\\.yml",
+    "^[^\\n]*serving[^\\n]*\\n[^\\n]*GET /feed/beta-linux\\.yml[\\s\\S]*GET /feed/tinydocy-0\\.0\\.4-x86_64\\.AppImage 200[\\s\\S]*GET /feed/latest-linux\\.yml",
     "--expect-log",
-    "default computed=beta",
+    "v0\\.0\\.3-beta\\.1 .*default computed=beta",
+    "--expect-log",
+    "v0\\.0\\.3-beta\\.1 .*Found version 0\\.0\\.4",
   ],
   "linux-downgrade-default": () => [
     "--kind",
@@ -214,9 +216,11 @@ const scenarios: Record<string, () => Args> = {
     "--expect-version",
     "0.0.4",
     "--expect-feed",
-    "GET /feed/beta\\.yml",
-    "--forbid-feed",
-    "latest\\.yml",
+    "^[^\\n]*serving[^\\n]*\\n[^\\n]*GET /feed/beta\\.yml[\\s\\S]*GET /feed/tinydocy-0\\.0\\.4-setup\\.exe 200[\\s\\S]*GET /feed/latest\\.yml",
+    "--expect-log",
+    "v0\\.0\\.3-beta\\.1 .*default computed=beta",
+    "--expect-log",
+    "v0\\.0\\.3-beta\\.1 .*Found version 0\\.0\\.4",
   ],
   "win-downgrade-default": () => [
     "--kind",

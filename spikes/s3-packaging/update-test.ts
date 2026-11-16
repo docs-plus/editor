@@ -134,7 +134,9 @@ const feedLog = path.join(work, "feed.log");
 const feed = startFeed(feedRoot, feedLog);
 const exe = install();
 const startVersion = (() => {
-  const m = path.basename(installer).match(/(\d+\.\d+\.\d+(?:-[\w.]+)?)/);
+  const m = path
+    .basename(installer)
+    .match(/(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?)/);
   return m?.[1] ?? "?";
 })();
 console.log(`[${name}] installed ${startVersion} -> ${exe}`);

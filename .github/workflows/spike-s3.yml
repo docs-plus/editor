@@ -115,8 +115,10 @@ jobs:
             echo "--- $f"; cat "$f"
           done
           echo "--- 0.0.3-beta.1 app-update.yml (AppImage)"
-          unsquashfs -l release/0.0.3-beta.1/tinydocy-0.0.3-beta.1-x86_64.AppImage >/dev/null 2>&1 || true
           cat release/0.0.3-beta.1/linux-unpacked/resources/app-update.yml
+          echo "--- AppImage AppRun: sandbox handling"
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/spikes/s3-packaging/release/0.0.1/tinydocy-0.0.1-x86_64.AppImage" --appimage-extract AppRun >/dev/null)
+          grep -n -i -B2 -A4 'sandbox\|unshare' "$RUNNER_TEMP/squashfs-root/AppRun" || cat "$RUNNER_TEMP/squashfs-root/AppRun"
 
       - name: deb contents and MIME registration
         run: |
@@ -252,10 +254,12 @@ jobs:
 
       - name: Prove the stub is first on PATH
         shell: pwsh
+        # The stub's "::error::" prefix is rewritten here so this deliberate
+        # call does not count as a stub hit in the job log.
         run: |
           where.exe node
-          node --version
-          "exit code: $LASTEXITCODE"
+          $out = (node --version 2>&1 | Out-String) -replace '::error::', '(stub) '
+          "node --version -> $($out.Trim()) (exit code $LASTEXITCODE)"
           exit 0
 
       - name: bun electron-builder (NSIS, five versions)
@@ -391,7 +395,17 @@ jobs:
           done
           xcrun assetutil --info release/0.0.2/mac-arm64/TinyDocy.app/Contents/Resources/Assets.car | grep -E '"(AssetType|Name|RenditionName|Idiom)"' | sort | uniq -c | head -30
 
+      - name: Update scenarios (unsigned; Squirrel.Mac expected to refuse)
+        continue-on-error: true
+        run: |
+          status=0
+          for s in ${{ matrix.scenarios }}; do bun scenarios.ts "$s" || status=1; done
+          exit $status
+
+      # Run 43911539534: this step hung for over 15 minutes on macos-26-intel.
       - name: Icon export (NSWorkspace.iconForFile -> PNG)
+        timeout-minutes: 4
+        continue-on-error: true
         run: |
           mkdir -p out/evidence
           for app in release/0.0.2/mac*/TinyDocy.app; do
@@ -399,13 +413,6 @@ jobs:
             osascript -l JavaScript export-icon.js "$PWD/$app" "$PWD/out/evidence/icon-${{ matrix.runner }}-$arch.png" 256
           done
           ls -l out/evidence
-
-      - name: Update scenarios (unsigned; Squirrel.Mac expected to refuse)
-        continue-on-error: true
-        run: |
-          status=0
-          for s in ${{ matrix.scenarios }}; do bun scenarios.ts "$s" || status=1; done
-          exit $status
 
       - name: Upload evidence
         if: always()
@@ -419,3 +426,63 @@ jobs:
             !spikes/s3-packaging/out/**/app/**
           if-no-files-found: warn
           retention-days: 90
+
+  arm:
+    name: Informational ${{ matrix.runner }} (build only)
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            builder_args: --linux deb AppImage --arm64
+          - runner: windows-11-arm
+            builder_args: --win nsis --arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Record runner
+        run: |
+          echo "image: $ImageOS $ImageVersion"
+          uname -a
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Block Node.js (node.exe for Windows spawns)
+        if: runner.os == 'Windows'
+        run: bun build --compile node-stub.ts --outfile "$RUNNER_TEMP/no-node/node.exe"
+
+      - name: bun electron-builder (one version)
+        run: bun release.ts --versions 0.0.1 -- ${{ matrix.builder_args }}
+
+      - name: Node stub hits in the builder logs
+        run: |
+          echo "node was called: $(cat logs/builder-*.log | grep -c 'node was called' || true)"
+          ! grep -h 'node was called' logs/builder-*.log
