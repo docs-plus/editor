@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Identity validation
+
+Your name and caret colour are checked before they are sent to
+collaborators, and collaborators' names are cleaned before their carets are
+drawn.
+
+#### Fixed
+
+- A stored colour outside the 8 swatches, or a name with control,
+  direction-override or zero-width characters, is repaired.
+- Blocked browser storage no longer breaks the editor; the identity lasts for
+  the session.
+- The identity dialog says "Enter a name." or "Use 32 characters or fewer."
+  instead of silently keeping the old name, and counts emoji and Persian names
+  correctly.
+- Names are capped in length and in stacked accent marks, so a collaborator's
+  name can no longer draw over the document.
+
 ### System theme
 
 New browsers follow the system's light or dark setting, from the first paint and live as it changes.

@@ -7,8 +7,11 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InstallAppButton } from "@/components/pwa";
+import {
+  lazySurface,
+  loadIdentityDialog,
+} from "@/components/smart-toolbar/lazy-surface";
 import { ConnectionStatus } from "@/components/tiptap-ui/connection-status";
-import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Tooltip,
@@ -25,7 +28,9 @@ import {
 import { DISCORD_INVITE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 import { DiscordIcon, GithubIcon, PencilIcon } from "@/lib/icons";
 import {
+  CARET_COLORS,
   getUserIdentity,
+  type NameResult,
   saveUserIdentity,
   type UserIdentity,
 } from "@/lib/user-identity";
@@ -113,6 +118,36 @@ function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
   return users;
 }
 
+/**
+ * The identity dialog is its own chunk, needed only after "Edit identity"
+ * is clicked. `preloadSurfaces` fetches it when the browser is idle after
+ * the first server sync (so it opens offline); hover and focus fetch it too.
+ */
+const prefetchIdentityDialog = () => {
+  loadIdentityDialog().catch(() => undefined);
+};
+const LazyIdentityDialog = lazySurface(loadIdentityDialog);
+
+type IdentityBroadcaster = {
+  commands: { updateUser: (user: UserIdentity) => unknown };
+};
+
+/**
+ * Stores the dialog's draft and, when its name is valid, sends the
+ * normalised identity (never the raw draft) to collaborators.
+ */
+export function saveIdentityDraft(
+  draft: UserIdentity,
+  editor: IdentityBroadcaster | null | undefined,
+): { result: NameResult; saved?: UserIdentity } {
+  const result = saveUserIdentity(draft);
+  if (!result.ok) return { result };
+  // Read back what was stored: the colour is canonicalised there too.
+  const saved = getUserIdentity();
+  editor?.commands.updateUser(saved);
+  return { result, saved };
+}
+
 /** Reports the peak peer bucket per document view: at most 5 events. */
 function useTrackPeakPeers(count: number, connected: boolean): void {
   const peakRankRef = useRef(-1);
@@ -130,6 +165,8 @@ export function UserIdentityButton() {
   const { editor } = useCurrentEditor();
   const [identity, setIdentity] = useState<UserIdentity | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Each opening mounts a fresh dialog, so drafts and errors start over.
+  const [openings, setOpenings] = useState(0);
   const connection = useConnectionState();
   const users = useOnlineUsers(editor);
 
@@ -143,10 +180,10 @@ export function UserIdentityButton() {
 
   if (!identity) return null;
 
-  const handleSave = (next: UserIdentity) => {
-    saveUserIdentity(next);
-    setIdentity(next);
-    editor?.commands.updateUser(next);
+  const handleSave = (draft: UserIdentity): NameResult => {
+    const { result, saved } = saveIdentityDraft(draft, editor);
+    if (saved) setIdentity(saved);
+    return result;
   };
 
   return (
@@ -175,7 +212,12 @@ export function UserIdentityButton() {
 
           <button
             type="button"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => {
+              setOpenings((n) => n + 1);
+              setDialogOpen(true);
+            }}
+            onPointerEnter={prefetchIdentityDialog}
+            onFocus={prefetchIdentityDialog}
             className={cn(
               "group flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
               "hover:bg-foreground/5 active:bg-foreground/10",
@@ -227,12 +269,16 @@ export function UserIdentityButton() {
         </div>
       </div>
 
-      <UserIdentityDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        currentUser={identity}
-        onSave={handleSave}
-      />
+      {openings > 0 && (
+        <LazyIdentityDialog
+          key={openings}
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          currentUser={identity}
+          colors={CARET_COLORS}
+          onSave={handleSave}
+        />
+      )}
     </>
   );
 }

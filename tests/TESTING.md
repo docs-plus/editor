@@ -56,8 +56,8 @@ tests/
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── lib/                              # Image embed planner and pipeline; `assets/` PNG, WebP and JPEG metadata stripper; security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets)
 │   ├── editor-actions/                   # Action contract and core actions; shortcut-bindings.test.ts: every advertised key bound once, tab-bar keys kept out of the editor keymap, Subscript by build target; playground-regenerate.test.ts: Regenerate Playground offered in the Playground only
-│   ├── components/                       # React components in happy-dom (toolbar button, menus, insert menu, ThemeToggle's phone cycle in `theme-toggle.test.tsx`)
-│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
+│   ├── components/                       # Toolbar and menu components; the identity dialog's inline name errors and the normalised broadcast (`user-identity-dialog.test.tsx`)
+│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds, remote caret names and colours clamped at render (`safe-caret-render.test.ts`)
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
@@ -85,6 +85,7 @@ tests/
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
+│   ├── identity-dialog.spec.ts           # Identity dialog: inline name errors, Persian name saved, fresh draft on reopen, opens offline after the idle prefetch
 │   ├── security-headers.spec.ts          # Hardening headers + CSP media-embed host allowlist
 │   ├── theme-system.spec.ts              # System theme: first frame, legacy Light, live OS changes, ⋯ › Appearance, palette, phone Aa cycle
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
