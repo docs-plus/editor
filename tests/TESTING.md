@@ -62,7 +62,7 @@ tests/
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
 ├── e2e/
 │   ├── helpers/
-│   │   ├── closed-documents.ts           # backdateClosure, runRetentionPurgeScript, runDeleteDocumentScript, isTombstoned on the shared DB_PATH
+│   │   ├── closed-documents.ts           # backdateClosure, runRetentionPurgeScript, runDeleteDocumentScript, isTombstoned, hasStoredDocument on the shared DB_PATH
 │   │   ├── editor-page.ts                # Playwright Page Object Model for the editor
 │   │   ├── playwright-modifier-key.ts    # Meta vs Control for keyboard shortcuts
 │   │   ├── perf-observer.ts              # PerformanceObserver injection + latency stats
@@ -80,6 +80,7 @@ tests/
 │   ├── performance-collab.spec.ts        # Multi-user typing latency on shared doc
 │   ├── pwa-connection.spec.ts            # Offline edits, connection status, offline banner/shell
 │   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
+│   ├── tab-close-undo.spec.ts            # Undo pill after closing, Recently closed, purge after the closed window
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
@@ -187,6 +188,7 @@ What WebKit does differently, and how the specs handle it:
 | `filter-collab.spec.ts` | With A's filter "alpha" applied, B renames the folded "Beta Section" to "Alpha Beta Section": A unfolds it (and its body) while Gamma stays folded; a non-matching section B adds arrives folded on A |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
+| `tab-close-undo.spec.ts` | Closing a tab shows Undo on the status pill and Undo puts it back in place with its text, including text typed just before closing; Recently closed in the tab bar restores a tab after a reload; a closure backdated past `CLOSED_RETENTION_DAYS` and purged is tombstoned, restore answers `gone` and the list drops it. Uses `helpers/closed-documents.ts` on the shared `DB_PATH` |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away (operator `delete-document.ts`) disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |
 | `toolbar-row.spec.ts` | Smart toolbar row (PR D1): row order in every context, one Tab stop, Alt+F10 and Esc with the selection, context slot per kind, remote heading deletion while a slot control has focus, clear formatting keeps links, read-only keeps every control and focus, the align items in Align ▾ and T3 ¶ (icon, label, check slot before the shortcut, shortcuts ending at Outdent's and Indent's edge, Ctrl+Shift+E on one line off macOS) and Mod+Shift+L/E/R/J aligning without the browser taking them, light and dark screenshots into `.superpowers/screens-D1/` |

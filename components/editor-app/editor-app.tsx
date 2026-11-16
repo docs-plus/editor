@@ -85,6 +85,7 @@ export function EditorApp({ intro }: EditorAppProps) {
     createTab,
     closeTab,
     closeAllTabs,
+    restoreTabs,
     reorderTab,
     switchTab,
     updateTabTitle,
@@ -157,6 +158,7 @@ export function EditorApp({ intro }: EditorAppProps) {
         onCreate={createTab}
         onClose={closeTab}
         onCloseAll={closeAllTabs}
+        onRestore={restoreTabs}
         onReorder={reorderTab}
         onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
