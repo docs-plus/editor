@@ -9,6 +9,17 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Closing a tab can be undone
+
+Closing a tab or closing all tabs shows an Undo pill for 5 s, and Recently
+closed in the tab bar restores any tab closed in the last 7 days.
+
+#### Added
+
+- Undo after closing one tab or all tabs.
+- Recently closed in the tab bar. Anyone using the sandbox can see and restore
+  these tabs.
+
 ### Closed documents are kept for 7 days
 
 Closing a tab no longer deletes the document on the server. It is kept for

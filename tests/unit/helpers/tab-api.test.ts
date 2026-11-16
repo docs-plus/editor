@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
   clearMigrationStorage,
+  closeDocument,
   deduplicateTabs,
-  deleteDocument,
   ensurePlaygroundTab,
   getDefaultBootstrap,
   getMigrationTabs,
@@ -175,7 +175,7 @@ describe("getDefaultBootstrap", () => {
   });
 });
 
-describe("deleteDocument", () => {
+describe("closeDocument", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -184,25 +184,46 @@ describe("deleteDocument", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 200 }),
     );
-    expect(await deleteDocument("doc-1")).toBe(true);
+    expect(await closeDocument("doc-1", "Notes")).toBe(true);
   });
 
   it("returns true on 404 (already gone)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 404 }),
     );
-    expect(await deleteDocument("doc-1")).toBe(true);
+    expect(await closeDocument("doc-1", "Notes")).toBe(true);
   });
 
   it("returns false on 500", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 500 }),
     );
-    expect(await deleteDocument("doc-1")).toBe(false);
+    expect(await closeDocument("doc-1", "Notes")).toBe(false);
   });
 
   it("returns false on network error", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network"));
-    expect(await deleteDocument("doc-1")).toBe(false);
+    expect(await closeDocument("doc-1", "Notes")).toBe(false);
+  });
+});
+
+describe("closeDocument body", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends the title and the tabs document as JSON", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    await closeDocument("doc-1", "Notes");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/documents/doc-1",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: '{"title":"Notes","tabsDoc":"global-tabs"}',
+      }),
+    );
   });
 });

@@ -17,10 +17,18 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect } from "react";
+import {
+  type ComponentType,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { OFFLINE_TAB_ACTION_HINT } from "@/components/pwa/offline-banner";
+import type { RecentlyClosedMenuProps } from "@/components/tab-bar/recently-closed-menu";
 import { TabContent } from "@/components/tab-bar/tab-content";
+import type { RestorableTab } from "@/hooks/use-synced-tabs";
 import { matchTabBarShortcut } from "@/lib/app-shortcuts";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
@@ -28,12 +36,18 @@ import {
   FileTextIcon,
   FlaskConicalIcon,
   GripVerticalIcon,
+  HistoryIcon,
   PanelLeftCloseIcon,
   PlusIcon,
   RefreshCwIcon,
 } from "@/lib/icons";
 import type { Tab } from "@/lib/tab-entry";
 import "./tab-bar.scss";
+
+// The menu loads through the lazy restore chunk (fetched when the button
+// is hovered or focused), so first load carries only the button.
+const loadRecentlyClosedMenu = () =>
+  import("@/lib/tab-restore").then((m) => m.loadRecentlyClosedMenu());
 
 interface TabBarProps {
   tabs: Tab[];
@@ -47,7 +61,55 @@ interface TabBarProps {
   onClose: (id: string) => void;
   onCloseAll: () => void;
   onReorder: (id: string, targetIndex: number) => void;
+  /** Restores tabs picked from Recently closed. */
+  onRestore: (tabs: readonly RestorableTab[]) => void;
   onPlaygroundRegenerate?: () => void;
+}
+
+/** History button and its lazy Recently closed menu. Needs the server. */
+function RecentlyClosedButton({
+  offline,
+  onRestore,
+}: {
+  offline: boolean;
+  onRestore: TabBarProps["onRestore"];
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [Menu, setMenu] = useState<ComponentType<RecentlyClosedMenuProps>>();
+  const prefetch = () => {
+    if (!Menu) loadRecentlyClosedMenu().then((menu) => setMenu(() => menu));
+  };
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="tab-bar-recently-closed"
+        onClick={() => {
+          prefetch();
+          setOpen((current) => !current);
+        }}
+        onPointerEnter={prefetch}
+        onFocus={prefetch}
+        disabled={offline}
+        aria-label="Recently closed"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={offline ? OFFLINE_TAB_ACTION_HINT : "Recently closed"}
+      >
+        <HistoryIcon size={14} />
+      </button>
+      {Menu ? (
+        <Menu
+          open={open && !offline}
+          onOpenChange={setOpen}
+          anchorRef={buttonRef}
+          onRestore={onRestore}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function newTabLabel(canCreateTab: boolean, offline: boolean): string {
@@ -155,6 +217,7 @@ export function TabBar({
   onClose,
   onCloseAll,
   onReorder,
+  onRestore,
   onPlaygroundRegenerate,
 }: TabBarProps) {
   const sensors = useSensors(
@@ -299,6 +362,7 @@ export function TabBar({
         >
           <PanelLeftCloseIcon size={14} />
         </button>
+        <RecentlyClosedButton offline={offline} onRestore={onRestore} />
       </DndContext>
     </div>
   );

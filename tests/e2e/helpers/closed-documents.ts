@@ -57,3 +57,15 @@ export function isTombstoned(id: string): boolean {
     db.close();
   }
 }
+
+/** True once Hocus has stored the document (Recently closed lists only those). */
+export function hasStoredDocument(id: string): boolean {
+  const db = openSqlite();
+  try {
+    return Boolean(
+      db.prepare("SELECT 1 FROM documents WHERE name = ?").get(id),
+    );
+  } finally {
+    db.close();
+  }
+}
