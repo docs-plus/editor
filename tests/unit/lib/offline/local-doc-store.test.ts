@@ -9,6 +9,7 @@ import {
   LOCAL_ORIGIN,
   LocalDocStore,
   legacyStoreKey,
+  mergeIntoStored,
   OFFLINE_CACHE_EPOCH,
   OFFLINE_DOC_MAX_AGE_DAYS,
   OFFLINE_NAMESPACE,
@@ -504,5 +505,102 @@ describe("removal during a legacy merge", () => {
       "1:ws.example:a",
       "1:ws.example~s2:a",
     ]);
+  });
+});
+
+describe("merge on save", () => {
+  it("merges a save into the stored copy", async () => {
+    const { store } = makeStore();
+    await store.save("a", yState("stored offline"));
+    await store.save("a", yState("server state"));
+    const text = textOf((await store.load("a"))?.current ?? undefined);
+    expect(text).toContain("stored offline");
+    expect(text).toContain("server state");
+  });
+
+  it("replaces an expired copy instead of merging it", async () => {
+    let now = 0;
+    const { store } = makeStore(() => now);
+    await store.save("a", yState("expired"));
+    now = (OFFLINE_DOC_MAX_AGE_DAYS + 1) * DAY;
+    await store.save("a", yState("fresh"));
+    now += 1;
+    expect(textOf((await store.load("a"))?.current ?? undefined)).toBe("fresh");
+  });
+
+  it("keeps an unreadable copy and rejects the save", async () => {
+    const { backend, store } = makeStore();
+    const key = storeKey("ws.example", "a");
+    await backend.put({
+      key,
+      name: "a",
+      update: Uint8Array.from([255, 255, 255]),
+      updatedAt: 1_000_000,
+    });
+    await expect(store.save("a", yState("new"))).rejects.toThrow();
+    expect((await backend.get(key))?.update).toEqual(
+      Uint8Array.from([255, 255, 255]),
+    );
+  });
+
+  it("does not keep deleted text in the saved copy", async () => {
+    const { backend, store } = makeStore();
+    const doc = new Y.Doc();
+    doc.getText("t").insert(0, "base");
+    await store.save("a", Y.encodeStateAsUpdate(doc));
+    doc.getText("t").insert(4, "x".repeat(10_000));
+    await store.save("a", Y.encodeStateAsUpdate(doc));
+    doc.getText("t").delete(4, 10_000);
+    for (let i = 0; i < 3; i++) {
+      await store.save("a", Y.encodeStateAsUpdate(doc));
+    }
+    expect(
+      (await backend.get(storeKey("ws.example", "a")))?.update.byteLength,
+    ).toBeLessThan(200);
+  });
+
+  it("returns the update untouched when the stamp matches", () => {
+    const stored = {
+      key: storeKey("ws.example", "a"),
+      name: "a",
+      update: Uint8Array.from([255, 255, 255]),
+      updatedAt: 1_000_000,
+    };
+    const update = yState("next");
+    // Undecodable bytes: only a skipped merge can succeed.
+    expect(
+      mergeIntoStored(stored, update, 1_000_001, {
+        updatedAt: 1_000_000,
+        byteLength: 3,
+      }),
+    ).toBe(update);
+    expect(() =>
+      mergeIntoStored(stored, update, 1_000_001, {
+        updatedAt: 999,
+        byteLength: 3,
+      }),
+    ).toThrow();
+  });
+
+  it("skips the merge when the stored copy is the binding's own last write", async () => {
+    const backend = createMemoryBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const doc = new Y.Doc();
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    await binding.hydrated;
+    doc.getText("t").insert(0, "first");
+    await binding.flush();
+    const key = storeKey("ws.example", "a");
+    const own = await backend.get(key);
+    if (!own) throw new Error("no copy saved");
+    // Same stamp, undecodable bytes: a merge would throw and disable the binding.
+    await backend.put({
+      ...own,
+      update: new Uint8Array(own.update.byteLength).fill(255),
+    });
+    doc.getText("t").insert(0, "second ");
+    await binding.flush();
+    expect(textOf((await backend.get(key))?.update)).toBe("second first");
+    binding.destroy();
   });
 });
