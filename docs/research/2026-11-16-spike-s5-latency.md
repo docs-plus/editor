@@ -2,7 +2,7 @@
 
 Date: 2026-11-16. Plan: `docs/superpowers/plans/2026-11-16-phase-1-spikes.md`, Task S5.
 Spike code: branch `spike/s5-latency` (the plan calls it `spike/s5-latency-ime`), directory
-`spikes/s5-latency/`, workflow `.github/workflows/spike-s5.yml`. Throwaway; never merged.
+[`spikes/s5-latency/`](https://github.com/docs-plus/editor/tree/44fe815/spikes/s5-latency) at `44fe815`, workflow `.github/workflows/spike-s5.yml`. Throwaway; never merged.
 Raw results: `docs/research/spike-evidence/s5/`.
 
 ## Recommendation (D-A1)
@@ -13,8 +13,8 @@ and no storage commit runs on main's own thread.
 **Is it provisional?** Only formally. The plan's rule keeps the worker unless commits on main pass
 on both verdict machines. Those runs are pending owner hardware, so the worker is the decision
 today. An owner run could reopen it only if all four main-thread ratios came in ≤ 1.10 with event
-loop p99 ≤ 8 ms. On every machine measured here, main-thread commits fail: ratios 1.09–1.38,
-worst p99 per machine 9.9–182 ms. Phase 2 can build on the worker now.
+loop p99 ≤ 8 ms. On every machine measured here, main-thread commits fail at least one condition: ratios up
+to 1.38, worst p99 per machine 9.9–182 ms. Phase 2 can build on the worker now.
 
 - The plan's rule lets commits move onto main only if all four `electron-main-commits` /
   `electron-idle` p95 ratios (50 and 500 headings, on the owner's M1 and on a Windows laptop with
@@ -44,7 +44,8 @@ Ratios use the runner→renderer measure (below). Bold = fails the rule's thresh
   stalls up to 86 ms (M5 Max), 417 ms (`ubuntu-24.04`) or 664 ms (`windows-latest`). The renderer-side measure barely moves
   (1.04 at 50 headings): Review Focus #2, confirmed.
 
-Spec lines this settles (to fold into the Phase 1 amendments): arch §1 D-A1 ("**Decided by
+Spec lines this settles (to fold into the Phase 1 amendments; the S2/S3 write-up in
+[#90](https://github.com/docs-plus/editor/pull/90) leaves D-A1 to this rule): arch §1 D-A1 ("**Decided by
 S2/S5** … If commits on main's own thread stay within budget, the worker is dropped") and the
 design doc's D-A1 row → "Decided by S5: the worker stays." The worker's own pass row
 (ratio ≤ 1.10 against idle) is measured on the M5 Max at 1.00 / 1.00; its verdict rows are also
@@ -130,7 +131,7 @@ on owner hardware".
 | `electron-worker-commits` / idle ≤ 1.10 | no | **pending owner hardware**. Context: M5 Max 1.00 / 1.00, `ubuntu-24.04` 1.07 / 1.09, `macos-26` 1.18 / 1.17, `windows-latest` 1.13 / pending: Windows runner time limit; rerun on owner hardware | all |
 | Main-thread commits: four ratios ≤ 1.10 and ELD p99 ≤ 8 ms | no (decides D-A1) | **not met → keep the worker** (verdict machines pending; fails on every machine measured) | all |
 | Commits per second | no | M5 Max ≈ 255–265 (both arms); `macos-26` worker 735–771, main 604–610; `ubuntu-24.04` worker 3,472–4,280, main 2,573–2,943; `windows-latest` (50 h) worker 225, main 236 | all |
-| Japanese IME, macOS and Windows | no | **pending owner hardware** (`spikes/s5-latency/ime-checklist.md`) | — |
+| Japanese IME, macOS and Windows | no | **pending owner hardware** ([`ime-checklist.md`](https://github.com/docs-plus/editor/tree/44fe815/spikes/s5-latency/ime-checklist.md)) | — |
 | CJK IME on GNOME Wayland (IBus + Mozc; XWayland fallback) | no | **pending owner hardware** | — |
 
 ### Per machine (median of 7 rounds of per-trial p95, ms)
@@ -232,7 +233,8 @@ Windows), and its Defender state is unknown, so it isn't the plan's Defender-on 
   main's event-loop p50/p99/max, commits per second, load average, visibility, versions).
 - Workflow run: https://github.com/docs-plus/editor/actions/runs/43917773107 (artifacts
   `s5-latency-<os>`, 30 days).
-- IME: `spikes/s5-latency/ime-checklist.md` on the spike branch, to be ticked by a person.
+- IME: [`spikes/s5-latency/ime-checklist.md`](https://github.com/docs-plus/editor/tree/44fe815/spikes/s5-latency/ime-checklist.md) on the spike branch, to be
+  ticked by a person.
 
 ## Pending owner hardware
 
