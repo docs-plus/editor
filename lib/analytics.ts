@@ -28,6 +28,7 @@ export interface AnalyticsEventMap {
   editor_ready: Record<string, never>;
   tab_create: { tab_count: number };
   tab_close_all: { closed_count: number };
+  tab_restore: { restored_count: number };
   playground_regenerate: Record<string, never>;
   diagram_insert: Record<string, never>;
   media_embed: { provider: MediaNodeType };

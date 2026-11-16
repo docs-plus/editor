@@ -13,12 +13,11 @@ import {
   releaseCollabSession,
 } from "@/lib/collab-session";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
-import { getGlobalTabsDoc } from "@/lib/hocuspocus";
 import { sweepLocalCopies } from "@/lib/offline";
 import {
   clearMigrationStorage,
+  closeDocument,
   DELETE_TIMEOUT_MS,
-  deleteDocument,
   findRawTabIndex,
   generateId,
   getDefaultBootstrap,
@@ -29,8 +28,28 @@ import {
   sanitizeTabs,
 } from "@/lib/tab-api";
 import { isTab, MAX_TAB_TITLE_LENGTH, type Tab } from "@/lib/tab-entry";
+import type { RestorableTab, TabList } from "@/lib/tab-restore";
+import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 export type { Tab } from "@/lib/tab-entry";
+export type { RestorableTab } from "@/lib/tab-restore";
+
+/** Undo and restore live in a lazy chunk, fetched on the first close. */
+const loadTabRestore = () => import("@/lib/tab-restore");
+
+/** Deletes every raw entry whose id is in `ids`, in one transaction. */
+function removeTabEntries(arr: Y.Array<unknown>, ids: ReadonlySet<string>) {
+  const indices = arr
+    .toArray()
+    .map((t, i) => (isTab(t) && ids.has(t.id) ? i : -1))
+    .filter((i) => i >= 0)
+    .sort((a, b) => b - a);
+  const doDelete = () => {
+    for (const idx of indices) arr.delete(idx, 1);
+  };
+  if (arr.doc) arr.doc.transact(doDelete);
+  else doDelete();
+}
 
 export interface UseSyncedTabsReturn {
   ready: boolean;
@@ -41,6 +60,7 @@ export interface UseSyncedTabsReturn {
   createTab: () => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
+  restoreTabs: (tabs: readonly RestorableTab[]) => Promise<void>;
   reorderTab: (id: string, targetIndex: number) => void;
   switchTab: (id: string) => void;
   updateTabTitle: (id: string, title: string) => void;
@@ -151,40 +171,68 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     persistActiveTabId(tab.id);
   }, []);
 
-  const closeTab = useCallback(async (id: string) => {
-    if (closingRef.current) return;
-    const arr = tabsArrayRef.current;
-    if (!arr || id === PLAYGROUND_ID) return;
-    const current = sanitizeTabs(arr.toArray());
-    if (current.length <= 1) return;
-    const idx = current.findIndex((t) => t.id === id);
-    if (idx < 0) return;
+  // Stable for the hook's life: the lazy restore code reads the live list.
+  const [tabList] = useState<TabList>(() => ({
+    tabs: () => tabsArrayRef.current,
+    activate: (id) => {
+      activeTabIdRef.current = id;
+      setActiveTabId(id);
+      persistActiveTabId(id);
+    },
+  }));
 
-    closingRef.current = true;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DELETE_TIMEOUT_MS);
-    const ok = await deleteDocument(id, controller.signal).finally(() => {
-      clearTimeout(timeout);
-      closingRef.current = false;
-    });
-    if (!ok) {
-      alert("Could not close tab");
-      return;
-    }
+  const restoreTabs = useCallback(
+    async (entries: readonly RestorableTab[]) =>
+      (await loadTabRestore()).restoreTabs(tabList, entries),
+    [tabList],
+  );
 
-    const newActive =
-      activeTabIdRef.current === id
-        ? (current[idx === current.length - 1 ? idx - 1 : idx + 1]?.id ??
-          current[0]?.id ??
-          PLAYGROUND_ID)
-        : activeTabIdRef.current;
-    // Re-resolve: the shared array may have changed while DELETE was in flight.
-    const rawIdx = findRawTabIndex(arr.toArray(), id);
-    if (rawIdx >= 0) arr.delete(rawIdx, 1);
-    forgetLocalCopy(id);
-    setActiveTabId(newActive);
-    persistActiveTabId(newActive);
-  }, []);
+  const offerUndo = useCallback(
+    async (closed: Tab[], raw: unknown[]) =>
+      (await loadTabRestore()).offerUndo(tabList, closed, raw),
+    [tabList],
+  );
+
+  const closeTab = useCallback(
+    async (id: string) => {
+      if (closingRef.current) return;
+      const arr = tabsArrayRef.current;
+      if (!arr || id === PLAYGROUND_ID) return;
+      const current = sanitizeTabs(arr.toArray());
+      if (current.length <= 1) return;
+      const idx = current.findIndex((t) => t.id === id);
+      if (idx < 0) return;
+      const { title } = current[idx];
+
+      closingRef.current = true;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), DELETE_TIMEOUT_MS);
+      const ok = await closeDocument(id, title, controller.signal).finally(
+        () => {
+          clearTimeout(timeout);
+          closingRef.current = false;
+        },
+      );
+      if (!ok) {
+        alert("Could not close tab");
+        return;
+      }
+
+      const newActive =
+        activeTabIdRef.current === id
+          ? (current[idx === current.length - 1 ? idx - 1 : idx + 1]?.id ??
+            current[0]?.id ??
+            PLAYGROUND_ID)
+          : activeTabIdRef.current;
+      // Re-resolve: the shared array may have changed while DELETE was in flight.
+      const raw = arr.toArray();
+      removeTabEntries(arr, new Set([id]));
+      forgetLocalCopy(id);
+      tabList.activate(newActive);
+      await offerUndo([current[idx]], raw);
+    },
+    [tabList, offerUndo],
+  );
 
   const closeAllTabs = useCallback(async () => {
     if (closingRef.current) return;
@@ -204,7 +252,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     const timeout = setTimeout(() => controller.abort(), DELETE_TIMEOUT_MS);
     const results = await Promise.allSettled(
       userTabs.map((t) =>
-        deleteDocument(t.id, controller.signal).then((ok) => ({
+        closeDocument(t.id, t.title, controller.signal).then((ok) => ({
           id: t.id,
           ok,
         })),
@@ -240,21 +288,8 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
 
     const succeededSet = new Set(succeeded);
     for (const id of succeeded) forgetLocalCopy(id);
-    const ydoc = arr.doc;
-    const indices = arr
-      .toArray()
-      .map((t, i) => (isTab(t) && succeededSet.has(t.id) ? i : -1))
-      .filter((i) => i >= 0)
-      .sort((a, b) => b - a);
-
-    const doDelete = () => {
-      for (const idx of indices) arr.delete(idx, 1);
-    };
-    if (ydoc) {
-      ydoc.transact(doDelete);
-    } else {
-      doDelete();
-    }
+    const raw = arr.toArray();
+    removeTabEntries(arr, succeededSet);
     if (succeeded.length > 0) {
       trackEvent("tab_close_all", { closed_count: succeeded.length });
     }
@@ -271,9 +306,12 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
         arr.push([newTab]);
         return newTab.id;
       })();
-    setActiveTabId(nextId);
-    persistActiveTabId(nextId);
-  }, []);
+    tabList.activate(nextId);
+    await offerUndo(
+      userTabs.filter((t) => succeededSet.has(t.id)),
+      raw,
+    );
+  }, [tabList, offerUndo]);
 
   const reorderTab = useCallback((id: string, targetIndex: number) => {
     const arr = tabsArrayRef.current;
@@ -342,6 +380,7 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     createTab,
     closeTab,
     closeAllTabs,
+    restoreTabs,
     reorderTab,
     switchTab,
     updateTabTitle,

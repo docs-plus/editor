@@ -9,6 +9,38 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Spike S5 results: typing latency and D-A1
+
+Records spike S5 of the desktop Phase 1 plan: typing latency in Electron
+against Chrome for Testing 156, and storage commits in the worker against
+commits on main's own thread. Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/research/2026-11-16-spike-s5-latency.md`, the S5 write-up,
+  and its raw results in `docs/research/spike-evidence/s5/`. D-A1 keeps the
+  storage worker: commits on main's own thread slow typing by 9–38% and
+  stall main's event loop past 8 ms on every machine measured. The verdict
+  machines' rows (the owner's M1, a Windows laptop with Defender on) and the
+  IME checks are pending owner hardware.
+
+#### Changed
+
+- **Docs:** the D-A1 rows in the desktop architecture and design specs now
+  say "keep the storage worker", provisional until the owner's machines are
+  measured.
+
+### Closing a tab can be undone
+
+Closing a tab or closing all tabs shows an Undo pill for 5 s, and Recently
+closed in the tab bar restores any tab closed in the last 7 days.
+
+#### Added
+
+- Undo after closing one tab or all tabs.
+- Recently closed in the tab bar. Anyone using the sandbox can see and restore
+  these tabs.
+
 ### Closed documents are kept for 7 days
 
 Closing a tab no longer deletes the document on the server. It is kept for

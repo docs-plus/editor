@@ -43,6 +43,7 @@ export {
   Heading5 as HeadingFiveIcon,
   Heading6 as HeadingSixIcon,
   Highlighter as HighlighterIcon,
+  History as HistoryIcon,
   ImagePlus as ImagePlusIcon,
   Info as InfoIcon,
   Italic as ItalicIcon,

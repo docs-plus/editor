@@ -5,6 +5,7 @@ import {
   MAX_TAB_TITLE_LENGTH,
   type Tab,
 } from "@/lib/tab-entry";
+import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 const TABS_KEY = "tinydocy-tabs";
 
@@ -119,13 +120,20 @@ export function getDefaultBootstrap(): Tab[] {
   ];
 }
 
-export async function deleteDocument(
+/**
+ * Closes a tab softly: the server keeps the document restorable for its
+ * closed window. True on success, and on 404 from an older server.
+ */
+export async function closeDocument(
   id: string,
+  title: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, tabsDoc: getGlobalTabsDoc() }),
       signal,
     });
     return res.ok || res.status === 404;
