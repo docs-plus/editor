@@ -325,7 +325,7 @@ Versions are built in one job: N-1 `0.0.1`, N `0.0.2`, beta `0.0.3-beta.1`, stab
 ```bash
 git switch -c spike/s4-electron-e2e spike/s1-shell && git merge spike/s3-packaging
 cd spikes/s3-packaging && bun electron-builder --dir --publish never   # unpacked app per OS
-DB_PATH=$(mktemp -d)/s4.sqlite HOCUS_THROTTLE=0 HOCUS_ALLOWED_ORIGINS=<D-A11 origin> bun run hocus &
+DB_PATH=$(mktemp -d)/s4.sqlite HOCUS_THROTTLE=0 HOCUS_ALLOWED_ORIGINS=app://tinydocy bun run hocus &   # D-A11, decided by S1
 CI= bun playwright test -c spikes/s4-electron-e2e/playwright.config.ts
 ```
 
@@ -445,7 +445,7 @@ Five arms run on the same document with the same CDP throttle, interleaved: each
     - `require("node:sqlite")` succeeds
     - `PRAGMA journal_mode=WAL` returns `wal`
     - a worker opens the same database and round-trips one row
-    - a custom `app://smoke` scheme, registered standard and secure, serves `fixture/index.html`, and the window reports `document.title === "smoke"`. P2.5 retargets this check to the D-A11 origin and the real export, and moves the smoke under the `electron` project.
+    - a custom `app://smoke` scheme, registered standard and secure, serves `fixture/index.html`, and the window reports `document.title === "smoke"`. P2.5 retargets this check to the D-A11 origin (`app://tinydocy`) and the real export, and moves the smoke under the `electron` project.
   - It then exits with `0`.
 - [ ] **Step 2: See it fail.** Run `bun electron desktop/smoke/dist/main.cjs` with `SMOKE_BREAK=wal`. Expect exit code `1` and `SMOKE_FAIL wal`.
 - [ ] **Step 3: See it pass.**

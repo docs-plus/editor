@@ -9,6 +9,30 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phase 1 shell spike results (S1, S4)
+
+Records what the Electron shell spikes found and the decisions they settle.
+Documentation only; no app or server change. The spike code stays on its
+`spike/*` branches.
+
+#### Added
+
+- `docs/research/2026-11-16-spike-s1-shell-origin.md`: the static export in
+  Electron on both candidate origins, on macOS, Windows and Linux (CSP,
+  embeds, spellcheck, preload, sender check, menus), with screenshots in
+  `docs/research/spike-evidence/s1/`.
+- `docs/research/2026-11-16-spike-s4-electron-e2e.md`: Playwright `_electron`
+  relaunches the packaged app and the text comes back offline; the spec is
+  kept as a reference for P2.5.
+
+#### Changed
+
+- Desktop specs: the app origin is `app://tinydocy` with a YouTube Referer
+  rewrite (D-A11); `pageExtensions` covers pages and routes while metadata
+  files are moved aside for the desktop build (D-A9); main, worker and
+  preload stay CJS bundles that find their files through
+  `app.getAppPath()`.
+
 ### Storage and packaging spike results (S2, S3)
 
 - **Docs:** Phase 1 storage and packaging spike results (S2, S3) and the
