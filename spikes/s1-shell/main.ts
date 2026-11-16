@@ -9,8 +9,11 @@
  * electronApp.evaluate).
  */
 import {
+  copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   statSync,
   writeFileSync,
@@ -115,6 +118,20 @@ if (process.env.SPIKE_NETLOG) {
 }
 if (process.env.TINYDOCY_USER_DATA) {
   app.setPath("userData", process.env.TINYDOCY_USER_DATA);
+}
+// Hunspell platforms: a .bdic already in <userData>/Dictionaries is used
+// instead of a download (the bundled-dictionary fallback).
+if (process.env.SPIKE_DICT_PRESEED_DIR) {
+  const target = join(app.getPath("userData"), "Dictionaries");
+  mkdirSync(target, { recursive: true });
+  for (const name of readdirSync(process.env.SPIKE_DICT_PRESEED_DIR)) {
+    if (name.endsWith(".bdic")) {
+      copyFileSync(
+        join(process.env.SPIKE_DICT_PRESEED_DIR, name),
+        join(target, name),
+      );
+    }
+  }
 }
 
 if (ORIGIN_KIND === "app") {

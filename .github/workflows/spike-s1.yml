@@ -138,6 +138,18 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g spellcheck
           else bun spikes/s1-shell/run-s1.ts app -- -g spellcheck; fi
 
+      # Linux: the dictionary placed in <userData>/Dictionaries before start.
+      - name: Spellcheck with a preseeded dictionary
+        if: always() && runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          export SPIKE_DICT_PRESEED_DIR="$RUNNER_TEMP/dict" S1_RESULTS_TAG=dict-preseed
+          xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g spellcheck
+
+      - name: Export payload files (segment prefetch check)
+        if: always()
+        run: find out -name '*.txt' | sort
+
       - name: Summary
         if: always()
         run: |
