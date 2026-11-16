@@ -23,7 +23,7 @@ Can the desktop app keep its library in `node:sqlite` inside an Electron `worker
 | Hosted runner images | `macos-26-arm64` 20261028.624, `macos-26` (Intel) 20260819.586, `windows-2025-vs2026` 20261103.298 (`windows-latest`), `windows-11-vs2026-arm64` 20261111.635, `ubuntu-24.04` and `ubuntu-24.04-arm` 20261103.629 |
 | Owner Mac | MacBook Pro, Apple M5 Max, macOS 27.0.1 (26A434), internal APFS SSD |
 
-The plan names the owner's M1 for the durability row. The machine measured here is an M5 Max: same F_FULLFSYNC path (Apple-silicon SoC storage controller, APFS), different generation. If the owner wants the M1 number on record, the command is in [How to rerun](#how-to-rerun).
+This M5 Max is the owner's own Apple-silicon Mac. The plan wrote "M1" for that machine, and **the coordinator accepted this measurement as the owner-Mac durability evidence** (2026-11-16), so Gate 1 doesn't wait on another Mac. The F_FULLFSYNC path is the same on every Apple-silicon generation: the SoC storage controller under APFS.
 
 ## How it works
 
@@ -43,7 +43,7 @@ Gate rows run on `macos-26`, `windows-latest` and `ubuntu-24.04`; the other runn
 | Crash atomicity during append | **yes** | **Pass.** 200 kills per runner, 0 lost acked rows, 0 `quick_check` failures, 0 gaps, 0 reference mismatches. | see table below |
 | Crash atomicity during compaction | **yes** | **Pass.** ≥ 100 of 200 kills inside a compaction on every gate runner (200, 200, 167); state always fully before or fully after; 0 failures. | see table below |
 | Control with `synchronous=OFF` | no | **Passes, as expected.** 200 kills, 0 lost acked rows: the page cache survives a process kill, so the kill rows prove atomicity, not durability. The harness is not suspect. | see table below |
-| Durability evidence | **yes** | **Pass.** Owner Mac, `fullfsync` on: 4 KB commit p50 **4.0 ms**, p95 6.2 ms, max 16.9 ms (2,000 commits). Plain `fsync` (`fullfsync=0`): p50 0.13 ms. `synchronous=OFF`: p50 0.03 ms. A p50 ≥ 1 ms with `fullfsync` against ≈0.1 ms without it shows F_FULLFSYNC reaches the drive. | owner Mac |
+| Durability evidence | **yes** | **Pass** (owner-Mac evidence, accepted). Owner Mac (M5 Max), `fullfsync` on: 4 KB commit p50 **4.0 ms**, p95 6.2 ms, max 16.9 ms (2,000 commits). Plain `fsync` (`fullfsync=0`): p50 0.13 ms. `synchronous=OFF`: p50 0.03 ms. A p50 ≥ 1 ms with `fullfsync` against ≈0.1 ms without it shows F_FULLFSYNC reaches the drive. | owner Mac |
 | Typing during commits | — | **Not here.** S5's `electron-worker-commits` and `electron-main-commits` arms; S2 provides `startCommitLoop` and the worker's `loop-start` / `loop-stop` for them. | S5 |
 | Fallback `better-sqlite3` | — | **Not needed.** No `node:sqlite` row failed. | — |
 
@@ -97,7 +97,7 @@ The "up to 26 ms" an fsync can take (plan) is close to the owner Mac's max (16.9
 
 - **D-A6 pragmas: confirmed.** WAL, `synchronous=FULL`, `fullfsync=1` and `checkpoint_fullfsync=1` on macOS read back as set; F_FULLFSYNC is real on Apple silicon (4.0 ms p50 against 0.13 ms without it).
 - **Crash atomicity: passes with `node:sqlite`.** No Tauri revisit from S2; `better-sqlite3` is not needed.
-- **D-A1: unchanged here.** The worker stays as specified until S5's commit-arm rule decides (four ratios on the owner's M1 and a Windows laptop with Defender on). Hosted and owner-Mac commit tables are not D-A1 evidence. If the Windows verdict machine is missing, the plan's fallback applies: D-A1 is decided on the Mac alone, keeping the worker.
+- **D-A1: unchanged here.** The worker stays as specified until S5's commit-arm rule decides (four ratios on the owner's Mac and a Windows laptop with Defender on). Hosted and owner-Mac commit tables are not D-A1 evidence. If the Windows verdict machine is missing, the plan's fallback applies: D-A1 is decided on the Mac alone, keeping the worker.
 - **P2.6 soak T1–T8:** reuse `kill-harness.ts`'s shape (READY-anchored kills, deterministic reference, pid-gone check, verify in a fresh process) and add the dense variant to raise mid-transaction coverage.
 
 Spec lines this changes: arch D-A6 (evidence link), arch §3.1 step 2 (the `app.getAppPath()` note), arch D-A1 reason column ("S2 shows…", decision still S5's). See the amendments in this PR.
