@@ -16,7 +16,10 @@ import {
 } from "@/lib/security/activity-store";
 import {
   backupDatabase,
-  PURGE_BACKUPS_KEPT,
+  consumeDeployMarker,
+  DEPLOY_MARKER_NAME,
+  FIRST_BACKUP_NAME,
+  PURGE_BACKUP_RETENTION_DAYS,
   parsePurgeMode,
   previewRetentionPurge,
   runRetentionPurge,
@@ -217,37 +220,71 @@ describe("backupDatabase", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("writes a readable copy to backups/ next to the database", () => {
+  const setupFile = () => {
     dir = mkdtempSync(path.join(tmpdir(), "purge-backup-"));
     const dbPath = path.join(dir, "db.sqlite");
     db = new Database(dbPath);
     seed(db);
+    return dbPath;
+  };
+  const backupsIn = () => readdirSync(path.join(dir, "backups")).sort();
 
-    const file = backupDatabase(db, dbPath, {
+  it("writes the first backup to db-first.sqlite, then dated copies", () => {
+    const dbPath = setupFile();
+
+    const first = backupDatabase(db, dbPath, { nowMs: Date.UTC(2026, 10, 1) });
+    const second = backupDatabase(db, dbPath, {
       nowMs: Date.UTC(2026, 10, 16, 3, 17),
     });
 
-    expect(file).toBe(
+    expect(first).toBe(path.join(dir, "backups", FIRST_BACKUP_NAME));
+    expect(second).toBe(
       path.join(dir, "backups", "db-2026-11-16T03-17-00-000Z.sqlite"),
     );
-    const copy = new Database(file, { readonly: true });
-    expect(documentNames(copy)).toEqual(documentNames(db));
-    copy.close();
+    for (const file of [first, second]) {
+      const copy = new Database(file, { readonly: true });
+      expect(documentNames(copy)).toEqual(documentNames(db));
+      copy.close();
+    }
+    expect(backupsIn()).not.toContainEqual(expect.stringMatching(/partial/));
   });
 
-  it(`keeps the newest ${PURGE_BACKUPS_KEPT} backups`, () => {
-    dir = mkdtempSync(path.join(tmpdir(), "purge-backup-"));
-    const dbPath = path.join(dir, "db.sqlite");
-    db = new Database(dbPath);
-    seed(db);
+  it(`deletes dated backups after ${PURGE_BACKUP_RETENTION_DAYS} days, however many there are`, () => {
+    const dbPath = setupFile();
+    const start = Date.UTC(2026, 10, 1);
 
-    for (let day = 1; day <= PURGE_BACKUPS_KEPT + 2; day++) {
-      backupDatabase(db, dbPath, { nowMs: Date.UTC(2026, 10, day) });
+    // The first, then 20 a day for 20 days (a busy deploy day included).
+    backupDatabase(db, dbPath, { nowMs: start });
+    for (let day = 0; day < 20; day++) {
+      for (let run = 0; run < 20; run++) {
+        backupDatabase(db, dbPath, {
+          nowMs: start + day * DAY + (run + 1) * 60_000,
+        });
+      }
     }
 
-    const kept = readdirSync(path.join(dir, "backups")).sort();
-    expect(kept).toHaveLength(PURGE_BACKUPS_KEPT);
-    expect(kept[0]).toBe("db-2026-11-03T00-00-00-000Z.sqlite");
+    const kept = backupsIn();
+    const now = start + 19 * DAY + 20 * 60_000;
+    const cutoff = now - PURGE_BACKUP_RETENTION_DAYS * DAY;
+    const dated = kept.filter((name) => name !== FIRST_BACKUP_NAME);
+    // Every dated backup inside the window survives, every older one is gone.
+    expect(dated).toHaveLength(20 * 14 + 1);
+    expect(
+      dated[0] >=
+        `db-${new Date(cutoff).toISOString().replace(/[:.]/g, "-")}.sqlite`,
+    ).toBe(true);
+  });
+
+  it("never deletes db-first.sqlite", () => {
+    const dbPath = setupFile();
+
+    backupDatabase(db, dbPath, { nowMs: Date.UTC(2020, 0, 1) });
+    backupDatabase(db, dbPath, { nowMs: Date.UTC(2026, 10, 16) });
+
+    expect(backupsIn()).toEqual([
+      "db-2026-11-16T00-00-00-000Z.sqlite",
+      FIRST_BACKUP_NAME,
+    ]);
   });
 
   it("throws when the backup cannot be written", () => {
@@ -258,6 +295,39 @@ describe("backupDatabase", () => {
     writeFileSync(path.join(dir, "backups"), "not a directory");
 
     expect(() => backupDatabase(db, dbPath)).toThrow();
+  });
+});
+
+describe("consumeDeployMarker", () => {
+  let dir: string;
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const marker = (writtenAtSeconds: number) => {
+    dir = mkdtempSync(path.join(tmpdir(), "purge-marker-"));
+    writeFileSync(path.join(dir, DEPLOY_MARKER_NAME), `${writtenAtSeconds}\n`);
+    return path.join(dir, "db.sqlite");
+  };
+
+  it("is true for a fresh marker next to the database, and deletes it", () => {
+    const dbPath = marker(1_000);
+
+    expect(consumeDeployMarker(dbPath, 1_005_000)).toBe(true);
+    expect(existsSync(path.join(dir, DEPLOY_MARKER_NAME))).toBe(false);
+    expect(consumeDeployMarker(dbPath, 1_006_000)).toBe(false);
+  });
+
+  it("ignores and deletes a stale marker", () => {
+    const dbPath = marker(1_000);
+
+    expect(consumeDeployMarker(dbPath, 1_000_000 + 11 * 60_000)).toBe(false);
+    expect(existsSync(path.join(dir, DEPLOY_MARKER_NAME))).toBe(false);
+  });
+
+  it("is false without a marker", () => {
+    dir = mkdtempSync(path.join(tmpdir(), "purge-marker-"));
+
+    expect(consumeDeployMarker(path.join(dir, "db.sqlite"))).toBe(false);
   });
 });
 
@@ -329,8 +399,29 @@ describe("purge-retention CLI", () => {
     expect(result.stderr).toContain("retention_purge_backup_written");
     expect(result.stderr).toContain("retention_purge_completed");
     expect(namesIn(dbPath)).not.toContain(STALE);
-    const [backup] = readdirSync(path.join(dir, "backups"));
-    expect(namesIn(path.join(dir, "backups", backup))).toContain(STALE);
+    expect(readdirSync(path.join(dir, "backups"))).toEqual([FIRST_BACKUP_NAME]);
+    expect(namesIn(path.join(dir, "backups", FIRST_BACKUP_NAME))).toContain(
+      STALE,
+    );
+  });
+
+  // scripts/deploy.sh writes the marker just before PM2 registers the app.
+  it("exits without purging or backing up when a deploy started it", () => {
+    const dbPath = setup();
+    const markerFile = path.join(dir, DEPLOY_MARKER_NAME);
+    writeFileSync(markerFile, `${Math.floor(Date.now() / 1000)}\n`);
+
+    const result = run(dbPath, "on");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("retention_purge_registered");
+    expect(namesIn(dbPath)).toContain(STALE);
+    expect(existsSync(path.join(dir, "backups"))).toBe(false);
+    expect(existsSync(markerFile)).toBe(false);
+
+    // The next run (the cron) purges.
+    expect(run(dbPath, "on").stderr).toContain("retention_purge_completed");
+    expect(namesIn(dbPath)).not.toContain(STALE);
   });
 
   it("deletes nothing when the backup fails", () => {

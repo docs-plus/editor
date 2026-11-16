@@ -134,6 +134,22 @@ export function findStaleDocuments(
     .filter((name) => !isSystemDocumentId(name));
 }
 
+/**
+ * How many documents are idle since before `cutoffMs`, minus system
+ * documents: the whole backlog, of which a purge deletes one batch. Streams
+ * the rows instead of loading them. Read-only.
+ */
+export function countStaleDocuments(db: Database, cutoffMs: number): number {
+  const rows = db
+    .prepare("SELECT name FROM document_activity WHERE last_persisted_at < ?")
+    .iterate(cutoffMs) as IterableIterator<{ name: string }>;
+  let count = 0;
+  for (const row of rows) {
+    if (!isSystemDocumentId(row.name)) count++;
+  }
+  return count;
+}
+
 export function purgeStaleDocuments(
   db: Database,
   cutoffMs: number,

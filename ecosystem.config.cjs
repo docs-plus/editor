@@ -20,7 +20,8 @@
  *
  * editor-purge is a daily job, not a server: PM2 runs it at `cron_restart`
  * (host-local time), it exits, and it is not restarted until the next run.
- * Starting or restarting it (every deploy does) also runs it once.
+ * Only the cron purges: the run PM2 starts when a deploy registers or
+ * updates the app finds scripts/deploy.sh's marker and exits.
  */
 
 // The SQLite file and the retention windows. Next.js, Hocus and the purge
@@ -99,7 +100,8 @@ module.exports = {
         NODE_ENV: "production",
         ...storageEnv,
         // dry-run logs what it would delete and changes nothing; on backs
-        // the database up to backups/ (keeps 7), then deletes; off skips.
+        // the database up to backups/ (dated copies kept 14 days, the first
+        // one forever), then deletes; off skips.
         // Switch to on in a pull request after reviewing dry-run logs.
         PURGE_MODE: "dry-run",
       },

@@ -12,6 +12,8 @@ import path from "node:path";
 
 import { parse } from "yaml";
 
+import { DEPLOY_MARKER_NAME } from "@/scripts/purge-retention";
+
 interface App {
   name: string;
   cwd?: string;
@@ -77,10 +79,26 @@ describe("scripts/deploy.sh PM2 commands", () => {
     for (const name of onlyNames) app(name);
   });
 
-  it("(re)starts editor-purge from the file with its env", () => {
+  // PM2 runs an app when it adds or restarts it. The marker, written next to
+  // the database just before, makes that run exit: deploys never purge.
+  it("registers editor-purge without purging", () => {
+    const register =
+      "pm2 startOrRestart ecosystem.config.cjs --only editor-purge --update-env";
+    const marker = `date +%s > "$purge_marker"`;
     expect(deployScript).toContain(
-      "pm2 startOrRestart ecosystem.config.cjs --only editor-purge --update-env",
+      `purge_marker="$APP_DIR/${DEPLOY_MARKER_NAME}"`,
     );
+    expect(deployScript).toContain(marker);
+    expect(deployScript).toContain(register);
+    expect(deployScript.indexOf(marker)).toBeLessThan(
+      deployScript.indexOf(register),
+    );
+  });
+
+  // The script looks for the marker next to DB_PATH; deploy.sh writes it in
+  // the app directory, PM2's cwd for editor-purge.
+  it("keeps the database in the app directory, where the marker goes", () => {
+    expect(String(app("editor-purge").env?.DB_PATH)).not.toContain("/");
   });
 });
 
