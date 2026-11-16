@@ -3,3 +3,4 @@ dist/
 evidence/
 playwright-report-*/
 test-results/
+.parked/

@@ -9,8 +9,7 @@
  *
  * Usage (repo root): bun spikes/s1-shell/build-export.ts
  */
-import { existsSync, mkdtempSync, readdirSync, renameSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -22,7 +21,10 @@ const WEB_ONLY_METADATA = [
   "app/apple-icon.tsx",
 ];
 
-const parked = mkdtempSync(join(tmpdir(), "s1-overlay-"));
+// Parked inside the checkout: a rename across drives fails with EXDEV
+// (Windows runners keep the repo on D: and the temp dir on C:).
+const parked = join(ROOT, "spikes/s1-shell/.parked");
+mkdirSync(parked, { recursive: true });
 const moved: string[] = [];
 let exitCode = 1;
 try {

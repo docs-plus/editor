@@ -39,8 +39,9 @@ jobs:
           persist-credentials: false
 
       - name: No secrets or environments in this workflow
-        # Bracket expressions, so the pattern does not match this line itself.
-        run: "! grep -nE 'secrets[.]|environment[:]' .github/workflows/spike-s1.yml"
+        # Catches the dot and the index form; the bracketed letters keep the
+        # pattern from matching this line itself.
+        run: "! grep -nE 'secret[s][[:space:]]*[.[]|environmen[t][[:space:]]*:' .github/workflows/spike-s1.yml"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
