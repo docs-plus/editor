@@ -1,0 +1,125 @@
+name: Spike S5 latency
+
+# Spike S5 (throwaway, branch spike/s5-latency, never merged): typing latency
+# in Electron vs Chrome for Testing 156 and the D-A1 commit arms, on hosted
+# runners. Hosted runners are context only; the verdict machines are the
+# owner's. No secrets, no environments.
+
+on:
+  push:
+    branches: [spike/s5-latency]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-s5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  latency:
+    name: Latency (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, ubuntu-24.04, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      PERF_HEADINGS: "50,500"
+      PERF_ROUNDS: "7"
+      PERF_CPU_THROTTLE: "4"
+      S5_MACHINE: ${{ matrix.os }}
+      CFT_VERSION: "156.0.8078.80"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No secrets or environments in this workflow
+        # [m]: the pattern must not match its own line.
+        run: |
+          ! grep -nE 'secrets\.|environ[m]ent:' .github/workflows/spike-s5.yml
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          cd spikes/s5-latency
+          bun install --frozen-lockfile
+          bun install-electron
+
+      - name: Install Chrome for Testing ${{ env.CFT_VERSION }}
+        run: |
+          out=$(bunx --bun @puppeteer/browsers@3.2.7 install "chrome@$CFT_VERSION" --path "$RUNNER_TEMP/cft" | tail -1)
+          echo "$out"
+          echo "CHROME_PATH=${out#* }" >> "$GITHUB_ENV"
+
+      - name: Linux libraries and Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          bun playwright install-deps chromium
+          sudo apt-get install -y xvfb
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Build the app (production, spike hooks on)
+        env:
+          NEXT_PUBLIC_SPIKE_HOOKS: "1"
+          NEXT_PUBLIC_SERVICE_WORKER: "0"
+          NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1290
+        run: bun run build
+
+      - name: Build the Electron main and worker
+        run: cd spikes/s5-latency && bun run build
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Machine
+        run: |
+          uname -a
+          bun -e 'const os=require("node:os");console.log(os.cpus()[0]?.model, os.cpus().length, "cpus", Math.round(os.totalmem()/2**30), "GiB")'
+
+      - name: Run the arms
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a --server-args="-screen 0 1920x1080x24" bun spikes/s5-latency/run.ts
+          else
+            bun spikes/s5-latency/run.ts
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s5-latency-${{ matrix.os }}
+          path: |
+            spikes/s5-latency/results/
+            spikes/s5-latency/test-results/
+          if-no-files-found: ignore
+          retention-days: 30
