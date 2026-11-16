@@ -91,11 +91,42 @@ function isCurrent(doc: StoredDoc, now: number): boolean {
 }
 
 /**
+ * `mergeIntoStored`, plus whether the result holds nothing beyond `update`
+ * (`own`): only then may the caller's next save skip the merge on this
+ * write's stamp. A write that took in edits the caller lacks (a copy read
+ * after the hydrate timeout, another tab's save) must be merged again, or
+ * the next save would drop them.
+ */
+function mergeStored(
+  stored: StoredDoc | undefined,
+  update: Uint8Array,
+  now: number,
+  lastWrite?: WriteStamp,
+): { merged: Uint8Array; own: boolean } {
+  if (!stored || !isCurrent(stored, now)) return { merged: update, own: true };
+  if (lastWrite && isUnchanged(stored, lastWrite)) {
+    return { merged: update, own: true };
+  }
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, update);
+    const before = Y.snapshot(doc);
+    Y.applyUpdate(doc, stored.update);
+    if (Y.equalSnapshots(before, Y.snapshot(doc))) {
+      return { merged: update, own: true };
+    }
+    return { merged: Y.encodeStateAsUpdate(doc), own: false };
+  } finally {
+    doc.destroy();
+  }
+}
+
+/**
  * What to store when saving `update` over `stored`: both merged, so a save
  * never drops edits only the stored copy holds (a copy read after the
  * hydrate timeout, another tab's save). Returns `update` itself when there
- * is nothing to keep: no copy, an expired or other-epoch copy, or the
- * caller's own last write (`lastWrite`), which its state already contains.
+ * is nothing to keep: no copy, an expired or other-epoch copy, the caller's
+ * own last write (`lastWrite`), or a copy `update` already contains.
  * Merges through a temporary doc, not `Y.mergeUpdates`, so deleted content
  * is garbage-collected instead of kept forever. Throws if either update
  * does not decode.
@@ -106,16 +137,7 @@ export function mergeIntoStored(
   now: number,
   lastWrite?: WriteStamp,
 ): Uint8Array {
-  if (!stored || !isCurrent(stored, now)) return update;
-  if (lastWrite && isUnchanged(stored, lastWrite)) return update;
-  const doc = new Y.Doc();
-  try {
-    Y.applyUpdate(doc, stored.update);
-    Y.applyUpdate(doc, update);
-    return Y.encodeStateAsUpdate(doc);
-  } finally {
-    doc.destroy();
-  }
+  return mergeStored(stored, update, now, lastWrite).merged;
 }
 
 /** Local copies of collaborative documents, scoped to one collab server. */
@@ -197,8 +219,10 @@ export class LocalDocStore {
    * resolved with; when the stored copy still carries it, the merge is
    * skipped. The copy is read, merged and written in one backend step (one
    * IndexedDB transaction), so another tab's save cannot land in between.
-   * Resolves the stamp of this write, or undefined if dropped. A failed
-   * read or merge rejects and leaves the stored copy untouched.
+   * Resolves this write's stamp when the written copy holds nothing beyond
+   * `update`; undefined when the save was dropped or took in edits the
+   * caller lacks, so its next save merges again. A failed read or merge
+   * rejects and leaves the stored copy untouched.
    */
   save(
     name: string,
@@ -210,12 +234,16 @@ export class LocalDocStore {
       if (generation !== this.generation(name)) return undefined;
       const key = storeKey(this.serverHost, name);
       const now = this.now();
-      let merged = update;
+      // Until the backend runs the merge, assume it took in edits, so a
+      // stamp is never resolved for bytes this save did not produce.
+      let result = { merged: update, own: false };
       await this.backend.putMerged({ key, name, updatedAt: now }, (stored) => {
-        merged = mergeIntoStored(stored, update, now, lastWrite);
-        return merged;
+        result = mergeStored(stored, update, now, lastWrite);
+        return result.merged;
       });
-      return { updatedAt: now, byteLength: merged.byteLength };
+      return result.own
+        ? { updatedAt: now, byteLength: result.merged.byteLength }
+        : undefined;
     });
   }
 
@@ -329,19 +357,12 @@ export function bindLocalCopy(
   let destroyed = false;
   let disabled = false;
   let migration: Promise<void> | undefined;
-  // Set once the stored copy was applied (or there was none), so `doc`
-  // holds everything it held: only then may a save skip the merge when the
-  // copy is still this binding's own last write.
-  let holdsStoredCopy = false;
+  // The stamp of this binding's last write, set only when that write held
+  // nothing `doc` lacks: while the stored copy still carries it, the next
+  // save skips the merge.
   let lastWrite: WriteStamp | undefined;
   const save = async (update: Uint8Array) => {
-    const stamp = await store.save(
-      name,
-      update,
-      generation,
-      holdsStoredCopy ? lastWrite : undefined,
-    );
-    lastWrite = stamp;
+    lastWrite = await store.save(name, update, generation, lastWrite);
   };
 
   const write = async () => {
@@ -382,9 +403,7 @@ export function bindLocalCopy(
 
   const hydrated = (hydrate ? store.load(name) : Promise.resolve(null))
     .then((copy) => {
-      if (destroyed) return false;
-      holdsStoredCopy = hydrate;
-      if (!copy) return false;
+      if (destroyed || !copy) return false;
       if (copy.current) Y.applyUpdate(doc, copy.current, LOCAL_ORIGIN);
       if (copy.legacy) {
         Y.applyUpdate(doc, copy.legacy.update, LOCAL_ORIGIN);
