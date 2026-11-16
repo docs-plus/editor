@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Link underlines and dark link colour
+
+Document links stay underlined everywhere (WCAG 1.4.1), set slightly below the
+text.
+
+#### Fixed
+
+- Dark-mode document links are brighter (≥4.5:1): `#5b9cf2` reads at 7.05:1 on
+  the page and 6.39:1 on cards, instead of 4.39:1 and 3.98:1.
+
+#### Changed
+
+- The underline sits `0.15em` below the text, clear of descenders.
+
 ### Dark primary text contrast
 
 In dark mode, primary-coloured text and borders (the heading filter's ALL

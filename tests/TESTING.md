@@ -42,7 +42,7 @@ tests/
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
-│   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex for contrast tests
+│   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex, readScssVar (editor SCSS custom properties) for contrast tests
 │   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
 │   └── assert-invariants-json.ts         # Schema invariant assertions (Playwright-safe, no `bun:test` dep)
 ├── fixtures/                             # Static JSON document fixtures
@@ -52,7 +52,7 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
-│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary`)
+│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary`, document link colour ≥ 4.5:1 on background and card in both themes)
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
@@ -70,6 +70,7 @@ tests/
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── filter-collab.spec.ts             # Filter folds follow a collaborator's heading edits
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
+│   ├── link-underlines.spec.ts           # Document links underlined, 0.15em offset, in paragraph, heading, list, table
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── toolbar-perf.spec.ts              # Toolbar catch-up render and arrow p95 on 500 headings (perf project)
 │   ├── toolbar-focus-guards.spec.ts      # Roving tabindex leaves Base UI's popup focus guards alone
@@ -181,6 +182,7 @@ What WebKit does differently, and how the specs handle it:
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches; a `?filter=alpha` link opens the bar with the chip once the doc syncs, folds the unmatched sections, keeps the URL, and Clear all filters removes it; a link of 10 words applies only the first 8 (the 9th and 10th match nothing, and the URL drops them) |
 | `filter-collab.spec.ts` | With A's filter "alpha" applied, B renames the folded "Beta Section" to "Alpha Beta Section": A unfolds it (and its body) while Gamma stays folded; a non-matching section B adds arrives folded on A |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
+| `link-underlines.spec.ts` | Exactly five links (paragraph, H2, bullet item, table cell, and a bold red link wrapping its marks) are each underlined with `text-underline-offset` at 0.15 × their font size (WCAG 1.4.1) |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |

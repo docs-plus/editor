@@ -34,7 +34,7 @@
   - The docked outline is 270 px wide (`toc-sidebar.scss:7`). It docks at a viewport of 950 px (`use-outline-open.ts:17`), which is the 648 px card, plus 270, plus a 32 px gutter.
   - The toolbar stepper is already labelled **"Font size"** (`font-size-stepper.tsx:85,91`).
   - Typography (smart quotes, dashes and arrows) is **always on** (`document-editor-config.ts:26,228`). The prior-art doc's "off matches today" is wrong.
-  - Only `a span` gets an underline in the document (`paragraph-node.scss:85-87`).
+  - Only `a span` gets an underline in the document (`paragraph-node.scss:85-87`). *Correction (F5): every document link was already underlined by the LINKS block in `paragraph-node.scss` (`.tiptap.ProseMirror a`); F5 pinned it with a test and added the offset.*
   - Dark `--primary` is `#973c00`. Measured as text it is **2.78:1** on `--background`, 2.51:1 on card, popover and sidebar, and 2.12:1 on muted. It is used as text by `button` and `badge` `link` variants and by `heading-filter.tsx:116`.
   - `lib/user-identity.ts` has no try/catch, no length cap and no colour allowlist.
 
@@ -907,7 +907,7 @@ Desktop and the web library are new installs on new storage, so they get the new
 - **Size.** S: 0.5 day, with unit tests for each rule (including a Persian name with ZWNJ and an RTL-override attack string).
 
 **Links (F5):**
-- Add `.tiptap a { text-decoration: underline; text-underline-offset: .15em }`.
+- Add `.tiptap a { text-decoration: underline; text-underline-offset: .15em }`. *Shipped (F5): the underline already existed in the LINKS block of `paragraph-node.scss`; F5 added only the `0.15em` offset there, pinned underline and offset in every context (`tests/e2e/link-underlines.spec.ts`), and raised dark `--link-text-color` to `#5b9cf2` (7.05:1 on `--background`, 6.39:1 on `--card`).*
 - Check that `@docs.plus/extension-hyperlink`'s `text-decoration: none` (`styles.css:324`) targets only its popover, and override it if it hits document links.
 - This is WCAG 1.4.1, not a setting. S, with screenshots in the design review.
 

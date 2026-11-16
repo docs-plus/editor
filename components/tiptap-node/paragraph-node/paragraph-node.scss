@@ -10,7 +10,7 @@
 
   .dark & {
     --tt-collaboration-carets-label: var(--tt-gray-dark-100);
-    --link-text-color: #1a73e8;
+    --link-text-color: #5b9cf2;
     --thread-text: var(--tt-gray-dark-900);
     --placeholder-color: var(--tt-gray-dark-a-400);
     --thread-bg-color: var(--tt-color-yellow-dec-2);
@@ -148,6 +148,7 @@
   a {
     color: var(--link-text-color);
     text-decoration: underline;
+    text-underline-offset: 0.15em;
   }
 }
 
