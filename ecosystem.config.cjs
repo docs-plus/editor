@@ -28,6 +28,9 @@
 // must all see the same values.
 const storageEnv = {
   DB_PATH: "db.sqlite",
+  // Days a closed tab stays restorable: list and restore refuse older
+  // closures, and the purge deletes and tombstones them.
+  CLOSED_RETENTION_DAYS: "7",
 };
 
 module.exports = {

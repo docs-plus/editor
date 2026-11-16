@@ -23,16 +23,14 @@ import {
   generateId,
   getDefaultBootstrap,
   getMigrationTabs,
-  isTab,
   loadActiveTabIdFromStorage,
-  MAX_TAB_TITLE_LENGTH,
   persistActiveTabId,
   resolveActiveTabId,
   sanitizeTabs,
-  type Tab,
 } from "@/lib/tab-api";
+import { isTab, MAX_TAB_TITLE_LENGTH, type Tab } from "@/lib/tab-entry";
 
-export type { Tab } from "@/lib/tab-api";
+export type { Tab } from "@/lib/tab-entry";
 
 export interface UseSyncedTabsReturn {
   ready: boolean;

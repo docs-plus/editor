@@ -19,6 +19,11 @@ import {
   purgeTombstones,
 } from "../lib/security/activity-store";
 import {
+  findClosedDocumentsToPurge,
+  purgeClosedDocuments,
+} from "../lib/security/closed-documents";
+import {
+  CLOSED_RETENTION_DAYS,
   RETENTION_DAYS,
   TOMBSTONE_RETENTION_DAYS,
 } from "../lib/security/guardrail-config";
@@ -66,6 +71,7 @@ export function parsePurgeMode(value: string | undefined): PurgeMode {
 
 interface PurgeOptions {
   retentionDays?: number;
+  closedRetentionDays?: number;
   batchSize?: number;
   nowMs?: number;
 }
@@ -76,6 +82,9 @@ function cutoffs(options: PurgeOptions) {
     nowMs,
     documentCutoffMs:
       nowMs - (options.retentionDays ?? RETENTION_DAYS) * DAY_MS,
+    // Closed tabs are past their restore window.
+    closedCutoffMs:
+      nowMs - (options.closedRetentionDays ?? CLOSED_RETENTION_DAYS) * DAY_MS,
     // Tombstones must outlive every offline copy in a browser, which can
     // reconnect long after the document went idle on the server.
     tombstoneCutoffMs: nowMs - TOMBSTONE_RETENTION_DAYS * DAY_MS,
@@ -85,9 +94,17 @@ function cutoffs(options: PurgeOptions) {
 export function runRetentionPurge(
   db: Database,
   options: PurgeOptions = {},
-): { deletedCount: number; deletedNames: string[] } {
+): { deletedCount: number; deletedNames: string[]; closedNames: string[] } {
   bootstrapDocumentActivityTable(db);
-  const { nowMs, documentCutoffMs, tombstoneCutoffMs } = cutoffs(options);
+  const { nowMs, documentCutoffMs, closedCutoffMs, tombstoneCutoffMs } =
+    cutoffs(options);
+  // Closed tabs first: they are past their restore window.
+  const closed = purgeClosedDocuments(
+    db,
+    closedCutoffMs,
+    options.batchSize,
+    nowMs,
+  );
   const result = purgeStaleDocuments(
     db,
     documentCutoffMs,
@@ -95,7 +112,7 @@ export function runRetentionPurge(
     nowMs,
   );
   purgeTombstones(db, tombstoneCutoffMs);
-  return result;
+  return { ...result, closedNames: closed.deletedNames };
 }
 
 const hasTable = (db: Database, name: string) =>
@@ -115,8 +132,10 @@ export function previewRetentionPurge(
   wouldDeleteNames: string[];
   staleTotal: number;
   expiredTombstoneCount: number;
+  wouldDeleteClosedNames: string[];
 } {
-  const { documentCutoffMs, tombstoneCutoffMs } = cutoffs(options);
+  const { documentCutoffMs, closedCutoffMs, tombstoneCutoffMs } =
+    cutoffs(options);
   const hasActivity = hasTable(db, "document_activity");
   const wouldDeleteNames = hasActivity
     ? findStaleDocuments(db, documentCutoffMs, options.batchSize)
@@ -128,11 +147,17 @@ export function previewRetentionPurge(
   const expiredTombstoneCount = hasTable(db, "document_tombstones")
     ? countExpiredTombstones(db, tombstoneCutoffMs)
     : 0;
+  // The closed purge reads the stored tab lists from `documents`.
+  const wouldDeleteClosedNames =
+    hasTable(db, "document_closures") && hasTable(db, "documents")
+      ? findClosedDocumentsToPurge(db, closedCutoffMs)
+      : [];
   return {
     wouldDeleteCount: wouldDeleteNames.length,
     wouldDeleteNames,
     staleTotal,
     expiredTombstoneCount,
+    wouldDeleteClosedNames,
   };
 }
 
@@ -205,6 +230,7 @@ function purgeWithBusyRetry(db: Database): void {
     logAbuseEvent("retention_purge_completed", {
       deletedCount: result.deletedCount,
       deletedNames: result.deletedNames,
+      closedNames: result.closedNames,
     });
   } catch (error) {
     if (!isSqliteBusyError(error)) throw error;
@@ -212,6 +238,7 @@ function purgeWithBusyRetry(db: Database): void {
     logAbuseEvent("retention_purge_completed_retry", {
       deletedCount: retried.deletedCount,
       deletedNames: retried.deletedNames,
+      closedNames: retried.closedNames,
     });
   }
 }
@@ -232,6 +259,7 @@ function runCli(): void {
     if (mode === "dry-run") {
       logAbuseEvent("retention_purge_dry_run", {
         retentionDays: RETENTION_DAYS,
+        closedRetentionDays: CLOSED_RETENTION_DAYS,
         tombstoneRetentionDays: TOMBSTONE_RETENTION_DAYS,
         ...previewRetentionPurge(db),
       });

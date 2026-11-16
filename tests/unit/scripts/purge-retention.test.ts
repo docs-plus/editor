@@ -15,6 +15,7 @@ import {
   bootstrapDocumentActivityTable,
   upsertDocumentActivity,
 } from "@/lib/security/activity-store";
+import { closeDocumentSoftly } from "@/lib/security/closed-documents";
 import {
   backupDatabase,
   consumeDeployMarker,
@@ -134,6 +135,28 @@ describe("runRetentionPurge", () => {
     runRetentionPurge(db, { retentionDays: 30, nowMs: 31 * DAY + 91 * DAY });
     expect(tombstone()).toBeNull();
   });
+  it("closed documents are tombstoned after CLOSED_RETENTION_DAYS", () => {
+    db = new Database(":memory:");
+    db.exec("CREATE TABLE documents (name TEXT PRIMARY KEY, data BLOB)");
+    bootstrapDocumentActivityTable(db);
+    const id = "44444444-4444-4444-8444-444444444444";
+    const DAY = 24 * 60 * 60 * 1000;
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      id,
+      Buffer.from("{}"),
+    );
+    closeDocumentSoftly(db, id, "Closed", "global-tabs", 0);
+    const tombstone = () =>
+      db.prepare("SELECT 1 FROM document_tombstones WHERE name = ?").get(id);
+
+    const early = runRetentionPurge(db, { nowMs: 6 * DAY });
+    expect(early.closedNames).toEqual([]);
+    expect(tombstone()).toBeNull();
+
+    const late = runRetentionPurge(db, { nowMs: 7 * DAY + 1 });
+    expect(late.closedNames).toEqual([id]);
+    expect(tombstone()).not.toBeNull();
+  });
 });
 
 describe("parsePurgeMode", () => {
@@ -172,6 +195,7 @@ describe("previewRetentionPurge", () => {
       wouldDeleteNames: [STALE],
       staleTotal: 1,
       expiredTombstoneCount: 1,
+      wouldDeleteClosedNames: [],
     });
     expect(documentNames(db)).toEqual([STALE, FRESH, "playground"].sort());
     expect(
@@ -182,6 +206,23 @@ describe("previewRetentionPurge", () => {
     expect(runRetentionPurge(db, options).deletedNames).toEqual(
       preview.wouldDeleteNames,
     );
+  });
+
+  it("previews closed documents past the window and changes nothing", () => {
+    db = new Database(":memory:");
+    seed(db);
+    closeDocumentSoftly(db, FRESH, "Fresh", "global-tabs", 40 * DAY);
+    const options = { retentionDays: 30, nowMs: 48 * DAY };
+
+    const preview = previewRetentionPurge(db, options);
+
+    expect(preview.wouldDeleteClosedNames).toEqual([FRESH]);
+    expect(documentNames(db)).toContain(FRESH);
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM document_closures").get(),
+    ).toEqual({ n: 1 });
+    // The real purge deletes exactly what the preview listed.
+    expect(runRetentionPurge(db, options).closedNames).toEqual([FRESH]);
   });
 
   it("counts the whole backlog but lists only one batch", () => {
@@ -209,6 +250,7 @@ describe("previewRetentionPurge", () => {
       wouldDeleteNames: [],
       staleTotal: 0,
       expiredTombstoneCount: 0,
+      wouldDeleteClosedNames: [],
     });
     expect(db.prepare("SELECT name FROM sqlite_master").all()).toEqual([]);
   });

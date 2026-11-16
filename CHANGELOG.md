@@ -9,6 +9,46 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Closed documents are kept for 7 days
+
+Closing a tab no longer deletes the document on the server. It is kept for
+`CLOSED_RETENTION_DAYS` (7) and can be restored; then the daily retention
+purge deletes and tombstones it.
+
+#### Added
+
+- `POST /api/documents/restore` and `GET /api/documents/closed` (turn the list
+  off with `CLOSED_DOCUMENTS_LIST=0`).
+- `scripts/delete-document.ts` deletes and tombstones one document at once,
+  for takedowns.
+
+#### Changed
+
+- `DELETE /api/documents/[id]` closes softly. Closed documents count toward
+  `MAX_TOTAL_DOCUMENTS` until they are purged.
+
+#### Deploy
+
+- Deploy only after `PURGE_MODE` is `on` for the `editor-purge` app (the daily
+  purge from #97). With `dry-run` or `off`, closed documents are hidden after
+  7 days but never deleted, and they keep counting toward
+  `MAX_TOTAL_DOCUMENTS`. The dry-run log lists them as
+  `wouldDeleteClosedNames`.
+- No migration: `document_closures` is created on first use; `documents` is
+  unchanged.
+- `CLOSED_RETENTION_DAYS` (7) is in the shared `storageEnv` of
+  `ecosystem.config.cjs`, so Next.js, Hocus and the purge use the same value.
+- Closing no longer frees `MAX_TOTAL_DOCUMENTS` capacity for 7 days. To free
+  it, or to take content down, run on the host:
+
+  ```bash
+  cd /opt/projects/editor.docs.plus && DB_PATH=/opt/projects/editor.docs.plus/db.sqlite bun run scripts/delete-document.ts <id>
+  ```
+- Rollback: older code ignores `document_closures`; documents closed meanwhile
+  stay stored, unlisted, until idle retention removes them (30 days). Browsers
+  already holding W1b bundles show Undo, which then fails with "Check your
+  connection." This is acceptable for a rollback window.
+
 ### Automatic deploys and a daily retention purge, both off until turned on
 
 The Deploy workflow can now deploy by itself after CI passes on `main`, and

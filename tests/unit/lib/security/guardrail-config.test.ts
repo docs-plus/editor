@@ -20,6 +20,8 @@ const ENV_KEYS = [
   "HOCUS_REDIS_HOST",
   "HOCUS_REDIS_PORT",
   "HOCUS_MIN_CLIENT_SCHEMA",
+  "CLOSED_RETENTION_DAYS",
+  "CLOSED_DOCUMENTS_LIST",
 ] as const;
 
 type GuardrailConfigModule = typeof import("@/lib/security/guardrail-config");
@@ -132,5 +134,19 @@ describe("guardrail-config", () => {
     expect(config.HOCUS_REDIS_ENABLED).toBe(true);
     expect(config.HOCUS_REDIS_HOST).toBe("redis.internal");
     expect(config.HOCUS_REDIS_PORT).toBe(6391);
+  });
+  it("parses the closed-document retention and list switch", async () => {
+    let config = await loadConfigModule();
+    expect(config.CLOSED_RETENTION_DAYS).toBe(7);
+    expect(config.CLOSED_DOCUMENTS_LIST).toBe(true);
+
+    process.env.CLOSED_RETENTION_DAYS = "3";
+    process.env.CLOSED_DOCUMENTS_LIST = "0";
+    config = await loadConfigModule();
+    expect(config.CLOSED_RETENTION_DAYS).toBe(3);
+    expect(config.CLOSED_DOCUMENTS_LIST).toBe(false);
+
+    process.env.CLOSED_RETENTION_DAYS = "-1";
+    expect((await loadConfigModule()).CLOSED_RETENTION_DAYS).toBe(7);
   });
 });

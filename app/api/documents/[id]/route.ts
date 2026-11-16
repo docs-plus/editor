@@ -1,41 +1,51 @@
-import type { Database } from "bun:sqlite";
-
 import { NextResponse } from "next/server";
 
 import { logAbuseEvent } from "@/lib/security/abuse-log";
-import {
-  bootstrapDocumentActivityTable,
-  deleteDocumentPermanently,
-} from "@/lib/security/activity-store";
+import { bootstrapDocumentActivityTable } from "@/lib/security/activity-store";
 import { getClientIpFromHeaders } from "@/lib/security/client-ip";
 import {
+  cleanClosedTitle,
+  closeDocumentSoftly,
+} from "@/lib/security/closed-documents";
+import {
   isSystemDocumentId,
+  isTabsDocumentId,
   isValidUserDocumentId,
+  TABS_DOC,
 } from "@/lib/security/doc-id-validator";
 import { HTTP_MUTATION_RATE_LIMIT_PER_MINUTE } from "@/lib/security/guardrail-config";
+import {
+  rateLimitedResponse,
+  readJsonBody,
+  withBusyRetry,
+} from "@/lib/security/http-route-guards";
 import { createSlidingWindowLimiter } from "@/lib/security/rate-limit";
-import { isSqliteBusyError, openSqlite } from "@/lib/sqlite-open";
+import { openSqlite } from "@/lib/sqlite-open";
 
-const MAX_RETRIES = 3;
 const ONE_MINUTE_MS = 60_000;
+const MAX_BODY_BYTES = 1024;
 const deleteLimiter = createSlidingWindowLimiter({
   limit: HTTP_MUTATION_RATE_LIMIT_PER_MINUTE,
   windowMs: ONE_MINUTE_MS,
 });
 
-function deleteWithRetry(db: Database, id: string): boolean {
-  bootstrapDocumentActivityTable(db);
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      return deleteDocumentPermanently(db, id);
-    } catch (err) {
-      if (isSqliteBusyError(err) && attempt < MAX_RETRIES - 1) continue;
-      throw err;
-    }
-  }
-  return false; // Unreachable; satisfies TypeScript control flow
+function readCloseBody(body: unknown): { title: string; tabsDoc: string } {
+  const fields =
+    typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>)
+      : {};
+  const tabsDoc =
+    typeof fields.tabsDoc === "string" && isTabsDocumentId(fields.tabsDoc)
+      ? fields.tabsDoc
+      : TABS_DOC;
+  return { title: cleanClosedTitle(fields.title), tabsDoc };
 }
 
+/**
+ * Closes a tab softly: the document stays stored and restorable for
+ * `CLOSED_RETENTION_DAYS`, then the retention purge deletes and tombstones
+ * it. Older bundles send no body and only check `ok || 404`.
+ */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -44,18 +54,11 @@ export async function DELETE(
   const ip = getClientIpFromHeaders(request.headers);
   const decision = deleteLimiter.check(ip);
   if (!decision.allowed) {
-    logAbuseEvent("documents_delete_throttled", {
+    return rateLimitedResponse(decision, {
       ip,
       route: "/api/documents/[id]",
-      retry_after_s: decision.retryAfterSeconds,
+      event: "documents_delete_throttled",
     });
-    return NextResponse.json(
-      { error: "Rate limit exceeded", retryAfter: decision.retryAfterSeconds },
-      {
-        status: 429,
-        headers: { "Retry-After": String(decision.retryAfterSeconds) },
-      },
-    );
   }
 
   if (isSystemDocumentId(id)) {
@@ -71,12 +74,20 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid document id" }, { status: 400 });
   }
 
+  const { title, tabsDoc } = readCloseBody(
+    await readJsonBody(request, MAX_BODY_BYTES),
+  );
+
   try {
     const db = openSqlite();
     try {
-      const deleted = deleteWithRetry(db, id);
-      logAbuseEvent("document_deleted", { ip, id, existed: deleted });
-      return NextResponse.json({ deleted }, { status: deleted ? 200 : 404 });
+      bootstrapDocumentActivityTable(db);
+      const result = withBusyRetry(() =>
+        closeDocumentSoftly(db, id, title, tabsDoc),
+      );
+      const closed = result === "closed";
+      logAbuseEvent("document_closed", { ip, id, tabsDoc, closed });
+      return NextResponse.json({ closed });
     } finally {
       db.close();
     }
@@ -88,7 +99,7 @@ export async function DELETE(
     });
     console.error("[DELETE /api/documents]", err);
     return NextResponse.json(
-      { error: "Failed to delete document" },
+      { error: "Failed to close document" },
       { status: 500 },
     );
   }

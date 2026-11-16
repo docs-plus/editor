@@ -6,6 +6,7 @@ import {
   type WebSocketRoute,
 } from "@playwright/test";
 
+import { runDeleteDocumentScript } from "./helpers/closed-documents";
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
 import { storedCopies } from "./helpers/offline-store";
 
@@ -167,10 +168,9 @@ test.describe("offline copies", () => {
     await waitForCopy(page, docId);
 
     await socket.cut();
-    const response = await page.request.delete(`/api/documents/${docId}`);
-    // 404: not stored server-side yet; still tombstoned (the client treats
-    // it as success too).
-    expect([200, 404]).toContain(response.status());
+    // Closing is soft and restorable; a takedown deletes and tombstones at
+    // once (the purge does the same to tabs closed for CLOSED_RETENTION_DAYS).
+    runDeleteDocumentScript(docId);
     await socket.restore();
 
     // The server drops the tombstoned tab from the shared list on reconnect.

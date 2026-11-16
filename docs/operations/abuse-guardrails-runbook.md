@@ -53,6 +53,14 @@ This runbook covers operational handling for TinyDocy demo abuse guardrails:
 - `TOMBSTONE_RETENTION_DAYS=90`: how long a deleted or expired document name stays
   blocked. It must outlive any offline copy a browser may still hold; otherwise that
   copy could recreate the document on reconnect.
+- `CLOSED_RETENTION_DAYS=7`: how long a closed tab stays restorable. Closing
+  (`DELETE /api/documents/<id>`) is a soft delete: the document stays stored and is
+  hidden from Recently closed and refused by restore once older than this; the daily
+  retention purge then deletes and tombstones it. Closed documents still count toward
+  `MAX_TOTAL_DOCUMENTS` until they are purged. Set the same value for `editor-next`
+  (`ecosystem.config.cjs`) and in the purge cron's env.
+- `CLOSED_DOCUMENTS_LIST=0` turns off `GET /api/documents/closed` (Recently closed
+  returns no documents and `disabled: true`); restore keeps working.
 - `TRUSTED_PROXY=0` (`1` only when a reverse proxy fronts every request;
   `ecosystem.config.cjs` sets `1`; see Client IP Extraction Policy)
 - `HOCUS_LOGGER=0` to disable Hocuspocus Logger extension
@@ -136,6 +144,10 @@ Failure signals:
 - Sharp sustained increase in `documents_delete_throttled`
 - Frequent `documents_delete_failed`
 - Repeated missing/failed retention events
+- Sharp sustained increase in `documents_restore_throttled` or
+  `documents_closed_list_throttled`: restore (`POST /api/documents/restore`) and
+  the Recently closed list (`GET /api/documents/closed`) each have their own
+  `HTTP_MUTATION_RATE_LIMIT` limiter per IP; a restore of many tabs is one unit
 - `documents_delete_throttled` with `"ip":"unknown"` in production: client IPs
   are not being resolved, so everyone shares one bucket. Check `TRUSTED_PROXY`
   and the proxy's forwarding headers.
@@ -148,17 +160,33 @@ Failure signals:
 
 ## Taking Content Down
 
-Delete the document (DELETE `/api/documents/<id>` or the tab's close button), which
-tombstones it. Never reset or overwrite its stored Yjs state: browsers holding an
-offline copy would push the old content straight back on reconnect.
+Closing a tab no longer takes content down: anyone using the sandbox can restore a
+closed tab for `CLOSED_RETENTION_DAYS`. Never close abusive content from the tab bar.
+Delete and tombstone it at once with the operator command, on the host:
+
+```bash
+cd /opt/projects/editor.docs.plus && DB_PATH=/opt/projects/editor.docs.plus/db.sqlite bun run scripts/delete-document.ts <id>
+```
+
+It logs `document_deleted_by_operator` and exits 2 for an invalid or system id. The
+same command frees `MAX_TOTAL_DOCUMENTS` capacity at once (a closed document only
+frees it when the purge runs). Never reset or overwrite a document's stored Yjs state:
+browsers holding an offline copy would push the old content straight back on
+reconnect.
 
 ## Scheduled Jobs
 
 - Retention: the `editor-purge` PM2 app in `ecosystem.config.cjs` runs
-  `scripts/purge-retention.ts` daily at 03:17 (host time); deploys never run it. It
-  deletes documents idle for `RETENTION_DAYS` and tombstones older than
-  `TOMBSTONE_RETENTION_DAYS`, but only with `PURGE_MODE=on`, after a backup;
-  the file ships `dry-run`. See "Scheduled jobs" in `deploy-runbook.md`.
+  `scripts/purge-retention.ts` daily at 03:17 (host time); deploys never run it. With
+  `PURGE_MODE=on`, after a backup, it deletes and tombstones documents closed more
+  than `CLOSED_RETENTION_DAYS` ago (a closed tab that is listed again in the stored
+  tab list is kept, with its closure, and decided again on the next run), then
+  documents idle for `RETENTION_DAYS`, and drops tombstones older than
+  `TOMBSTONE_RETENTION_DAYS`. The file ships `dry-run`, which logs what it would
+  delete (including `wouldDeleteClosedNames`) and changes nothing. Until it is `on`,
+  closed documents are hidden after the window but never deleted.
+  `CLOSED_RETENTION_DAYS` sits in the shared `storageEnv`, so Next.js and the purge
+  agree. See "Scheduled jobs" in `deploy-runbook.md`.
 - Rotate PM2 logs (`pm2-logrotate`, 14 days): abuse events contain IP addresses.
 
 ## Client IP Extraction Policy
@@ -170,7 +198,8 @@ Per-IP guardrails (`WS_CONNECTION_LIMIT`, `DOC_CREATION_RATE_LIMIT`,
 - Use `X-Forwarded-For`/`X-Real-IP` only when `TRUSTED_PROXY=1`.
 - `TRUSTED_PROXY=0` (default): both headers are client-controlled and ignored.
   - WebSocket: the TCP peer address.
-  - HTTP (`DELETE /api/documents/[id]`): Next.js route handlers have no socket
+  - HTTP (`DELETE /api/documents/[id]`, `POST /api/documents/restore`,
+    `GET /api/documents/closed`): Next.js route handlers have no socket
     address, so all requests share the `unknown` key. The limit becomes global
     instead of bypassable by rotating headers.
 - `TRUSTED_PROXY=1`: the rightmost `X-Forwarded-For` entry (the address the

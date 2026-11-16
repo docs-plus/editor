@@ -15,7 +15,7 @@ import * as Y from "yjs";
 
 import type { UseSyncedTabsReturn } from "@/hooks/use-synced-tabs";
 import { PLAYGROUND_ID } from "@/lib/constants";
-import type { Tab } from "@/lib/tab-api";
+import type { Tab } from "@/lib/tab-entry";
 
 /** Provider double: `onSynced()` simulates the server sync completing. */
 type ProviderConfig = { document: Y.Doc; onSynced: () => void };
