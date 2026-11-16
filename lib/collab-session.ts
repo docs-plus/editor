@@ -43,7 +43,9 @@ const STOP_SYNC_CLOSE_REASONS = new Set([
 
 /**
  * How long to wait for the local copy before connecting without it.
- * Applying it after the provider synced would upload the whole copy again.
+ * Applying it after the provider synced would upload the whole copy again,
+ * so a copy read later is never applied: saves merge into it on the device,
+ * and it loads on the next open.
  */
 const HYDRATE_TIMEOUT_MS = 1000;
 
@@ -258,7 +260,8 @@ function attachWithLocalCopy(entry: Entry, name: string): void {
   entry.binding = bindLocalCopy(entry.doc, name, store, { generation });
   const timeout = setTimeout(() => {
     if (attached) return;
-    // Too slow: connect without the copy and keep saving from here on.
+    // Too slow: connect without the copy; saves merge into it, so its
+    // unsynced edits stay on the device and load on the next open.
     entry.binding?.destroy();
     entry.binding = bindLocalCopy(entry.doc, name, store, {
       hydrate: false,

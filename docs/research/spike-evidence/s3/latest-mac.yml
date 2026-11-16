@@ -1,0 +1,35 @@
+version: 0.0.2
+files:
+  - url: tinydocy-0.0.2-mac-x64.zip
+    sha512: uOEiK4XNYnACv/XaKaRKSDlTETFQIBkCZ6ImbAuagC3ZJ5LdKDXJDUbBP3adGhkcA/6THbZ9wKBSVF21FTkrBA==
+    size: 123312545
+  - url: tinydocy-0.0.2-mac-arm64.zip
+    sha512: j3GRiF/KPhJ+iDc5Pkgoumcydx/bKVAmV23f+/LYgKZCaGsYVAGnIP1hLcEetFndeLCk9wBfDeLVC6TDynVt4Q==
+    size: 119316771
+  - url: tinydocy-0.0.2-mac-arm64.zip
+    sha512: j3GRiF/KPhJ+iDc5Pkgoumcydx/bKVAmV23f+/LYgKZCaGsYVAGnIP1hLcEetFndeLCk9wBfDeLVC6TDynVt4Q==
+    size: 119316771
+  - url: tinydocy-0.0.2-mac-arm64.zip
+    sha512: j3GRiF/KPhJ+iDc5Pkgoumcydx/bKVAmV23f+/LYgKZCaGsYVAGnIP1hLcEetFndeLCk9wBfDeLVC6TDynVt4Q==
+    size: 119316771
+  - url: tinydocy-0.0.2-x64.dmg
+    sha512: IPhpkWhMEk5k5NIHwjGfYTx5wxh6l0K2TCy/6JErakJqMHHEs4OZS3ghCunpMKt8XZ0Fi2PgFi2CIhZyn5bJ+Q==
+    size: 126809261
+  - url: tinydocy-0.0.2-x64.dmg
+    sha512: IPhpkWhMEk5k5NIHwjGfYTx5wxh6l0K2TCy/6JErakJqMHHEs4OZS3ghCunpMKt8XZ0Fi2PgFi2CIhZyn5bJ+Q==
+    size: 126809261
+  - url: tinydocy-0.0.2-x64.dmg
+    sha512: IPhpkWhMEk5k5NIHwjGfYTx5wxh6l0K2TCy/6JErakJqMHHEs4OZS3ghCunpMKt8XZ0Fi2PgFi2CIhZyn5bJ+Q==
+    size: 126809261
+  - url: tinydocy-0.0.2-arm64.dmg
+    sha512: EJGIe+46zZXwaxPKl/Cbd7Ipm9h3V4T9R/Kwg2I+JuxKhdOIquCekKfP/FLVGSu4QeWIPPtL0yRed76h8o4ywQ==
+    size: 122814368
+  - url: tinydocy-0.0.2-arm64.dmg
+    sha512: EJGIe+46zZXwaxPKl/Cbd7Ipm9h3V4T9R/Kwg2I+JuxKhdOIquCekKfP/FLVGSu4QeWIPPtL0yRed76h8o4ywQ==
+    size: 122814368
+  - url: tinydocy-0.0.2-arm64.dmg
+    sha512: EJGIe+46zZXwaxPKl/Cbd7Ipm9h3V4T9R/Kwg2I+JuxKhdOIquCekKfP/FLVGSu4QeWIPPtL0yRed76h8o4ywQ==
+    size: 122814368
+path: tinydocy-0.0.2-mac-x64.zip
+sha512: uOEiK4XNYnACv/XaKaRKSDlTETFQIBkCZ6ImbAuagC3ZJ5LdKDXJDUbBP3adGhkcA/6THbZ9wKBSVF21FTkrBA==
+releaseDate: '2026-11-16T16:52:19.522Z'

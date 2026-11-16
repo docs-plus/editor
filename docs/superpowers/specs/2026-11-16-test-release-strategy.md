@@ -322,11 +322,18 @@ Every new workflow (`nightly-desktop.yml`, `release-desktop.yml`, `update-snapsh
   - Every build before 1.0.0 is a beta (§5.1), and the stable feed stays empty until then. A tester on a Stable default would check an empty feed and never update.
   - **Rule (adopted in plan v7):** a build whose version has a prerelease suffix defaults `updates.channel` to Beta; a plain version defaults to Stable. **The default is computed, never stored:** the default `prefs` JSON has no `"channel"` key (preferences row 23 and §5.2, amended). A stored choice, made by the user, always wins.
   - The update-channel rule is on D30's never-cut list.
-- **Verify in S3** (plan S3 row; not confirmed from the pages read):
-  - that a version with a `-beta.N` suffix writes and reads a `beta.yml` channel file
-  - **that stable builds also write `beta.yml`**, so a beta-channel install sees stable versions and 1.0.0 reaches the public beta
-  - how `prefs.updates.channel` maps to electron-updater's `channel` and `allowPrerelease` settings
-  - **whether setting `channel` turns on `allowDowngrade`**; P3.3 sets `allowDowngrade = false` explicitly after setting the channel, and S3 verifies it stays off
+- **Channel mapping, verified in S3** ([write-up](../../research/2026-11-16-spike-s3-packaging-updates.md), electron-updater 6.8.11):
+
+  | `prefs.updates.channel` | Stored? | `autoUpdater.channel` | `allowPrerelease` | Feed file | Then |
+  |---|---|---|---|---|---|
+  | unset (default) | never; computed from `app.getVersion()` | setter **not called**: a `-beta.N` build's `app-update.yml` already says `channel: beta` | constructor default | `latest*.yml`, or `beta*.yml` for a `-beta.N` build | `allowDowngrade = false` |
+  | Stable | yes | `"latest"` | `false` | `latest*.yml` | `allowDowngrade = false`, the last assignment |
+  | Beta | yes | `"beta"` | `true` | `beta*.yml` | `allowDowngrade = false`, the last assignment |
+
+  - A `-beta.N` build requests `beta.yml` (`beta-mac.yml`, `beta-linux.yml`).
+  - **Stable builds also write `beta.yml`** with `generateUpdatesFilesForAllChannels: true`, and a `0.0.3-beta.1` install was offered and installed stable `0.0.4`.
+  - **Only the `channel` setter turns `allowDowngrade` on.** `generateUpdatesFilesForAllChannels` is build-time only. P3.3 assigns `allowDowngrade = false` after the setter, right before every `checkForUpdates`. A feed offering `0.0.0` then installs nothing, on the default path and after switching from Beta to Stable. The negative control without the reset installed `0.0.0`.
+  - `allowPrerelease` only affects the GitHub provider. It is set so the state reads consistently.
 - **Live features before Gate 4 point at staging** (plan §8.4). Beta builds read the staging URL at build time. A tester never shares through production before Gate 4.
 - **Gate 2 builds** are unsigned internal builds for the owner and 2 technical testers who accept the Gatekeeper and SmartScreen steps (D32). All 10 get signed `0.2.0-beta` builds at Gate 3.
 

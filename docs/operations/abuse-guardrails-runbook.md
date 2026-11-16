@@ -91,6 +91,11 @@ Search logs for these JSON event names:
 - `documents_delete_throttled`
 - `documents_delete_invalid_id`
 - `documents_delete_failed`
+- `retention_purge_dry_run` (`PURGE_MODE=dry-run`: what a purge would delete)
+- `retention_purge_skipped` (`PURGE_MODE=off`)
+- `retention_purge_registered` (a deploy registered the app; nothing ran)
+- `retention_purge_backup_written` / `retention_purge_backup_failed` (an `on`
+  run's backup; a failed backup deletes nothing)
 - `retention_purge_completed`
 - `retention_purge_completed_retry`
 - `document_store_rejected` (document over its size cap; not persisted)
@@ -171,14 +176,17 @@ reconnect.
 
 ## Scheduled Jobs
 
-- Retention: run `bun run scripts/purge-retention.ts` daily (cron or a systemd timer).
-  It deletes and tombstones documents closed more than `CLOSED_RETENTION_DAYS` ago
-  (a closed tab that is listed again in the stored tab list is kept, with its
-  closure, and decided again on the next run), then documents idle for
-  `RETENTION_DAYS`, and drops tombstones older than
-  `TOMBSTONE_RETENTION_DAYS`. Nothing in the repository schedules it. Give the cron the
-  same `CLOSED_RETENTION_DAYS` as `editor-next`; without the cron, closed documents are
-  hidden after the window but never deleted.
+- Retention: the `editor-purge` PM2 app in `ecosystem.config.cjs` runs
+  `scripts/purge-retention.ts` daily at 03:17 (host time); deploys never run it. With
+  `PURGE_MODE=on`, after a backup, it deletes and tombstones documents closed more
+  than `CLOSED_RETENTION_DAYS` ago (a closed tab that is listed again in the stored
+  tab list is kept, with its closure, and decided again on the next run), then
+  documents idle for `RETENTION_DAYS`, and drops tombstones older than
+  `TOMBSTONE_RETENTION_DAYS`. The file ships `dry-run`, which logs what it would
+  delete (including `wouldDeleteClosedNames`) and changes nothing. Until it is `on`,
+  closed documents are hidden after the window but never deleted.
+  `CLOSED_RETENTION_DAYS` sits in the shared `storageEnv`, so Next.js and the purge
+  agree. See "Scheduled jobs" in `deploy-runbook.md`.
 - Rotate PM2 logs (`pm2-logrotate`, 14 days): abuse events contain IP addresses.
 
 ## Client IP Extraction Policy

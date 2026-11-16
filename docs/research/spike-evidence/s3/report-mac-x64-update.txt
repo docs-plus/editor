@@ -1,0 +1,52 @@
+=== update-test mac-x64-update: PASS
+kind=mac-zip start=0.0.1 feed=0.0.2 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.1 expected 0.0.1
+  [x] marker intact
+  [x] netlog files=1
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=25
+  [x] feed log matches /GET /feed/latest-mac\.yml/
+  [x] feed log matches /GET /feed/tinydocy-0\.0\.2-mac-x64\.zip 200/
+  [x] feed log lacks /mac-arm64/
+  [x] probe log matches /did not pass validation|code signature|Code signature/
+--- feed log
+2026-11-16T17:18:22.130Z serving /Users/runner/work/editor/editor/spikes/s3-packaging/release/0.0.2 at http://127.0.0.1:8787/feed/
+2026-11-16T17:18:34.480Z GET /feed/latest-mac.yml?noCache=1k7ils8uk 200
+2026-11-16T17:18:34.627Z GET /feed/tinydocy-0.0.2-mac-x64.zip 200
+--- probe log
+2026-11-16T17:18:31.608Z v0.0.1 pid=15540 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=darwin arch=x64 exec=/Users/runner/work/editor/editor/spikes/s3-packaging/out/mac-x64-update/app/TinyDocy.app/Contents/MacOS/TinyDocy appimage=- argv=[]
+2026-11-16T17:18:34.412Z v0.0.1 pid=15540 window shown renderer-pid=15557
+2026-11-16T17:18:34.420Z v0.0.1 pid=15540 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:18:34.421Z v0.0.1 pid=15540 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:18:34.423Z v0.0.1 pid=15540 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:18:34.427Z v0.0.1 pid=15540 [updater] Checking for update
+2026-11-16T17:18:34.429Z v0.0.1 pid=15540 event checking-for-update
+2026-11-16T17:18:34.446Z v0.0.1 pid=15540 [updater] Generated new staging user ID: 7fc90907-8230-5ded-bde6-61f74653f1d8
+2026-11-16T17:18:34.500Z v0.0.1 pid=15540 [updater] Found version 0.0.2 (url: tinydocy-0.0.2-mac-x64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-arm64.dmg, tinydocy-0.0.2-arm64.dmg, tinydocy-0.0.2-arm64.dmg)
+2026-11-16T17:18:34.501Z v0.0.1 pid=15540 event update-available version=0.0.2
+2026-11-16T17:18:34.502Z v0.0.1 pid=15540 [updater] Downloading update from tinydocy-0.0.2-mac-x64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-mac-arm64.zip, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-x64.dmg, tinydocy-0.0.2-arm64.dmg, tinydocy-0.0.2-arm64.dmg, tinydocy-0.0.2-arm64.dmg
+2026-11-16T17:18:34.503Z v0.0.1 pid=15540 [updater:debug] Checking for macOS Rosetta environment
+2026-11-16T17:18:34.570Z v0.0.1 pid=15540 [updater:warn] sysctl shell command to check for macOS Rosetta environment failed: Error: Command failed: sysctl sysctl.proc_translated
+sysctl: unknown oid 'sysctl.proc_translated'
+
+2026-11-16T17:18:34.570Z v0.0.1 pid=15540 [updater:debug] Checking for arm64 in uname
+2026-11-16T17:18:34.614Z v0.0.1 pid=15540 [updater] Checked 'uname -a': arm64=false
+2026-11-16T17:18:34.616Z v0.0.1 pid=15540 [updater:debug] updater cache dir: /Users/runner/Library/Caches/tinydocy-updater
+2026-11-16T17:18:34.617Z v0.0.1 pid=15540 check result version=0.0.2 isUpdateAvailable=true
+2026-11-16T17:18:34.624Z v0.0.1 pid=15540 [updater] Unable to locate previous update.zip for differential download (is this first install?), falling back to full download
+2026-11-16T17:18:39.785Z v0.0.1 pid=15540 [updater] New version 0.0.2 has been downloaded to /Users/runner/Library/Caches/tinydocy-updater/pending/tinydocy-0.0.2-mac-x64.zip
+2026-11-16T17:18:39.793Z v0.0.1 pid=15540 [updater:debug] Creating proxy server for native Squirrel.Mac (fileToProxy=http://127.0.0.1:8787/feed/tinydocy-0.0.2-mac-x64.zip)
+2026-11-16T17:18:39.799Z v0.0.1 pid=15540 [updater:debug] Proxy server for native Squirrel.Mac is created (fileToProxy=http://127.0.0.1:8787/feed/tinydocy-0.0.2-mac-x64.zip)
+2026-11-16T17:18:39.805Z v0.0.1 pid=15540 [updater:debug] Proxy server for native Squirrel.Mac is starting to listen (fileToProxy=http://127.0.0.1:8787/feed/tinydocy-0.0.2-mac-x64.zip)
+2026-11-16T17:18:39.846Z v0.0.1 pid=15540 [updater:debug] Proxy server for native Squirrel.Mac is listening (address=http://127.0.0.1:49457, fileToProxy=http://127.0.0.1:8787/feed/tinydocy-0.0.2-mac-x64.zip)
+2026-11-16T17:18:39.868Z v0.0.1 pid=15540 [updater:warn] Error: Could not get code signature for running application
+2026-11-16T17:18:39.871Z v0.0.1 pid=15540 [updater:error] Error: Error: Could not get code signature for running application
+    at Server.<anonymous> (/Users/runner/work/editor/editor/spikes/s3-packaging/out/mac-x64-update/app/TinyDocy.app/Contents/Resources/app.asar/node_modules/electron-updater/out/MacUpdater.js:211:36)
+    at Server.wrapper (node:events:639:12)
+    at Server.emit (node:events:526:24)
+    at emitListeningNT (node:net:2485:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+2026-11-16T17:18:39.873Z v0.0.1 pid=15540 event error Could not get code signature for running application
+2026-11-16T17:18:39.876Z v0.0.1 pid=15540 probe-exit reason=error
+2026-11-16T17:18:39.877Z v0.0.1 pid=15540 event update-downloaded version=0.0.2 file=/Users/runner/Library/Caches/tinydocy-updater/pending/tinydocy-0.0.2-mac-x64.zip
+2026-11-16T17:18:39.878Z v0.0.1 pid=15540 calling quitAndInstall(true, true)

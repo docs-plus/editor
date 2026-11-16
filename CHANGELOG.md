@@ -29,13 +29,15 @@ purge deletes and tombstones it.
 
 #### Deploy
 
-- Confirm the daily `bun run scripts/purge-retention.ts` cron runs on the
-  host, with `CLOSED_RETENTION_DAYS` in its env. Without it, closed documents
-  are hidden after 7 days but never deleted.
+- Deploy only after `PURGE_MODE` is `on` for the `editor-purge` app (the daily
+  purge from #97). With `dry-run` or `off`, closed documents are hidden after
+  7 days but never deleted, and they keep counting toward
+  `MAX_TOTAL_DOCUMENTS`. The dry-run log lists them as
+  `wouldDeleteClosedNames`.
 - No migration: `document_closures` is created on first use; `documents` is
   unchanged.
-- `ecosystem.config.cjs` now sets `CLOSED_RETENTION_DAYS` for `editor-next`.
-  Deploy with `gh workflow run deploy.yml`.
+- `CLOSED_RETENTION_DAYS` (7) is in the shared `storageEnv` of
+  `ecosystem.config.cjs`, so Next.js, Hocus and the purge use the same value.
 - Closing no longer frees `MAX_TOTAL_DOCUMENTS` capacity for 7 days. To free
   it, or to take content down, run on the host:
 
@@ -46,6 +48,164 @@ purge deletes and tombstones it.
   stay stored, unlisted, until idle retention removes them (30 days). Browsers
   already holding W1b bundles show Undo, which then fails with "Check your
   connection." This is acceptable for a rollback window.
+
+### Automatic deploys and a daily retention purge, both off until turned on
+
+The Deploy workflow can now deploy by itself after CI passes on `main`, and
+a daily PM2 job runs the retention purge, which has never run in production.
+Both start off: automatic deploys wait for the owner to set `AUTO_DEPLOY`,
+and the purge only logs what it would delete until `PURGE_MODE` is `on`.
+
+#### Added
+
+- **Automatic deploys (opt-in).** The Deploy workflow also runs when CI
+  completes on `main` (`workflow_run`). It deploys that commit only if the
+  repository variable `AUTO_DEPLOY` is `on` and the CI run passed and came
+  from a push, never from a pull request or a fork. Unset means off. The
+  on-`main` and green-CI checks and the `production` environment are
+  unchanged, and the runner still checks out no code.
+  `gh workflow run deploy.yml` still deploys by hand at any time.
+- Only runs that will deploy join the `deploy-production` concurrency group,
+  so a skipped run (failed CI, a fork's `main`, automatic deploys off) cannot
+  cancel a deploy waiting its turn.
+- **`editor-purge`**, a PM2 app in `ecosystem.config.cjs`, runs
+  `scripts/purge-retention.ts` daily at 03:17 (host time, `cron_restart`,
+  `autorestart: false`). It shares `DB_PATH` with `editor-next` and
+  `editor-hocus` through one `storageEnv` object, where retention settings
+  also belong. Only the cron purges: `scripts/deploy.sh` registers or
+  updates it (`startOrRestart --update-env`) after the new build is live,
+  and writes a marker, `.purge-skip-next`, first. The run PM2 starts then
+  exits without purging (`retention_purge_registered`). Starting it by hand
+  or `pm2 resurrect` does run it.
+- **`PURGE_MODE`** for the purge: `off`; `dry-run` (the default, and the
+  file's value), which logs `retention_purge_dry_run` with the documents an
+  `on` run would delete (`wouldDeleteNames`), the whole backlog
+  (`staleTotal`) and the expiring tombstones, and changes nothing; and `on`.
+  An `on` run first copies the database with `VACUUM INTO` into `backups/`
+  next to `DB_PATH`, and deletes nothing if that fails (exit 1,
+  `retention_purge_backup_failed`). The first backup, `db-first.sqlite`, is
+  kept forever; later `db-<UTC time>.sqlite` copies are deleted after 14
+  days by age, not count. Copies are written as `*.partial` and renamed when
+  complete. An unknown value is refused.
+- Tests: the purge modes, the dry run (it writes nothing and lists exactly
+  what the purge deletes), the backups (the first kept forever, 14-day age
+  rotation), the deploy marker, and the CLI in each
+  mode, including a failed backup; `workflow_run` workflows must not check
+  out code and must require a successful CI run from a push; the ecosystem
+  file, `deploy.sh` and the Deploy workflow are checked against each other
+  (`tests/unit/ci/deploy-config.test.ts`).
+
+See "Automatic deploys" and "Scheduled jobs" in
+`docs/operations/deploy-runbook.md`.
+
+#### Deploy
+
+Nothing deploys by itself and nothing is deleted on merge. In order:
+
+1. **Finish the one-time setup** in the deploy runbook if it is not done:
+   the deploy key on the host, the `production` environment limited to
+   `main` with its secrets, and `git pull --ff-only` once on the host.
+2. **Deploy by hand:** `gh workflow run deploy.yml`. The deploy that first
+   brings this change runs the host's previous `scripts/deploy.sh` (script
+   changes apply from the next deploy), so it may not start `editor-purge`.
+   If `bunx pm2@6.0.14 ls` does not list it, register it the way
+   `deploy.sh` does (the marker makes that first run exit at once), then save
+   the PM2 list so it survives a reboot:
+   ```bash
+   cd /opt/projects/editor.docs.plus
+   date +%s > .purge-skip-next
+   bunx pm2@6.0.14 start ecosystem.config.cjs --only editor-purge
+   bunx pm2@6.0.14 save
+   ```
+   Its first real run is the next 03:17, as a dry run: it deletes nothing.
+3. **Turn automatic deploys on** only after a manual deploy has succeeded:
+   `gh variable set AUTO_DEPLOY --body on`.
+4. **Turning the purge on** is a later, separate change. Read the
+   `retention_purge_dry_run` lines from a few daily runs
+   (`bunx pm2@6.0.14 logs editor-purge`). If the listed documents should go,
+   set `PURGE_MODE: "on"` in `ecosystem.config.cjs` in a pull request. From
+   the next 03:17 run, every run backs up to `backups/` before it deletes up
+   to 100 documents: the first to `db-first.sqlite` (kept forever), then
+   dated copies kept 14 days. Check the disk has room for about 16 copies of
+   `db.sqlite`.
+
+### Phase 1 shell spike results (S1, S4)
+
+Records what the Electron shell spikes found and the decisions they settle.
+Documentation only; no app or server change. The spike code stays on its
+`spike/*` branches.
+
+#### Added
+
+- `docs/research/2026-11-16-spike-s1-shell-origin.md`: the static export in
+  Electron on both candidate origins, on macOS, Windows and Linux (CSP,
+  embeds, spellcheck, preload, sender check, menus), with screenshots in
+  `docs/research/spike-evidence/s1/`.
+- `docs/research/2026-11-16-spike-s4-electron-e2e.md`: Playwright `_electron`
+  relaunches the packaged app and the text comes back offline; the spec is
+  kept as a reference for P2.5.
+
+#### Changed
+
+- Desktop specs: the app origin is `app://tinydocy` with a YouTube Referer
+  rewrite (D-A11); `pageExtensions` covers pages and routes while metadata
+  files are moved aside for the desktop build (D-A9); main, worker and
+  preload stay CJS bundles that find their files through
+  `app.getAppPath()`.
+
+### Storage and packaging spike results (S2, S3)
+
+- **Docs:** Phase 1 storage and packaging spike results (S2, S3) and the
+  decisions they settle: the storage worker stands until S5 decides D-A1,
+  `bun electron-builder` with no `node` exception, the update-channel
+  mapping with `allowDowngrade` reset last, and signed Linux manifests.
+  Documentation only; no app or server change.
+
+### Two tabs editing one document offline keep each other's edits
+
+Each save now reads, merges and writes the device copy in one IndexedDB
+transaction.
+
+#### Fixed
+
+- A second tab's save no longer drops the first tab's offline edits.
+- Each save carries its own id, so a tab never mistakes another tab's save
+  for its own, even one of the same size in the same millisecond.
+
+### Offline copies keep unsynced edits after a slow read
+
+When the device copy took longer than 1 s to read, the next save replaced it
+with the server's state and edits made offline were lost. Saves now merge into
+the stored copy.
+
+#### Fixed
+
+- A copy read after the 1 s timeout stays on the device and opens on the next
+  visit.
+
+### Playwright CI job gets 45 minutes
+
+The Playwright job was cancelled at its 30-minute limit on busy runners
+before its tests finished, failing pull requests whose tests all passed.
+
+#### Changed
+
+- The Playwright (Chromium) job's `timeout-minutes` rises from 30 to 45. The
+  lint, typecheck, unit test and build job stays at 20.
+
+### Link underlines and dark link colour
+
+Document links stay underlined everywhere (WCAG 1.4.1), set slightly below the
+text.
+
+#### Fixed
+
+- Dark-mode document links are brighter (≥4.5:1): `#5b9cf2` reads at 7.05:1 on
+  the page and 6.39:1 on cards, instead of 4.39:1 and 3.98:1.
+
+#### Changed
+
+- The underline sits `0.15em` below the text, clear of descenders.
 
 ### Identity validation
 
@@ -64,6 +224,69 @@ drawn.
   correctly.
 - Names are capped in length and in stacked accent marks, so a collaborator's
   name can no longer draw over the document.
+
+### System theme
+
+New browsers follow the system's light or dark setting, from the first paint and live as it changes.
+
+#### Added
+
+- ⋯ › Appearance offers System, Light and Dark. The row button still switches between light and dark.
+- On phones, which have no ⋯ menu, the theme button in the Aa sheet steps through System, Light and Dark. Its label says what comes next.
+
+#### Fixed
+
+- The palette's Switch theme works.
+
+#### Changed
+
+- Browsers that used TinyDocy before keep Light (written once on the next load) or the Dark they chose.
+
+### Shortcut clashes
+
+⌘⇧R only aligns right, also on the Playground, and outside the editor it
+reloads the page again. Regenerate Playground is in the Alt+/ palette, the
+keyboard path to the Playground tab's Regenerate button.
+
+#### Added
+
+- Alt+/ › Regenerate Playground, listed only on the Playground (no key).
+
+#### Fixed
+
+- ⌘⇧R no longer regenerates the Playground; the Regenerate button's tooltip
+  no longer shows it.
+
+#### Changed
+
+- Desktop builds (`NEXT_PUBLIC_APP_TARGET=desktop`) bind Subscript to ⌘⇧, so
+  that ⌘, can open Settings. The web keeps ⌘,; Strikethrough keeps ⌘⇧S.
+
+### Image privacy
+
+Inserted and pasted images no longer carry camera metadata.
+
+#### Fixed
+
+- JPEG photos are always re-encoded, which removes Exif and GPS location and
+  bakes in the rotation.
+- PNG and WebP keep their pixels but lose text, time, Exif, XMP and unknown
+  chunks. A PNG or WebP carrying an Exif rotation is re-encoded instead.
+- Re-encoded JPEGs (Safari, which cannot encode WebP) lose the Exif and
+  Photoshop segments its encoder adds.
+- New images get empty alt text instead of the file name.
+
+#### Changed
+
+- Small JPEGs over 1600 px on the longest side are now downscaled, and
+  re-encoded JPEGs are converted to sRGB.
+- GIFs are unchanged, so animations keep working.
+
+### Desktop smoke test (D-A12)
+
+- **CI:** a desktop smoke test checks, on every Electron bump and nightly,
+  that `node:sqlite` loads, WAL works, SQLite runs in a worker thread and a
+  custom app protocol serves pages (D-A12).
 
 ### Dark primary text contrast
 

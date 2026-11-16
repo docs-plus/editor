@@ -5,11 +5,15 @@ import { join } from "node:path";
 import { contrastRatio, MIN_TEXT_CONTRAST } from "@/lib/text-style-contrast";
 import {
   oklchToHex,
+  readScssVar,
   readThemeTokens,
   type Theme,
 } from "@/tests/helpers/css-tokens";
 
 const ROOT = join(import.meta.dir, "../../..");
+
+const PARAGRAPH_SCSS =
+  "components/tiptap-node/paragraph-node/paragraph-node.scss";
 
 /** Surfaces primary-coloured text can sit on. */
 const SURFACES = [
@@ -94,4 +98,27 @@ describe("design token contrast", () => {
     }
     expect(hits.sort()).toEqual([]);
   });
+  it("reads editor SCSS custom properties per theme", () => {
+    expect(readScssVar(PARAGRAPH_SCSS, ":root", "--link-text-color")).toBe(
+      "#1155cc",
+    );
+    expect(readScssVar(PARAGRAPH_SCSS, ".dark", "--link-text-color")).toBe(
+      "#5b9cf2",
+    );
+  });
+
+  it.each<Theme>(["light", "dark"])(
+    "document links reach 4.5:1 on the page and on cards (%s)",
+    (theme) => {
+      const selector = theme === "dark" ? ".dark" : ":root";
+      const link = readScssVar(PARAGRAPH_SCSS, selector, "--link-text-color");
+      for (const surface of ["background", "card"]) {
+        const ratio = contrastRatio(link, hex(theme, surface));
+        expect({ surface, ok: ratio >= MIN_TEXT_CONTRAST }).toEqual({
+          surface,
+          ok: true,
+        });
+      }
+    },
+  );
 });

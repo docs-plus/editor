@@ -13,7 +13,9 @@
 #   2. build Next.js in a second checkout (the live site keeps serving);
 #   3. restart Hocus (it runs from source), then swap the build in and
 #      restart Next.js, keeping the previous build in .next.prev;
-#   4. check both answer, and put the previous build back if Next.js does not.
+#   4. check both answer, and put the previous build back if Next.js does not;
+#   5. register the daily retention purge (editor-purge) with PM2 without
+#      purging: the run PM2 starts exits at once, so only the cron purges.
 # It only moves forward along main. Roll back with the runbook.
 # The body is one function, so bash has read all of it before the
 # fast-forward replaces this file. Changes to it apply from the next deploy.
@@ -116,6 +118,19 @@ if ! wait_for "http://127.0.0.1:$NEXT_PORT/" 90; then
   mv .next.prev .next
   pm2 restart ecosystem.config.cjs --only editor-next --update-env
   exit 8
+fi
+
+# After the site is live: a failure here leaves the new build serving.
+# PM2 cannot add or update an app without running it, so the marker tells
+# that run to exit without purging (scripts/purge-retention.ts). It sits next
+# to the database (DB_PATH is db.sqlite in this directory).
+log "Registering the retention purge (no run)"
+purge_marker="$APP_DIR/.purge-skip-next"
+date +%s > "$purge_marker"
+if ! pm2 startOrRestart ecosystem.config.cjs --only editor-purge --update-env; then
+  rm -f "$purge_marker"
+  echo "deploy: the site is deployed, but editor-purge was not registered" >&2
+  exit 10
 fi
 
 log "Deployed $(git log -1 --format='%h %s')"

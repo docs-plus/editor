@@ -1,0 +1,8 @@
+version: 0.0.4
+files:
+  - url: tinydocy-0.0.4-setup.exe
+    sha512: bNRxWr94A8tfziHiW3sWg8NWgnTP0IYxt86Kyb4bJW+Y8K132KfS7c+X/XFwgdunTqqcaBUEyF7WX9hGcKAmnQ==
+    size: 121664048
+path: tinydocy-0.0.4-setup.exe
+sha512: bNRxWr94A8tfziHiW3sWg8NWgnTP0IYxt86Kyb4bJW+Y8K132KfS7c+X/XFwgdunTqqcaBUEyF7WX9hGcKAmnQ==
+releaseDate: '2026-11-16T16:53:25.893Z'

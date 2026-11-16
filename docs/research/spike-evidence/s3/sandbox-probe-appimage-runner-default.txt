@@ -1,0 +1,5 @@
+== probe-appimage-runner-default
+[3743:1116/171447.739758:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[3743:1116/171447.953363:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[3743:1116/171447.996325:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+2026-11-16T17:14:47.791Z v0.0.1 pid=3743 start mode=hold pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_tinydohqIfyt/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/release/0.0.1/tinydocy-0.0.1-x86_64.AppImage argv=["--no-sandbox"]

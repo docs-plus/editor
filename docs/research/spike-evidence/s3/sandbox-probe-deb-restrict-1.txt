@@ -1,0 +1,5 @@
+== probe-deb-restrict-1
+[4491:1116/171529.004330:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4491:1116/171529.033489:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4491:1116/171529.046507:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+2026-11-16T17:15:29.010Z v0.0.1 pid=4491 start mode=hold pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/opt/TinyDocy/tinydocy appimage=- argv=[]

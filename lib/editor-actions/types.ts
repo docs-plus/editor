@@ -154,6 +154,12 @@ export interface Action<Arg = undefined> {
    * `view.*`, `code.copy`, `mermaid.copySource`, `palette.open`.
    */
   readonly mutates?: boolean;
+  /**
+   * Default true. `false` leaves the action out of the palette in this
+   * editor, for commands that belong to one document (Regenerate
+   * Playground). Toolbar surfaces list ids explicitly and never show it.
+   */
+  offered?(ctx: Ctx): boolean;
   enabled(ctx: Ctx): Enabled;
   isActive?(ctx: Ctx): boolean;
   isMixed?(ctx: Ctx): boolean;

@@ -460,12 +460,12 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
       const pos = props.getPos();
 
       if (isValidPosition(pos)) {
-        const imageNodes = successful.map(({ url, file }) => ({
+        const imageNodes = successful.map(({ url }) => ({
           type: extension.options.type,
           attrs: {
             src: url,
-            alt: file.name.replace(/\.[^/.]+$/, "") || "unknown",
-            title: file.name.replace(/\.[^/.]+$/, "") || "unknown",
+            // The file name can leak a date or place (`IMG_2026…_home.jpg`).
+            alt: "",
           },
         }));
 

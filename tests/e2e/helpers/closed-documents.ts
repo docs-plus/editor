@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 
 import { openSqlite } from "@/lib/sqlite-open";
+import { runRetentionPurge } from "@/scripts/purge-retention";
 
 /**
  * Reaches into the SQLite file the dev servers share (`DB_PATH`, default
@@ -23,15 +24,18 @@ export function backdateClosure(id: string, closedAt: number): void {
   }
 }
 
-/** Runs the daily retention purge once, as the production cron does. */
-export function runRetentionPurgeScript(): void {
-  const result = Bun.spawnSync(["bun", "run", "scripts/purge-retention.ts"], {
-    cwd: REPO_ROOT,
-    env: process.env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  expect(result.exitCode, result.stderr.toString()).toBe(0);
+/**
+ * Runs the retention purge once, in this process: the same
+ * `runRetentionPurge` the daily `editor-purge` job runs with `PURGE_MODE=on`,
+ * without its backup (`VACUUM INTO` of the whole dev database on every call).
+ */
+export function runRetentionPurgeNow(): void {
+  const db = openSqlite({ busyTimeoutMs: 10_000 });
+  try {
+    runRetentionPurge(db);
+  } finally {
+    db.close();
+  }
 }
 
 /** Takes one document down at once, as an operator does on the host. */

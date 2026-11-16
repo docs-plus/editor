@@ -168,6 +168,7 @@ export function EditorApp({ intro }: EditorAppProps) {
         documentId={activeTabId}
         onTitleChange={(title) => updateTabTitle(activeTabId, title)}
         playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+        onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
     </div>
   );
