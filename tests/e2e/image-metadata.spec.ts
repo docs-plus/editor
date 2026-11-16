@@ -159,6 +159,11 @@ async function samplePixel(
     );
 }
 
+function expectNoFileName(image: InsertedImage) {
+  expect(image.alt).toBe("");
+  expect(image.title).toBeNull();
+}
+
 test.describe("Image metadata", () => {
   test.beforeEach(async ({ page }) => {
     const editor = new EditorPage(page);
@@ -192,6 +197,7 @@ test.describe("Image metadata", () => {
     expect(r2).toBeLessThan(40);
     expect(g2).toBeLessThan(40);
     expect(b2).toBeGreaterThan(255 - 40);
+    expectNoFileName(image);
   });
 
   test("PNG with eXIf and tEXt", async ({ page }) => {
@@ -204,6 +210,7 @@ test.describe("Image metadata", () => {
     expect(image.type).toBe("image/png");
     expect(new Uint8Array(image.bytes)).toEqual(buildPng([]));
     expect([image.width, image.height]).toEqual([2, 1]);
+    expectNoFileName(image);
   });
 
   test("JPEG bytes labelled image/png", async ({ page }) => {
@@ -211,6 +218,7 @@ test.describe("Image metadata", () => {
     const image = await pasteFile(page, jpeg, "photo.png", "image/png");
     expect(image.type).not.toBe("image/png");
     expect(metadataSegments(image.bytes)).toEqual([]);
+    expectNoFileName(image);
   });
 
   test("JPEG bytes labelled image/gif", async ({ page }) => {
@@ -218,5 +226,27 @@ test.describe("Image metadata", () => {
     const image = await pasteFile(page, jpeg, "photo.gif", "image/gif");
     expect(image.type).not.toBe("image/gif");
     expect(metadataSegments(image.bytes)).toEqual([]);
+    expectNoFileName(image);
+  });
+
+  test("the upload node inserts without the file name", async ({ page }) => {
+    await page.evaluate(() => {
+      const editor = (
+        window as Window & {
+          __tiptap_editor?: {
+            commands: { setImageUploadNode: () => boolean };
+          };
+        }
+      ).__tiptap_editor;
+      editor?.commands.setImageUploadNode();
+    });
+    await page.locator('.tiptap input[type="file"]').setInputFiles({
+      name: "IMG_2026_home.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(PNG_WITH_METADATA),
+    });
+    const image = await readImage(page, 0);
+    expect(new Uint8Array(image.bytes)).toEqual(buildPng([]));
+    expectNoFileName(image);
   });
 });

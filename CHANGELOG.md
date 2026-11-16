@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Image privacy
+
+Inserted and pasted images no longer carry camera metadata.
+
+#### Fixed
+
+- JPEG photos are always re-encoded, which removes Exif and GPS location and
+  bakes in the rotation.
+- PNG and WebP keep their pixels but lose text, time, Exif, XMP and unknown
+  chunks. A PNG or WebP carrying an Exif rotation is re-encoded instead.
+- Re-encoded JPEGs (Safari, which cannot encode WebP) lose the Exif and
+  Photoshop segments its encoder adds.
+- New images get empty alt text instead of the file name.
+
+#### Changed
+
+- Small JPEGs over 1600 px on the longest side are now downscaled, and
+  re-encoded JPEGs are converted to sRGB.
+- GIFs are unchanged, so animations keep working.
+
 ### Desktop local-first planning documents
 
 Adds the planning set for TinyDocy Desktop: the installable app for macOS,
