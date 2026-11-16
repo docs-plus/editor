@@ -140,6 +140,53 @@ describe("stripImageMetadata: PNG", () => {
   });
 });
 
+describe("stripImageMetadata: containers without an image", () => {
+  const signature = buildPng([]).subarray(0, 8);
+  const ihdr = pngChunk("IHDR", new Uint8Array(13));
+  const iend = pngChunk("IEND", new Uint8Array());
+
+  /** A RIFF/WEBP file holding exactly `chunks`. */
+  function riff(...chunks: Uint8Array[]): Uint8Array {
+    const body = concat(ascii("WEBP"), ...chunks);
+    const size = new Uint8Array(4);
+    new DataView(size.buffer).setUint32(0, body.length, true);
+    return concat(ascii("RIFF"), size, body);
+  }
+
+  function riffChunkBytes(id: string, data: Uint8Array): Uint8Array {
+    const size = new Uint8Array(4);
+    new DataView(size.buffer).setUint32(0, data.length, true);
+    const pad = new Uint8Array(data.length & 1);
+    return concat(ascii(id), size, data, pad);
+  }
+
+  it("returns null for a PNG with no IHDR first or no IDAT", () => {
+    expect(stripImageMetadata(concat(signature, iend), "image/png")).toBeNull();
+    expect(
+      stripImageMetadata(concat(signature, ihdr, iend), "image/png"),
+    ).toBeNull();
+    const idat = pngChunk("IDAT", new Uint8Array(2));
+    expect(
+      stripImageMetadata(concat(signature, idat, ihdr, iend), "image/png"),
+    ).toBeNull();
+  });
+
+  it("returns null for a WebP with no image chunk", () => {
+    expect(stripImageMetadata(riff(), "image/webp")).toBeNull();
+    const exifOnly = riffChunkBytes("EXIF", buildExifApp1({}).subarray(6));
+    expect(stripImageMetadata(riff(exifOnly), "image/webp")).toBeNull();
+  });
+
+  it("returns null for a VP8X chunk shorter than its 10 bytes", () => {
+    const vp8l = riffChunk(buildWebp({}), "VP8L") as Uint8Array;
+    const shortVp8x = riff(
+      riffChunkBytes("VP8X", new Uint8Array()),
+      riffChunkBytes("VP8L", vp8l),
+    );
+    expect(stripImageMetadata(shortVp8x, "image/webp")).toBeNull();
+  });
+});
+
 describe("stripImageMetadata: WebP", () => {
   it("drops EXIF and XMP, clears their VP8X flags and rewrites the RIFF size", () => {
     const w = stripImageMetadata(

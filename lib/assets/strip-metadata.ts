@@ -1,5 +1,6 @@
 /**
- * Removes metadata from PNG and WebP files without touching their pixels.
+ * Removes metadata from PNG and WebP files without touching their pixels,
+ * and from JPEGs the canvas encoder produced.
  *
  * Image privacy policy (I3): an inserted image must not carry camera or
  * location metadata.
@@ -11,14 +12,15 @@
  *   rotation, so dropping it would turn the picture); the caller re-encodes.
  * - GIF passes through unchanged so animations keep working. Its comment and
  *   XMP application extensions pass through with it.
- *
  * - A JPEG the canvas encoder produced (Safari, which cannot encode WebP)
  *   loses the Exif and Photoshop segments that encoder adds on its own
- *   (`stripJpegMetadata`), so no inserted JPEG carries an APP1.
+ *   (`stripJpegMetadata`). Those hold colour space and pixel size, nothing
+ *   from the source, so when they cannot be removed the encoder output is
+ *   kept as it is.
  *
  * Pure: no DOM, so the policy is unit-tested. `null` means "re-encode
  * instead": malformed or truncated input, bytes that are not the declared
- * container, a rotation, or Exif that cannot be read.
+ * container or hold no image, a rotation, or Exif that cannot be read.
  */
 
 /** Colour, transparency, physical size and APNG animation are kept. */
@@ -57,6 +59,10 @@ const WEBP_KEEP = new Set([
 
 /** VP8X flag bits for the Exif and XMP chunks that are dropped. */
 const VP8X_EXIF_AND_XMP = 0x08 | 0x04;
+/** The VP8X payload is 10 bytes: flags, reserved, canvas width and height. */
+const VP8X_SIZE = 10;
+/** WebP chunks that hold image data; a file needs at least one. */
+const WEBP_IMAGE = new Set(["VP8 ", "VP8L", "ANMF"]);
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -119,12 +125,15 @@ function stripPng(bytes: Uint8Array): Uint8Array<ArrayBuffer> | null {
   const kept: Uint8Array[] = [bytes.subarray(0, PNG_SIGNATURE.length)];
   let length = PNG_SIGNATURE.length;
   let offset = PNG_SIGNATURE.length;
+  let hasImageData = false;
 
   while (offset + 12 <= bytes.length) {
     const size = data.getUint32(offset);
     const end = offset + 12 + size;
     if (end > bytes.length) return null;
     const type = fourcc(bytes, offset + 4);
+    if (offset === PNG_SIGNATURE.length && type !== "IHDR") return null;
+    if (type === "IDAT") hasImageData = true;
     if (
       type === "eXIf" &&
       !isUpright(bytes.subarray(offset + 8, offset + 8 + size))
@@ -136,7 +145,7 @@ function stripPng(bytes: Uint8Array): Uint8Array<ArrayBuffer> | null {
       length += end - offset;
     }
     // Anything after IEND (appended text, a second file) is dropped.
-    if (type === "IEND") return join(kept, length);
+    if (type === "IEND") return hasImageData ? join(kept, length) : null;
     offset = end;
   }
   return null;
@@ -154,12 +163,15 @@ function stripWebp(bytes: Uint8Array): Uint8Array<ArrayBuffer> | null {
   const kept: Uint8Array[] = [];
   let length = 12;
   let offset = 12;
+  let hasImageData = false;
   while (offset < end) {
     if (offset + 8 > end) return null;
     const id = fourcc(bytes, offset);
     const size = data.getUint32(offset + 4, true);
     const chunkEnd = offset + 8 + size + (size & 1);
     if (chunkEnd > end) return null;
+    if (id === "VP8X" && size < VP8X_SIZE) return null;
+    if (WEBP_IMAGE.has(id)) hasImageData = true;
     if (
       id === "EXIF" &&
       !isUpright(bytes.subarray(offset + 8, offset + 8 + size))
@@ -172,10 +184,12 @@ function stripWebp(bytes: Uint8Array): Uint8Array<ArrayBuffer> | null {
     }
     offset = chunkEnd;
   }
+  if (!hasImageData) return null;
 
   const out = join([bytes.subarray(0, 12), ...kept], length);
   view(out).setUint32(4, length - 8, true);
-  if (fourcc(out, 12) === "VP8X" && length >= 21) out[20] &= ~VP8X_EXIF_AND_XMP;
+  // VP8X comes first when present; byte 20 is its flags byte.
+  if (fourcc(out, 12) === "VP8X") out[20] &= ~VP8X_EXIF_AND_XMP;
   return out;
 }
 
