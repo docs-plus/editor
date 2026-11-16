@@ -1,0 +1,812 @@
+{
+  "timestamp": "2026-11-16T17:52:29.046Z",
+  "machine": "ubuntu-24.04",
+  "os": "linux 7.0.0-1017-azure x64",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "cpuCount": 4,
+  "headings": 500,
+  "rounds": 7,
+  "cpuThrottle": 4,
+  "keystrokes": 220,
+  "warmupKeystrokes": 20,
+  "arms": [
+    "chrome",
+    "chrome-control",
+    "electron-idle",
+    "electron-worker-commits",
+    "electron-main-commits"
+  ],
+  "byArm": {
+    "chrome": {
+      "version": "Chrome for Testing 156.0.8078.80",
+      "observer": {
+        "rounds": [77.7, 84.3, 90.5, 91.8, 88.9, 79.7, 86.1],
+        "median": 86.10000000009313
+      },
+      "runner": {
+        "rounds": [78, 85, 92, 93, 90, 81, 89],
+        "median": 89
+      },
+      "eldP99": null,
+      "eldMax": null,
+      "commitsPerSecond": null,
+      "load1m": [1.6, 1.74, 1.81, 1.6, 1.42, 1.64, 1.6],
+      "allVisible": true,
+      "allFocused": true
+    },
+    "chrome-control": {
+      "version": "Chrome for Testing 156.0.8078.80",
+      "observer": {
+        "rounds": [84.1, 83, 88, 93.6, 91.1, 82.7, 87.2],
+        "median": 87.19999999995343
+      },
+      "runner": {
+        "rounds": [84, 84, 89, 95, 92, 84, 89],
+        "median": 89
+      },
+      "eldP99": null,
+      "eldMax": null,
+      "commitsPerSecond": null,
+      "load1m": [1.37, 1.63, 1.54, 1.36, 1.54, 1.48, 1.58],
+      "allVisible": true,
+      "allFocused": true
+    },
+    "electron-idle": {
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)",
+      "observer": {
+        "rounds": [84.4, 82.5, 81.2, 89, 80.7, 85.4, 90.9],
+        "median": 84.40000000002328
+      },
+      "runner": {
+        "rounds": [85, 84, 82, 91, 82, 87, 94],
+        "median": 85
+      },
+      "eldP99": {
+        "rounds": [1.235, 1.184, 1.284, 1.236, 1.27, 1.245, 1.242],
+        "median": 1.242,
+        "worst": 1.284
+      },
+      "eldMax": {
+        "rounds": [4.297, 4.78, 6.922, 4.801, 3.889, 4.596, 6.046],
+        "worst": 6.922
+      },
+      "commitsPerSecond": null,
+      "load1m": [1.48, 1.53, 1.86, 1.62, 1.51, 1.58, 1.6],
+      "allVisible": true,
+      "allFocused": true
+    },
+    "electron-worker-commits": {
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)",
+      "observer": {
+        "rounds": [88.8, 93, 90, 103.3, 93.3, 92.5, 86.4],
+        "median": 92.5
+      },
+      "runner": {
+        "rounds": [90, 93, 92, 106, 95, 95, 89],
+        "median": 93
+      },
+      "eldP99": {
+        "rounds": [1.336, 1.425, 1.391, 1.441, 1.474, 1.482, 1.485],
+        "median": 1.441,
+        "worst": 1.485
+      },
+      "eldMax": {
+        "rounds": [4.08, 4.284, 4.588, 4.465, 4.518, 4.375, 3.678],
+        "worst": 4.588
+      },
+      "commitsPerSecond": {
+        "rounds": [2968, 3075, 4450, 4280, 4691, 4558, 4239],
+        "median": 4280
+      },
+      "load1m": [1.59, 1.96, 2.46, 2.05, 1.73, 1.72, 1.79],
+      "allVisible": true,
+      "allFocused": true
+    },
+    "electron-main-commits": {
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)",
+      "observer": {
+        "rounds": [95.8, 95.4, 103, 103.8, 104.3, 96.7, 93.3],
+        "median": 96.69999999995343
+      },
+      "runner": {
+        "rounds": [98, 97, 105, 108, 112, 102, 96],
+        "median": 102
+      },
+      "eldP99": {
+        "rounds": [13.05, 10.781, 8.339, 11.903, 7.713, 6.762, 7.033],
+        "median": 8.339,
+        "worst": 13.05
+      },
+      "eldMax": {
+        "rounds": [
+          412.615, 210.633, 344.719, 213.91, 417.333, 216.793, 201.851
+        ],
+        "worst": 417.333
+      },
+      "commitsPerSecond": {
+        "rounds": [2943, 2885, 3300, 2692, 2661, 3351, 3499],
+        "median": 2943
+      },
+      "load1m": [1.62, 2.09, 2.21, 2.01, 1.75, 2.11, 2.08],
+      "allVisible": true,
+      "allFocused": true
+    }
+  },
+  "ratios": {
+    "electron-idle / chrome (observer)": 0.98,
+    "chrome-control / chrome (observer, noise floor)": 1.01,
+    "electron-idle / chrome (runner)": 0.96,
+    "chrome-control / chrome (runner, noise floor)": 1,
+    "worker-commits / idle (runner)": 1.09,
+    "main-commits / idle (runner)": 1.2,
+    "main-commits / idle (observer)": 1.15
+  },
+  "retried": [],
+  "trials": [
+    {
+      "arm": "chrome",
+      "observerP95": 77.70000000006985,
+      "runnerP95": 78,
+      "main": null,
+      "load1m": 1.6,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 84.09999999997672,
+      "runnerP95": 84,
+      "main": null,
+      "load1m": 1.37,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 84.40000000002328,
+      "runnerP95": 85,
+      "main": {
+        "eld": {
+          "p50": 1.09,
+          "p99": 1.235,
+          "max": 4.297,
+          "mean": 1.096,
+          "count": 20317
+        },
+        "commits": null
+      },
+      "load1m": 1.48,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 88.80000000004657,
+      "runnerP95": 90,
+      "main": {
+        "eld": {
+          "p50": 1.093,
+          "p99": 1.336,
+          "max": 4.08,
+          "mean": 1.102,
+          "count": 22058
+        },
+        "commits": {
+          "commits": 72616,
+          "size": 4096,
+          "p50": 0.135,
+          "p95": 0.307,
+          "p99": 2.623,
+          "max": 258.012,
+          "mean": 0.333,
+          "commitsPerSecond": 2967.944
+        }
+      },
+      "load1m": 1.59,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 95.80000000004657,
+      "runnerP95": 98,
+      "main": {
+        "eld": {
+          "p50": 1.001,
+          "p99": 13.05,
+          "max": 412.615,
+          "mean": 1.596,
+          "count": 18182
+        },
+        "commits": {
+          "commits": 85399,
+          "size": 4096,
+          "p50": 0.144,
+          "p95": 0.319,
+          "p99": 1.953,
+          "max": 411.977,
+          "mean": 0.309,
+          "commitsPerSecond": 2943.016
+        }
+      },
+      "load1m": 1.62,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 83,
+      "runnerP95": 84,
+      "main": null,
+      "load1m": 1.63,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 82.5,
+      "runnerP95": 84,
+      "main": {
+        "eld": {
+          "p50": 1.089,
+          "p99": 1.184,
+          "max": 4.78,
+          "mean": 1.094,
+          "count": 20058
+        },
+        "commits": null
+      },
+      "load1m": 1.53,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 93,
+      "runnerP95": 93,
+      "main": {
+        "eld": {
+          "p50": 1.093,
+          "p99": 1.425,
+          "max": 4.284,
+          "mean": 1.105,
+          "count": 23409
+        },
+        "commits": {
+          "commits": 79519,
+          "size": 4096,
+          "p50": 0.135,
+          "p95": 0.331,
+          "p99": 2.106,
+          "max": 445.696,
+          "mean": 0.322,
+          "commitsPerSecond": 3074.869
+        }
+      },
+      "load1m": 1.96,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 95.40000000002328,
+      "runnerP95": 97,
+      "main": {
+        "eld": {
+          "p50": 1.004,
+          "p99": 10.781,
+          "max": 210.633,
+          "mean": 1.599,
+          "count": 18353
+        },
+        "commits": {
+          "commits": 84692,
+          "size": 4096,
+          "p50": 0.147,
+          "p95": 0.326,
+          "p99": 2.227,
+          "max": 210.172,
+          "mean": 0.316,
+          "commitsPerSecond": 2885.186
+        }
+      },
+      "load1m": 2.09,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 84.30000000004657,
+      "runnerP95": 85,
+      "main": null,
+      "load1m": 1.74,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 81.19999999995343,
+      "runnerP95": 82,
+      "main": {
+        "eld": {
+          "p50": 1.09,
+          "p99": 1.284,
+          "max": 6.922,
+          "mean": 1.097,
+          "count": 20665
+        },
+        "commits": null
+      },
+      "load1m": 1.86,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 90,
+      "runnerP95": 92,
+      "main": {
+        "eld": {
+          "p50": 1.094,
+          "p99": 1.391,
+          "max": 4.588,
+          "mean": 1.106,
+          "count": 22487
+        },
+        "commits": {
+          "commits": 110676,
+          "size": 4096,
+          "p50": 0.135,
+          "p95": 0.298,
+          "p99": 1.287,
+          "max": 102.195,
+          "mean": 0.221,
+          "commitsPerSecond": 4450.376
+        }
+      },
+      "load1m": 2.46,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 103,
+      "runnerP95": 105,
+      "main": {
+        "eld": {
+          "p50": 1.003,
+          "p99": 8.339,
+          "max": 344.719,
+          "mean": 1.365,
+          "count": 21410
+        },
+        "commits": {
+          "commits": 96435,
+          "size": 4096,
+          "p50": 0.149,
+          "p95": 0.343,
+          "p99": 2.249,
+          "max": 344.22,
+          "mean": 0.272,
+          "commitsPerSecond": 3300.085
+        }
+      },
+      "load1m": 2.21,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 90.5,
+      "runnerP95": 92,
+      "main": null,
+      "load1m": 1.81,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 88,
+      "runnerP95": 89,
+      "main": null,
+      "load1m": 1.54,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 103.30000000004657,
+      "runnerP95": 106,
+      "main": {
+        "eld": {
+          "p50": 1.094,
+          "p99": 1.441,
+          "max": 4.465,
+          "mean": 1.107,
+          "count": 25212
+        },
+        "commits": {
+          "commits": 119485,
+          "size": 4096,
+          "p50": 0.131,
+          "p95": 0.31,
+          "p99": 1.2,
+          "max": 371.915,
+          "mean": 0.23,
+          "commitsPerSecond": 4279.622
+        }
+      },
+      "load1m": 2.05,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 103.80000000004657,
+      "runnerP95": 108,
+      "main": {
+        "eld": {
+          "p50": 1.002,
+          "p99": 11.903,
+          "max": 213.91,
+          "mean": 1.694,
+          "count": 19676
+        },
+        "commits": {
+          "commits": 89743,
+          "size": 4096,
+          "p50": 0.144,
+          "p95": 0.365,
+          "p99": 3.08,
+          "max": 213.745,
+          "mean": 0.34,
+          "commitsPerSecond": 2691.526
+        }
+      },
+      "load1m": 2.01,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 91.80000000004657,
+      "runnerP95": 93,
+      "main": null,
+      "load1m": 1.6,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 93.60000000009313,
+      "runnerP95": 95,
+      "main": null,
+      "load1m": 1.36,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 89,
+      "runnerP95": 91,
+      "main": {
+        "eld": {
+          "p50": 1.09,
+          "p99": 1.236,
+          "max": 4.801,
+          "mean": 1.096,
+          "count": 23025
+        },
+        "commits": null
+      },
+      "load1m": 1.62,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 104.30000000004657,
+      "runnerP95": 112,
+      "main": {
+        "eld": {
+          "p50": 1,
+          "p99": 7.713,
+          "max": 417.333,
+          "mean": 1.75,
+          "count": 21298
+        },
+        "commits": {
+          "commits": 99172,
+          "size": 4096,
+          "p50": 0.145,
+          "p95": 0.32,
+          "p99": 2.012,
+          "max": 416.328,
+          "mean": 0.345,
+          "commitsPerSecond": 2660.907
+        }
+      },
+      "load1m": 1.75,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 88.89999999990687,
+      "runnerP95": 90,
+      "main": null,
+      "load1m": 1.42,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 91.0999999998603,
+      "runnerP95": 92,
+      "main": null,
+      "load1m": 1.54,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 80.69999999995343,
+      "runnerP95": 82,
+      "main": {
+        "eld": {
+          "p50": 1.089,
+          "p99": 1.27,
+          "max": 3.889,
+          "mean": 1.096,
+          "count": 20328
+        },
+        "commits": null
+      },
+      "load1m": 1.51,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 93.30000000004657,
+      "runnerP95": 95,
+      "main": {
+        "eld": {
+          "p50": 1.095,
+          "p99": 1.474,
+          "max": 4.518,
+          "mean": 1.108,
+          "count": 23202
+        },
+        "commits": {
+          "commits": 120662,
+          "size": 4096,
+          "p50": 0.134,
+          "p95": 0.286,
+          "p99": 1.143,
+          "max": 144.229,
+          "mean": 0.21,
+          "commitsPerSecond": 4691.43
+        }
+      },
+      "load1m": 1.73,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 79.69999999995343,
+      "runnerP95": 81,
+      "main": null,
+      "load1m": 1.64,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 82.69999999995343,
+      "runnerP95": 84,
+      "main": null,
+      "load1m": 1.48,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 85.39999999990687,
+      "runnerP95": 87,
+      "main": {
+        "eld": {
+          "p50": 1.09,
+          "p99": 1.245,
+          "max": 4.596,
+          "mean": 1.096,
+          "count": 21063
+        },
+        "commits": null
+      },
+      "load1m": 1.58,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 92.5,
+      "runnerP95": 95,
+      "main": {
+        "eld": {
+          "p50": 1.095,
+          "p99": 1.482,
+          "max": 4.375,
+          "mean": 1.108,
+          "count": 23521
+        },
+        "commits": {
+          "commits": 119231,
+          "size": 4096,
+          "p50": 0.133,
+          "p95": 0.288,
+          "p99": 1.373,
+          "max": 116.284,
+          "mean": 0.216,
+          "commitsPerSecond": 4557.523
+        }
+      },
+      "load1m": 1.72,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 96.69999999995343,
+      "runnerP95": 102,
+      "main": {
+        "eld": {
+          "p50": 1.003,
+          "p99": 6.762,
+          "max": 216.793,
+          "mean": 1.369,
+          "count": 20969
+        },
+        "commits": {
+          "commits": 96169,
+          "size": 4096,
+          "p50": 0.148,
+          "p95": 0.317,
+          "p99": 1.948,
+          "max": 216.624,
+          "mean": 0.267,
+          "commitsPerSecond": 3350.595
+        }
+      },
+      "load1m": 2.11,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome-control",
+      "observerP95": 87.19999999995343,
+      "runnerP95": 89,
+      "main": null,
+      "load1m": 1.58,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    },
+    {
+      "arm": "electron-idle",
+      "observerP95": 90.89999999990687,
+      "runnerP95": 94,
+      "main": {
+        "eld": {
+          "p50": 1.09,
+          "p99": 1.242,
+          "max": 6.046,
+          "mean": 1.097,
+          "count": 22796
+        },
+        "commits": null
+      },
+      "load1m": 1.6,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-worker-commits",
+      "observerP95": 86.4000000001397,
+      "runnerP95": 89,
+      "main": {
+        "eld": {
+          "p50": 1.094,
+          "p99": 1.485,
+          "max": 3.678,
+          "mean": 1.107,
+          "count": 22281
+        },
+        "commits": {
+          "commits": 104562,
+          "size": 4096,
+          "p50": 0.131,
+          "p95": 0.277,
+          "p99": 1.135,
+          "max": 356.26,
+          "mean": 0.232,
+          "commitsPerSecond": 4239.182
+        }
+      },
+      "load1m": 1.79,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "electron-main-commits",
+      "observerP95": 93.30000000004657,
+      "runnerP95": 96,
+      "main": {
+        "eld": {
+          "p50": 1.002,
+          "p99": 7.033,
+          "max": 201.851,
+          "mean": 1.335,
+          "count": 20416
+        },
+        "commits": {
+          "commits": 95409,
+          "size": 4096,
+          "p50": 0.146,
+          "p95": 0.313,
+          "p99": 1.841,
+          "max": 201.596,
+          "mean": 0.255,
+          "commitsPerSecond": 3499.132
+        }
+      },
+      "load1m": 2.08,
+      "visible": true,
+      "focused": true,
+      "version": "Electron 45.3.2 (Chromium 156.0.8078.100, Node 24.22.2)"
+    },
+    {
+      "arm": "chrome",
+      "observerP95": 86.10000000009313,
+      "runnerP95": 89,
+      "main": null,
+      "load1m": 1.6,
+      "visible": true,
+      "focused": true,
+      "version": "Chrome for Testing 156.0.8078.80"
+    }
+  ]
+}

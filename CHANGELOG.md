@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Spike S5 results: typing latency and D-A1
+
+Records spike S5 of the desktop Phase 1 plan: typing latency in Electron
+against Chrome for Testing 156, and storage commits in the worker against
+commits on main's own thread. Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/research/2026-11-16-spike-s5-latency.md`, the S5 write-up,
+  and its raw results in `docs/research/spike-evidence/s5/`. D-A1 keeps the
+  storage worker: commits on main's own thread slow typing by 9–38% and
+  stall main's event loop past 8 ms on every machine measured. The verdict
+  machines' rows (the owner's M1, a Windows laptop with Defender on) and the
+  IME checks are pending owner hardware.
+
 ### Dark primary text contrast
 
 In dark mode, primary-coloured text, borders and lines (the heading filter's
