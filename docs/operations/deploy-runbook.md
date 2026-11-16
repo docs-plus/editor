@@ -1,10 +1,35 @@
 # Deploy runbook
 
 Production (tiny.docs.plus) deploys through the **Deploy** GitHub workflow
-(`.github/workflows/deploy.yml`). It is started by hand after a pull request
-merges and CI on `main` is green; nothing deploys on merge by itself.
+(`.github/workflows/deploy.yml`). It starts by itself when CI passes on a push
+to `main` (a merged pull request) and deploys that commit. It can also be
+started by hand.
 
-## Running a deploy
+## Automatic deploys
+
+The workflow listens for the **CI** workflow to complete on `main`
+(`workflow_run`). It deploys only when that CI run succeeded and was started
+by a push; CI runs for pull requests, forks included, never deploy. GitHub
+runs the copy of `deploy.yml` on `main`, so a pull request cannot change what
+it does.
+
+CI on `main` cancels a run when a newer push arrives, so when several pull
+requests merge close together, only the last one's CI finishes and deploys.
+Deploys run one at a time, and a newer commit includes everything before it.
+
+**Kill switch.** Pause automatic deploys with a repository variable; deploys
+by hand keep working:
+
+```bash
+gh variable set AUTO_DEPLOY --body off   # pause
+gh variable delete AUTO_DEPLOY           # resume (any value but "off" also resumes)
+```
+
+While paused, the Deploy runs that CI starts show as skipped. Resuming does
+not deploy what merged in the meantime: deploy by hand, or wait for the next
+merge.
+
+## Deploying by hand
 
 ```bash
 gh workflow run deploy.yml                 # deploy the tip of main
@@ -13,6 +38,8 @@ gh run watch "$(gh run list --workflow deploy.yml -L1 --json databaseId --jq '.[
 ```
 
 Or use GitHub: Actions → Deploy → Run workflow.
+
+## What a deploy does
 
 The workflow:
 
@@ -32,6 +59,9 @@ On the host, `scripts/deploy.sh`:
 4. Swaps the new `.next` in (the old one becomes `.next.prev`), restarts
    `editor-next` and waits for port 3847 to answer. If it doesn't, the old
    build goes back.
+5. Starts or restarts `editor-purge` (see [Scheduled jobs](#scheduled-jobs)),
+   which runs the retention purge once. If that fails, the run fails, but the
+   new build stays live.
 
 PM2 restarts use `ecosystem.config.cjs --only <app> --update-env`, so the env
 in that file applies on every deploy. Keep production env changes in the file
@@ -39,7 +69,31 @@ on `main`, never only in the PM2 dump.
 
 Deploys are serialised by the workflow's concurrency group and by a lock on the
 host. A release that needs extra operator steps says so in its CHANGELOG
-"Deploy" note; do those by hand before or after, as the note says.
+"Deploy" note. With automatic deploys, pause them (`AUTO_DEPLOY=off`) before
+merging such a release, do the steps, deploy by hand, then resume.
+
+## Scheduled jobs
+
+Production has one, defined in `ecosystem.config.cjs` and run by PM2:
+
+| App | Runs | What it does |
+| --- | --- | --- |
+| `editor-purge` | daily at 03:17, host-local time (`cron_restart: "17 3 * * *"`) | `bun scripts/purge-retention.ts`: deletes documents idle for `RETENTION_DAYS` (30) and tombstones older than `TOMBSTONE_RETENTION_DAYS` (90). |
+
+- It is a job, not a server: it exits when done (`autorestart: false`), so
+  `pm2 ls` shows it as `stopped` between runs. PM2 starts it again at the
+  cron time.
+- Every deploy runs `pm2 startOrRestart ecosystem.config.cjs --only
+  editor-purge --update-env`, which also runs one purge straight away. The
+  purge is safe to run again.
+- It shares `storageEnv` (`DB_PATH` and any retention variables) with
+  `editor-next` and `editor-hocus`, so it purges the database they use with
+  the same windows. Put new retention settings in `storageEnv`.
+- Its output (`retention_purge_completed` with the deleted names) is in
+  `bunx pm2@6.0.14 logs editor-purge`.
+- Run it by hand: `bunx pm2@6.0.14 restart editor-purge`.
+- After it is first added, run `bunx pm2@6.0.14 save`, so it survives a host
+  reboot with the other apps.
 
 ## One-time setup
 
@@ -79,7 +133,10 @@ host. A release that needs extra operator steps says so in its CHANGELOG
    ssh-keyscan -t ed25519 <host> > /tmp/tinydocy_known_hosts
    ssh-keygen -lf /tmp/tinydocy_known_hosts
    ```
-4. **GitHub environment and secrets** (repository admin):
+4. **GitHub environment and secrets** (repository admin). Until they exist,
+   every merge to `main` starts a Deploy run that fails at the SSH step, so
+   pause automatic deploys first (`gh variable set AUTO_DEPLOY --body off`)
+   and resume after step 6:
    ```bash
    gh api -X PUT repos/docs-plus/editor/environments/production
    gh secret set DEPLOY_HOST --env production --body "<host>"
@@ -112,7 +169,8 @@ host. A release that needs extra operator steps says so in its CHANGELOG
    pulls them in.
 6. **Test it.** `gh workflow run deploy.yml`. If the host is already at the
    tip of `main`, the script finds nothing to fast-forward, then rebuilds and
-   restarts both apps.
+   restarts both apps. Then resume automatic deploys
+   (`gh variable delete AUTO_DEPLOY`).
 
 ## Rollback
 
@@ -128,5 +186,6 @@ host. A release that needs extra operator steps says so in its CHANGELOG
 
 ## Revoking
 
-Delete the key's line from the host's `~/.ssh/authorized_keys` and the
+Pause automatic deploys (`gh variable set AUTO_DEPLOY --body off`), then
+delete the key's line from the host's `~/.ssh/authorized_keys` and the
 `DEPLOY_SSH_KEY` secret. The workflow then fails at the SSH step.

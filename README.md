@@ -195,15 +195,16 @@ operational guidance is in the
 
 ## Deploying
 
-Production runs as three PM2 processes defined in `ecosystem.config.cjs`:
-Next.js on 3847, Hocuspocus on 3848, and an optional Redis on 6380. They sit
-behind a TLS-terminating reverse proxy.
+Production runs as PM2 processes defined in `ecosystem.config.cjs`: Next.js
+on 3847, Hocuspocus on 3848, an optional Redis on 6380, and `editor-purge`, the
+daily retention purge. The servers sit behind a TLS-terminating reverse proxy.
 
-To deploy, run the **Deploy** workflow after a pull request merges and CI on
-`main` is green:
+The **Deploy** workflow deploys each push to `main` once its CI passes. To
+pause that, or to deploy by hand:
 
 ```bash
-gh workflow run deploy.yml
+gh variable set AUTO_DEPLOY --body off   # pause automatic deploys
+gh workflow run deploy.yml               # deploy the tip of main by hand
 ```
 
 It SSHes to the host with a key that can only run `scripts/deploy.sh`. The
@@ -219,8 +220,8 @@ Requirements:
 - **Service worker headers.** The proxy must not change `Cache-Control` on
   `/_next/static/service-worker/sw.js`; it must stay
   `public, max-age=0, must-revalidate`.
-- **Retention.** Run `bun scripts/purge-retention.ts` daily (cron or a systemd
-  timer) and rotate the PM2 logs; abuse events contain IP addresses.
+- **Retention.** `editor-purge` runs `scripts/purge-retention.ts` daily at
+  03:17 (host time). Rotate the PM2 logs; abuse events contain IP addresses.
 - **Taking content down.** Delete the document; never reset its stored state,
   because offline copies would push it back.
 
