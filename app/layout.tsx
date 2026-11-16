@@ -64,12 +64,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          In <head>, not <body>: Chromium may render as soon as <body> is
+          inserted, and a busy parser can yield before the body's first
+          script, painting one frame in the wrong theme.
+        */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: applies the theme before the first frame
+          dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }}
+        />
+      </head>
       <body className={inter.variable}>
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: prevents theme flash on load and catches the install prompt before hydration
-          dangerouslySetInnerHTML={{
-            __html: THEME_BOOT_SCRIPT + INSTALL_PROMPT_CAPTURE_SCRIPT,
-          }}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: catches the install prompt before hydration
+          dangerouslySetInnerHTML={{ __html: INSTALL_PROMPT_CAPTURE_SCRIPT }}
         />
         <TooltipProvider>{children}</TooltipProvider>
         <GoogleAnalytics />
