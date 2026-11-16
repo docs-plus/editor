@@ -212,15 +212,28 @@ async function hasGifSignature(file: Blob): Promise<boolean> {
   return /^GIF8[79]a$/.test(String.fromCharCode(...head));
 }
 
+/**
+ * The metadata stripper, a chunk of its own, or `null` when it cannot load
+ * (offline before its first use, or a deploy replaced it).
+ */
+async function loadStripper() {
+  try {
+    return await import("@/lib/assets/strip-metadata");
+  } catch {
+    return null;
+  }
+}
+
 /** The stripped file as a data URL, or `null` to re-encode instead. */
 async function stripToDataUrl(
   file: File,
   type: "image/png" | "image/webp",
   signal?: AbortSignal,
 ): Promise<string | null> {
-  const { stripImageMetadata } = await import("@/lib/assets/strip-metadata");
+  const stripper = await loadStripper();
   throwIfAborted(signal);
-  const stripped = stripImageMetadata(
+  if (!stripper) return null;
+  const stripped = stripper.stripImageMetadata(
     new Uint8Array(await file.arrayBuffer()),
     type,
   );
@@ -232,12 +245,15 @@ async function stripToDataUrl(
 /**
  * Safari's JPEG encoder adds its own Exif (colour space, pixel size) and
  * Photoshop segments. They hold nothing from the source, but no inserted
- * JPEG should carry an APP1, so they are dropped.
+ * JPEG should carry an APP1, so they are dropped when the stripper loads.
  */
 async function withoutEncoderMetadata(blob: Blob): Promise<Blob> {
   if (blob.type !== "image/jpeg") return blob;
-  const { stripJpegMetadata } = await import("@/lib/assets/strip-metadata");
-  const stripped = stripJpegMetadata(new Uint8Array(await blob.arrayBuffer()));
+  const stripper = await loadStripper();
+  if (!stripper) return blob;
+  const stripped = stripper.stripJpegMetadata(
+    new Uint8Array(await blob.arrayBuffer()),
+  );
   return stripped ? new Blob([stripped], { type: blob.type }) : blob;
 }
 

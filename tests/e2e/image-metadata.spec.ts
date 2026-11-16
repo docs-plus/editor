@@ -13,6 +13,10 @@ import {
   pngChunk,
 } from "../helpers/image-bytes";
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
+import { interceptChunk } from "./helpers/lazy-chunk";
+
+/** Only the metadata stripper's chunk contains this (`next dev` names). */
+const STRIPPER_CHUNK_MARKER = "function stripPng(";
 
 const EXIF_ROTATED_GPS = buildExifApp1({
   orientation: 6,
@@ -226,6 +230,31 @@ test.describe("Image metadata", () => {
     const image = await pasteFile(page, jpeg, "photo.gif", "image/gif");
     expect(image.type).not.toBe("image/gif");
     expect(metadataSegments(image.bytes)).toEqual([]);
+    expectNoFileName(image);
+  });
+
+  test("a PNG still inserts, re-encoded, when the stripper chunk cannot load", async ({
+    page,
+    browserName,
+  }) => {
+    // Offline before the first strip, or a deploy replaced the chunk.
+    const restore = await interceptChunk(page, STRIPPER_CHUNK_MARKER, (route) =>
+      route.abort(),
+    );
+    const image = await pasteFile(
+      page,
+      PNG_WITH_METADATA,
+      "IMG_2026_home.png",
+      "image/png",
+    );
+    await restore();
+    expect(image.type).not.toBe("image/png");
+    expect([image.width, image.height]).toEqual([2, 1]);
+    // WebKit re-encodes to JPEG and its encoder's own Exif stays when the
+    // chunk that removes it is unavailable; it holds nothing from the source.
+    if (browserName !== "webkit") {
+      expect(metadataSegments(image.bytes)).toEqual([]);
+    }
     expectNoFileName(image);
   });
 
