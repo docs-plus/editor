@@ -1,0 +1,155 @@
+name: Spike S1 (Electron shell)
+
+# Throwaway spike (Phase 1, plan S1). Runs only on the spike branch; never
+# merged to main. No secrets and no environments: the grep step checks it.
+
+on:
+  push:
+    branches: [spike/s1-shell]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-s1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shell:
+    name: S1 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-latest, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+    env:
+      NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1294
+      NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No secrets or environments in this workflow
+        run: "! grep -nE 'secrets\\.|environment:' .github/workflows/spike-s1.yml"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Electron 45 has no postinstall: its binary downloads on first use or
+      # through the package's own install-electron bin.
+      - name: Install the spike (Electron)
+        working-directory: spikes/s1-shell
+        run: |
+          bun install --frozen-lockfile
+          bun install-electron
+
+      - name: Linux tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q xdotool xvfb
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # Windows resolves `node` through PATHEXT, so the stub needs a .cmd twin.
+      - name: Block Node.js (Windows twin)
+        if: runner.os == 'Windows'
+        run: |
+          printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
+
+      - name: Workflow rules
+        if: runner.os == 'Linux'
+        run: bun test tests/unit/ci/workflow-permissions.test.ts
+
+      - name: Web build keeps the web-only routes
+        if: runner.os == 'Linux'
+        run: |
+          bun next build
+          bun spikes/s1-shell/check-web-routes.ts
+
+      - name: Desktop export
+        run: bun spikes/s1-shell/build-export.ts
+
+      - name: Main and preload bundles (CJS)
+        run: bun spikes/s1-shell/build.ts
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: S1 on app://tinydocy
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun spikes/s1-shell/run-s1.ts app
+          else bun spikes/s1-shell/run-s1.ts app; fi
+
+      - name: S1 on https://app.tinydocy.invalid
+        if: always()
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun spikes/s1-shell/run-s1.ts https
+          else bun spikes/s1-shell/run-s1.ts https; fi
+
+      # Control: no Referer rewrite on app://, so YouTube should refuse (153).
+      - name: Control, app:// without the Referer rewrite
+        if: always()
+        continue-on-error: true
+        env:
+          SPIKE_REFERER_REWRITE: "0"
+          S1_RESULTS_TAG: no-rewrite
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g embeds
+          else bun spikes/s1-shell/run-s1.ts app -- -g embeds; fi
+
+      # Hunspell platforms: retest spellcheck with the dictionary served by
+      # the app origin (setSpellCheckerDictionaryDownloadURL), size recorded.
+      - name: Spellcheck with a bundled dictionary
+        if: always() && runner.os != 'macOS'
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/dict"
+          curl -fsSL -o "$RUNNER_TEMP/dict/en-us-10-1.bdic" https://redirector.gvt1.com/edgedl/chrome/dict/en-us-10-1.bdic
+          ls -l "$RUNNER_TEMP/dict"
+          export SPIKE_DICT_DIR="$RUNNER_TEMP/dict" S1_DICT_URL="app://tinydocy/_dict/" S1_RESULTS_TAG=dict-origin
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g spellcheck
+          else bun spikes/s1-shell/run-s1.ts app -- -g spellcheck; fi
+
+      - name: Summary
+        if: always()
+        run: |
+          for f in spikes/s1-shell/evidence/*/results*.json; do
+            echo "== $f"; head -c 4000 "$f"; echo
+          done
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spike-s1-${{ matrix.os }}
+          retention-days: 90
+          path: |
+            spikes/s1-shell/evidence/
+            spikes/s1-shell/playwright-report-*/
+            spikes/s1-shell/test-results/

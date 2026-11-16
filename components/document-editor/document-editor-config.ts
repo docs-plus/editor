@@ -224,7 +224,10 @@ export function buildDocumentEditorExtensions({
     TaskList,
     TaskItem.configure({ nested: true }),
     TokenHighlight.configure({ multicolor: true }),
-    HyperMultimediaKit,
+    // Spike S1: no X widgets on desktop; an X URL stays a link.
+    process.env.NEXT_PUBLIC_APP_TARGET === "desktop"
+      ? HyperMultimediaKit.configure({ X: false })
+      : HyperMultimediaKit,
     Typography,
     Superscript,
     Subscript,

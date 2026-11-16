@@ -38,7 +38,11 @@ export function useDocumentEditorEffects({
   }, [toggleFilterBar]);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production" && editor) {
+    if (
+      (process.env.NODE_ENV !== "production" ||
+        process.env.NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR === "1") &&
+      editor
+    ) {
       window.__tiptap_editor = editor;
       return () => {
         delete window.__tiptap_editor;

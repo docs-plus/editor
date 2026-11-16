@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
-type DeleteRouteModule = typeof import("@/app/api/documents/[id]/route");
+type DeleteRouteModule = typeof import("@/app/api/documents/[id]/route.web");
 
 const INVALID_ID_PARAMS = {
   params: Promise.resolve({ id: "../bad-document-id" }),
 };
 
 function loadDeleteRoute(): Promise<DeleteRouteModule> {
-  return importFresh("@/app/api/documents/[id]/route");
+  return importFresh("@/app/api/documents/[id]/route.web");
 }
 
 function deleteRequest(headers: Record<string, string>): Request {
