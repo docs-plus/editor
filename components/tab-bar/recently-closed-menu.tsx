@@ -1,6 +1,6 @@
 "use client";
 
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { dismissNotice, getNotice, subscribeNotice } from "@/lib/announce";
 import {
   type ClosedDocumentsList,
   fetchClosedDocuments,
@@ -48,6 +49,23 @@ function useClosedList(open: boolean): ListState {
     return () => controller.abort();
   }, [open]);
   return state;
+}
+
+/**
+ * The menu and the status pill never show together (they can overlap at
+ * tablet widths): opening the menu dismisses the pill, and a new pill
+ * closes the menu.
+ */
+function useNoPillOverlap(open: boolean, close: () => void): void {
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!open) return;
+    dismissNotice();
+    return subscribeNotice(() => {
+      if (getNotice()) closeRef.current();
+    });
+  }, [open]);
 }
 
 function Notice({ children }: { children: string }) {
@@ -96,6 +114,7 @@ export function RecentlyClosedMenu({
   onRestore,
 }: RecentlyClosedMenuProps) {
   const state = useClosedList(open);
+  useNoPillOverlap(open, () => onOpenChange(false));
   const showFooter = state.status === "ready" && !state.list.disabled;
   return (
     <DropdownMenu
