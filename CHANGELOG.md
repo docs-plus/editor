@@ -9,6 +9,12 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop smoke test (D-A12)
+
+- **CI:** a desktop smoke test checks, on every Electron bump and nightly,
+  that `node:sqlite` loads, WAL works, SQLite runs in a worker thread and a
+  custom app protocol serves pages (D-A12).
+
 ### Dark primary text contrast
 
 In dark mode, primary-coloured text, borders and lines (the heading filter's

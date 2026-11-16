@@ -1,0 +1,19 @@
+{
+  "name": "tinydocy-desktop-smoke",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "bun build main.ts worker.ts --target=node --format=cjs --external electron --entry-naming '[name].cjs' --outdir dist",
+    "smoke": "electron dist/main.cjs",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "electron": "45.3.2",
+    "typescript": "6.0.3"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}

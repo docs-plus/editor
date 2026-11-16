@@ -30,6 +30,11 @@ const WORKFLOW_FILES = readdirSync(WORKFLOWS_DIR).filter((f) =>
 // Commands that execute (or install) third-party package code.
 const RUNS_DEPENDENCIES = /\bbun (install|update|run (test|build|lint))\b/;
 const PINNED_USES = /@[0-9a-f]{40}( #.*)?$/;
+// A local reusable workflow resolves at the caller's own commit.
+const LOCAL_WORKFLOW = /^\.\/\.github\/workflows\/[\w.-]+\.ya?ml$/;
+
+const isPinned = (ref: string) =>
+  LOCAL_WORKFLOW.test(ref) || PINNED_USES.test(ref);
 
 const actionRefs = (source: string): string[] =>
   source
@@ -89,7 +94,7 @@ describe.each(WORKFLOW_FILES)("workflow %s", (file) => {
 
   it("pins every action to a full commit SHA", () => {
     for (const ref of actionRefs(source)) {
-      expect(ref).toMatch(PINNED_USES);
+      expect(isPinned(ref), ref).toBe(true);
     }
   });
 });
@@ -101,4 +106,14 @@ it("finds the actions the workflows use", () => {
     actionRefs(readWorkflow(file).source),
   );
   expect(all.length).toBeGreaterThan(0);
+});
+
+it("accepts local reusable workflows and nothing unpinned", () => {
+  expect(isPinned("./.github/workflows/desktop-smoke.yml")).toBe(true);
+  expect(
+    isPinned("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7"),
+  ).toBe(true);
+  expect(isPinned("actions/checkout@v7")).toBe(false);
+  expect(isPinned("./.github/actions/setup")).toBe(false);
+  expect(isPinned("docs-plus/editor/.github/workflows/x.yml@main")).toBe(false);
 });
