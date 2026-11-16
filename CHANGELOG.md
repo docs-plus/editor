@@ -9,6 +9,12 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop smoke test (D-A12)
+
+- **CI:** a desktop smoke test checks, on every Electron bump and nightly,
+  that `node:sqlite` loads, WAL works, SQLite runs in a worker thread and a
+  custom app protocol serves pages (D-A12).
+
 ### Deploy workflow
 
 Production now deploys through a manual GitHub workflow,
