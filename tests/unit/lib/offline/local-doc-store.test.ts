@@ -582,6 +582,54 @@ describe("merge on save", () => {
     ).toThrow();
   });
 
+  it("skips later merges once a hydrated binding has saved over its copy", async () => {
+    const backend = createMemoryBackend();
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await store.save("a", yState("stored "));
+    const doc = new Y.Doc();
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    await binding.hydrated;
+    doc.getText("t").insert(0, "first ");
+    await binding.flush(); // merges: the copy adds nothing the doc lacks
+    const key = storeKey("ws.example", "a");
+    const own = await backend.get(key);
+    if (!own) throw new Error("no copy saved");
+    // Same stamp, undecodable bytes: a merge would throw and disable the binding.
+    await backend.put({
+      ...own,
+      update: new Uint8Array(own.update.byteLength).fill(255),
+    });
+    doc.getText("t").insert(0, "second ");
+    await binding.flush();
+    expect(textOf((await backend.get(key))?.update)).toBe(
+      "second first stored ",
+    );
+    binding.destroy();
+  });
+
+  it("keeps edits it merged in across the binding's later saves", async () => {
+    const backend = createMemoryBackend();
+    const key = storeKey("ws.example", "a");
+    // Tab B hydrates before tab A saves, so its doc never holds A's edit.
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const doc = new Y.Doc();
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    await binding.hydrated;
+    const tabA = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await tabA.save("a", yState("typed in tab A "));
+    doc.getText("t").insert(0, "B1 ");
+    await binding.flush();
+    expect(textOf((await backend.get(key))?.update)).toContain(
+      "typed in tab A",
+    );
+    doc.getText("t").insert(0, "B2 ");
+    await binding.flush();
+    const text = textOf((await backend.get(key))?.update);
+    expect(text).toContain("typed in tab A");
+    expect(text).toContain("B2 B1");
+    binding.destroy();
+  });
+
   it("skips the merge when the stored copy is the binding's own last write", async () => {
     const backend = createMemoryBackend();
     const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);

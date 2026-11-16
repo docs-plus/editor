@@ -300,7 +300,8 @@ describe("offline copy read slower than the hydrate timeout", () => {
   });
 
   it("keeps the late copy across later saves", async () => {
-    // The rebound binding did not hydrate, so it must never skip the merge.
+    // The saved copy holds the late copy, which the live doc lacks, so the
+    // next save must merge again instead of skipping.
     const { memory, name, provider, session } = await saveDuringSlowRead();
     receive(session, provider, " and more");
     vi.advanceTimersByTime(750);
