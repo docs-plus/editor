@@ -1,11 +1,12 @@
 name: Deploy
 
 # Deploys a commit of main to production (tiny.docs.plus).
-# - Automatically: when CI passes on a push to main, it deploys that commit.
-#   Turn this off (and on again) with a repository variable; the manual path
-#   keeps working:
-#     gh variable set AUTO_DEPLOY --body off
-#     gh variable delete AUTO_DEPLOY
+# - Automatically, once turned on: when CI passes on a push to main, it
+#   deploys that commit. Off until the repository variable AUTO_DEPLOY is
+#   "on" (after the one-time setup in the runbook); the manual path always
+#   works:
+#     gh variable set AUTO_DEPLOY --body on     # turn on
+#     gh variable set AUTO_DEPLOY --body off    # turn off
 # - By hand:
 #     gh workflow run deploy.yml                 # the tip of main
 #     gh workflow run deploy.yml -f ref=<sha>    # a commit of main
@@ -37,7 +38,7 @@ concurrency:
     ${{ (github.event_name == 'workflow_dispatch' ||
     (github.event.workflow_run.conclusion == 'success' &&
     github.event.workflow_run.event == 'push' &&
-    vars.AUTO_DEPLOY != 'off')) && 'deploy-production' ||
+    vars.AUTO_DEPLOY == 'on')) && 'deploy-production' ||
     format('deploy-skipped-{0}', github.run_id) }}
   cancel-in-progress: false
 
@@ -46,12 +47,13 @@ jobs:
     name: Deploy to production
     # Automatic deploys only for a CI run that passed on a push to main: never
     # a pull request (the branches filter also matches a fork branch named
-    # main) and never while AUTO_DEPLOY is off. An unset variable is ''.
+    # main) and only while AUTO_DEPLOY is on. An unset variable is '', so
+    # automatic deploys stay off until it is set.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      vars.AUTO_DEPLOY != 'off')
+      vars.AUTO_DEPLOY == 'on')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:

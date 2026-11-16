@@ -48,6 +48,12 @@ describe("ecosystem.config.cjs editor-purge", () => {
     expect(purge.autorestart).toBe(false);
   });
 
+  // The first real purge permanently deletes documents: it stays a dry run
+  // until the owner switches the file to on in a pull request.
+  it("sets an explicit PURGE_MODE that never deletes without review", () => {
+    expect(["off", "dry-run", "on"]).toContain(String(purge.env?.PURGE_MODE));
+  });
+
   it("uses the same database and retention env as the servers", () => {
     const storageKeys = (env: App["env"] = {}) =>
       Object.keys(env).filter((key) => /^DB_PATH$|RETENTION/.test(key));
@@ -94,9 +100,10 @@ describe("Deploy workflow", () => {
     expect(workflow.on).toHaveProperty("workflow_dispatch");
   });
 
-  it("gates only the automatic path on the AUTO_DEPLOY kill switch", () => {
+  it("deploys automatically only once AUTO_DEPLOY is on", () => {
     const condition = workflow.jobs.deploy.if;
-    expect(condition).toContain("vars.AUTO_DEPLOY != 'off'");
+    expect(condition).toContain("vars.AUTO_DEPLOY == 'on'");
+    expect(condition).not.toContain("AUTO_DEPLOY != ");
     expect(condition).toMatch(
       /^github\.event_name == 'workflow_dispatch' \|\|/,
     );
