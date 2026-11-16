@@ -41,6 +41,7 @@ tests/
 │   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings)
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
+│   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
 │   ├── css-tokens.ts                     # readThemeTokens (globals.css :root/.dark) + oklchToHex for contrast tests
 │   ├── assert-invariants.ts              # Schema invariant assertions (`bun:test`)
@@ -52,7 +53,7 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
-│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets)
+│   ├── lib/                              # Image embed planner and pipeline; `assets/` PNG, WebP and JPEG metadata stripper; security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets)
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
@@ -70,6 +71,7 @@ tests/
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── filter-collab.spec.ts             # Filter folds follow a collaborator's heading edits
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
+│   ├── image-metadata.spec.ts            # Inserted images lose Exif/GPS/text metadata, keep orientation and pixels, get alt=""
 │   ├── performance.spec.ts               # Keystroke-to-paint latency (10 + 50 headings)
 │   ├── toolbar-perf.spec.ts              # Toolbar catch-up render and arrow p95 on 500 headings (perf project)
 │   ├── toolbar-focus-guards.spec.ts      # Roving tabindex leaves Base UI's popup focus guards alone
@@ -156,7 +158,7 @@ make test-e2e
 
 ### WebKit (Safari's engine)
 
-The `webkit` project runs the core editing specs (`toolbar*`, `selection-bubble`, `paint-format`, `palette*`, `slash-menu`, `continue-chip`, `action-preview`, `mobile-bar*`, `collaboration`, `editor-leak`) in WebKit. CI does not run it; run it by hand before a change that touches layout, focus, selection or lazy surfaces:
+The `webkit` project runs the core editing specs (`toolbar*`, `selection-bubble`, `paint-format`, `palette*`, `slash-menu`, `continue-chip`, `action-preview`, `mobile-bar*`, `collaboration`, `editor-leak`, `image-metadata`) in WebKit. CI does not run it; run it by hand before a change that touches layout, focus, selection or lazy surfaces:
 
 ```bash
 bun playwright install webkit   # once
@@ -166,6 +168,7 @@ CI= bun playwright test --project=webkit --workers=2
 What WebKit does differently, and how the specs handle it:
 
 - **No DevTools protocol.** Tests that call `newCDPSession` (heap and listener counts, raw touch drags, CPU throttling) skip with "CDP only"; the continue-chip phone test skips only its raw-touch pan.
+- **No WebP encoding, and the JPEG encoder adds its own metadata.** `toBlob("image/webp")` returns PNG, so re-encoded images are JPEG, and WebKit's JPEG encoder writes an Exif APP1 (colour space, pixel size) and a Photoshop APP13. The pipeline drops them (`stripJpegMetadata`); `image-metadata.spec.ts` checks no APP1 survives.
 - **No forced colours.** WebKit has no `forced-color-adjust` and no forced colours mode: forced-colours assertions skip (`NO_FORCED_COLOURS` in `helpers/a11y.ts`).
 - **Focus guards.** On Safari, Floating UI gives Base UI's hidden focus guards `role="button"` so VoiceOver can enter a portal; `expectNoSeriousA11yViolations` excludes them.
 - **Collapsed ranges measure 0×0**: measure the caret with `view.coordsAtPos`, not a DOM range.
@@ -181,6 +184,7 @@ What WebKit does differently, and how the specs handle it:
 | `filter.spec.ts` | CMD+SHIFT+F opens filter; typing highlights matches; a `?filter=alpha` link opens the bar with the chip once the doc syncs, folds the unmatched sections, keeps the URL, and Clear all filters removes it; a link of 10 words applies only the first 8 (the 9th and 10th match nothing, and the URL drops them) |
 | `filter-collab.spec.ts` | With A's filter "alpha" applied, B renames the folded "Beta Section" to "Alpha Beta Section": A unfolds it (and its body) while Gamma stays folded; a non-matching section B adds arrives folded on A |
 | `fold.spec.ts` | Fold chevron hides content; crinkle click unfolds |
+| `image-metadata.spec.ts` | A 40×20 JPEG with Exif orientation 6 and GPS, pasted through the media kit's `editorFileUpload` event, embeds as WebP (JPEG on WebKit) with no APP1, `EXIF` or `XMP ` segment, decodes to 20×40 with red on top and blue below; a PNG with `eXIf` and `tEXt` embeds byte-identical to the same PNG without them; JPEG bytes labelled `image/png` or `image/gif` are re-encoded; a PNG still inserts, re-encoded, when the stripper chunk fails to load (offline, or replaced by a deploy); every inserted image, including one from the upload node's file input, has `alt=""` and no `title`. Fixtures come from `tests/helpers/image-bytes.ts` |
 | `pwa-connection.spec.ts` | Text typed offline survives a tab switch and syncs to a second browser after reconnecting; reload asks only while edits are unsynced; status strip goes online / reconnecting / offline with one announcement per transition; offline banner and disabled tab create/close; calm notice instead of the red alert before the editor opens offline. Simulates offline with `context.setOffline()` plus `page.routeWebSocket()` (setOffline alone does not close an open WebSocket) |
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |

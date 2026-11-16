@@ -14,6 +14,13 @@ import {
   planImageEmbed,
   prepareImageForEmbed,
 } from "@/lib/image-downscale";
+import {
+  ascii,
+  buildExifApp1,
+  buildPng,
+  GIF_TWO_FRAMES,
+  pngChunk,
+} from "@/tests/helpers/image-bytes";
 
 const KB = 1024;
 
@@ -120,17 +127,34 @@ describe("planImageEmbed", () => {
     expect(large.kind === "reject" && large.reason).toMatch(/256 KB/);
   });
 
-  it("passes common formats through only when the data URL fits", () => {
-    expect(
-      planImageEmbed({ type: "image/png", size: 100 * KB }, cap).kind,
-    ).toBe("passthrough");
-    // 192 KB raw → ~256 KB base64 + prefix: just over the cap.
-    expect(
-      planImageEmbed({ type: "image/jpeg", size: 192 * KB }, cap).kind,
-    ).toBe("reencode");
+  it("always re-encodes JPEG, so Exif and GPS never survive", () => {
+    expect(planImageEmbed({ type: "image/jpeg", size: 1 * KB }, cap)).toEqual({
+      kind: "reencode",
+    });
+    expect(planImageEmbed({ type: "IMAGE/JPEG", size: 1 * KB }, cap)).toEqual({
+      kind: "reencode",
+    });
     expect(
       planImageEmbed({ type: "image/jpeg", size: 4 * KB * KB }, cap).kind,
     ).toBe("reencode");
+  });
+
+  it("strips PNG and WebP that fit and re-encodes the rest", () => {
+    expect(planImageEmbed({ type: "image/png", size: 100 * KB }, cap)).toEqual({
+      kind: "strip",
+      type: "image/png",
+    });
+    expect(planImageEmbed({ type: "image/webp", size: 1 * KB }, cap)).toEqual({
+      kind: "strip",
+      type: "image/webp",
+    });
+    // 192 KB raw → ~256 KB base64 + prefix: just over the cap.
+    expect(planImageEmbed({ type: "image/png", size: 192 * KB }, cap)).toEqual({
+      kind: "reencode",
+    });
+    expect(
+      planImageEmbed({ type: "image/png", size: 4 * KB * KB }, cap),
+    ).toEqual({ kind: "reencode" });
   });
 
   it("always re-encodes formats outside the passthrough list", () => {
@@ -204,14 +228,36 @@ describe("encodeUnderCap", () => {
   });
 });
 
+function base64Bytes(src: string): Uint8Array {
+  const [, payload = ""] = src.split(",");
+  return Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
+}
+
 describe("prepareImageForEmbed / handleImageUpload", () => {
   const png = (bytes: number) =>
     new File([new Uint8Array(bytes)], "a.png", { type: "image/png" });
+  const smallPng = () =>
+    new File([buildPng([])], "a.png", { type: "image/png" });
 
-  it("embeds a small image unchanged", async () => {
-    const src = await prepareImageForEmbed(png(32));
+  it("strips metadata from a small PNG and keeps its pixels", async () => {
+    const exif = pngChunk(
+      "eXIf",
+      buildExifApp1({ gps: { lat: 52.37, lon: 4.89 } }).subarray(6),
+    );
+    const text = pngChunk("tEXt", ascii("Comment\0secret"));
+    const file = new File([buildPng([exif, text])], "a.png", {
+      type: "image/png",
+    });
+    const src = await prepareImageForEmbed(file);
     expect(src).toMatch(/^data:image\/png;base64,/);
-    expect(src.length).toBe(dataUrlLength("image/png", 32));
+    expect(base64Bytes(src)).toEqual(buildPng([]));
+  });
+
+  it("passes a GIF through byte for byte, frames and loop included", async () => {
+    const file = new File([GIF_TWO_FRAMES], "a.gif", { type: "image/gif" });
+    const src = await prepareImageForEmbed(file);
+    expect(src).toMatch(/^data:image\/gif;base64,/);
+    expect(base64Bytes(src)).toEqual(GIF_TWO_FRAMES);
   });
 
   it("rejects SVG with a user-facing message", async () => {
@@ -234,7 +280,7 @@ describe("prepareImageForEmbed / handleImageUpload", () => {
 
   it("reports completion progress", async () => {
     const onProgress = vi.fn();
-    await handleImageUpload(png(32), onProgress);
+    await handleImageUpload(smallPng(), onProgress);
     expect(onProgress).toHaveBeenLastCalledWith({ progress: 100 });
   });
 });
