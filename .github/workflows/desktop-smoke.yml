@@ -66,6 +66,22 @@ jobs:
           chmod +x "$RUNNER_TEMP/no-node/node"
           echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
 
+      # Windows process spawns look for node.exe and never run the sh stub
+      # above, so put a compiled stub beside it (found in spike S3).
+      - name: Block Node.js (node.exe on Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cat > "$RUNNER_TEMP/node-stub.ts" <<'EOF'
+          console.error(`::error::node was called: ${process.argv.slice(2).join(" ")}`);
+          process.exit(1);
+          EOF
+          bun build --compile "$RUNNER_TEMP/node-stub.ts" --outfile "$RUNNER_TEMP/no-node/node.exe"
+          # cmd resolves node through PATHEXT, as a Windows spawn would.
+          if cmd.exe //d //c "node --version" > /dev/null 2>&1; then
+            echo "::error::the node.exe stub is not first on PATH"
+            exit 1
+          fi
+
       # Fail on high and critical advisories in the smoke's own lockfile.
       - name: Audit dependencies
         run: bun audit --audit-level=high
