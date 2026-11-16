@@ -33,7 +33,7 @@ const HOST = "ws.example";
 const NOW = () => 1_000_000;
 
 /**
- * Memory backend whose `~s2` puts wait until `open()`, so a legacy merge
+ * Memory backend whose `~s2` saves wait until `open()`, so a legacy merge
  * stays in flight while the session releases.
  */
 function gatedBackend() {
@@ -41,9 +41,9 @@ function gatedBackend() {
   const gate = Promise.withResolvers<void>();
   const backend: offline.DocStoreBackend = {
     ...memory,
-    put: async (doc) => {
+    putMerged: async (doc, merge) => {
       if (doc.key.includes("~s2:")) await gate.promise;
-      await memory.put(doc);
+      await memory.putMerged(doc, merge);
     },
   };
   return { backend, memory, open: () => gate.resolve() };

@@ -113,6 +113,50 @@ test.describe("offline copies", () => {
     await context.close();
   });
 
+  // Saves here are sequential; overlapping saves are covered by the unit
+  // test with a yielding read. This runs `putMerged` on real IndexedDB.
+  test("two tabs editing one document offline keep each other's edits", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext();
+    const pageA = await context.newPage();
+    const pageB = await context.newPage();
+    const socketA = new CollabSocket(context, pageA);
+    const socketB = new CollabSocket(context, pageB);
+    const docId = await openDoc(pageA, socketA);
+    // B shares A's tab list, as real tabs do: with a list of its own, B's
+    // copy sweep would delete A's tab-list copy and A could not reopen.
+    const tabsDoc = await pageA.evaluate(
+      () =>
+        (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC,
+    );
+    await pageB.addInitScript((name) => {
+      (window as Window & { __GLOBAL_TABS_DOC?: string }).__GLOBAL_TABS_DOC =
+        name;
+    }, tabsDoc);
+    await socketB.install();
+    await pageB.goto("/");
+    await pageB.locator(`[data-tab-id="${docId}"]`).click();
+    await new EditorPage(pageB).waitForSync();
+    await waitForCopy(pageA, docId);
+
+    await socketA.cut();
+    await socketB.cut();
+    await typeInNewParagraphAtEnd(pageA, "tab-a-marker");
+    await pageA.waitForTimeout(1500); // offline copy is saved on a short debounce
+    await typeInNewParagraphAtEnd(pageB, "tab-b-marker");
+    await pageB.waitForTimeout(1500);
+
+    for (const page of [pageA, pageB]) {
+      page.on("dialog", (dialog) => void dialog.accept());
+    }
+    await pageA.reload();
+    const editor = pageA.locator(".tiptap");
+    await expect(editor).toContainText("tab-a-marker", { timeout: 15_000 });
+    await expect(editor).toContainText("tab-b-marker", { timeout: 15_000 });
+    await context.close();
+  });
+
   test("a document deleted while away disappears and its copy is removed", async ({
     context,
     page,

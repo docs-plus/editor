@@ -109,6 +109,9 @@ describe("bindLocalCopy", () => {
         put: async () => {
           throw new Error("quota");
         },
+        putMerged: async () => {
+          throw new Error("quota");
+        },
         delete: async () => {},
         deleteIfUnchanged: async () => false,
         all: async () => [],
@@ -264,9 +267,9 @@ describe("~s2 namespace", () => {
     const memory = createMemoryBackend();
     const backend: DocStoreBackend = {
       ...memory,
-      put: async (doc) => {
+      putMerged: async (doc, merge) => {
         if (doc.key.includes("~s2:")) throw new Error("quota");
-        await memory.put(doc);
+        await memory.putMerged(doc, merge);
       },
     };
     const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
@@ -376,7 +379,7 @@ describe("~s2 namespace", () => {
 });
 
 /**
- * Memory backend whose `~s2` puts land only when `release` is called, while
+ * Memory backend whose `~s2` saves land only when `release` is called, while
  * deletes land at once: a backend that does not keep call order.
  */
 function gatedBackend() {
@@ -384,11 +387,11 @@ function gatedBackend() {
   const gates: Array<() => void> = [];
   const backend: DocStoreBackend = {
     ...memory,
-    put: async (doc) => {
+    putMerged: async (doc, merge) => {
       if (doc.key.includes("~s2:")) {
         await new Promise<void>((resolve) => gates.push(resolve));
       }
-      await memory.put(doc);
+      await memory.putMerged(doc, merge);
     },
   };
   const release = () => {
@@ -559,26 +562,24 @@ describe("merge on save", () => {
     ).toBeLessThan(200);
   });
 
-  it("returns the update untouched when the stamp matches", () => {
+  it("returns the update untouched when the write id matches", () => {
     const stored = {
       key: storeKey("ws.example", "a"),
       name: "a",
       update: Uint8Array.from([255, 255, 255]),
       updatedAt: 1_000_000,
+      writeId: "own-write",
     };
     const update = yState("next");
     // Undecodable bytes: only a skipped merge can succeed.
-    expect(
-      mergeIntoStored(stored, update, 1_000_001, {
-        updatedAt: 1_000_000,
-        byteLength: 3,
-      }),
-    ).toBe(update);
+    expect(mergeIntoStored(stored, update, 1_000_001, "own-write")).toBe(
+      update,
+    );
     expect(() =>
-      mergeIntoStored(stored, update, 1_000_001, {
-        updatedAt: 999,
-        byteLength: 3,
-      }),
+      mergeIntoStored(stored, update, 1_000_001, "another-write"),
+    ).toThrow();
+    expect(() =>
+      mergeIntoStored({ ...stored, writeId: undefined }, update, 1_000_001),
     ).toThrow();
   });
 
@@ -649,6 +650,94 @@ describe("merge on save", () => {
     doc.getText("t").insert(0, "second ");
     await binding.flush();
     expect(textOf((await backend.get(key))?.update)).toBe("second first");
+    binding.destroy();
+  });
+});
+
+describe("two tabs saving one document", () => {
+  it("keeps both tabs' edits when their saves overlap", async () => {
+    const memory = createMemoryBackend();
+    // Reads yield after reading, so both tabs read before either writes.
+    const backend: DocStoreBackend = {
+      ...memory,
+      get: async (key) => {
+        const stored = await memory.get(key);
+        await tick();
+        return stored;
+      },
+    };
+    const tabA = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const tabB = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    await Promise.all([
+      tabA.save("a", yState("from tab A")),
+      tabB.save("a", yState("from tab B")),
+    ]);
+    const text = textOf(
+      (await memory.get(storeKey("ws.example", "a")))?.update,
+    );
+    expect(text).toContain("from tab A");
+    expect(text).toContain("from tab B");
+  });
+
+  it("keeps both tabs' offline edits through their bindings", async () => {
+    const backend = createMemoryBackend();
+    const tabs = ["A", "B"].map((label) => {
+      const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+      const doc = new Y.Doc();
+      return {
+        label,
+        doc,
+        binding: bindLocalCopy(doc, "a", store, { debounceMs: 5 }),
+      };
+    });
+    for (const tab of tabs) await tab.binding.hydrated;
+    // Neither tab reads the other's copy: each only saves.
+    for (const tab of tabs) {
+      tab.doc.getText("t").insert(0, `typed in tab ${tab.label} `);
+      await tab.binding.flush();
+    }
+    const text = textOf(
+      (await backend.get(storeKey("ws.example", "a")))?.update,
+    );
+    expect(text).toContain("typed in tab A");
+    expect(text).toContain("typed in tab B");
+    for (const tab of tabs) tab.binding.destroy();
+  });
+});
+
+describe("write stamps across tabs", () => {
+  /** A doc with a fixed client id, so two docs' states have equal length. */
+  function docOf(clientID: number, text: string): Y.Doc {
+    const doc = new Y.Doc();
+    doc.clientID = clientID;
+    doc.getText("t").insert(0, text);
+    return doc;
+  }
+
+  it("merges another tab's write of the same length in the same millisecond", async () => {
+    const backend = createMemoryBackend();
+    const key = storeKey("ws.example", "a");
+    const store = new LocalDocStore(backend, "ws.example", () => 1_000_000);
+    const doc = docOf(0x7000_0001, "");
+    const binding = bindLocalCopy(doc, "a", store, { debounceMs: 5 });
+    await binding.hydrated;
+    doc.getText("t").insert(0, "typed in tab A");
+    await binding.flush();
+    const own = await backend.get(key);
+    if (!own) throw new Error("no copy saved");
+    // Another tab replaces the copy in the same millisecond with one of the
+    // same byte length: the `{updatedAt, byteLength}` stamp cannot tell.
+    const tabB = Y.encodeStateAsUpdate(docOf(0x7000_0002, "typed in tab B"));
+    expect(tabB.byteLength).toBe(own.update.byteLength);
+    await backend.putMerged(
+      { key, name: "a", updatedAt: 1_000_000 },
+      () => tabB,
+    );
+    doc.getText("t").insert(0, "more ");
+    await binding.flush();
+    const text = textOf((await backend.get(key))?.update);
+    expect(text).toContain("typed in tab B");
+    expect(text).toContain("more typed in tab A");
     binding.destroy();
   });
 });
