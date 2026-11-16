@@ -9,6 +9,15 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Two tabs editing one document offline keep each other's edits
+
+Each save now reads, merges and writes the device copy in one IndexedDB
+transaction.
+
+#### Fixed
+
+- A second tab's save no longer drops the first tab's offline edits.
+
 ### Offline copies keep unsynced edits after a slow read
 
 When the device copy took longer than 1 s to read, the next save replaced it

@@ -34,6 +34,16 @@ export type StoredDoc = {
 export interface DocStoreBackend {
   get(key: string): Promise<StoredDoc | undefined>;
   put(doc: StoredDoc): Promise<void>;
+  /**
+   * Writes `{ ...doc, update: merge(stored) }` under `doc.key`, reading and
+   * writing with no other writer in between, so two tabs saving one
+   * document never drop each other's edits. `merge` is synchronous; if it
+   * throws, nothing is written and the promise rejects with that error.
+   */
+  putMerged(
+    doc: Omit<StoredDoc, "update">,
+    merge: (stored: StoredDoc | undefined) => Uint8Array,
+  ): Promise<void>;
   delete(key: string): Promise<void>;
   /**
    * Deletes `key` only if it still holds a copy with this `updatedAt` and
@@ -185,8 +195,10 @@ export class LocalDocStore {
    * Merges `update` into the stored copy, unless `name` was removed since
    * `generation`. `lastWrite` is the stamp this caller's previous save
    * resolved with; when the stored copy still carries it, the merge is
-   * skipped. Resolves the stamp of this write, or undefined if dropped. A
-   * failed read or merge rejects and leaves the stored copy untouched.
+   * skipped. The copy is read, merged and written in one backend step (one
+   * IndexedDB transaction), so another tab's save cannot land in between.
+   * Resolves the stamp of this write, or undefined if dropped. A failed
+   * read or merge rejects and leaves the stored copy untouched.
    */
   save(
     name: string,
@@ -198,9 +210,11 @@ export class LocalDocStore {
       if (generation !== this.generation(name)) return undefined;
       const key = storeKey(this.serverHost, name);
       const now = this.now();
-      const stored = await this.backend.get(key);
-      const merged = mergeIntoStored(stored, update, now, lastWrite);
-      await this.backend.put({ key, name, update: merged, updatedAt: now });
+      let merged = update;
+      await this.backend.putMerged({ key, name, updatedAt: now }, (stored) => {
+        merged = mergeIntoStored(stored, update, now, lastWrite);
+        return merged;
+      });
       return { updatedAt: now, byteLength: merged.byteLength };
     });
   }
@@ -457,6 +471,25 @@ export function createIndexedDbBackend(): DocStoreBackend | null {
       commit<void>((s) => {
         s.put(doc);
       }),
+    // Read, merge and write in one transaction with no await in between,
+    // so another tab's save cannot land after the read.
+    putMerged: (doc, merge) => {
+      let mergeError: unknown;
+      return commit<void>((s) => {
+        const req = s.get(doc.key);
+        req.onsuccess = () => {
+          try {
+            s.put({
+              ...doc,
+              update: merge(req.result as StoredDoc | undefined),
+            });
+          } catch (error) {
+            mergeError = error;
+            s.transaction.abort();
+          }
+        };
+      }).catch((error) => Promise.reject(mergeError ?? error));
+    },
     delete: (key) =>
       commit<void>((s) => {
         s.delete(key);
@@ -490,6 +523,9 @@ export function createMemoryBackend(): DocStoreBackend {
     get: async (key) => docs.get(key),
     put: async (doc) => {
       docs.set(doc.key, doc);
+    },
+    putMerged: async (doc, merge) => {
+      docs.set(doc.key, { ...doc, update: merge(docs.get(doc.key)) });
     },
     delete: async (key) => {
       docs.delete(key);
