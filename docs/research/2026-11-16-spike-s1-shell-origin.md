@@ -7,9 +7,9 @@
   - **Export and build, and CSP: pass** on macOS, Windows and Linux, on both origins.
     - Export uses the plan's overlay fallback for metadata files.
     - CSP holds with only the pre-registered `style-src-attr` amendment, plus two app changes (no CSP relaxation): Tiptap's injected `<style>` off, and the CSS-inlined icons as files.
-  - **Embeds: pass, with the P2.5 X link card required.**
+  - **Embeds:**
     - YouTube passes on both origins, each with one header fix.
-    - X: no X script runs on desktop (X is off, and `widgets.js` is never requested). The kit has no card mode, so the link card is product work, an explicit P2.5 task (coordinator decision, 2026-11-16). There is no waiver of the no-`widgets.js` rule.
+    - X link card: fail; waived for Gate 1 by the coordinator under the owner's delegation of 2026-11-16 (the owner instructed the coordinator to settle all decisions without asking); no widgets.js: pass. The link card is required in P2.5.
   - The Tauri trigger ("embeds fail on both origins") is **not** hit.
   - Rows that need owner hardware are in §3.4.
 
@@ -47,7 +47,7 @@ Workflow runs:
 | Row | Result | OS / origin | Evidence |
 |---|---|---|---|
 | **Export and build** | **Pass, using the fallback for metadata files** | all 3 OSes, both | See §3.1.1 |
-| **Embeds** | **YouTube: pass** on both origins, each with one header fix. No Error 153 on any OS; playback was confirmed on the Mac. **X: pass, with the P2.5 link card required.** No `widgets.js` runs; the kit can't draw a card yet, so the card is a P2.5 task. | all 3 OSes, both | See §3.1.2 |
+| **Embeds** | **YouTube: pass** on both origins, each with one header fix. No Error 153 on any OS; playback was confirmed on the Mac. **X link card: fail; waived for Gate 1 by the coordinator under the owner's delegation of 2026-11-16 (the owner instructed the coordinator to settle all decisions without asking); no widgets.js: pass. The link card is required in P2.5.** | all 3 OSes, both | See §3.1.2 |
 | **CSP** | **Pass with the pre-registered amendment** (`style-src-attr 'unsafe-inline'`) and two app changes: Tiptap `injectCSS: false`, and the CSS icons as files. `img-src` stays `'self'`. | all 3 OSes, both | See §3.1.3 |
 
 #### 3.1.1 Export and build
@@ -87,7 +87,7 @@ Workflow runs:
   - zero violations
   - no `widgets.js` in any net-log (`widgetsJsRequested: false` on every OS)
 - But the kit has **no link-card rendering**. The Embed dialog still lists X, and a pasted X URL produced no embed and no link mark.
-  - Recorded as **pass, with the P2.5 link card required** (coordinator decision, 2026-11-16): the spike confirmed that X's script never runs, and the missing card is product work.
+  - Recorded as: X link card: fail; waived for Gate 1 by the coordinator under the owner's delegation of 2026-11-16 (the owner instructed the coordinator to settle all decisions without asking); no widgets.js: pass. The link card is required in P2.5.
   - Nothing third-party runs, and YouTube works on both origins, so the Tauri condition "embeds fail on both origins" is not hit.
 
 #### 3.1.3 CSP
@@ -157,7 +157,7 @@ These are not the arch §10 conditions: no packaging, no 1,000-document library,
 
 ## 5. Decisions and spec changes
 
-1. **D-A11, the origin: `app://tinydocy` (confirmed 2026-11-16).**
+1. **D-A11, the origin: `app://tinydocy`, confirmed by the coordinator under the owner's delegation, 2026-11-16.**
    - Neither origin has zero failed rows, but the rows that fail (the X link card, Linux spellcheck, Windows `wpad`) fail identically on both. Every row that depends on the origin passes on both once its header fix is in, so the plan's "if both pass" tie-break applies.
    - Per the plan's rule, `app://` wins:
      - It doesn't intercept the https scheme. With the https origin, every YouTube, `googlevideo.com` and ad request goes through main's `net.fetch`.
