@@ -13,11 +13,13 @@ interface Step {
 }
 
 interface Job {
+  if?: string;
   permissions?: Permissions;
   steps?: Step[];
 }
 
 interface Workflow {
+  on?: Record<string, unknown> | string | string[];
   permissions?: Permissions;
   jobs: Record<string, Job>;
 }
@@ -92,6 +94,52 @@ describe.each(WORKFLOW_FILES)("workflow %s", (file) => {
       expect(ref).toMatch(PINNED_USES);
     }
   });
+});
+
+const triggers = (workflow: Workflow): string[] => {
+  const on = workflow.on;
+  if (typeof on === "string") return [on];
+  if (Array.isArray(on)) return on;
+  return Object.keys(on ?? {});
+};
+
+const WORKFLOW_RUN_FILES = WORKFLOW_FILES.filter((file) =>
+  triggers(readWorkflow(file).workflow).includes("workflow_run"),
+);
+
+// A workflow_run workflow runs with secrets after another workflow, which may
+// have run for a pull request from a fork. It must never run that code, and
+// must only act on runs that came from a push.
+describe.each(WORKFLOW_RUN_FILES)("workflow_run workflow %s", (file) => {
+  const { workflow } = readWorkflow(file);
+  const jobs = Object.entries(workflow.jobs);
+
+  it("never checks out or runs repository code", () => {
+    for (const [name, job] of jobs) {
+      for (const step of job.steps ?? []) {
+        expect(step.uses?.startsWith("actions/checkout@") ?? false, name).toBe(
+          false,
+        );
+      }
+      expect(runsDependencies(job), name).toBe(false);
+    }
+  });
+
+  it("acts only on successful runs from a push", () => {
+    for (const [name, job] of jobs) {
+      const condition = job.if ?? "";
+      expect(condition, name).toContain(
+        "github.event.workflow_run.conclusion == 'success'",
+      );
+      expect(condition, name).toContain(
+        "github.event.workflow_run.event == 'push'",
+      );
+    }
+  });
+});
+
+it("finds the workflow_run workflows", () => {
+  expect(WORKFLOW_RUN_FILES).toContain("deploy.yml");
 });
 
 // A workflow may use no actions at all (release.yml only runs gh), but the

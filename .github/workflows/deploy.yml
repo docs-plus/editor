@@ -1,14 +1,24 @@
 name: Deploy
 
-# Deploys a commit of main to production (tiny.docs.plus). Run it by hand once
-# a pull request has merged and CI on main is green:
-#   gh workflow run deploy.yml                 # the tip of main
-#   gh workflow run deploy.yml -f ref=<sha>    # a commit of main
+# Deploys a commit of main to production (tiny.docs.plus).
+# - Automatically: when CI passes on a push to main, it deploys that commit.
+#   Turn this off (and on again) with a repository variable; the manual path
+#   keeps working:
+#     gh variable set AUTO_DEPLOY --body off
+#     gh variable delete AUTO_DEPLOY
+# - By hand:
+#     gh workflow run deploy.yml                 # the tip of main
+#     gh workflow run deploy.yml -f ref=<sha>    # a commit of main
 # It refuses commits that are not on main or whose CI on main did not pass,
 # then SSHes to the host, whose key only runs scripts/deploy.sh (an SSH forced
 # command). One-time setup and rollback: docs/operations/deploy-runbook.md.
 
 on:
+  # Runs the copy of this file on main, never one from a pull request.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -26,6 +36,14 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to production
+    # Automatic deploys only for a CI run that passed on a push to main: never
+    # a pull request (the branches filter also matches a fork branch named
+    # main) and never while AUTO_DEPLOY is off. An unset variable is ''.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      vars.AUTO_DEPLOY != 'off')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -41,7 +59,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          REF: ${{ inputs.ref }}
+          REF: ${{ github.event.workflow_run.head_sha || inputs.ref }}
         run: |
           set -euo pipefail
           if [[ ! "$REF" =~ ^(main|[0-9a-f]{7,40})$ ]]; then
