@@ -1,9 +1,11 @@
 import type { Database } from "bun:sqlite";
 
+import * as Y from "yjs";
+
 import { cleanText } from "@/lib/clean-text";
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
 import { CLOSED_RETENTION_DAYS } from "@/lib/security/guardrail-config";
-import { MAX_TAB_TITLE_LENGTH } from "@/lib/tab-api";
+import { isValidTabEntry, MAX_TAB_TITLE_LENGTH } from "@/lib/tab-api";
 
 /**
  * Closed tabs (soft deletes). Closing writes a `document_closures` row and
@@ -142,8 +144,35 @@ export function listClosedDocuments(
 }
 
 /**
+ * Ids in a stored tab list's `tabs` array. Empty when the list is not stored
+ * or cannot be read.
+ */
+function storedTabIds(db: Database, tabsDoc: string): Set<string> {
+  const ids = new Set<string>();
+  const row = db
+    .prepare("SELECT data FROM documents WHERE name = ?")
+    .get(tabsDoc) as { data: Uint8Array } | null;
+  if (!row) return ids;
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, row.data);
+    for (const entry of doc.getArray("tabs").toArray()) {
+      if (isValidTabEntry(entry)) ids.add(entry.id);
+    }
+  } catch {
+    // Unreadable: treat the list as empty, so the closure is purged.
+  } finally {
+    doc.destroy();
+  }
+  return ids;
+}
+
+/**
  * Deletes and tombstones every document closed before `cutoffMs`, one
- * `BEGIN IMMEDIATE` per batch, until none remain.
+ * `BEGIN IMMEDIATE` per batch, until none remain. A document listed again in
+ * the tab list it was closed from (a collaborator's stale title update or
+ * reorder put the entry back, or the list's removal is not stored yet) is in
+ * use: it and its closure stay, and a later purge decides again.
  */
 export function purgeClosedDocuments(
   db: Database,
@@ -152,9 +181,11 @@ export function purgeClosedDocuments(
   nowMs: number = Date.now(),
 ): { deletedCount: number; deletedNames: string[] } {
   const deletedNames: string[] = [];
+  // Keyset pages: kept (listed) closures stay, so the next page starts
+  // after the last row seen instead of at the first remaining one.
   const selectBatch = db.prepare(
-    `SELECT name FROM document_closures
-     WHERE closed_at < ?
+    `SELECT name, tabs_doc, closed_at FROM document_closures
+     WHERE closed_at < ? AND (closed_at, name) > (?, ?)
      ORDER BY closed_at ASC, name ASC
      LIMIT ?`,
   );
@@ -170,16 +201,30 @@ export function purgeClosedDocuments(
      ON CONFLICT(name) DO UPDATE SET deleted_at = excluded.deleted_at`,
   );
 
-  // Every selected closure row is deleted, so each batch makes progress.
+  let after = { closedAt: Number.NEGATIVE_INFINITY, name: "" };
   for (;;) {
-    const names = inImmediateTransaction(db, () => {
-      const batch = (
-        selectBatch.all(cutoffMs, batchSize) as Array<{ name: string }>
-      ).map((row) => row.name);
-      for (const name of batch) {
-        deleteClosure.run(name);
+    const rows = inImmediateTransaction(db, () => {
+      const batch = selectBatch.all(
+        cutoffMs,
+        after.closedAt,
+        after.name,
+        batchSize,
+      ) as Array<{ name: string; tabs_doc: string; closed_at: number }>;
+      // Read inside this transaction, so the decision uses the current list.
+      const listedIn = new Map<string, Set<string>>();
+      for (const { name, tabs_doc: tabsDoc } of batch) {
         // A system name never gets a closure through the API; never delete one.
-        if (isSystemDocumentId(name)) continue;
+        if (isSystemDocumentId(name)) {
+          deleteClosure.run(name);
+          continue;
+        }
+        let listed = listedIn.get(tabsDoc);
+        if (!listed) {
+          listed = storedTabIds(db, tabsDoc);
+          listedIn.set(tabsDoc, listed);
+        }
+        if (listed.has(name)) continue;
+        deleteClosure.run(name);
         deleteDocument.run(name);
         deleteActivity.run(name);
         tombstone.run(name, nowMs);
@@ -187,7 +232,9 @@ export function purgeClosedDocuments(
       }
       return batch;
     });
-    if (names.length === 0) break;
+    const last = rows.at(-1);
+    if (!last) break;
+    after = { closedAt: last.closed_at, name: last.name };
   }
 
   return { deletedCount: deletedNames.length, deletedNames };

@@ -172,8 +172,10 @@ reconnect.
 ## Scheduled Jobs
 
 - Retention: run `bun run scripts/purge-retention.ts` daily (cron or a systemd timer).
-  It deletes and tombstones documents closed more than `CLOSED_RETENTION_DAYS` ago,
-  then documents idle for `RETENTION_DAYS`, and drops tombstones older than
+  It deletes and tombstones documents closed more than `CLOSED_RETENTION_DAYS` ago
+  (a closed tab that is listed again in the stored tab list is kept, with its
+  closure, and decided again on the next run), then documents idle for
+  `RETENTION_DAYS`, and drops tombstones older than
   `TOMBSTONE_RETENTION_DAYS`. Nothing in the repository schedules it. Give the cron the
   same `CLOSED_RETENTION_DAYS` as `editor-next`; without the cron, closed documents are
   hidden after the window but never deleted.

@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import * as Y from "yjs";
+
 import { bootstrapDocumentActivityTable } from "@/lib/security/activity-store";
 import {
   CLOSED_LIST_LIMIT,
@@ -169,6 +171,58 @@ describe("closed-documents", () => {
     expect(hasRow("documents", "c")).toBe(true);
     expect(hasRow("document_closures", "c")).toBe(true);
     expect(hasRow("document_tombstones", "c")).toBe(false);
+  });
+
+  it("purge keeps a closed document that is listed again in its tab list", () => {
+    // A stale title update or reorder from another visitor can put the entry
+    // back after the close: the tab is in use. Its closure stays, so the
+    // next purge decides again once the list no longer holds it.
+    const tabs = new Y.Doc();
+    const entries = tabs.getArray("tabs");
+    entries.push([
+      { id: "playground", title: "Playground", createdAt: 0 },
+      { id: "a", title: "A", createdAt: 1 },
+    ]);
+    const storeTabs = () =>
+      db
+        .prepare(
+          `INSERT INTO documents (name, data) VALUES (?, ?)
+           ON CONFLICT(name) DO UPDATE SET data = excluded.data`,
+        )
+        .run("global-tabs", Y.encodeStateAsUpdate(tabs));
+    storeTabs();
+    for (const name of ["a", "b"]) {
+      seedDocument(name);
+      closeDocumentSoftly(db, name, name, "global-tabs", 1000);
+    }
+
+    // Batches of one: the kept row must not stall the loop.
+    const first = purgeClosedDocuments(db, 5000, 1, 10000);
+    expect(first.deletedNames).toEqual(["b"]);
+    expect(hasRow("documents", "a")).toBe(true);
+    expect(hasRow("document_closures", "a")).toBe(true);
+    expect(hasRow("document_tombstones", "a")).toBe(false);
+    expect(hasRow("document_tombstones", "b")).toBe(true);
+
+    entries.delete(1, 1);
+    storeTabs();
+    const second = purgeClosedDocuments(db, 5000, 1, 11000);
+    expect(second.deletedNames).toEqual(["a"]);
+    expect(hasRow("document_tombstones", "a")).toBe(true);
+  });
+
+  it("purge ignores malformed entries in the stored tab list", () => {
+    const tabs = new Y.Doc();
+    tabs.getArray("tabs").push([{ id: "a", title: 5, createdAt: 1 }]);
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      "global-tabs",
+      Y.encodeStateAsUpdate(tabs),
+    );
+    seedDocument("a");
+    closeDocumentSoftly(db, "a", "A", "global-tabs", 1000);
+    expect(purgeClosedDocuments(db, 5000, 1, 10000).deletedNames).toEqual([
+      "a",
+    ]);
   });
 
   it("computes the cutoff from the retention days", () => {

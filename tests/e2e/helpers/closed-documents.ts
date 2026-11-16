@@ -34,6 +34,15 @@ export function runRetentionPurgeScript(): void {
   expect(result.exitCode, result.stderr.toString()).toBe(0);
 }
 
+/** Takes one document down at once, as an operator does on the host. */
+export function runDeleteDocumentScript(id: string): void {
+  const result = Bun.spawnSync(
+    ["bun", "run", "scripts/delete-document.ts", id],
+    { cwd: REPO_ROOT, env: process.env, stdout: "pipe", stderr: "pipe" },
+  );
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
+}
+
 export function isTombstoned(id: string): boolean {
   const db = openSqlite();
   try {
