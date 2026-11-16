@@ -38,11 +38,9 @@ export function useDocumentEditorEffects({
   }, [toggleFilterBar]);
 
   useEffect(() => {
-    // Spike S5: NEXT_PUBLIC_SPIKE_HOOKS=1 exposes the editor in a production
-    // build so the latency harness can load the same document in every arm.
     if (
       (process.env.NODE_ENV !== "production" ||
-        process.env.NEXT_PUBLIC_SPIKE_HOOKS === "1") &&
+        process.env.NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR === "1") &&
       editor
     ) {
       window.__tiptap_editor = editor;

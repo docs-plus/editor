@@ -1,0 +1,16 @@
+{
+  "name": "s1-shell",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "electron": "45.3.2"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  }
+}

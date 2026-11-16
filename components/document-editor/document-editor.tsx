@@ -205,6 +205,9 @@ function DocumentEditorContent({
 
   const editor = useEditor({
     immediatelyRender: false,
+    // Spike S1: the desktop CSP has no 'unsafe-inline' for <style>, so the
+    // base CSS ships as a stylesheet instead of Tiptap's injected tag.
+    injectCSS: process.env.NEXT_PUBLIC_APP_TARGET !== "desktop",
     editorProps: EDITOR_PROPS,
     extensions,
     content: initialContent ?? DEFAULT_EDITOR_CONTENT,

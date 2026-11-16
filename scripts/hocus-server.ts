@@ -215,6 +215,10 @@ const server = Bun.serve<SocketData>({
     const ip = pinClientIp(headers, server.requestIP(request)?.address);
 
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      // Spike S1: record the Origin each upgrade carries (D-A11 row).
+      console.log(
+        `[spike-s1] upgrade origin=${JSON.stringify(request.headers.get("origin"))}`,
+      );
       const admission = socketGate.admit(ip, request.headers.get("origin"));
       if (!admission.allowed) {
         logAbuseEvent("ws_upgrade_rejected", {
