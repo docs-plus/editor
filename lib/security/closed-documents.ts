@@ -195,6 +195,45 @@ function storedTabIds(db: Database, tabsDoc: string): Set<string> {
   return ids;
 }
 
+/** `isListed(tabsDoc, name)`, reading each stored tab list once. */
+function listedChecker(
+  db: Database,
+): (tabsDoc: string, name: string) => boolean {
+  const listedIn = new Map<string, Set<string>>();
+  return (tabsDoc, name) => {
+    let listed = listedIn.get(tabsDoc);
+    if (!listed) {
+      listed = storedTabIds(db, tabsDoc);
+      listedIn.set(tabsDoc, listed);
+    }
+    return listed.has(name);
+  };
+}
+
+/**
+ * Names `purgeClosedDocuments` would delete with the same cutoff, oldest
+ * first. Read-only: for the purge's dry run.
+ */
+export function findClosedDocumentsToPurge(
+  db: Database,
+  cutoffMs: number,
+): string[] {
+  const isListed = listedChecker(db);
+  const rows = db
+    .prepare(
+      `SELECT name, tabs_doc FROM document_closures
+       WHERE closed_at < ?
+       ORDER BY closed_at ASC, name ASC`,
+    )
+    .all(cutoffMs) as Array<{ name: string; tabs_doc: string }>;
+  return rows
+    .filter(
+      ({ name, tabs_doc: tabsDoc }) =>
+        !isSystemDocumentId(name) && !isListed(tabsDoc, name),
+    )
+    .map(({ name }) => name);
+}
+
 /**
  * Deletes and tombstones every document closed before `cutoffMs`, one
  * `BEGIN IMMEDIATE` per batch, until none remain. A document listed again in
@@ -239,19 +278,14 @@ export function purgeClosedDocuments(
         batchSize,
       ) as Array<{ name: string; tabs_doc: string; closed_at: number }>;
       // Read inside this transaction, so the decision uses the current list.
-      const listedIn = new Map<string, Set<string>>();
+      const isListed = listedChecker(db);
       for (const { name, tabs_doc: tabsDoc } of batch) {
         // A system name never gets a closure through the API; never delete one.
         if (isSystemDocumentId(name)) {
           deleteClosure.run(name);
           continue;
         }
-        let listed = listedIn.get(tabsDoc);
-        if (!listed) {
-          listed = storedTabIds(db, tabsDoc);
-          listedIn.set(tabsDoc, listed);
-        }
-        if (listed.has(name)) continue;
+        if (isListed(tabsDoc, name)) continue;
         deleteClosure.run(name);
         deleteDocument.run(name);
         deleteActivity.run(name);
