@@ -21,6 +21,8 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.555 0.163 48.998);
   --primary-foreground: oklch(0.987 0.022 95.277);
+  /* Primary as text or border: >=4.5:1 on every surface (token-contrast test). */
+  --primary-ink: var(--primary);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.97 0 0);
@@ -60,6 +62,8 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.473 0.137 46.201);
   --primary-foreground: oklch(0.987 0.022 95.277);
+  /* Dark --primary is a fill colour (2.8:1 as text on --background). */
+  --primary-ink: oklch(0.769 0.188 70.08);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -116,6 +120,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
