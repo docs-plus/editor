@@ -7,8 +7,8 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InstallAppButton } from "@/components/pwa";
+import { lazySurface } from "@/components/smart-toolbar/lazy-surface";
 import { ConnectionStatus } from "@/components/tiptap-ui/connection-status";
-import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Tooltip,
@@ -25,6 +25,7 @@ import {
 import { DISCORD_INVITE_URL, GITHUB_REPO_URL } from "@/lib/constants";
 import { DiscordIcon, GithubIcon, PencilIcon } from "@/lib/icons";
 import {
+  CARET_COLORS,
   getUserIdentity,
   type NameResult,
   saveUserIdentity,
@@ -114,6 +115,20 @@ function useOnlineUsers(editor: ReturnType<typeof useCurrentEditor>["editor"]) {
   return users;
 }
 
+/**
+ * The identity dialog is its own chunk: it is needed only after "Edit
+ * identity" is clicked. It is fetched when the browser is first idle (so it
+ * opens offline too) and on hover or focus of the trigger.
+ */
+const loadIdentityDialog = () =>
+  import("@/components/tiptap-ui/user-identity-dialog").then(
+    (module) => module.UserIdentityDialog,
+  );
+const prefetchIdentityDialog = () => {
+  loadIdentityDialog().catch(() => undefined);
+};
+const LazyIdentityDialog = lazySurface(loadIdentityDialog);
+
 type IdentityBroadcaster = {
   commands: { updateUser: (user: UserIdentity) => unknown };
 };
@@ -151,6 +166,8 @@ export function UserIdentityButton() {
   const { editor } = useCurrentEditor();
   const [identity, setIdentity] = useState<UserIdentity | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Each opening mounts a fresh dialog, so drafts and errors start over.
+  const [openings, setOpenings] = useState(0);
   const connection = useConnectionState();
   const users = useOnlineUsers(editor);
 
@@ -160,6 +177,12 @@ export function UserIdentityButton() {
 
   useEffect(() => {
     setIdentity(getUserIdentity());
+    if (!window.requestIdleCallback) {
+      const id = window.setTimeout(prefetchIdentityDialog, 1000);
+      return () => window.clearTimeout(id);
+    }
+    const id = window.requestIdleCallback(prefetchIdentityDialog);
+    return () => window.cancelIdleCallback(id);
   }, []);
 
   if (!identity) return null;
@@ -196,7 +219,12 @@ export function UserIdentityButton() {
 
           <button
             type="button"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => {
+              setOpenings((n) => n + 1);
+              setDialogOpen(true);
+            }}
+            onPointerEnter={prefetchIdentityDialog}
+            onFocus={prefetchIdentityDialog}
             className={cn(
               "group flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 -my-0.5 transition-colors",
               "hover:bg-foreground/5 active:bg-foreground/10",
@@ -248,12 +276,16 @@ export function UserIdentityButton() {
         </div>
       </div>
 
-      <UserIdentityDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        currentUser={identity}
-        onSave={handleSave}
-      />
+      {openings > 0 && (
+        <LazyIdentityDialog
+          key={openings}
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          currentUser={identity}
+          colors={CARET_COLORS}
+          onSave={handleSave}
+        />
+      )}
     </>
   );
 }

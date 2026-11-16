@@ -12,19 +12,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  CARET_COLORS,
-  type NameResult,
-  normalizeName,
-  type UserIdentity,
-} from "@/lib/user-identity";
+// Type-only: this lazy chunk must not import `lib/user-identity` at runtime.
+// A module both the editor chunk and this one import is split out of the
+// editor group, which costs it more than the module itself.
+import type { NameResult, UserIdentity } from "@/lib/user-identity";
 import { cn } from "@/lib/utils";
 
-interface UserIdentityDialogProps {
+export interface UserIdentityDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The identity the drafts start from; mount the dialog once per opening. */
   currentUser: UserIdentity;
-  /** Stores the identity; the dialog closes only when this returns `ok`. */
+  /** The caret colour swatches (`CARET_COLORS`). */
+  colors: readonly string[];
+  /** Validates and stores; the dialog closes only when this returns `ok`. */
   onSave: (identity: UserIdentity) => NameResult;
 }
 
@@ -41,6 +42,7 @@ export function UserIdentityDialog({
   open,
   onOpenChange,
   currentUser,
+  colors,
   onSave,
 }: UserIdentityDialogProps) {
   const [draftName, setDraftName] = useState(currentUser.name);
@@ -48,20 +50,8 @@ export function UserIdentityDialog({
   const [nameError, setNameError] = useState<NameError | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const handleOpen = (next: boolean) => {
-    if (next) {
-      setDraftName(currentUser.name);
-      setDraftColor(currentUser.color);
-      setNameError(null);
-    }
-    onOpenChange(next);
-  };
-
   const handleSave = () => {
-    const checked = normalizeName(draftName);
-    const result = checked.ok
-      ? onSave({ name: draftName, color: draftColor })
-      : checked;
+    const result = onSave({ name: draftName, color: draftColor });
     if (result.ok) {
       onOpenChange(false);
       return;
@@ -71,7 +61,7 @@ export function UserIdentityDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Your Identity</DialogTitle>
@@ -110,7 +100,7 @@ export function UserIdentityDialog({
           <fieldset className="flex flex-col gap-1.5">
             <legend className="text-sm font-medium">Cursor Color</legend>
             <div className="flex flex-wrap gap-2 pt-1">
-              {CARET_COLORS.map((color) => (
+              {colors.map((color) => (
                 <button
                   key={color}
                   type="button"

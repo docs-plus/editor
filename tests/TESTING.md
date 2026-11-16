@@ -80,6 +80,7 @@ tests/
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, new tab, close-all
+│   ├── identity-dialog.spec.ts           # Identity dialog: inline name errors, Persian name saved, fresh draft on reopen, opens offline after the idle prefetch
 │   ├── security-headers.spec.ts          # Hardening headers + CSP media-embed host allowlist
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)

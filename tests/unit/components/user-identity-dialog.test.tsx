@@ -6,7 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { saveIdentityDraft } from "@/components/tiptap-ui/user-identity-button";
 import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
 import {
+  CARET_COLORS,
   type NameResult,
+  normalizeName,
   saveUserIdentity,
   type UserIdentity,
 } from "@/lib/user-identity";
@@ -42,8 +44,9 @@ afterEach(() => {
 });
 
 function renderDialog() {
+  // The button's save path validates; the dialog shows what it returns.
   const onSave = mock(
-    (identity: UserIdentity): NameResult => ({ ok: true, name: identity.name }),
+    (identity: UserIdentity): NameResult => normalizeName(identity.name),
   );
   const onOpenChange = mock((_open: boolean) => {});
   const host = document.createElement("div");
@@ -56,6 +59,7 @@ function renderDialog() {
         open: true,
         onOpenChange,
         currentUser: CURRENT,
+        colors: CARET_COLORS,
         onSave,
       }),
     );
@@ -96,11 +100,10 @@ const errorText = () =>
 
 describe("UserIdentityDialog", () => {
   it("refuses an empty name with an inline error and keeps focus", () => {
-    const { onSave, onOpenChange } = renderDialog();
+    const { onOpenChange } = renderDialog();
     typeName("   ");
     clickSave();
     expect(errorText()).toBe("Enter a name.");
-    expect(onSave).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     const input = nameInput();
     expect(document.activeElement).toBe(input);
@@ -115,11 +118,11 @@ describe("UserIdentityDialog", () => {
   });
 
   it("refuses a 33-character name", () => {
-    const { onSave } = renderDialog();
+    const { onOpenChange } = renderDialog();
     typeName("a".repeat(33));
     clickSave();
     expect(errorText()).toBe("Use 32 characters or fewer.");
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it("clears the error when the name changes", () => {
@@ -142,6 +145,18 @@ describe("UserIdentityDialog", () => {
       color: CURRENT.color,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("the lazy dialog chunk", () => {
+  it("never imports lib/user-identity at runtime (it would split the editor group)", async () => {
+    const source = await Bun.file(
+      `${import.meta.dir}/../../../components/tiptap-ui/user-identity-dialog.tsx`,
+    ).text();
+    const runtimeImports = source.match(
+      /^import\s+(?!type\b)[^;]*from\s+"@\/lib\/user-identity";/gm,
+    );
+    expect(runtimeImports).toBeNull();
   });
 });
 
