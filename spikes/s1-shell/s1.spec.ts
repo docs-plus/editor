@@ -37,7 +37,18 @@ const ELECTRON = createRequire(join(DIR, "package.json"))(
   "electron",
 ) as unknown as string;
 
+const TAG = process.env.S1_RESULTS_TAG ? `-${process.env.S1_RESULTS_TAG}` : "";
+const shot = (name: string) => join(EVIDENCE, `${name}${TAG}.png`);
+
+const RESULTS_FILE = join(EVIDENCE, `results${TAG}.json`);
+/** Merged into the file a previous (partial) run left, so `-g` runs add keys. */
 const results: Record<string, unknown> = {
+  ...(existsSync(RESULTS_FILE)
+    ? (JSON.parse(readFileSync(RESULTS_FILE, "utf8")) as Record<
+        string,
+        unknown
+      >)
+    : {}),
   origin: ORIGIN,
   os: OS,
   arch: process.arch,
@@ -104,15 +115,15 @@ async function violations(page: Page) {
   ) as Promise<{ directive: string; blocked: string; sample: string }[]>;
 }
 
+/** Caret in a fresh paragraph at the end (the playground's last block varies). */
 async function focusEnd(page: Page) {
   await page.evaluate(() => {
     const editor = window.__tiptap_editor;
     if (!editor) return;
-    editor
-      .chain()
-      .focus()
-      .setTextSelection(editor.state.doc.content.size - 1)
-      .run();
+    editor.commands.insertContentAt(editor.state.doc.content.size, {
+      type: "paragraph",
+    });
+    editor.commands.focus("end");
   });
   await page.waitForTimeout(100);
 }
@@ -122,7 +133,29 @@ async function insertFromMenu(page: Page, item: RegExp) {
     .getByRole("toolbar")
     .getByRole("button", { name: "Insert", exact: true })
     .click();
-  await page.getByRole("menuitem", { name: item }).first().click();
+  const entry = page.getByRole("menuitem", { name: item }).first();
+  if ((await entry.getAttribute("aria-disabled")) === "true") {
+    const reasonId = await entry.getAttribute("aria-describedby");
+    const reason = reasonId
+      ? await page.locator(`[id="${reasonId}"]`).textContent()
+      : null;
+    const where = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) return null;
+      const { $from } = editor.state.selection;
+      const path: string[] = [];
+      for (let d = 0; d <= $from.depth; d++) path.push($from.node(d).type.name);
+      const last: string[] = [];
+      editor.state.doc.forEach((n) => {
+        last.push(n.type.name);
+      });
+      return { path, last: last.slice(-4), focused: editor.isFocused };
+    });
+    throw new Error(
+      `menu item ${item} disabled: ${reason} at ${JSON.stringify(where)}`,
+    );
+  }
+  await entry.click();
 }
 
 /** OS-level key press, so native menu accelerators see it (CDP keys do not). */
@@ -269,7 +302,7 @@ test("export, navigation, origin, CSP, assets, preload, sender", async () => {
     }
     phase.popovers = (await violations(page)).length;
     record("popoversOpened", opened);
-    await page.screenshot({ path: join(EVIDENCE, "editor.png") });
+    await page.screenshot({ path: shot("editor") });
     const v = await violations(page);
     record("cspPhases", phase);
     record("cspViolations", v);
@@ -481,7 +514,7 @@ test("spellcheck: no network, word flagged", async () => {
     const para = page
       .locator(".ProseMirror p", { hasText: "mispeled" })
       .first();
-    await para.screenshot({ path: join(EVIDENCE, "spellcheck.png") });
+    await para.screenshot({ path: shot("spellcheck") });
   } finally {
     await app.close();
   }
@@ -642,10 +675,8 @@ test("embeds: YouTube plays, X is a link card", async () => {
         .catch(() => null);
     }
     record("youtubePlayer", player);
-    await iframe
-      .screenshot({ path: join(EVIDENCE, "youtube.png") })
-      .catch(() => undefined);
-    await page.screenshot({ path: join(EVIDENCE, "youtube-page.png") });
+    await iframe.screenshot({ path: shot("youtube") }).catch(() => undefined);
+    await page.screenshot({ path: shot("youtube-page") });
 
     const beforeX = (await violations(page)).length;
     // Embed dialog with an X URL.
@@ -706,7 +737,7 @@ test("embeds: YouTube plays, X is a link card", async () => {
     });
     const vX = (await violations(page)).slice(beforeX);
     record("xEmbed", { dialogText, node: xNode, violations: vX });
-    await page.screenshot({ path: join(EVIDENCE, "x-embed.png") });
+    await page.screenshot({ path: shot("x-embed") });
     const s = await mainState(app);
     record(
       "youtubeReferers",
