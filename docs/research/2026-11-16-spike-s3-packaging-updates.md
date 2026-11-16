@@ -4,6 +4,7 @@
 - **Plan:** [Phase 1 spikes](../superpowers/plans/2026-11-16-phase-1-spikes.md), Task S3
 - **Branch:** `spike/s3-packaging` (from `main` at e93169d; never merged, no PR). Code in `spikes/s3-packaging/`, workflow `.github/workflows/spike-s3.yml` (push to the branch and `workflow_dispatch`; no `secrets.` or `environment:`; passes `tests/unit/ci/workflow-permissions.test.ts`).
 - **Final run:** [43915218016](https://github.com/docs-plus/editor/actions/runs/43915218016) (commit e834984), every job green. The icon-export step on `macos-26-intel` timed out (`continue-on-error`; see row 8b). Earlier run: [43911539534](https://github.com/docs-plus/editor/actions/runs/43911539534) (commit 71a2a67). Its gate rows passed too, and its WM_CLASS mismatch led to the `desktopName` fix.
+- **Re-run on Electron 45.3.2** (the shell spikes' pin and the S6 smoke's): [43926328502](https://github.com/docs-plus/editor/actions/runs/43926328502) (commit a0b73bb), all 7 jobs green. Every gate step passed again: zero Node stub hits, NSIS and AppImage 0.0.1 → 0.0.2, and the signed manifest (valid accepted, tampered refused). The tables below are from the 45.3.1 run.
 - **Scope:** a hello-world app. `spike/s1-shell` wasn't on origin when S3 ran, so packaging the real static export moves to S4 and P2.5. Every build is unsigned: signing enrolment (D35) is pending.
 - **Evidence:** [`spike-evidence/s3/`](spike-evidence/s3/) holds the update reports (feed and probe logs), sandbox probes, log excerpts, the feed `.yml` files and the icon export.
 - **Result:** every gate-blocking row passes: `bun electron-builder` with the Node stub, and N-1 → N on NSIS and on AppImage. The rows for macOS updates and signing are pending owner signing enrolment (D35). The rows that need a real desktop are pending owner hardware.
@@ -16,7 +17,7 @@ Can `bun electron-builder` package the app for macOS, Windows and Linux with not
 
 | Item | Value |
 |---|---|
-| Electron | 45.3.1 (exact pin; published 2026-11-12, passes `minimumReleaseAge` 3 d) |
+| Electron | 45.3.1 for the main run (exact pin; published 2026-11-12, passes `minimumReleaseAge` 3 d), then 45.3.2 for the re-run |
 | Chromium (bundled) | 156.0.8078.96 (`process.versions.chrome` in the packaged app) |
 | Node (bundled) | 24.22.2 (`process.versions.node`) |
 | electron-builder | 26.18.0 (exact pin) |

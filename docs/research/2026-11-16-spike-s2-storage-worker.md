@@ -4,6 +4,7 @@
 - **Plan:** [Phase 1 spikes](../superpowers/plans/2026-11-16-phase-1-spikes.md), Task S2
 - **Branch:** `spike/s2-storage` (`spikes/s2-storage/`, never merged). Workflow: `.github/workflows/spike-s2.yml`.
 - **Run:** [43909325904](https://github.com/docs-plus/editor/actions/runs/43909325904) (commit `a3c9658`), 30 jobs: 6 runners × 5 targets.
+- **Re-run on Electron 45.3.2** (the shell spikes' pin and the S6 smoke's): [43926163902](https://github.com/docs-plus/editor/actions/runs/43926163902) (commit `87e11e6`), all 30 jobs green. See [Electron 45.3.2 re-run](#electron-4532-re-run).
 - **Result:** every gate-blocking row passes. D-A1 is not decided here (S5's commit-arm rule decides it).
 
 ## The question
@@ -14,7 +15,7 @@ Can the desktop app keep its library in `node:sqlite` inside an Electron `worker
 
 | | |
 |---|---|
-| Electron | 45.3.1 (the shell spikes and the S6 smoke pin 45.3.2, a later patch of the same line) |
+| Electron | 45.3.1 for the main run, then 45.3.2 (Chromium 156.0.8078.100) for the re-run. Both are patches of the same line. |
 | Chromium | 156.0.8078.96 |
 | Node (bundled) | 24.22.2 |
 | SQLite (`node:sqlite`) | 3.53.4 |
@@ -80,6 +81,19 @@ Notes:
 | `ubuntu-24.04-arm` (VM) | 0.14 / 0.61 / 2.59 | 0.15 / 0.75 / 3.21 | 0.03 |
 
 The "up to 26 ms" an fsync can take (plan) is close to the owner Mac's max (16.9 ms in the worker, 41 ms on main) and to the hosted Mac VMs' tail. Windows Defender on the hosted runners (`Get-MpComputerStatus`): `windows-latest` `RealTimeProtectionEnabled` **False**, `windows-11-arm` **True**, which likely explains its 4 ms p50 against 0.34 ms. The Windows verdict machine (a laptop with Defender on) is owner hardware and belongs to S5.
+
+## Electron 45.3.2 re-run
+
+The coordinator asked for one Electron pin across the spikes, so S2 was re-pinned to 45.3.2 and run again. Nothing else changed.
+
+| Runner | Append: kills / after first ack / inside a batch | Compaction: kills / inside / before–after | `synchronous=OFF` | Dense append | Lost acked rows, `quick_check` failures, gaps, mismatches |
+|---|---|---|---|---|---|
+| `macos-26` | 200 / 178 / 3 | 200 / 200 / 180–20 | 200 | 100 / 1 | 0, 0, 0, 0 |
+| `windows-latest` | 200 / 172 / 5 | 200 / 200 / 200–0 | 200 | 100 / 6 | 0, 0, 0, 0 |
+| `ubuntu-24.04` | 200 / 182 / 1 | 200 / 200 / 200–0 | 200 | 100 / 9 | 0, 0, 0, 0 |
+| Owner Mac (M5 Max) | 200 / 176 / 3 | 200 / 200 / 139–61 | 200 | — | 0, 0, 0, 0 |
+
+The informational runners (`macos-26-intel`, `windows-11-arm`, `ubuntu-24.04-arm`) passed every target too. Owner Mac on 45.3.2: a 4 KB commit with `fullfsync` takes 3.13 ms p50 (p95 4.12, max 8.99), against 0.04 ms with `fullfsync=0` and 0.01 ms with `synchronous=OFF`. Every verdict from the 45.3.1 run holds.
 
 ## Evidence
 
