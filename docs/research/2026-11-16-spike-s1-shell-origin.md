@@ -7,9 +7,9 @@
   - **Export and build, and CSP: pass** on macOS, Windows and Linux, on both origins.
     - Export uses the plan's overlay fallback for metadata files.
     - CSP holds with only the pre-registered `style-src-attr` amendment, plus two app changes (no CSP relaxation): Tiptap's injected `<style>` off, and the CSS-inlined icons as files.
-  - **Embeds: partly fails.**
+  - **Embeds: pass, with the P2.5 X link card required.**
     - YouTube passes on both origins, each with one header fix.
-    - The **X link card fails**: the kit has no card mode. X is off on desktop, so no X script runs, but nothing renders a card. It needs a P2.5 card or an owner waiver.
+    - X: no X script runs on desktop (X is off, and `widgets.js` is never requested). The kit has no card mode, so the link card is product work, an explicit P2.5 task (coordinator decision, 2026-11-16). There is no waiver of the no-`widgets.js` rule.
   - The Tauri trigger ("embeds fail on both origins") is **not** hit.
   - Rows that need owner hardware are in §3.4.
 
@@ -47,7 +47,7 @@ Workflow runs:
 | Row | Result | OS / origin | Evidence |
 |---|---|---|---|
 | **Export and build** | **Pass, using the fallback for metadata files** | all 3 OSes, both | See §3.1.1 |
-| **Embeds** | **YouTube: pass** on both origins, each with one header fix. No Error 153 on any OS; playback was confirmed on the Mac. **X link card: fail.** No `widgets.js` runs, but the kit can't draw a card (P2.5 card or owner waiver). | all 3 OSes, both | See §3.1.2 |
+| **Embeds** | **YouTube: pass** on both origins, each with one header fix. No Error 153 on any OS; playback was confirmed on the Mac. **X: pass, with the P2.5 link card required.** No `widgets.js` runs; the kit can't draw a card yet, so the card is a P2.5 task. | all 3 OSes, both | See §3.1.2 |
 | **CSP** | **Pass with the pre-registered amendment** (`style-src-attr 'unsafe-inline'`) and two app changes: Tiptap `injectCSS: false`, and the CSS icons as files. `img-src` stays `'self'`. | all 3 OSes, both | See §3.1.3 |
 
 #### 3.1.1 Export and build
@@ -86,8 +86,8 @@ Workflow runs:
 - With `HyperMultimediaKit.configure({ X: false })` on desktop:
   - zero violations
   - no `widgets.js` in any net-log (`widgetsJsRequested: false` on every OS)
-- But the kit has **no link-card rendering**. The Embed dialog still lists X, and a pasted X URL produced no embed and no link mark. "X shows as a link card" therefore **fails**.
-  - It needs a small desktop-only card (P2.5), or the owner waives this part of the row for Gate 1.
+- But the kit has **no link-card rendering**. The Embed dialog still lists X, and a pasted X URL produced no embed and no link mark.
+  - Recorded as **pass, with the P2.5 link card required** (coordinator decision, 2026-11-16): the spike confirmed that X's script never runs, and the missing card is product work.
   - Nothing third-party runs, and YouTube works on both origins, so the Tauri condition "embeds fail on both origins" is not hit.
 
 #### 3.1.3 CSP
@@ -157,13 +157,13 @@ These are not the arch §10 conditions: no packaging, no 1,000-document library,
 
 ## 5. Decisions and spec changes
 
-1. **D-A11, the origin: `app://tinydocy` (recommended; the owner confirms).**
+1. **D-A11, the origin: `app://tinydocy` (confirmed 2026-11-16).**
    - Neither origin has zero failed rows, but the rows that fail (the X link card, Linux spellcheck, Windows `wpad`) fail identically on both. Every row that depends on the origin passes on both once its header fix is in, so the plan's "if both pass" tie-break applies.
    - Per the plan's rule, `app://` wins:
      - It doesn't intercept the https scheme. With the https origin, every YouTube, `googlevideo.com` and ad request goes through main's `net.fetch`.
      - Its WebSocket `Origin` is `app://tinydocy`, not `null`.
    - The cost is the `onBeforeSendHeaders` Referer rewrite for YouTube subframe requests. The Referer value (the spike used `https://app.tinydocy.invalid/`) is fixed in P2.5.
-   - Amends: arch §1 D-A11, design §4 D-A11 and its §7 "Origin" bullet, and image store §3.2 (the asset path rides `app://tinydocy`).
+   - Amends: arch §1 D-A11, design §4 D-A11 and its §7 "Origin" bullet, image store §3.2 (the asset path rides `app://tinydocy`), and the spikes plan's S4 and S6 origin placeholders.
 2. **D-A9 and arch §3.1 step 1:**
    - `pageExtensions` for `page.*` and `route.*` files.
    - A prebuild move-aside, inside the checkout, for `sitemap`, `robots`, `opengraph-image`, `manifest` and `apple-icon`.
@@ -173,6 +173,8 @@ These are not the arch §10 conditions: no packaging, no 1,000-document library,
      - `icon.tsx` needs `export const dynamic = "force-static"`
    - `tsconfig.json` must exclude `out/`, because the export copies the service worker's `.ts` source into `out/_next/static/media/`.
 3. **Arch §3.1 step 2:** CJS bundles confirmed. Main locates its files through `app.getAppPath()`, never `__dirname`.
+**Proposed, not applied in this PR** (this PR amends only D-A11, `pageExtensions` and CJS; these go to P2.5 or a later docs change):
+
 4. **The desktop CSP (design §7):**
    - `script-src 'self'` plus per-response hashes of every inline script, not just the boot script
    - `style-src-elem 'self'` plus hashes, and `style-src-attr 'unsafe-inline'` (the pre-registered amendment)
@@ -182,7 +184,10 @@ These are not the arch §10 conditions: no packaging, no 1,000-document library,
 5. **Arch §7, the sender check:** compare `${protocol}//${host}` with the origin. Node reports `.origin` as `"null"` for `app:`.
 6. **Preferences §5.3:** the preload applies the boot attributes through a `MutationObserver` on `document`. It can't touch `documentElement` directly, because that is `null` when the preload runs. The hashed inline script stays as the web path and as a no-op check (`data-prefs`).
 
-## 6. Issues to file (for P2.5)
+## 6. Issues for P2.5
+
+The five issue drafts (X link card, Linux Hunspell fetch, `/privacy` 404, `data:` icons, Next Windows prefetch path) are written out in full, ready for `gh issue create`. They are not filed yet: this session's permissions blocked issue creation. The full drafts are in the coordinator's notes; the summary is below.
+
 
 - X link card for desktop: the kit has no card mode. Also remove X from the desktop Embed dialog's copy.
 - Desktop footer: drop or retarget the `/privacy` link, a web-only page.

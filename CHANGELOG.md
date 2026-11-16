@@ -29,10 +29,9 @@ Documentation only; no app or server change. The spike code stays on its
 
 - Desktop specs: the app origin is `app://tinydocy` with a YouTube Referer
   rewrite (D-A11); `pageExtensions` covers pages and routes while metadata
-  files are moved aside for the desktop build (D-A9); the desktop CSP gains
-  `style-src-attr 'unsafe-inline'` (CSS icons move to files, so `img-src`
-  stays `'self'`); the preload sets the boot attributes through a
-  `MutationObserver` (preferences §5.3).
+  files are moved aside for the desktop build (D-A9); main, worker and
+  preload stay CJS bundles that find their files through
+  `app.getAppPath()`.
 
 ### Dark primary text contrast
 
