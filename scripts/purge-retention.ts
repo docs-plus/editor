@@ -179,7 +179,12 @@ export function backupDatabase(
   const first = path.join(dir, FIRST_BACKUP_NAME);
   const file = existsSync(first) ? path.join(dir, backupStamp(nowMs)) : first;
   const partial = `${file}.partial`;
-  rmSync(partial, { force: true });
+  // A run killed while copying leaves its .partial behind under a name no
+  // later run would reuse. Only one purge runs at a time, so any left is junk.
+  for (const name of readdirSync(dir)) {
+    if (name.endsWith(".partial"))
+      rmSync(path.join(dir, name), { force: true });
+  }
   db.prepare("VACUUM INTO ?").run(partial);
   renameSync(partial, file);
 

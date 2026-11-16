@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -273,6 +274,19 @@ describe("backupDatabase", () => {
       dated[0] >=
         `db-${new Date(cutoff).toISOString().replace(/[:.]/g, "-")}.sqlite`,
     ).toBe(true);
+  });
+
+  it("removes copies a killed run left half-written", () => {
+    const dbPath = setupFile();
+    mkdirSync(path.join(dir, "backups"));
+    writeFileSync(
+      path.join(dir, "backups", "db-2026-11-01T03-17-00-000Z.sqlite.partial"),
+      "half a copy",
+    );
+
+    backupDatabase(db, dbPath, { nowMs: Date.UTC(2026, 10, 16) });
+
+    expect(backupsIn()).toEqual([FIRST_BACKUP_NAME]);
   });
 
   it("never deletes db-first.sqlite", () => {

@@ -127,8 +127,10 @@ says what a run may do:
   fails, the run logs `retention_purge_backup_failed`, exits 1 and deletes
   nothing.
   - The very first backup is `db-first.sqlite`: the state before any purge.
-    It is **kept forever**; delete it by hand only when it is no longer
-    wanted.
+    It is **kept forever**, so it keeps every document the purge later
+    deletes, including content taken down or deleted by its author. When a
+    takedown must be complete, or once the snapshot is no longer needed,
+    delete it by hand.
   - Later ones are `db-<UTC time>.sqlite`, deleted after **14 days** by age,
     not by count, so extra runs cannot push out the copies from before a
     purge.
