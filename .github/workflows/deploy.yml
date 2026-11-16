@@ -29,8 +29,16 @@ on:
 permissions:
   contents: read
 
+# One deploy at a time. Only runs that will deploy (the job's `if` below)
+# join deploy-production: every CI completion on main starts a run here, and
+# a skipped one in the group would cancel a deploy waiting its turn.
 concurrency:
-  group: deploy-production
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch' ||
+    (github.event.workflow_run.conclusion == 'success' &&
+    github.event.workflow_run.event == 'push' &&
+    vars.AUTO_DEPLOY != 'off')) && 'deploy-production' ||
+    format('deploy-skipped-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:

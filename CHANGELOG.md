@@ -20,8 +20,10 @@ because nothing scheduled it.
 - **Automatic deploys.** The Deploy workflow also runs when CI completes on
   `main` (`workflow_run`). It deploys that commit only if the CI run passed
   and came from a push, never from a pull request or a fork. The on-`main`
-  and green-CI checks, the concurrency group and the `production`
-  environment are unchanged, and the runner still checks out no code.
+  and green-CI checks and the `production` environment are unchanged, and
+  the runner still checks out no code. Only runs that will deploy join the
+  `deploy-production` concurrency group, so a skipped run (failed CI, a
+  fork's `main`, the switch off) cannot cancel a deploy waiting its turn.
   `gh variable set AUTO_DEPLOY --body off` pauses automatic deploys;
   `gh workflow run deploy.yml` still deploys by hand.
 - **`editor-purge`**, a PM2 app in `ecosystem.config.cjs`, runs

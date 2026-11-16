@@ -67,8 +67,10 @@ PM2 restarts use `ecosystem.config.cjs --only <app> --update-env`, so the env
 in that file applies on every deploy. Keep production env changes in the file
 on `main`, never only in the PM2 dump.
 
-Deploys are serialised by the workflow's concurrency group and by a lock on the
-host. A release that needs extra operator steps says so in its CHANGELOG
+Deploys are serialised by the workflow's `deploy-production` concurrency group
+and by a lock on the host. Only runs that will deploy join that group; a
+skipped run gets a group of its own, so it can never cancel a deploy that is
+waiting. A release that needs extra operator steps says so in its CHANGELOG
 "Deploy" note. With automatic deploys, pause them (`AUTO_DEPLOY=off`) before
 merging such a release, do the steps, deploy by hand, then resume.
 

@@ -83,8 +83,10 @@ describe("Deploy workflow", () => {
     readFileSync(path.join(ROOT, ".github/workflows/deploy.yml"), "utf8"),
   ) as {
     on: Record<string, { workflows?: string[]; branches?: string[] }>;
+    concurrency: { group: string; "cancel-in-progress": boolean };
     jobs: { deploy: { if: string } };
   };
+  const squash = (text: string) => text.replace(/\s+/g, " ").trim();
 
   it("deploys automatically after CI on main and keeps the manual path", () => {
     expect(workflow.on.workflow_run?.workflows).toEqual(["CI"]);
@@ -98,5 +100,16 @@ describe("Deploy workflow", () => {
     expect(condition).toMatch(
       /^github\.event_name == 'workflow_dispatch' \|\|/,
     );
+  });
+
+  // Every CI completion on main starts a Deploy run. A skipped one in the
+  // production group would cancel a deploy waiting its turn, so only runs
+  // that pass the job's condition may join it.
+  it("puts only runs that will deploy in the production group", () => {
+    const group = squash(workflow.concurrency.group);
+    expect(group).toBe(
+      `\${{ (${squash(workflow.jobs.deploy.if)}) && 'deploy-production' || format('deploy-skipped-{0}', github.run_id) }}`,
+    );
+    expect(workflow.concurrency["cancel-in-progress"]).toBe(false);
   });
 });
