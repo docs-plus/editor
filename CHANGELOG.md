@@ -9,6 +9,25 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop local-first planning documents
+
+Adds the planning set for TinyDocy Desktop: the installable app for macOS,
+Windows and Linux, the personal web library, live sharing and comments.
+Documentation only; no app or server change.
+
+#### Added
+
+- `docs/superpowers/specs/`: the desktop design (v8, decisions D0–D41),
+  architecture, UX, details, preferences, web library, image store,
+  comments, onboarding and import, languages, search and linking, phones and
+  tablets, brand and website, test and release strategy, and the post-v1
+  roadmap.
+- `docs/research/`: the research reports behind them.
+- `docs/design/2026-11-15-desktop-prototype.html`: a throwaway clickable
+  prototype.
+- `docs/superpowers/plans/`: the Phase 1 implementation plans (web fixes and
+  spikes).
+
 ### Deploy workflow
 
 Production now deploys through a manual GitHub workflow,
