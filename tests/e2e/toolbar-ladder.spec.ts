@@ -242,7 +242,7 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
 
   await toolbar.getByRole("button", { name: "More formatting" }).click();
   await expect(
-    page.getByRole("menuitem", { name: /Switch to (dark|light) mode/ }),
+    page.getByRole("menuitem", { name: "Appearance" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
 

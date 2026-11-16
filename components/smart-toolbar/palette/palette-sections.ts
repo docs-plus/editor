@@ -5,7 +5,8 @@
  * lists the saved formats by name. An action shown under Suggested here is
  * not repeated in its home group. Disabled entries stay listed with their
  * reason, after the runnable ones of their group. Pure: tested without
- * React. After a format is removed, "Restore ‘X’" leads Suggested here
+ * React. Actions not offered in this editor (`offered`) are left out.
+ * After a format is removed, "Restore ‘X’" leads Suggested here
  * until the next removal or a reload, and shows nowhere else.
  */
 import type { Swatch } from "@/components/smart-toolbar/color/swatch";
@@ -212,7 +213,7 @@ export function buildPaletteSections(input: {
   const offered: PaletteItem[] = [];
   const ordered = [...actions].sort((a, b) => formatRank(a) - formatRank(b));
   for (const action of ordered) {
-    if (action.id === HIDDEN) continue;
+    if (action.id === HIDDEN || action.offered?.(ctx) === false) continue;
     const items = itemsOf(action, ctx);
     if (action.id === RESTORE) {
       if (items[0].arg) offered.unshift({ ...items[0], key: "restore" });

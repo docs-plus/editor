@@ -5,6 +5,7 @@ import {
 import type { Editor } from "@tiptap/core";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 
+import { SUBSCRIPT_SHORTCUT } from "@/lib/app-shortcuts";
 import type {
   AnyAction,
   Ctx,
@@ -162,7 +163,7 @@ const MARKS: readonly MarkSpec[] = [
     name: "subscript",
     id: "mark.subscript",
     label: "Subscript",
-    shortcut: "Mod-,",
+    shortcut: SUBSCRIPT_SHORTCUT,
     icon: SubscriptIcon,
   },
   {

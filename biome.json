@@ -78,6 +78,7 @@
       "!**/*.md",
       "!**/*.scss",
       "!docs/design",
+      "!docs/research/spike-evidence",
       "!tests/fixtures/clipboard"
     ]
   },

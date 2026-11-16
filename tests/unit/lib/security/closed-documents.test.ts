@@ -12,6 +12,7 @@ import {
   cleanClosedTitle,
   closeDocumentSoftly,
   closedCutoffMs,
+  findClosedDocumentsToPurge,
   listClosedDocuments,
   purgeClosedDocuments,
   restoreClosedDocument,
@@ -300,6 +301,33 @@ describe("closed-documents", () => {
     const second = purgeClosedDocuments(db, 5000, 1, 11000);
     expect(second.deletedNames).toEqual(["a"]);
     expect(hasRow("document_tombstones", "a")).toBe(true);
+  });
+
+  it("previews the closed purge without changing anything", () => {
+    const tabs = new Y.Doc();
+    tabs.getArray("tabs").push([{ id: "a", title: "A", createdAt: 1 }]);
+    db.prepare("INSERT INTO documents (name, data) VALUES (?, ?)").run(
+      "global-tabs",
+      Y.encodeStateAsUpdate(tabs),
+    );
+    for (const [name, at] of [
+      ["a", 1000],
+      ["b", 1100],
+      ["c", 9000],
+    ] as const) {
+      seedDocument(name);
+      closeDocumentSoftly(db, name, name, "global-tabs", at);
+    }
+
+    // "a" is listed again and "c" is inside the window.
+    expect(findClosedDocumentsToPurge(db, 5000)).toEqual(["b"]);
+    for (const name of ["a", "b", "c"]) {
+      expect(hasRow("documents", name)).toBe(true);
+      expect(hasRow("document_closures", name)).toBe(true);
+    }
+    expect(purgeClosedDocuments(db, 5000, 100, 10000).deletedNames).toEqual([
+      "b",
+    ]);
   });
 
   it("purge ignores malformed entries in the stored tab list", () => {

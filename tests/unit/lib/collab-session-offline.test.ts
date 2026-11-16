@@ -33,7 +33,7 @@ const HOST = "ws.example";
 const NOW = () => 1_000_000;
 
 /**
- * Memory backend whose `~s2` puts wait until `open()`, so a legacy merge
+ * Memory backend whose `~s2` saves wait until `open()`, so a legacy merge
  * stays in flight while the session releases.
  */
 function gatedBackend() {
@@ -41,9 +41,9 @@ function gatedBackend() {
   const gate = Promise.withResolvers<void>();
   const backend: offline.DocStoreBackend = {
     ...memory,
-    put: async (doc) => {
+    putMerged: async (doc, merge) => {
       if (doc.key.includes("~s2:")) await gate.promise;
-      await memory.put(doc);
+      await memory.putMerged(doc, merge);
     },
   };
   return { backend, memory, open: () => gate.resolve() };
@@ -258,5 +258,72 @@ describe("offline copy removed while the session hydrates", () => {
     vi.advanceTimersByTime(1000);
     await settle();
     expect(await storedText(backend, name)).toBe("reopened");
+  });
+});
+
+/** A stored offline edit, a 1.5 s read, and a server update after the 1 s timeout. */
+async function saveDuringSlowRead() {
+  const { backend, memory, open } = slowReadBackend();
+  const name = unique();
+  const seed = new Y.Doc();
+  seed.getText("t").insert(0, "typed offline earlier");
+  await new offline.LocalDocStore(memory, HOST, NOW).save(
+    name,
+    Y.encodeStateAsUpdate(seed),
+  );
+  store = new offline.LocalDocStore(backend, HOST, NOW);
+  vi.useFakeTimers();
+  const session = acquireCollabSession(name);
+  const provider = created.at(-1) as FakeProvider;
+  await settle();
+  vi.advanceTimersByTime(1000); // HYDRATE_TIMEOUT_MS
+  expect(provider.attach).toHaveBeenCalledOnce();
+  await settle(); // the rebound binding subscribes to updates
+  receive(session, provider, "from server");
+  vi.advanceTimersByTime(500); // the read finishes at 1.5 s
+  open();
+  await settle();
+  vi.advanceTimersByTime(250); // the 750 ms save debounce
+  await settle();
+  return { memory, name, provider, session };
+}
+
+describe("offline copy read slower than the hydrate timeout", () => {
+  it("keeps the stored offline edits when the server state is saved", async () => {
+    const { memory, name, session } = await saveDuringSlowRead();
+    const text = await storedText(memory, name);
+    expect(text).toContain("typed offline earlier");
+    expect(text).toContain("from server");
+    // Merged into storage, never into the live (already attached) doc.
+    expect(session.doc.getText("t").toString()).toBe("from server");
+    expect(session.hasLocalCopy).toBe(false);
+  });
+
+  it("keeps the late copy across later saves", async () => {
+    // The saved copy holds the late copy, which the live doc lacks, so the
+    // next save must merge again instead of skipping.
+    const { memory, name, provider, session } = await saveDuringSlowRead();
+    receive(session, provider, " and more");
+    vi.advanceTimersByTime(750);
+    await settle();
+    const text = await storedText(memory, name);
+    expect(text).toContain("typed offline earlier");
+    expect(text).toContain("and more");
+  });
+
+  it("opens the kept edits on the next visit", async () => {
+    const { memory, name } = await saveDuringSlowRead();
+    releaseCollabSession(name);
+    vi.advanceTimersByTime(1001);
+    await settle();
+    expect(liveSessionNames().has(name)).toBe(false);
+    store = new offline.LocalDocStore(memory, HOST, NOW); // a fast read this time
+    const reopened = acquireCollabSession(name);
+    await settle();
+    expect((created.at(-1) as FakeProvider).attach).toHaveBeenCalledOnce();
+    expect(reopened.doc.getText("t").toString()).toContain(
+      "typed offline earlier",
+    );
+    expect(reopened.hasLocalCopy).toBe(true);
   });
 });

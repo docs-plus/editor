@@ -29,6 +29,7 @@ import { OFFLINE_TAB_ACTION_HINT } from "@/components/pwa/offline-banner";
 import type { RecentlyClosedMenuProps } from "@/components/tab-bar/recently-closed-menu";
 import { TabContent } from "@/components/tab-bar/tab-content";
 import type { RestorableTab } from "@/hooks/use-synced-tabs";
+import { matchTabBarShortcut } from "@/lib/app-shortcuts";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import {
   CloseIcon,
@@ -247,48 +248,27 @@ export function TabBar({
 
   const handleKeyboard = useCallback(
     (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-
-      if (mod && e.key === "t") {
-        e.preventDefault();
-        if (!canCreateTab || offline) return;
-        onCreate();
-      }
-
-      if (mod && e.key === "w") {
-        e.preventDefault();
-        if (offline) return;
-        if (tabs.length > 1 && activeTabId !== PLAYGROUND_ID)
-          onClose(activeTabId);
-      }
-
-      if (mod && e.shiftKey && e.key === "r") {
-        e.preventDefault();
-        if (activeTabId === PLAYGROUND_ID) onPlaygroundRegenerate?.();
-      }
-
-      if (mod && e.shiftKey && (e.key === "[" || e.key === "{")) {
-        e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        if (idx > 0) onSwitch(tabs[idx - 1].id);
-      }
-
-      if (mod && e.shiftKey && (e.key === "]" || e.key === "}")) {
-        e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        if (idx < tabs.length - 1) onSwitch(tabs[idx + 1].id);
+      const command = matchTabBarShortcut(e);
+      if (!command) return;
+      e.preventDefault();
+      const idx = tabs.findIndex((t) => t.id === activeTabId);
+      switch (command) {
+        case "newTab":
+          if (canCreateTab && !offline) onCreate();
+          break;
+        case "closeTab":
+          if (!offline && tabs.length > 1 && activeTabId !== PLAYGROUND_ID)
+            onClose(activeTabId);
+          break;
+        case "previousTab":
+          if (idx > 0) onSwitch(tabs[idx - 1].id);
+          break;
+        case "nextTab":
+          if (idx < tabs.length - 1) onSwitch(tabs[idx + 1].id);
+          break;
       }
     },
-    [
-      tabs,
-      activeTabId,
-      canCreateTab,
-      offline,
-      onCreate,
-      onClose,
-      onSwitch,
-      onPlaygroundRegenerate,
-    ],
+    [tabs, activeTabId, canCreateTab, offline, onCreate, onClose, onSwitch],
   );
 
   useEffect(() => {
@@ -328,8 +308,8 @@ export function TabBar({
                       <button
                         type="button"
                         tabIndex={-1}
-                        aria-label="Regenerate content (⌘⇧R)"
-                        title="Regenerate content (⌘⇧R)"
+                        aria-label="Regenerate content"
+                        title="Regenerate content"
                         className="tab-bar-tab-regenerate"
                         onClick={(e) => {
                           e.stopPropagation();

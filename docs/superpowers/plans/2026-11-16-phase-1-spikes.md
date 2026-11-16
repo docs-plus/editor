@@ -272,7 +272,7 @@ Versions are built in one job: N-1 `0.0.1`, N `0.0.2`, beta `0.0.3-beta.1`, stab
   - A `-beta.N` build requests `beta.yml` (`beta-mac.yml` on macOS, `beta-linux.yml` on Linux).
   - "Stable builds also write `beta.yml`": a stable build with `generateUpdatesFilesForAllChannels` writes all three beta files, and a beta-channel `0.0.3-beta.1` install is offered stable `0.0.4` once that is published.
   - Record the mapping table from `prefs.updates.channel` (Stable/Beta) to electron-updater's `channel` and `allowPrerelease`. The default channel is computed, never stored.
-- [ ] **`allowDowngrade` stays off.** Both the `channel` setter and `generateUpdatesFilesForAllChannels` turn it on, so it "must be set to `false` explicitly".
+- [ ] **`allowDowngrade` stays off.** Both the `channel` setter and `generateUpdatesFilesForAllChannels` turn it on, so it "must be set to `false` explicitly". *(S3 correction: in electron-updater 6.8.11 only the `channel` setter turns it on; the flag is build-time only.)*
   - Log `allowDowngrade` after construction, after the channel setter and before each `checkForUpdates`.
   - `allowDowngrade = false` is the last assignment before every check.
   - A feed offering `0.0.0` installs nothing (`version.txt` unchanged) on the default path (no channel set) and on the Beta→Stable path (a `0.0.3-beta.1` install switched to Stable).
@@ -325,7 +325,7 @@ Versions are built in one job: N-1 `0.0.1`, N `0.0.2`, beta `0.0.3-beta.1`, stab
 ```bash
 git switch -c spike/s4-electron-e2e spike/s1-shell && git merge spike/s3-packaging
 cd spikes/s3-packaging && bun electron-builder --dir --publish never   # unpacked app per OS
-DB_PATH=$(mktemp -d)/s4.sqlite HOCUS_THROTTLE=0 HOCUS_ALLOWED_ORIGINS=<D-A11 origin> bun run hocus &
+DB_PATH=$(mktemp -d)/s4.sqlite HOCUS_THROTTLE=0 HOCUS_ALLOWED_ORIGINS=app://tinydocy bun run hocus &   # D-A11, decided by S1
 CI= bun playwright test -c spikes/s4-electron-e2e/playwright.config.ts
 ```
 
@@ -445,7 +445,7 @@ Five arms run on the same document with the same CDP throttle, interleaved: each
     - `require("node:sqlite")` succeeds
     - `PRAGMA journal_mode=WAL` returns `wal`
     - a worker opens the same database and round-trips one row
-    - a custom `app://smoke` scheme, registered standard and secure, serves `fixture/index.html`, and the window reports `document.title === "smoke"`. P2.5 retargets this check to the D-A11 origin and the real export, and moves the smoke under the `electron` project.
+    - a custom `app://smoke` scheme, registered standard and secure, serves `fixture/index.html`, and the window reports `document.title === "smoke"`. P2.5 retargets this check to the D-A11 origin (`app://tinydocy`) and the real export, and moves the smoke under the `electron` project.
   - It then exits with `0`.
 - [ ] **Step 2: See it fail.** Run `bun electron desktop/smoke/dist/main.cjs` with `SMOKE_BREAK=wal`. Expect exit code `1` and `SMOKE_FAIL wal`.
 - [ ] **Step 3: See it pass.**

@@ -25,7 +25,8 @@ async function insertPastedImages(editor: Editor, files: File[]) {
   const results = await Promise.allSettled(
     accepted.map(async (file) => ({
       src: await handleImageUpload(file),
-      alt: file.name,
+      // The file name can leak a date or place (`IMG_2026…_home.jpg`).
+      alt: "",
     })),
   );
 

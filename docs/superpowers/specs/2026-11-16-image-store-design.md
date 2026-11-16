@@ -192,9 +192,9 @@ INDEX doc_blobs(hash)
   - `Content-Type` comes from the magic bytes
   - `X-Content-Type-Options: nosniff`
   - `Cache-Control: private, max-age=31536000, immutable`
-- **The origin is decided by S1, together with D-A11.**
-  - The asset path rides the chosen app origin, whether `app://tinydocy` or https-style, so the desktop CSP needs only `img-src 'self'`. No `blob:` and no new host.
-  - The alternative is a dedicated privileged scheme (`protocol.registerSchemesAsPrivileged`, [Electron protocol](https://www.electronjs.org/docs/latest/api/protocol)). It would need its own `img-src` entry. S1 decides; the resolver hides the choice.
+- **The origin is `app://tinydocy` (S1, with D-A11).**
+  - The asset path rides the app origin, so assets need only `img-src 'self'`. No `blob:` and no new host. S1 served a fixture PNG this way on all three OSes, and eight traversal probes (`..`, `%2e%2e`, `..%2f`) all got 404.
+  - No dedicated asset scheme is needed.
 - `BlobStore.url(hex)` returns that URL **synchronously** when the hash is in a small set of known hashes, which main pushes at document open. So on desktop, resolving costs nothing for present blobs.
 - A missing blob goes through `ensure` (§5.3).
 

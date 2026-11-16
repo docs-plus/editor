@@ -4,7 +4,7 @@ import {
   backdateClosure,
   hasStoredDocument,
   isTombstoned,
-  runRetentionPurgeScript,
+  runRetentionPurgeNow,
 } from "./helpers/closed-documents";
 import { EditorPage, typeInNewParagraphAtEnd } from "./helpers/editor-page";
 
@@ -121,7 +121,7 @@ test.describe("closing a tab can be undone", () => {
     await expect
       .poll(
         () => {
-          runRetentionPurgeScript();
+          runRetentionPurgeNow();
           return isTombstoned(id);
         },
         { timeout: 20_000 },

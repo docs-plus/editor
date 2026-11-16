@@ -45,6 +45,7 @@ export default defineConfig({
         "**/mobile-bar*.spec.ts",
         "**/collaboration.spec.ts",
         "**/editor-leak.spec.ts",
+        "**/image-metadata.spec.ts",
       ],
       testIgnore: ["**/toolbar-perf.spec.ts"],
       use: {
