@@ -103,7 +103,12 @@ function randomIdentity(): UserIdentity {
 
 let segmenter: Intl.Segmenter | null = null;
 
+/**
+ * User-perceived characters. Without `Intl.Segmenter` (Firefox before 125)
+ * this counts code points instead, so an emoji sequence counts as several.
+ */
 function graphemes(text: string): string[] {
+  if (typeof Intl.Segmenter !== "function") return Array.from(text);
   segmenter ??= new Intl.Segmenter(undefined, { granularity: "grapheme" });
   return Array.from(segmenter.segment(text), (part) => part.segment);
 }

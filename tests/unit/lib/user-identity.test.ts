@@ -241,3 +241,30 @@ describe("clampRemoteName", () => {
       m.clampRemoteName("\u{1F600}\u200D".repeat(200)).length,
     ).toBeLessThanOrEqual(320));
 });
+
+describe("without Intl.Segmenter (Firefox < 125)", () => {
+  it("falls back to code points instead of throwing", async () => {
+    const intl = Intl as { Segmenter?: typeof Intl.Segmenter };
+    const original = intl.Segmenter;
+    delete intl.Segmenter;
+    try {
+      const fresh = await importFresh<Mod>("@/lib/user-identity");
+      localStorage.setItem(
+        "tinydocy-user",
+        JSON.stringify({ name: "Ann", color: "#E57373" }),
+      );
+      expect(fresh.getUserIdentity()).toEqual({
+        name: "Ann",
+        color: "#E57373",
+      });
+      expect(fresh.normalizeName("Bo")).toEqual({ ok: true, name: "Bo" });
+      expect(fresh.normalizeName("a".repeat(33))).toEqual({
+        ok: false,
+        error: "too_long",
+      });
+      expect(fresh.clampRemoteName("w".repeat(100))).toBe("w".repeat(32));
+    } finally {
+      intl.Segmenter = original;
+    }
+  });
+});
