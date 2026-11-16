@@ -15,7 +15,7 @@ import {
   THEME_COLOR,
 } from "@/lib/site-config";
 import { INSTALL_PROMPT_CAPTURE_SCRIPT } from "@/lib/pwa/install-prompt";
-import { THEME_BOOT_SCRIPT } from "@/lib/theme";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 
 import "./globals.css";
 import "@/styles/_variables.scss";
