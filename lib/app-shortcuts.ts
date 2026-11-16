@@ -5,7 +5,8 @@ export const SETTINGS_SHORTCUT: KeyCombo = "Mod-,";
 
 /**
  * Toggles subscript. Desktop builds move it to ⌘⇧, so that ⌘, can open
- * Settings; the web keeps ⌘,. A literal comparison, so Next.js inlines it.
+ * Settings; the web keeps ⌘,. `next.config.ts` always defines the target,
+ * so this literal comparison is inlined and folded at build time.
  */
 export const SUBSCRIPT_SHORTCUT: KeyCombo =
   process.env.NEXT_PUBLIC_APP_TARGET === "desktop" ? "Mod-Shift-," : "Mod-,";
