@@ -10,12 +10,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import type { RestorableTab } from "@/hooks/use-synced-tabs";
 import {
   type ClosedDocumentsList,
   fetchClosedDocuments,
   formatClosedAgo,
-} from "@/lib/tab-api";
+} from "@/lib/closed-tabs-api";
+import type { RestorableTab } from "@/lib/tab-restore";
 
 type ListState =
   | { status: "loading" }

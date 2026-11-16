@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { trackEvent } from "@/lib/analytics";
-import { announceLater } from "@/lib/announce-later";
 import {
   acquireCollabSession,
   forgetLocalCopy,
@@ -28,28 +27,17 @@ import {
   MAX_TAB_TITLE_LENGTH,
   persistActiveTabId,
   resolveActiveTabId,
-  restoreDocuments,
   sanitizeTabs,
   type Tab,
 } from "@/lib/tab-api";
+import type { RestorableTab, TabList } from "@/lib/tab-restore";
 import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 export type { Tab } from "@/lib/tab-api";
+export type { RestorableTab } from "@/lib/tab-restore";
 
-/**
- * A tab to restore. `index` is its raw index before it was closed (Undo puts
- * it back there); without one it is appended (Recently closed).
- */
-export type RestorableTab = { id: string; title: string; index?: number };
-
-function quotedTitle(title: string): string {
-  return `“${title || "Untitled"}”`;
-}
-
-/** `“Title”` for one tab, `N tabs` for several. */
-function tabsLabel(tabs: readonly RestorableTab[]): string {
-  return tabs.length === 1 ? quotedTitle(tabs[0].title) : `${tabs.length} tabs`;
-}
+/** Undo and restore live in a lazy chunk, fetched on the first close. */
+const loadTabRestore = () => import("@/lib/tab-restore");
 
 /** Deletes every raw entry whose id is in `ids`, in one transaction. */
 function removeTabEntries(arr: Y.Array<unknown>, ids: ReadonlySet<string>) {
@@ -185,93 +173,26 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     persistActiveTabId(tab.id);
   }, []);
 
-  const activate = useCallback((id: string) => {
-    activeTabIdRef.current = id;
-    setActiveTabId(id);
-    persistActiveTabId(id);
-  }, []);
+  // Stable for the hook's life: the lazy restore code reads the live list.
+  const [tabList] = useState<TabList>(() => ({
+    tabs: () => tabsArrayRef.current,
+    activate: (id) => {
+      activeTabIdRef.current = id;
+      setActiveTabId(id);
+      persistActiveTabId(id);
+    },
+  }));
 
   const restoreTabs = useCallback(
-    async (entries: readonly RestorableTab[]) => {
-      const arr = tabsArrayRef.current;
-      if (!arr || entries.length === 0) return;
-      const label = tabsLabel(entries);
-      const missing = entries.filter(
-        (entry) => findRawTabIndex(arr.toArray(), entry.id) < 0,
-      );
-      const openCount = sanitizeTabs(arr.toArray()).length;
-      if (openCount + missing.length > MAX_TABS_PER_CLIENT) {
-        announceLater(
-          `Maximum tabs reached (${MAX_TABS_PER_CLIENT}). Close a tab to restore ${label}.`,
-        );
-        return;
-      }
-
-      const results = await restoreDocuments(entries.map((entry) => entry.id));
-      if (!results) {
-        announceLater(`Couldn't restore ${label}. Check your connection.`);
-        return;
-      }
-      const live = tabsArrayRef.current;
-      if (!live) return;
-
-      const restored = entries.filter(
-        (entry) => results[entry.id] === "restored",
-      );
-      const gone = entries.filter((entry) => results[entry.id] === "gone");
-      // Ascending old indices put several tabs back in their old order.
-      const ordered = [...restored].sort(
-        (a, b) => (a.index ?? Infinity) - (b.index ?? Infinity),
-      );
-      const insert = () => {
-        for (const entry of ordered) {
-          // "restored" but already listed: another visitor's entry synced in.
-          if (findRawTabIndex(live.toArray(), entry.id) >= 0) continue;
-          const at =
-            entry.index === undefined
-              ? live.length
-              : Math.min(Math.max(entry.index, 1), live.length);
-          const tab: Tab = {
-            id: entry.id,
-            title: entry.title,
-            createdAt: Date.now(),
-          };
-          live.insert(at, [tab]);
-        }
-      };
-      if (live.doc) live.doc.transact(insert);
-      else insert();
-
-      // "not_closed": another visitor restored it first; it arrives through
-      // the shared list.
-      const back = entries.find(
-        (entry) =>
-          results[entry.id] !== "gone" &&
-          findRawTabIndex(live.toArray(), entry.id) >= 0,
-      );
-      if (back) activate(back.id);
-      if (restored.length > 0) {
-        trackEvent("tab_restore", { restored_count: restored.length });
-      }
-      if (gone.length > 0) {
-        announceLater(
-          gone.length === 1
-            ? `${quotedTitle(gone[0].title)} can no longer be restored.`
-            : `${gone.length} tabs can no longer be restored.`,
-        );
-      }
-    },
-    [activate],
+    async (entries: readonly RestorableTab[]) =>
+      (await loadTabRestore()).restoreTabs(tabList, entries),
+    [tabList],
   );
 
   const offerUndo = useCallback(
-    (closed: RestorableTab[]) => {
-      if (closed.length === 0) return;
-      announceLater(`Closed ${tabsLabel(closed)}`, {
-        action: { label: "Undo", run: () => void restoreTabs(closed) },
-      });
-    },
-    [restoreTabs],
+    async (closed: Tab[], raw: unknown[]) =>
+      (await loadTabRestore()).offerUndo(tabList, closed, raw),
+    [tabList],
   );
 
   const closeTab = useCallback(
@@ -306,13 +227,13 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
             PLAYGROUND_ID)
           : activeTabIdRef.current;
       // Re-resolve: the shared array may have changed while DELETE was in flight.
-      const rawIdx = findRawTabIndex(arr.toArray(), id);
+      const raw = arr.toArray();
       removeTabEntries(arr, new Set([id]));
       forgetLocalCopy(id);
-      activate(newActive);
-      offerUndo([{ id, title, index: rawIdx >= 0 ? rawIdx : undefined }]);
+      tabList.activate(newActive);
+      await offerUndo([current[idx]], raw);
     },
-    [activate, offerUndo],
+    [tabList, offerUndo],
   );
 
   const closeAllTabs = useCallback(async () => {
@@ -370,16 +291,6 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
     const succeededSet = new Set(succeeded);
     for (const id of succeeded) forgetLocalCopy(id);
     const raw = arr.toArray();
-    const closed: RestorableTab[] = userTabs
-      .filter((t) => succeededSet.has(t.id))
-      .map((t) => {
-        const index = findRawTabIndex(raw, t.id);
-        return {
-          id: t.id,
-          title: t.title,
-          index: index >= 0 ? index : undefined,
-        };
-      });
     removeTabEntries(arr, succeededSet);
     if (succeeded.length > 0) {
       trackEvent("tab_close_all", { closed_count: succeeded.length });
@@ -397,9 +308,12 @@ export function useSyncedTabs(): UseSyncedTabsReturn {
         arr.push([newTab]);
         return newTab.id;
       })();
-    activate(nextId);
-    offerUndo(closed);
-  }, [activate, offerUndo]);
+    tabList.activate(nextId);
+    await offerUndo(
+      userTabs.filter((t) => succeededSet.has(t.id)),
+      raw,
+    );
+  }, [tabList, offerUndo]);
 
   const reorderTab = useCallback((id: string, targetIndex: number) => {
     const arr = tabsArrayRef.current;

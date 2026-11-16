@@ -65,6 +65,8 @@ afterAll(() => {
 });
 // Loaded after the mocks: static imports are hoisted above `mock.module`.
 const { useSyncedTabs } = await import("@/hooks/use-synced-tabs");
+// The hook loads Undo and restore lazily: load it now so they run in-tick.
+await import("@/lib/tab-restore");
 
 const TABS_KEY = "tinydocy-tabs";
 const playground: Tab = {
@@ -410,6 +412,28 @@ describe("useSyncedTabs close and Undo", () => {
     expect(announceLater).toHaveBeenLastCalledWith(
       "Couldn't restore “A”. Check your connection.",
     );
+  });
+
+  it("a restore whose answer was lost puts the tab back on retry", async () => {
+    // The server restored A but the answer never arrived: the retry is told
+    // "not_closed", and A must not stay out of every list.
+    const answers = [json({}, 500), json({ results: { A: "not_closed" } })];
+    stubFetch(() => answers.shift() ?? json({}, 500));
+    syncWith([playground, tabA, tabB]);
+    await act(() => hookResult().closeTab("A"));
+    const undo = announceLater.mock.calls.at(-1)?.[1] as {
+      action: { run: () => void };
+    };
+
+    await runUndo();
+    expect(tabIds()).toEqual([PLAYGROUND_ID, "B"]);
+
+    await act(async () => {
+      undo.action.run();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(tabIds()).toEqual([PLAYGROUND_ID, "A", "B"]);
+    expect(hookResult().activeTabId).toBe("A");
   });
 
   it("closeAllTabs offers one Undo that restores every closed tab in one request", async () => {

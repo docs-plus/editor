@@ -17,10 +17,16 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ComponentType,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { OFFLINE_TAB_ACTION_HINT } from "@/components/pwa/offline-banner";
+import type { RecentlyClosedMenuProps } from "@/components/tab-bar/recently-closed-menu";
 import { TabContent } from "@/components/tab-bar/tab-content";
 import type { RestorableTab } from "@/hooks/use-synced-tabs";
 import { PLAYGROUND_ID } from "@/lib/constants";
@@ -37,13 +43,10 @@ import {
 import type { Tab } from "@/lib/tab-api";
 import "./tab-bar.scss";
 
+// The menu loads through the lazy restore chunk (fetched when the button
+// is hovered or focused), so first load carries only the button.
 const loadRecentlyClosedMenu = () =>
-  import("@/components/tab-bar/recently-closed-menu").then(
-    (m) => m.RecentlyClosedMenu,
-  );
-// The menu body is one lazy chunk, fetched when the button is hovered or
-// focused, so first load only carries the button.
-const RecentlyClosedMenu = dynamic(loadRecentlyClosedMenu, { ssr: false });
+  import("@/lib/tab-restore").then((m) => m.loadRecentlyClosedMenu());
 
 interface TabBarProps {
   tabs: Tab[];
@@ -72,8 +75,10 @@ function RecentlyClosedButton({
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [used, setUsed] = useState(false);
-  const prefetch = () => void loadRecentlyClosedMenu();
+  const [Menu, setMenu] = useState<ComponentType<RecentlyClosedMenuProps>>();
+  const prefetch = () => {
+    if (!Menu) loadRecentlyClosedMenu().then((menu) => setMenu(() => menu));
+  };
   return (
     <>
       <button
@@ -81,7 +86,7 @@ function RecentlyClosedButton({
         type="button"
         className="tab-bar-recently-closed"
         onClick={() => {
-          setUsed(true);
+          prefetch();
           setOpen((current) => !current);
         }}
         onPointerEnter={prefetch}
@@ -94,8 +99,8 @@ function RecentlyClosedButton({
       >
         <HistoryIcon size={14} />
       </button>
-      {used ? (
-        <RecentlyClosedMenu
+      {Menu ? (
+        <Menu
           open={open && !offline}
           onOpenChange={setOpen}
           anchorRef={buttonRef}
