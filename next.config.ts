@@ -26,7 +26,12 @@ function resolveBuildId(): string {
 }
 
 const nextConfig: NextConfig = {
-  env: { NEXT_PUBLIC_BUILD_ID: resolveBuildId() },
+  env: {
+    NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
+    // Always defined, so the bundler inlines it and drops the other target's
+    // branches; an unset NEXT_PUBLIC_* stays a runtime lookup.
+    NEXT_PUBLIC_APP_TARGET: process.env.NEXT_PUBLIC_APP_TARGET ?? "web",
+  },
   // Next 16.4+ rewrites AGENTS.md when it detects a coding agent; that file
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,

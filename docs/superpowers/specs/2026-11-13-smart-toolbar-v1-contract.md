@@ -177,6 +177,7 @@ export interface Action<Arg = undefined> {
   readonly shortcut?: KeyCombo;          // display only (§3.4)
   readonly markdownHint?: string;
   readonly mutates?: boolean;            // default true; false = never changes the doc
+  offered?(ctx: Ctx): boolean;           // default true; false = left out of the palette in this editor (P1.2)
   enabled(ctx: Ctx): Enabled;
   isActive?(ctx: Ctx): boolean; isMixed?(ctx: Ctx): boolean;
   value?(ctx: Ctx): string | null;
@@ -289,7 +290,8 @@ export type UiIntent =
   | { type: "outline.toggle" } | { type: "filter.toggle" } | { type: "theme.toggle" }
   | { type: "palette.open" } | { type: "colors.open"; kind: "text" | "highlight" }
   | { type: "insert.open"; kind: "table" | "image" | "embed" }
-  | { type: "toolbar.focus" };   // A2: media.options removed, toolbar.focus added
+  | { type: "toolbar.focus" }    // A2: media.options removed, toolbar.focus added
+  | { type: "playground.regenerate" };  // P1.2: the palette's Regenerate Playground
 export type UiIntentListener = (intent: UiIntent) => boolean;   // true ONLY for an intent it handled
 export function onUiIntent(editor: Editor, listener: UiIntentListener): () => void;
 export function emitUiIntent(editor: Editor, intent: UiIntent): boolean;  // true iff some listener returned === true
@@ -359,7 +361,7 @@ Each track adds actions **only** to its own file. Ids are `<prefix>.<name>`, and
   - **table:** `table.addRowBefore` `table.addRowAfter` `table.deleteRow` `table.addColumnBefore` `table.addColumnAfter` `table.deleteColumn` `table.toggleHeaderRow` `table.mergeOrSplit`
   - **code and mermaid:** `code.language` `code.copy`* `mermaid.language` `mermaid.copySource`*
   - **media:** `media.options`
-  - **view:** `view.outline`* `view.filter`* `view.theme`*
+  - **view:** `view.outline`* `view.filter`* `view.theme`* `view.regeneratePlayground` (P1.2: offered only in the Playground's editor, which the shell marks with `markPlaygroundEditor`; no key)
 
 **`lib/editor-actions/surface-actions.ts`: D2.**
 - Prefixes: `color.` `size.` `insert.` `memory.`

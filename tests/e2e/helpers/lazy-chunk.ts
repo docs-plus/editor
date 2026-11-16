@@ -13,6 +13,7 @@ export const CHUNK_MARKERS = {
   menus: "function StyleMenuItems(",
   slashMenu: "function SlashMenu({",
   continueChip: "function ContinueChip(",
+  identityDialog: "function UserIdentityDialog(",
 } as const;
 
 /**

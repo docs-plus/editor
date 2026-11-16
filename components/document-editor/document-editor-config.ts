@@ -41,6 +41,10 @@ import {
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
 import { ActionPreview } from "@/extensions/action-preview";
+import {
+  renderCaret,
+  renderCaretSelection,
+} from "@/extensions/collaboration-caret/safe-caret-render";
 import { EditorActionShortcuts } from "@/extensions/editor-action-shortcuts";
 import { HeadingDrag } from "@/extensions/heading-drag";
 import {
@@ -61,6 +65,7 @@ import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
+import { SUBSCRIPT_SHORTCUT } from "@/lib/app-shortcuts";
 import { lowlight } from "@/lib/lowlight";
 
 import { SafeCodeBlock } from "./safe-code-block";
@@ -70,6 +75,19 @@ export const DEFAULT_EDITOR_CONTENT = {
   type: "doc",
   content: [{ type: "heading", attrs: { level: 1 } }, { type: "paragraph" }],
 } satisfies JSONContent;
+
+/**
+ * Subscript on the key this build advertises (`SUBSCRIPT_SHORTCUT`): ⌘, on
+ * the web, ⌘⇧, on desktop, where ⌘, opens Settings. `extend` replaces the
+ * parent's `Mod-,` binding.
+ */
+const SubscriptByTarget = Subscript.extend({
+  addKeyboardShortcuts() {
+    return {
+      [SUBSCRIPT_SHORTCUT]: () => this.editor.commands.toggleSubscript(),
+    };
+  },
+});
 
 const PLACEHOLDER_TEXT: Record<string, string> = {
   heading: "Heading",
@@ -218,6 +236,8 @@ export function buildDocumentEditorExtensions({
     SlashTrigger,
     CollaborationCaret.configure({
       provider,
+      render: renderCaret,
+      selectionRender: renderCaretSelection,
     }),
     HorizontalRule,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -227,7 +247,7 @@ export function buildDocumentEditorExtensions({
     HyperMultimediaKit,
     Typography,
     Superscript,
-    Subscript,
+    SubscriptByTarget,
     Selection,
     // Colour swatch previews: decorations only, never the doc (hover preview).
     ActionPreview,

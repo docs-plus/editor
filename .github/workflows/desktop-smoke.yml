@@ -1,0 +1,105 @@
+name: Desktop smoke
+
+# D-A12: the pinned Electron build still has what the desktop app depends on
+# (`node:sqlite`, WAL, SQLite in a worker thread, a custom app protocol).
+# Electron 37.2.0 shipped without `node:sqlite` (electron/electron#47671).
+#
+# Runs on pull requests that touch the smoke (an Electron bump changes its
+# lockfile), nightly through `nightly.yml`, and on demand. Not a required
+# check. Read-only token and no secrets, like CI.
+
+on:
+  pull_request:
+    paths:
+      - desktop/smoke/**
+      - .github/workflows/desktop-smoke.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Electron smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-latest, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop/smoke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # The smoke has its own lockfile; the root install has no Electron.
+      # The electron package downloads its binary on first use.
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          bun -e 'require("electron")'
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      # The runner image ships Node, so a stub makes any call to it fail
+      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # Windows process spawns look for node.exe and never run the sh stub
+      # above, so put a compiled stub beside it (found in spike S3).
+      - name: Block Node.js (node.exe on Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cat > "$RUNNER_TEMP/node-stub.ts" <<'EOF'
+          console.error(`::error::node was called: ${process.argv.slice(2).join(" ")}`);
+          process.exit(1);
+          EOF
+          bun build --compile "$RUNNER_TEMP/node-stub.ts" --outfile "$RUNNER_TEMP/no-node/node.exe"
+          # cmd resolves node through PATHEXT, as a Windows spawn would.
+          if cmd.exe //d //c "node --version" > /dev/null 2>&1; then
+            echo "::error::the node.exe stub is not first on PATH"
+            exit 1
+          fi
+
+      # Fail on high and critical advisories in the smoke's own lockfile.
+      - name: Audit dependencies
+        run: bun audit --audit-level=high
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Smoke
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun electron dist/main.cjs
+          else
+            bun electron dist/main.cjs
+          fi

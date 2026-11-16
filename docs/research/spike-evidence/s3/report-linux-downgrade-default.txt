@@ -1,0 +1,28 @@
+=== update-test linux-downgrade-default: PASS
+kind=appimage start=0.0.1 feed=0.0.0 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.1 expected 0.0.1
+  [x] marker intact
+  [x] netlog files=1
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=16
+  [x] feed log matches /GET /feed/latest-linux\.yml/
+  [x] feed log lacks /\.AppImage/
+  [x] probe log matches /after construction allowDowngrade=false/
+  [x] probe log matches /before checkForUpdates allowDowngrade=false/
+  [x] probe log matches /downgrade is disallowed/
+--- feed log
+2026-11-16T17:16:57.820Z serving /home/runner/work/editor/editor/spikes/s3-packaging/release/0.0.0 at http://127.0.0.1:8787/feed/
+2026-11-16T17:16:59.349Z GET /feed/latest-linux.yml?noCache=1k7ilpc24 200
+--- probe log
+2026-11-16T17:16:58.897Z v0.0.1 pid=6146 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=linux arch=x64 exec=/tmp/.mount_TinyDoBYUKTk/tinydocy appimage=/home/runner/work/editor/editor/spikes/s3-packaging/out/linux-downgrade-default/TinyDocy.AppImage argv=[]
+2026-11-16T17:16:59.320Z v0.0.1 pid=6146 window shown renderer-pid=6203
+2026-11-16T17:16:59.322Z v0.0.1 pid=6146 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:59.323Z v0.0.1 pid=6146 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:59.323Z v0.0.1 pid=6146 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:16:59.323Z v0.0.1 pid=6146 [updater] Checking for update
+2026-11-16T17:16:59.323Z v0.0.1 pid=6146 event checking-for-update
+2026-11-16T17:16:59.330Z v0.0.1 pid=6146 [updater] Generated new staging user ID: 46504ffd-1dab-582c-8ce6-3cc08e4a549b
+2026-11-16T17:16:59.356Z v0.0.1 pid=6146 [updater] Update for version 0.0.1 is not available (latest version: 0.0.0, downgrade is disallowed).
+2026-11-16T17:16:59.357Z v0.0.1 pid=6146 event update-not-available latest=0.0.0
+2026-11-16T17:16:59.357Z v0.0.1 pid=6146 probe-exit reason=update-not-available
+2026-11-16T17:16:59.357Z v0.0.1 pid=6146 check result version=0.0.0 isUpdateAvailable=false

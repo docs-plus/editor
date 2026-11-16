@@ -14,6 +14,7 @@ import {
   CODE_LANGUAGES,
   sanitizeCodeLanguage,
 } from "@/lib/code-language";
+import { isPlaygroundEditor } from "@/lib/editor-actions/playground";
 import type {
   AnyAction,
   Ctx,
@@ -32,6 +33,7 @@ import {
   FilterIcon,
   MoonStarIcon,
   PanelLeftIcon,
+  RefreshCwIcon,
   Rows3Icon,
   SlidersHorizontalIcon,
   TableCellsMergeIcon,
@@ -445,6 +447,23 @@ function viewAction(
 }
 
 /**
+ * The keyboard path to the Playground tab's Regenerate button, which is not
+ * a Tab stop. Offered only in the Playground's editor; no key, since ⌘⇧R is
+ * Align right. The shell replaces the content (one Yjs change).
+ */
+const regeneratePlaygroundAction: AnyAction = {
+  id: "view.regeneratePlayground",
+  label: "Regenerate Playground",
+  group: "view",
+  contexts: "any",
+  keywords: ["reset", "sample", "content", "playground"],
+  icon: RefreshCwIcon,
+  offered: (ctx) => ctx.can("playground", isPlaygroundEditor),
+  enabled: () => true,
+  run: (editor) => emitUiIntent(editor, { type: "playground.regenerate" }),
+};
+
+/**
  * Simplified toolbar (A15): flips the remembered row density, which the
  * shell reads (`useToolbarDensity`), and says so on the status pill with
  * Undo (WCAG 4.1.3: the menu closes and the palette label is static).
@@ -514,4 +533,5 @@ export const slotActions: readonly AnyAction[] = [
   viewAction("view.filter", "Filter sections", "filter.toggle", FilterIcon),
   viewAction("view.theme", "Switch theme", "theme.toggle", MoonStarIcon),
   simpleToolbarAction,
+  regeneratePlaygroundAction,
 ];

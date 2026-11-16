@@ -139,8 +139,10 @@ describe("view.simpleToolbar", () => {
 
   it("says so on the status pill, with Undo", async () => {
     const { dismissNotice, getNotice } = await import("@/lib/announce");
-    // The announcer is lazy: an earlier test's notice can still land late,
-    // so start clean and wait for the expected text, not one tick.
+    // The announcer is lazy: an earlier test's notice can still land late
+    // (its `import()` may resolve after ours while the module loads), so let
+    // those land first, start clean and wait for the expected text.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     dismissNotice();
     const noticeSays = async (text: string) => {
       for (let waited = 0; waited < 1000; waited += 10) {

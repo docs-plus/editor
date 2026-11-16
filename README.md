@@ -51,7 +51,7 @@ documents, so don't type anything private.
 | **Rich content** | Lists, task lists, tables, blockquotes, code blocks with highlighting, live Mermaid diagrams and charts, and media embeds (image, video, audio, YouTube, Vimeo, Loom, SoundCloud, Spotify, X). |
 | **Action palette and formatting memory** | Alt+/ (or Alt+Shift+Z) lists every toolbar action with search, Recent and Suggested here. Repeat formatting (⌘⌥V, Ctrl+Alt+V or F4) applies the last formatting you used as one undo step; Paint format (the bubble's brush) picks up formatting and paints it onto the next selection; Your formats live in the text style dropdown. Pointing at a colour swatch, or arrowing to one, previews it on the selection before you apply it. A status pill says what happened, or why not; diagrams start from five templates. On phones a text selection swaps the bar to eight formatting cells. Your formats stay on the device; the Repeat bundle, Recent and the last template are remembered across reloads until "Forget my choices". |
 | **"/" block menu** | Type "/" at the start of a line or after a space for a short list of text styles, lists and Insert kinds (with the Diagram templates) under the caret. Typing filters it, including Markdown shortcuts such as `##`; Enter or a click applies the block as one undo step. |
-| **Simplified toolbar** | ⋯ → Simplified toolbar (also in the palette) shows the compact row at every width: alignment and indent behind ¶, the colour pair as one button, Outline and Filter behind View, size as one menu, Theme in ⋯. Every tool stays one click away; the choice stays in this browser, survives "Forget my choices", and never changes on its own. |
+| **Simplified toolbar** | ⋯ → Simplified toolbar (also in the palette) shows the compact row at every width: alignment and indent behind ¶, the colour pair as one button, Outline and Filter behind View, size as one menu, the theme in ⋯ › Appearance. Every tool stays one click away; the choice stays in this browser, survives "Forget my choices", and never changes on its own. |
 | **Installable app** | Web app manifest, install button, offline page, and a service worker that never touches documents or the live connection. |
 | **Offline editing** | Documents open from the device before the server answers. Offline edits sync on reconnect, and deleted documents never come back. |
 | **Fast with large documents** | Skeleton on first paint, code-split editor, and a single render on mount, so a 1,200-block document shows in about 1 s on desktop. |
@@ -166,6 +166,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
 | `NEXT_PUBLIC_ACTION_PREVIEW` | on | `0` turns off colour previews: pointing at or arrowing to a swatch no longer shows it on the selection. |
 | `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size, Simplified toolbar) and the "Continue where you left off" place: it shows the defaults and writes nothing, and the Simplified toolbar item is disabled with the reason. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`, `tinydocy-continue`) and never reach the document, the server, URLs or analytics. |
+| `NEXT_PUBLIC_APP_TARGET` | `web` | `desktop` for the desktop app's build: Subscript moves to ⌘⇧, so ⌘, can open Settings. |
 | `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |
@@ -195,15 +196,17 @@ operational guidance is in the
 
 ## Deploying
 
-Production runs as three PM2 processes defined in `ecosystem.config.cjs`:
-Next.js on 3847, Hocuspocus on 3848, and an optional Redis on 6380. They sit
-behind a TLS-terminating reverse proxy.
+Production runs as PM2 processes defined in `ecosystem.config.cjs`: Next.js
+on 3847, Hocuspocus on 3848, an optional Redis on 6380, and `editor-purge`, the
+daily retention purge. The servers sit behind a TLS-terminating reverse proxy.
 
-To deploy, run the **Deploy** workflow after a pull request merges and CI on
-`main` is green:
+Run the **Deploy** workflow to deploy. Once the one-time setup is done, the
+owner can also turn on automatic deploys, which deploy each push to `main`
+after its CI passes:
 
 ```bash
-gh workflow run deploy.yml
+gh workflow run deploy.yml               # deploy the tip of main by hand
+gh variable set AUTO_DEPLOY --body on    # deploy automatically after CI (off by default)
 ```
 
 It SSHes to the host with a key that can only run `scripts/deploy.sh`. The
@@ -219,8 +222,10 @@ Requirements:
 - **Service worker headers.** The proxy must not change `Cache-Control` on
   `/_next/static/service-worker/sw.js`; it must stay
   `public, max-age=0, must-revalidate`.
-- **Retention.** Run `bun scripts/purge-retention.ts` daily (cron or a systemd
-  timer) and rotate the PM2 logs; abuse events contain IP addresses.
+- **Retention.** `editor-purge` runs `scripts/purge-retention.ts` daily at
+  03:17 (host time). It is a dry run until `PURGE_MODE` is `on`; then it backs
+  the database up before deleting. Rotate the PM2 logs; abuse events contain
+  IP addresses.
 - **Taking content down.** Delete the document; never reset its stored state,
   because offline copies would push it back.
 

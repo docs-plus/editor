@@ -1,0 +1,48 @@
+=== update-test win-gate: PASS
+kind=nsis start=0.0.1 feed=0.0.2 mode=update pref=unset signed=false control=false
+  [x] version.txt=0.0.2 expected 0.0.2
+  [x] marker intact
+  [x] netlog files=2
+  [x] netlog github.com hits=0
+  [x] netlog 127.0.0.1:8787 hits=41
+  [x] feed log matches /GET /feed/latest\.yml/
+  [x] feed log matches /GET /feed/tinydocy-0\.0\.2-setup\.exe 200/
+  [x] probe log matches /after construction allowDowngrade=false/
+  [x] probe log matches /before checkForUpdates allowDowngrade=false/
+--- feed log
+2026-11-16T17:14:12.101Z serving D:\a\editor\editor\spikes\s3-packaging\release\0.0.2 at http://127.0.0.1:8787/feed/
+2026-11-16T17:14:31.759Z GET /feed/latest.yml?noCache=1k7ilkru5 200
+2026-11-16T17:14:31.770Z GET /feed/tinydocy-0.0.2-setup.exe 200
+2026-11-16T17:14:45.660Z GET /feed/latest.yml?noCache=1k7ill9gh 200
+--- probe log
+2026-11-16T17:14:31.481Z v0.0.1 pid=8272 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=win32 arch=x64 exec=C:\Users\runneradmin\AppData\Local\Programs\tinydocy\TinyDocy.exe appimage=- argv=[]
+2026-11-16T17:14:31.736Z v0.0.1 pid=8272 window shown renderer-pid=7276
+2026-11-16T17:14:31.738Z v0.0.1 pid=8272 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:31.738Z v0.0.1 pid=8272 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:31.738Z v0.0.1 pid=8272 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:31.739Z v0.0.1 pid=8272 [updater] Checking for update
+2026-11-16T17:14:31.739Z v0.0.1 pid=8272 event checking-for-update
+2026-11-16T17:14:31.747Z v0.0.1 pid=8272 [updater] Generated new staging user ID: c3e7469f-0bfe-51c7-bb6d-063702fddf47
+2026-11-16T17:14:31.763Z v0.0.1 pid=8272 [updater] Found version 0.0.2 (url: tinydocy-0.0.2-setup.exe)
+2026-11-16T17:14:31.763Z v0.0.1 pid=8272 event update-available version=0.0.2
+2026-11-16T17:14:31.764Z v0.0.1 pid=8272 [updater] Downloading update from tinydocy-0.0.2-setup.exe
+2026-11-16T17:14:31.765Z v0.0.1 pid=8272 [updater:debug] updater cache dir: C:\Users\runneradmin\AppData\Local\tinydocy-updater
+2026-11-16T17:14:31.765Z v0.0.1 pid=8272 check result version=0.0.2 isUpdateAvailable=true
+2026-11-16T17:14:31.767Z v0.0.1 pid=8272 [updater:warn] disableWebInstaller is set to false, you should set it to true if you do not plan on using a web installer. This will default to true in a future version.
+2026-11-16T17:14:32.157Z v0.0.1 pid=8272 [updater] New version 0.0.2 has been downloaded to C:\Users\runneradmin\AppData\Local\tinydocy-updater\pending\tinydocy-0.0.2-setup.exe
+2026-11-16T17:14:32.158Z v0.0.1 pid=8272 event update-downloaded version=0.0.2 file=C:\Users\runneradmin\AppData\Local\tinydocy-updater\pending\tinydocy-0.0.2-setup.exe
+2026-11-16T17:14:32.159Z v0.0.1 pid=8272 calling quitAndInstall(true, true)
+2026-11-16T17:14:32.159Z v0.0.1 pid=8272 [updater] Install on explicit quitAndInstall
+2026-11-16T17:14:32.159Z v0.0.1 pid=8272 [updater] Install: isSilent: true, isForceRunAfter: true
+2026-11-16T17:14:32.159Z v0.0.1 pid=8272 [updater] Executing: C:\Users\runneradmin\AppData\Local\tinydocy-updater\pending\tinydocy-0.0.2-setup.exe with args: --updated,/S,--force-run
+2026-11-16T17:14:45.430Z v0.0.2 pid=1600 start mode=update pref=unset signed=false electron=45.3.1 chrome=156.0.8078.96 node=24.22.2 platform=win32 arch=x64 exec=C:\Users\runneradmin\AppData\Local\Programs\tinydocy\TinyDocy.exe appimage=- argv=["--updated"]
+2026-11-16T17:14:45.642Z v0.0.2 pid=1600 window shown renderer-pid=9036
+2026-11-16T17:14:45.643Z v0.0.2 pid=1600 after construction allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:45.643Z v0.0.2 pid=1600 channel pref unset: default computed=stable (not stored, setter not called) allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:45.644Z v0.0.2 pid=1600 before checkForUpdates allowDowngrade=false channel=null allowPrerelease=false
+2026-11-16T17:14:45.644Z v0.0.2 pid=1600 [updater] Checking for update
+2026-11-16T17:14:45.644Z v0.0.2 pid=1600 event checking-for-update
+2026-11-16T17:14:45.661Z v0.0.2 pid=1600 [updater] Update for version 0.0.2 is not available (latest version: 0.0.2, downgrade is disallowed).
+2026-11-16T17:14:45.661Z v0.0.2 pid=1600 event update-not-available latest=0.0.2
+2026-11-16T17:14:45.661Z v0.0.2 pid=1600 probe-exit reason=update-not-available
+2026-11-16T17:14:45.662Z v0.0.2 pid=1600 check result version=0.0.2 isUpdateAvailable=false

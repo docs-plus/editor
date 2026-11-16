@@ -1,0 +1,65 @@
+### Record runner (macos-26-intel)
+image: macos26 20260824.0517.1
+ProductName:		macOS
+ProductVersion:		26.6.1
+BuildVersion:		25G76
+x86_64
+Xcode 26.6
+Build version 17F113
+		<string>26.6</string>
+
+### Info.plist / Assets.car / app-update.yml
+--- release/0.0.2/mac-arm64/TinyDocy.app
+arm64
+  "CFBundleIconFile" => "icon.icns"
+  "CFBundleIconName" => "Icon"
+  "CFBundleIdentifier" => "plus.docs.tinydocy.spike"
+  "CFBundleShortVersionString" => "0.0.2"
+  "LSMinimumSystemVersion" => "13.0"
+-rw-r--r--  1 runner  staff  1746568 Nov 16 17:14 Assets.car
+-rw-r--r--  1 runner  staff    33773 Nov 16 17:14 icon.icns
+provider: generic
+url: http://127.0.0.1:8787/feed/
+updaterCacheDirName: tinydocy-updater
+--- release/0.0.2/mac/TinyDocy.app
+x86_64
+  "CFBundleIconFile" => "icon.icns"
+  "CFBundleIconName" => "Icon"
+  "CFBundleIdentifier" => "plus.docs.tinydocy.spike"
+  "CFBundleShortVersionString" => "0.0.2"
+  "LSMinimumSystemVersion" => "13.0"
+-rw-r--r--  1 runner  staff  1746568 Nov 16 17:14 Assets.car
+-rw-r--r--  1 runner  staff    33773 Nov 16 17:14 icon.icns
+provider: generic
+url: http://127.0.0.1:8787/feed/
+updaterCacheDirName: tinydocy-updater
+   9         "AssetType" : "IconGroup",
+   3         "AssetType" : "Image",
+   3         "Name" : "Icon_Assets\/glyph",
+   2         "Name" : "Icon_Assets\/Gradient-1",
+   1         "Name" : "Icon_Assets\/Gradient-2",
+   9         "Name" : "Icon\/Group",
+   3         "RenditionName" : "IconGroup",
+   5     "AssetType" : "Color",
+   7     "AssetType" : "Icon Image",
+   3     "AssetType" : "IconGroup",
+   3     "AssetType" : "IconImageStack",
+   1     "AssetType" : "Image",
+   1     "AssetType" : "MultiSized Image",
+   2     "AssetType" : "Named Gradient",
+   1     "AssetType" : "PackedImage",
+   1     "Name" : "Icon_Assets\/Color-1",
+   1     "Name" : "Icon_Assets\/Color-2",
+   1     "Name" : "Icon_Assets\/Color-3",
+   1     "Name" : "Icon_Assets\/Color-4",
+   1     "Name" : "Icon_Assets\/Color-5",
+   1     "Name" : "Icon_Assets\/glyph",
+   1     "Name" : "Icon_Assets\/Gradient-1",
+   1     "Name" : "Icon_Assets\/Gradient-2",
+  11     "Name" : "Icon",
+   3     "Name" : "Icon\/Group",
+   1     "Name" : "ZZZZPackedAsset-2.0.0-gamut0",
+   3     "RenditionName" : "Icon.iconstack",
+   1     "RenditionName" : "Icon1024x1024_NSAppearanceNameSystem_E3A0CB9D-921A-4797-9E54-F216C4C2013F-10431-000000C22BD9F9C2.png",
+   1     "RenditionName" : "Icon128x128_NSAppearanceNameSystem_FC1DDBF5-CAF7-4F30-8207-02CA153DC56C-10431-000000C20A5F865C.png",
+   1     "RenditionName" : "Icon16x16_NSAppearanceNameSystem_62BACC1A-CEB4-4314-AED4-7C3CDAF4C362-10431-000000C204B43E5A.png",

@@ -130,11 +130,11 @@ test.describe("simplified toolbar", () => {
     expect(state.stops).toBe(1);
     expect(state.overflow).toBeLessThanOrEqual(1);
 
-    // Theme moved into ⋯, after the setting.
+    // The theme is reachable from ⋯ › Appearance, after the setting.
     await more(page).click();
     await expect(densityItem(page)).toHaveAttribute("aria-checked", "true");
     await expect(
-      page.getByRole("menuitem", { name: /Switch to (dark|light) mode/ }),
+      page.getByRole("menuitem", { name: "Appearance" }),
     ).toBeVisible();
   });
 
