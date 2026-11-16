@@ -9,6 +9,44 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Closed documents are kept for 7 days
+
+Closing a tab no longer deletes the document on the server. It is kept for
+`CLOSED_RETENTION_DAYS` (7) and can be restored; then the daily retention
+purge deletes and tombstones it.
+
+#### Added
+
+- `POST /api/documents/restore` and `GET /api/documents/closed` (turn the list
+  off with `CLOSED_DOCUMENTS_LIST=0`).
+- `scripts/delete-document.ts` deletes and tombstones one document at once,
+  for takedowns.
+
+#### Changed
+
+- `DELETE /api/documents/[id]` closes softly. Closed documents count toward
+  `MAX_TOTAL_DOCUMENTS` until they are purged.
+
+#### Deploy
+
+- Confirm the daily `bun run scripts/purge-retention.ts` cron runs on the
+  host, with `CLOSED_RETENTION_DAYS` in its env. Without it, closed documents
+  are hidden after 7 days but never deleted.
+- No migration: `document_closures` is created on first use; `documents` is
+  unchanged.
+- `ecosystem.config.cjs` now sets `CLOSED_RETENTION_DAYS` for `editor-next`.
+  Deploy with `gh workflow run deploy.yml`.
+- Closing no longer frees `MAX_TOTAL_DOCUMENTS` capacity for 7 days. To free
+  it, or to take content down, run on the host:
+
+  ```bash
+  cd /opt/projects/editor.docs.plus && DB_PATH=/opt/projects/editor.docs.plus/db.sqlite bun run scripts/delete-document.ts <id>
+  ```
+- Rollback: older code ignores `document_closures`; documents closed meanwhile
+  stay stored, unlisted, until idle retention removes them (30 days). Browsers
+  already holding W1b bundles show Undo, which then fails with "Check your
+  connection." This is acceptable for a rollback window.
+
 ### Identity validation
 
 Your name and caret colour are checked before they are sent to

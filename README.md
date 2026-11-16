@@ -188,6 +188,8 @@ operational guidance is in the
 | `WS_CONNECTION_LIMIT`, `WS_SOCKETS_PER_IP`, `MAX_WS_SOCKETS` | 10, 30, 5000 | Connection limits. |
 | `DOC_CREATION_RATE_LIMIT`, `MAX_TOTAL_DOCUMENTS` | 10/h, 2000 | Document creation limits. |
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |
+| `CLOSED_RETENTION_DAYS` | 7 | Days a closed tab stays restorable; the daily retention purge then deletes and tombstones it. Set it for `editor-next` and the purge cron. |
+| `CLOSED_DOCUMENTS_LIST` | on | `0` turns off the Recently closed list (`GET /api/documents/closed`); restore keeps working. |
 | `HOCUS_LOGGER`, `HOCUS_THROTTLE`, `HOCUS_REDIS` | on, on, off | Optional Hocuspocus extensions. |
 | `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Raises the minimum client schema above the built-in floor of 2 (`SCHEMA_FLOOR`); lower values have no effect. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
 | `HOCUS_REWRITE_LEGACY_HIGHLIGHTS` | off | `1` rewrites stored legacy highlight colours (`var(--tt-color-highlight-X)`) to their token on load. Turn it on only once release N tabs are gone. |
