@@ -1,7 +1,7 @@
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
-import { getGlobalTabsDoc } from "@/lib/hocuspocus";
 import type { ClosedDocument } from "@/lib/security/closed-documents";
 import { isValidUserDocumentId } from "@/lib/security/doc-id-validator";
+import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 // Type-only: no server code reaches the client bundle.
 export type { ClosedDocument } from "@/lib/security/closed-documents";

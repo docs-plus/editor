@@ -14,7 +14,6 @@ import {
   releaseCollabSession,
 } from "@/lib/collab-session";
 import { MAX_TABS_PER_CLIENT, PLAYGROUND_ID } from "@/lib/constants";
-import { getGlobalTabsDoc } from "@/lib/hocuspocus";
 import { sweepLocalCopies } from "@/lib/offline";
 import {
   clearMigrationStorage,
@@ -33,6 +32,7 @@ import {
   sanitizeTabs,
   type Tab,
 } from "@/lib/tab-api";
+import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 export type { Tab } from "@/lib/tab-api";
 
