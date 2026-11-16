@@ -1,0 +1,29 @@
+{
+  "name": "tinydocy",
+  "productName": "TinyDocy",
+  "version": "0.0.1",
+  "description": "TinyDocy S3 packaging spike (hello world)",
+  "homepage": "https://github.com/docs-plus/editor",
+  "author": {
+    "name": "docs.plus",
+    "email": "spike@docs.plus"
+  },
+  "desktopName": "tinydocy.desktop",
+  "type": "module",
+  "private": true,
+  "main": "dist/main.cjs",
+  "scripts": {
+    "bundle": "bun build.ts"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "electron": "45.3.1",
+    "electron-builder": "26.18.0"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}
