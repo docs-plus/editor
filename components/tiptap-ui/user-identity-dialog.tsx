@@ -98,7 +98,11 @@ export function UserIdentityDialog({
             />
           </label>
           {nameError && (
-            <p id={NAME_ERROR_ID} className="text-sm text-destructive">
+            <p
+              id={NAME_ERROR_ID}
+              role="alert"
+              className="text-sm text-destructive"
+            >
               {NAME_ERROR_TEXT[nameError]}
             </p>
           )}

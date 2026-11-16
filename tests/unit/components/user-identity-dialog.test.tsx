@@ -5,14 +5,18 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { saveIdentityDraft } from "@/components/tiptap-ui/user-identity-button";
 import { UserIdentityDialog } from "@/components/tiptap-ui/user-identity-dialog";
-import type { NameResult, UserIdentity } from "@/lib/user-identity";
+import {
+  type NameResult,
+  saveUserIdentity,
+  type UserIdentity,
+} from "@/lib/user-identity";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const CURRENT: UserIdentity = { name: "Brave Otter", color: "#E57373" };
-const FAMILY = "\u{1F469}‍\u{1F469}‍\u{1F467}";
+const FAMILY = "\u{1F469}\u200D\u{1F469}\u200D\u{1F467}";
 
 const mounted: { root: Root; host: HTMLElement }[] = [];
 
@@ -31,6 +35,9 @@ afterEach(() => {
   } else {
     delete (window as { localStorage?: Storage }).localStorage;
   }
+  // A successful save clears the module's failed-write state, so a quota
+  // test leaves nothing behind for other files sharing this process.
+  saveUserIdentity(CURRENT);
   localStorage.clear();
 });
 
@@ -72,12 +79,16 @@ function typeName(value: string) {
   });
 }
 
+/** Focuses Save first, as a pointer click does in Chromium. */
 function clickSave() {
   const save = Array.from(document.querySelectorAll("button")).find(
     (button) => button.textContent === "Save",
   );
   if (!save) throw new Error("Save not rendered");
-  act(() => save.click());
+  act(() => {
+    save.focus();
+    save.click();
+  });
 }
 
 const errorText = () =>
@@ -97,6 +108,10 @@ describe("UserIdentityDialog", () => {
     expect(input?.getAttribute("aria-describedby")).toBe(
       "user-identity-name-error",
     );
+    // Announced even when focus never left the field (Safari).
+    expect(
+      document.querySelector("#user-identity-name-error")?.getAttribute("role"),
+    ).toBe("alert");
   });
 
   it("refuses a 33-character name", () => {
@@ -170,7 +185,7 @@ describe("saveIdentityDraft", () => {
   it("broadcasts nothing for an invalid name", () => {
     const updateUser = mock((_user: UserIdentity) => true);
     const { result, saved } = saveIdentityDraft(
-      { name: "​", color: "#64B5F6" },
+      { name: "\u200B", color: "#64B5F6" },
       { commands: { updateUser } },
     );
     expect(result).toEqual({ ok: false, error: "empty" });
