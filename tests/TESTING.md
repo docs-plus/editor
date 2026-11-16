@@ -53,7 +53,7 @@ tests/
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch)
-│   ├── editor-actions/                   # Action contract and core actions; shortcut-bindings.test.ts: every advertised key bound once, tab-bar keys kept out of the editor keymap, Subscript by build target
+│   ├── editor-actions/                   # Action contract and core actions; shortcut-bindings.test.ts: every advertised key bound once, tab-bar keys kept out of the editor keymap, Subscript by build target; playground-regenerate.test.ts: Regenerate Playground offered in the Playground only
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
@@ -80,7 +80,7 @@ tests/
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
-│   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, new tab, close-all
+│   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
 │   ├── security-headers.spec.ts          # Hardening headers + CSP media-embed host allowlist
 │   ├── soak.spec.ts                      # Single-user soak (journeys + bot + memory tracking)
 │   ├── soak-collab.spec.ts               # N-user collaboration soak (dynamic, configurable)

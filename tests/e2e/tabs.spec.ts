@@ -105,6 +105,44 @@ test.describe("tabs", () => {
     );
   });
 
+  // The Regenerate button is not a Tab stop and has no key, so the palette
+  // is its keyboard path; other documents never list it.
+  test("Alt+/ › Regenerate Playground regenerates the Playground only", async ({
+    page,
+  }) => {
+    const ep = new EditorPage(page);
+    await ep.goto();
+    await ep.waitForSync();
+    await ep.focusTitle();
+    await page.keyboard.press("Alt+Slash");
+    const search = page.getByPlaceholder("Search actions…");
+    await expect(search).toBeFocused();
+    await page.keyboard.type("regenerate");
+    await expect(
+      page.getByRole("option", { name: /^Regenerate Playground/ }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    await ep.goto("playground");
+    await ep.waitForSync();
+    await ep.focusTitle();
+    const before = JSON.stringify(await ep.getEditorJSON());
+
+    await page.keyboard.press("Alt+Slash");
+    await expect(search).toBeFocused();
+    await page.keyboard.type("regenerate");
+    const option = page.getByRole("option", {
+      name: /^Regenerate Playground/,
+    });
+    await expect(option).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-command-palette]")).toHaveCount(0);
+
+    await expect
+      .poll(async () => JSON.stringify(await ep.getEditorJSON()))
+      .not.toBe(before);
+  });
+
   test("close-all is enabled when user tabs exist", async ({ page }) => {
     const ep = new EditorPage(page);
     await ep.goto();

@@ -12,12 +12,17 @@ since the previous tag.
 ### Shortcut clashes
 
 ⌘⇧R only aligns right, also on the Playground, and outside the editor it
-reloads the page again.
+reloads the page again. Regenerate Playground is in the Alt+/ palette, the
+keyboard path to the Playground tab's Regenerate button.
+
+#### Added
+
+- Alt+/ › Regenerate Playground, listed only on the Playground (no key).
 
 #### Fixed
 
-- Regenerate is the Playground tab's button only; its tooltip no longer shows
-  ⌘⇧R.
+- ⌘⇧R no longer regenerates the Playground; the Regenerate button's tooltip
+  no longer shows it.
 
 #### Changed
 
