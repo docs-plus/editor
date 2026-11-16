@@ -54,6 +54,16 @@ export function deleteDocumentPermanently(
 }
 
 /** Drops tombstones older than the retention cutoff; returns how many. */
+/** Tombstones `purgeTombstones` would delete with the same cutoff. Read-only. */
+export function countExpiredTombstones(db: Database, cutoffMs: number): number {
+  const row = db
+    .prepare(
+      "SELECT COUNT(*) AS count FROM document_tombstones WHERE deleted_at < ?",
+    )
+    .get(cutoffMs) as { count: number };
+  return row.count;
+}
+
 export function purgeTombstones(db: Database, cutoffMs: number): number {
   const stale = db
     .prepare("SELECT name FROM document_tombstones WHERE deleted_at < ?")
@@ -97,12 +107,16 @@ export function documentExists(db: Database, name: string): boolean {
   );
 }
 
-export function purgeStaleDocuments(
+/**
+ * Names of the documents `purgeStaleDocuments` would delete with the same
+ * arguments: the oldest `batchSize` idle since before `cutoffMs`, minus
+ * system documents. Read-only.
+ */
+export function findStaleDocuments(
   db: Database,
   cutoffMs: number,
   batchSize: number = DEFAULT_BATCH_SIZE,
-  nowMs: number = Date.now(),
-): { deletedCount: number; deletedNames: string[] } {
+): string[] {
   const staleRows = db
     .prepare(
       `
@@ -115,9 +129,18 @@ export function purgeStaleDocuments(
     )
     .all(cutoffMs, batchSize) as Array<{ name: string }>;
 
-  const candidates = staleRows
+  return staleRows
     .map((row) => row.name)
     .filter((name) => !isSystemDocumentId(name));
+}
+
+export function purgeStaleDocuments(
+  db: Database,
+  cutoffMs: number,
+  batchSize: number = DEFAULT_BATCH_SIZE,
+  nowMs: number = Date.now(),
+): { deletedCount: number; deletedNames: string[] } {
+  const candidates = findStaleDocuments(db, cutoffMs, batchSize);
 
   if (candidates.length === 0) {
     return { deletedCount: 0, deletedNames: [] };

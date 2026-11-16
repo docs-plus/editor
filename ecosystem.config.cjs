@@ -95,7 +95,14 @@ module.exports = {
       cwd: __dirname,
       script: "bun",
       args: "scripts/purge-retention.ts",
-      env: { NODE_ENV: "production", ...storageEnv },
+      env: {
+        NODE_ENV: "production",
+        ...storageEnv,
+        // dry-run logs what it would delete and changes nothing; on backs
+        // the database up to backups/ (keeps 7), then deletes; off skips.
+        // Switch to on in a pull request after reviewing dry-run logs.
+        PURGE_MODE: "dry-run",
+      },
       cron_restart: "17 3 * * *",
       autorestart: false,
       instances: 1,
