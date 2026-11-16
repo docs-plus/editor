@@ -9,6 +9,21 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Shortcut clashes
+
+⌘⇧R only aligns right, also on the Playground, and outside the editor it
+reloads the page again.
+
+#### Fixed
+
+- Regenerate is the Playground tab's button only; its tooltip no longer shows
+  ⌘⇧R.
+
+#### Changed
+
+- Desktop builds (`NEXT_PUBLIC_APP_TARGET=desktop`) bind Subscript to ⌘⇧, so
+  that ⌘, can open Settings. The web keeps ⌘,; Strikethrough keeps ⌘⇧S.
+
 ### Desktop local-first planning documents
 
 Adds the planning set for TinyDocy Desktop: the installable app for macOS,

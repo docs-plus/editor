@@ -1,8 +1,9 @@
 /**
- * Every advertised shortcut is bound, and each key does one thing: no combo
- * is bound by two editor extensions, and none of the tab bar's window keys
- * reaches the editor keymap too (⌘⇧R once aligned right *and* regenerated
- * the Playground). The action-vs-action uniqueness check lives in
+ * Every advertised shortcut is bound, each advertised combo by one editor
+ * extension (unless chained by design), and none of the tab bar's window
+ * keys is also an editor key: ⌘⇧R once aligned right *and* regenerated the
+ * Playground. Other window listeners (⌘⇧F, Alt+/) and non-advertised
+ * combos are not checked here; action-vs-action uniqueness lives in
  * `contract.test.ts`.
  */
 import { afterEach, describe, expect, it } from "bun:test";
@@ -150,6 +151,13 @@ describe("matchTabBarShortcut", () => {
 
   it("never takes ⌘⇧T, the browser's reopen-tab", () => {
     expect(press("T", { metaKey: true, shiftKey: true })).toBeNull();
+    // Chrome on macOS reports a lowercase key with ⌘ and Shift held.
+    expect(press("t", { metaKey: true, shiftKey: true })).toBeNull();
+  });
+
+  it("leaves ⌘[ and ⌘] (Back and Forward) to the browser", () => {
+    expect(press("[", { metaKey: true })).toBeNull();
+    expect(press("]", { ctrlKey: true })).toBeNull();
   });
 
   it("leaves ⌘⇧R to the editor's Align right and the browser's hard reload", () => {

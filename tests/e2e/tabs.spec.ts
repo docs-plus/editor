@@ -26,6 +26,85 @@ test.describe("tabs", () => {
     expect(textBefore).not.toEqual(textAfter);
   });
 
+  // ⌘⇧R once also regenerated the Playground where the browser reports a
+  // lowercase "r" with Shift held (Chrome on macOS). Playwright sends "R",
+  // so the test also dispatches that lowercase event itself.
+  test("Mod+Shift+R on the Playground aligns right and keeps the content", async ({
+    page,
+  }) => {
+    const ep = new EditorPage(page);
+    await ep.goto("playground");
+    await ep.waitForSync();
+
+    // Caret in the first paragraph with text that is not yet right-aligned
+    // (the Playground document is shared, so a rerun finds earlier ones).
+    const paragraphIndex = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) return -1;
+      let index = -1;
+      let target = -1;
+      editor.state.doc.forEach((node, offset, i) => {
+        if (
+          target < 0 &&
+          node.type.name === "paragraph" &&
+          node.textContent &&
+          node.attrs.textAlign !== "right"
+        ) {
+          target = offset + 2;
+          index = i;
+        }
+      });
+      editor.chain().focus().setTextSelection(target).run();
+      return index;
+    });
+    expect(paragraphIndex).toBeGreaterThan(0);
+    await expect(page.locator(".tiptap")).toBeFocused();
+
+    type Json = { attrs?: Record<string, unknown>; content?: Json[] };
+    const withoutAlign = (json: Json): Json => {
+      const { textAlign: _, ...attrs } = json.attrs ?? {};
+      return {
+        ...json,
+        attrs,
+        content: json.content?.map(withoutAlign),
+      };
+    };
+    const textAlign = async () =>
+      ((await ep.getEditorJSON()) as Json).content?.[paragraphIndex]?.attrs
+        ?.textAlign;
+    const before = JSON.stringify(
+      withoutAlign((await ep.getEditorJSON()) as Json),
+    );
+
+    await page.keyboard.press("ControlOrMeta+Shift+KeyR");
+    await expect.poll(textAlign).toBe("right");
+
+    await page.evaluate(() => {
+      const mac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
+      document.querySelector(".tiptap")?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "r",
+          code: "KeyR",
+          shiftKey: true,
+          metaKey: mac,
+          ctrlKey: !mac,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    // Regenerating would replace the document within this second.
+    await page.waitForTimeout(1000);
+
+    expect(await textAlign()).toBe("right");
+    expect(
+      JSON.stringify(withoutAlign((await ep.getEditorJSON()) as Json)),
+    ).toBe(before);
+    await expect(page.locator(".tab-bar-tab-regenerate")).toHaveAccessibleName(
+      "Regenerate content",
+    );
+  });
+
   test("close-all is enabled when user tabs exist", async ({ page }) => {
     const ep = new EditorPage(page);
     await ep.goto();
