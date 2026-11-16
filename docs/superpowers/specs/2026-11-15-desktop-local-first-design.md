@@ -573,7 +573,7 @@ Each server PR carries a CHANGELOG Deploy note.
 - Built at runtime by main.
 - No `'unsafe-inline'` in `script-src`. Main hashes every inline script of each HTML response: the preferences boot script, plus the export's own inline scripts (10 on `/`, 16 on `/about` in S1). A build test checks the boot script's hash (preferences design §5.3).
 - Styles (S1's pre-registered amendment): `style-src-elem 'self'` plus hashes, and `style-src-attr 'unsafe-inline'`, because ProseMirror and node views set `style` attributes (49 to 51 violations without it). Tiptap's injected `<style>` is turned off (`injectCSS: false`) and its CSS ships as a stylesheet.
-- Stored images are served from `/_asset/<hex>` on the app origin, so they need no `blob:` and no new `img-src` host (image store design §3.2). `img-src` is `'self' data:`, because eight CSS-inlined SVG icons are `data:` URIs (S1). The alternative is moving those icons to files.
+- Stored images are served from `/_asset/<hex>` on the app origin, so they need no `blob:` and no new `img-src` host (image store design §3.2). `img-src` stays `'self'`. The eight CSS icons that are `data:` URIs today become files (S1).
 - No X script hosts.
 - `connect-src` lists only the default server.
 
