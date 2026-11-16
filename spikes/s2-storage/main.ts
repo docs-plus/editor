@@ -20,12 +20,16 @@ import type { Request } from "./worker";
 
 type Args = Record<string, string>;
 
+// `--key=value` or `--key value`; a bare `--flag` is "1".
 const parseArgs = (argv: string[]): Args => {
   const args: Args = {};
-  for (const arg of argv) {
+  argv.forEach((arg, i) => {
     const match = arg.match(/^--([\w-]+)(?:=(.*))?$/);
-    if (match?.[1]) args[match[1]] = match[2] ?? "1";
-  }
+    if (!match?.[1]) return;
+    const next = argv[i + 1];
+    args[match[1]] =
+      match[2] ?? (next !== undefined && !next.startsWith("--") ? next : "1");
+  });
   return args;
 };
 
