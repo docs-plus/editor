@@ -24,24 +24,25 @@ concurrency:
 
 jobs:
   storage:
-    name: S2 (${{ matrix.os }})
+    name: S2 ${{ matrix.target }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    continue-on-error: ${{ matrix.informational }}
+    timeout-minutes: 90
+    # Gate rows: macos-26, windows-latest, ubuntu-24.04. The rest inform.
+    continue-on-error: ${{ !contains(fromJSON('["macos-26","windows-latest","ubuntu-24.04"]'), matrix.os) }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, windows-latest, ubuntu-24.04]
-        informational: [false]
-        include:
-          - os: macos-26-intel
-            informational: true
-          - os: windows-11-arm
-            informational: true
-          - os: ubuntu-24.04-arm
-            informational: true
+        os:
+          - macos-26
+          - windows-latest
+          - ubuntu-24.04
+          - macos-26-intel
+          - windows-11-arm
+          - ubuntu-24.04-arm
+        # One kill target per job keeps each job well inside the timeout.
+        target: [checks, append, compaction, append-off, append-dense]
     defaults:
       run:
         shell: bash
@@ -49,6 +50,7 @@ jobs:
     env:
       KILLS: ${{ github.event.inputs.kills || '200' }}
       OUT: ${{ github.workspace }}/spikes/s2-storage/harness-out
+      TARGET: ${{ matrix.target }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,45 +106,47 @@ jobs:
       - name: Pragmas (worker opens node:sqlite)
         run: |
           mkdir -p "$OUT"
+          echo "$TARGET" > "$OUT/target.txt"
           $XVFB bun electron dist/main.cjs --mode=pragmas --db "$RUNNER_TEMP/s2-pragmas.sqlite" | tee "$OUT/pragmas.txt"
           grep '^RESULT ' "$OUT/pragmas.txt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Appends and compaction round trip
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'checks' }}
         run: |
           $XVFB bun electron dist/main.cjs --mode=roundtrip --db "$RUNNER_TEMP/s2-roundtrip.sqlite" | tee "$OUT/roundtrip.txt"
           grep '^RESULT ' "$OUT/roundtrip.txt" >> "$GITHUB_STEP_SUMMARY"
           grep -q '"ok":true' "$OUT/roundtrip.txt"
 
       - name: Commit times, 4 KB (context only on hosted VMs)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'checks' }}
         run: |
           for thread in worker main; do
             $XVFB bun electron dist/main.cjs --mode=commit-loop --thread=$thread --count=1000 --db "$RUNNER_TEMP/s2-commit-$thread.sqlite" | grep '^RESULT ' | tee -a "$OUT/commit-times.txt"
           done
+          $XVFB bun electron dist/main.cjs --mode=commit-loop --synchronous=OFF --count=1000 --db "$RUNNER_TEMP/s2-commit-off.sqlite" | grep '^RESULT ' | tee -a "$OUT/commit-times.txt"
           cat "$OUT/commit-times.txt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Kill harness, append
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'append' }}
         run: $XVFB bun kill-harness.ts --kills "$KILLS" --target append --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Kill harness, compaction
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'compaction' }}
         run: $XVFB bun kill-harness.ts --kills "$KILLS" --target compaction --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Kill harness, append control (synchronous=OFF)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'append-off' }}
         run: $XVFB bun kill-harness.ts --kills "$KILLS" --target append --synchronous=OFF --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Kill harness, dense append (extra evidence)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.target == 'append-dense' }}
         run: $XVFB bun kill-harness.ts --kills 100 --target append --dense --out "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload harness logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: s2-${{ matrix.os }}
+          name: s2-${{ matrix.os }}-${{ matrix.target }}
           path: spikes/s2-storage/harness-out/
           if-no-files-found: warn
           retention-days: 90

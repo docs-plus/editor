@@ -183,12 +183,8 @@ for (let run = 1; run <= kills; run += 1) {
     proc.kill("SIGKILL");
   };
 
-  if (target === "compaction") {
-    // Safety net: kill anyway if no compaction starts within 15 s.
-    timer = setTimeout(kill, 15_000);
-  } else {
-    timer = setTimeout(kill, 50 + Math.random() * 1950);
-  }
+  // Safety net: kill anyway if churn never gets going within 15 s.
+  timer = setTimeout(kill, 15_000);
 
   const pumped = pump(proc.stdout, (line) => {
     if (line.startsWith("FAIL ")) note(`run ${run}: ${line}`);
@@ -200,6 +196,12 @@ for (let run = 1; run <= kills; run += 1) {
     if (kind === "COMPACT_ACK") summary.compactionsAcked += 1;
     if (kind && /^(BATCH_BEGIN|ACK|COMPACT_BEGIN|COMPACT_ACK)$/.test(kind)) {
       lastProtocol = kind;
+    }
+    // The 50–2000 ms append delay starts at READY (database loaded, churn
+    // starting), so kills hit the write stream, not Electron's startup.
+    if (kind === "READY" && target !== "compaction" && !killed) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(kill, 50 + Math.random() * 1950);
     }
     if (kind === "COMPACT_BEGIN") compactSeq = Number(value);
     if (kind === "COMPACT_BEGIN" && target === "compaction" && !killed) {
