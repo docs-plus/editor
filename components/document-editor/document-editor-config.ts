@@ -41,6 +41,10 @@ import {
   MAX_FILE_SIZE,
 } from "@/components/tiptap-node/image-upload-node/upload-utils";
 import { ActionPreview } from "@/extensions/action-preview";
+import {
+  renderCaret,
+  renderCaretSelection,
+} from "@/extensions/collaboration-caret/safe-caret-render";
 import { EditorActionShortcuts } from "@/extensions/editor-action-shortcuts";
 import { HeadingDrag } from "@/extensions/heading-drag";
 import {
@@ -218,6 +222,8 @@ export function buildDocumentEditorExtensions({
     SlashTrigger,
     CollaborationCaret.configure({
       provider,
+      render: renderCaret,
+      selectionRender: renderCaretSelection,
     }),
     HorizontalRule,
     TextAlign.configure({ types: ["heading", "paragraph"] }),

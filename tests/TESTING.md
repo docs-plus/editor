@@ -51,8 +51,9 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
-│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch)
-│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds
+│   ├── lib/                              # Security guardrails, legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), identity validation and blocked storage (`user-identity.test.ts`)
+│   ├── components/                       # Toolbar and menu components; the identity dialog's inline name errors and the normalised broadcast (`user-identity-dialog.test.tsx`)
+│   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds, remote caret names and colours clamped at render (`safe-caret-render.test.ts`)
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
