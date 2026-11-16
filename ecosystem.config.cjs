@@ -17,7 +17,19 @@
  * NEXT_PUBLIC_SERVICE_WORKER) and SEO_NOINDEX are inlined by `bun run build`.
  * Put them in .env.production before building, then `bun run build` and
  * `pm2 restart editor-next`; setting them here has no effect.
+ *
+ * editor-purge is a daily job, not a server: PM2 runs it at `cron_restart`
+ * (host-local time), it exits, and it is not restarted until the next run.
+ * Only the cron purges: the run PM2 starts when a deploy registers or
+ * updates the app finds scripts/deploy.sh's marker and exits.
  */
+
+// The SQLite file and the retention windows. Next.js, Hocus and the purge
+// must all see the same values.
+const storageEnv = {
+  DB_PATH: "db.sqlite",
+};
+
 module.exports = {
   apps: [
     {
@@ -25,7 +37,12 @@ module.exports = {
       cwd: __dirname,
       script: "bun",
       args: "run start",
-      env: { NODE_ENV: "production", PORT: 3847, TRUSTED_PROXY: "1" },
+      env: {
+        NODE_ENV: "production",
+        PORT: 3847,
+        TRUSTED_PROXY: "1",
+        ...storageEnv,
+      },
       instances: 1,
       exec_mode: "fork",
       autorestart: true,
@@ -54,7 +71,7 @@ module.exports = {
         NODE_ENV: "production",
         HOCUS_PORT: "3848",
         TRUSTED_PROXY: "1",
-        DB_PATH: "db.sqlite",
+        ...storageEnv,
         HOCUS_REDIS: "1",
         HOCUS_REDIS_HOST: "127.0.0.1",
         HOCUS_REDIS_PORT: "6380",
@@ -72,6 +89,27 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "256M",
+    },
+    {
+      // Deletes documents idle for RETENTION_DAYS and expired tombstones.
+      name: "editor-purge",
+      cwd: __dirname,
+      script: "bun",
+      args: "scripts/purge-retention.ts",
+      env: {
+        NODE_ENV: "production",
+        ...storageEnv,
+        // dry-run logs what it would delete and changes nothing; on backs
+        // the database up to backups/ (dated copies kept 14 days, the first
+        // one forever), then deletes; off skips.
+        // Switch to on in a pull request after reviewing dry-run logs.
+        PURGE_MODE: "dry-run",
+      },
+      cron_restart: "17 3 * * *",
+      autorestart: false,
+      instances: 1,
+      exec_mode: "fork",
+      watch: false,
     },
   ],
 };

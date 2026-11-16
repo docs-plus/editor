@@ -37,6 +37,9 @@ next-env.d.ts
 db.sqlite
 db.sqlite-wal
 db.sqlite-shm
+# Retention purge backups and deploy marker (scripts/purge-retention.ts)
+/backups/
+/.purge-skip-next
 
 # test results and reports (local-only)
 /test-results/
