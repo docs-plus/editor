@@ -62,9 +62,9 @@ export function buildDesktopCsp({
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     ...styleDirectives,
-    // CSS-inlined SVG icons (heading drag, list checkbox, phone sheet) are
-    // data: URIs; img-src covers CSS backgrounds and masks.
-    "img-src 'self' data:",
+    // No data: — the CSS icons that were data: URIs are files on the
+    // spike branch (public/spike-icons/).
+    "img-src 'self'",
     "media-src 'self'",
     "font-src 'self'",
     `connect-src 'self' ${hocusUrl}`,
