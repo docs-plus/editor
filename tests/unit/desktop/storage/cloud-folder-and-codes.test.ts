@@ -9,13 +9,39 @@ import {
   UPDATE_ORIGINS,
 } from "@/lib/platform/doc-store";
 
-const host = (platform: string, env: Record<string, string> = {}) => ({
+const host = (
+  platform: string,
+  env: Record<string, string> = {},
+  homeDir = "",
+) => ({
   platform,
   env,
+  homeDir,
   realpath: (path: string) => path,
 });
 
 describe("cloudFolderOf", () => {
+  test("a user name that looks like a provider is not a sync folder", () => {
+    expect(
+      cloudFolderOf(
+        "/home/box/.config/TinyDocy",
+        host("linux", {}, "/home/box"),
+      ),
+    ).toBeNull();
+    expect(
+      cloudFolderOf(
+        "/Users/dropbox/Library/Application Support/TinyDocy",
+        host("darwin", {}, "/Users/dropbox"),
+      ),
+    ).toBeNull();
+    expect(
+      cloudFolderOf("/home/box/Dropbox/T", host("linux", {}, "/home/box")),
+    ).toBe("dropbox");
+    expect(
+      cloudFolderOf("D:\\Dropbox\\TinyDocy", host("win32", {}, "C:\\Users\\a")),
+    ).toBe("dropbox");
+  });
+
   const cases: [string, string, Record<string, string>, string | null][] = [
     ["darwin", "/Users/a/Library/Application Support/TinyDocy", {}, null],
     [

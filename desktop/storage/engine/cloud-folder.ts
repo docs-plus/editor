@@ -58,16 +58,24 @@ function isUnder(path: string, root: string, caseInsensitive: boolean) {
 /** The cloud provider syncing `dir`, or null. Symlinks are resolved first. */
 export function cloudFolderOf(
   dir: string,
-  host: Pick<StorageHost, "platform" | "env" | "realpath">,
+  host: Pick<StorageHost, "platform" | "env" | "realpath" | "homeDir">,
 ): CloudProvider | null {
   const resolved = host.realpath(dir);
   const caseInsensitive = host.platform !== "linux";
+  // The home folder's own segments are a user name, not a sync folder: a
+  // person called "box" or "dropbox" must still be able to start the app.
+  const home = host.homeDir ? host.realpath(host.homeDir) : "";
+  const skip =
+    home && isUnder(resolved, home, caseInsensitive)
+      ? segmentsOf(home).length
+      : 0;
   for (const name of ONEDRIVE_ENV) {
     const root = host.env[name];
     if (root && isUnder(resolved, root, caseInsensitive)) return "onedrive";
   }
   const parts = segmentsOf(resolved);
   for (const [i, part] of parts.entries()) {
+    if (i < skip) continue;
     if (part.toLowerCase() === "cloudstorage") {
       const next = parts[i + 1] ?? "";
       for (const [pattern, provider] of CLOUD_STORAGE)
