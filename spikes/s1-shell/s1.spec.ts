@@ -478,6 +478,10 @@ test("spellcheck: no network, word flagged", async () => {
       "spellcheckEvents",
       (s as unknown as { spellcheck: string[] }).spellcheck,
     );
+    record(
+      "spellcheckDictServer",
+      (s as unknown as { dictServer?: unknown }).dictServer ?? null,
+    );
     const para = page
       .locator(".ProseMirror p", { hasText: "mispeled" })
       .first();
@@ -485,7 +489,9 @@ test("spellcheck: no network, word flagged", async () => {
   } finally {
     await app.close();
   }
-  const hosts = nonLoopback(hostsInNetLog(netlog));
+  const all = hostsInNetLog(netlog);
+  record("spellcheckNetlogHosts", all);
+  const hosts = nonLoopback(all);
   record("spellcheckNetlogNonLoopbackHosts", hosts);
 });
 

@@ -1,0 +1,239 @@
+name: Spike quit and Linux spellcheck
+
+# Throwaway spike for P2.5 issues #106 (quit hangs) and #100 (Linux
+# spellcheck downloads its dictionary). Runs only on the spike branch; never
+# merged to main. No secrets and no environments: the grep step checks it.
+
+on:
+  push:
+    branches: [spike/quit-spellcheck]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-quit-spellcheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quit:
+    name: Quit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, ubuntu-24.04, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      QUIT_MACHINE: ${{ matrix.os }}
+      QUIT_REPS: "3"
+      QUIT_TIMEOUT_MS: "20000"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No secrets or environments in this workflow
+        # Bracket expressions, so the pattern does not match this line itself.
+        run: "! grep -nE 'secrets[.]|environment[:]' .github/workflows/spike-quit-spellcheck.yml"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # Electron 45 has no postinstall: install-electron fetches the binary.
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          cd spikes/quit
+          bun install --frozen-lockfile
+          bun install-electron
+
+      - name: Linux libraries and Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          bun playwright install-deps chromium
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      # Everything after install runs on Bun. A stub makes any call to the
+      # runner image's Node fail loudly.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Block Node.js (Windows twin)
+        if: runner.os == 'Windows'
+        run: |
+          printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
+
+      - name: Workflow rules
+        if: runner.os == 'Linux'
+        run: bun test tests/unit/ci/workflow-permissions.test.ts
+
+      # S5's export: the editor exposed for setContent, Hocus on 1290.
+      # TMP on the checkout's drive (build-export.ts renames; EXDEV on Windows).
+      - name: Desktop export
+        env:
+          NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR: "1"
+          NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1290
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: bun spikes/s1-shell/build-export.ts
+
+      - name: Electron bundles (CJS)
+        run: cd spikes/quit && bun run build
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Machine
+        run: |
+          uname -a
+          bun -e 'const os=require("node:os");console.log(os.cpus()[0]?.model, os.cpus().length, "cpus", Math.round(os.totalmem()/2**30), "GiB")'
+
+      - name: Quit trials
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a --server-args="-screen 0 1920x1080x24" bun spikes/quit/run.ts
+          else
+            bun spikes/quit/run.ts
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spike-quit-${{ matrix.os }}
+          path: spikes/quit/results/
+          if-no-files-found: ignore
+          retention-days: 90
+
+  spellcheck:
+    name: Spellcheck (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1294
+      NEXT_PUBLIC_SPIKE_EXPOSE_EDITOR: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          cd spikes/s1-shell
+          bun install --frozen-lockfile
+          bun install-electron
+
+      - name: Linux tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb tcpdump
+
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Desktop export
+        run: bun spikes/s1-shell/build-export.ts
+
+      - name: Main and preload bundles (CJS)
+        run: bun spikes/s1-shell/build.ts
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Build time, not run time: the files the app would bundle. Both en-US
+      # versions, so whichever name Electron 45 asks for is there.
+      - name: Fetch the dictionaries to bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/dict"
+          curl -fsSL -o "$RUNNER_TEMP/dict/en-US-10-1.bdic" https://redirector.gvt1.com/edgedl/chrome/dict/en-us-10-1.bdic
+          curl -fsSL "https://chromium.googlesource.com/chromium/deps/hunspell_dictionaries/+/refs/heads/main/en-US-10-2.bdic?format=TEXT" | base64 -d > "$RUNNER_TEMP/dict/en-US-10-2.bdic"
+          ls -l "$RUNNER_TEMP/dict"
+          sha256sum "$RUNNER_TEMP/dict"/*
+
+      # One arm per delivery path, each inside a packet capture of DNS
+      # queries and outbound TCP/UDP connection attempts (any interface).
+      # The candidates run first: the baseline resolves *.gvt1.com, and a
+      # cached answer could hide a later arm's lookup (its SYN would still
+      # show).
+      - name: Spellcheck arms
+        run: |
+          ev=spikes/s1-shell/evidence/linux-app
+          mkdir -p "$ev"
+          arm() {
+            name=$1; shift
+            sudo tcpdump -i any -nn -U -w "$ev/$name.pcap" \
+              'udp port 53 or (tcp[tcpflags] & tcp-syn != 0 and tcp[tcpflags] & tcp-ack == 0) or (udp and not port 53 and not src host 127.0.0.1)' \
+              2>"$ev/$name.tcpdump.log" &
+            pid=$!
+            sleep 2
+            env S1_RESULTS_TAG="$name" "$@" xvfb-run -a bun spikes/s1-shell/run-s1.ts app -- -g spellcheck || echo "::warning::arm $name failed"
+            sleep 1
+            sudo kill -INT "$pid"; wait "$pid" || true
+            sudo chmod a+r "$ev/$name.pcap"
+            {
+              echo "## DNS queries"
+              tcpdump -nn -r "$ev/$name.pcap" 'udp port 53' 2>/dev/null | grep -oE '(A|AAAA|HTTPS)\? [^ ]+' | sort | uniq -c
+              echo "## outbound connection attempts (not loopback)"
+              tcpdump -nn -r "$ev/$name.pcap" 'not net 127.0.0.0/8 and not ip6 host ::1' 2>/dev/null | grep -v '\.53: \|\.53 >' | awk '{print $3, $4, $5}' | sort | uniq -c
+            } > "$ev/$name.capture.txt"
+            echo "== $name"; cat "$ev/$name.capture.txt"
+            cp "$ev/spellcheck.netlog.json" "$ev/$name.netlog.json" 2>/dev/null || true
+          }
+          arm loopback SPIKE_DICT_SERVER=loopback SPIKE_DICT_DIR="$RUNNER_TEMP/dict"
+          arm file S1_DICT_URL="file://$RUNNER_TEMP/dict/"
+          arm baseline
+
+      - name: Summary
+        if: always()
+        run: |
+          for f in spikes/s1-shell/evidence/*/results*.json; do
+            echo "== $f"; head -c 6000 "$f"; echo
+          done
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spike-spellcheck-ubuntu-24.04
+          retention-days: 90
+          path: |
+            spikes/s1-shell/evidence/
+            spikes/s1-shell/test-results/

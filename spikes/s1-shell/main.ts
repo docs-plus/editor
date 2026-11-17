@@ -30,6 +30,7 @@ import {
 } from "electron";
 
 import { buildDesktopCsp, hashInline, type StyleMode } from "./csp";
+import { startDictServer } from "./dict-server";
 import { installMenu, type MenuIntent } from "./menu";
 import { installQuitFlow } from "./quit";
 
@@ -85,6 +86,7 @@ interface S1State {
   contextMenus: { misspelled: string; suggestions: string[] }[];
   documentNavigations: string[];
   inPageNavigations: string[];
+  dictServer?: { url: string; requests: unknown[] };
 }
 
 const state: S1State = {
@@ -437,12 +439,24 @@ function sendIntent(intent: MenuIntent): void {
   win?.webContents.send("app.menuIntent", intent);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   state.marks.ready = performance.now();
   installProtocol();
   installRefererRewrite();
   installIpc();
-  if (process.env.SPIKE_DICT_URL) {
+  // #100: SPIKE_DICT_SERVER=loopback serves SPIKE_DICT_DIR's .bdic files on
+  // 127.0.0.1 and points the downloader there (before the first window, so
+  // before the spellchecker initialises). SPIKE_DICT_URL sets any other URL
+  // (file:///…/ was the other candidate).
+  if (
+    process.env.SPIKE_DICT_SERVER === "loopback" &&
+    process.env.SPIKE_DICT_DIR
+  ) {
+    const server = await startDictServer(process.env.SPIKE_DICT_DIR);
+    state.dictServer = { url: server.url, requests: server.requests };
+    session.defaultSession.setSpellCheckerDictionaryDownloadURL(server.url);
+    app.once("will-quit", () => server.close());
+  } else if (process.env.SPIKE_DICT_URL) {
     session.defaultSession.setSpellCheckerDictionaryDownloadURL(
       process.env.SPIKE_DICT_URL,
     );
