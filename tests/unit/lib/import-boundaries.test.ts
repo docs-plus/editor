@@ -48,6 +48,32 @@ const SERVER_ENTRIES = [
   "scripts/hocus-server.ts",
 ];
 
+// The platform-neutral storage path (desktop architecture §3.3, D-A4): shared
+// by desktop and the web library, so it must not load the sandbox's
+// collaboration stack, its offline copies, React or the editor.
+const PLATFORM_ENTRIES = [
+  "lib/platform/local-session.ts",
+  "lib/platform/memory-doc-store.ts",
+];
+
+describe("platform import boundaries", () => {
+  for (const entry of PLATFORM_ENTRIES) {
+    it(`${entry} loads no sandbox, React or editor code`, () => {
+      const { files, packages } = staticImports(entry);
+      for (const file of files) {
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file.startsWith("lib/offline/")).toBe(false);
+        expect(file.startsWith("components/")).toBe(false);
+      }
+      for (const name of packages) {
+        expect(name).not.toBe("react");
+        expect(name.startsWith("@tiptap/")).toBe(false);
+        expect(name.startsWith("@hocuspocus/")).toBe(false);
+      }
+    });
+  }
+});
+
 describe("import boundaries", () => {
   for (const entry of SERVER_ENTRIES) {
     it(`${entry} imports neither the client tab API nor @hocuspocus/provider`, () => {

@@ -41,6 +41,7 @@ tests/
 │   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings)
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
+│   ├── memory-document-index.ts          # MemoryDocumentIndex: the in-memory DocumentIndex fake (deferLoad, failTrash, purgeTrash)
 │   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── editor-keymap.ts                  # collectEditorKeys(): every combo the editor's extensions bind; normalizeCombo()
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
@@ -54,6 +55,7 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
+│   ├── platform/                         # DocumentIndex contract suite (`document-index-contract.ts`) on MemoryDocumentIndex and GlobalTabsIndex, plus the sandbox's own rules (Playground, bootstrap, poisoned entries)
 │   ├── api/                              # Route handlers: DELETE rate limit; soft close, batch restore and Recently closed list (temp DB_PATH)
 │   ├── scripts/                          # Retention purge (stale and closed documents), operator delete-document, Hocus client gate and root sweep, desktop export parking and output check
 │   ├── lib/                              # Image embed planner and pipeline; `assets/` PNG, WebP and JPEG metadata stripper; security guardrails (incl. closed-documents store), import boundaries (server entries never reach `lib/tab-api` or `@hocuspocus/provider`), legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets, document link colour ≥ 4.5:1 on background and card in both themes), theme boot script and System theme (`theme.test.ts`), identity validation and blocked storage (`user-identity.test.ts`)

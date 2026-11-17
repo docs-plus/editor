@@ -46,6 +46,107 @@ gained `dynamic = "force-static"`; the PNG is byte-identical.
 - The desktop build never registers the service worker, whose precache lists
   `/privacy` (#117 follow-up).
 
+### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
+
+The second half of desktop plan P2.1: the platform-neutral storage path that
+desktop and the web library share, behind the P2.1a ports. Nothing in the web
+app uses it yet; `lib/collab-session.ts` is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/local-session.ts`, the `DocSession` over a
+  `DocStore`: load with no timeout, hydrate (never appended), migration hook
+  before ready, deferred release (1 s), then flush, compact and close. Edits
+  made before the content loads are kept, `flush()` also covers sessions
+  that are closing, a refused load is retried on the next open, and
+  unreadable content or a failing migration is reported (`corrupt`,
+  `migration_failed`) with the schema advanced only past finished steps.
+- **Platform:** `lib/platform/batcher.ts`: appends 250 ms after the last
+  update or 1 s after the first, one append in flight per document, failed
+  appends retried in order with backoff (2 s doubling to 60 s) and never
+  skipped, save health (`failing`, `behind` past 4 MiB), and the compaction
+  trigger (500 rows or 1 MiB since the snapshot).
+- **Platform:** `lib/platform/memory-doc-store.ts`, the in-memory `DocStore`
+  (one client per document, `failNext`, load and write delays) for tests and
+  the dev bridge.
+- **Tests:** the `DocStore` contract suite (`tests/helpers/doc-store-contract.ts`),
+  written as runner-neutral cases so P2.6 can run it on SQLite and inside
+  Electron; it passes on `MemoryDocStore`. A real-process SIGKILL test and a
+  fake-clock property test show a kill loses only the last second of typing.
+
+### Desktop P2.1a: `DocSession` and `DocStore` port types
+
+The first half of desktop plan P2.1: the types the editor, the storage worker
+and the web library code against. Types and one error class only; nothing
+imports them yet, so the web app is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session.ts` (`DocSession`, `DocHandle`,
+  `DocHandleState`, `ReadOnlyReason`, and the `HYDRATE_ORIGIN`,
+  `STORAGE_ORIGIN` and `MIGRATION_ORIGIN` transaction origins) and
+  `lib/platform/doc-store.ts` (`DocStore`, `LoadedDoc`, `AppendRecord`,
+  `CompactResult`, `UPDATE_ORIGINS`, and `DocStoreError` with the
+  architecture §9 storage codes plus the web library's `quota_exceeded`).
+
+#### Changed
+
+- **Docs:** the desktop architecture spec now puts each port in its own file
+  under `lib/platform/` (no `ports.ts`), and records P2.1's amendments to the
+  port shapes. `DocStore.compact` resolves with `{ foreign }` for the web
+  library's merge-into-snapshot compaction; the web library design notes it.
+
+### Desktop P2.3: the tab list behind a `DocumentIndex` port (#122)
+
+The shared tab list now sits behind a `DocumentIndex` port, so the desktop
+library (SQLite) and the web library (IndexedDB) can serve the same list
+later. Tab behaviour is unchanged: the tab e2e specs pass without changes.
+
+#### Added
+
+- **Platform:** `lib/platform/document-index.ts`, the `DocumentIndex` port:
+  `snapshot()` (`rev`, `ready`, `items`), `subscribe()` with `load` and
+  `change` events, `create`, `rename`, `move`, `trash`, `restore` and
+  `destroy`. The active tab stays per window, outside the port.
+- **Tests:** one contract suite (`tests/unit/platform/`) runs on
+  `MemoryDocumentIndex` (`tests/helpers/memory-document-index.ts`) and on the
+  web implementation. Web-only tests cover Playground, bootstrap and
+  poisoned entries.
+
+#### Changed
+
+- **Tabs:** `GlobalTabsIndex` (`lib/platform/web/global-tabs-index.ts`) now
+  holds the `global-tabs` Y.Doc logic: the bootstrap and legacy migration,
+  sanitized reads, rename, reorder, soft close (forgetting the device copy)
+  and restore. `useSyncedTabs` is its React adapter. It keeps the active tab,
+  the title debounce, the tab cap, the confirmations and the Undo pill.
+- **Tabs:** the legacy-list migration keeps the stored active tab id when it
+  clears the old list, because the hook now reads that id after the seed.
+- **Tabs:** first-load JS grows 564 B gz (319,253 B against 318,689 B on
+  `next start`). The editor chunk is unchanged.
+
+### CSS icons as files, so the desktop CSP needs no `data:` images
+
+The eight `data:image/svg+xml` icons in the stylesheets (seven unique) would be
+blocked by the desktop app's `img-src 'self'` (#102). They now ship as files.
+
+#### Changed
+
+- **Icons:** the phone bar's context-slot icons (Heading, Code, Table, Media),
+  the checklist tick and the heading drag grip are SVG files beside their
+  stylesheets. The bundler serves them as hashed `/_next/static/media/*.svg`
+  (`image/svg+xml`), so they look the same in both themes. The drag grip is
+  now one mask tinted per theme, and draws in the system text colour under
+  forced colours.
+- **Offline:** when the service worker stores a stylesheet, it also stores
+  the `/_next/static` files the sheet references, so CSS icons draw offline
+  even before they were first shown.
+- **Tests:** a unit test fails if a stylesheet uses a `data:` URL again or
+  points a relative `url()` at a missing file.
+
+The web CSP keeps `data:` in `img-src`: images inserted into documents are
+stored as `data:` URLs.
+
 ### Dark links on highlighted text
 
 Links inside highlighted text are readable in dark mode (#104).

@@ -10,7 +10,9 @@
  * - Navigations: network-first (navigation preload, 3 s timeout). A 5xx or
  *   no answer falls back to the last good copy of a shell page, then to the
  *   precached /offline page.
- * - /_next/static/*: cache-first (content-addressed).
+ * - /_next/static/*: cache-first (content-addressed). A stored stylesheet
+ *   also stores the /_next/static files it references (icons, fonts), so
+ *   its masks still draw offline.
  * - Everything else is never touched (see classifyRequest).
  */
 import {
@@ -24,6 +26,7 @@ import {
 } from "./sw-config";
 import {
   classifyRequest,
+  extractCssAssets,
   extractStaticAssets,
   isCacheableResponse,
 } from "./sw-routing";
@@ -140,6 +143,7 @@ async function handleStatic(event: FetchEvent): Promise<Response> {
     event.waitUntil(
       cache
         .put(event.request, response.clone())
+        .then(() => cacheCssAssets(cache, [event.request.url]))
         .then(() => trimCache(cache, STATIC_CACHE_MAX_ENTRIES))
         .catch(() => undefined),
     );
@@ -167,10 +171,35 @@ async function storeSnapshot(
   const previous = await shell.match(pathname, { ignoreVary: true });
   if (etag && previous?.headers.get("etag") === etag) return;
   const staticCache = await caches.open(STATIC_CACHE);
+  const assets = extractStaticAssets(await response.clone().text());
   // Rejects on any 404: the previous copy is kept.
-  await staticCache.addAll(extractStaticAssets(await response.clone().text()));
+  await staticCache.addAll(assets);
+  await cacheCssAssets(staticCache, assets);
   await shell.put(pathname, response);
   await trimCache(staticCache, STATIC_CACHE_MAX_ENTRIES);
+}
+
+/**
+ * Stores the /_next/static files the cached stylesheets among `urls`
+ * reference (CSS icons and fonts load only when first drawn). Best effort:
+ * a failed file is fetched again when the page draws it.
+ */
+async function cacheCssAssets(cache: Cache, urls: string[]): Promise<void> {
+  const sheets = urls
+    .map((url) => new URL(url, self.location.origin))
+    .filter((url) => url.pathname.endsWith(".css"));
+  await Promise.allSettled(
+    sheets.map(async (sheet) => {
+      const css = await (await cache.match(sheet.href))?.text();
+      if (!css) return;
+      const files = extractCssAssets(css, sheet.href);
+      await Promise.allSettled(
+        files.map(async (file) => {
+          if (!(await cache.match(file))) await cache.add(file);
+        }),
+      );
+    }),
+  );
 }
 
 async function trimCache(cache: Cache, maxEntries: number): Promise<void> {

@@ -9,8 +9,14 @@ import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 const TABS_KEY = "tinydocy-tabs";
 
+/**
+ * Drops the legacy tab list once it seeded the shared one. The active tab id
+ * in the same key stays: it is this browser's own choice, read after the seed.
+ */
 export function clearMigrationStorage(): void {
+  const activeTabId = loadActiveTabIdFromStorage();
   localStorage.removeItem(TABS_KEY);
+  if (activeTabId) persistActiveTabId(activeTabId);
 }
 
 const PLAYGROUND_TAB: Tab = {

@@ -526,7 +526,7 @@ Documents/<folder path>/<clean title>-<short id>.md        (front matter: tags, 
 |---|---|---|
 | `local-session` (architecture §5.1): load, hydrate, migration hook, batcher wiring, deferred release | **The same file**, given an `IdbDocStore` | Move it from `lib/platform/desktop/` to **`lib/platform/local-session.ts`** (P2.1). It imports only `ports.ts`. |
 | The batcher and compaction trigger (architecture §5.2) | Same | Extract it as **`lib/platform/batcher.ts`** (P2.1 / P2.6) |
-| `DocSession`, `DocStore`, `DocumentIndex`, `AppShell` ports | Same types | `DocStore` gains nothing. The web adapter keeps `applied` internally (§2.5). |
+| `DocSession`, `DocStore`, `DocumentIndex`, `AppShell` ports | Same types | `DocStore` gains one thing: `compact` resolves with `{ foreign }`, the stored snapshot it merged in, which `local-session` applies with `STORAGE_ORIGIN` (P2.1; desktop always returns null). The web adapter keeps `applied` internally (§2.5). |
 | `WriteGate`, the stable Awareness, provider optional | Same | none (P2.2) |
 | Files sidebar tree, Pinned, Move to…, drag and drop, Quick Open | Same components | **Place them in `components/library/`, not `components/desktop/`** (P2.7a). The import-boundary rules (architecture §3.3) would otherwise forbid the web from importing them. Desktop-only chrome stays in `components/desktop/`: titlebar, native menus, Settings window, first run. |
 | List views, sort, group, filter, tag filter, virtualization | Same | `components/library/` (P2.7b) |
