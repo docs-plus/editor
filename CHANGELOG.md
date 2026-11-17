@@ -139,6 +139,31 @@ gained `dynamic = "force-static"`; the PNG is byte-identical.
 - The desktop build never registers the service worker, whose precache lists
   `/privacy` (#117 follow-up).
 
+### Design: selection bubble and quick insert
+
+A draft design for the owner's review: a fuller one-row selection bubble, a
+caret-local way to insert blocks, amendments to the "/" menu (Suggested, an
+inline hint, a footer), and a phone Insert sheet. Documentation only; no app
+or server change.
+
+#### Added
+
+- **Docs:**
+  - `docs/superpowers/specs/2026-11-17-bubble-and-quick-insert-design.md`:
+    the audit of today's bubble, Insert, "/" and phone surfaces; research
+    across eight editors (two rounds of owner references, including Notion's
+    panel and "/" menu) and the platform guidance; the proposed design with
+    owner decisions O1–O12; and a phased plan.
+  - `docs/design/2026-11-17-bubble-quick-insert-prototype.html`: a clickable
+    prototype with a switch for each decision, theme, RTL, reduced motion and
+    device.
+  - Screenshots of today's UI and of the prototype in
+    `docs/design/2026-11-17-bubble-quick-insert/`.
+- **Finding:** the lazy selection bubble mounts Tiptap's React `<BubbleMenu>`,
+  which calls `registerPlugin` from a lazy chunk. When the chunk lands it
+  rebuilds every plugin view (29 of 29 measured), after the editor is already
+  interactive. The spec's phase 0 replaces it.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
