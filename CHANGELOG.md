@@ -9,6 +9,52 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.7a: files sidebar, Quick Open and Move to…
+
+The library's files sidebar for desktop and the web library (D3), in
+`components/library/`, driven by a `LibraryIndex`. The web sandbox doesn't
+use it: the web build is unchanged (every JS and CSS chunk identical to
+`main`; first load and editor chunk +0 B).
+
+#### Added
+
+- **Platform:** `LibraryIndex` extends the `DocumentIndex` port with
+  folders (4 levels), all-or-none moves that refuse a folder into its own
+  subtree, pins in their own order, `markOpened`, and a folder trashed and
+  restored as one unit (to the root when its parent is gone).
+  `GlobalTabsIndex` stays a plain `DocumentIndex`. `MemoryDocumentIndex`
+  implements it, and the shared contract suite covers it for P2.6's
+  `IpcDocumentIndex` and W2's `IdbDocumentIndex`.
+- **Search:** `lib/search/normalize.ts`, the one metadata normalizer
+  (D-A8): case, Latin, Arabic and Hebrew marks, tatweel, Arabic yeh and kaf
+  to Persian, Persian and Arabic-Indic digits to ASCII, with an offset map
+  so highlights keep the original text. `lib/search/match.ts` matches word
+  prefixes before substrings.
+- **Library:** the files sidebar (Search, Recent, Pinned, the Library tree,
+  Trash), an APG tree with one tab stop, multi-select, type-ahead, F2
+  rename, Move to Trash (⌘⌫ / Delete) and file-operation undo (⌘Z, 20
+  steps), Shift+F10 row menus, and pointer drag and drop with
+  spring-loaded folders (700 ms, or Space). Move to… lists recent
+  destinations first and keeps refused folders visible with the reason.
+  Quick Open searches titles and folder names only (D24), shows the folder
+  path, offers Create when nothing matches, and opens in a new tab with
+  ⌘Enter. Right-to-left sidebars mirror, ← and → included.
+- **Focus:** `lib/region-focus.ts` moves between regions with F6 /
+  Shift+F6 and returns to the last focused element of each.
+- **Tests:** the `library` Playwright project runs the keyboard checklist,
+  folder refusals, drag and drop, RTL keys and axe on a Bun harness
+  (`tests/harness/library`, `bun run harness:library`); CI starts it in
+  the e2e job. Unit tests cover the normalizer, the matcher, folder and
+  drop rules, tree rows, keys, the undo stack and F6 regions; the import
+  boundary test keeps the library UI free of sandbox, desktop, editor and
+  test code.
+
+#### Changed
+
+- **Build:** `app/globals.css` leaves `components/library` and
+  `tests/harness` out of Tailwind's sources; the library styles itself in
+  plain CSS on the shadcn tokens, shipped only with the components.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
