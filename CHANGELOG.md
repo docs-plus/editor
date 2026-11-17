@@ -9,6 +9,31 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
+
+The second half of desktop plan P2.1: the platform-neutral storage path that
+desktop and the web library share, behind the P2.1a ports. Nothing in the web
+app uses it yet; `lib/collab-session.ts` is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/local-session.ts`, the `DocSession` over a
+  `DocStore`: load with no timeout, hydrate (never appended), migration hook
+  before ready, deferred release (1 s), then flush, compact and close; edits
+  made before the content loads are kept.
+- **Platform:** `lib/platform/batcher.ts`: appends 250 ms after the last
+  update or 1 s after the first, one append in flight per document, failed
+  appends retried in order with backoff (2 s doubling to 60 s) and never
+  skipped, save health (`failing`, `behind` past 4 MiB), and the compaction
+  trigger (500 rows or 1 MiB since the snapshot).
+- **Platform:** `lib/platform/memory-doc-store.ts`, the in-memory `DocStore`
+  (one client per document, `failNext`, load and write delays) for tests and
+  the dev bridge.
+- **Tests:** the `DocStore` contract suite (`tests/helpers/doc-store-contract.ts`),
+  written as runner-neutral cases so P2.6 can run it on SQLite and inside
+  Electron; it passes on `MemoryDocStore`. A real-process SIGKILL test and a
+  fake-clock property test show a kill loses only the last second of typing.
+
 ### Desktop P2.1a: `DocSession` and `DocStore` port types
 
 The first half of desktop plan P2.1: the types the editor, the storage worker

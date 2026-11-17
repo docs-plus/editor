@@ -580,7 +580,7 @@ sequenceDiagram
 | Preferences boot script | parity with `resolveBoot()` over about 40 stored payloads; the desktop CSP hash matches the script (build test) | happy-dom; build |
 | Main | `argv` filter, navigation and `window.open` denial, fuses | `_electron` |
 
-**Fakes** (`tests/helpers/platform-fakes.ts`): `MemoryDocStore` (with `loadDelayMs` and `failNext`), `MemoryDocumentIndex`, `MemoryBlobStore` (with `failNext` and `missing`), `FakeAppShell` (records flush requests), `FakeClock`.
+**Fakes** (`tests/helpers/platform-fakes.ts`; `MemoryDocStore` lives in `lib/platform/memory-doc-store.ts` because the dev bridge uses it too, and the `DocStore` contract cases in `tests/helpers/doc-store-contract.ts` are runner-neutral data for `bun test` and the Electron worker alike): `MemoryDocStore` (with `loadDelayMs`, `writeDelayMs` and `failNext`), `MemoryDocumentIndex`, `MemoryBlobStore` (with `failNext` and `missing`), `FakeAppShell` (records flush requests), `FakeClock`.
 
 **Playwright projects**
 - **`local`:** `NEXT_PUBLIC_APP_TARGET=desktop` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev` under `next dev`, with no Hocus.
