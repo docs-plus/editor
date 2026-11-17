@@ -277,15 +277,20 @@ test.describe("context slot cell", () => {
     );
     const cell = bar(page).getByRole("button", { name: "Code block tools" });
     // The cell shows its kind (CodeXml, drawn as a mask), not the sliders.
-    expect(
-      await cell.evaluate((el) => ({
-        sliders: getComputedStyle(el.querySelector("svg") as Element).display,
-        mask: getComputedStyle(el, "::before").maskImage,
-      })),
-    ).toEqual({
+    // The mask is a file, not a data: URL, so `img-src 'self'` allows it.
+    const kind = await cell.evaluate((el) => ({
+      sliders: getComputedStyle(el.querySelector("svg") as Element).display,
+      mask: getComputedStyle(el, "::before").maskImage,
+    }));
+    expect(kind).toEqual({
       sliders: "none",
-      mask: expect.stringContaining("data:image/svg"),
+      mask: expect.stringMatching(/\/_next\/static\/media\/code\.[^/"]+\.svg/),
     });
+    const icon = await page.request.get(
+      (kind.mask.match(/url\("(.+)"\)/) ?? [])[1] ?? "",
+    );
+    expect(icon.ok()).toBe(true);
+    expect(icon.headers()["content-type"]).toContain("image/svg+xml");
     await cell.tap();
     const menu = page.getByRole("menu", { name: "Code block tools" });
     // Copy code, a separator, then the "Language" group.

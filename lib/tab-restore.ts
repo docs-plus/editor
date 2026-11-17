@@ -1,11 +1,10 @@
-import type * as Y from "yjs";
-
 import { trackEvent } from "@/lib/analytics";
 import { announceLater } from "@/lib/announce-later";
-import { restoreDocuments } from "@/lib/closed-tabs-api";
 import { MAX_TABS_PER_CLIENT } from "@/lib/constants";
-import { findRawTabIndex, sanitizeTabs } from "@/lib/tab-api";
-import type { Tab } from "@/lib/tab-entry";
+import type {
+  DocumentIndex,
+  RestorableEntry,
+} from "@/lib/platform/document-index";
 
 /**
  * Undo and restore for closed tabs. A lazy chunk: `useSyncedTabs` and the
@@ -14,14 +13,15 @@ import type { Tab } from "@/lib/tab-entry";
  */
 
 /**
- * A tab to restore. `index` is its raw index before it was closed (Undo puts
+ * A tab to restore. `index` is its position before it was closed (Undo puts
  * it back there); without one it is appended (Recently closed).
  */
-export type RestorableTab = { id: string; title: string; index?: number };
+export type RestorableTab = RestorableEntry;
 
 /** What the restore logic needs from `useSyncedTabs`. */
 export interface TabList {
-  tabs: () => Y.Array<unknown> | null;
+  /** The tab list's index; null once the hook has unmounted. */
+  index: () => DocumentIndex | null;
   activate: (id: string) => void;
 }
 
@@ -34,36 +34,6 @@ function tabsLabel(tabs: readonly RestorableTab[]): string {
   return tabs.length === 1 ? quotedTitle(tabs[0].title) : `${tabs.length} tabs`;
 }
 
-function isListed(arr: Y.Array<unknown>, id: string): boolean {
-  return findRawTabIndex(arr.toArray(), id) >= 0;
-}
-
-/** Inserts the missing tabs in one transaction, at their old index or the end. */
-function insertMissing(arr: Y.Array<unknown>, entries: RestorableTab[]): void {
-  // Ascending old indices put several tabs back in their old order.
-  const ordered = [...entries].sort(
-    (a, b) => (a.index ?? Infinity) - (b.index ?? Infinity),
-  );
-  const insert = () => {
-    for (const entry of ordered) {
-      if (isListed(arr, entry.id)) continue;
-      const at =
-        entry.index === undefined
-          ? arr.length
-          : // Playground stays at 0.
-            Math.min(Math.max(entry.index, 1), arr.length);
-      const tab: Tab = {
-        id: entry.id,
-        title: entry.title,
-        createdAt: Date.now(),
-      };
-      arr.insert(at, [tab]);
-    }
-  };
-  if (arr.doc) arr.doc.transact(insert);
-  else insert();
-}
-
 /**
  * Restores closed tabs with one request. "restored" and "not_closed" (another
  * visitor restored it first, or an earlier answer was lost) both mean the
@@ -73,34 +43,31 @@ export async function restoreTabs(
   list: TabList,
   entries: readonly RestorableTab[],
 ): Promise<void> {
-  const arr = list.tabs();
-  if (!arr || entries.length === 0) return;
+  const index = list.index();
+  if (!index || entries.length === 0) return;
+  const { items } = index.snapshot();
   const label = tabsLabel(entries);
-  const missing = entries.filter((entry) => !isListed(arr, entry.id));
-  if (
-    sanitizeTabs(arr.toArray()).length + missing.length >
-    MAX_TABS_PER_CLIENT
-  ) {
+  const listed = new Set(items.map((item) => item.id));
+  const missing = entries.filter((entry) => !listed.has(entry.id));
+  if (items.length + missing.length > MAX_TABS_PER_CLIENT) {
     announceLater(
       `Maximum tabs reached (${MAX_TABS_PER_CLIENT}). Close a tab to restore ${label}.`,
     );
     return;
   }
 
-  const results = await restoreDocuments(entries.map((entry) => entry.id));
+  const results = await index.restore(entries);
   if (!results) {
     announceLater(`Couldn't restore ${label}. Check your connection.`);
     return;
   }
-  const live = list.tabs();
-  if (!live) return;
+  if (list.index() !== index) return;
 
   const back = entries.filter((entry) => {
     const result = results[entry.id];
     return result === "restored" || result === "not_closed";
   });
   const gone = entries.filter((entry) => results[entry.id] === "gone");
-  insertMissing(live, back);
 
   if (back[0]) list.activate(back[0].id);
   const restoredCount = entries.filter(
@@ -118,20 +85,13 @@ export async function restoreTabs(
   }
 }
 
-/**
- * The pill after a close: `Closed “Title”` or `Closed N tabs`, with Undo.
- * `raw` is the shared list before the close, for the tabs' old indices.
- */
+/** The pill after a close: `Closed “Title”` or `Closed N tabs`, with Undo. */
 export function offerUndo(
   list: TabList,
-  closed: readonly { id: string; title: string }[],
-  raw: readonly unknown[],
+  closed: readonly RestorableTab[],
 ): void {
   if (closed.length === 0) return;
-  const entries: RestorableTab[] = closed.map(({ id, title }) => {
-    const index = findRawTabIndex(raw, id);
-    return { id, title, index: index >= 0 ? index : undefined };
-  });
+  const entries = [...closed];
   announceLater(`Closed ${tabsLabel(entries)}`, {
     action: { label: "Undo", run: () => void restoreTabs(list, entries) },
   });

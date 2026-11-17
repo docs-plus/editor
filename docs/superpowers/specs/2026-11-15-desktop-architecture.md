@@ -106,7 +106,8 @@ components/
 hooks/use-yjs-document.ts      # consumes DocSession from context; no longer imports collab-session
 lib/
   collab-session.ts            # sandbox only; unchanged except P1.1 and P1.1b
-  platform/ports.ts            # DocSession, DocStore, DocumentIndex, AppShell, BlobStore (+ Live ports later)
+  platform/doc-session.ts      # one file per port (P2.1): DocSession here, DocStore in doc-store.ts,
+  platform/doc-store.ts        # DocumentIndex in document-index.ts (P2.3); AppShell, BlobStore and the Live ports likewise
   platform/doc-session-context.tsx
   platform/local-session.ts    # shared by desktop and the web library (moved out of platform/desktop/)
   platform/batcher.ts          # batching and the compaction trigger, shared the same way
@@ -186,13 +187,15 @@ These are enforced by one test, `tests/unit/ci/import-boundaries.test.ts`. It re
 
 ## 4. Ports
 
-All live in `lib/platform/ports.ts`, as types only.
+Each port has its own types-only file in `lib/platform/` (P2.1): `doc-session.ts`, `doc-store.ts`, `document-index.ts`, and the same for the ports still to come. There is no `ports.ts`.
+
+**P2.1 amendments to the shapes below.** `DocSession.open` returns a handle at once (`ready` starts false), with `getState()` (`ready`, `authoritative`, `readOnlyReason`, `error`), `subscribe`, `flush` and `release`, and `DocSession.flush()` saves every open document. `DocStore.load` returns `snapshot: null` before the first compaction. `append` takes `snippet` and `schemaTo` beside `title`. `compact` resolves with `{ foreign }`: always null on desktop; the web library's merge-into-snapshot rule (web library §2.5) returns another writer's content there, which `local-session` applies with `STORAGE_ORIGIN` and never appends. This is the one addition to the port the web library needs, because `IdbDocStore` cannot reach the Y.Doc. Stored origins are `local`, `migration`, `remote` and `restore`; `local-session` maps Yjs transaction origins onto them.
 
 | Port | Shape | Web sandbox | Web library (D3) | Desktop |
 |---|---|---|---|---|
 | **`DocSession`** | `open(docId) → { doc, awareness, provider: HocuspocusProvider \| null, ready, authoritative, readOnlyReason, subscribe, release }` | An adapter over `acquireCollabSession`: `authoritative` = server synced, `readOnlyReason` = `rejectedReason` | `web-doc-session.ts`: `local-session` over `IdbDocStore` for the writer tab; a read-only mirror (`open_elsewhere`) in other tabs | `local-session` (§5.1) |
 | **`DocStore`** | `load(docId) → { snapshot?, updates[], maxSeq, schema }` · `append(docId, { origin, update, title? }) → seq` · `compact(docId, state, upToSeq)` · `close(docId)` · `flush()` | none: the sandbox keeps `LocalDocStore` inside `collab-session` | `IdbDocStore` (W2): strict appends, merge-into-snapshot compaction (W-D3) | `IpcDocStore` (§5.2) |
-| **`DocumentIndex`** | `snapshot() → { rev, items }` · `subscribe(cb)` · `create`, `rename`, `move`, `pin`, `trash`, `restore`, `purge`, `searchTitles` | the internals of today's `useSyncedTabs` (`global-tabs`) | `IdbDocumentIndex` (W2), with the rev feed over BroadcastChannel | `IpcDocumentIndex` over `docs`, `folders` and the tag tables, with a change feed |
+| **`DocumentIndex`** | `snapshot() → { rev, ready, items }` · `subscribe(cb(type: load \| change, snapshot))` · `create`, `rename`, `move`, `trash`, `restore`, `destroy` (P2.3, `lib/platform/document-index.ts`); `pin`, `purge`, `searchTitles` and folders join with P2.7a/b | `GlobalTabsIndex` (`lib/platform/web/global-tabs-index.ts`, P2.3): the `global-tabs` logic moved out of `useSyncedTabs` | `IdbDocumentIndex` (W2), with the rev feed over BroadcastChannel | `IpcDocumentIndex` over `docs`, `folders` and the tag tables, with a change feed |
 | **`AppShell`** | `onFlushRequested(cb)`, `confirmFlushed()`, `openExternal`, `reveal(docId)`, `onMenuIntent`, `updateStatus`, `installUpdate`, `copyDiagnostics` | `beforeunload` guard (today's `useUnsyncedChangesGuard`), `window.open` | `BrowserShell`: flush on `visibilitychange`, `pagehide` and `blur`; no `reveal` | `ElectronShell`. Registers no `beforeunload`. |
 | **`BlobStore`** (D4) | `put(docId, bytes, mime) → { hex }` · `url(hex)` · `get(hex)` · `has(hexes)` · `recount(docId, hexes)` · `gc(now)` (image store §3.1) | none: the sandbox stays inline | `IdbBlobStore` (W11) with reference-counted object URLs | `IpcBlobStore` → main → worker; files under `<userData>/assets/` |
 | (Live) `SyncAttachment` | `attach({ doc, awareness, serverUrl, name, token }) → detach` | the web's built-in provider | `HocuspocusProvider` on the shared socket, `import()`ed when needed (W10) | `import()`'d only when a live document opens |
@@ -586,7 +589,7 @@ sequenceDiagram
 | Preferences boot script | parity with `resolveBoot()` over about 40 stored payloads; the desktop CSP hash matches the script (build test) | happy-dom; build |
 | Main | `argv` filter, navigation and `window.open` denial, fuses | `_electron` |
 
-**Fakes** (`tests/helpers/platform-fakes.ts`): `MemoryDocStore` (with `loadDelayMs` and `failNext`), `MemoryDocumentIndex`, `MemoryBlobStore` (with `failNext` and `missing`), `FakeAppShell` (records flush requests), `FakeClock`.
+**Fakes** (`tests/helpers/platform-fakes.ts`; `MemoryDocStore` lives in `lib/platform/memory-doc-store.ts` because the dev bridge uses it too, and the `DocStore` contract cases in `tests/helpers/doc-store-contract.ts` are runner-neutral data for `bun test` and the Electron worker alike): `MemoryDocStore` (with `loadDelayMs`, `writeDelayMs` and `failNext`), `MemoryDocumentIndex`, `MemoryBlobStore` (with `failNext` and `missing`), `FakeAppShell` (records flush requests), `FakeClock`.
 
 **Playwright projects**
 - **`local`:** `NEXT_PUBLIC_APP_TARGET=desktop` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev` under `next dev`, with no Hocus.

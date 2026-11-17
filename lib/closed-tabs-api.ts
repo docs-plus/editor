@@ -1,15 +1,15 @@
+import type { RestoreResult } from "@/lib/platform/document-index";
 import type { ClosedDocument } from "@/lib/security/closed-documents";
 import { getGlobalTabsDoc } from "@/lib/tabs-doc-name";
 
 /**
- * Restore and Recently closed requests. Imported only by the lazy restore
- * module and the lazy menu, so none of it is in first-load JS.
+ * Restore and Recently closed requests. Loaded only with `import()` by the
+ * tab index's restore and by the lazy menu, so none of it is in first-load JS.
  */
 
 // Type-only: no server code reaches the client bundle.
+export type { RestoreResult } from "@/lib/platform/document-index";
 export type { ClosedDocument } from "@/lib/security/closed-documents";
-
-export type RestoreResult = "restored" | "not_closed" | "gone";
 
 /** One request for every id; null on a network error or a non-200. */
 export async function restoreDocuments(
