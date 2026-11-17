@@ -10,7 +10,8 @@
 
   .dark & {
     --tt-collaboration-carets-label: var(--tt-gray-dark-100);
-    --link-text-color: #5b9cf2;
+    // ≥ 4.5:1 on the page and on every highlight; yellow is the limit (#104).
+    --link-text-color: #93c5fd;
     --thread-text: var(--tt-gray-dark-900);
     --placeholder-color: var(--tt-gray-dark-a-400);
     --thread-bg-color: var(--tt-color-yellow-dec-2);

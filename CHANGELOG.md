@@ -9,6 +9,20 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Dark links on highlighted text
+
+Links inside highlighted text are readable in dark mode (#104).
+
+#### Fixed
+
+- Dark-mode document links are lighter: `#93c5fd` instead of `#5b9cf2`. On the
+  ten highlight colours they now read at 4.60–6.55:1 instead of 2.95–4.21:1
+  (yellow is the lowest), and at 10.98:1 on the page and 9.94:1 on cards.
+  Light mode is unchanged (4.54–5.65:1 on highlights). Links keep their
+  underline.
+- `token-contrast.test.ts` and `link-underlines.spec.ts` check every highlight
+  × link pair in both themes against 4.5:1.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
