@@ -39,10 +39,19 @@ function visibleBand(scrollTarget: HTMLElement): Band {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-/** The document position at the editor's left edge, `top` px down. */
+/**
+ * The document position where the line `top` px down starts. Both inline
+ * edges are probed and the smaller position wins: in a right-to-left line
+ * the left edge is the line's logical end.
+ */
 function posAtBandEdge(view: EditorView, top: number): number | undefined {
-  const left = view.dom.getBoundingClientRect().left + 1;
-  return view.posAtCoords({ left, top })?.pos;
+  const { left, right } = view.dom.getBoundingClientRect();
+  let found: number | undefined;
+  for (const x of [left + 1, right - 1]) {
+    const pos = view.posAtCoords({ left: x, top })?.pos;
+    if (pos !== undefined && (found === undefined || pos < found)) found = pos;
+  }
+  return found;
 }
 
 /** Client rects of the DOM range between two document positions. */

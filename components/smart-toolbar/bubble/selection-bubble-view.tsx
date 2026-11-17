@@ -43,8 +43,9 @@ const FOCUS_GUARD = "[data-base-ui-focus-guard]";
 
 /**
  * The bubble's one root (v1 contract §5.2). The controller appends it to
- * the scroll container on show and removes it on hide; it is absolute and
- * hidden until the first position lands.
+ * the scroll container on show and removes it on hide; it is absolute, and
+ * hidden until each show's first position lands (the controller hides it
+ * again on hide).
  */
 function createBubbleRoot(): HTMLDivElement {
   const root = document.createElement("div");

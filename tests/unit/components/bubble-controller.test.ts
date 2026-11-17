@@ -266,6 +266,22 @@ describe("createBubbleController", () => {
     await until(connected);
   });
 
+  test("focus while shown leaves it to the view (Esc's exit fade)", async () => {
+    await showBubble();
+    // Esc on an item: the view suppresses and fades, focus returns.
+    allow = false;
+    editor.view.dom.dispatchEvent(new FocusEvent("focus"));
+    await Bun.sleep(SETTLE_MS);
+    expect(host.root.isConnected).toBe(true);
+  });
+
+  test("hide resets visibility, so a re-shown root waits for its position", async () => {
+    await showBubble();
+    host.root.style.visibility = "visible";
+    controller.hide();
+    expect(host.root.style.visibility).toBe("hidden");
+  });
+
   test("setEditable(false) hides it (update event)", async () => {
     await showBubble();
     editor.setEditable(false);
@@ -413,7 +429,8 @@ describe("bubbleReferenceRect", () => {
     to: number;
     lines: Line[];
     coords: (pos: number) => { top: number; bottom: number };
-    hit?: number;
+    /** The position each band probe hits (a function: per probe). */
+    hit?: number | ((probe: { left: number; top: number }) => number);
     domAtPos?: (pos: number) => { node: Node; offset: number };
     /** A real document; by default one big textblock. */
     doc?: ProseMirrorNode;
@@ -457,7 +474,8 @@ describe("bubbleReferenceRect", () => {
       coordsAtPos: (pos: number) => ({ left: 50, right: 60, ...coords(pos) }),
       posAtCoords: (probe: { left: number; top: number }) => {
         probes.push(probe);
-        return hit === undefined ? null : { pos: hit, inside: -1 };
+        if (hit === undefined) return null;
+        return { pos: typeof hit === "number" ? hit : hit(probe), inside: -1 };
       },
       domAtPos: (pos: number) => {
         if (start < 0) start = pos;
@@ -511,7 +529,23 @@ describe("bubbleReferenceRect", () => {
       lines: [{ top: 160, left: 40, right: 640 }],
     });
     bubbleReferenceRect(view, stubScrollTarget(), "top");
-    expect(probes).toEqual([{ left: 41, top: 151 }]);
+    expect(probes).toEqual([
+      { left: 41, top: 151 },
+      { left: 639, top: 151 },
+    ]);
+    expect(ranges).toEqual([[900, 1200]]);
+  });
+
+  test("top: a right-to-left line starts at its right edge (the smaller position)", () => {
+    const { view, ranges } = stubView({
+      from: 10,
+      to: 4000,
+      coords: (pos) => (pos === 10 ? { top: 20, bottom: 40 } : inBand()),
+      // The left edge of an RTL line is its logical end.
+      hit: ({ left }) => (left < 100 ? 950 : 900),
+      lines: [{ top: 160, left: 40, right: 640 }],
+    });
+    bubbleReferenceRect(view, stubScrollTarget(), "top");
     expect(ranges).toEqual([[900, 1200]]);
   });
 
@@ -579,7 +613,10 @@ describe("bubbleReferenceRect", () => {
       ],
     });
     const result = bubbleReferenceRect(view, stubScrollTarget(), "bottom");
-    expect(probes).toEqual([{ left: 41, top: 151 }]);
+    expect(probes).toEqual([
+      { left: 41, top: 151 },
+      { left: 639, top: 151 },
+    ]);
     expect(ranges).toEqual([[900, 1200]]);
     expect([result.left, result.right, result.top]).toEqual([40, 300, 160]);
   });

@@ -169,6 +169,8 @@ export function createBubbleController(
     stopAutoUpdate?.();
     stopAutoUpdate = undefined;
     root.remove();
+    // A later show stays hidden until its first position lands.
+    root.style.visibility = "hidden";
     host.onHide();
   }
 
@@ -223,6 +225,16 @@ export function createBubbleController(
     evaluate();
   };
 
+  /**
+   * Focus (:459-462) re-evaluates only while hidden. While shown, focus
+   * coming back from an item (Esc) must not hide at once: the view's
+   * suppression would cut its exit fade, which the plugin's debounced
+   * focus handler let play.
+   */
+  const onFocus = () => {
+    if (!visible) evaluateLater();
+  };
+
   /** :464-484, but only focus moving into the root itself keeps it. */
   const onBlur = ({ event }: EditorEvents["blur"]) => {
     if (preventHide) {
@@ -275,7 +287,7 @@ export function createBubbleController(
     if (destroyed) return;
     destroyed = true;
     editor.off("transaction", onTransaction);
-    editor.off("focus", evaluateLater);
+    editor.off("focus", onFocus);
     editor.off("blur", onBlur);
     editor.off("update", onUpdate);
     editor.off("destroy", destroy);
@@ -297,7 +309,7 @@ export function createBubbleController(
   }
 
   editor.on("transaction", onTransaction);
-  editor.on("focus", evaluateLater);
+  editor.on("focus", onFocus);
   editor.on("blur", onBlur);
   editor.on("update", onUpdate);
   editor.on("destroy", destroy);
