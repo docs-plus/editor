@@ -1,6 +1,6 @@
 # Selection bubble and quick insert: design
 
-- **Status:** Draft for owner review (2026-11-17). Nothing is built. No product code changes until the owner approves §2.
+- **Status:** **Approved by the owner, 2026-11-17** ("Approve as recommended"): every decision in §2 as recommended, including O11 a (one row), O1 a, O2 b, O4 a, O5 a + c, O6 a, O7 b, O8 a, O12 a and BQ1–BQ11. Plan: [`docs/superpowers/plans/2026-11-17-bubble-and-quick-insert.md`](../plans/2026-11-17-bubble-and-quick-insert.md).
 - **Why now:** the owner shared two screenshots of another editor's selection bubble and bottom insert pill. They asked for a rethink of TinyDocy's bubble and quick-access surfaces that covers every state, edge case and platform.
 - **Decides:**
   - what lives in the bubble, the Insert surfaces, the row and the page menu;
@@ -53,6 +53,8 @@ The reference's bottom insert pill and "Make page wide" item are deliberately **
 ---
 
 ## 2. Decisions to approve
+
+> **Approved by the owner, 2026-11-17: "Approve as recommended."** Each row below is decided as its Recommendation column says.
 
 Each row is either a proposal (BQ*n*) or an owner choice (O*n*). Each owner choice has options and a recommendation, and the prototype lets you switch between the options.
 
