@@ -1,0 +1,27 @@
+# windows-latest, Next 16.4.6, repro app: find out -name '*.txt' | sort (run 44041439341, job 133896720223)
+out/__next.__PAGE__.txt
+out/__next._full.txt
+out/__next._tree.txt
+out/_not-found.txt
+out/_not-found/__next._full.txt
+out/_not-found/__next._not-found/__PAGE__.txt
+out/_not-found/__next._tree.txt
+out/about.txt
+out/about/__next._full.txt
+out/about/__next._tree.txt
+out/about/__next.about/__PAGE__.txt
+out/index.txt
+
+# ubuntu-24.04, Next 16.4.6, repro app (job 133896720117)
+out/__next.__PAGE__.txt
+out/__next._full.txt
+out/__next._tree.txt
+out/_not-found.txt
+out/_not-found/__next._full.txt
+out/_not-found/__next._not-found.__PAGE__.txt
+out/_not-found/__next._tree.txt
+out/about.txt
+out/about/__next._full.txt
+out/about/__next._tree.txt
+out/about/__next.about.__PAGE__.txt
+out/index.txt

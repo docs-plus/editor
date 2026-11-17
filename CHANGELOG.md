@@ -23,6 +23,31 @@ Links inside highlighted text are readable in dark mode (#104).
 - `token-contrast.test.ts` and `link-underlines.spec.ts` check every highlight
   × link pair in both themes against 4.5:1.
 
+### Windows export spike: where the desktop renderer is built
+
+This decides #103 and fixes #111, two Windows problems in building the desktop
+renderer (the Next.js static export). Documentation only; no app or server
+change.
+
+#### Added
+
+- **Docs:** `docs/research/2026-11-17-spike-windows-export.md` and its
+  evidence in `docs/research/spike-evidence/windows-export/`, including a
+  draft upstream comment for vercel/next.js#85374 (not posted).
+  - On Windows, Next 16.4.6 and 16.5 canary write segment-prefetch files
+    into `__next.<segment>/` directories, so prefetch 404s.
+  - The renderer is therefore built once on Linux and packaged on every OS.
+  - Parking the web-only metadata files inside the checkout fixes `EXDEV`
+    on Windows runners.
+
+#### Changed
+
+- **Docs:** the desktop architecture §3.1 and the test and release strategy
+  §2.4 now say:
+  - The renderer is exported once, on Linux.
+  - The stage step refuses a Windows-built `out/`.
+  - The metadata move-aside stays in Phase 2, with leftover recovery.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
