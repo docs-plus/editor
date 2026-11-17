@@ -1,0 +1,14 @@
+# #111: desktop export on windows-latest with the runner's default temp dir (run 44041439341, job 133896719748)
+# runner image: windows-2025-vs2026 20261103.298.1
+# (Git Bash shows TMP=/tmp, its own mapping; Bun's os.tmpdir() is the Windows default on C:)
+TMP=/tmp TEMP=/tmp TMPDIR=<unset>
+checkout on D:\, os.tmpdir() C:\Users\RUNNER~1\AppData\Local\Temp on C:\
+renameSync checkout -> os.tmpdir(): EXDEV
+[s1] repo root on D:\, parked on D:\, os.tmpdir() on C:\
+[s1] desktop export exit=0 in 32939 ms
+[s1] out/ top level: 404.html __next.__PAGE__.txt __next._full.txt __next._tree.txt _next _not-found _not-found.html _not-found.txt about about.html about.txt favicon.ico icon index.html index.txt spike-icons
+[s1] web-only metadata in out/: none
+# step 'app/ is restored': git status --porcelain -- app printed nothing; job conclusion: success
+
+# TinyDocy export on Windows, segment layout
+{"label":"tinydocy windows-latest","platform":"win32","next":"16.4.6","layout":"nested (bug)","nestedDirs":["_not-found/__next._not-found","about/__next.about"],"segmentFiles":["__next.__PAGE__.txt","__next._full.txt","__next._tree.txt","_not-found/__next._full.txt","_not-found/__next._not-found/__PAGE__.txt","_not-found/__next._tree.txt","about/__next._full.txt","about/__next._tree.txt","about/__next.about/__PAGE__.txt"],"clientUrlStatus":{"/about/__next.about.__PAGE__.txt":404,"/_not-found/__next._not-found.__PAGE__.txt":404}}

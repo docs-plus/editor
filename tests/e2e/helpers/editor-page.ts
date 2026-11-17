@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { JSONContent } from "@tiptap/core";
 
 import { getPlaywrightModifierKey } from "./playwright-modifier-key";
@@ -297,6 +297,42 @@ export class EditorPage {
       window.__tiptap_editor?.commands.setContent(content as JSONContent);
     }, json);
     await this.page.waitForTimeout(200);
+  }
+
+  /**
+   * Waits until the server has acknowledged every local edit and fails,
+   * naming the cause, if it refused them instead. A refused document (over
+   * `MAX_DOC_SIZE_BYTES`) turns read-only, so a timing run would type into
+   * nothing; call this after seeding a large document.
+   */
+  async expectSavedToServer(): Promise<void> {
+    const result = await this.page.waitForFunction(
+      () => {
+        const notice = document.querySelector(".document-size-notice");
+        if (notice) return { refusal: notice.textContent ?? "" };
+        const caret = window.__tiptap_editor?.extensionManager.extensions.find(
+          (extension) => extension.name === "collaborationCaret",
+        );
+        const provider = caret?.options.provider as
+          | { isSynced: boolean; hasUnsyncedChanges: boolean }
+          | undefined;
+        if (!provider?.isSynced || provider.hasUnsyncedChanges) return false;
+        return { refusal: null };
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
+    const { refusal } = (await result.jsonValue()) as {
+      refusal: string | null;
+    };
+    expect(
+      refusal,
+      "the server refused the document; is Hocus running with the Makefile's MAX_DOC_SIZE_BYTES (make dev)?",
+    ).toBeNull();
+    await expect(this.page.locator(".tiptap")).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
   }
 
   async undo(): Promise<void> {
