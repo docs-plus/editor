@@ -17,6 +17,8 @@ import {
   hasUnsyncedCollabChanges,
   subscribeUnsyncedChanges,
 } from "@/lib/collab-session";
+import { DocSessionProvider } from "@/lib/platform/doc-session-context";
+import { sandboxDocSession } from "@/lib/platform/web/sandbox-doc-session";
 
 /** How long the intro waits for the collab server before showing a notice. */
 const UNREACHABLE_AFTER_MS = 10_000;
@@ -165,13 +167,16 @@ export function EditorApp({ intro }: EditorAppProps) {
       {offline && !bannerDismissed && (
         <OfflineBanner onDismiss={() => setBannerDismissed(true)} />
       )}
-      <DocumentEditor
-        key={activeTabId}
-        documentId={activeTabId}
-        onTitleChange={(title) => updateTabTitle(activeTabId, title)}
-        playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-        onPlaygroundRegenerate={handlePlaygroundRegenerate}
-      />
+      {/* The web composition root: documents open through collab-session. */}
+      <DocSessionProvider session={sandboxDocSession}>
+        <DocumentEditor
+          key={activeTabId}
+          documentId={activeTabId}
+          onTitleChange={(title) => updateTabTitle(activeTabId, title)}
+          playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+          onPlaygroundRegenerate={handlePlaygroundRegenerate}
+        />
+      </DocSessionProvider>
     </div>
   );
 }

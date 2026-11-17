@@ -74,6 +74,27 @@ describe("platform import boundaries", () => {
   }
 });
 
+// The editor reads its DocSession from context (architecture §3.3): neither
+// the hook nor the editor may load the sandbox's collab-session or a
+// platform adapter, so the desktop graph never contains them.
+const EDITOR_ENTRIES = [
+  "hooks/use-yjs-document.ts",
+  "components/document-editor/document-editor.tsx",
+];
+
+describe("editor import boundaries", () => {
+  for (const entry of EDITOR_ENTRIES) {
+    it(`${entry} loads no collab-session or platform adapter`, () => {
+      const { files } = staticImports(entry);
+      for (const file of files) {
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file.startsWith("lib/platform/web/")).toBe(false);
+        expect(file.startsWith("lib/platform/desktop/")).toBe(false);
+      }
+    });
+  }
+});
+
 describe("import boundaries", () => {
   for (const entry of SERVER_ENTRIES) {
     it(`${entry} imports neither the client tab API nor @hocuspocus/provider`, () => {
