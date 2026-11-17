@@ -20,6 +20,8 @@ on:
       - desktop/storage-harness/**
       - desktop/dev/bun-sqlite-driver.ts
       - lib/platform/desktop/**
+      - lib/platform/doc-store.ts
+      - tests/helpers/doc-store-contract.ts
       - tests/load/desktop-durability-soak.ts
       - .github/workflows/desktop-storage-soak.yml
   workflow_call:

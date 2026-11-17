@@ -5,9 +5,6 @@ import * as Y from "yjs";
 import { IDLE_MS, type Library } from "@/desktop/storage/engine/library";
 import { TRASH_RETENTION_MS } from "@/desktop/storage/engine/library-index";
 import { dispatch } from "@/desktop/storage/protocol";
-import type { DocStore } from "@/lib/platform/doc-store";
-import { createEngineDocStore } from "@/tests/helpers/engine-doc-store";
-import { STORAGE_DOC_STORE_CASES } from "@/tests/helpers/storage-doc-store-cases";
 import {
   createClock,
   createTempDir,
@@ -25,24 +22,6 @@ beforeEach(() => {
 afterEach(() => {
   library.shutdown();
   temp.cleanUp();
-});
-
-describe("DocStore over the engine (bun:sqlite)", () => {
-  for (const testCase of STORAGE_DOC_STORE_CASES)
-    test(testCase.name, async () => {
-      const stores = new Map<string, DocStore>();
-      await testCase.run({
-        store(owner) {
-          let store = stores.get(owner);
-          if (!store) {
-            store = createEngineDocStore(library, owner);
-            stores.set(owner, store);
-          }
-          return store;
-        },
-        createDoc: async () => library.createDoc().id,
-      });
-    });
 });
 
 describe("dispatch", () => {

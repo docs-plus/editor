@@ -6,8 +6,8 @@
  * engine on `bun:sqlite`.
  *
  * Modes (`--mode=`):
- * - `contract`: the engine `DocStore` cases over the worker (`CASE_OK` /
- *   `CASE_FAIL` lines).
+ * - `contract`: P2.1's shared `DocStore` contract over the worker
+ *   (`CASE_OK` / `CASE_FAIL` lines).
  * - `churn`: edits a document with product batching (or `--dense`) until
  *   killed; `--target=compaction` compacts after every ack;
  *   `--quit-after-ms` runs the quit flush instead (T4). The worker prints
@@ -21,7 +21,8 @@
  * An uncaught throw in Electron main opens a modal dialog, so every failure
  * exits with `process.exit(1)` after printing `HARNESS_FAIL`.
  */
-import { writeSync } from "node:fs";
+import { mkdtempSync, rmSync, writeSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { app } from "electron";
@@ -29,7 +30,10 @@ import * as Y from "yjs";
 
 import { createRpcDocStore } from "../../lib/platform/desktop/rpc-doc-store";
 import type { DocStore } from "../../lib/platform/doc-store";
-import { STORAGE_DOC_STORE_CASES } from "../../tests/helpers/storage-doc-store-cases";
+import {
+  DOC_STORE_CONTRACT,
+  type DocStoreHarness,
+} from "../../tests/helpers/doc-store-contract";
 import { StorageClient } from "../storage/client";
 import { openNodeSqlite } from "../storage/drivers/node-sqlite";
 import { Library } from "../storage/engine/library";
@@ -85,32 +89,50 @@ function storeFor(client: StorageClient, owner: string): DocStore {
   );
 }
 
+/**
+ * P2.1's shared DocStore contract on `node:sqlite` in the real worker: one
+ * worker and temp library per case, one owner id per connected client.
+ */
 async function contract() {
-  const client = await StorageClient.start(workerPath(), { dir: dir() });
+  let passed = 0;
   let failed = 0;
-  for (const [i, testCase] of STORAGE_DOC_STORE_CASES.entries()) {
-    const stores = new Map<string, DocStore>();
-    try {
-      await testCase.run({
-        store(owner) {
-          const key = `${i}:${owner}`;
-          let store = stores.get(key);
-          if (!store) {
-            store = storeFor(client, key);
-            stores.set(key, store);
-          }
-          return store;
-        },
-        createDoc: async () => (await client.call("createDoc", {})).id,
+  const harness: DocStoreHarness = {
+    exclusiveOpen: true,
+    async createLibrary() {
+      const libraryDir = mkdtempSync(path.join(tmpdir(), "contract-"));
+      const client = await StorageClient.start(workerPath(), {
+        dir: libraryDir,
       });
+      let clients = 0;
+      return {
+        connect: () => storeFor(client, `client-${++clients}`),
+        async createDoc(docId, schema) {
+          await client.call("createDoc", { id: docId, schema });
+        },
+        async dispose() {
+          await client.shutdown();
+          rmSync(libraryDir, {
+            recursive: true,
+            force: true,
+            maxRetries: 10,
+            retryDelay: 200,
+          });
+        },
+      };
+    },
+  };
+  for (const testCase of DOC_STORE_CONTRACT) {
+    if (testCase.requires && !harness[testCase.requires]) continue;
+    try {
+      await testCase.run(harness);
+      passed += 1;
       say(`CASE_OK ${testCase.name}`);
     } catch (error) {
       failed += 1;
       say(`CASE_FAIL ${testCase.name}: ${String(error)}`);
     }
   }
-  say(`STATS ${JSON.stringify(await client.call("stats", {}))}`);
-  say(`SHUTDOWN ${await client.shutdown()}`);
+  say(`CONTRACT ${passed} passed, ${failed} failed`);
   if (failed > 0) fail(`${failed} contract case(s) failed`);
 }
 
