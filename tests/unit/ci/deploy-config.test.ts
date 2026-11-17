@@ -107,9 +107,13 @@ describe("scripts/deploy.sh PM2 commands", () => {
       'ln -s "$(command -v bun)" "$node_shim/node"',
     );
     // Install before the env file is in the build checkout.
-    expect(
-      deployScript.indexOf('(cd "$BUILD_DIR" && install_deps)'),
-    ).toBeLessThan(deployScript.indexOf('cp .env.production "$BUILD_DIR/"'));
+    const install = '(cd "$BUILD_DIR" && install_deps)';
+    const copyEnv = 'cp .env.production "$BUILD_DIR/"';
+    expect(deployScript).toContain(install);
+    expect(deployScript).toContain(copyEnv);
+    expect(deployScript.indexOf(install)).toBeLessThan(
+      deployScript.indexOf(copyEnv),
+    );
   });
 
   // The script looks for the marker next to DB_PATH; deploy.sh writes it in
