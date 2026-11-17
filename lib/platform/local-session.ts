@@ -48,7 +48,7 @@ export type DocMigration = {
 
 export type LocalSessionOptions = {
   store: DocStore;
-  /** The schema this build writes (`DOC_SCHEMA`). Default 1. */
+  /** The schema this build writes (`DOC_SCHEMA` from `lib/doc-migrations`). Default 0. */
   schema?: number;
   /** The open hook's forward migrations; the list starts empty (architecture §5.1). */
   migrations?: readonly DocMigration[];
@@ -100,7 +100,7 @@ function defaultScheduleIdle(fn: () => void): void {
 export function createLocalSession(options: LocalSessionOptions): DocSession {
   const store = options.store;
   const clock = options.clock ?? systemClock;
-  const schema = options.schema ?? 1;
+  const schema = options.schema ?? 0;
   const migrations = [...(options.migrations ?? [])].sort(
     (a, b) => a.to - b.to,
   );
