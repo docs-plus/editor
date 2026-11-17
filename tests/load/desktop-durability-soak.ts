@@ -93,6 +93,23 @@ const note = (text: string) => {
   if (args.verbose) console.log(text);
 };
 
+/**
+ * Removes a temp library. On Windows, Defender or the indexer may still hold
+ * a file for a moment; a cleanup failure is logged, never a failed case.
+ */
+function removeDir(dir: string) {
+  try {
+    rmSync(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
+  } catch (error) {
+    console.warn(`could not remove ${dir}: ${String(error)}`);
+  }
+}
+
 // ── Engine access (bun:sqlite) ──────────────────────────────────────────
 
 function openEngine(
@@ -210,7 +227,7 @@ async function runHarness(
 async function caseContract(): Promise<CaseResult> {
   const dir = mkdtempSync(join(tmpdir(), "soak-contract-"));
   const run = await runHarness([`--mode=contract`, `--dir=${dir}`]);
-  rmSync(dir, { recursive: true, force: true });
+  removeDir(dir);
   const ok = run.lines.filter((l) => l.startsWith("CASE_OK")).length;
   const failed = run.lines.filter((l) => l.startsWith("CASE_FAIL"));
   const stats = run.lines.find((l) => l.startsWith("STATS "));
@@ -315,7 +332,7 @@ async function killLoop(
       `${name} ${i}/${kills} last=${last} acked=${ackedK} failures=${failures.length}`,
     );
   }
-  rmSync(dir, { recursive: true, force: true });
+  removeDir(dir);
   return {
     name,
     pass: failures.length === 0,
@@ -338,7 +355,7 @@ async function caseT3(): Promise<CaseResult> {
       `--fullfsync=${fullfsync}`,
       "--count=300",
     ]);
-    rmSync(dir, { recursive: true, force: true });
+    removeDir(dir);
     const line = run.lines.find((l) => l.startsWith("TIMING "));
     if (!line) {
       failures.push(
@@ -424,7 +441,7 @@ async function caseT4(runs: number): Promise<CaseResult> {
     if (k !== Number(kText))
       failures.push(`run ${i}: ${k} edits stored, ${kText} typed before quit`);
   }
-  rmSync(dir, { recursive: true, force: true });
+  removeDir(dir);
   return {
     name: "T4",
     pass: failures.length === 0,
@@ -473,7 +490,7 @@ async function caseT5(kills: number): Promise<CaseResult> {
     failures.push(
       `calibration: ${calibration.lines.join(" | ")} ${calibration.stderr.slice(0, 500)}`,
     );
-  rmSync(calibrationDir, { recursive: true, force: true });
+  removeDir(calibrationDir);
   const random = seededRandom(5);
   for (let i = 1; i <= kills; i += 1) {
     const dir = mkdtempSync(join(tmpdir(), "soak-t5-"));
@@ -512,7 +529,7 @@ async function caseT5(kills: number): Promise<CaseResult> {
     const pad = textOf(library, docId).padLength;
     library.shutdown();
     if (pad !== 4096) failures.push(`kill ${i}: document damaged (${pad})`);
-    rmSync(dir, { recursive: true, force: true });
+    removeDir(dir);
   }
   return {
     name: "T5",
@@ -539,7 +556,7 @@ async function caseT6(): Promise<CaseResult> {
   const before = hash();
   const run = await runHarness(["--mode=readonly", `--dir=${dir}`]);
   const after = hash();
-  rmSync(dir, { recursive: true, force: true });
+  removeDir(dir);
   const failures: string[] = [];
   const status = run.lines.find((l) => l.startsWith("STATUS "));
   if (!status || JSON.parse(status.slice(7)).readOnly !== "library_too_new")
@@ -563,9 +580,15 @@ async function caseT6(): Promise<CaseResult> {
 
 // ── T8: a year of editing, then startup with 1,000 documents ──────────
 
-/** Architecture §10 "Sidebar populated", with the 1.5× CI slack of §10. */
-function sidebarBudgetMs() {
-  return process.platform === "win32" ? 1000 : 600;
+/**
+ * Architecture §10 targets, from process start: "Worker ready" and
+ * "Sidebar populated" (Mac means an M1, Win a mid-range laptop; Linux uses
+ * the Windows row). CI applies §10's 1.5× slack to the sidebar gate.
+ */
+function budgets() {
+  return process.platform === "darwin"
+    ? { workerReadyMs: 150, sidebarMs: 600 }
+    : { workerReadyMs: 300, sidebarMs: 1000 };
 }
 
 async function caseT8(): Promise<CaseResult> {
@@ -616,6 +639,9 @@ async function caseT8(): Promise<CaseResult> {
     ids.slice(0, 5).map((id) => [id, ""]),
   );
   const monthly: Record<string, unknown>[] = [];
+  // How long each daily VACUUM INTO blocked the worker: a quit flush queues
+  // behind it (D-A2's "a clean quit loses nothing" needs it under ~3 s).
+  const copyMs: number[] = [];
   let appends = 0;
   let compactions = 0;
   let trashed = 0;
@@ -646,6 +672,9 @@ async function caseT8(): Promise<CaseResult> {
           origin: "local",
           update,
           title: `Document ${id.slice(0, 4)}`,
+          // A list-view snippet as long as the real one, so the sidebar
+          // payload is realistic.
+          snippet: words.repeat(2).slice(0, 200),
         });
         appends += 1;
         rowsSinceSnapshot += 1;
@@ -673,7 +702,12 @@ async function caseT8(): Promise<CaseResult> {
     }
     // Idle: the daily copy and the Trash purge.
     clock.now += IDLE_MS;
-    library.runIdleJobs();
+    const idle = library.runIdleJobs();
+    if (idle.dailyCopyMs !== null) copyMs.push(idle.dailyCopyMs);
+    if (idle.dailyCopy === null && idle.dailyCopyMs !== null)
+      failures.push(
+        `day ${day}: daily copy failed (${library.stats().lastDailyCopyError})`,
+      );
     // Restart now and then, sometimes uncleanly.
     if (day % 30 === 29) {
       if (random() < 0.5) library.shutdown();
@@ -730,25 +764,45 @@ async function caseT8(): Promise<CaseResult> {
     }
     startups.push(JSON.parse(line.slice(8)));
   }
-  const budget = sidebarBudgetMs();
+  const budget = budgets();
   const median = (key: string) => {
     const values = startups.map((s) => Number(s[key])).sort((a, b) => a - b);
     return values[Math.floor(values.length / 2)] ?? Number.NaN;
   };
-  const spawnToSidebar = median("spawnToSidebarMs");
-  if (!args["no-electron"] && !(spawnToSidebar <= budget * 1.5))
+  const toSidebar = median("processToSidebarMs");
+  const toWorkerReady = median("processToReadyMs");
+  if (!args["no-electron"] && !(toSidebar <= budget.sidebarMs * 1.5))
     failures.push(
-      `sidebar ${spawnToSidebar.toFixed(0)} ms after worker spawn, budget ${budget} ms (× 1.5 CI slack)`,
+      `sidebar rows ${toSidebar.toFixed(0)} ms after process start, budget ${budget.sidebarMs} ms (× 1.5 CI slack)`,
     );
   if (startups.some((s) => s.docs !== liveDocs))
     failures.push(
       `startup listed ${startups.map((s) => s.docs)} documents, wanted ${liveDocs}`,
     );
-  rmSync(dir, { recursive: true, force: true });
+  // §10 "After an unclean exit": quick_check runs inside the open.
+  let unclean: Record<string, number> | null = null;
+  if (!args["no-electron"]) {
+    const db = new Database(join(dir, LIBRARY_FILE));
+    db.exec("UPDATE meta SET value = '1' WHERE key = 'unclean_exit'");
+    db.close();
+    const run = await runHarness(["--mode=startup", `--dir=${dir}`]);
+    const line = run.lines.find((l) => l.startsWith("STARTUP "));
+    if (line) unclean = JSON.parse(line.slice(8));
+    if (!unclean?.uncleanExit)
+      failures.push(`unclean startup: ${line ?? run.stderr.slice(0, 500)}`);
+    else if (unclean.openMs > 2000)
+      failures.push(
+        `quick_check open took ${unclean.openMs.toFixed(0)} ms, budget 2 s`,
+      );
+  }
+  const sortedCopies = [...copyMs].sort((a, b) => a - b);
+  const copyMedian = sortedCopies[Math.floor(sortedCopies.length / 2)] ?? 0;
+  const copyMax = sortedCopies.at(-1) ?? 0;
+  removeDir(dir);
   return {
     name: "T8",
     pass: failures.length === 0,
-    summary: `${days} days, ${appends} appends, ${compactions} compactions, ${trashed} trashed; ${(seededBytes / 1048576).toFixed(0)} → ${(stats.bytes / 1048576).toFixed(0)} MB; ${dailies.length} daily copies; ${liveDocs} documents listed ${spawnToSidebar.toFixed(0)} ms after worker spawn (median of 5; budget ${budget} ms)`,
+    summary: `${days} days, ${appends} appends, ${compactions} compactions, ${trashed} trashed; ${(seededBytes / 1048576).toFixed(0)} → ${(stats.bytes / 1048576).toFixed(0)} MB; ${dailies.length} daily copies (VACUUM INTO median ${copyMedian.toFixed(0)} ms, max ${copyMax.toFixed(0)} ms); ${liveDocs} documents: worker ready ${toWorkerReady.toFixed(0)} ms and sidebar rows ${toSidebar.toFixed(0)} ms after process start (median of 5; §10 ${budget.workerReadyMs} / ${budget.sidebarMs} ms; excludes renderer IPC and paint); unclean-exit open with quick_check ${unclean ? unclean.openMs.toFixed(0) : "n/a"} ms`,
     details: {
       days,
       docs: liveDocs,
@@ -759,7 +813,9 @@ async function caseT8(): Promise<CaseResult> {
       finalBytes: stats.bytes,
       monthly,
       startups,
-      budgetMs: budget,
+      unclean,
+      budget,
+      dailyCopyMs: { median: copyMedian, max: copyMax, count: copyMs.length },
       simMs,
     },
     failures,

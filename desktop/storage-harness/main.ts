@@ -268,6 +268,7 @@ async function startup() {
     `STARTUP ${JSON.stringify({
       processToSpawnMs: spawnAt,
       workerReadyMs: readyAt - spawnAt,
+      processToReadyMs: readyAt,
       openMs: client.timings.openMs,
       sidebarCallMs: rowsAt - readyAt,
       processToSidebarMs: rowsAt,
