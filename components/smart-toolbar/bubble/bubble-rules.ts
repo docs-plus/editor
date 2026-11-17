@@ -77,7 +77,7 @@ export function shouldShowBubble(
   if (!(selection instanceof TextSelection)) return false;
   const { from, to, $from, $to } = selection;
   const { doc } = view.state;
-  if (doc.textBetween(from, to).length === 0) return false;
+  if (doc.textBetween(from, to).trim().length === 0) return false;
   if (
     $from.parent.type.name === CODE_BLOCK ||
     $to.parent.type.name === CODE_BLOCK
@@ -188,4 +188,56 @@ export function chooseBubblePlacement({
     rect.left < band.right &&
     rect.right > band.left;
   return obstacles.some(overlaps) ? "bottom" : "top";
+}
+
+/** Two rects are on one line when their tops differ by at most this (px). */
+export const BUBBLE_LINE_SLACK = 2;
+
+/** The visible, non-empty rects of `rects`, as the band sees them. */
+function visibleRects(
+  rects: readonly BubbleRect[],
+  band: { top: number; bottom: number },
+): BubbleRect[] {
+  return rects.filter(
+    (rect) =>
+      rect.right - rect.left >= 1 &&
+      rect.bottom > band.top &&
+      rect.top < band.bottom,
+  );
+}
+
+/** Bounding box of the rects on the line whose top is `lineTop`. */
+function unionLine(rects: readonly BubbleRect[], lineTop: number): BubbleRect {
+  const line = rects.filter(
+    (rect) => Math.abs(rect.top - lineTop) <= BUBBLE_LINE_SLACK,
+  );
+  return {
+    top: Math.min(...line.map((rect) => rect.top)),
+    bottom: Math.max(...line.map((rect) => rect.bottom)),
+    left: Math.min(...line.map((rect) => rect.left)),
+    right: Math.max(...line.map((rect) => rect.right)),
+  };
+}
+
+/**
+ * The first line of a selection that shows inside `band` (the scroll
+ * viewport): its client rects on that line, unioned. Null when none show.
+ */
+export function firstLineRect(
+  rects: readonly BubbleRect[],
+  band: { top: number; bottom: number },
+): BubbleRect | null {
+  const visible = visibleRects(rects, band);
+  if (visible.length === 0) return null;
+  return unionLine(visible, Math.min(...visible.map((rect) => rect.top)));
+}
+
+/** Like `firstLineRect`, for the last line that shows inside `band`. */
+export function lastLineRect(
+  rects: readonly BubbleRect[],
+  band: { top: number; bottom: number },
+): BubbleRect | null {
+  const visible = visibleRects(rects, band);
+  if (visible.length === 0) return null;
+  return unionLine(visible, Math.max(...visible.map((rect) => rect.top)));
 }
