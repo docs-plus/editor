@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Deploy: run install scripts on Bun, not the host's Node 14
+
+The first automated deploy failed at `bun install`: husky's `prepare` script
+ran on the production host's own `node` (Node 14, used by other services
+there), which cannot parse it. Production kept serving the previous build.
+
+#### Fixed
+
+- **Deploy:** `scripts/deploy.sh` installs through `install_deps`, which puts a
+  `node` that is Bun first on `PATH` and sets `HUSKY=0`, for both the build
+  checkout and the live checkout. PM2 is unchanged.
+
+**Deploy:** `deploy.sh` runs from the live checkout, so pull this commit there
+once (`git pull --ff-only` in `/opt/projects/editor.docs.plus`) before the next
+deploy.
+
 ### Spike S5 results: typing latency and D-A1
 
 Records spike S5 of the desktop Phase 1 plan: typing latency in Electron
