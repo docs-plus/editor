@@ -31,6 +31,7 @@ import {
 
 import { buildDesktopCsp, hashInline, type StyleMode } from "./csp";
 import { installMenu, type MenuIntent } from "./menu";
+import { installQuitFlow } from "./quit";
 
 const ORIGIN_KIND = process.env.SPIKE_ORIGIN === "https" ? "https" : "app";
 const APP_HOST = ORIGIN_KIND === "https" ? "app.tinydocy.invalid" : "tinydocy";
@@ -474,4 +475,5 @@ app.whenReady().then(() => {
   );
 });
 
+installQuitFlow();
 app.on("window-all-closed", () => app.quit());

@@ -6,6 +6,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 ipcRenderer.send("spike.preloadRan", location.href);
+// #106: does a message sent during unload reach main before "closed"?
+window.addEventListener("pagehide", () => {
+  if (window.top === window) ipcRenderer.send("spike.pagehide", location.href);
+});
 
 let htmlAttr: string;
 try {

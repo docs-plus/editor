@@ -18,6 +18,7 @@ import { Worker } from "node:worker_threads";
 
 import { app } from "electron";
 
+import { onQuitFlush } from "../s1-shell/quit";
 import { startCommitLoop } from "../s2-storage/commit-loop";
 import { openDatabase } from "../s2-storage/engine";
 
@@ -150,7 +151,36 @@ const s5 = {
 };
 (globalThis as unknown as { __s5: typeof s5 }).__s5 = s5;
 
-app.on("quit", () => rmSync(dir, { recursive: true, force: true }));
+// #106 flush-before-quit: a running storage load is drained and its database
+// closed before the process exits (S1's quit flow holds will-quit for it).
+onQuitFlush("storage", async () => {
+  const running = load;
+  load = null;
+  const stats = running ? await running.stop() : null;
+  if (process.env.SPIKE_QUIT_LOG === "1")
+    console.log(
+      `[s5] ${JSON.stringify({ event: "storage-closed", commits: stats?.commits ?? 0 })}`,
+    );
+});
+
+// #106: on Windows Chromium still holds files in userData (inside `dir`)
+// when "quit" fires, so rmSync throws EBUSY/EPERM. An uncaught exception in
+// main shows Electron's modal error box, and the process never exits. Never
+// throw from a quit handler; the runner removes what's left after exit.
+// S5_CLEANUP=throw keeps the original handler (the #106 "before" arm).
+app.on("quit", () => {
+  if (process.env.S5_CLEANUP === "throw") {
+    console.log("[s5] cleanup start");
+    rmSync(dir, { recursive: true, force: true });
+    console.log("[s5] cleanup done");
+    return;
+  }
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    console.log(`[s5] cleanup left ${dir}: ${(error as Error).message}`);
+  }
+});
 
 // S5_SELFTEST=1: start the arm's load, stop it after a second, print, quit.
 if (process.env.S5_SELFTEST === "1") {
