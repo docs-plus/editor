@@ -4,9 +4,10 @@
  *
  * - **On open**, `local-session` runs them after hydrate and before the
  *   editor binds (y-prosemirror deletes runs whose marks the schema doesn't
- *   know, `lib/yjs-mark-migration.ts`), inside one `doc.transact` with
- *   `MIGRATION_ORIGIN`, outside undo. Their update is appended as origin
- *   `migration` with `schemaTo`, which the storage engine writes to
+ *   know, `lib/yjs-mark-migration.ts`). The composition root passes
+ *   `DOC_SCHEMA` and `DOC_MIGRATIONS`; local-session runs each step in its
+ *   own `MIGRATION_ORIGIN` transaction, outside undo, and appends it as
+ *   origin `migration` with `schemaTo`, which the storage engine writes to
  *   `docs.schema` in the same transaction.
  * - **At import** (P2.8), the same functions run on `.tinydoc` and web
  *   downloads.
@@ -21,7 +22,7 @@ export type DocMigration = {
   /** The schema this step produces: the previous step's `to` plus one. */
   to: number;
   /** Edits `doc` in place. Runs inside the caller's transaction. */
-  run(doc: Y.Doc): void;
+  migrate(doc: Y.Doc): void;
 };
 
 export const DOC_MIGRATIONS: readonly DocMigration[] = [];
@@ -54,7 +55,8 @@ export function planDocMigrations(
 
 /**
  * Runs the steps a plan lists in one transaction under `origin`, so they
- * produce one update. Returns the schema reached, or null when there was
+ * produce one update. For import, where a file is all-or-nothing; the open
+ * hook in local-session runs one transaction per step instead. Returns the schema reached, or null when there was
  * nothing to do.
  */
 export function runDocMigrations(
@@ -64,7 +66,7 @@ export function runDocMigrations(
 ): number | null {
   if (plan.kind !== "migrate") return null;
   doc.transact(() => {
-    for (const step of plan.steps) step.run(doc);
+    for (const step of plan.steps) step.migrate(doc);
   }, origin);
   return plan.schemaTo;
 }

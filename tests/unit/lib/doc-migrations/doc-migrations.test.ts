@@ -11,8 +11,8 @@ import {
 } from "@/lib/doc-migrations";
 
 const steps: DocMigration[] = [
-  { to: 1, run: (doc) => doc.getMap("m").set("one", true) },
-  { to: 2, run: (doc) => doc.getMap("m").set("two", true) },
+  { to: 1, migrate: (doc) => doc.getMap("m").set("one", true) },
+  { to: 2, migrate: (doc) => doc.getMap("m").set("two", true) },
 ];
 
 describe("document migrations", () => {
@@ -33,7 +33,9 @@ describe("document migrations", () => {
   });
 
   test("refuses a gap in the list", () => {
-    expect(() => planDocMigrations(0, [{ to: 2, run: () => {} }])).toThrow();
+    expect(() =>
+      planDocMigrations(0, [{ to: 2, migrate: () => {} }]),
+    ).toThrow();
   });
 
   test("runs every step in one transaction under the given origin", () => {
