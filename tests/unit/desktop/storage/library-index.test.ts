@@ -202,3 +202,18 @@ describe("Trash and purge", () => {
     expect(library.stats().docs).toBe(2);
   });
 });
+
+describe("ids and schema at creation", () => {
+  test("accepts any safe id and stores the given schema", () => {
+    const { id } = library.createDoc({ id: "doc-a_1", schema: 3 });
+    expect(library.load(id, "w1").schema).toBe(3);
+  });
+
+  test("refuses ids that aren't safe in SQL, paths or logs", () => {
+    for (const id of ["", "../x", "a b", "a/b", "-x", "x".repeat(65)])
+      expect(codeOf(() => library.createDoc({ id }))).toBe("invalid_argument");
+    expect(codeOf(() => library.createDoc({ schema: -1 }))).toBe(
+      "invalid_argument",
+    );
+  });
+});

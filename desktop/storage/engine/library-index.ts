@@ -16,8 +16,13 @@ import { bumpRev, randomHex32, readRev, scalar, transaction } from "./sql";
 export type DocKind = "doc" | "template";
 
 export type CreateDocInput = {
-  /** A UUID; minted when omitted. */
+  /**
+   * Minted (a UUID) when omitted. Main's IPC guard only lets UUIDs through;
+   * the engine accepts any {@link SAFE_ID}, which tests and imports use.
+   */
   id?: string;
+  /** `docs.schema`: `DOC_SCHEMA` for a new document, the file's on import. */
+  schema?: number;
   title?: string;
   folderId?: string | null;
   sortKey?: string;
@@ -81,10 +86,17 @@ export type SidebarSnapshot = {
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Ids that are safe in SQL, file names and logs. */
+export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 export const MAX_NAME_LENGTH = 200;
 
 function requireId(id: string, what: string) {
+  if (!SAFE_ID.test(id))
+    throw new StorageError("invalid_argument", `bad ${what}`);
+}
+
+function requireUuid(id: string, what: string) {
   if (!UUID.test(id)) throw new StorageError("invalid_argument", `bad ${what}`);
 }
 
@@ -112,7 +124,10 @@ export function createDoc(
   const id = input.id ?? crypto.randomUUID();
   requireId(id, "document id");
   const lineage = input.lineage ?? crypto.randomUUID();
-  requireId(lineage, "lineage");
+  requireUuid(lineage, "lineage");
+  const schema = input.schema ?? 0;
+  if (!Number.isInteger(schema) || schema < 0)
+    throw new StorageError("invalid_argument", "bad schema");
   const linkKey = input.linkKey ?? randomHex32();
   if (!HEX32.test(linkKey))
     throw new StorageError("invalid_argument", "bad link key");
@@ -123,8 +138,8 @@ export function createDoc(
   const rev = indexWrite(db, () => {
     db.prepare(
       `INSERT INTO docs (id, title, folder_id, sort_key, created_at, modified_at,
-         lineage, link_key, kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         lineage, link_key, kind, schema)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       cleanName(input.title ?? ""),
@@ -135,6 +150,7 @@ export function createDoc(
       lineage,
       linkKey,
       kind,
+      schema,
     );
   });
   return { id, lineage, linkKey, rev };
