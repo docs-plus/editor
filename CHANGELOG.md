@@ -11,7 +11,7 @@ since the previous tag.
 
 ### Windows export spike: where the desktop renderer is built
 
-This settles #103 and #111, two Windows problems in building the desktop
+This decides #103 and fixes #111, two Windows problems in building the desktop
 renderer (the Next.js static export). Documentation only; no app or server
 change.
 

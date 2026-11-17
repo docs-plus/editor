@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-17
 - **Issues:** docs-plus/editor#103 (segment-prefetch path on Windows), docs-plus/editor#111 (`EXDEV` in `build-export.ts`)
-- **Spike branch (never merged):** `spike/windows-export`, branched from `spike/s1-shell`. Code in [`spikes/windows-export/`](https://github.com/docs-plus/editor/tree/spike/windows-export/spikes/windows-export) and `spikes/s1-shell/build-export.ts`; workflow `.github/workflows/spike-windows-export.yml`.
-- **Runs:** canonical [44041439341](https://github.com/docs-plus/editor/actions/runs/44041439341) (`98679c0`), all 10 jobs green; rerun after the probe fix: RERUN_PLACEHOLDER.
+- **Spike branch (never merged):** `spike/windows-export`, branched from `spike/s1-shell`. Code in [`spikes/windows-export/`](https://github.com/docs-plus/editor/tree/5361266/spikes/windows-export) and `spikes/s1-shell/build-export.ts`; workflow `.github/workflows/spike-windows-export.yml`.
+- **Runs:** canonical [44041439341](https://github.com/docs-plus/editor/actions/runs/44041439341) (`98679c0`), all 10 jobs green; rerun [44041915519](https://github.com/docs-plus/editor/actions/runs/44041915519) (`5361266`, the probe served on loopback only), all 10 green with the same results.
 - **Evidence:** `docs/research/spike-evidence/windows-export/`.
 - **Decisions:**
   - **#103:** **(a)**: build the renderer once, on Linux, and package those same bytes on every OS. The protocol handler maps no names. The stage step fails on any `__next.*` directory, so a Windows-built renderer can't be packaged.
@@ -31,7 +31,7 @@
 
 ### 3.1 #103: the Windows segment layout
 
-A minimal app ([`spikes/windows-export/repro/`](https://github.com/docs-plus/editor/tree/spike/windows-export/spikes/windows-export/repro)) has a root layout, `/` with a `<Link href="/about">`, and `/about`, with `output: "export"` and nothing else. It was exported on 3 OSes × 2 Next versions. [`check-segments.ts`](https://github.com/docs-plus/editor/blob/spike/windows-export/spikes/windows-export/check-segments.ts) lists the segment files. It then requests the URLs the client router asks for from a plain static server, which maps a path straight to a file (as any host does).
+A minimal app ([`spikes/windows-export/repro/`](https://github.com/docs-plus/editor/tree/5361266/spikes/windows-export/repro)) has a root layout, `/` with a `<Link href="/about">`, and `/about`, with `output: "export"` and nothing else. It was exported on 3 OSes × 2 Next versions. [`check-segments.ts`](https://github.com/docs-plus/editor/blob/5361266/spikes/windows-export/check-segments.ts) lists the segment files. It then requests the URLs the client router asks for from a plain static server, which maps a path straight to a file (as any host does).
 
 | Build OS | Next | Page segment files | `GET /about/__next.about.__PAGE__.txt` | `GET /_not-found/__next._not-found.__PAGE__.txt` |
 |---|---|---|---|---|
@@ -49,7 +49,7 @@ Raw: `check-segments-results.jsonl` (one line per job), `repro-out-listing.txt` 
 - **What it costs:** the segment prefetch for every route below the root. S1 saw navigation fall back to the full payload (`about.txt`) without a document load. So nothing breaks, but each prefetch is a wasted request and a 404 in the protocol handler.
 - **Cause (Next source, 16.4.6 and canary.53 alike):** `collectSegmentPathsImpl` in `packages/next/src/export/index.ts` returns `path.relative(segmentsDirectory, …)`. On Windows that is `about\__PAGE__.segment.rsc`. `convertSegmentPathToStaticExportFilename` replaces only `/` with `.`, so the backslash survives, and `path.join(segmentsDirDest, filename)` turns it into a directory. The root route's `__next.__PAGE__.txt` is unaffected, because its segment has no parent directory.
 - **Newer Next:** not fixed. Canary.49 reproduces on the runner. In canary.53 (2026-11-16, the newest when checked) both functions are unchanged.
-- **Upstream:** vercel/next.js#85374 has been open since 2025-10-26, with the same root cause in its latest comment. vercel/next.js#92339 was closed as its duplicate on 2026-08-31. Fix PRs #92340 (2026-04-04) and #99058 (2026-09-22) are open and waiting for review.
+- **Upstream:** vercel/next.js#85374 has been open since 2025-10-26, with the same root cause in its latest comment. vercel/next.js#92339 was closed as its duplicate on 2026-08-31. Fix PRs vercel/next.js#92340 (2026-04-04) and vercel/next.js#99058 (2026-09-22) are open and waiting for review.
 
 ### 3.2 #103: option (a) works: one Linux build, packaged on every OS
 
@@ -60,7 +60,7 @@ The workflow's `handoff-build` job exports TinyDocy's renderer on `ubuntu-24.04`
 | `windows-latest` | 132 | identical | flat | 200 |
 | `macos-26` | 132 | identical | flat | 200 |
 
-Raw: `handoff.txt`. The artifact hop keeps every name and byte, including the `$`, `!` and `@` that Next's segment encoding can use.
+Raw: `handoff.txt`. The artifact hop kept every name and byte of this export. TinyDocy has no dynamic routes, so the `$`, `!` and `@` that Next's segment encoding uses for them were not exercised. All three are valid in artifact names and on NTFS.
 
 ### 3.3 #111: `EXDEV` fixed, and the overlay stays
 
@@ -105,12 +105,12 @@ One risk remains, a Windows file lock: a dev server or editor holding `app/sitem
 - It needs a removal plan once upstream merges, and it silently hides any other Windows-only export difference.
 - It only helps the packaged app. A Windows-built `out/` on any other host still 404s.
 
-**When upstream fixes it** (#92340 or #99058 lands in a pinned Next): Windows may export again, but the single Linux build stays, for the identical bytes. The guard stays as a regression check.
+**When upstream fixes it** (vercel/next.js#92340 or vercel/next.js#99058 lands in a pinned Next): Windows may export again, but the single Linux build stays, for the identical bytes. The guard stays as a regression check.
 
 ## 5. Spec changes (in this PR)
 
 - **Desktop architecture §3.1:**
-  - step 1 records the in-checkout parking, the leftover recovery and why the overlay stays, plus the "built once, on Linux" rule;
+  - step 1 records the in-checkout parking, the leftover recovery and why the overlay stays, plus the rule that Windows never exports the renderer;
   - step 3 adds the `__next.*` guard.
 - **Test and release strategy §2.4:** a new "On the renderer" block:
   - Windows never runs the desktop `next build`;
@@ -120,6 +120,6 @@ One risk remains, a Windows file lock: a dev server or editor holding `app/sitem
 
 ## 6. Follow-ups
 
-- **Owner:** post the #85374 comment from the draft, or not. If posted, also ask for review on #99058. A new issue is the fallback only, and it needs a public repro repository (owner TBD).
+- **Owner:** post the vercel/next.js#85374 comment from the draft, or not. If posted, also ask for review on vercel/next.js#99058. A new issue is the fallback only, and it needs a public repro repository (owner TBD).
 - **P2.5 desktop build script (desktop-seams, then P2.5):** carry the overlay rules from §3.3, and the `__next.*` stage guard.
 - **P3.1 `release-desktop.yml`:** the Linux renderer job and the manifest check in each packaging job.

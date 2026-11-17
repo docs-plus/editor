@@ -7,10 +7,10 @@
 The bug is already tracked upstream:
 
 - **vercel/next.js#85374** (open since 2025-10-26), "Next.js >=16.0.0: Mismatch in RSC file paths causes 404 errors in static exports on Windows". Its latest comment gives the same root cause we found.
-- vercel/next.js#92339 was closed on 2026-08-31 as a duplicate of #85374.
-- Two fix PRs are open and waiting for review: **#92340** (2026-04-04) and **#99058** (2026-09-22, "fix(next-export): normalize segment paths on Windows in static export (#85374)").
+- vercel/next.js#92339 was closed on 2026-08-31 as a duplicate of vercel/next.js#85374.
+- Two fix PRs are open and waiting for review: **vercel/next.js#92340** (2026-04-04) and **vercel/next.js#99058** (2026-09-22, "fix(next-export): normalize segment paths on Windows in static export (#85374)").
 
-A new issue would be closed as a duplicate. What would help upstream is a confirmation on the current release and canary, with a hosted, one-click repro. Suggested comment for #85374 (the owner posts it, or doesn't):
+A new issue would be closed as a duplicate. What would help upstream is a confirmation on the current release and canary, with a hosted, one-click repro. Suggested comment for vercel/next.js#85374 (the owner posts it, or doesn't):
 
 ---
 
@@ -32,7 +32,7 @@ A new issue would be closed as a duplicate. What would help upstream is a confir
 
 ## Fallback: a full issue, if the owner prefers a new report
 
-Use this only if #85374 is closed without a fix. The Next.js bug template asks for a public repro link and `next info` output.
+Use this only if vercel/next.js#85374 is closed without a fix. The Next.js bug template asks for a public repro link and `next info` output.
 
 **Title:** Static export on Windows writes segment-prefetch files into `__next.<segment>/` directories, so prefetch requests 404
 

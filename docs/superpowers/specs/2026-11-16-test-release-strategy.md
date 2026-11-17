@@ -265,14 +265,14 @@ Every new workflow (`nightly-desktop.yml`, `release-desktop.yml`, `update-snapsh
 **On signing:**
 - PR builds stay **unsigned**, because fork PRs get no secrets.
 - Signing happens only in the `desktop-release` environment, in a job that **installs nothing** and only signs and notarizes artifacts built by a job with no secrets (P3.1).
+- S3 must show that `bun electron-builder` and `_electron` work with the Node stub on PATH. Electron's own bundled Node is fine; the system `node` is what the stub blocks. If S3 shows a builder step needs `node`, the exception is written into the workflow test, scoped to that one step.
+
 **On the renderer (#103, [Windows export spike](../../research/2026-11-17-spike-windows-export.md)):**
 - Windows never runs the desktop `next build`. Next 16.4.6 exports segment-prefetch files there under the wrong path (`__next.<segment>/__PAGE__.txt`), and prefetch 404s. Upstream: vercel/next.js#85374, still unfixed in 16.5 canary.
 - `release-desktop.yml` and `nightly-desktop.yml` export the renderer once, in a Linux job with no secrets, and upload `out/` with a sha256 manifest. Each OS's packaging job downloads it and checks the manifest before staging. Every installer in a release then carries byte-identical renderer files, and one build provenance covers them. The signing job is unchanged: it still installs nothing and signs what the packaging jobs built.
 - The PR job `electron-mac` may export on its own macOS runner; macOS and Linux write the same layout.
 - The stage step fails on any `__next.*` directory in `out/` (architecture §3.1), so a Windows-built renderer can't reach a package by accident.
-- Revisit when a Next release with the fix (#92340 or #99058) is pinned: Windows may then export again, but the single Linux build stays, for the identical bytes.
-
-- S3 must show that `bun electron-builder` and `_electron` work with the Node stub on PATH. Electron's own bundled Node is fine; the system `node` is what the stub blocks. If S3 shows a builder step needs `node`, the exception is written into the workflow test, scoped to that one step.
+- Revisit when a Next release with the fix (vercel/next.js#92340 or vercel/next.js#99058) is pinned: Windows may then export again, but the single Linux build stays, for the identical bytes.
 
 ---
 
