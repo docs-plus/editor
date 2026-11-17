@@ -35,8 +35,12 @@ const NAMED: JSONContent = {
 /** A provider stand-in: UniqueID only subscribes to "synced". */
 function fakeProvider() {
   const listeners = new Map<string, () => void>();
+  // Like HocuspocusProvider's EventEmitter, `on` returns the provider.
   const provider = {
-    on: (event: string, fn: () => void) => listeners.set(event, fn),
+    on(event: string, fn: () => void) {
+      listeners.set(event, fn);
+      return provider;
+    },
     off: (event: string) => listeners.delete(event),
   } as unknown as HocuspocusProvider;
   return { provider, listeners, sync: () => listeners.get("synced")?.() };
@@ -179,5 +183,21 @@ describe("no provider", () => {
     expect(listeners.has("synced")).toBe(true);
     listeners.get("synced")?.();
     expect(listeners.has("synced")).toBe(false);
+  });
+
+  it("hands back the provider from the caret's on (e2e helpers find it so)", async () => {
+    const { provider } = fakeProvider();
+    let current: HocuspocusProvider | null = null;
+    await open(seededDoc(NAMED), { getProvider: () => current });
+    const caret = editor?.extensionManager.extensions.find(
+      (extension) => extension.name === "collaborationCaret",
+    );
+    const forward = caret?.options.provider as {
+      on: (event: string, fn: () => void) => unknown;
+    };
+    const probe = () => {};
+    expect(forward.on("probe", probe)).toBeUndefined();
+    current = provider;
+    expect(forward.on("probe", probe)).toBe(provider);
   });
 });
