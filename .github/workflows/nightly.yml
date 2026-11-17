@@ -11,6 +11,9 @@ name: Nightly
 #                  from 3 clients against Hocuspocus (spec §7 abuse soak)
 #   mixed-version  N+1, release N and pre-N clients on one document with
 #                  the gate env at its default (spec §3.1 N+1 ship gate)
+#   desktop-renderer  the desktop static export (bun run build:desktop) on
+#                  Linux, where releases build it (#103), served with the
+#                  protocol handler's path rules, under the desktop project
 #   desktop-smoke  the D-A12 Electron smoke (desktop-smoke.yml) on macOS,
 #                  Windows and Linux
 #
@@ -351,6 +354,70 @@ jobs:
           path: |
             test-reports/
             ${{ runner.temp }}/hocus.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  desktop-renderer:
+    name: Desktop renderer (static export)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bun playwright install --with-deps chromium
+
+      # Fails if a web-only route or web metadata tag reaches out/, or on the
+      # Windows segment layout; leaves app/ as it was.
+      - name: Desktop export
+        run: NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build:desktop
+
+      - name: Web-only files are back in app/
+        run: git diff --exit-code --stat -- app
+
+      # The renderer still syncs through Hocus until the dev bridge (P2.4,
+      # after P2.1 and P2.2) replaces it.
+      - name: Start servers
+        id: servers
+        run: |
+          PORT=3849 bun scripts/serve-desktop-export.ts > "$RUNNER_TEMP/serve.log" 2>&1 &
+          make dev-hocus > "$RUNNER_TEMP/hocus.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -s -o /dev/null http://127.0.0.1:1234 &&
+              curl -sf -o /dev/null http://127.0.0.1:3849/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::servers did not start"
+          exit 1
+
+      - name: Run the desktop project
+        run: >-
+          DESKTOP_BASE_URL=http://127.0.0.1:3849 CI=
+          bun playwright test --project=desktop --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-desktop-renderer
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
           if-no-files-found: ignore
           retention-days: 7
 
