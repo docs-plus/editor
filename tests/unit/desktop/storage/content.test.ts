@@ -23,6 +23,7 @@ beforeEach(() => {
   clock = createClock();
   library = openTestLibrary(temp.dir, createTestHost(clock));
   docId = library.createDoc({ title: "Untitled" }).id;
+  library.load(docId, "w1");
 });
 afterEach(() => {
   library.shutdown();
@@ -89,6 +90,7 @@ describe("load and append", () => {
 
   test("seqs are global across documents", () => {
     const other = library.createDoc().id;
+    library.load(other, "w2");
     const doc = new Y.Doc();
     const a = library.append(docId, "w1", {
       origin: "local",
@@ -159,7 +161,7 @@ describe("load and append", () => {
       codeOf(() =>
         library.append(crypto.randomUUID(), "w1", { origin: "local", update }),
       ),
-    ).toBe("not_found");
+    ).toBe("forbidden");
     expect(codeOf(() => library.load(crypto.randomUUID(), "w1"))).toBe(
       "not_found",
     );
@@ -222,6 +224,7 @@ describe("compaction (D-A3)", () => {
     library.compact(docId, "w1", Y.encodeStateAsUpdate(doc), seq);
     library.shutdown();
     library = openTestLibrary(temp.dir, createTestHost(clock));
+    library.load(docId, "w1");
     const next = library.append(docId, "w1", {
       origin: "local",
       update: edit(doc, "b"),
@@ -246,7 +249,7 @@ describe("compaction (D-A3)", () => {
     expect(textOf(library.load(docId, "w1"))).toBe("ab");
   });
 
-  test("refuses an upToSeq past the last assigned seq", () => {
+  test("refuses an upToSeq past the document's last row", () => {
     const doc = new Y.Doc();
     const seq = library.append(docId, "w1", {
       origin: "local",
@@ -391,4 +394,23 @@ describe("compaction property (architecture §11)", () => {
       }
     });
   }
+});
+
+describe("claim (registry replay after a worker restart)", () => {
+  test("lets the holding window write again without a load", () => {
+    library.shutdown();
+    library = openTestLibrary(temp.dir, createTestHost(clock));
+    const update = edit(new Y.Doc(), "x");
+    expect(
+      codeOf(() => library.append(docId, "w1", { origin: "local", update })),
+    ).toBe("forbidden");
+    library.claim(docId, "w1");
+    expect(
+      library.append(docId, "w1", { origin: "local", update }),
+    ).toBeGreaterThan(0);
+    expect(codeOf(() => library.claim(docId, "w2"))).toBe("already_open");
+    expect(codeOf(() => library.claim(crypto.randomUUID(), "w2"))).toBe(
+      "not_found",
+    );
+  });
 });

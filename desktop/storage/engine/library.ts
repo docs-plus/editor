@@ -22,8 +22,9 @@
  *
  * **Registry** (architecture §5.2, §6.2): a document is open in at most one
  * window (D-A3). `load` claims it for an owner (a window id) and rejects
- * another owner with `already_open`; appends and compactions from another
- * owner are `forbidden`; main's own content writes (purge, and P2.8's
+ * another owner with `already_open`; appends and compactions from any
+ * other owner are `forbidden` (and {@link Library.claim} re-registers holds
+ * after a worker restart); main's own content writes (purge, and P2.8's
  * import-into and restore) refuse an open document with `document_open`.
  */
 import { cloudFolderOf } from "./cloud-folder";
@@ -265,10 +266,17 @@ export class Library {
   }
 
   /** Content writes from the renderer: refused while another owner holds the doc. */
+  /**
+   * Content writes from the renderer: only the window holding the document
+   * may write it (architecture §7: "the registry must hold docId open for
+   * this window"). Main checks this first; the worker checks again.
+   */
   private assertWriter(docId: string, owner: string) {
-    const holder = this.holders.get(docId);
-    if (holder !== undefined && holder !== owner)
-      throw new StorageError("forbidden", "document is open in another window");
+    if (this.holders.get(docId) !== owner)
+      throw new StorageError(
+        "forbidden",
+        "this window has not opened the document",
+      );
   }
 
   /** Main's own content writes: refused while any window holds the doc. */
@@ -322,6 +330,21 @@ export class Library {
     this.trace?.(`COMPACT_ACK ${upToSeq}`);
     this.wrote();
     return { foreign: null };
+  }
+
+  /**
+   * Re-registers a hold without loading: after a worker restart, main
+   * replays its registry so the windows' resent batches are accepted.
+   */
+  claim(docId: string, owner: string): void {
+    const holder = this.holders.get(docId);
+    if (holder !== undefined && holder !== owner)
+      throw new StorageError("already_open", "document is open elsewhere");
+    if (
+      scalar(this.conn, "SELECT 1 FROM docs WHERE id = ?", docId) === undefined
+    )
+      throw new StorageError("not_found", "no such document");
+    this.holders.set(docId, owner);
   }
 
   close(docId: string, owner: string): void {

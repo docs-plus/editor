@@ -29,6 +29,7 @@ afterEach(() => {
 });
 
 function write(docId: string, text: string) {
+  if (!library.isOpen(docId)) library.load(docId, "w1");
   const doc = new Y.Doc();
   doc.getText("t").insert(0, text);
   library.append(docId, "w1", {

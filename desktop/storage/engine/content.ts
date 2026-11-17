@@ -55,13 +55,20 @@ function snapshotUpto(db: SqliteDriver, docId: string): number {
   return typeof value === "number" ? value : 0;
 }
 
-/** The highest seq ever assigned in this library (0 before the first append). */
-function lastAssignedSeq(db: SqliteDriver): number {
+/**
+ * The highest seq this document has: of its rows, or of the rows its
+ * snapshot replaced. A compaction can't claim to cover more than this.
+ */
+function lastDocSeq(db: SqliteDriver, docId: string): number {
   const value = scalar(
     db,
-    "SELECT seq FROM sqlite_sequence WHERE name = 'updates'",
+    "SELECT MAX(seq) FROM updates WHERE doc_id = ?",
+    docId,
   );
-  return typeof value === "number" ? value : 0;
+  return Math.max(
+    typeof value === "number" ? value : 0,
+    snapshotUpto(db, docId),
+  );
 }
 
 export function load(db: SqliteDriver, docId: string): LoadedContent {
@@ -144,8 +151,8 @@ export function append(
 /**
  * Stores `state` as the snapshot and deletes rows `seq ≤ upToSeq`, in one
  * transaction (D-A3). A stale compaction (`upToSeq` below the stored
- * snapshot's) changes nothing. An `upToSeq` past the last seq the library
- * has assigned is refused: it would hide every later append.
+ * snapshot's) changes nothing. An `upToSeq` past the document's last row
+ * is refused: it could claim rows the renderer has never seen.
  */
 export function compact(
   db: SqliteDriver,
@@ -160,8 +167,11 @@ export function compact(
   transaction(db, () => {
     if (!docExists(db, docId))
       throw new StorageError("not_found", "no such document");
-    if (upToSeq > lastAssignedSeq(db))
-      throw new StorageError("invalid_argument", "upToSeq is in the future");
+    if (upToSeq > lastDocSeq(db, docId))
+      throw new StorageError(
+        "invalid_argument",
+        "upToSeq is past the document's rows",
+      );
     if (upToSeq < snapshotUpto(db, docId)) return;
     db.prepare(
       `INSERT INTO snapshots (doc_id, data, upto_seq) VALUES (?, ?, ?)

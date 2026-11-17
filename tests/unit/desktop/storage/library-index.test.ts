@@ -152,6 +152,7 @@ describe("Trash and purge", () => {
     const ydoc = new Y.Doc();
     ydoc.getText("t").insert(0, "x");
     const update = Y.encodeStateAsUpdate(ydoc);
+    library.load(doc.id, "w1");
     const seq = library.append(doc.id, "w1", { origin: "local", update });
     library.compact(doc.id, "w1", update, seq);
     library.append(doc.id, "w1", { origin: "local", update });
