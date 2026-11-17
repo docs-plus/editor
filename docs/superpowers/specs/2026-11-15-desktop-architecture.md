@@ -126,8 +126,13 @@ desktop/
   main/                        # index, windows, app-protocol, csp, doc-handlers, quit-coordinator, menus,
                                # dialogs, deep-links, backups, updater (lazy), diagnostics
   storage/worker.ts            # worker_thread entry
+  storage/client.ts            # main's handle on the worker: start, call, shutdown (P2.6)
+  storage/protocol.ts          # request and reply types, dispatch (no node:* imports)
+  storage/node-host.ts         # the StorageHost (fs, pid check, clock) the engine is given
   storage/engine/              # SQL logic over a SqliteDriver; no electron, node:* or bun:* imports
   storage/drivers/node-sqlite.ts
+  storage-harness/             # the soak's Electron main (own lockfile), like smoke/ (P2.6)
+  dev/bun-sqlite-driver.ts     # the SqliteDriver over bun:sqlite, for tests and the dev host
   dev/storage-host.ts          # dev and test only: doc-handlers + engine on bun:sqlite over a localhost WebSocket
   build/build.ts, build/electron-builder.yml
 ```
@@ -176,7 +181,7 @@ These are enforced by one test, `tests/unit/ci/import-boundaries.test.ts`. It re
 |---|---|
 | `desktop/shared` | anything outside itself |
 | `desktop/storage/engine` | `electron`, `node:*`, `bun:*`, React, `@tiptap/*` |
-| `desktop/main`, `desktop/storage` | React, `lib/**` (except `lib/security/content-security-policy.ts`, `lib/doc-migrations`, `lib/prefs/schema.ts`, and the pure `lib/comments/validate.ts` and `lib/assets` sniffers) |
+| `desktop/main`, `desktop/storage` | React, `lib/**` (except `lib/security/content-security-policy.ts`, `lib/doc-migrations`, `lib/prefs/schema.ts`, the pure `lib/comments/validate.ts` and `lib/assets` sniffers, and `lib/schema-names.ts`, the name lists the import guard checks; P2.6) |
 | `desktop/preload` | anything except `desktop/shared` and `electron` |
 | `lib/platform/desktop` | `desktop/{main,preload,storage}` |
 | `app`, `components`, `hooks`, `lib` | `desktop/**` except `desktop/shared` types; `lib/platform/desktop/**` except from `components/desktop/desktop-root.tsx` |
@@ -297,6 +302,14 @@ INDEX import_sources(source_hash)
 | `filenames.ts` | Cleans names: path separators, `..`, Windows reserved names, trailing dots and spaces, and paths over 240 characters |
 | `assets.ts` (P2.6b) | Owns `<userData>/assets/`: the temp-fsync-rename write order, dedupe, the startup `tmp/` sweep, `recount` and GC with a 30-day grace (image store §3.2–§3.4). |
 | `jobs.ts` | One queue. Foreground calls run first; daily copy and mirror run on idle, meaning 30 s without an append. Each job yields between documents. |
+
+**As built in P2.6.**
+- **Modules.** `index.ts` is `library-index.ts` (not a barrel). `library.ts` holds the open order, the registry and the lifecycle; `lock.ts`, `cloud-folder.ts`, `sql.ts`, `driver.ts` (the `SqliteDriver` seam and SQLite error mapping) and `host.ts` (an injected `StorageHost` for files, the pid check and the clock) keep the engine free of `node:*`. `jobs.ts` is two lines in the worker: idle jobs run between requests after 30 s without a write. `mirror.ts`, `filenames.ts` and `assets.ts` come with P2.10 and P2.6b.
+- **Open order.** Cloud-folder refusal, lock, pragmas, schema creation for a new file, then `format_version` before any other write (a newer library is reopened read-only and never written), then `quick_check` if `unclean_exit` was set (a failure is read-only, `corrupt`), then migrations, then `unclean_exit` is set.
+- **Registry in the worker too.** `load` claims a document for a window; another window's `load` is `already_open`; an append or compaction from any window that doesn't hold the document is `forbidden`, as §7 requires of main; purge (and P2.8's import-into and restore) is `document_open` while any window holds it. After a worker restart, main replays its registry with `claim(docId, owner)`.
+- **Compaction guards.** A compaction older than the stored snapshot is a no-op. An `upToSeq` past the document's last row is `invalid_argument`. `updates.seq` is `AUTOINCREMENT`, so a seq is never reused after the newest rows are compacted away.
+- **`docs.schema`** defaults to 0, which is `DOC_SCHEMA` while `lib/doc-migrations` lists no steps.
+- **Import guard.** `checkImport` (`lib/doc-migrations/import-guard.ts`) refuses a state over 64 MiB (`import_too_large`), bytes that aren't Yjs (`corrupt`), and nodes, marks or roots the build doesn't know (`unknown_schema`; legacy `link` and `code` pass, the import migrations rename them; roots: `default`, plus `comments` in P4.11). P2.8 calls it before anything is written.
 
 **Backup failures.** EPERM, EACCES and Defender blocks on the backup folder raise app health `backups_failing` (§6.1; plan §5.5 "Backups failing"). The library itself is never affected.
 
@@ -584,7 +597,7 @@ sequenceDiagram
 | Compaction invariant | property test: random appends, compactions and reopens, with the Y.Doc state compared against a reference | engine on `bun:sqlite` |
 | Guards and `doc-handlers` | fuzz plus golden messages, sender and registry checks | pure modules |
 | Reducer and chip | a table row for each plan §5.5 state; "every refusal ends in a stop or a backoff" | pure |
-| Durability T1–T8, T16–T18 | `tests/load/desktop-durability-soak.ts`: SIGKILL Electron during append, compaction, migration, asset writes and image migration; a year of image churn | packaged app |
+| Durability T1–T8, T16–T18 | `tests/load/desktop-durability-soak.ts`: SIGKILL Electron during append, compaction, migration, asset writes and image migration; a year of image churn | the storage worker in a windowless Electron (`desktop/storage-harness`, P2.6), verified on `bun:sqlite`; the packaged app once P2.5 lands. T7 (slow hydrate) tests the session layer, not storage: P2.1 covers it in `local-session`'s tests, and W2 again over IndexedDB. |
 | `BlobStore` contract and asset GC | one suite plus a property test: GC never deletes a referenced blob | `MemoryBlobStore`; the worker on `bun:sqlite`; `IdbBlobStore` in the web library |
 | Preferences boot script | parity with `resolveBoot()` over about 40 stored payloads; the desktop CSP hash matches the script (build test) | happy-dom; build |
 | Main | `argv` filter, navigation and `window.open` denial, fuses | `_electron` |
