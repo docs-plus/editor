@@ -57,11 +57,17 @@ function listSegmentFiles(dir: string): string[] {
 if (import.meta.main) {
   // A static server with no rewrites: the same lookup any host (or a naive
   // `app://` handler) does, path → file.
+  // Loopback only, and no path may leave out/.
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
       const path = decodeURIComponent(new URL(req.url).pathname);
-      const file = Bun.file(join(outDir, path));
+      const target = resolve(outDir, `.${path}`);
+      if (!target.startsWith(outDir + sep)) {
+        return new Response("forbidden", { status: 403 });
+      }
+      const file = Bun.file(target);
       return file
         .exists()
         .then((ok) =>
