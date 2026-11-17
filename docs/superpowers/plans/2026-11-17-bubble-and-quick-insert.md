@@ -45,11 +45,11 @@
 
 ## Review Focus
 
-1. **Tab switch while the bubble is open.** The editor remounts (`key={activeTabId}`). The old controller must tear down once (StrictMode runs effects twice), and no root may stay in the old scroll container. **Test:** P0 Task 3, "tab switch with the bubble open leaves no root and no listeners".
-2. **⌘A on a 500-heading document.** The anchor must be the first *visible* selected line, computed without laying out every `content-visibility`-skipped block, and the bubble must appear within one frame of the show delay. **Test:** P0 Task 3, "select all anchors to the first visible line".
-3. **A remote edit deletes the selected text while the bubble or its colour menu is open.** It hides, and focus returns to the editor, never `body`. **Test:** P0 Task 3, "a collaborator deleting the selection hides the bubble" (it extends the existing collaboration helpers).
-4. **IME composition.** No show, move or hide mid-composition; a re-check on `compositionend`. **Test:** P0 Task 2 (controller unit test with `view.composing` stubbed).
-5. **Clicking 🔗 and pasting at once.** The selected text must survive. **Test:** P1 Task 6.
+1. **Tab switch while the bubble is open.** The editor remounts (`key={activeTabId}`). The old controller must tear down once (StrictMode runs effects twice), and no root may stay in the old scroll container. **Test:** P0 Task 0.3, "tab switch with the bubble open leaves no root and no listeners".
+2. **⌘A on a 500-heading document.** The anchor must be the first *visible* selected line, computed without laying out every `content-visibility`-skipped block, and the bubble must appear within one frame of the show delay. **Test:** P0 Task 0.3, "select all anchors to the first visible line".
+3. **A remote edit deletes the selected text while the bubble or its colour menu is open.** It hides, and focus returns to the editor, never `body`. **Test:** P0 Task 0.3, "a collaborator deleting the selection hides the bubble" (it extends the existing collaboration helpers).
+4. **IME composition.** No show, move or hide mid-composition; a re-check on `compositionend`. **Test:** P0 Task 0.2 (controller unit test with `view.composing` stubbed).
+5. **Clicking 🔗 and pasting at once.** The selected text must survive. **Test:** P1 Task 1.6.
 
 ---
 
@@ -57,7 +57,7 @@
 
 **Branch:** `feat/bubble-controller` from `origin/main`. **Visible change:** the anchor (BQ3) and whitespace-only hiding. Items are unchanged. A design review is needed.
 
-### Task 1: Pure anchor helpers and the whitespace rule
+### Task 0.1: Pure anchor helpers and the whitespace rule
 
 **Files:**
 - Modify: `components/smart-toolbar/bubble/bubble-rules.ts`
@@ -118,7 +118,7 @@ git add components/smart-toolbar/bubble/bubble-rules.ts tests/unit/components/se
 git commit -m "feat(bubble): anchor helpers and hide on whitespace-only selections"
 ```
 
-### Task 2: `BubbleController` (show, hide, position) and the anchor
+### Task 0.2: `BubbleController` (show, hide, position) and the anchor
 
 **Files:**
 - Create: `components/smart-toolbar/bubble/bubble-controller.ts`
@@ -126,7 +126,7 @@ git commit -m "feat(bubble): anchor helpers and hide on whitespace-only selectio
 - Test: `tests/unit/components/bubble-controller.test.ts`
 
 **Interfaces:**
-- Consumes: `firstLineRect`, `lastLineRect` and `BubblePlacement` from Task 1.
+- Consumes: `firstLineRect`, `lastLineRect` and `BubblePlacement` from Task 0.1.
 - Produces:
 
 ```ts
@@ -213,7 +213,7 @@ These behaviours copy `node_modules/@tiptap/extension-bubble-menu/src/bubble-men
   - Ignore results after `destroy()` or when hidden.
 - **Lifecycle:** keep controllers in a module `WeakMap<Editor, BubbleController>`. `destroy()` removes every listener and timer, calls `hide()`, and deletes its entry. A second call does nothing.
 
-- [ ] **Step 4: Implement `bubbleReferenceRect` in `bubble-anchor.ts` (DOM; Task 3's e2e covers it)**
+- [ ] **Step 4: Implement `bubbleReferenceRect` in `bubble-anchor.ts` (DOM; Task 0.3's e2e covers it)**
 
 1. **The band:**
    - top: the sticky row's `getBoundingClientRect().bottom` (`':scope > [data-slot="toolbar"]'`), else the scroll target's top;
@@ -235,7 +235,7 @@ git add components/smart-toolbar/bubble/bubble-controller.ts components/smart-to
 git commit -m "feat(bubble): add a plugin-free bubble controller and line anchor"
 ```
 
-### Task 3: Switch `SelectionBubbleView` to the controller
+### Task 0.3: Switch `SelectionBubbleView` to the controller
 
 **Files:**
 - Modify: `components/smart-toolbar/bubble/selection-bubble-view.tsx`
@@ -244,7 +244,7 @@ git commit -m "feat(bubble): add a plugin-free bubble controller and line anchor
 - Modify: `docs/superpowers/specs/2026-11-13-smart-toolbar-v1-contract.md` §10 (amendment A18), `CHANGELOG.md`
 
 **Interfaces:**
-- Consumes: `createBubbleController`, `BubbleHost` and `bubbleReferenceRect` from Task 2.
+- Consumes: `createBubbleController`, `BubbleHost` and `bubbleReferenceRect` from Task 0.2.
 - The DOM contract is unchanged:
   - the root has `className="st-bubble"`, `data-smart-bubble`, `data-state` and `data-placement`, and one `role="toolbar"` inside;
   - the root is a direct child of `.document-editor-wrapper` while shown, and absent otherwise.
@@ -316,7 +316,7 @@ For the bubble chunk: `for f in $(grep -l "st-bubble-panel" .next/static/chunks/
 
 **Branch:** `feat/bubble-v2` from `main` after P0 merges. Visible; needs a design review.
 
-### Task 1: Block-type face
+### Task 1.1: Block-type face
 
 **Files:** create `components/smart-toolbar/bubble/style-face.ts`; test `tests/unit/components/style-face.test.ts`.
 
@@ -333,7 +333,7 @@ For the bubble chunk: `for f in $(grep -l "st-bubble-panel" .next/static/chunks/
 
 Commit: `feat(bubble): compute the Style face`.
 
-### Task 2: Turn-into menu body, shared by the bubble and the row (BQ10, BQ11)
+### Task 1.2: Turn-into menu body, shared by the bubble and the row (BQ10, BQ11)
 
 **Files:**
 - create `components/smart-toolbar/row/turn-into-menu-items.tsx`, exported through `menu-bodies.ts`;
@@ -356,7 +356,7 @@ Commit: `feat(bubble): compute the Style face`.
 
 Commit: `feat(toolbar): turn-into menu shared by the bubble and the row`.
 
-### Task 3: Bubble layout v2
+### Task 1.3: Bubble layout v2
 
 **Files:** modify `selection-bubble-view.tsx`, `bubble-rules.ts` (`BUBBLE_ACTION_IDS`), `selection-bubble.scss`, `color-controls.tsx` (the split chevron is 24 px); test `selection-bubble.spec.ts` (update "shows B, I, U…" and the bubble-in-row matrix).
 
@@ -381,7 +381,7 @@ Commit: `feat(toolbar): turn-into menu shared by the bubble and the row`.
 
 Commit: `feat(bubble): fuller bubble with style, strike, code and clear`.
 
-### Task 4: Named colour rows on desktop (O2)
+### Task 1.4: Named colour rows on desktop (O2)
 
 **Files:** modify `components/smart-toolbar/color/color-panel.tsx` and `color-panel.scss`; create `components/smart-toolbar/color/color-order.ts`; tests `action-preview.spec.ts`, `toolbar-surfaces.spec.ts`.
 
@@ -406,7 +406,7 @@ Commit: `feat(bubble): fuller bubble with style, strike, code and clear`.
 
 Commit: `feat(color): named colour rows on desktop surfaces`.
 
-### Task 5: Keyboard-selection timing (O7) and motion (O10)
+### Task 1.5: Keyboard-selection timing (O7) and motion (O10)
 
 **Files:** `bubble-controller.ts` (with an option), `selection-bubble-view.tsx`, `selection-bubble.scss`; tests `selection-bubble.spec.ts`.
 
@@ -423,7 +423,7 @@ Commit: `feat(color): named colour rows on desktop surfaces`.
 
 Commit: `feat(bubble): settle keyboard selections before showing`.
 
-### Task 6: Link handoff and the pill reasons
+### Task 1.6: Link handoff and the pill reasons
 
 **Files:** `selection-bubble-view.tsx`; test `selection-bubble.spec.ts`.
 
@@ -447,7 +447,7 @@ Then: screenshots (spec Appendix C, bubble rows), CHANGELOG, PR. Report it; don'
 
 **Branch:** `feat/quick-insert` from `main` after P1. Visible.
 
-### Task 1: Suggested from recent insert kinds (O12 a)
+### Task 2.1: Suggested from recent insert kinds (O12 a)
 
 **Files:**
 - `lib/remembered-choice.ts`: `INSERT_KIND_CHOICE.maxRecent` 0 → 3;
@@ -468,7 +468,7 @@ Then: screenshots (spec Appendix C, bubble rows), CHANGELOG, PR. Report it; don'
 
 Commit: `feat(slash): suggest recent insert kinds`.
 
-### Task 2: Ghost hint, footer and badges (BQ9)
+### Task 2.2: Ghost hint, footer and badges (BQ9)
 
 **Files:** `components/smart-toolbar/slash/slash-menu.tsx`; create `components/smart-toolbar/slash/slash-footer.tsx` and `lib/slash-menu/slash-badges.ts`; test `tests/e2e/slash-menu.spec.ts`.
 
@@ -490,7 +490,7 @@ Commit: `feat(slash): suggest recent insert kinds`.
 
 Commit: `feat(slash): inline hint, footer tip and close button`.
 
-### Task 3: `+` on the empty line (O5 a)
+### Task 2.3: `+` on the empty line (O5 a)
 
 **Files:**
 - create `components/smart-toolbar/slash/empty-line-plus.tsx`, exported from `slash-menu.tsx`'s module;
@@ -515,7 +515,7 @@ Commit: `feat(slash): inline hint, footer tip and close button`.
 
 Commit: `feat(slash): plus button on empty lines`.
 
-### Task 4: Insert alias hints, the placeholder, and the registry contract test
+### Task 2.4: Insert alias hints, the placeholder, and the registry contract test
 
 **Files:**
 - `insert/insert-menu-body.tsx`: the "/" alias as an end hint;
@@ -537,7 +537,7 @@ Then: screenshots, CHANGELOG, PR.
 
 **Branch:** `feat/overflow-groups`.
 
-### Task 1: Groups
+### Task 3.1: Groups
 
 **Files:** `components/smart-toolbar/row/overflow-menu.tsx` and its body in `row/row-menu-bodies.tsx`; tests `toolbar-row.spec.ts`, `toolbar-a11y*.spec.ts`.
 
@@ -553,7 +553,7 @@ Then: screenshots, CHANGELOG, PR.
 
 Commit: `feat(toolbar): group the row's more menu`.
 
-### Task 2: Page width ▸ (gated)
+### Task 3.2: Page width ▸ (gated)
 
 **Gate:** start only when the preferences work (P2.9c) has merged `page.width` / `doc.width` (check the preferences spec rows 7–8 in the code). Until then, record "blocked on P2.9c" in the PR and skip this task.
 
@@ -567,7 +567,7 @@ Then: CHANGELOG, PR.
 
 **Branch:** `feat/phone-insert-sheet`. **Gate:** phone file ownership is clear (Global Constraints).
 
-### Task 1: Insert sheet
+### Task 4.1: Insert sheet
 
 **Files:** create `components/smart-toolbar/phone/insert-sheet.tsx`; modify `phone/phone-menu-cells.tsx` (the Insert cell opens the sheet) and `lib/slash-menu/slash-items.ts` (export `groupSlashItems(items)` for grid rendering); test `tests/e2e/mobile-bar.spec.ts`.
 
@@ -584,7 +584,7 @@ Then: CHANGELOG, PR.
 
 Commit: `feat(phone): insert sheet`.
 
-### Task 2: Aa sheet order and the tablet stand-in words
+### Task 4.2: Aa sheet order and the tablet stand-in words
 
 **Files:** `phone/format-sheet.tsx` (Style first, with a pressed current style and More headings ▸; colours as a 44 px grid with the current-value caption and the applied pill with Undo); the row's stand-ins (`collapse-menus.tsx`: words "Format", "Layout", "Block" at ≥ 768 px on a coarse pointer, CSS only); tests `mobile-bar*.spec.ts`, `toolbar-ladder.spec.ts`.
 
@@ -598,7 +598,7 @@ Then: screenshots (390, 320, 820 px), CHANGELOG, PR.
 
 **Branch:** after the comments UI (P4.10) registers `comment.add`.
 
-### Task 1
+### Task 5.1
 
 **Files:** `bubble-rules.ts` (`BUBBLE_ACTION_IDS` gains `"comment.add"`), `insert/insert-menu-body.tsx` (Insert › Comment where `canComment()`), and the reading-mode comment-only bubble in `selection-bubble-view.tsx` (shown while `!editor.isEditable && canComment()`).
 
@@ -623,10 +623,10 @@ Commit and PR.
   - §8.3, §13.1, §13.2 → P4;
   - §9 → P3;
   - §10 → P0 and P1;
-  - §11 → P1 Task 5;
+  - §11 → P1 Task 1.5;
   - §12 → P0;
-  - §13.3 (contextmenu hide) → P0 Task 2;
-  - §13.4 RTL → P1 Task 4 and P2 Task 2;
+  - §13.3 (contextmenu hide) → P0 Task 0.2;
+  - §13.4 RTL → P1 Task 1.4 and P2 Task 2.2;
   - §14 → the tests per task;
   - §16 → the per-phase tests.
 - **Gated items,** each named in its task: Page width (P2.9c), the placeholder (#123), phone files (ownership), 💬 (P4.10).
