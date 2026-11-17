@@ -223,7 +223,7 @@ export function LibrarySidebar({
         >
           <SearchIcon aria-hidden="true" />
           <span className="lib-search-label">Search by title</span>
-          <kbd>{mac ? "⌘O" : "Ctrl+O"}</kbd>
+          <kbd dir="ltr">{mac ? "⌘O" : "Ctrl+O"}</kbd>
         </button>
         {header}
         {header ? <div className="lib-sep" role="separator" /> : null}

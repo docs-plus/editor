@@ -225,8 +225,10 @@
 .lib-tree:focus-within
   .lib-treeitem[aria-selected="true"]:focus-visible
   > .lib-row {
+  /* On the accent fill the ring sits just inside the row, in the fill's
+     text colour, so it reads as one ring. */
   outline-color: var(--primary-foreground);
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  outline-offset: -3px;
 }
 .lib-chevron {
   display: grid;
@@ -435,8 +437,13 @@
 [dir="rtl"] .lib-dest[aria-selected="true"] {
   box-shadow: inset -2px 0 0 var(--primary);
 }
+/* Refused destinations are dimmed (inactive controls are exempt from the
+   contrast minimum); the reason is in the hint line and the tooltip. */
 .lib-dest[aria-disabled="true"] {
-  color: var(--lib-muted);
+  color: var(--muted-foreground);
+}
+.lib-dest[aria-disabled="true"] > svg {
+  opacity: 0.6;
 }
 .lib-dest-note {
   margin-inline-start: auto;

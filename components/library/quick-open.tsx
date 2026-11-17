@@ -187,16 +187,16 @@ export function QuickOpen({ onClose }: { onClose: (opened: boolean) => void }) {
           </CommandList>
           <div className="lib-qo-foot" aria-hidden="true">
             <span>
-              <kbd>↵</kbd> Open
+              <kbd dir="ltr">↵</kbd> Open
             </span>
             <span>
-              <kbd>{mac ? "⌘↵" : "Ctrl+↵"}</kbd> New tab
+              <kbd dir="ltr">{mac ? "⌘↵" : "Ctrl+↵"}</kbd> New tab
             </span>
             <span>
-              <kbd>{mac ? "⌥⌘↵" : "Shift+↵"}</kbd> New window
+              <kbd dir="ltr">{mac ? "⌥⌘↵" : "Shift+↵"}</kbd> New window
             </span>
             <span className="lib-qo-foot-end">
-              <kbd>esc</kbd> Close
+              <kbd dir="ltr">esc</kbd> Close
             </span>
           </div>
         </Command>
