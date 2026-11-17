@@ -17,8 +17,6 @@ import {
   hasUnsyncedCollabChanges,
   subscribeUnsyncedChanges,
 } from "@/lib/collab-session";
-import { DocSessionProvider } from "@/lib/platform/doc-session-context";
-import { sandboxDocSession } from "@/lib/platform/web/sandbox-doc-session";
 
 /** How long the intro waits for the collab server before showing a notice. */
 const UNREACHABLE_AFTER_MS = 10_000;
@@ -29,8 +27,9 @@ const UNREACHABLE_AFTER_MS = 10_000;
  * open the WebSocket first; the chunk downloads while the tab list syncs.
  */
 const loadDocumentEditor = () =>
-  import("@/components/document-editor/document-editor").then(
-    (module) => module.DocumentEditor,
+  // The sandbox wrapper: the editor plus its DocSession, in one lazy chunk.
+  import("@/components/editor-app/sandbox-document-editor").then(
+    (module) => module.SandboxDocumentEditor,
   );
 
 const DocumentEditor = dynamic(loadDocumentEditor, {
@@ -167,16 +166,13 @@ export function EditorApp({ intro }: EditorAppProps) {
       {offline && !bannerDismissed && (
         <OfflineBanner onDismiss={() => setBannerDismissed(true)} />
       )}
-      {/* The web composition root: documents open through collab-session. */}
-      <DocSessionProvider session={sandboxDocSession}>
-        <DocumentEditor
-          key={activeTabId}
-          documentId={activeTabId}
-          onTitleChange={(title) => updateTabTitle(activeTabId, title)}
-          playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-          onPlaygroundRegenerate={handlePlaygroundRegenerate}
-        />
-      </DocSessionProvider>
+      <DocumentEditor
+        key={activeTabId}
+        documentId={activeTabId}
+        onTitleChange={(title) => updateTabTitle(activeTabId, title)}
+        playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+        onPlaygroundRegenerate={handlePlaygroundRegenerate}
+      />
     </div>
   );
 }
