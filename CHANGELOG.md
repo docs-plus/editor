@@ -9,6 +9,56 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
+
+The second half of desktop plan P2.1: the platform-neutral storage path that
+desktop and the web library share, behind the P2.1a ports. Nothing in the web
+app uses it yet; `lib/collab-session.ts` is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/local-session.ts`, the `DocSession` over a
+  `DocStore`: load with no timeout, hydrate (never appended), migration hook
+  before ready, deferred release (1 s), then flush, compact and close. Edits
+  made before the content loads are kept, `flush()` also covers sessions
+  that are closing, a refused load is retried on the next open, and
+  unreadable content or a failing migration is reported (`corrupt`,
+  `migration_failed`) with the schema advanced only past finished steps.
+- **Platform:** `lib/platform/batcher.ts`: appends 250 ms after the last
+  update or 1 s after the first, one append in flight per document, failed
+  appends retried in order with backoff (2 s doubling to 60 s) and never
+  skipped, save health (`failing`, `behind` past 4 MiB), and the compaction
+  trigger (500 rows or 1 MiB since the snapshot).
+- **Platform:** `lib/platform/memory-doc-store.ts`, the in-memory `DocStore`
+  (one client per document, `failNext`, load and write delays) for tests and
+  the dev bridge.
+- **Tests:** the `DocStore` contract suite (`tests/helpers/doc-store-contract.ts`),
+  written as runner-neutral cases so P2.6 can run it on SQLite and inside
+  Electron; it passes on `MemoryDocStore`. A real-process SIGKILL test and a
+  fake-clock property test show a kill loses only the last second of typing.
+
+### Desktop P2.1a: `DocSession` and `DocStore` port types
+
+The first half of desktop plan P2.1: the types the editor, the storage worker
+and the web library code against. Types and one error class only; nothing
+imports them yet, so the web app is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session.ts` (`DocSession`, `DocHandle`,
+  `DocHandleState`, `ReadOnlyReason`, and the `HYDRATE_ORIGIN`,
+  `STORAGE_ORIGIN` and `MIGRATION_ORIGIN` transaction origins) and
+  `lib/platform/doc-store.ts` (`DocStore`, `LoadedDoc`, `AppendRecord`,
+  `CompactResult`, `UPDATE_ORIGINS`, and `DocStoreError` with the
+  architecture §9 storage codes plus the web library's `quota_exceeded`).
+
+#### Changed
+
+- **Docs:** the desktop architecture spec now puts each port in its own file
+  under `lib/platform/` (no `ports.ts`), and records P2.1's amendments to the
+  port shapes. `DocStore.compact` resolves with `{ foreign }` for the web
+  library's merge-into-snapshot compaction; the web library design notes it.
+
 ### Dark links on highlighted text
 
 Links inside highlighted text are readable in dark mode (#104).
