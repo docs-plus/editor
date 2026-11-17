@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 
 import {
@@ -135,8 +136,12 @@ describe("createBubbleController", () => {
   test("a transaction that changes neither selection nor doc keeps the timer", async () => {
     select();
     await Bun.sleep(BUBBLE_SHOW_DELAY_MS - 100);
+    const at = performance.now();
     editor.view.dispatch(editor.state.tr.setMeta("noop", true));
     await until(connected);
+    // The kept timer fires about 100 ms later; a restarted one takes the
+    // whole delay again.
+    expect(performance.now() - at).toBeLessThan(BUBBLE_SHOW_DELAY_MS);
   });
 
   test("hides synchronously on an empty selection and removes the root", async () => {
@@ -401,6 +406,8 @@ describe("bubbleReferenceRect", () => {
     coords,
     hit,
     domAtPos,
+    doc,
+    rectsFor,
   }: {
     from: number;
     to: number;
@@ -408,6 +415,10 @@ describe("bubbleReferenceRect", () => {
     coords: (pos: number) => { top: number; bottom: number };
     hit?: number;
     domAtPos?: (pos: number) => { node: Node; offset: number };
+    /** A real document; by default one big textblock. */
+    doc?: ProseMirrorNode;
+    /** The rects of one measured range; by default `lines`. */
+    rectsFor?: (from: number, to: number) => Line[];
   }) {
     const ranges: Array<[number, number]> = [];
     const probes: Array<{ left: number; top: number }> = [];
@@ -416,10 +427,17 @@ describe("bubbleReferenceRect", () => {
     const view = {
       state: {
         selection: { from, to },
-        // Every position is inside a textblock: `intoTextblock` keeps it.
-        doc: {
+        // By default every position is inside one big textblock, so
+        // ranges are only capped by the selection and the 300 positions.
+        doc: doc ?? {
           content: { size: 5000 },
-          resolve: () => ({ parent: { inlineContent: true } }),
+          resolve: () => ({
+            parent: { inlineContent: true },
+            start: () => 0,
+            end: () => 1e6,
+            before: () => -1,
+            after: () => 1e6 + 1,
+          }),
         },
       },
       dom: {
@@ -428,7 +446,11 @@ describe("bubbleReferenceRect", () => {
           createRange: () => ({
             setStart: () => {},
             setEnd: () => {},
-            getClientRects: () => lines.map(rect),
+            getClientRects: () => {
+              const last = ranges.at(-1);
+              const own = rectsFor && last ? rectsFor(...last) : lines;
+              return own.map(rect);
+            },
           }),
         },
       },
@@ -560,6 +582,77 @@ describe("bubbleReferenceRect", () => {
     expect(probes).toEqual([{ left: 41, top: 151 }]);
     expect(ranges).toEqual([[900, 1200]]);
     expect([result.left, result.right, result.top]).toEqual([40, 300, 160]);
+  });
+
+  describe("each range stays inside one textblock", () => {
+    // Title 0..7 (text 1..6), "One" 7..12 (text 8..11), empty paragraph
+    // 12..14, "Two" 14..19 (text 15..18).
+    const realDoc = () => {
+      const ed = createTestEditor({
+        content: {
+          type: "doc",
+          content: [
+            {
+              type: "heading",
+              attrs: { level: 1 },
+              content: [{ type: "text", text: "Title" }],
+            },
+            { type: "paragraph", content: [{ type: "text", text: "One" }] },
+            { type: "paragraph" },
+            { type: "paragraph", content: [{ type: "text", text: "Two" }] },
+          ],
+        },
+      });
+      const doc = ed.state.doc;
+      ed.destroy();
+      return doc;
+    };
+
+    test("top: a start at a textblock's end reads the next one, skipping an empty one", () => {
+      const doc = realDoc();
+      expect(doc.content.size).toBe(19);
+      const { view, ranges } = stubView({
+        doc,
+        from: 11,
+        to: 18,
+        coords: inBand,
+        lines: [],
+        // Only "Two" has a line; a whole-block box would be in every other.
+        rectsFor: (a) => (a === 15 ? [{ top: 300, left: 40, right: 80 }] : []),
+      });
+      const result = bubbleReferenceRect(view, stubScrollTarget(), "top");
+      // "One" from its end is empty; the empty paragraph is skipped.
+      expect(ranges).toEqual([[15, 18]]);
+      expect([result.top, result.left, result.right]).toEqual([300, 40, 80]);
+    });
+
+    test("top: a select-all start reads the title only, never past it", () => {
+      const doc = realDoc();
+      const { view, ranges } = stubView({
+        doc,
+        from: 0,
+        to: 19,
+        coords: inBand,
+        lines: [{ top: 300, left: 40, right: 640 }],
+      });
+      bubbleReferenceRect(view, stubScrollTarget(), "top");
+      expect(ranges).toEqual([[1, 6]]);
+    });
+
+    test("bottom: an end at a textblock's start reads the previous one", () => {
+      const doc = realDoc();
+      const { view, ranges } = stubView({
+        doc,
+        from: 1,
+        to: 15,
+        coords: inBand,
+        lines: [],
+        rectsFor: (a) => (a === 8 ? [{ top: 300, left: 40, right: 80 }] : []),
+      });
+      const result = bubbleReferenceRect(view, stubScrollTarget(), "bottom");
+      expect(ranges).toEqual([[8, 11]]);
+      expect(result.top).toBe(300);
+    });
   });
 
   test("falls back to the selection's rect when no line shows", () => {

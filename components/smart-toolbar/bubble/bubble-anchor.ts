@@ -75,21 +75,68 @@ export function intoTextblock(
 }
 
 /**
+ * The first line that shows in the band, read forward from `start` one
+ * textblock at a time: each range stays inside one textblock, so it never
+ * holds a whole block (whose border box `getClientRects` would return).
+ * A position at a textblock's end, or an empty textblock, has no line:
+ * the scan goes on to the next. At most `MAX_RANGE` positions in all.
+ */
+function firstLineFrom(
+  view: EditorView,
+  band: Band,
+  start: number,
+  to: number,
+) {
+  const { doc } = view.state;
+  let pos = start;
+  let budget = MAX_RANGE;
+  while (budget > 0 && pos < to) {
+    pos = intoTextblock(doc, pos, 1, to);
+    const $pos = doc.resolve(pos);
+    if (!$pos.parent.inlineContent) return null;
+    const end = Math.min($pos.end(), to, pos + budget);
+    if (end > pos) {
+      const line = firstLineRect(rangeRects(view, pos, end), band);
+      if (line) return line;
+    }
+    budget -= Math.max(1, end - pos);
+    pos = $pos.after();
+  }
+  return null;
+}
+
+/** Like `firstLineFrom`, backward from `end` for the last line. */
+function lastLineFrom(view: EditorView, band: Band, from: number, end: number) {
+  const { doc } = view.state;
+  let pos = end;
+  let budget = MAX_RANGE;
+  while (budget > 0 && pos > from) {
+    pos = intoTextblock(doc, pos, -1, from);
+    const $pos = doc.resolve(pos);
+    if (!$pos.parent.inlineContent) return null;
+    const start = Math.max($pos.start(), from, pos - budget);
+    if (pos > start) {
+      const line = lastLineRect(rangeRects(view, start, pos), band);
+      if (line) return line;
+    }
+    budget -= Math.max(1, pos - start);
+    pos = $pos.before();
+  }
+  return null;
+}
+
+/**
  * First selected line in the band, from where the band starts. Positions
  * are moved into a textblock before `coordsAtPos` reads them: at the
  * document's edges it measures whatever the view's first or last child is.
  */
 function topAnchor(view: EditorView, band: Band, from: number, to: number) {
-  const { doc } = view.state;
-  let start = intoTextblock(doc, from, 1, to);
+  let start = intoTextblock(view.state.doc, from, 1, to);
   if (view.coordsAtPos(start).bottom < band.top) {
     const hit = posAtBandEdge(view, band.top + 1);
-    if (hit !== undefined) {
-      start = intoTextblock(doc, clamp(hit, from, to), 1, to);
-    }
+    if (hit !== undefined) start = clamp(hit, from, to);
   }
-  const rects = rangeRects(view, start, Math.min(to, start + MAX_RANGE));
-  return firstLineRect(rects, band);
+  return firstLineFrom(view, band, start, to);
 }
 
 /**
@@ -109,8 +156,7 @@ function bottomAnchor(
   if (view.coordsAtPos(end).top > band.bottom) {
     return topAnchor(view, band, from, to);
   }
-  const rects = rangeRects(view, Math.max(from, end - MAX_RANGE), end);
-  const line = lastLineRect(rects, band);
+  const line = lastLineFrom(view, band, from, end);
   if (line && line.bottom + room > band.bottom) {
     return topAnchor(view, band, from, to);
   }
