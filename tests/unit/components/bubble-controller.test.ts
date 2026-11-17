@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Editor, JSONContent } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 
-import { bubbleReferenceRect } from "@/components/smart-toolbar/bubble/bubble-anchor";
+import {
+  bubbleReferenceRect,
+  intoTextblock,
+} from "@/components/smart-toolbar/bubble/bubble-anchor";
 import {
   BUBBLE_SHOW_DELAY_MS,
   type BubbleController,
@@ -413,7 +416,11 @@ describe("bubbleReferenceRect", () => {
     const view = {
       state: {
         selection: { from, to },
-        doc: { content: { size: 5000 } },
+        // Every position is inside a textblock: `intoTextblock` keeps it.
+        doc: {
+          content: { size: 5000 },
+          resolve: () => ({ parent: { inlineContent: true } }),
+        },
       },
       dom: {
         getBoundingClientRect: () => new DOMRect(40, 0, 600, 5000),
@@ -498,22 +505,61 @@ describe("bubbleReferenceRect", () => {
     expect(ranges).toEqual([[10, 40]]);
   });
 
-  test("bottom: the last line inside the band, read back from the band's bottom", () => {
+  test("bottom: the last selected line, when the selection ends in the band", () => {
     const { view, ranges, probes } = stubView({
       from: 10,
-      to: 4000,
-      coords: (pos) => (pos === 4000 ? { top: 900, bottom: 920 } : inBand()),
-      hit: 2000,
+      to: 2000,
+      coords: (pos) => (pos === 10 ? { top: 20, bottom: 40 } : inBand()),
       lines: [
         { top: 600, left: 40, right: 640 },
         { top: 680, left: 40, right: 200 },
-        { top: 720, left: 40, right: 640 }, // below the band
       ],
     });
     const result = bubbleReferenceRect(view, stubScrollTarget(), "bottom");
-    expect(probes).toEqual([{ left: 41, top: 699 }]);
+    expect(probes).toEqual([]);
     expect(ranges).toEqual([[1700, 2000]]);
     expect([result.left, result.right, result.top]).toEqual([40, 200, 680]);
+  });
+
+  test("bottom: no room under the last line takes the first visible line", () => {
+    const { view, ranges } = stubView({
+      from: 10,
+      to: 2000,
+      coords: inBand,
+      lines: [
+        { top: 300, left: 40, right: 640 },
+        { top: 680, left: 40, right: 200 },
+      ],
+    });
+    const target = stubScrollTarget();
+    const roomy = bubbleReferenceRect(view, target, "bottom", 0);
+    expect(roomy.top).toBe(680);
+    // 680 + 20 + 46 is past the band's bottom (700).
+    const tight = bubbleReferenceRect(view, target, "bottom", 46);
+    expect(tight.top).toBe(300);
+    expect(ranges.at(-1)).toEqual([10, 310]);
+  });
+
+  test("bottom: a selection past the band's bottom (select all) takes its first visible line", () => {
+    const { view, ranges, probes } = stubView({
+      from: 0,
+      to: 4000,
+      coords: (pos) =>
+        pos === 0
+          ? { top: 20, bottom: 40 }
+          : pos === 4000
+            ? { top: 900, bottom: 920 }
+            : inBand(),
+      hit: 900,
+      lines: [
+        { top: 160, left: 40, right: 300 },
+        { top: 680, left: 40, right: 640 },
+      ],
+    });
+    const result = bubbleReferenceRect(view, stubScrollTarget(), "bottom");
+    expect(probes).toEqual([{ left: 41, top: 151 }]);
+    expect(ranges).toEqual([[900, 1200]]);
+    expect([result.left, result.right, result.top]).toEqual([40, 300, 160]);
   });
 
   test("falls back to the selection's rect when no line shows", () => {
@@ -539,5 +585,53 @@ describe("bubbleReferenceRect", () => {
     });
     const result = bubbleReferenceRect(view, stubScrollTarget(), "bottom");
     expect([result.top, result.bottom]).toEqual([10, 70]);
+  });
+});
+
+describe("intoTextblock", () => {
+  const doc = () =>
+    createTestEditor({
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          { type: "horizontalRule" },
+          { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+        ],
+      },
+    });
+
+  test("keeps a position that is already in a textblock", () => {
+    const ed = doc();
+    expect(intoTextblock(ed.state.doc, 3, 1, 20)).toBe(3);
+    expect(intoTextblock(ed.state.doc, 3, -1, 0)).toBe(3);
+    ed.destroy();
+  });
+
+  test("moves a block boundary forward into the next textblock, past a rule", () => {
+    const ed = doc();
+    // 0: before the title; 7: after it, before the rule; 8: after the rule.
+    expect(intoTextblock(ed.state.doc, 0, 1, 100)).toBe(1);
+    expect(intoTextblock(ed.state.doc, 7, 1, 100)).toBe(9);
+    ed.destroy();
+  });
+
+  test("moves the end backward into the previous textblock", () => {
+    const ed = doc();
+    const size = ed.state.doc.content.size;
+    expect(intoTextblock(ed.state.doc, size, -1, 0)).toBe(size - 1);
+    expect(intoTextblock(ed.state.doc, 8, -1, 0)).toBe(6);
+    ed.destroy();
+  });
+
+  test("never passes the limit", () => {
+    const ed = doc();
+    expect(intoTextblock(ed.state.doc, 7, 1, 8)).toBe(8);
+    expect(intoTextblock(ed.state.doc, 8, -1, 7)).toBe(7);
+    ed.destroy();
   });
 });

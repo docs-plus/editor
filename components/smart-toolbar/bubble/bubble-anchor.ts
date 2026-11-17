@@ -1,4 +1,6 @@
 import { posToDOMRect } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import {
@@ -53,26 +55,66 @@ function rangeRects(view: EditorView, from: number, to: number): DOMRect[] {
   return Array.from(range.getClientRects());
 }
 
-/** First selected line in the band, from where the band starts. */
+/**
+ * `pos`, or the nearest position inside a textblock in direction `dir`,
+ * never past `limit`. A range that starts (or ends) on a block boundary
+ * holds that whole block, and `getClientRects` returns its border box: the
+ * "first line" of select all would be the title's whole box.
+ */
+export function intoTextblock(
+  doc: ProseMirrorNode,
+  pos: number,
+  dir: 1 | -1,
+  limit: number,
+): number {
+  const $pos = doc.resolve(pos);
+  if ($pos.parent.inlineContent) return pos;
+  const found = TextSelection.findFrom($pos, dir, true)?.head;
+  if (found === undefined) return pos;
+  return dir > 0 ? Math.min(found, limit) : Math.max(found, limit);
+}
+
+/**
+ * First selected line in the band, from where the band starts. Positions
+ * are moved into a textblock before `coordsAtPos` reads them: at the
+ * document's edges it measures whatever the view's first or last child is.
+ */
 function topAnchor(view: EditorView, band: Band, from: number, to: number) {
-  let start = from;
-  if (view.coordsAtPos(from).bottom < band.top) {
+  const { doc } = view.state;
+  let start = intoTextblock(doc, from, 1, to);
+  if (view.coordsAtPos(start).bottom < band.top) {
     const hit = posAtBandEdge(view, band.top + 1);
-    if (hit !== undefined) start = clamp(hit, from, to);
+    if (hit !== undefined) {
+      start = intoTextblock(doc, clamp(hit, from, to), 1, to);
+    }
   }
   const rects = rangeRects(view, start, Math.min(to, start + MAX_RANGE));
   return firstLineRect(rects, band);
 }
 
-/** Last selected line in the band, from where the band ends. */
-function bottomAnchor(view: EditorView, band: Band, from: number, to: number) {
-  let end = to;
-  if (view.coordsAtPos(to).top > band.bottom) {
-    const hit = posAtBandEdge(view, band.bottom - 1);
-    if (hit !== undefined) end = clamp(hit, from, to);
+/**
+ * Last selected line, with `room` px free under it inside the band. When
+ * the selection runs past the band's bottom (select all), or its last line
+ * sits too close to that edge, the bubble under it would leave the view:
+ * it goes under the first line that shows instead.
+ */
+function bottomAnchor(
+  view: EditorView,
+  band: Band,
+  from: number,
+  to: number,
+  room: number,
+) {
+  const end = intoTextblock(view.state.doc, to, -1, from);
+  if (view.coordsAtPos(end).top > band.bottom) {
+    return topAnchor(view, band, from, to);
   }
   const rects = rangeRects(view, Math.max(from, end - MAX_RANGE), end);
-  return lastLineRect(rects, band);
+  const line = lastLineRect(rects, band);
+  if (line && line.bottom + room > band.bottom) {
+    return topAnchor(view, band, from, to);
+  }
+  return line;
 }
 
 const toDOMRect = ({ left, top, right, bottom }: BubbleRect) =>
@@ -89,13 +131,17 @@ function selectionRect(view: EditorView, from: number, to: number): DOMRect {
 
 /**
  * The rect the bubble anchors to: the first selected line that shows in
- * the scroll target's band for `"top"`, the last for `"bottom"`. Falls back
- * to the selection's union rect when no line shows or measuring throws.
+ * the scroll target's band for `"top"`, the last selected line for
+ * `"bottom"` (the first that shows when the selection runs past the band,
+ * or when `room`, the bubble's height plus its offset, does not fit under
+ * the last). Falls back to the selection's union rect when no line shows
+ * or measuring throws.
  */
 export function bubbleReferenceRect(
   view: EditorView,
   scrollTarget: HTMLElement,
   placement: BubblePlacement,
+  room = 0,
 ): DOMRect {
   const { from, to } = view.state.selection;
   try {
@@ -103,7 +149,7 @@ export function bubbleReferenceRect(
     const line =
       placement === "top"
         ? topAnchor(view, band, from, to)
-        : bottomAnchor(view, band, from, to);
+        : bottomAnchor(view, band, from, to, room);
     if (line) return toDOMRect(line);
   } catch {
     // Positions the DOM no longer has (a remote step replaced the block).
