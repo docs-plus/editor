@@ -1,5 +1,6 @@
 import { getMarkRange } from "@tiptap/core";
 import {
+  AllSelection,
   type EditorState,
   NodeSelection,
   TextSelection,
@@ -61,8 +62,9 @@ function insideOneLink(state: EditorState, from: number, to: number) {
  *
  * Hidden when read-only, suppressed (a keystroke or Esc dismissed it),
  * unfocused (neither the editor nor the bubble), on a node selection, on a
- * range with no text, with either end in a code block (code and Mermaid),
- * or with both ends inside one hyperlink (its own preview takes over).
+ * range with no text or only whitespace, with either end in a code block
+ * (code and Mermaid), or with both ends inside one hyperlink (its own
+ * preview takes over). Shows for a text range and for select all.
  */
 export function shouldShowBubble(
   view: BubbleView,
@@ -74,7 +76,13 @@ export function shouldShowBubble(
   if (!view.editable || suppressed) return false;
   if (!isFocusWithBubble(view, root)) return false;
   if (selection instanceof NodeSelection) return false;
-  if (!(selection instanceof TextSelection)) return false;
+  // Select all (⌘A) is an `AllSelection` (spec §7.2: it shows).
+  if (
+    !(selection instanceof TextSelection) &&
+    !(selection instanceof AllSelection)
+  ) {
+    return false;
+  }
   const { from, to, $from, $to } = selection;
   const { doc } = view.state;
   if (doc.textBetween(from, to).trim().length === 0) return false;

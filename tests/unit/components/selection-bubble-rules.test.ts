@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { AllSelection, NodeSelection, TextSelection } from "@tiptap/pm/state";
 
 import {
   BUBBLE_ACTION_IDS,
@@ -223,6 +223,14 @@ describe("shouldShowBubble", () => {
       ),
     );
     expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(false);
+  });
+
+  it("shows for select all (an AllSelection)", () => {
+    editor = createTestEditor({ content: DOC });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(new AllSelection(editor.state.doc)),
+    );
+    expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(true);
   });
 
   it("hides inside a code block", () => {
