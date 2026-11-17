@@ -9,6 +9,29 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Tests: run 500-heading perf and soak documents at production's 2 MiB cap
+
+A 500-heading flat document (`generateLargeDocument(500, { shape: "flat" })`,
+about 1.2 MB as JSON) was over Hocuspocus's 1 MiB default
+`MAX_DOC_SIZE_BYTES`: the server refused it, the editor turned read-only and
+a perf run recorded 0 of 220 keystrokes, failing with only "keystroke
+samples". Closes #110. Test tooling only; no app or server change.
+
+#### Changed
+
+- **Tests:** `make dev-hocus`, and so `make dev`, Playwright's `webServer`,
+  CI's e2e job and the nightly jobs, starts Hocus with production's
+  `MAX_DOC_SIZE_BYTES=2097152` (`Makefile`, the one source; an environment
+  value overrides it). Local `make dev` now has production's cap too.
+
+#### Added
+
+- **Tests:** `EditorPage.expectSavedToServer()` waits until the server has
+  acknowledged every edit and fails with the size notice's text if it
+  refused them. The perf, toolbar-perf, collaborative perf and soak specs
+  call it after seeding their document; the typing perf spec checks it
+  again after typing.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script

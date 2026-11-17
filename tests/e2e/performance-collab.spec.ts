@@ -51,6 +51,7 @@ test(`typing latency with ${PERF_COLLAB_USERS} users on shared doc (${PERF_COLLA
   await editors[0].goto(docId);
   await editors[0].waitForSync();
   await editors[0].setContent(doc);
+  await editors[0].expectSavedToServer();
   await expect(pages[0].locator(".tiptap")).toContainText(
     "Soak Test Document",
     {
