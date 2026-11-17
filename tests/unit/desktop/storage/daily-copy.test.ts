@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import * as Y from "yjs";
 
-import { DAILY_KEEP, localDate } from "@/desktop/storage/engine/daily-copy";
+import { openBunSqlite } from "@/desktop/dev/bun-sqlite-driver";
+import {
+  copyLibraryInto,
+  DAILY_KEEP,
+  localDate,
+} from "@/desktop/storage/engine/daily-copy";
 import { IDLE_MS, type Library } from "@/desktop/storage/engine/library";
 import {
   createClock,
@@ -94,5 +99,73 @@ describe("daily copies (D-A6)", () => {
     expect(() =>
       library.readDailyCopy("../../etc", crypto.randomUUID()),
     ).toThrow();
+  });
+});
+
+describe("daily copy off the writer (begin, copy, complete or fail)", () => {
+  function idle() {
+    clock.advance(IDLE_MS);
+  }
+
+  test("begin waits for idle, hands out one job at a time, and nothing until it ends", () => {
+    write(library.createDoc().id, "x");
+    expect(library.beginDailyCopy()).toBeNull();
+    idle();
+    const job = library.beginDailyCopy();
+    expect(job?.partial).toEndWith(".sqlite.partial");
+    expect(job?.source).toBe(library.path);
+    expect(library.beginDailyCopy()).toBeNull();
+  });
+
+  test("a copy made on its own read-only connection completes like the inline one", () => {
+    const docId = library.createDoc().id;
+    write(docId, "copied");
+    idle();
+    const job = library.beginDailyCopy();
+    if (!job) throw new Error("no job");
+    copyLibraryInto(openBunSqlite, job.source, job.partial);
+    // The writer keeps committing while the copy is out.
+    write(docId, " later");
+    expect(library.completeDailyCopy(job)).toBe(
+      `library-${localDate(clock.now)}.sqlite`,
+    );
+    expect(library.listDailyCopies()).toEqual([localDate(clock.now)]);
+    const restored = new Y.Doc();
+    Y.applyUpdate(restored, library.readDailyCopy(localDate(clock.now), docId));
+    expect(restored.getText("t").toString()).toBe("copied");
+    expect(library.beginDailyCopy()).toBeNull(); // done for today
+  });
+
+  test("a failed or abandoned copy leaves no partial, keeps older copies and retries", () => {
+    const docId = library.createDoc().id;
+    write(docId, "day one");
+    idle();
+    library.runIdleJobs();
+    const kept = library.listDailyCopies();
+    clock.advance(DAY);
+    write(docId, " day two");
+    idle();
+    const job = library.beginDailyCopy();
+    if (!job) throw new Error("no job");
+    createTestHost(clock).createExclusive(job.partial, "half a copy");
+    library.failDailyCopy(job, "quit");
+    expect(createTestHost(clock).exists(job.partial)).toBe(false);
+    expect(library.listDailyCopies()).toEqual(kept);
+    expect(library.stats().lastDailyCopyError).toBe("quit");
+    expect(library.beginDailyCopy()).not.toBeNull();
+  });
+
+  test("opening the library sweeps partial copies a killed process left", () => {
+    const host = createTestHost(clock);
+    library.shutdown();
+    host.mkdirp(host.join(temp.dir, "daily"));
+    const partial = host.join(
+      temp.dir,
+      "daily",
+      "library-2026-11-16.sqlite.partial",
+    );
+    host.createExclusive(partial, "junk");
+    library = openTestLibrary(temp.dir, host);
+    expect(host.exists(partial)).toBe(false);
   });
 });
