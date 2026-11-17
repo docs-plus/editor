@@ -95,6 +95,27 @@ describe("scripts/deploy.sh PM2 commands", () => {
     );
   });
 
+  // The host's own node is Node 14; install scripts must run on Bun.
+  it("installs only through install_deps, with Bun as node", () => {
+    const installs = deployScript
+      .split("\n")
+      .filter((line) => /\bbun install\b/.test(line));
+    expect(installs).toEqual([
+      'install_deps() { HUSKY=0 PATH="$node_shim:$PATH" bun install --frozen-lockfile; }',
+    ]);
+    expect(deployScript).toContain(
+      'ln -s "$(command -v bun)" "$node_shim/node"',
+    );
+    // Install before the env file is in the build checkout.
+    const install = '(cd "$BUILD_DIR" && install_deps)';
+    const copyEnv = 'cp .env.production "$BUILD_DIR/"';
+    expect(deployScript).toContain(install);
+    expect(deployScript).toContain(copyEnv);
+    expect(deployScript.indexOf(install)).toBeLessThan(
+      deployScript.indexOf(copyEnv),
+    );
+  });
+
   // The script looks for the marker next to DB_PATH; deploy.sh writes it in
   // the app directory, PM2's cwd for editor-purge.
   it("keeps the database in the app directory, where the marker goes", () => {

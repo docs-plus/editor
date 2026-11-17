@@ -40,7 +40,7 @@ log() { printf '\n== %s\n' "$*"; }
 # A forced-command session is not a login shell: fail before touching
 # anything if a tool is missing from its PATH.
 local tool
-for tool in bun bunx git flock curl; do
+for tool in bun bunx git flock curl mktemp; do
   if ! command -v "$tool" > /dev/null; then
     echo "deploy: $tool is not on PATH ($PATH)" >&2
     exit 9
@@ -78,14 +78,25 @@ if [ -e "$BUILD_DIR" ]; then
 fi
 git worktree prune
 git worktree add --detach "$BUILD_DIR" "$sha"
-cleanup() { git -C "$APP_DIR" worktree remove --force "$BUILD_DIR" 2>/dev/null || true; }
+# Package scripts that run during install (husky's prepare, sharp's) start
+# with `#!/usr/bin/env node`, and Bun runs them on the host's own node: an old
+# Node 14 that other services on this host use, which cannot parse them. Give
+# the installs a node that is Bun. HUSKY=0: a server checkout needs no hooks.
+node_shim="$(mktemp -d)"
+ln -s "$(command -v bun)" "$node_shim/node"
+install_deps() { HUSKY=0 PATH="$node_shim:$PATH" bun install --frozen-lockfile; }
+cleanup() {
+  git -C "$APP_DIR" worktree remove --force "$BUILD_DIR" 2>/dev/null || true
+  rm -rf "$node_shim"
+}
 trap cleanup EXIT
+(cd "$BUILD_DIR" && install_deps)
 cp .env.production "$BUILD_DIR/"
-(cd "$BUILD_DIR" && bun install --frozen-lockfile && bun run build)
+(cd "$BUILD_DIR" && bun run build)
 
 log "Updating the live checkout"
 git merge --ff-only --quiet "$sha"
-bun install --frozen-lockfile
+install_deps
 
 wait_for() { # url-or-port, seconds
   local target="$1" seconds="$2"
