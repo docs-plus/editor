@@ -20,6 +20,7 @@ export default defineConfig({
         "**/soak*.spec.ts",
         "**/yjs-soak/**",
         "**/pwa-offline.spec.ts",
+        "**/desktop-seams.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
       ],
@@ -75,6 +76,17 @@ export default defineConfig({
         browserName: "chromium",
         baseURL: process.env.PWA_BASE_URL ?? "http://localhost:3847",
         serviceWorkers: "allow",
+      },
+    },
+    {
+      // Needs a desktop-flag production build (NEXT_PUBLIC_APP_TARGET=desktop);
+      // see the spec's header.
+      name: "desktop",
+      testMatch: ["**/desktop-seams.spec.ts"],
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 720 },
+        baseURL: process.env.DESKTOP_BASE_URL ?? "http://localhost:3849",
       },
     },
     {

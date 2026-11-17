@@ -1,0 +1,7 @@
+# #103 option (a): renderer exported once on ubuntu-24.04 (job 133896720304), downloaded on windows-latest (133897000932) and macos-26 (133897000846), run 44041439341
+## job-handoff_check_macos-26.log
+     132 files match
+{"label":"linux-built renderer on macos-26","platform":"darwin","next":"16.4.6","layout":"flat (ok)","nestedDirs":[],"segmentFiles":["__next.__PAGE__.txt","__next._full.txt","__next._tree.txt","_not-found/__next._full.txt","_not-found/__next._not-found.__PAGE__.txt","_not-found/__next._tree.txt","about/__next._full.txt","about/__next._tree.txt","about/__next.about.__PAGE__.txt"],"clientUrlStatus":{"/about/__next.about.__PAGE__.txt":200,"/_not-found/__next._not-found.__PAGE__.txt":200}}
+## job-handoff_check_windows-latest.log
+132 files match
+{"label":"linux-built renderer on windows-latest","platform":"win32","next":"16.4.6","layout":"flat (ok)","nestedDirs":[],"segmentFiles":["__next.__PAGE__.txt","__next._full.txt","__next._tree.txt","_not-found/__next._full.txt","_not-found/__next._not-found.__PAGE__.txt","_not-found/__next._tree.txt","about/__next._full.txt","about/__next._tree.txt","about/__next.about.__PAGE__.txt"],"clientUrlStatus":{"/about/__next.about.__PAGE__.txt":200,"/_not-found/__next._not-found.__PAGE__.txt":200}}

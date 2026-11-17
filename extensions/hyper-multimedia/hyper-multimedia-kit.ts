@@ -1,6 +1,8 @@
 import { HyperMultimediaKit as BaseHyperMultimediaKit } from "@docs.plus/extension-hypermultimedia";
 import type { Plugin } from "@tiptap/pm/state";
 
+import { createXLinkCardView } from "./x-link-card";
+
 /**
  * Kit extensions whose plugin view's `destroy` tears the media controls
  * down: `MediaResizeControls` hides the active gripper and toolbar,
@@ -41,19 +43,33 @@ export function keepViewOnReconfigure(plugin: Plugin): void {
 /**
  * `HyperMultimediaKit` whose media controls survive a plugin view rebuild:
  * a gripper on the hovered image stays up, and a resize drag keeps going.
+ *
+ * Desktop builds (`NEXT_PUBLIC_APP_TARGET=desktop`) keep the `x` node, so
+ * documents with X posts stay valid, but draw it as a static link card: no
+ * X script may run in the desktop app. The literal comparison folds at build
+ * time, so the web build keeps the kit's embed and drops the card.
  */
 export const HyperMultimediaKit = BaseHyperMultimediaKit.extend({
   addExtensions() {
-    return (this.parent?.() ?? []).map((extension) =>
-      MEDIA_CONTROL_EXTENSIONS.has(extension.name)
-        ? extension.extend({
-            addProseMirrorPlugins() {
-              const plugins = this.parent?.() ?? [];
-              plugins.forEach(keepViewOnReconfigure);
-              return plugins;
-            },
-          })
-        : extension,
-    );
+    return (this.parent?.() ?? []).map((extension) => {
+      if (MEDIA_CONTROL_EXTENSIONS.has(extension.name)) {
+        return extension.extend({
+          addProseMirrorPlugins() {
+            const plugins = this.parent?.() ?? [];
+            plugins.forEach(keepViewOnReconfigure);
+            return plugins;
+          },
+        });
+      }
+      if (process.env.NEXT_PUBLIC_APP_TARGET === "desktop") {
+        if (extension.name === "x") {
+          // Loaded here, not by the card module: a static stylesheet import
+          // survives tree shaking and would ship the card's CSS to the web.
+          void import("./x-link-card.scss");
+          return extension.extend({ addNodeView: () => createXLinkCardView });
+        }
+      }
+      return extension;
+    });
   },
 });

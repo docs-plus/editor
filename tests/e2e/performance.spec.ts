@@ -53,6 +53,8 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     await editorPage.goto();
     await editorPage.waitForSync();
     await editorPage.setContent(opts.doc);
+    // A refused document turns read-only and would record no keystrokes.
+    await editorPage.expectSavedToServer();
     // Each arm waits for its own end state: the toolbar mounted or gone.
     const toolbar = page.getByRole("toolbar", {
       name: "Formatting",
@@ -72,6 +74,8 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     await collectKeystrokeLatencies(page);
     await page.keyboard.type("a".repeat(KEYSTROKES), { delay: 10 });
     const samples = await collectKeystrokeLatencies(page);
+    // The keys reached the server too: a refusal mid-run names its cause.
+    await editorPage.expectSavedToServer();
     expect(samples.length, "keystroke samples").toBe(KEYSTROKES);
     return percentile(samples.slice(WARMUP_KEYSTROKES), 95);
   } finally {

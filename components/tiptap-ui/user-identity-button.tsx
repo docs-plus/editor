@@ -2,11 +2,11 @@
 
 import { useCurrentEditor } from "@tiptap/react";
 import throttle from "lodash.throttle";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InstallAppButton } from "@/components/pwa";
+import { PrivacyLink } from "@/components/site-page/privacy-link";
 import {
   lazySurface,
   loadIdentityDialog,
@@ -260,12 +260,7 @@ export function UserIdentityButton() {
           >
             <GithubIcon />
           </CommunityIconLink>
-          <Link
-            href="/privacy"
-            className="px-1.5 text-muted-foreground hover:text-foreground hover:underline underline-offset-2"
-          >
-            Privacy
-          </Link>
+          <PrivacyLink className="px-1.5 text-muted-foreground hover:text-foreground hover:underline underline-offset-2" />
         </div>
       </div>
 

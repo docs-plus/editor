@@ -40,10 +40,10 @@ test.describe("catch-up render budget", () => {
     const editorPage = new EditorPage(page);
     await editorPage.goto();
     await editorPage.waitForSync();
-    // Plain content keeps 500 headings under the dev server's size cap.
     await editorPage.setContent(
       generateLargeDocument(500, { shape: "mixed", richContent: false }),
     );
+    await editorPage.expectSavedToServer();
     await page.locator(".tiptap h1").first().click();
     await expect(page.locator(".tiptap")).toBeFocused();
     await page.keyboard.press("End");
@@ -103,6 +103,7 @@ test.describe("catch-up render budget", () => {
       await editorPage.goto();
       await editorPage.waitForSync();
       await editorPage.setContent(doc);
+      await editorPage.expectSavedToServer();
       if (CPU_THROTTLE > 1) {
         const cdp = await context.newCDPSession(page);
         await cdp.send("Emulation.setCPUThrottlingRate", {
