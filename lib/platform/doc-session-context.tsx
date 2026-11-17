@@ -35,10 +35,7 @@ export function DocSessionProvider({
 /** The `DocSession` of the nearest `DocSessionProvider`. Throws without one. */
 export function useDocSession(): DocSession {
   const session = useContext(DocSessionContext);
-  if (!session) {
-    throw new Error(
-      "useDocSession: no DocSessionProvider above this component (the composition root provides one)",
-    );
-  }
+  // Short: this string ships in the editor chunk.
+  if (!session) throw new Error("No DocSessionProvider");
   return session;
 }
