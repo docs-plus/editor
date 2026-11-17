@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import type { NextConfig } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 
 import { GA_MEASUREMENT_ID } from "./lib/analytics-config";
 import { buildContentSecurityPolicy } from "./lib/security/content-security-policy";
@@ -46,11 +47,10 @@ const nextConfig: NextConfig = {
     // branches; an unset NEXT_PUBLIC_* stays a runtime lookup.
     NEXT_PUBLIC_APP_TARGET: process.env.NEXT_PUBLIC_APP_TARGET ?? "web",
   },
-  // Desktop is a static export loaded from app://tinydocy. Web-only route
-  // handlers are `route.web.ts(x)`, which the desktop extensions don't
-  // match; `*.desktop.tsx` is the desktop-only counterpart. Web-only pages
-  // and metadata files are parked instead (scripts/desktop-export.ts).
-  ...(isDesktop ? { output: "export" as const } : {}),
+  // Web-only route handlers are `route.web.ts(x)`, which the desktop
+  // extensions don't match; `*.desktop.tsx` is the desktop-only
+  // counterpart. Web-only pages and metadata files are parked instead
+  // (scripts/desktop-export.ts).
   pageExtensions: isDesktop
     ? ["desktop.tsx", "tsx", "ts"]
     : ["web.tsx", "web.ts", "tsx", "ts"],
@@ -97,4 +97,12 @@ async function webHeaders() {
   ];
 }
 
-export default nextConfig;
+// Desktop is a static export loaded from app://tinydocy. Only the build
+// exports: under `next dev` (the `local` Playwright project) the web
+// metadata files aren't parked, and `output: "export"` would make each of
+// them a 500 that every page links.
+export default function config(phase: string): NextConfig {
+  return isDesktop && phase === PHASE_PRODUCTION_BUILD
+    ? { ...nextConfig, output: "export" }
+    : nextConfig;
+}
