@@ -349,3 +349,17 @@ test("stats reads the pragmas back as set", () => {
   });
   library.shutdown();
 });
+
+test("shutdown releases every file handle (Windows can delete the folder)", () => {
+  const lsof = Bun.which("lsof");
+  if (!lsof) return;
+  const library = openTestLibrary(temp.dir, createTestHost(clock));
+  library.createDoc({ title: "x" });
+  library.sidebar();
+  library.shutdown();
+  const open = Bun.spawnSync([lsof, "-p", String(process.pid)])
+    .stdout.toString()
+    .split("\n")
+    .filter((line) => line.includes(temp.dir));
+  expect(open).toEqual([]);
+});
