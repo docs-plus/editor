@@ -13,7 +13,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.desktop-node.json",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "check": "biome check .",
