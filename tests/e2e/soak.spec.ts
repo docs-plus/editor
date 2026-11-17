@@ -35,6 +35,7 @@ test("single-user soak — sustained editing with memory tracking", async ({
   await ep.goto();
   await ep.waitForSync();
   await ep.setContent(generateLargeDocument(SOAK_HEADINGS));
+  await ep.expectSavedToServer();
 
   const journeyResults = await runAllJourneys(page, ep);
   for (const j of journeyResults) {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { PrivacyLink } from "@/components/site-page/privacy-link";
 import { REPO_URL, SITE_NAME } from "@/lib/site-config";
 
 import "./site-page.scss";
@@ -23,7 +24,7 @@ export function SitePage({ children }: { children: ReactNode }) {
       </header>
       <main className="site-page-content">{children}</main>
       <footer className="site-page-footer">
-        <Link href="/privacy">Privacy</Link>
+        <PrivacyLink />
         <span>MIT licensed</span>
       </footer>
     </div>

@@ -1,0 +1,28 @@
+# next info, windows-latest, repro app, Next 16.4.6 (run 44041439341, job 133896720223)
+# run through Bun 1.4.4 (bunfig [run] bun = true); the yarn/corepack lines are next info probing package managers
+error This project's package.json defines "packageManager": "yarn@bun@1.4.4". However the current global version of Yarn is 1.22.22.
+Presence of the "packageManager" field indicates that the project is meant to be used with Corepack, a tool included by default with all official Node.js distributions starting from 16.9 and 14.19.
+Corepack must currently be enabled by running corepack enable in your terminal. For more information, check out https://yarnpkg.com/corepack.
+warn  - Failed to fetch latest canary version. (Reason: Failed to get registry from "yarn"..)
+      Detected "16.4.6". Visit https://github.com/vercel/next.js/releases.
+      Make sure to try the latest canary version (eg.: `npm install next@canary`) to confirm the issue still exists before creating a new issue.
+Learn more: https://nextjs.org/docs/messages/opening-an-issue
+Operating System:
+  Platform: win32
+  Arch: x64
+  Version: Windows Server 2025 Datacenter
+  Available memory (MB): 16379
+  Available CPU cores: 4
+Binaries:
+  Node: 26.3.0
+  npm: 10.9.9
+  Yarn: 1.22.22
+  pnpm: N/A
+Relevant Packages:
+  next: 16.4.6
+  eslint-config-next: N/A
+  react: 19.3.1
+  react-dom: 19.3.1
+  typescript: N/A
+Next.js Config:
+  output: export
