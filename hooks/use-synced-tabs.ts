@@ -39,14 +39,12 @@ export interface UseSyncedTabsReturn {
 }
 
 /**
- * The tab bar over a `DocumentIndex` (by default the sandbox's shared
- * `global-tabs` list). The index holds the list; this hook adds what is
- * per-window: the active tab (persisted locally), the title debounce, the
- * tab cap, confirmations and the Undo pill. `createIndex` must be stable.
+ * The tab bar over the sandbox's `DocumentIndex`, the shared `global-tabs`
+ * list. The index holds the list; this hook adds what is per-window: the
+ * active tab (persisted locally), the title debounce, the tab cap,
+ * confirmations and the Undo pill.
  */
-export function useSyncedTabs(
-  createIndex: () => DocumentIndex = createGlobalTabsIndex,
-): UseSyncedTabsReturn {
+export function useSyncedTabs(): UseSyncedTabsReturn {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState("");
   const [ready, setReady] = useState(false);
@@ -58,7 +56,10 @@ export function useSyncedTabs(
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const index = createIndex();
+    // Created here, once per mount: a factory in the effect's dependencies
+    // (even a default parameter, which the minifier may inline as a new
+    // function each render) would re-create the index on every render.
+    const index = createGlobalTabsIndex();
     indexRef.current = index;
 
     // Runs synchronously inside Yjs transactions, so plain setState is used:
@@ -105,7 +106,7 @@ export function useSyncedTabs(
       index.destroy();
       setReady(false);
     };
-  }, [createIndex]);
+  }, []);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
