@@ -37,6 +37,7 @@ test(`multi-user soak — ${SOAK_USERS} users editing concurrently with schema c
   await ep0.goto(docId);
   await ep0.waitForSync();
   await ep0.setContent(generateLargeDocument(SOAK_HEADINGS));
+  await ep0.expectSavedToServer();
   await expect(page0.locator(".tiptap")).toContainText("Soak Test Document", {
     timeout: 10000,
   });

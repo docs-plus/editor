@@ -1,0 +1,28 @@
+# force-static experiment (macOS, Next 16.4.6, spike/s1-shell tree, 2026-11-17)
+
+## without the overlay, unchanged files
+Error: export const dynamic = "force-static"/export const revalidate not configured on route "/robots.txt" with "output: export". See more info here: https://nextjs.org/docs/advanced-features/static-html-export
+Error: export const dynamic = "force-static"/export const revalidate not configured on route "/sitemap.xml" with "output: export". See more info here: https://nextjs.org/docs/advanced-features/static-html-export
+Error: export const dynamic = "force-static"/export const revalidate not configured on route "/manifest.webmanifest" with "output: export". See more info here: https://nextjs.org/docs/advanced-features/static-html-export
+Error: Failed to collect page data for /robots.txt
+
+## with export const dynamic = "force-static" added to the five files
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /about
+├ ○ /apple-icon
+├ ○ /icon
+├ ○ /manifest.webmanifest
+├ ○ /opengraph-image
+├ ○ /robots.txt
+└ ○ /sitemap.xml
+
+
+○  (Static)  prerendered as static content
+
+## head tags in out/index.html
+<link rel="manifest" href="/manifest.webmanifest"/>
+<meta property="og:image" content="https://tiny.docs.plus/opengraph-image?3ec168a6321016c9"/>
+<meta name="twitter:image" content="https://tiny.docs.plus/opengraph-image?3ec168a6321016c9"/>
+<link rel="apple-touch-icon" href="/apple-icon?1d2df994da6bd754" type="image/png" sizes="180x180"/>

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { contrastRatio, MIN_TEXT_CONTRAST } from "@/lib/text-style-contrast";
+import { HIGHLIGHT_PALETTE, HIGHLIGHT_TOKENS } from "@/lib/text-style-tokens";
 import {
   oklchToHex,
   readScssVar,
@@ -103,7 +104,7 @@ describe("design token contrast", () => {
       "#1155cc",
     );
     expect(readScssVar(PARAGRAPH_SCSS, ".dark", "--link-text-color")).toBe(
-      "#5b9cf2",
+      "#93c5fd",
     );
   });
 
@@ -119,6 +120,25 @@ describe("design token contrast", () => {
           ok: true,
         });
       }
+    },
+  );
+
+  // #104. Highlights in the document use HIGHLIGHT_PALETTE:
+  // `text-style-marks.scss` redefines `--tt-color-highlight-*` inside
+  // `.tiptap`, so the global values in `styles/_variables.scss` only colour
+  // the old popover swatches and are not the document's backgrounds.
+  it.each<Theme>(["light", "dark"])(
+    "document links reach 4.5:1 on every highlight (%s)",
+    (theme) => {
+      const selector = theme === "dark" ? ".dark" : ":root";
+      const link = readScssVar(PARAGRAPH_SCSS, selector, "--link-text-color");
+      const failing = HIGHLIGHT_TOKENS.map((highlight) => ({
+        highlight,
+        ratio: contrastRatio(link, HIGHLIGHT_PALETTE[highlight][theme]),
+      }))
+        .filter(({ ratio }) => ratio < MIN_TEXT_CONTRAST)
+        .map(({ highlight, ratio }) => `${highlight} ${ratio.toFixed(2)}:1`);
+      expect(failing).toEqual([]);
     },
   );
 });

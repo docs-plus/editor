@@ -6,6 +6,10 @@
  */
 import { expect, test } from "@playwright/test";
 
+import { MIN_TEXT_CONTRAST } from "@/lib/text-style-contrast";
+import { HIGHLIGHT_TOKENS } from "@/lib/text-style-tokens";
+
+import { contrastRatio, resolveRgb, setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 
 const link = { type: "hyperlink", attrs: { href: "https://example.com" } };
@@ -106,3 +110,61 @@ test("document links are underlined with a 0.15em offset in every context", asyn
     expect(offset, text ?? "").toBeCloseTo(0.15 * fontSize, 1);
   }
 });
+
+/**
+ * #104: a link inside every highlight keeps AA contrast in both themes. The
+ * unit test (`token-contrast.test.ts`) checks the tokens; this checks what
+ * renders: the mark sits inside the link (`<a><mark>`) and inherits its
+ * colour, over the highlight's own background.
+ */
+for (const theme of ["light", "dark"] as const) {
+  test(`links on every highlight reach 4.5:1 (${theme})`, async ({ page }) => {
+    await setTheme(page, theme);
+    const editor = new EditorPage(page);
+    await editor.goto();
+    await editor.waitForSync();
+
+    await page.evaluate(
+      (content) => {
+        const e = window.__tiptap_editor;
+        e?.commands.insertContentAt(e.state.doc.content.size, content);
+      },
+      HIGHLIGHT_TOKENS.map((color) =>
+        paragraph(
+          text(`${color} link`, [
+            link,
+            { type: "highlight", attrs: { color } },
+          ]),
+        ),
+      ),
+    );
+
+    const pairs = await page
+      .locator(".tiptap a mark[data-highlight]")
+      .evaluateAll((marks) =>
+        marks.map((mark) => {
+          const style = getComputedStyle(mark);
+          return {
+            highlight: mark.getAttribute("data-highlight") ?? "",
+            color: style.color,
+            background: style.backgroundColor,
+          };
+        }),
+      );
+    expect(pairs.map(({ highlight }) => highlight)).toEqual([
+      ...HIGHLIGHT_TOKENS,
+    ]);
+
+    const failing: string[] = [];
+    for (const { highlight, color, background } of pairs) {
+      const ratio = contrastRatio(
+        await resolveRgb(page, color),
+        await resolveRgb(page, background),
+      );
+      if (ratio < MIN_TEXT_CONTRAST) {
+        failing.push(`${highlight} ${ratio.toFixed(2)}:1`);
+      }
+    }
+    expect(failing).toEqual([]);
+  });
+}
