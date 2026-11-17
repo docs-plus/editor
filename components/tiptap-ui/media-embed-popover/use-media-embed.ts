@@ -15,8 +15,16 @@ import { useTiptapEditor } from "@/hooks/use-tiptap-editor";
 import { trackEvent } from "@/lib/analytics";
 import { isNodeInSchema } from "@/lib/editor-utils";
 
-export const MEDIA_EMBED_HINT =
-  "Image, video or audio file, YouTube, Vimeo, Loom, SoundCloud, Spotify or X";
+/**
+ * Desktop builds embed no X post (no X script may run there; a pasted X
+ * link becomes a static card instead), so the Embed dialog neither lists
+ * nor accepts X. The comparison folds at build time.
+ */
+const EMBEDS_X = process.env.NEXT_PUBLIC_APP_TARGET !== "desktop";
+
+export const MEDIA_EMBED_HINT = EMBEDS_X
+  ? "Image, video or audio file, YouTube, Vimeo, Loom, SoundCloud, Spotify or X"
+  : "Image, video or audio file, YouTube, Vimeo, Loom, SoundCloud or Spotify";
 
 type MediaInserter = (chain: ChainedCommands, src: string) => ChainedCommands;
 
@@ -49,7 +57,8 @@ function isWebUrl(value: string): boolean {
 export function resolveMediaType(rawUrl: string): MediaNodeType | null {
   const url = rawUrl.trim();
   if (!isWebUrl(url) || !isSafeMediaSrc(url)) return null;
-  return detectMediaType(url);
+  const type = detectMediaType(url);
+  return type === "x" && !EMBEDS_X ? null : type;
 }
 
 export function canEmbedMedia(editor: Editor | null): boolean {

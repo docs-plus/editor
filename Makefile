@@ -1,3 +1,8 @@
+# Production's per-document cap (ecosystem.config.cjs), so a 500-heading
+# perf or soak document (about 1.2 MB) is not refused by the 1 MiB default.
+# Every local, CI and nightly Hocus starts through dev-hocus; an env value wins.
+MAX_DOC_SIZE_BYTES ?= 2097152
+
 .PHONY: dev dev-next dev-hocus build start lint check test test-watch test-fuzz test-e2e test-perf test-perf-collab test-load test-stress test-soak test-soak-quick test-soak-collab test-soak-collab-quick test-yjs-soak test-reports-dir
 
 dev: ## Start Next.js and Hocuspocus dev servers in parallel
@@ -7,7 +12,7 @@ dev-next: ## Start Next.js dev server
 	HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun next dev
 
 dev-hocus: ## Start Hocuspocus WebSocket + SQLite server (custom bootstrap)
-	HOCUS_PORT=1234 DB_PATH=db.sqlite HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
+	HOCUS_PORT=1234 DB_PATH=db.sqlite HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 MAX_DOC_SIZE_BYTES=$(MAX_DOC_SIZE_BYTES) bun run hocus
 
 build: ## Build for production
 	bun next build

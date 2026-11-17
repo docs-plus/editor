@@ -31,6 +31,91 @@ blocked by the desktop app's `img-src 'self'` (#102). They now ship as files.
 The web CSP keeps `data:` in `img-src`: images inserted into documents are
 stored as `data:` URLs.
 
+### Dark links on highlighted text
+
+Links inside highlighted text are readable in dark mode (#104).
+
+#### Fixed
+
+- Dark-mode document links are lighter: `#93c5fd` instead of `#5b9cf2`. On the
+  ten highlight colours they now read at 4.60–6.55:1 instead of 2.95–4.21:1
+  (yellow is the lowest), and at 10.98:1 on the page and 9.94:1 on cards.
+  Light mode is unchanged (4.54–5.65:1 on highlights). Links keep their
+  underline.
+- `token-contrast.test.ts` and `link-underlines.spec.ts` check every highlight
+  × link pair in both themes against 4.5:1.
+
+### Windows export spike: where the desktop renderer is built
+
+This decides #103 and fixes #111, two Windows problems in building the desktop
+renderer (the Next.js static export). Documentation only; no app or server
+change.
+
+#### Added
+
+- **Docs:** `docs/research/2026-11-17-spike-windows-export.md` and its
+  evidence in `docs/research/spike-evidence/windows-export/`, including a
+  draft upstream comment for vercel/next.js#85374 (not posted).
+  - On Windows, Next 16.4.6 and 16.5 canary write segment-prefetch files
+    into `__next.<segment>/` directories, so prefetch 404s.
+  - The renderer is therefore built once on Linux and packaged on every OS.
+  - Parking the web-only metadata files inside the checkout fixes `EXDEV`
+    on Windows runners.
+
+#### Changed
+
+- **Docs:** the desktop architecture §3.1 and the test and release strategy
+  §2.4 now say:
+  - The renderer is exported once, on Linux.
+  - The stage step refuses a Windows-built `out/`.
+  - The metadata move-aside stays in Phase 2, with leftover recovery.
+
+### Tests: run 500-heading perf and soak documents at production's 2 MiB cap
+
+A 500-heading flat document (`generateLargeDocument(500, { shape: "flat" })`,
+about 1.2 MB as JSON) was over Hocuspocus's 1 MiB default
+`MAX_DOC_SIZE_BYTES`: the server refused it, the editor turned read-only and
+a perf run recorded 0 of 220 keystrokes, failing with only "keystroke
+samples". Closes #110. Test tooling only; no app or server change.
+
+#### Changed
+
+- **Tests:** `make dev-hocus`, and so `make dev`, Playwright's `webServer`,
+  CI's e2e job and the nightly jobs, starts Hocus with production's
+  `MAX_DOC_SIZE_BYTES=2097152` (`Makefile`, the one source; an environment
+  value overrides it). Local `make dev` now has production's cap too.
+
+#### Added
+
+- **Tests:** `EditorPage.expectSavedToServer()` waits until the server has
+  acknowledged every edit and fails with the size notice's text if it
+  refused them. The perf, toolbar-perf, collaborative perf and soak specs
+  call it after seeding their document; the typing perf spec checks it
+  again after typing.
+
+### Desktop seams: Privacy link and X link card (#99, #101)
+
+Web-side groundwork for the desktop renderer, found by spike S1. Every change
+sits behind `NEXT_PUBLIC_APP_TARGET=desktop`; the web build is unchanged
+(editor chunk group −17 B gz, first load +53 B gz).
+
+#### Added
+
+- **Desktop:** an X post renders as a static link card: "Post by @user", the
+  URL and an Open on X button that opens a new window (the system browser in
+  the desktop shell). The kit's `x` node stays in the schema, so documents
+  with X posts stay valid and web clients still embed them; the card never
+  asks X for anything and loads no `widgets.js`.
+- **Tests:** a `desktop` Playwright project that checks a desktop-flag
+  production build makes no `/privacy` request and no request to X's hosts.
+
+#### Changed
+
+- **Desktop:** the Privacy links (site footer, status strip, analytics
+  consent) go to the website's privacy page in a new window instead of the
+  web-only `/privacy`, so the app never prefetches a page it doesn't have.
+- **Desktop:** the Embed dialog neither lists nor accepts X.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script

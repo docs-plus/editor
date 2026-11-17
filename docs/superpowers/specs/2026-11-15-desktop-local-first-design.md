@@ -565,7 +565,7 @@ Each server PR carries a CHANGELOG Deploy note.
 **Native dialogs.** Going live and joining use dialogs owned by the main process, so a compromised renderer can't publish a document quietly.
 
 **Third-party content**
-- On desktop, X embeds render as link cards in v1, so no `widgets.js` runs.
+- On desktop, X embeds render as link cards in v1, so no `widgets.js` runs (built in #99 on `NEXT_PUBLIC_APP_TARGET`; arch §3.1).
 - YouTube stays in its cross-origin iframe.
 - Remote images are placeholders until the user clicks "Load images".
 
