@@ -5,8 +5,16 @@
  * Electron worker, and W2 on `IdbDocStore` with `fake-indexeddb`.
  *
  * So the cases are plain data, `{ name, run(harness) }`, that assert with
- * `node:assert/strict` and use no Bun or DOM API. A runner loops over
- * `DOC_STORE_CONTRACT` (see `runDocStoreContract` for `bun:test`).
+ * `node:assert/strict` and use no Bun or DOM API and no timers. Any runner
+ * registers them through `defineDocStoreContract`, which takes the runner's
+ * own `describe` and `it`.
+ *
+ * What the cases rely on:
+ * - Every document is made with `createDoc` first; an id never created is
+ *   never loaded, so a store may reject one with `not_found`.
+ * - A client always `load`s a document before writing it. Only the
+ *   `exclusiveOpen` cases write without a load, and expect `forbidden`.
+ * - Errors are matched by their `code` property, not by class.
  *
  * Content is compared through Yjs, never by counting rows: the desktop and
  * web compaction rules keep different rows for the same content.
@@ -430,3 +438,23 @@ export const DOC_STORE_CONTRACT: readonly DocStoreContractCase[] = [
       }),
   },
 ];
+
+/** The two functions every test runner has (`bun:test`, `node:test`, Mocha, Vitest). */
+export type ContractRunner = {
+  describe(name: string, body: () => void): void;
+  it(name: string, body: () => Promise<void>): void;
+};
+
+/** Registers every contract case the harness supports under `describe(title)`. */
+export function defineDocStoreContract(
+  runner: ContractRunner,
+  title: string,
+  harness: DocStoreHarness,
+): void {
+  runner.describe(title, () => {
+    for (const testCase of DOC_STORE_CONTRACT) {
+      if (testCase.requires && !harness[testCase.requires]) continue;
+      runner.it(testCase.name, () => testCase.run(harness));
+    }
+  });
+}

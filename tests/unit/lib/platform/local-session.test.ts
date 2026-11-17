@@ -492,3 +492,36 @@ describe("local-session failures", () => {
     await retried.flush();
   });
 });
+
+describe("local-session T7: slow hydrate never overwrites storage", () => {
+  it(
+    "writes nothing before a 1.5 s load resolves, then keeps both copies",
+    async () => {
+      await seed("stored edits ");
+      const slow = new SpyStore(
+        new MemoryDocStore({ library, loadDelayMs: 1500 }),
+      );
+      const { session } = makeSession({ store: slow });
+      const handle = session.open(DOC);
+
+      // Typed while the stored copy is still loading.
+      handle.doc.getText("t").insert(0, "typed early");
+      await clock.advance(5 * BATCH_IDLE_MS);
+      await handle.flush();
+      expect(slow.appends).toHaveLength(0);
+      expect(slow.compactions).toBe(0);
+
+      await new Promise((r) => setTimeout(r, 1600));
+      await settle();
+      expect(handle.getState().ready).toBe(true);
+      handle.release();
+      await clock.advance(RELEASE_DELAY_MS); // flush, compact (snapshot), close
+
+      const reopened = await new MemoryDocStore({ library }).load(DOC);
+      const text = textIn(reopened);
+      expect(text).toContain("stored edits ");
+      expect(text).toContain("typed early");
+    },
+    { timeout: 5000 },
+  );
+});

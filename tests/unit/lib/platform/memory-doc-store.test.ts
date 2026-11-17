@@ -8,8 +8,8 @@ import {
   MemoryDocStore,
 } from "@/lib/platform/memory-doc-store";
 import {
-  DOC_STORE_CONTRACT,
   type DocStoreHarness,
+  defineDocStoreContract,
 } from "@/tests/helpers/doc-store-contract";
 
 const harness: DocStoreHarness = {
@@ -24,12 +24,11 @@ const harness: DocStoreHarness = {
   },
 };
 
-describe("DocStore contract: MemoryDocStore", () => {
-  for (const testCase of DOC_STORE_CONTRACT) {
-    if (testCase.requires && !harness[testCase.requires]) continue;
-    it(testCase.name, () => testCase.run(harness));
-  }
-});
+defineDocStoreContract(
+  { describe, it },
+  "DocStore contract: MemoryDocStore",
+  harness,
+);
 
 function update(text: string): Uint8Array {
   const doc = new Y.Doc();
