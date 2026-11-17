@@ -310,12 +310,25 @@ export class EditorPage {
       () => {
         const notice = document.querySelector(".document-size-notice");
         if (notice) return { refusal: notice.textContent ?? "" };
+        // The caret's `provider` option is the editor's Awareness holder,
+        // not the provider: its `on` forwards to the provider of the moment
+        // and returns what that returns, and `HocuspocusProvider.on`
+        // returns the provider itself (`this`). Null with no provider.
         const caret = window.__tiptap_editor?.extensionManager.extensions.find(
           (extension) => extension.name === "collaborationCaret",
         );
-        const provider = caret?.options.provider as
-          | { isSynced: boolean; hasUnsyncedChanges: boolean }
+        const forward = caret?.options.provider as
+          | { on: (event: string, fn: () => void) => unknown }
           | undefined;
+        const probe = () => {};
+        const provider = forward?.on("tinydocy:probe", probe) as
+          | {
+              isSynced: boolean;
+              hasUnsyncedChanges: boolean;
+              off: (event: string, fn: () => void) => void;
+            }
+          | undefined;
+        provider?.off("tinydocy:probe", probe);
         if (!provider?.isSynced || provider.hasUnsyncedChanges) return false;
         return { refusal: null };
       },

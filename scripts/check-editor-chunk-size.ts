@@ -1,8 +1,8 @@
 /**
- * Editor bundle gate (spec §7, contract §5.1): the lazy editor chunk group
- * may grow by at most `EDITOR_CHUNK_BUDGET_BYTES` gzipped over the baseline
- * measured on `58a9d22` (the `integrate/smart-toolbar-ab` tip, before any
- * smart-toolbar v1 track merged).
+ * Editor bundle gate (spec §7, contract §5.1; desktop D23): the lazy editor
+ * chunk group may grow by at most `EDITOR_CHUNK_BUDGET_BYTES` gzipped over
+ * the baseline measured on `58a9d22` (the `integrate/smart-toolbar-ab` tip,
+ * before any smart-toolbar v1 track merged).
  *
  * The editor is a `next/dynamic` import (`components/editor-app`). Turbopack
  * emits a loader that fetches the editor's chunk group with
@@ -21,14 +21,25 @@ import { join } from "node:path";
 /** Gzipped bytes of the editor chunk group at `58a9d22`. */
 export const EDITOR_CHUNK_BASELINE_BYTES = 377_888;
 /**
- * Allowed growth for the whole smart toolbar v1. Spec §7 said +6 KB gz;
- * owner decision O1 (contract §10 A9) lazy-loads what is not needed at
- * first paint and sets the budget to the measured remainder (18.43 KB on
- * the r2 integration), rounded up to the next 0.5 KB. A11 raises it to
- * 20 KB for the r2 fix waves (owner, 2026-11-13), and A12 to 23.5 KB for
- * PR E (owner, 2026-11-13). Raising it again needs a new contract amendment.
+ * Growth on `main` (08b7663) when P2.2 set the fence: the smart toolbar v1
+ * and everything merged before the desktop work. Its old 23.5 KB budget
+ * (contract A12) is replaced by the fence below.
  */
-export const EDITOR_CHUNK_BUDGET_BYTES = 23.5 * 1024;
+export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
+/**
+ * The D23 editor-chunk ledger (desktop details spec §1 rule 5): every line
+ * the desktop, library and v1 feature work may add to this chunk, each
+ * measured in its PR. While D41's conditional 80 B undo line is
+ * unconfirmed the total is 1,580 B; if spike M18 confirms it, this becomes
+ * 1,660 B with no further approval.
+ */
+export const EDITOR_CHUNK_LEDGER_BYTES = 1_580;
+/**
+ * The fence (D23): `main` plus the ledger, so unrelated work can't spend
+ * the ledger's bytes. Raising it needs an amendment to that rule.
+ */
+export const EDITOR_CHUNK_BUDGET_BYTES =
+  EDITOR_CHUNK_MAIN_GROWTH_BYTES + EDITOR_CHUNK_LEDGER_BYTES;
 
 /** Only `document-editor.tsx` renders this string. */
 const EDITOR_MARKER = "Main content area, start typing to enter text.";
@@ -75,13 +86,13 @@ function main() {
   const nextDir = dirFlag === -1 ? ".next" : process.argv[dirFlag + 1];
   const { files, gzipBytes } = measureEditorChunk(nextDir);
   const growth = gzipBytes - EDITOR_CHUNK_BASELINE_BYTES;
-  const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
+  const bytes = (n: number) => `${n.toLocaleString("en-US")} B`;
   console.log(
-    `Editor chunk group (${files.length} files): ${kb(gzipBytes)} gz`,
+    `Editor chunk group (${files.length} files): ${bytes(gzipBytes)} gz`,
   );
   for (const file of files) console.log(`  ${file}`);
   console.log(
-    `Baseline ${kb(EDITOR_CHUNK_BASELINE_BYTES)}, growth ${growth >= 0 ? "+" : ""}${kb(growth)}, budget +${kb(EDITOR_CHUNK_BUDGET_BYTES)}`,
+    `Baseline ${bytes(EDITOR_CHUNK_BASELINE_BYTES)}, growth ${growth >= 0 ? "+" : ""}${bytes(growth)}, budget +${bytes(EDITOR_CHUNK_BUDGET_BYTES)} (${bytes(EDITOR_CHUNK_BUDGET_BYTES - growth)} left)`,
   );
   if (growth > EDITOR_CHUNK_BUDGET_BYTES) {
     console.error(
