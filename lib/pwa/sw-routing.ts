@@ -29,6 +29,26 @@ export function extractStaticAssets(html: string): string[] {
   return [...new Set(html.match(STATIC_URL_IN_HTML) ?? [])];
 }
 
+const CSS_URL = /url\(\s*(["']?)([^"')]+)\1\s*\)/g;
+
+/**
+ * Every same-origin /_next/static path a stylesheet at `cssUrl` references
+ * (its icons and fonts, relative to the sheet), deduplicated. `data:` and
+ * cross-origin URLs are skipped.
+ */
+export function extractCssAssets(css: string, cssUrl: string): string[] {
+  const { origin } = new URL(cssUrl);
+  const paths = new Set<string>();
+  for (const [, , target] of css.matchAll(CSS_URL)) {
+    if (/^data:/i.test(target)) continue;
+    const url = new URL(target, cssUrl);
+    if (url.origin === origin && STATIC_PATH.test(url.pathname)) {
+      paths.add(url.pathname);
+    }
+  }
+  return [...paths];
+}
+
 /** Never store errors, opaque or redirected bodies, or uncacheable responses. */
 export function isCacheableResponse(response: Response): boolean {
   if (response.type !== "basic" && response.type !== "default") return false;

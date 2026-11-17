@@ -87,6 +87,57 @@ imports them yet, so the web app is unchanged.
   port shapes. `DocStore.compact` resolves with `{ foreign }` for the web
   library's merge-into-snapshot compaction; the web library design notes it.
 
+### Desktop P2.3: the tab list behind a `DocumentIndex` port (#122)
+
+The shared tab list now sits behind a `DocumentIndex` port, so the desktop
+library (SQLite) and the web library (IndexedDB) can serve the same list
+later. Tab behaviour is unchanged: the tab e2e specs pass without changes.
+
+#### Added
+
+- **Platform:** `lib/platform/document-index.ts`, the `DocumentIndex` port:
+  `snapshot()` (`rev`, `ready`, `items`), `subscribe()` with `load` and
+  `change` events, `create`, `rename`, `move`, `trash`, `restore` and
+  `destroy`. The active tab stays per window, outside the port.
+- **Tests:** one contract suite (`tests/unit/platform/`) runs on
+  `MemoryDocumentIndex` (`tests/helpers/memory-document-index.ts`) and on the
+  web implementation. Web-only tests cover Playground, bootstrap and
+  poisoned entries.
+
+#### Changed
+
+- **Tabs:** `GlobalTabsIndex` (`lib/platform/web/global-tabs-index.ts`) now
+  holds the `global-tabs` Y.Doc logic: the bootstrap and legacy migration,
+  sanitized reads, rename, reorder, soft close (forgetting the device copy)
+  and restore. `useSyncedTabs` is its React adapter. It keeps the active tab,
+  the title debounce, the tab cap, the confirmations and the Undo pill.
+- **Tabs:** the legacy-list migration keeps the stored active tab id when it
+  clears the old list, because the hook now reads that id after the seed.
+- **Tabs:** first-load JS grows 564 B gz (319,253 B against 318,689 B on
+  `next start`). The editor chunk is unchanged.
+
+### CSS icons as files, so the desktop CSP needs no `data:` images
+
+The eight `data:image/svg+xml` icons in the stylesheets (seven unique) would be
+blocked by the desktop app's `img-src 'self'` (#102). They now ship as files.
+
+#### Changed
+
+- **Icons:** the phone bar's context-slot icons (Heading, Code, Table, Media),
+  the checklist tick and the heading drag grip are SVG files beside their
+  stylesheets. The bundler serves them as hashed `/_next/static/media/*.svg`
+  (`image/svg+xml`), so they look the same in both themes. The drag grip is
+  now one mask tinted per theme, and draws in the system text colour under
+  forced colours.
+- **Offline:** when the service worker stores a stylesheet, it also stores
+  the `/_next/static` files the sheet references, so CSS icons draw offline
+  even before they were first shown.
+- **Tests:** a unit test fails if a stylesheet uses a `data:` URL again or
+  points a relative `url()` at a missing file.
+
+The web CSP keeps `data:` in `img-src`: images inserted into documents are
+stored as `data:` URLs.
+
 ### Dark links on highlighted text
 
 Links inside highlighted text are readable in dark mode (#104).

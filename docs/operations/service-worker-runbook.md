@@ -17,7 +17,10 @@ emergency, and the deployment rules that keep it updatable.
   `/privacy`, else the precached `/offline` page. A page copy is stored only
   after every `/_next/static` file it references is cached.
 - **`/_next/static/*`** is cache-first in `tinydocy-static` (capped at 300
-  entries). Pages live in `tinydocy-shell-v1`.
+  entries). Storing a stylesheet also stores the `/_next/static` files it
+  references (CSS icons such as the checklist tick and fonts), best effort,
+  so they draw offline before they were first shown. Pages live in
+  `tinydocy-shell-v1`.
 - **Never touched:** `/api/*`, RSC requests, HEAD, Range, metadata routes,
   every cross-origin request (analytics, X, embeds, user images) and the
   collaboration WebSocket. Documents are never stored.

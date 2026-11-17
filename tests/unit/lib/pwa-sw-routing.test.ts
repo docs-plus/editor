@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   classifyRequest,
+  extractCssAssets,
   extractStaticAssets,
   isCacheableResponse,
 } from "@/lib/pwa/sw-routing";
@@ -87,6 +88,34 @@ describe("extractStaticAssets", () => {
       "/_next/static/media/c.p.woff2",
       "/_next/static/chunks/d.js",
     ]);
+  });
+});
+
+describe("extractCssAssets", () => {
+  it("resolves the sheet's /_next/static files once, against the sheet", () => {
+    const css = [
+      '.a{mask:url("../media/check.1.svg") center/contain no-repeat}',
+      ".b{-webkit-mask:url(../media/check.1.svg)}",
+      "@font-face{src:url('../media/f.p.woff2') format('woff2')}",
+      '.c{background:url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E")}',
+      ".d{background:url(https://example.com/x.svg)}",
+      ".e{background:url(/favicon.ico)}",
+      ".f{background:url( ./icons/grip.2.svg )}",
+    ].join("\n");
+
+    expect(
+      extractCssAssets(css, `${origin}/_next/static/chunks/abc.css`),
+    ).toEqual([
+      "/_next/static/media/check.1.svg",
+      "/_next/static/media/f.p.woff2",
+      "/_next/static/chunks/icons/grip.2.svg",
+    ]);
+  });
+
+  it("finds nothing in a sheet without urls", () => {
+    expect(
+      extractCssAssets(".a{color:red}", `${origin}/_next/static/chunks/a.css`),
+    ).toEqual([]);
   });
 });
 
