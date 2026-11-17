@@ -87,6 +87,7 @@ tests/
 │   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
 │   ├── tab-close-undo.spec.ts            # Undo pill after closing, Recently closed, purge after the closed window
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
+│   ├── desktop-seams.spec.ts             # Desktop-flag build: no /privacy request, X post as a link card, no X request (desktop project)
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
@@ -311,6 +312,22 @@ PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
 ```
 
 Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts`.
+
+### Desktop-flag build
+
+| Test | Project | Validates |
+|------|---------|-----------|
+| `desktop-seams.spec.ts` | `desktop` (production build with `NEXT_PUBLIC_APP_TARGET=desktop`) | `/about` and the editor never request `/privacy` (the Privacy links go to the website's page in a new window); a pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts or loads `widgets.js` |
+
+Prefetch runs only in production builds, so this needs one. Use free ports and localhost only:
+
+```bash
+NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build && PORT=3849 bun run start
+HOCUS_PORT=1296 HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
+DESKTOP_BASE_URL=http://localhost:3849 CI= bun playwright test --project=desktop
+```
+
+The web behaviour with the flag off, and the flag-on branches, are unit tested in `tests/unit/extensions/x-link-card.test.ts`, `tests/unit/helpers/media-embed.test.ts` and `tests/unit/components/privacy-link.test.tsx`.
 
 Manual install checklist (localhost production build):
 

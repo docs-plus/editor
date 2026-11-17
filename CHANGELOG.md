@@ -71,6 +71,29 @@ samples". Closes #110. Test tooling only; no app or server change.
   call it after seeding their document; the typing perf spec checks it
   again after typing.
 
+### Desktop seams: Privacy link and X link card (#99, #101)
+
+Web-side groundwork for the desktop renderer, found by spike S1. Every change
+sits behind `NEXT_PUBLIC_APP_TARGET=desktop`; the web build is unchanged
+(editor chunk group −17 B gz, first load +53 B gz).
+
+#### Added
+
+- **Desktop:** an X post renders as a static link card: "Post by @user", the
+  URL and an Open on X button that opens a new window (the system browser in
+  the desktop shell). The kit's `x` node stays in the schema, so documents
+  with X posts stay valid and web clients still embed them; the card never
+  asks X for anything and loads no `widgets.js`.
+- **Tests:** a `desktop` Playwright project that checks a desktop-flag
+  production build makes no `/privacy` request and no request to X's hosts.
+
+#### Changed
+
+- **Desktop:** the Privacy links (site footer, status strip, analytics
+  consent) go to the website's privacy page in a new window instead of the
+  web-only `/privacy`, so the app never prefetches a page it doesn't have.
+- **Desktop:** the Embed dialog neither lists nor accepts X.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
