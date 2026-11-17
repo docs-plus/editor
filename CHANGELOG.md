@@ -9,7 +9,7 @@ since the previous tag.
 
 ## [Unreleased]
 
-### Desktop P2.3: the tab list behind a `DocumentIndex` port
+### Desktop P2.3: the tab list behind a `DocumentIndex` port (#122)
 
 The shared tab list now sits behind a `DocumentIndex` port, so the desktop
 library (SQLite) and the web library (IndexedDB) can serve the same list
