@@ -134,6 +134,12 @@ desktop/
 ### 3.1 Build
 
 1. **Renderer.** `NEXT_PUBLIC_APP_TARGET=desktop bun next build`.
+   - **The target flag.** `NEXT_PUBLIC_APP_TARGET` (`web` or `desktop`) is the one build-time switch between the two renderers. `next.config.ts` always defines it (`web` when unset), so the bundler inlines it. Code compares the literal `process.env.NEXT_PUBLIC_APP_TARGET === "desktop"` at each site, never through an exported `IS_DESKTOP` constant (folding across modules isn't guaranteed), and never sniffs the runtime. With the flag off the web build is unchanged. Desktop branches on `main` today:
+     - Subscript moves to ⌘⇧, so ⌘, can open Settings (`lib/app-shortcuts.ts`, P1.2).
+     - The Privacy link goes to the website's page, `${SITE_URL}/privacy`, in a new window that the shell sends to the system browser, as a plain anchor that is never prefetched, because `/privacy` is web only (`components/site-page/privacy-link.tsx`, #101).
+     - X posts render as a static link card: the kit's `x` node stays in the schema, so documents with X posts stay valid and a web client still embeds them, but its node view is replaced, so no oEmbed request and no `widgets.js` (`extensions/hyper-multimedia/x-link-card.ts`, #99). The spike's `X: false` would have dropped the node from the desktop schema. The card's stylesheet loads by `import()` inside the desktop branch: a static stylesheet import survives tree shaking and would ship to the web.
+     - The Embed dialog neither lists nor accepts X; pasting an X URL into the document still makes the card (`use-media-embed.ts`, #99).
+   - The `desktop` Playwright project checks a desktop-flag production build: no request for `/privacy`, and none to X's hosts (`tests/e2e/desktop-seams.spec.ts`).
    - `next.config.ts` switches three things on that literal: `output: "export"`, `headers()` (web only), and `pageExtensions`: web `["web.tsx", "web.ts", "tsx", "ts"]`, desktop `["desktop.tsx", "tsx", "ts"]`.
    - **S1 (2026-11-16):** Turbopack honours `pageExtensions` for `page` and `route` files but not for metadata files: in the web build `sitemap.web.ts` became the route `/sitemap.web`. So `sitemap`, `robots`, `opengraph-image`, `manifest` and `apple-icon` keep their plain names, and a prebuild step moves them out of `app/` for the desktop build and puts them back (the overlay fallback).
      - It parks them inside the checkout: a rename across drives fails with `EXDEV` on Windows runners.
