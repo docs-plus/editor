@@ -824,7 +824,10 @@ async function caseT8(): Promise<CaseResult> {
 /** Batched copy (Electron, its thread) vs VACUUM INTO (bun), same library. */
 async function compareCopies(dir: string) {
   const daily = join(dir, "daily");
-  const before = new Set(createNodeHost().list(daily));
+  // The year's copies are dated ahead of today's real clock: today's copy
+  // would sort oldest and be pruned at once, so start from an empty folder.
+  removeDir(daily);
+  const before = new Set<string>();
   const run = await runHarness(["--mode=copy-time", `--dir=${dir}`]);
   const line = run.lines.find((l) => l.startsWith("COPYTIME "));
   if (!line)
@@ -885,10 +888,12 @@ async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
   const { id: docId } = library.createDoc({ title: "Typed" });
   // The previous good copy, dated yesterday: it must survive every quit.
   const previous = await library.takeDailyCopyNow();
+  const copyError = library.stats().lastDailyCopyError;
   library.shutdown();
+  if (!previous) throw new Error(`setup copy failed: ${copyError}`);
   const daily = join(dir, "daily");
   const previousPath = join(daily, `library-${yesterday()}.sqlite`);
-  renameSync(join(daily, previous ?? ""), previousPath);
+  renameSync(join(daily, previous), previousPath);
   const resetDay = () => {
     const db = new Database(join(dir, LIBRARY_FILE));
     db.prepare("UPDATE meta SET value = ? WHERE key = 'last_daily_copy'").run(
