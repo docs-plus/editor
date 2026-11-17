@@ -106,7 +106,8 @@ components/
 hooks/use-yjs-document.ts      # consumes DocSession from context; no longer imports collab-session
 lib/
   collab-session.ts            # sandbox only; unchanged except P1.1 and P1.1b
-  platform/ports.ts            # DocSession, DocStore, DocumentIndex, AppShell, BlobStore (+ Live ports later)
+  platform/doc-session.ts      # one file per port (P2.1): DocSession here, DocStore in doc-store.ts,
+  platform/doc-store.ts        # DocumentIndex in document-index.ts (P2.3); AppShell, BlobStore and the Live ports likewise
   platform/doc-session-context.tsx
   platform/local-session.ts    # shared by desktop and the web library (moved out of platform/desktop/)
   platform/batcher.ts          # batching and the compaction trigger, shared the same way
@@ -177,7 +178,9 @@ These are enforced by one test, `tests/unit/ci/import-boundaries.test.ts`. It re
 
 ## 4. Ports
 
-All live in `lib/platform/ports.ts`, as types only.
+Each port has its own types-only file in `lib/platform/` (P2.1): `doc-session.ts`, `doc-store.ts`, `document-index.ts`, and the same for the ports still to come. There is no `ports.ts`.
+
+**P2.1 amendments to the shapes below.** `DocSession.open` returns a handle at once (`ready` starts false), with `getState()` (`ready`, `authoritative`, `readOnlyReason`, `error`), `subscribe`, `flush` and `release`, and `DocSession.flush()` saves every open document. `DocStore.load` returns `snapshot: null` before the first compaction. `append` takes `snippet` and `schemaTo` beside `title`. `compact` resolves with `{ foreign }`: always null on desktop; the web library's merge-into-snapshot rule (web library §2.5) returns another writer's content there, which `local-session` applies with `STORAGE_ORIGIN` and never appends. This is the one addition to the port the web library needs, because `IdbDocStore` cannot reach the Y.Doc. Stored origins are `local`, `migration`, `remote` and `restore`; `local-session` maps Yjs transaction origins onto them.
 
 | Port | Shape | Web sandbox | Web library (D3) | Desktop |
 |---|---|---|---|---|

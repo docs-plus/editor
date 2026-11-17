@@ -9,6 +9,28 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.1a: `DocSession` and `DocStore` port types
+
+The first half of desktop plan P2.1: the types the editor, the storage worker
+and the web library code against. Types and one error class only; nothing
+imports them yet, so the web app is unchanged.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session.ts` (`DocSession`, `DocHandle`,
+  `DocHandleState`, `ReadOnlyReason`, and the `HYDRATE_ORIGIN`,
+  `STORAGE_ORIGIN` and `MIGRATION_ORIGIN` transaction origins) and
+  `lib/platform/doc-store.ts` (`DocStore`, `LoadedDoc`, `AppendRecord`,
+  `CompactResult`, `UPDATE_ORIGINS`, and `DocStoreError` with the
+  architecture §9 storage codes plus the web library's `quota_exceeded`).
+
+#### Changed
+
+- **Docs:** the desktop architecture spec now puts each port in its own file
+  under `lib/platform/` (no `ports.ts`), and records P2.1's amendments to the
+  port shapes. `DocStore.compact` resolves with `{ foreign }` for the web
+  library's merge-into-snapshot compaction; the web library design notes it.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
