@@ -35,7 +35,9 @@ worker and P2.7 builds the files sidebar on it.
   - appends and renderer-driven compaction in one transaction each, with
     one window per document (`already_open`, `forbidden`, `document_open`);
   - documents, folders, tags, Trash (emptied after 30 days) and the sidebar
-    snapshot with `rev`;
+    snapshot, with a change feed: every change the sidebar shows, appends
+    included, moves `rev`, and the worker sends `index_changed` with the
+    changed rows;
   - a daily `VACUUM INTO` copy on the first idle moment, keeping 7, and a
     reader for restoring one document from a day;
   - shutdown for the quit flush: WAL checkpoint, `unclean_exit` cleared,
@@ -49,9 +51,11 @@ worker and P2.7 builds the files sidebar on it.
   large, isn't Yjs, or carries a node, mark or root this build doesn't
   know) and `lib/platform/desktop/rpc-doc-store.ts` (`DocStore` over worker
   replies, for `IpcDocStore`).
-- **Tests:** engine suites on `bun:sqlite` (open, content, index, daily
+- **Tests:** P2.1's shared `DocStore` contract on the engine, on
+  `bun:sqlite` under `bun test` and on `node:sqlite` inside the Electron
+  worker; engine suites (open, content, index and its change feed, daily
   copies, codes, and a property test of random appends, compactions,
-  crashes and reopens), the import-boundary test's storage rows, and
+  crashes and reopens); the import-boundary test's storage rows; and
   `tests/load/desktop-durability-soak.ts` with its Electron harness in
   `desktop/storage-harness/` for soak cases T1–T6 and T8.
 - **CI:** `desktop-storage-soak.yml` on macOS, Windows and Linux: 20 kills
@@ -63,8 +67,8 @@ worker and P2.7 builds the files sidebar on it.
 
 - **Docs:** the desktop architecture spec records where P2.6 put the engine
   and the harness, the worker-side registry check and `claim`, the
-  import-boundary allowance for `lib/schema-names.ts`, and that T7 belongs to
-  the web library.
+  import-boundary allowance for `lib/schema-names.ts`, and that T7 is covered
+  by `local-session`'s tests, not the storage soak.
 
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 

@@ -597,7 +597,7 @@ sequenceDiagram
 | Compaction invariant | property test: random appends, compactions and reopens, with the Y.Doc state compared against a reference | engine on `bun:sqlite` |
 | Guards and `doc-handlers` | fuzz plus golden messages, sender and registry checks | pure modules |
 | Reducer and chip | a table row for each plan §5.5 state; "every refusal ends in a stop or a backoff" | pure |
-| Durability T1–T8, T16–T18 | `tests/load/desktop-durability-soak.ts`: SIGKILL Electron during append, compaction, migration, asset writes and image migration; a year of image churn | the storage worker in a windowless Electron (`desktop/storage-harness`, P2.6), verified on `bun:sqlite`; the packaged app once P2.5 lands. T7 (slow hydrate) is the web library's (W2): it tests the session layer, not storage. |
+| Durability T1–T8, T16–T18 | `tests/load/desktop-durability-soak.ts`: SIGKILL Electron during append, compaction, migration, asset writes and image migration; a year of image churn | the storage worker in a windowless Electron (`desktop/storage-harness`, P2.6), verified on `bun:sqlite`; the packaged app once P2.5 lands. T7 (slow hydrate) tests the session layer, not storage: P2.1 covers it in `local-session`'s tests, and W2 again over IndexedDB. |
 | `BlobStore` contract and asset GC | one suite plus a property test: GC never deletes a referenced blob | `MemoryBlobStore`; the worker on `bun:sqlite`; `IdbBlobStore` in the web library |
 | Preferences boot script | parity with `resolveBoot()` over about 40 stored payloads; the desktop CSP hash matches the script (build test) | happy-dom; build |
 | Main | `argv` filter, navigation and `window.open` denial, fuses | `_electron` |
