@@ -7,11 +7,14 @@ name: Desktop storage soak
 # bun:sqlite. See tests/load/desktop-durability-soak.ts.
 #
 # Pull requests that touch storage run a short profile (20 kills per case);
-# the nightly and manual runs use the plan's 200. Not a required check.
+# the nightly and manual runs use the plan's 200, and so does a pull request
+# labelled `storage-soak-full` (workflow_dispatch needs the file on main).
+# Not a required check.
 # Read-only token and no secrets, like CI.
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - desktop/storage/**
       - desktop/storage-harness/**
@@ -62,7 +65,7 @@ jobs:
       run:
         shell: bash
     env:
-      KILLS: ${{ github.event_name == 'pull_request' && 20 || inputs.kills || 200 }}
+      KILLS: ${{ github.event_name != 'pull_request' && (inputs.kills || 200) || contains(github.event.pull_request.labels.*.name, 'storage-soak-full') && 200 || 20 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
