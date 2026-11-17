@@ -16,6 +16,7 @@ import {
 } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 import { CHUNK_MARKERS, holdChunk, interceptChunk } from "./helpers/lazy-chunk";
+import { listenerCounts } from "./helpers/listener-counts";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
 
@@ -923,4 +924,328 @@ test("no bubble on a coarse pointer", async ({ browser }) => {
   } finally {
     await context.close();
   }
+});
+
+/** The non-Playground tab `openDoc` opened. */
+const docTabId = async (page: Page) => {
+  const id = await page
+    .locator('[data-tab-id]:not([data-tab-id="playground"])')
+    .first()
+    .getAttribute("data-tab-id");
+  if (!id) throw new Error("no document tab");
+  return id;
+};
+
+/** Switches to tab `id` and waits for its new editor's server sync. */
+async function openTab(page: Page, id: string) {
+  await page.evaluate(() => {
+    const el = document.querySelector(".ProseMirror");
+    if (el) Object.assign(el, { tabProbeOld: true });
+  });
+  await page.locator(`[data-tab-id="${id}"] [aria-selected]`).click();
+  await page.waitForFunction(() => {
+    const region = document.querySelector(".document-editor-content");
+    const view = region?.querySelector(".ProseMirror");
+    return (
+      region?.getAttribute("data-server-synced") === "true" &&
+      view != null &&
+      !("tabProbeOld" in view)
+    );
+  });
+}
+
+test.describe("selection bubble controller (spec §12.1)", () => {
+  test("mounting the bubble chunk registers no plugin", async ({ page }) => {
+    const chunk = await holdChunk(page, CHUNK_MARKERS.bubble);
+    await openDoc(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      const views = (editor.view as unknown as { pluginViews: object[] })
+        .pluginViews;
+      Object.assign(window, {
+        __bubbleProbe: {
+          plugins: editor.state.plugins.length,
+          views: new WeakSet(views),
+        },
+      });
+    });
+    chunk.release();
+    await dragSelect(page, "some words");
+    await expectBubbleOpen(page);
+    const after = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      const probe = (
+        window as unknown as {
+          __bubbleProbe: { plugins: number; views: WeakSet<object> };
+        }
+      ).__bubbleProbe;
+      const views = (editor.view as unknown as { pluginViews: object[] })
+        .pluginViews;
+      return {
+        plugins: editor.state.plugins.length,
+        before: probe.plugins,
+        rebuilt: views.filter((view) => !probe.views.has(view)).length,
+      };
+    });
+    expect(after.plugins).toBe(after.before);
+    expect(after.rebuilt).toBe(0);
+    await chunk.restore();
+  });
+
+  test("a selection starting on a wrapped second line anchors to that line", async ({
+    page,
+  }) => {
+    const long = Array.from(
+      { length: 6 },
+      (_, i) =>
+        `Sentence ${i + 1} of a long paragraph that wraps across several visual lines.`,
+    ).join(" ");
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        paragraph(text(long)),
+      ],
+    });
+    // The first position of the paragraph's second visual line, then 12
+    // characters from it; the centre and top come from the range's rects.
+    const target = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      const view = editor.view;
+      const start = (editor.state.doc.firstChild?.nodeSize ?? 0) + 1;
+      const firstTop = view.coordsAtPos(start, 1).top;
+      let from = start;
+      while (view.coordsAtPos(from, 1).top === firstTop) from += 1;
+      const to = from + 12;
+      editor.chain().focus().setTextSelection({ from, to }).run();
+      const a = view.domAtPos(from);
+      const b = view.domAtPos(to);
+      const range = document.createRange();
+      range.setStart(a.node, a.offset);
+      range.setEnd(b.node, b.offset);
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+      const left = Math.min(...rects.map((r) => r.left));
+      const right = Math.max(...rects.map((r) => r.right));
+      const column = document
+        .querySelector(".document-editor-content")
+        ?.getBoundingClientRect();
+      if (!column) throw new Error("no page column");
+      return {
+        firstTop,
+        lineTop: Math.min(...rects.map((r) => r.top)),
+        centre: (left + right) / 2,
+        column: { left: column.left, right: column.right },
+      };
+    });
+    expect(target.lineTop).toBeGreaterThan(target.firstTop);
+    await expectBubbleOpen(page);
+    await expect(bubble(page)).toHaveAttribute("data-placement", "top");
+    await expect
+      .poll(async () => {
+        const box = await bubble(page).boundingBox();
+        if (!box) return "no box";
+        const centred =
+          Math.abs(box.x + box.width / 2 - target.centre) <= 2 ||
+          Math.abs(box.x - (target.column.left + 8)) <= 2 ||
+          Math.abs(box.x + box.width - (target.column.right - 8)) <= 2;
+        const bottom = box.y + box.height;
+        const above =
+          bottom <= target.lineTop &&
+          bottom >= target.lineTop - 8 - box.height - 1;
+        return centred && above ? "anchored" : JSON.stringify({ box, target });
+      })
+      .toBe("anchored");
+  });
+
+  test("select all anchors to the first visible line", async ({ page }) => {
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        ...Array.from({ length: 300 }, (_, i) =>
+          paragraph(text(`Paragraph ${i + 1} of a long document`)),
+        ),
+      ],
+    });
+    // Off-screen blocks have estimated heights (`content-visibility`), and
+    // a selected block renders: select everything once so every block
+    // remembers its real height, or ⌘A would shift the page under the
+    // view. Then centre paragraph 150.
+    const ends = await page.evaluate(async () => {
+      const editor = window.__tiptap_editor;
+      const middle = editor?.view.dom.children[150];
+      if (!editor || !middle) throw new Error("missing");
+      const frames = () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+      editor.commands.selectAll();
+      await frames();
+      editor.commands.setTextSelection(1);
+      await frames();
+      for (let i = 0; i < 5; i += 1) {
+        middle.scrollIntoView({ block: "center" });
+        await frames();
+      }
+      editor.view.dom.focus({ preventScroll: true });
+      const size = editor.state.doc.content.size;
+      return {
+        first: editor.view.coordsAtPos(1).top,
+        last: editor.view.coordsAtPos(size - 1).top,
+      };
+    });
+    const viewport = page.viewportSize();
+    // The selection runs past both edges of the view.
+    expect(ends.first).toBeLessThan(0);
+    expect(ends.last).toBeGreaterThan(viewport?.height ?? 0);
+    await page.keyboard.press("ControlOrMeta+a");
+    await expectBubbleOpen(page);
+    await expect
+      .poll(async () => {
+        const box = await bubble(page).boundingBox();
+        const toolbarBottom = await page.evaluate(
+          () =>
+            document
+              .querySelector('.document-editor-wrapper > [data-slot="toolbar"]')
+              ?.getBoundingClientRect().bottom ?? 0,
+        );
+        if (!box || !viewport) return "no box";
+        const inside = box.y >= 0 && box.y + box.height <= viewport.height;
+        const under = box.y >= toolbarBottom && box.y <= toolbarBottom + 60;
+        return inside && under
+          ? "under the row"
+          : JSON.stringify({ box, toolbarBottom });
+      })
+      .toBe("under the row");
+  });
+
+  test("a whitespace-only selection shows no bubble", async ({ page }) => {
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        paragraph(text("Gap     between words")),
+      ],
+    });
+    await selectText(page, "     ");
+    expect(await selectionRange(page)).not.toEqual({ from: 0, to: 0 });
+    await page.waitForTimeout(400);
+    await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("dragstart hides it", async ({ page }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.locator(".tiptap").dispatchEvent("dragstart");
+    await expect(bubble(page)).toHaveCount(0);
+  });
+
+  test("tab switch with the bubble open leaves no root and no listeners", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "CDP only");
+    test.setTimeout(120_000);
+    await openDoc(page);
+    const id = await docTabId(page);
+    // Warm up: both editors, their chunks and the bubble chunk exist.
+    await openTab(page, "playground");
+    await openTab(page, id);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      editor?.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    const cdp = await page.context().newCDPSession(page);
+    // Past collab-session's deferred release (1 s).
+    await page.waitForTimeout(1_100);
+    const before = await listenerCounts(cdp);
+
+    for (let i = 0; i < 5; i += 1) {
+      await selectText(page, "some words");
+      await expectBubbleOpen(page);
+      await openTab(page, "playground");
+      await expect(bubble(page)).toHaveCount(0);
+      await openTab(page, id);
+    }
+    await expect(
+      page.locator(".document-editor-wrapper > [data-smart-bubble]"),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(() => window.__tiptap_editor?.state.selection.empty),
+    ).toBe(true);
+    await page.waitForTimeout(1_100);
+    const after = await listenerCounts(cdp);
+    test.info().annotations.push({
+      type: "document + window listeners",
+      description: `${JSON.stringify(before)} → ${JSON.stringify(after)}`,
+    });
+    expect(after).toEqual(before);
+  });
+
+  test("a collaborator deleting the selection hides the bubble", async ({
+    browser,
+  }) => {
+    test.setTimeout(60_000);
+    const docId = `bubble-collab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    try {
+      const pageA = await contextA.newPage();
+      const pageB = await contextB.newPage();
+      await pageA.addInitScript(
+        `window.__HOCUS_TOKEN = ${JSON.stringify(`user-a-${docId}`)}`,
+      );
+      await pageB.addInitScript(
+        `window.__HOCUS_TOKEN = ${JSON.stringify(`user-b-${docId}`)}`,
+      );
+      const editorA = new EditorPage(pageA);
+      await editorA.goto(docId);
+      await editorA.waitForSync();
+      await pageA.evaluate((content) => {
+        window.__tiptap_editor
+          ?.chain()
+          .setMeta("addToHistory", false)
+          .setContent(content)
+          .run();
+      }, DOC as object);
+      const editorB = new EditorPage(pageB);
+      await editorB.goto(docId);
+      await editorB.waitForSync();
+      await expect(pageB.locator(".tiptap")).toContainText("some words", {
+        timeout: 15_000,
+      });
+
+      await selectText(pageA, "some words");
+      await expectBubbleOpen(pageA);
+      await pageB.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        let range: { from: number; to: number } | null = null;
+        editor.state.doc.forEach((node, offset) => {
+          if (!range && node.textContent.includes("some words")) {
+            range = { from: offset, to: offset + node.nodeSize };
+          }
+        });
+        if (!range) throw new Error("paragraph missing");
+        editor.chain().deleteRange(range).run();
+      });
+      await expect(pageA.locator(".tiptap")).not.toContainText("some words", {
+        timeout: 15_000,
+      });
+      await expect(bubble(pageA)).toHaveCount(0);
+      expect(
+        await pageA.evaluate(() => document.activeElement !== document.body),
+      ).toBe(true);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
 });

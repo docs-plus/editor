@@ -1,18 +1,15 @@
 "use client";
 
-import { PluginKey } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
-import { type Editor, posToDOMRect } from "@tiptap/react";
-import { BubbleMenu } from "@tiptap/react/menus";
+import type { Editor } from "@tiptap/react";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
@@ -21,6 +18,11 @@ import { ActionButton } from "../action-button";
 import { ColorSplit } from "../color-controls";
 import { PaintFormatButton } from "../formats/paint-format-button";
 import { StatusPill } from "../status-pill";
+import { bubbleReferenceRect } from "./bubble-anchor";
+import {
+  type BubbleController,
+  createBubbleController,
+} from "./bubble-controller";
 import {
   BUBBLE_OFFSET,
   type BubblePlacement,
@@ -33,13 +35,26 @@ import {
 } from "./bubble-rules";
 import "./selection-bubble.scss";
 
-/** One key for every editor: plugin state is per editor state. */
-const BUBBLE_KEY = new PluginKey("selectionBubble");
 /** Exit fade (spec §4.3: 140 ms in / 90 ms out). */
 const EXIT_MS = 90;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
+
+/**
+ * The bubble's one root (v1 contract §5.2). The controller appends it to
+ * the scroll container on show and removes it on hide; it is absolute and
+ * hidden until the first position lands.
+ */
+function createBubbleRoot(): HTMLDivElement {
+  const root = document.createElement("div");
+  root.className = "st-bubble";
+  root.dataset.smartBubble = "";
+  root.dataset.state = "closed";
+  root.style.position = "absolute";
+  root.style.visibility = "hidden";
+  return root;
+}
 
 /** Keeps the editor's focus and selection on a click between the items. */
 function keepEditorFocus(event: React.MouseEvent<HTMLElement>) {
@@ -87,18 +102,22 @@ export function SelectionBubbleView(props: SelectionBubbleViewProps) {
 
 /**
  * The desktop selection bubble (spec §4.3, design pass §1): B · I · U │
- * text colour split │ link │ Paint format. A `BubbleMenu` registered once
- * per editor with stable
- * props; its items mount only while it shows, so typing with no bubble
- * runs no bubble code past `shouldShowBubble`'s empty-selection exit.
+ * text colour split │ link │ Paint format. A `BubbleController` (spec
+ * §12.1) shows, hides and positions it without a ProseMirror plugin, so
+ * this lazy chunk never calls `registerPlugin`. Its items mount only while
+ * it shows, so typing with no bubble runs no bubble code past the
+ * controller's empty-selection exit.
  *
  * DOM contract (v1 contract §5.2, read by D1's Alt+F10): the root carries
  * `data-smart-bubble` and `data-state="open" | "closed"`, with one
- * `role="toolbar"` inside.
+ * `role="toolbar"` inside; it is a child of the scroll container only while
+ * shown.
  */
 function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
   const [shown, setShown] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  // This chunk is client-only: creating the root at first render is safe.
+  const [root] = useState(createBubbleRoot);
+  const controllerRef = useRef<BubbleController | null>(null);
   const suppressedRef = useRef(false);
   const placementRef = useRef<BubblePlacement>("top");
   // Mirrors `placementRef` so the colour popover opens away from the text.
@@ -107,54 +126,52 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
   const focusInsideRef = useRef(false);
   const restoreFocusRef = useRef(false);
 
-  const dispatchMeta = useCallback(
-    (meta: unknown) => {
-      if (editor.isDestroyed) return;
-      editor.view.dispatch(editor.state.tr.setMeta(BUBBLE_KEY, meta));
-    },
-    [editor],
-  );
-
   /** Esc: fade out for 90 ms, then hide; stays hidden until a new selection. */
   const startClose = useCallback(() => {
-    const root = rootRef.current;
-    if (!root?.isConnected) return;
+    if (!root.isConnected) return;
     suppressedRef.current = true;
     root.dataset.state = "closed";
     root.dataset.closing = "";
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(
-      () => dispatchMeta("hide"),
+      () => controllerRef.current?.hide(),
       EXIT_MS,
     );
-  }, [dispatchMeta]);
+  }, [root]);
 
-  const shouldShow = useCallback(
-    ({ view, element }: { view: EditorView; element: HTMLElement }) =>
-      shouldShowBubble(view, element, suppressedRef.current),
-    [],
-  );
+  /**
+   * Scrolled out (the controller hid the root in place) or wholly under the
+   * sticky row (covered, WCAG 2.4.11; it scrolls with the text, so only a
+   * scroll tells): not open for Alt+F10, and focus moves to the editor
+   * before the browser drops it on `body`.
+   */
+  const syncVisibility = useCallback(() => {
+    if (!root.isConnected || root.dataset.closing !== undefined) return;
+    const toolbar = scrollTarget.querySelector(STICKY_TOOLBAR);
+    const covered =
+      root.style.visibility === "hidden" ||
+      (toolbar !== null &&
+        root.getBoundingClientRect().bottom <=
+          toolbar.getBoundingClientRect().bottom);
+    root.dataset.state = covered ? "closed" : "open";
+    if (covered && focusInsideRef.current) {
+      focusInsideRef.current = false;
+      editor.view.focus();
+    }
+  }, [editor, root, scrollTarget]);
 
-  const options = useMemo(() => {
-    const base = {
-      scrollTarget,
-      strategy: "absolute" as const,
-      placement: "top" as const,
-      offset: BUBBLE_OFFSET,
-      // The side is decided here (toolbar, remote caret labels), not by flip.
-      flip: false,
-      shift: { padding: 8 },
-      hide: true,
-    };
+  // One controller per editor for this view's lifetime (StrictMode's second
+  // effect replaces the first).
+  useEffect(() => {
+    if (editor.isDestroyed) return;
+    const view = editor.view;
 
-    /** Flips the bubble below when the band above is taken. */
+    /** Flips the bubble below when the band above its first line is taken. */
     const place = () => {
-      const root = rootRef.current;
-      if (!root?.isConnected || editor.isDestroyed) return;
-      const { from, to } = editor.state.selection;
+      if (!root.isConnected || editor.isDestroyed) return;
       const toolbar = scrollTarget.querySelector(STICKY_TOOLBAR);
       const next = chooseBubblePlacement({
-        selection: posToDOMRect(editor.view, from, to),
+        selection: bubbleReferenceRect(view, scrollTarget, "top"),
         bubble: { width: root.offsetWidth, height: root.offsetHeight },
         obstacles: Array.from(scrollTarget.querySelectorAll(CARET_LABEL), (n) =>
           n.getBoundingClientRect(),
@@ -163,26 +180,28 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
           toolbar ? "bottom" : "top"
         ],
       });
+      // Only on a change: an unconditional reposition would run `place`
+      // again from its own result.
       if (next === placementRef.current) return;
       placementRef.current = next;
       root.dataset.placement = next;
       setPlacement(next);
-      dispatchMeta({
-        type: "updateOptions",
-        options: { options: { ...base, placement: next } },
-      });
-      dispatchMeta("updatePosition");
+      controller.setPlacement(next);
+      controller.updatePosition();
     };
 
-    return {
-      ...base,
+    const controller = createBubbleController(editor, scrollTarget, {
+      root,
+      shouldShow: () => shouldShowBubble(view, root, suppressedRef.current),
+      getReferenceRect: (side) =>
+        bubbleReferenceRect(
+          view,
+          scrollTarget,
+          side,
+          BUBBLE_OFFSET + root.offsetHeight,
+        ),
       onShow: () => {
-        const root = rootRef.current;
-        if (!root) return;
         window.clearTimeout(closeTimerRef.current);
-        // The plugin makes its root a Tab stop; the toolbar inside has one.
-        // Not `-1` either: a click on the panel would focus a nameless div.
-        root.removeAttribute("tabindex");
         root.dataset.state = "open";
         root.dataset.placement = placementRef.current;
         setPlacement(placementRef.current);
@@ -190,54 +209,46 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         setShown(true);
       },
       onHide: () => {
-        const root = rootRef.current;
         window.clearTimeout(closeTimerRef.current);
-        if (root) {
-          root.dataset.state = "closed";
-          delete root.dataset.closing;
-        }
+        root.dataset.state = "closed";
+        delete root.dataset.closing;
         restoreFocusRef.current = focusInsideRef.current;
         focusInsideRef.current = false;
         setShown(false);
       },
-      onUpdate: place,
-    };
-  }, [editor, scrollTarget, dispatchMeta]);
-
-  // `BubbleMenu` keeps one root for its lifetime. When it registers again
-  // (dev StrictMode's double effect, or a new editor), the previous
-  // cleanup removes that root one frame later if it has a parent. With a
-  // selection already there (this chunk landed after it) the new plugin
-  // shows the root at once, so the removal detaches a shown bubble without
-  // `onHide`, and the plugin never shows it again. This frame runs after
-  // that one: put the root back where the plugin shows it.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const root = rootRef.current;
-      if (!root || root.isConnected || root.dataset.state !== "open") return;
-      scrollTarget.appendChild(root);
-      dispatchMeta("updatePosition");
+      onPosition: () => {
+        syncVisibility();
+        place();
+      },
     });
-    return () => cancelAnimationFrame(frame);
-  }, [scrollTarget, dispatchMeta]);
+    controller.setPlacement(placementRef.current);
+    controllerRef.current = controller;
+    // A selection made before this chunk landed shows now.
+    controller.update();
+    return () => {
+      controller.destroy();
+      if (controllerRef.current === controller) controllerRef.current = null;
+    };
+  }, [editor, scrollTarget, root, syncVisibility]);
 
   // One keydown and one mousedown listener on the editor, for the editor's
   // lifetime. They do nothing unless the bubble is in the DOM, so typing
-  // with no bubble dispatches nothing extra.
+  // with no bubble does nothing extra.
   useEffect(() => {
+    if (editor.isDestroyed) return;
     const dom = editor.view.dom;
     const onKeyDown = (event: KeyboardEvent) => {
       if (clearsBubbleSuppression(event)) {
         suppressedRef.current = false;
         return;
       }
-      if (!rootRef.current?.isConnected || !isBubbleDismissKey(event)) return;
+      if (!root.isConnected || !isBubbleDismissKey(event)) return;
       if (event.key === "Escape") {
         startClose();
         return;
       }
       suppressedRef.current = true;
-      dispatchMeta("hide");
+      controllerRef.current?.hide();
     };
     const onMouseDown = () => {
       suppressedRef.current = false;
@@ -249,28 +260,24 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       dom.removeEventListener("mousedown", onMouseDown);
       window.clearTimeout(closeTimerRef.current);
     };
-  }, [editor, dispatchMeta, startClose]);
+  }, [editor, root, startClose]);
 
-  // While shown: hide on read-only (`setEditable` changes neither the
-  // selection nor the document, so the plugin never re-checks) and when
-  // focus moves anywhere but the editor, the bubble or its popups (colour
-  // dialog), from the editor or from the bubble (the stock
-  // blur check keeps it for anything inside its parent, the whole editor
-  // shell, and never sees a blur from the bubble itself). Track whether
-  // focus is in the bubble or a popup.
+  // While shown: hide when focus moves anywhere but the editor, the bubble
+  // or its popups (colour dialog), from the editor or from the bubble (the
+  // controller's blur check never sees a blur from the bubble itself).
+  // Track whether focus is in the bubble or a popup. Read-only hides in the
+  // controller (`update` event).
   useEffect(() => {
     if (!shown) return;
-    const root = rootRef.current;
-    const onEditorUpdate = () => {
-      if (!editor.isEditable) queueMicrotask(() => dispatchMeta("hide"));
-    };
-    // Focus to the window or `body` fires no `focusin`.
+    const hide = () => controllerRef.current?.hide();
+    // Focus to the window or `body` fires no `focusin`. This also covers a
+    // `preventHide` left set by a click in the bubble.
     const onEditorBlur = ({ event }: { event: FocusEvent }) => {
-      if (event.relatedTarget === null) dispatchMeta("hide");
+      if (event.relatedTarget === null) hide();
     };
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
-      if (!root || !(target instanceof Element)) return;
+      if (!(target instanceof Element)) return;
       const inPopover =
         target.closest(POPOVER_CONTENT) !== null ||
         // Base UI's guards next to the portal hand focus straight on.
@@ -284,7 +291,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         !inPopover &&
         !editor.view.dom.contains(target)
       ) {
-        dispatchMeta("hide");
+        hide();
       }
     };
     // Tab past the last stop (or a click on nothing) drops focus on `body`,
@@ -294,34 +301,13 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
     // (as after Esc) instead of reopening on that focus.
     const onFocusOut = (event: FocusEvent) => {
       if (event.relatedTarget !== null || !document.hasFocus()) return;
-      // The plugin's own `hide()` (it sets opacity 0, then removes the
-      // root) blurs a focused item mid-dispatch: a nested hide here would
-      // make its `remove()` throw. `onHide` restores focus as above.
-      if (root?.style.opacity === "0") return;
+      // The controller's own hide removes a focused item: not a Tab out.
+      if (!controllerRef.current?.visible) return;
       suppressedRef.current = true;
-      dispatchMeta("hide");
+      hide();
     };
-    // `hide: true` hides the root (inline `visibility`) when the selection
-    // scrolls out, without `onHide`; wholly under the sticky row it is
-    // covered (WCAG 2.4.11; it scrolls with the text, so only a scroll
-    // tells). Either way it is not open for Alt+F10, and focus moves to the
-    // editor before the browser drops it on `body`.
-    const toolbar = scrollTarget.querySelector(STICKY_TOOLBAR);
-    const syncVisibility = () => {
-      if (!root?.isConnected || root.dataset.closing !== undefined) return;
-      const covered =
-        root.style.visibility === "hidden" ||
-        (toolbar !== null &&
-          root.getBoundingClientRect().bottom <=
-            toolbar.getBoundingClientRect().bottom);
-      root.dataset.state = covered ? "closed" : "open";
-      if (covered && focusInsideRef.current) {
-        focusInsideRef.current = false;
-        editor.view.focus();
-      }
-    };
-    const observer = new MutationObserver(syncVisibility);
-    if (root) observer.observe(root, { attributeFilter: ["style"] });
+    // The controller repositions on scroll after a debounce; the sticky
+    // row covers the bubble frame by frame.
     let frame = 0;
     const onScroll = () => {
       if (frame) return;
@@ -331,25 +317,22 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       });
     };
     scrollTarget.addEventListener("scroll", onScroll, { passive: true });
-    editor.on("update", onEditorUpdate);
     editor.on("blur", onEditorBlur);
     document.addEventListener("focusin", onFocusIn, true);
-    root?.addEventListener("focusout", onFocusOut);
+    root.addEventListener("focusout", onFocusOut);
     return () => {
-      root?.removeEventListener("focusout", onFocusOut);
-      observer.disconnect();
+      root.removeEventListener("focusout", onFocusOut);
       scrollTarget.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(frame);
-      editor.off("update", onEditorUpdate);
       editor.off("blur", onEditorBlur);
       document.removeEventListener("focusin", onFocusIn, true);
     };
-  }, [shown, editor, scrollTarget, dispatchMeta]);
+  }, [shown, editor, root, scrollTarget, syncVisibility]);
 
   useLayoutEffect(() => {
     if (shown) {
       // Items just mounted: position (and place) with the real size.
-      dispatchMeta("updatePosition");
+      controllerRef.current?.updatePosition();
       return;
     }
     if (!restoreFocusRef.current) return;
@@ -359,11 +342,12 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
     const frame = requestAnimationFrame(() => {
       const active = document.activeElement;
       if (active && active !== document.body && active.isConnected) return;
+      if (editor.isDestroyed) return;
       if (editor.isEditable) editor.view.focus();
       else emitUiIntent(editor, { type: "toolbar.focus" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [shown, editor, dispatchMeta]);
+  }, [shown, editor]);
 
   /** Esc on an item: back to the document with its selection, then fade. */
   const onEscape = useCallback(() => {
@@ -371,36 +355,26 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
     startClose();
   }, [editor, startClose]);
 
-  return (
-    <BubbleMenu
-      ref={rootRef}
-      editor={editor}
-      pluginKey={BUBBLE_KEY}
-      shouldShow={shouldShow}
-      appendTo={scrollTarget}
-      options={options}
-      className="st-bubble"
-      data-smart-bubble=""
-    >
-      {shown ? (
-        <Toolbar
-          variant="floating"
-          aria-label="Selection formatting"
-          className="st-bubble-panel"
-          onEscape={onEscape}
-          onMouseDown={keepEditorFocus}
-        >
-          <ActionButton id="mark.bold" editor={editor} variant="bubble" />
-          <ActionButton id="mark.italic" editor={editor} variant="bubble" />
-          <ActionButton id="mark.underline" editor={editor} variant="bubble" />
-          <ToolbarSeparator />
-          <ColorSplit kind="text" editor={editor} popoverSide={placement} />
-          <ToolbarSeparator />
-          <ActionButton id="mark.link" editor={editor} variant="bubble" />
-          <ToolbarSeparator />
-          <PaintFormatButton editor={editor} />
-        </Toolbar>
-      ) : null}
-    </BubbleMenu>
+  return createPortal(
+    shown ? (
+      <Toolbar
+        variant="floating"
+        aria-label="Selection formatting"
+        className="st-bubble-panel"
+        onEscape={onEscape}
+        onMouseDown={keepEditorFocus}
+      >
+        <ActionButton id="mark.bold" editor={editor} variant="bubble" />
+        <ActionButton id="mark.italic" editor={editor} variant="bubble" />
+        <ActionButton id="mark.underline" editor={editor} variant="bubble" />
+        <ToolbarSeparator />
+        <ColorSplit kind="text" editor={editor} popoverSide={placement} />
+        <ToolbarSeparator />
+        <ActionButton id="mark.link" editor={editor} variant="bubble" />
+        <ToolbarSeparator />
+        <PaintFormatButton editor={editor} />
+      </Toolbar>
+    ) : null,
+    root,
   );
 }
