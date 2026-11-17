@@ -46,6 +46,22 @@ export function parseItemKey(key: string): LibraryItemRef | null {
   return null;
 }
 
+/** Pinned documents in their own order (`pinKey`). */
+export function pinnedEntries(library: {
+  readonly items: readonly DocumentEntry[];
+}): DocumentEntry[] {
+  return library.items
+    .filter((item) => item.pinKey !== undefined)
+    .sort(byPinKey);
+}
+
+function byPinKey(a: DocumentEntry, b: DocumentEntry): number {
+  const x = a.pinKey ?? "";
+  const y = b.pinKey ?? "";
+  if (x === y) return 0;
+  return x < y ? -1 : 1;
+}
+
 /** Sorts names as people read them: case, accents and numbers. */
 export const nameCollator = new Intl.Collator(undefined, {
   numeric: true,
