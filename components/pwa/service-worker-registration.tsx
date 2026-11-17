@@ -7,10 +7,13 @@ import { CACHE_PREFIX } from "@/lib/pwa/sw-config";
 /**
  * Build-time switch, inlined by `bun run build`: NEXT_PUBLIC_SERVICE_WORKER=0
  * unregisters the worker and deletes its caches on the next load. Development
- * never registers, and removes a production worker left on localhost.
+ * never registers, and removes a production worker left on localhost. The
+ * desktop renderer never registers either: it is served from disk, and the
+ * worker precaches web-only pages (`SHELL_PATHS` has `/privacy`).
  */
-const SERVICE_WORKER_ENABLED =
+export const SERVICE_WORKER_ENABLED =
   process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PUBLIC_APP_TARGET !== "desktop" &&
   process.env.NEXT_PUBLIC_SERVICE_WORKER !== "0";
 
 const IDLE_TIMEOUT_MS = 10_000;

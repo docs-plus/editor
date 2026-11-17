@@ -1,19 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { EditorPage } from "./helpers/editor-page";
-
-/** The headings must be on the server before a shared link opens. */
-async function waitForServerCopy(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const caret = window.__tiptap_editor?.extensionManager.extensions.find(
-      (extension) => extension.name === "collaborationCaret",
-    );
-    const provider = caret?.options.provider as
-      | { hasUnsyncedChanges: boolean }
-      | undefined;
-    return provider !== undefined && !provider.hasUnsyncedChanges;
-  });
-}
 
 test.describe("heading filter", () => {
   let editorPage: EditorPage;
@@ -48,7 +35,8 @@ test.describe("heading filter", () => {
   test("a ?filter= link applies the filter once the doc syncs", async ({
     page,
   }) => {
-    await waitForServerCopy(page);
+    // The headings must be on the server before a shared link opens.
+    await editorPage.expectSavedToServer();
     await page.goto("/?filter=alpha&mode=or");
     await editorPage.waitForSync();
 
@@ -80,7 +68,8 @@ test.describe("heading filter", () => {
   test("a ?filter= link over the cap applies only its first 8 words", async ({
     page,
   }) => {
-    await waitForServerCopy(page);
+    // The headings must be on the server before a shared link opens.
+    await editorPage.expectSavedToServer();
     // Beta and Gamma come 9th and 10th, so they must be dropped unmatched.
     const kept = ["alpha", "w2", "w3", "w4", "w5", "w6", "w7", "w8"];
     await page.goto(`/?filter=${[...kept, "beta", "gamma"].join("|")}&mode=or`);
