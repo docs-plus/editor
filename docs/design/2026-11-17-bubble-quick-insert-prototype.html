@@ -1,0 +1,1114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bubble and quick insert prototype</title>
+<!--
+  Throwaway clickable prototype for docs/superpowers/specs/2026-11-17-bubble-and-quick-insert-design.md.
+  Not app code. Tokens are app/globals.css and lib/text-style-tokens.ts values; behaviour is approximated
+  with contenteditable + execCommand, which the app never uses.
+-->
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" integrity="sha384-hJnF5AwidE18GSWTAGHv3ByzzvfNZ1Tcx5y1UUV3WkauuMCEzBJBMSwSt/PUPXnM" crossorigin="anonymous"></script>
+<style>
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --border: oklch(0.922 0 0);
+  --bubble-surface: var(--popover);
+  --bubble-edge: oklch(0.87 0 0); /* spec §7.1: chosen on looks; 1.4.11 rests on focus ring + pressed bar */
+  --focus-ring: oklch(0.439 0 0);
+  --pressed-bar: var(--foreground);
+  --page-bg: oklch(0.985 0.002 247);
+  --selection: oklch(0.88 0.06 250);
+  --radius: 0.45rem;
+  --shadow: 0 4px 16px oklch(0 0 0 / 0.10), 0 1px 3px oklch(0 0 0 / 0.08);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* text colour and highlight tokens: lib/text-style-tokens.ts (light) */
+  --tc-gray:#57534e; --tc-brown:#8a4b2a; --tc-red:#dc2626; --tc-orange:#c2410c; --tc-yellow:#a16207;
+  --tc-green:#15803d; --tc-teal:#0f766e; --tc-blue:#2563eb; --tc-purple:#9333ea; --tc-pink:#db2777;
+  --hl-gray:#e7e5e4; --hl-brown:#eddcd0; --hl-red:#fecaca; --hl-orange:#fed7aa; --hl-yellow:#fef08a;
+  --hl-green:#bbf7d0; --hl-teal:#99f6e4; --hl-blue:#bfdbfe; --hl-purple:#e9d5ff; --hl-pink:#fbcfe8;
+  --draft: oklch(0.93 0.08 85);
+}
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --bubble-surface: oklch(0.24 0 0); /* spec §7.1: dark bubble lifts off the 0.205 card */
+  --bubble-edge: oklch(1 0 0 / 36%);
+  --focus-ring: oklch(0.87 0 0);
+  --page-bg: oklch(0.17 0 0);
+  --selection: oklch(0.42 0.08 250);
+  --shadow: 0 6px 20px oklch(0 0 0 / 0.5), 0 1px 3px oklch(0 0 0 / 0.4);
+  --tc-gray:#a8a29e; --tc-brown:#d0a284; --tc-red:#f87171; --tc-orange:#fb923c; --tc-yellow:#facc15;
+  --tc-green:#4ade80; --tc-teal:#2dd4bf; --tc-blue:#60a5fa; --tc-purple:#c084fc; --tc-pink:#f472b6;
+  --hl-gray:#3f3f46; --hl-brown:#4a3228; --hl-red:#5c2a2e; --hl-orange:#5c3b23; --hl-yellow:#574f12;
+  --hl-green:#1f4a30; --hl-teal:#174542; --hl-blue:#1e3a5f; --hl-purple:#45305e; --hl-pink:#5a2945;
+  --draft: oklch(0.40 0.08 85);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page-bg); color: var(--foreground);
+}
+[data-motion="reduce"] * { transition: none !important; animation: none !important; }
+button { font: inherit; color: inherit; }
+svg.lucide { width: 16px; height: 16px; stroke-width: 2; flex: none; }
+[dir="rtl"] .flip-rtl svg, [dir="rtl"] svg.flip-rtl { transform: scaleX(-1); }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* ── Controls ───────────────────────────────────────────── */
+.controls {
+  position: sticky; top: 0; z-index: 100; background: var(--card); border-block-end: 1px solid var(--border);
+  padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px;
+}
+.controls h1 { font-size: 13px; margin: 0; margin-inline-end: 8px; font-weight: 600; }
+.ctl { display: inline-flex; align-items: center; gap: 4px; }
+.ctl > span { color: var(--muted-foreground); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 3px 8px; cursor: pointer; font-size: 12px; }
+.seg button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.hint { flex-basis: 100%; color: var(--muted-foreground); font-size: 12px; }
+
+/* ── Stage / devices ────────────────────────────────────── */
+.stage-wrap { display: flex; justify-content: center; padding: 16px; }
+.device { position: relative; background: var(--background); overflow: hidden; display: flex; flex-direction: column; }
+.device[data-device="desktop"] { width: min(1280px, 100%); height: 760px; border: 1px solid var(--border); border-radius: 10px; }
+.device[data-device="tablet"] { width: 820px; height: 900px; border: 10px solid oklch(0.25 0 0); border-radius: 28px; }
+.device[data-device="phone"] { width: 390px; height: 780px; border: 10px solid oklch(0.25 0 0); border-radius: 40px; }
+.tabs { display: flex; align-items: end; gap: 4px; height: 38px; padding-inline: 10px; background: var(--page-bg); border-block-end: 1px solid var(--border); flex: none; }
+.tab { padding: 7px 12px; border-radius: 8px 8px 0 0; font-size: 13px; color: var(--muted-foreground); display: flex; gap: 6px; align-items: center; }
+.tab.on { background: var(--background); color: var(--foreground); }
+.scroller { position: relative; flex: 1; overflow: auto; background: var(--page-bg); }
+.device[data-device="phone"] .scroller { background: var(--background); }
+
+/* ── Row ────────────────────────────────────────────────── */
+.row {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 6px 10px;
+  background: var(--background); border-block-end: 1px solid var(--border); min-height: 46px;
+}
+.row .sep { width: 1px; height: 20px; background: var(--border); margin-inline: 6px; }
+.row .grow { flex: 1; }
+.tb {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 28px; height: 28px;
+  padding: 0 6px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; position: relative; white-space: nowrap;
+}
+.tb:hover { background: var(--muted); }
+.tb[aria-pressed="true"]::after {
+  content: ""; position: absolute; inset-inline: 8px; bottom: 2px; height: 2px; border-radius: 1px; background: var(--pressed-bar);
+}
+.tb[aria-pressed="mixed"]::after { content: ""; position: absolute; inset-inline: 10px; bottom: 2px; height: 2px; background: var(--muted-foreground); }
+.tb[aria-disabled="true"] { opacity: .45; cursor: default; }
+.tb .cv { width: 12px; height: 12px; opacity: .7; }
+.tb .word { font-size: 13px; }
+.coarse .tb { min-width: 44px; height: 44px; }
+
+/* ── Page ───────────────────────────────────────────────── */
+.page {
+  --measure: 33em;
+  position: relative; max-width: calc(var(--measure) + 160px); margin: 20px auto 120px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 8px; padding: 48px 80px; min-height: 900px;
+  transition: max-width .2s var(--ease);
+}
+.page[data-width="narrow"] { --measure: 30em; }
+.page[data-width="wide"] { --measure: 46em; }
+.page[data-width="full"] { --measure: 100vw; }
+.device[data-device="phone"] .page { margin: 0; border: 0; border-radius: 0; padding: 20px 20px 160px; max-width: none; }
+.editor { outline: none; font-size: 16px; line-height: 1.55; }
+.editor ::selection { background: var(--selection); }
+.editor h1 { font-size: 32px; margin: 0 0 12px; line-height: 1.2; }
+.editor h2 { font-size: 22px; margin: 22px 0 8px; }
+.editor h3 { font-size: 18px; margin: 18px 0 6px; }
+.editor p { margin: 6px 0; min-height: 1.55em; }
+.editor p.empty::before { content: attr(data-ph); color: var(--muted-foreground); position: absolute; pointer-events: none; }
+.editor blockquote { border-inline-start: 3px solid var(--border); margin: 8px 0; padding-inline-start: 14px; color: var(--muted-foreground); }
+.editor pre { background: var(--muted); padding: 12px 14px; border-radius: 6px; font: 13px/1.5 ui-monospace, "JetBrains Mono", monospace; }
+.editor code { background: var(--muted); padding: 1px 4px; border-radius: 4px; font: 0.9em ui-monospace, monospace; }
+.editor ul.task { list-style: none; padding-inline-start: 6px; }
+.editor ul.task li::before { content: "☐ "; }
+.editor a { color: var(--tc-blue); text-decoration: underline; }
+.editor [data-tc] { color: var(--tc); }
+.editor [data-hl] { background: var(--hl); border-radius: 2px; }
+::highlight(comment-draft) { background-color: var(--draft); }
+::highlight(preview) { color: var(--preview-tc, inherit); background-color: var(--preview-hl, transparent); }
+
+/* ── Floating surfaces ──────────────────────────────────── */
+.float {
+  position: absolute; z-index: 40; background: var(--bubble-surface); color: var(--popover-foreground);
+  border: 1px solid var(--bubble-edge); border-radius: var(--radius); box-shadow: var(--shadow);
+  opacity: 0; transform: scale(.98); transition: opacity 80ms linear, transform 0s 80ms; pointer-events: none;
+}
+.float[data-open] { opacity: 1; transform: none; pointer-events: auto; transition: opacity 120ms var(--ease), transform 120ms var(--ease); }
+.float[data-side="top"] { transform-origin: 50% 100%; }
+.float[data-side="bottom"] { transform-origin: 50% 0%; }
+.bubble { display: flex; align-items: center; gap: 2px; padding: 4px; }
+.bubble.panel { display: block; }
+.bubble .sep { width: 1px; height: 18px; background: var(--border); margin-inline: 4px; }
+.bubble .style-face { min-width: 64px; justify-content: space-between; padding-inline: 8px 4px; }
+.bubble .tb:focus-visible, .panel .tb:focus-visible { outline-offset: -2px; }
+.bubble .split-cv { min-width: 24px; padding: 0; }
+.tb[aria-pressed="mixed"]::after { background: repeating-linear-gradient(90deg, var(--foreground) 0 2px, transparent 2px 4px) !important; }
+.panel { padding: 6px; width: 236px; }
+.panel .prow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 0 8px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; }
+.panel .prow:hover, .panel .prow:focus-visible { background: var(--muted); }
+.panel .pgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 4px 2px; }
+.panel hr { border: 0; border-block-start: 1px solid var(--border); margin: 4px 0; }
+.ghost { position: absolute; z-index: 16; color: var(--muted-foreground); pointer-events: none; white-space: nowrap; }
+.slash-foot { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; margin: 4px -4px -4px; border-block-start: 1px solid var(--border); background: var(--bubble-surface); font-size: 12px; color: var(--muted-foreground); }
+.slash-foot button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 12px; display: flex; gap: 6px; align-items: center; padding: 2px 4px; border-radius: 4px; }
+.slash-foot button:hover { background: var(--muted); }
+.badge { font-size: 10px; font-weight: 600; color: #fff; background: oklch(0.55 0.15 250); border-radius: 4px; padding: 1px 5px; }
+.today .bubble { --bubble-edge: var(--border); }
+.menu { padding: 4px; min-width: 220px; max-height: 420px; overflow: auto; }
+.menu .label { padding: 6px 8px 2px; font-size: 11px; color: var(--muted-foreground); font-weight: 500; }
+.menu hr { border: 0; border-block-start: 1px solid var(--border); margin: 4px 0; }
+.mi {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: transparent;
+  border-radius: 4px; cursor: pointer; text-align: start; min-height: 32px;
+}
+.coarse .mi { min-height: 44px; }
+.mi:hover { background: var(--muted); }
+.mi.active, .mi:focus-visible { background: var(--accent); outline: none; box-shadow: inset 0 0 0 2px var(--focus-ring); } /* spec §14: inset ring, accent alone is 1.07:1 */
+.mi .end { margin-inline-start: auto; display: flex; gap: 8px; align-items: center; color: var(--muted-foreground); font-size: 12px; }
+.mi kbd { font: 11px ui-monospace, monospace; direction: ltr; unicode-bidi: isolate; }
+.mi .md { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+.mi[aria-disabled="true"] { opacity: .45; cursor: default; }
+.mi .reason { display: block; font-size: 11px; color: var(--muted-foreground); }
+.chip { width: 18px; height: 18px; border-radius: 4px; border: 1px solid oklch(0.5 0 0 / .35); flex: none; display: grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; }
+.chip svg.lucide { width: 12px; height: 12px; }
+.grid { display: grid; grid-template-columns: repeat(11, 26px); gap: 4px; padding: 4px 8px; }
+.sw { width: 26px; height: 26px; border-radius: 5px; border: 1px solid oklch(0 0 0 / .15); cursor: pointer; display: grid; place-items: center; font-weight: 600; position: relative; padding: 0; background: var(--popover); }
+.sw[aria-checked="true"]::after { content: "✓"; position: absolute; inset-block-start: -6px; inset-inline-end: -6px; width: 14px; height: 14px; font-size: 10px; border-radius: 50%; background: var(--foreground); color: var(--background); display: grid; place-items: center; }
+.caption { padding: 4px 8px 6px; font-size: 12px; color: var(--muted-foreground); min-height: 24px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; min-width: 340px; }
+.cols > [role="group"] + [role="group"] { border-inline-start: 1px solid var(--border); padding-inline-start: 6px; }
+.recent { display: flex; gap: 6px; padding: 4px 8px 6px; align-items: center; font-size: 11px; color: var(--muted-foreground); }
+.recent .sw { width: 20px; height: 20px; font-size: 11px; }
+.linkpop { display: flex; gap: 6px; padding: 6px; align-items: center; }
+.linkpop input { width: 260px; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; background: var(--background); color: inherit; }
+.linkpop input:focus { outline: 2px solid var(--focus-ring); }
+.plus {
+  position: absolute; z-index: 15; width: 28px; height: 28px; border-radius: 6px; border: 0; background: transparent;
+  color: var(--muted-foreground); display: none; place-items: center; cursor: pointer;
+}
+.plus[data-open] { display: grid; }
+.plus:hover { background: var(--muted); color: var(--foreground); }
+.card {
+  position: absolute; z-index: 30; width: 240px; background: var(--popover); border: 1px solid var(--bubble-edge);
+  border-radius: 8px; box-shadow: var(--shadow); padding: 10px; font-size: 13px;
+}
+.card textarea { width: 100%; min-height: 60px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); color: inherit; padding: 6px; font: inherit; }
+.card .actions { display: flex; gap: 6px; justify-content: end; margin-top: 6px; }
+.btn { border: 1px solid var(--border); background: var(--background); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.btn.primary { background: var(--foreground); color: var(--background); border-color: transparent; }
+.reaction { position: absolute; z-index: 25; inset-inline-end: 16px; border: 1px solid var(--border); background: var(--popover); border-radius: 999px; padding: 2px 8px; font-size: 13px; }
+.pills { position: absolute; inset-block-end: 14px; inset-inline-end: 14px; display: flex; gap: 8px; z-index: 22; }
+.pill { background: var(--popover); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--muted-foreground); box-shadow: var(--shadow); display: flex; gap: 8px; align-items: center; }
+.status { position: absolute; z-index: 45; background: var(--foreground); color: var(--background); padding: 6px 12px; border-radius: 999px; font-size: 12px; opacity: 0; transition: opacity 150ms; pointer-events: none; }
+.status[data-open] { opacity: 1; }
+.bottom-pill { position: absolute; inset-block-end: 18px; inset-inline-start: 50%; transform: translateX(-50%); z-index: 24; display: flex; gap: 2px; padding: 4px; background: var(--popover); border: 1px solid var(--bubble-edge); border-radius: 12px; box-shadow: var(--shadow); }
+.rejected-note { position: absolute; inset-block-end: 70px; inset-inline-start: 50%; transform: translateX(-50%); z-index: 24; font-size: 11px; background: oklch(0.6 0.2 25); color: white; padding: 3px 8px; border-radius: 6px; }
+
+/* ── Phone bar and sheets ───────────────────────────────── */
+.pbar {
+  position: absolute; inset-inline: 0; inset-block-end: 0; z-index: 30; display: flex; justify-content: space-between;
+  padding: 0 4px 18px; background: var(--background); border-block-start: 1px solid var(--border);
+}
+.pbar .tb { min-width: 44px; height: 44px; }
+.kbd-mock { position: absolute; inset-inline: 0; inset-block-end: 0; height: 0; }
+.sheet-scrim { position: absolute; inset: 0; background: oklch(0 0 0 / .3); z-index: 50; opacity: 0; pointer-events: none; transition: opacity 200ms; }
+.sheet-scrim[data-open] { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: absolute; inset-inline: 0; inset-block-end: 0; z-index: 51; background: var(--popover); border-radius: 14px 14px 0 0;
+  max-height: 75%; overflow: auto; padding: 6px 16px calc(16px + var(--safe-area-bottom, 0px) + 18px); transform: translateY(100%); transition: transform 200ms var(--ease);
+}
+.sheet[data-open] { transform: none; }
+.sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 4px auto 8px; }
+.sheet header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.sheet h3 { margin: 0; font-size: 16px; }
+.sheet h4 { margin: 12px 0 6px; font-size: 13px; color: var(--muted-foreground); font-weight: 500; }
+.cells { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cell { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); cursor: pointer; text-align: start; }
+.cell .note { margin-inline-start: auto; font-size: 11px; color: var(--muted-foreground); }
+.sheet .grid { grid-template-columns: repeat(6, 44px); gap: 10px; padding: 0; }
+.sheet .sw { width: 44px; height: 44px; }
+.sheet .cell[aria-pressed="true"] { border-color: var(--foreground); box-shadow: inset 0 0 0 1px var(--foreground); }
+
+/* ── Side notes ─────────────────────────────────────────── */
+.notes { max-width: 1280px; margin: 0 auto 40px; padding: 0 16px; color: var(--muted-foreground); font-size: 13px; }
+.notes code { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="controls" role="region" aria-label="Prototype controls">
+  <h1>Bubble &amp; quick insert</h1>
+  <div class="ctl"><span>Version</span><div class="seg" data-k="ver"><button data-v="proposed">Proposed</button><button data-v="today">Today</button></div></div>
+  <div class="ctl"><span>Device</span><div class="seg" data-k="device"><button data-v="desktop">Desktop</button><button data-v="tablet">Tablet touch</button><button data-v="tabletfine">Tablet trackpad</button><button data-v="phone">Phone</button></div></div>
+  <div class="ctl"><span>Theme</span><div class="seg" data-k="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+  <div class="ctl"><span>Direction</span><div class="seg" data-k="dir"><button data-v="ltr">LTR</button><button data-v="rtl">RTL</button></div></div>
+  <div class="ctl"><span>Motion</span><div class="seg" data-k="motion"><button data-v="full">Full</button><button data-v="reduce">Reduce</button></div></div>
+  <div class="ctl"><span>Document</span><div class="seg" data-k="kind"><button data-v="library">Library (comments)</button><button data-v="sandbox">Sandbox</button><button data-v="reading">Reading mode</button></div></div>
+  <div class="ctl"><span>O11 bubble shape</span><div class="seg" data-k="o11"><button data-v="a">a one row</button><button data-v="b">b vertical panel</button></div></div>
+  <div class="ctl"><span>O1 block type</span><div class="seg" data-k="o1"><button data-v="a">a Style ▾</button><button data-v="b">b H ▾ + List ▾</button><button data-v="c">c none</button></div></div>
+  <div class="ctl"><span>O2 colour</span><div class="seg" data-k="o2"><button data-v="b">b named rows</button><button data-v="a">a grid + caption</button></div></div>
+  <div class="ctl"><span>O4 reactions</span><div class="seg" data-k="o4"><button data-v="a">a none</button><button data-v="b">b emoji thread</button></div></div>
+  <div class="ctl"><span>O5 desktop insert</span><div class="seg" data-k="o5"><button data-v="a">a + on empty line</button><button data-v="b">b bottom pill</button><button data-v="c">c "/" only</button></div></div>
+  <div class="ctl"><span>O6 phone insert</span><div class="seg" data-k="o6"><button data-v="a">a sheet</button><button data-v="b">b dropdown</button></div></div>
+  <div class="ctl"><span>O12 "/" Suggested</span><div class="seg" data-k="o12"><button data-v="a">a recent inserts</button><button data-v="c">c none</button></div></div>
+  <div class="ctl"><span>O7 keyboard selection</span><div class="seg" data-k="o7"><button data-v="b">b after Shift up</button><button data-v="a">a always</button><button data-v="c">c never</button></div></div>
+  <div class="hint">Select text with the mouse to see the bubble. Alt+F10 (⌥F10) moves focus into it; arrow keys move; Esc returns with the selection. Put the caret on an empty line for <b>+</b>, or type <b>/</b>. ⋯ in the row › Page width changes the page. Phone: select text for the selection cells; Aa and Insert open sheets.</div>
+</div>
+
+<div class="stage-wrap"><div class="device" id="device"></div></div>
+
+<div class="notes">
+  <p>Prototype only. It approximates editor behaviour with <code>contenteditable</code>; the app uses Tiptap and the action registry. Colours are the app's tokens; icons are lucide 0.469 (the app's set). Today's bubble is shown for comparison under <b>Version › Today</b>.</p>
+</div>
+
+<script>
+"use strict";
+/* ── State ──────────────────────────────────────────────── */
+const S = {
+  ver: "proposed", device: "desktop", theme: "light", dir: "ltr", motion: "full", kind: "library",
+  o1: "a", o2: "b", o4: "a", o5: "a", o6: "a", o7: "b", o11: "a", o12: "a",
+  recentKinds: ["table", "pre"], slashFromPlus: false,
+  lastInput: "pointer", recentText: ["red", "blue"], recentHl: ["yellow"], lastText: "red", paint: false, width: "standard",
+};
+const TOKENS = ["gray","brown","red","orange","yellow","green","teal","blue","purple","pink"];
+const FIRST_TEXT = ["red","orange","green","blue","purple"];
+const FIRST_HL = ["yellow","green","blue","pink"];
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const icon = (name, cls = "") => `<i data-lucide="${name}" class="${cls}" aria-hidden="true"></i>`;
+const refreshIcons = () => window.lucide && lucide.createIcons();
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+const k = (mac, other) => (MAC ? mac : other);
+
+const CONTENT = {
+  ltr: `<h1>Brand tokens</h1>
+<p>A brand changes the brand primitives and nothing else. The script that builds the semantic layer stays the same, because the new values are illustrative.</p>
+<h2>Case 1: introducing a new brand</h2>
+<p>The button's fill, hover, border and the focus ring all change, because they read brand-600 or brand-800. No button code changes.</p>
+<p class="empty" data-ph="Type / for blocks"><br></p>
+<ul><li>Primitives first</li><li>Semantic roles second</li></ul>
+<pre>:root { --brand-600: #1f4; }</pre>
+<p>Destructive banners keep their own roles, separate from the brand, so a brand never turns a warning into a brand colour.</p>
+<p>Each role reads one primitive. Most brands change only the brand ramp and the banner stays red.</p>`,
+  rtl: `<h1>توکن‌های برند</h1>
+<p>یک برند فقط مقدارهای پایه را عوض می‌کند و بس. اسکریپتی که لایهٔ معنایی را می‌سازد همان می‌ماند، چون مقدارهای تازه فقط نمونه‌اند.</p>
+<h2>حالت ۱: برند تازه</h2>
+<p>رنگ دکمه، حالت هاور، حاشیه و حلقهٔ فوکوس همه عوض می‌شوند، چون از brand-600 یا brand-800 می‌خوانند. کد دکمه تغییر نمی‌کند.</p>
+<p class="empty" data-ph="برای بلوک‌ها / بزنید"><br></p>
+<ul><li>اول مقدارهای پایه</li><li>بعد نقش‌های معنایی</li></ul>
+<pre dir="ltr">:root { --brand-600: #1f4; }</pre>
+<p>بنرهای هشدار نقش‌های خودشان را دارند و از برند جدا هستند.</p>`,
+};
+
+/* ── Insert kinds (the "/" list; one list for /, + and the phone sheet) ── */
+const KINDS = [
+  { id: "p", label: "Text", icon: "type", md: "", sec: "Text", kw: "text paragraph" },
+  { id: "h1", label: "Heading 1", icon: "heading-1", md: "#", sec: "Text", kw: "h1 title" },
+  { id: "h2", label: "Heading 2", icon: "heading-2", md: "##", sec: "Text", kw: "h2" },
+  { id: "h3", label: "Heading 3", icon: "heading-3", md: "###", sec: "Text", kw: "h3" },
+  { id: "ul", label: "Bulleted list", icon: "list", md: "-", sec: "Lists", kw: "bullet ul", flip: 1 },
+  { id: "ol", label: "Numbered list", icon: "list-ordered", md: "1.", sec: "Lists", kw: "ordered ol", flip: 1 },
+  { id: "task", label: "Task list", icon: "list-todo", md: "[ ]", sec: "Lists", kw: "todo checklist", flip: 1 },
+  { id: "quote", label: "Quote", icon: "text-quote", md: ">", sec: "Insert", kw: "blockquote", flip: 1 },
+  { id: "pre", label: "Code block", icon: "square-code", md: "```", sec: "Insert", kw: "code" },
+  { id: "table", label: "Table", icon: "table", md: "", sec: "Insert", kw: "grid", note: "3 × 3" },
+  { id: "image", label: "Image", icon: "image", md: "", sec: "Insert", kw: "picture photo" },
+  { id: "embed", label: "Embed", icon: "clapperboard", md: "", sec: "Insert", kw: "video youtube" },
+  { id: "diagram", label: "Diagram", icon: "workflow", md: "", sec: "Insert", kw: "mermaid chart", sub: true },
+  { id: "hr", label: "Divider", icon: "minus", md: "---", sec: "Insert", kw: "rule line" },
+];
+
+/* ── Shell rendering ────────────────────────────────────── */
+function rowHTML() {
+  const coarse = S.device === "tablet";
+  const word = (w) => (coarse ? `<span class="word">${w}</span>` : "");
+  const tb = (ic, label, extra = "", cls = "") => `<button class="tb ${cls}" aria-label="${label}" title="${label}" ${extra}>${icon(ic)}</button>`;
+  if (S.device === "tablet") {
+    // O8 a: stand-ins with one fixed word
+    return `<div class="row" role="toolbar" aria-label="Formatting">
+      ${tb("panel-left", "Outline")}<span class="sep"></span>${tb("undo-2", "Undo", "", "flip-rtl")}${tb("redo-2", "Redo", "", "flip-rtl")}<span class="sep"></span>
+      <button class="tb"><span class="word">H2</span>${icon("chevron-down", "cv")}</button>
+      ${tb("bold", "Bold")}${tb("italic", "Italic")}
+      <button class="tb" aria-label="Format">${icon("type")}${word("Format")}${icon("chevron-down", "cv")}</button>
+      <button class="tb">${icon("baseline")}${icon("chevron-down", "cv")}</button>${tb("link", "Link")}
+      <button class="tb" aria-label="Layout">${icon("pilcrow")}${word("Layout")}${icon("chevron-down", "cv")}</button><button class="tb" aria-label="Block">${icon("ellipsis")}${word("Block")}${icon("chevron-down", "cv")}</button>
+      <button class="tb" data-act="insert">${icon("plus")}${word("Insert")}</button>
+      <span class="grow"></span><button class="tb" data-act="more" aria-haspopup="menu">${icon("ellipsis")}</button>
+    </div>`;
+  }
+  return `<div class="row" role="toolbar" aria-label="Formatting">
+    ${tb("panel-left", "Toggle outline")}${tb("filter", "Filter")}<span class="grow"></span>
+    ${tb("undo-2", "Undo", "", "flip-rtl")}${tb("redo-2", "Redo", "", "flip-rtl")}<span class="sep"></span>
+    <button class="tb" aria-haspopup="menu" aria-label="Turn into: Text"><span class="word">Text</span>${icon("chevron-down", "cv")}</button>
+    ${tb("minus", "Decrease font size")}<button class="tb"><span class="word">M</span></button>${tb("plus", "Increase font size")}<span class="sep"></span>
+    ${tb("bold", "Bold")}${tb("italic", "Italic")}${tb("underline", "Underline")}${tb("strikethrough", "Strike")}
+    <button class="tb">${icon("baseline")}${icon("chevron-down", "cv")}</button><button class="tb">${icon("highlighter")}${icon("chevron-down", "cv")}</button>${tb("link", "Link")}<span class="sep"></span>
+    ${tb("align-left", "Align")}${tb("list", "Bulleted list", "", "flip-rtl")}${tb("indent", "Indent", "", "flip-rtl")}<span class="sep"></span>
+    <button class="tb" data-act="insert" aria-haspopup="menu">${icon("plus")}<span class="word">Insert</span>${icon("chevron-down", "cv")}</button>
+    <button class="tb" data-act="more" aria-haspopup="menu" aria-label="More">${icon("ellipsis")}${icon("chevron-down", "cv")}</button>
+    <span class="grow"></span>${tb(S.theme === "dark" ? "moon" : "sun", "Theme")}
+  </div>`;
+}
+
+function phoneBarHTML(selected) {
+  if (selected) {
+    const last = S.kind === "sandbox" ? `<button class="tb" data-act="paint" aria-label="Paint format">${icon("paintbrush")}</button>`
+      : `<button class="tb" data-act="comment" aria-label="Comment">${icon("message-square-plus")}</button>`;
+    return `<div class="pbar" role="toolbar" aria-label="Selection formatting">
+      <button class="tb" data-cmd="bold" aria-label="Bold">${icon("bold")}</button><button class="tb" data-cmd="italic" aria-label="Italic">${icon("italic")}</button>
+      <button class="tb" data-cmd="underline" aria-label="Underline">${icon("underline")}</button>
+      <button class="tb" data-act="sheet-aa" aria-label="Text colour">${icon("baseline")}</button><button class="tb" data-act="sheet-aa" aria-label="Highlight">${icon("highlighter")}</button>
+      <button class="tb" data-act="link" aria-label="Link">${icon("link")}</button>${last}
+      <button class="tb" data-act="deselect" aria-label="Back to all tools">${icon("x")}</button></div>`;
+  }
+  return `<div class="pbar" role="toolbar" aria-label="Formatting">
+    <button class="tb flip-rtl" aria-label="Undo">${icon("undo-2")}</button>
+    <button class="tb" data-act="sheet-aa" aria-label="Text format"><span class="word" style="font-weight:600">Aa</span></button>
+    <button class="tb" data-cmd="bold" aria-label="Bold">${icon("bold")}</button><button class="tb" data-cmd="italic" aria-label="Italic">${icon("italic")}</button>
+    <button class="tb flip-rtl" aria-label="List">${icon("list")}</button><button class="tb flip-rtl" aria-label="Indent">${icon("indent")}</button>
+    <button class="tb" data-act="phone-insert" aria-label="Insert" aria-haspopup="dialog">${icon("plus")}</button></div>`;
+}
+
+function render() {
+  const root = document.documentElement;
+  root.classList.toggle("dark", S.theme === "dark");
+  root.dataset.motion = S.motion;
+  for (const seg of $$(".seg")) for (const b of $$("button", seg)) b.setAttribute("aria-pressed", String(S[seg.dataset.k] === b.dataset.v));
+  const dev = $("#device");
+  const device = S.device === "tabletfine" ? "tablet" : S.device;
+  dev.dataset.device = device;
+  dev.dir = S.dir;
+  dev.className = "device" + (S.device === "tablet" || S.device === "phone" ? " coarse" : "") + (S.ver === "today" ? " today" : "");
+  const phone = device === "phone";
+  dev.innerHTML = `
+    <div class="tabs"><div class="tab">${icon("flask-conical")}Playground</div><div class="tab on">${icon("file-text")}${S.dir === "rtl" ? "توکن‌ها" : "Brand tokens"}</div></div>
+    <div class="scroller" id="scroller">
+      ${phone ? "" : rowHTML()}
+      <div class="page" id="page" data-width="${S.width}">
+        <div class="editor" id="editor" contenteditable="${S.kind === "reading" ? "false" : "true"}" spellcheck="false">${CONTENT[S.dir]}</div>
+      </div>
+      <button class="plus" id="plus" aria-label="Insert block" title="Insert block · or type /" aria-haspopup="menu" aria-expanded="false" tabindex="-1">${icon("plus")}</button>
+      <div class="float bubble" id="bubble" role="toolbar" aria-label="Selection formatting" data-smart-bubble data-state="closed"></div>
+      <div class="float menu" id="menu" role="menu"></div>
+      <div class="float menu" id="submenu" role="menu"></div>
+      <div class="float" id="linkpop"></div>
+    </div>
+    ${phone ? "" : `<div class="pills"><div class="pill"><span style="color:#10b981">●</span> 2 users online · Kind Raven</div><div class="pill">${icon("github")} Privacy</div></div>`}
+    ${!phone && S.o5 === "b" && S.ver === "proposed" ? bottomPillHTML() : ""}
+    ${phone ? `<div id="pbar-slot">${phoneBarHTML(false)}</div>` : ""}
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div class="sheet-scrim" id="scrim"></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>`;
+  refreshIcons();
+  wire();
+}
+
+function bottomPillHTML() {
+  const b = (ic, l) => `<button class="tb" aria-label="${l}" title="${l}">${icon(ic)}</button>`;
+  return `<div class="rejected-note">O5 b — rejected (§8.4): collides with the pills, covers the last lines</div>
+    <div class="bottom-pill" role="toolbar" aria-label="Quick insert">${b("type", "Text styles")}<span class="sep" style="width:1px;background:var(--border);margin:4px"></span>${b("table", "Table")}${b("image", "Image")}${b("list-todo", "Task list")}${b("square-code", "Code block")}${b("ellipsis", "More")}</div>`;
+}
+
+/* ── Selection helpers ──────────────────────────────────── */
+const editorEl = () => $("#editor");
+function selRange() {
+  const sel = getSelection();
+  if (!sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  return editorEl()?.contains(r.commonAncestorContainer) ? r : null;
+}
+function blockOf(node) {
+  let n = node && (node.nodeType === 1 ? node : node.parentElement);
+  while (n && n !== editorEl()) {
+    if (/^(P|H1|H2|H3|H4|LI|BLOCKQUOTE|PRE)$/.test(n.tagName)) return n;
+    n = n.parentElement;
+  }
+  return null;
+}
+function relRect(rect) {
+  const sc = $("#scroller").getBoundingClientRect();
+  const s = $("#scroller");
+  return { top: rect.top - sc.top + s.scrollTop, bottom: rect.bottom - sc.top + s.scrollTop, left: rect.left - sc.left + s.scrollLeft, right: rect.right - sc.left + s.scrollLeft, width: rect.width, height: rect.height };
+}
+/** BQ3: the first selected line's rect (proposed) or the union box (today). */
+function anchorRect(range) {
+  if (S.ver === "today") return range.getBoundingClientRect();
+  const rects = [...range.getClientRects()].filter((r) => r.width > 1);
+  if (!rects.length) return range.getBoundingClientRect();
+  const first = rects[0];
+  const line = rects.filter((r) => Math.abs(r.top - first.top) < 4);
+  const left = Math.min(...line.map((r) => r.left)), right = Math.max(...line.map((r) => r.right));
+  return { top: first.top, bottom: first.bottom, left, right, width: right - left, height: first.height };
+}
+function lastLineRect(range) {
+  const rects = [...range.getClientRects()].filter((r) => r.width > 1);
+  return rects[rects.length - 1] || range.getBoundingClientRect();
+}
+function blockType(range) {
+  const blocks = new Set();
+  const walker = document.createTreeWalker(editorEl(), NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) if (range.intersectsNode(walker.currentNode)) blocks.add(blockOf(walker.currentNode));
+  const kinds = [...blocks].filter(Boolean).map((b) => {
+    if (b === editorEl().firstElementChild) return "Title";
+    if (b.tagName === "LI") return b.parentElement.classList.contains("task") ? "Task" : b.parentElement.tagName === "OL" ? "Numbered" : "List";
+    return { P: "Text", H1: "H1", H2: "H2", H3: "H3", BLOCKQUOTE: "Quote", PRE: "Code" }[b.tagName] || "Text";
+  });
+  const uniq = [...new Set(kinds)];
+  return uniq.length === 1 ? uniq[0] : "Mixed";
+}
+
+/* ── Bubble ─────────────────────────────────────────────── */
+let savedRange = null, shiftTimer = 0, side = "top";
+function bubbleHTML(type) {
+  const b = (cmd, ic, label, keys, md = "") => {
+    const heading = /^(H\d|Title)$/.test(type) && cmd === "bold";
+    const on = !heading && document.queryCommandState?.(cmd) ? "true" : "false";
+    return `<button class="tb" data-cmd="${cmd}" aria-pressed="${on}" aria-label="${label}" title="${label}${md ? "  " + md : ""}  ${keys}" tabindex="-1">${icon(ic)}</button>`;
+  };
+  const sep = `<span class="sep" role="separator"></span>`;
+  const colour = `<button class="tb" data-act="colour-apply" aria-label="Text colour: ${cap(S.lastText)}" title="Text colour: ${cap(S.lastText)}" tabindex="-1" style="color:var(--tc-${S.lastText})">${icon("baseline")}</button><button class="tb split-cv" data-act="colour" aria-haspopup="menu" aria-expanded="false" aria-label="Colours" tabindex="-1">${icon("chevron-down", "cv")}</button>`;
+  const link = `<button class="tb" data-act="link" aria-label="Link" title="Link  ${k("⌘K", "Ctrl+K")}" tabindex="-1">${icon("link")}</button>`;
+  const paint = `<button class="tb" data-act="paint" aria-pressed="${S.paint}" aria-label="Paint format" title="Paint format · Select text after clicking · Esc to cancel" tabindex="-1">${icon("paintbrush")}</button>`;
+  const canComment = S.kind !== "sandbox";
+  const comment = canComment ? `${sep}<button class="tb" data-act="comment" aria-label="Comment" title="Comment  ${k("⌥⌘M", "")}" tabindex="-1">${icon("message-square-plus")}</button>${S.o4 === "b" ? `<button class="tb" data-act="react" aria-haspopup="menu" aria-label="Add reaction" title="Add reaction" tabindex="-1">${icon("smile-plus")}</button>` : ""}` : "";
+  if (S.ver === "today") {
+    return `${b("bold", "bold", "Bold", k("⌘B", "Ctrl+B"), "**text**")}${b("italic", "italic", "Italic", k("⌘I", "Ctrl+I"), "*text*")}${b("underline", "underline", "Underline", k("⌘U", "Ctrl+U"))}${sep}${colour}${sep}${link}${sep}${paint}`;
+  }
+  if (S.kind === "reading") return comment.replace(sep, "");
+  const face = type === "Title" ? "Title" : type === "Task" || type === "Numbered" ? "List" : type;
+  const FACE_LABEL = { Text: "Text", H1: "Heading 1", H2: "Heading 2", H3: "Heading 3", List: "List", Quote: "Quote", Title: "Title", Mixed: "Mixed", Code: "Code block" };
+  const styleBtn = S.o1 === "a"
+    ? `<button class="tb style-face" data-act="style" aria-haspopup="menu" aria-expanded="false" aria-label="Turn into: ${face}" title="Turn into" tabindex="-1" ${type === "Title" ? 'aria-disabled="true"' : ""}><span class="word">${face}</span>${type === "Title" ? icon("lock", "cv") : icon("chevron-down", "cv")}</button>${sep}`
+    : S.o1 === "b"
+      ? `<button class="tb" data-act="heading" aria-haspopup="menu" aria-label="Heading: ${face}" tabindex="-1"><span class="word">${/^H\d$/.test(face) ? face : "H"}</span>${icon("chevron-down", "cv")}</button>${sep}`
+      : "";
+  const listBtn = S.o1 === "b" ? `<button class="tb flip-rtl" data-act="lists" aria-haspopup="menu" aria-label="List" tabindex="-1">${icon("list")}${icon("chevron-down", "cv")}</button>` : "";
+  const code = `<button class="tb" data-act="code" aria-label="Inline code" title="Inline code  \`text\`  ${k("⌘E", "Ctrl+E")}" tabindex="-1">${icon("code")}</button>`;
+  const clear = `<button class="tb" data-act="clear" aria-label="Clear formatting" title="Clear formatting  ${k("⌘\\", "Ctrl+\\")} · keeps links" tabindex="-1">${icon("remove-formatting")}</button>`;
+  const marks = `${b("bold", "bold", "Bold", k("⌘B", "Ctrl+B"), "**text**")}${b("italic", "italic", "Italic", k("⌘I", "Ctrl+I"), "*text*")}${b("underline", "underline", "Underline", k("⌘U", "Ctrl+U"))}${b("strikeThrough", "strikethrough", "Strike", k("⌘⇧S", "Ctrl+Shift+S"), "~~text~~")}${code}${clear}`;
+  if (S.o11 === "b") {
+    const turn = `<button class="prow" data-act="style" aria-haspopup="menu" aria-label="Turn into: ${face}" tabindex="-1" ${type === "Title" ? 'aria-disabled="true"' : ""}>${icon("type")}<span>${FACE_LABEL[face] || face}</span><span style="margin-inline-start:auto" class="flip-rtl">${type === "Title" ? icon("lock") : icon("chevron-right")}</span></button>`;
+    const grid = `<div class="pgrid">${colour.replace('class="tb split-cv"', 'class="tb split-cv" hidden')}${b("bold", "bold", "Bold", k("⌘B", "Ctrl+B"))}${b("italic", "italic", "Italic", k("⌘I", "Ctrl+I"))}${b("underline", "underline", "Underline", k("⌘U", "Ctrl+U"))}${clear}${link}${b("strikeThrough", "strikethrough", "Strike", k("⌘⇧S", "Ctrl+Shift+S"))}${code}${paint}<button class="tb" data-act="colour" aria-haspopup="menu" aria-label="Colours" tabindex="-1">${icon("palette")}</button></div>`;
+    const crow = canComment ? `<hr><button class="prow" data-act="comment" tabindex="-1">${icon("message-square-plus")}<span>Comment</span><kbd style="margin-inline-start:auto;font-size:11px;color:var(--muted-foreground)">${k("⌥⌘M", "")}</kbd></button>` : "";
+    return `${turn}<hr>${grid}${crow}`;
+  }
+  return `${styleBtn}${marks}${sep}${colour}${listBtn}${link}${paint}${comment}`;
+}
+
+function bubbleAllowed() {
+  const fine = S.device === "desktop" || S.device === "tabletfine";
+  return fine;
+}
+function updateBubble(force = false) {
+  const bubble = $("#bubble");
+  if (!bubble) return;
+  const range = selRange();
+  if (S.device === "phone") return updatePhoneBar(range);
+  const hide = () => { bubble.removeAttribute("data-open"); bubble.dataset.state = "closed"; };
+  if (!bubbleAllowed() || !range || range.collapsed) return hide();
+  const text = range.toString();
+  if (S.ver === "proposed" && !text.trim()) return hide(); // whitespace-only hides (proposed)
+  if (!text.length) return hide();
+  if (blockOf(range.startContainer)?.tagName === "PRE" || blockOf(range.endContainer)?.tagName === "PRE") return hide();
+  if (!force && S.ver === "proposed" && S.lastInput === "keyboard" && S.o7 === "c") return hide();
+  if ($("#menu").hasAttribute("data-open") && bubble.hasAttribute("data-open")) return;
+  savedRange = range.cloneRange();
+  bubble.classList.toggle("panel", S.ver === "proposed" && S.o11 === "b" && S.kind !== "reading");
+  bubble.innerHTML = bubbleHTML(blockType(range));
+  refreshIcons();
+  // roving: first item is the tab stop
+  const items = $$("button", bubble);
+  items.forEach((b, i) => (b.tabIndex = i === 0 ? 0 : -1));
+  bubble.setAttribute("data-open", "");
+  bubble.dataset.state = "open";
+  place(bubble, range);
+}
+function place(el, range) {
+  const sc = $("#scroller");
+  const row = $(".row");
+  const a = relRect(anchorRect(range));
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const page = $("#page");
+  const pageRect = relRect(page.getBoundingClientRect());
+  const rowBottom = row ? relRect(row.getBoundingClientRect()).bottom : sc.scrollTop;
+  let top = a.top - 8 - h;
+  side = "top";
+  if (top < rowBottom + 4) {
+    const last = relRect(S.ver === "proposed" ? lastLineRect(range) : range.getBoundingClientRect());
+    top = last.bottom + 8;
+    side = "bottom";
+  }
+  let left = (a.left + a.right) / 2 - w / 2;
+  const minL = (S.ver === "proposed" ? pageRect.left : 0) + 8;
+  const maxL = (S.ver === "proposed" ? pageRect.right : sc.clientWidth) - 8 - w;
+  left = Math.max(minL, Math.min(left, maxL));
+  el.style.top = `${top}px`;
+  el.style.left = `${left}px`;
+  el.dataset.side = side;
+}
+
+/* ── Menus ──────────────────────────────────────────────── */
+function openMenu(html, anchorEl, opts = {}) {
+  const menu = opts.sub ? $("#submenu") : $("#menu");
+  menu.innerHTML = html;
+  refreshIcons();
+  menu.setAttribute("data-open", "");
+  menu.style.maxHeight = "";
+  const a = relRect(anchorEl.getBoundingClientRect());
+  const sc = $("#scroller");
+  const row = $(".row");
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  // Visible band: under the sticky row, above the bottom edge (spec §10.4).
+  const bandTop = sc.scrollTop + (row ? row.offsetHeight : 0) + 8;
+  const bandBottom = sc.scrollTop + sc.clientHeight - 8;
+  let top;
+  if (opts.sub) {
+    top = Math.max(bandTop, Math.min(a.top - 4, bandBottom - h));
+    const rtl = S.dir === "rtl";
+    const parent = relRect($("#menu").getBoundingClientRect());
+    const limitR = sc.clientWidth - 8, limitL = 8;
+    let left = rtl ? parent.left - w - 2 : parent.right + 2;
+    // Doesn't fit at the inline end: open at the inline start, over the parent, offset 4 px (spec §10.4).
+    if (!rtl && left + w > limitR) left = parent.right - w - 4;
+    if (rtl && left < limitL) left = parent.left + 4;
+    menu.style.left = `${left}px`;
+  } else {
+    // Never over the selection: below means below its last line.
+    const avoid = opts.avoid ? relRect(opts.avoid) : null;
+    const upEdge = Math.min(a.top, avoid ? avoid.top : a.top) - 6;
+    const downEdge = Math.max(a.bottom, avoid ? avoid.bottom : a.bottom) + 6;
+    const roomUp = upEdge - bandTop, roomDown = bandBottom - downEdge;
+    const want = Math.min(h, 240);
+    const up = opts.side === "top" ? roomUp >= want || roomUp > roomDown : !(roomDown >= want || roomDown > roomUp);
+    const room = up ? roomUp : roomDown;
+    if (h > room) menu.style.maxHeight = `${room}px`;
+    const mh = Math.min(h, room);
+    top = up ? upEdge - mh : downEdge;
+    menu.dataset.side = up ? "top" : "bottom";
+    let left = S.dir === "rtl" ? a.right - w : a.left;
+    const col = opts.avoid && S.ver === "proposed" ? relRect($("#page").getBoundingClientRect()) : { left: 0, right: sc.clientWidth };
+    left = Math.max(col.left + 8, Math.min(left, col.right - w - 8));
+    menu.style.left = `${left}px`;
+  }
+  menu.style.top = `${top}px`;
+  if (opts.sub) menu.dataset.side = "bottom";
+  if (!opts.sub) $("#submenu").removeAttribute("data-open");
+  anchorEl.setAttribute?.("aria-expanded", "true");
+  menu._trigger = anchorEl;
+  if (opts.focus) $(".mi:not([aria-disabled])", menu)?.focus();
+}
+function closeMenus() {
+  hideGhost();
+  for (const m of [$("#menu"), $("#submenu")]) {
+    if (!m) continue;
+    m.removeAttribute("data-open");
+    m._trigger?.setAttribute?.("aria-expanded", "false");
+  }
+  clearPreview();
+}
+const mi = (attrs, ic, label, end = "", flip = false) =>
+  `<button class="mi" role="menuitem" ${attrs}>${ic ? `<span class="${flip ? "flip-rtl" : ""}">${icon(ic)}</span>` : ""}<span>${label}</span><span class="end">${end}</span></button>`;
+
+function styleMenuHTML(type, only) {
+  const row = (id, ic, label, keys, md, checked, flip) =>
+    `<button class="mi" role="menuitemradio" aria-checked="${checked}" data-block="${id}"><span class="${flip ? "flip-rtl" : ""}">${icon(ic)}</span><span>${label}</span><span class="end"><kbd>${keys}</kbd><span style="width:16px;display:inline-grid">${checked ? icon("check") : ""}</span></span></button>`;
+  const heads = `${row("p", "type", "Text", k("⌘⌥0", "Ctrl+Alt+0"), "", type === "Text")}
+    ${row("h1", "heading-1", "Heading 1", k("⌘⌥1", "Ctrl+Alt+1"), "#", type === "H1")}
+    ${row("h2", "heading-2", "Heading 2", k("⌘⌥2", "Ctrl+Alt+2"), "##", type === "H2")}
+    ${row("h3", "heading-3", "Heading 3", k("⌘⌥3", "Ctrl+Alt+3"), "###", type === "H3")}
+    ${mi('data-sub="moreheads" aria-haspopup="menu"', "heading", "More headings", icon("chevron-right", "flip-rtl"))}`;
+  const lists = `${row("ul", "list", "Bulleted list", k("⌘⇧8", "Ctrl+Shift+8"), "-", type === "List", 1)}
+    ${row("ol", "list-ordered", "Numbered list", k("⌘⇧7", "Ctrl+Shift+7"), "1.", type === "Numbered", 1)}
+    ${row("task", "list-todo", "Task list", k("⌘⇧9", "Ctrl+Shift+9"), "[ ]", type === "Task", 1)}`;
+  const other = `${row("quote", "text-quote", "Quote", k("⌘⇧B", "Ctrl+Shift+B"), ">", type === "Quote", 1)}
+    ${row("pre", "square-code", "Code block", k("⌘⌥C", "Ctrl+Alt+C"), "```", type === "Code")}`;
+  if (only === "heads") return `<div class="label">Heading</div>${heads}`;
+  if (only === "lists") return `<div class="label">List</div>${lists}`;
+  return `<div class="label">Turn into${type === "Mixed" ? " · mixed selection" : ""}</div>${heads}<hr>${lists}<hr>${other}`;
+}
+
+function colourMenuHTML() {
+  if (S.o2 === "a" || S.ver === "today") {
+    const sws = (kind) => [`<button class="sw" role="menuitemradio" aria-checked="true" data-${kind}="none" aria-label="${kind === "tc" ? "Default text colour" : "No highlight"}">${icon("ban")}</button>`,
+      ...TOKENS.map((t) => `<button class="sw" role="menuitemradio" aria-checked="false" data-${kind}="${t}" aria-label="${cap(t)} ${kind === "tc" ? "text" : "highlight"}" style="${kind === "tc" ? `color:var(--tc-${t})` : `background:var(--hl-${t})`}">${kind === "tc" ? "A" : ""}</button>`)].join("");
+    return `<div class="label">Text colour</div><div class="grid">${sws("tc")}</div><div class="label">Highlight</div><div class="grid">${sws("hl")}</div>${S.ver === "today" ? "" : `<div class="caption" id="caption" aria-hidden="true">Default text · No highlight</div>`}`;
+  }
+  const row = (kind, t, checked) => {
+    const none = t === "none";
+    const label = kind === "tc" ? (none ? "Default" : cap(t)) : none ? "No highlight" : cap(t);
+    const chip = none ? `<span class="chip">${icon("ban")}</span>` : kind === "tc" ? `<span class="chip" style="color:var(--tc-${t})">A</span>` : `<span class="chip" style="background:var(--hl-${t})">A</span>`;
+    return `<button class="mi" role="menuitemradio" aria-checked="${checked}" data-${kind}="${t}">${chip}<span>${label}</span><span class="end">${checked ? icon("check") : ""}</span></button>`;
+  };
+  const recent = [...S.recentText.map((t) => ["tc", t]), ...S.recentHl.map((t) => ["hl", t])].slice(0, 5);
+  return `<div class="recent" role="group" aria-label="Recent">Recent ${recent.map(([kd, t]) => `<button class="sw" data-${kd}="${t}" aria-label="${cap(t)} ${kd === "tc" ? "text" : "highlight"}" title="${cap(t)} ${kd === "tc" ? "text" : "highlight"}" style="${kd === "tc" ? `color:var(--tc-${t})` : `background:var(--hl-${t})`}">A</button>`).join("")}</div><hr><div class="cols"><div role="group" aria-label="Text"><div class="label">Text</div>${row("tc", "none", true)}${FIRST_TEXT.map((t) => row("tc", t, false)).join("")}
+    ${mi('data-sub="moretc" aria-haspopup="menu"', "", "More colours", icon("chevron-right", "flip-rtl"))}</div>
+    <div role="group" aria-label="Highlight"><div class="label">Highlight</div>${row("hl", "none", true)}${FIRST_HL.map((t) => row("hl", t, false)).join("")}
+    ${mi('data-sub="morehl" aria-haspopup="menu"', "", "More highlights", icon("chevron-right", "flip-rtl"))}</div></div>`;
+}
+function moreColoursHTML(kind) {
+  const list = kind === "tc" ? TOKENS.filter((t) => !FIRST_TEXT.includes(t)) : TOKENS.filter((t) => !FIRST_HL.includes(t));
+  return list.map((t) => `<button class="mi" role="menuitemradio" aria-checked="false" data-${kind}="${t}">${kind === "tc" ? `<span class="chip" style="color:var(--tc-${t})">A</span>` : `<span class="chip" style="background:var(--hl-${t})">A</span>`}<span>${cap(t)}</span></button>`).join("");
+}
+const INSERT_IDS = ["quote", "pre", "table", "image", "embed", "diagram", "hr"];
+const NEW_UNTIL = { diagram: "2026-12-31" }; // spec §8.5: date or first use, no storage
+const isNew = (id) => NEW_UNTIL[id] && new Date().toISOString().slice(0, 10) <= NEW_UNTIL[id] && !S.recentKinds.includes(id);
+function suggestedKinds() {
+  return S.ver === "proposed" && S.o12 === "a" ? S.recentKinds.slice(0, 3).map((id) => KINDS.find((x) => x.id === id)).filter(Boolean) : [];
+}
+function insertListHTML(query = "", opts = {}) {
+  const q = query.toLowerCase();
+  const items = KINDS.filter((x) => !q || x.label.toLowerCase().includes(q) || x.kw.includes(q));
+  const suggested = !q && opts.slash ? suggestedKinds() : [];
+  const proposed = S.ver === "proposed";
+  if (!items.length) return `<div class="caption">No matching blocks</div>${opts.slash && proposed ? slashFooter(null) : ""}`;
+  let sec = "", n = 0;
+  const row = (x, section) => {
+    const head = section !== sec ? `<div class="label">${(sec = section)}</div>` : "";
+    const badge = proposed && isNew(x.id) ? `<span class="badge">New</span>` : "";
+    const end = `${badge}${x.note ? x.note : ""}${x.md && !opts.coarse && opts.slash ? `<span class="md">${x.md}</span>` : ""}${opts.alias ? `<span class="md">/${x.label.split(" ")[0].toLowerCase()}</span>` : ""}${x.sub ? icon("chevron-right", "flip-rtl") : ""}`;
+    return head + `<button class="mi ${n++ === 0 ? "active" : ""}" role="option" data-kind="${x.id}" aria-label="${x.label}${badge ? ", new" : ""}"><span class="${x.flip ? "flip-rtl" : ""}">${icon(x.icon)}</span><span>${x.label}</span><span class="end">${end}</span></button>`;
+  };
+  return suggested.map((x) => row(x, "Suggested")).join("") + items.map((x) => row(x, x.sec)).join("") + (opts.slash && proposed ? slashFooter(suggested[0] || items[0]) : "");
+}
+function slashFooter(active) {
+  const coarse = S.device === "phone";
+  const tip = !active ? "" : active.md ? `Type <kbd>${active.md}</kbd> then space for ${active.label}` : "↑ ↓ to move · ↵ to insert";
+  return `<div class="slash-foot"><span id="sftip">${coarse ? "" : tip}</span><button data-act="slash-close" ${coarse ? 'style="min-height:44px;padding:0 12px"' : ""}>Close${coarse ? "" : " <kbd>esc</kbd>"}</button></div>`;
+}
+function updateTip() {
+  const tip = $("#sftip");
+  const a = $("#menu .mi.active");
+  if (!tip || !a || S.device === "phone") return;
+  const x = KINDS.find((k) => k.id === a.dataset.kind);
+  tip.innerHTML = x?.md ? `Type <kbd>${x.md}</kbd> then space for ${x.label}` : "↑ ↓ to move · ↵ to insert";
+}
+
+function moreMenuHTML() {
+  const g = (label, body) => `<div role="group" aria-label="${label}"><div class="label">${label}</div>${body}</div>`;
+  return g("Text", mi("", "superscript", "Superscript", `<kbd>${k("⌘.", "Ctrl+.")}</kbd>`) + mi("", "subscript", "Subscript", `<kbd>${k("⌘⇧,", "Ctrl+,")}</kbd>`) + mi('data-act="code"', "code", "Inline code", `<kbd>${k("⌘E", "Ctrl+E")}</kbd>`) + mi("", "remove-formatting", "Clear formatting", `<kbd>${k("⌘\\", "Ctrl+\\")}</kbd>`) + mi("", "paintbrush", "Paint format"))
+    + "<hr>" + g("View", mi('data-sub="width" aria-haspopup="menu"', "move-horizontal", "Page width", `${cap(S.width)} ${icon("chevron-right", "flip-rtl")}`) + mi('role="menuitemcheckbox" aria-checked="false"', "square", "Simplified toolbar") + mi('aria-haspopup="menu"', "sun-moon", "Appearance", icon("chevron-right", "flip-rtl")))
+    + "<hr>" + g("Help", mi("", "search", "All actions…", `<kbd>${k("⌥/", "Alt+/")}</kbd>`)) + "<hr>" + mi("", "eraser", "Forget my choices…");
+}
+function widthMenuHTML() {
+  return ["narrow", "standard", "wide", "full"].map((w) => `<button class="mi" role="menuitemradio" aria-checked="${S.width === w}" data-width="${w}"><span>${cap(w)}</span><span class="end">${S.width === w ? icon("check") : ""}</span></button>`).join("")
+    + (S.kind === "library" ? `<hr>${mi('data-width="standard"', "", "Use default (Standard)")}` : `<div class="caption">Sandbox: sets the app-wide width</div>`);
+}
+
+/* ── Commands (prototype only) ──────────────────────────── */
+function restore() {
+  if (!savedRange) return;
+  const sel = getSelection();
+  sel.removeAllRanges();
+  sel.addRange(savedRange);
+}
+function setBlock(id) {
+  restore();
+  editorEl().focus({ preventScroll: true });
+  const map = { p: "P", h1: "H1", h2: "H2", h3: "H3", h4: "H4", quote: "BLOCKQUOTE", pre: "PRE" };
+  if (map[id]) document.execCommand("formatBlock", false, map[id]);
+  else if (id === "ul" || id === "task") { document.execCommand("insertUnorderedList"); if (id === "task") blockOf(getSelection().anchorNode)?.parentElement?.classList.add("task"); }
+  else if (id === "ol") document.execCommand("insertOrderedList");
+  else if (id === "hr") document.execCommand("insertHorizontalRule");
+  else if (id === "table") document.execCommand("insertHTML", false, "<table border=1 style='border-collapse:collapse;width:100%'><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></table><p><br></p>");
+  else say(`${KINDS.find((x) => x.id === id)?.label}: its input step opens here`);
+  markEmpty();
+  say(KINDS.find((x) => x.id === id)?.label || id);
+}
+function applyColour(kind, token) {
+  restore();
+  editorEl().focus({ preventScroll: true });
+  document.execCommand("styleWithCSS", false, false);
+  const sentinel = kind === "tc" ? "#010203" : "#010204";
+  if (kind === "tc") document.execCommand("foreColor", false, sentinel);
+  else { document.execCommand("styleWithCSS", false, true); document.execCommand("hiliteColor", false, sentinel); }
+  for (const el of $$(`font[color="${sentinel}"]`, editorEl())) { const s = document.createElement("span"); if (token !== "none") { s.dataset.tc = token; s.style.setProperty("--tc", `var(--tc-${token})`); } s.append(...el.childNodes); el.replaceWith(s); }
+  for (const el of $$("span[style*='background-color']", editorEl())) if (/rgb\(1, 2, 4\)/.test(el.style.backgroundColor)) { el.style.backgroundColor = ""; if (token !== "none") { el.dataset.hl = token; el.style.setProperty("--hl", `var(--hl-${token})`); } }
+  if (token !== "none") { if (kind === "tc") { S.lastText = token; S.recentText = [token, ...S.recentText.filter((t) => t !== token)].slice(0, 5); } else S.recentHl = [token, ...S.recentHl.filter((t) => t !== token)].slice(0, 5); }
+  say(token === "none" ? (kind === "tc" ? "Default text colour" : "No highlight") : `${cap(token)} ${kind === "tc" ? "text" : "highlight"}`);
+}
+function preview(kind, token) {
+  if (!savedRange || !window.Highlight) return;
+  const root = document.documentElement;
+  root.style.setProperty("--preview-tc", kind === "tc" && token !== "none" ? `var(--tc-${token})` : "inherit");
+  root.style.setProperty("--preview-hl", kind === "hl" && token !== "none" ? `var(--hl-${token})` : "transparent");
+  CSS.highlights.set("preview", new Highlight(savedRange));
+  const c = $("#caption");
+  if (c) c.textContent = token === "none" ? (kind === "tc" ? "Default text" : "No highlight") : `${cap(token)} ${kind === "tc" ? "text" : "highlight"}`;
+}
+function clearPreview() { window.CSS?.highlights?.delete("preview"); }
+function say(msg) {
+  const st = $("#status");
+  if (!st) return;
+  st.textContent = msg;
+  const bubble = $("#bubble");
+  if (bubble?.hasAttribute("data-open")) { st.style.top = `${parseFloat(bubble.style.top) + (side === "top" ? -34 : bubble.offsetHeight + 8)}px`; st.style.left = `${parseFloat(bubble.style.left) + bubble.offsetWidth + 8}px`; }
+  else { st.style.top = "56px"; st.style.left = "50%"; }
+  st.setAttribute("data-open", "");
+  clearTimeout(say.t);
+  say.t = setTimeout(() => st.removeAttribute("data-open"), 2500);
+}
+function markEmpty() {
+  for (const p of $$("p", editorEl())) {
+    const empty = p.textContent.trim() === "" && !p.querySelector("img");
+    p.classList.toggle("empty", empty);
+    if (empty && !p.dataset.ph) p.dataset.ph = S.dir === "rtl" ? "برای بلوک‌ها / بزنید" : "Type / for blocks";
+  }
+}
+
+/* ── Link handoff (§7.5) ────────────────────────────────── */
+function openLink() {
+  const bubble = $("#bubble");
+  const pop = $("#linkpop");
+  const top = bubble.style.top, left = bubble.style.left;
+  bubble.removeAttribute("data-open");
+  pop.innerHTML = `<div class="linkpop">${icon("link")}<input id="linkin" type="url" placeholder="https://example.com" aria-label="Link address" dir="auto"><button class="btn primary" id="linkok">Apply</button></div>`;
+  refreshIcons();
+  // Crossfade; focus moves in the same frame (spec §7.5).
+  pop.style.left = left;
+  pop.setAttribute("data-open", "");
+  // v1: the Hyperlink package opens below the selection (placement is hard-coded there), never over it (spec §7.5).
+  pop.style.top = `${relRect(lastLineRect(savedRange)).bottom + 8}px`;
+  pop.dataset.side = side;
+  $("#linkin").focus();
+  const done = (apply) => {
+    const url = $("#linkin").value.trim();
+    pop.removeAttribute("data-open");
+    restore();
+    editorEl().focus({ preventScroll: true });
+    if (apply && url) { document.execCommand("createLink", false, url); say("Link added"); }
+    updateBubble(true);
+  };
+  $("#linkok").onclick = () => done(true);
+  $("#linkin").onkeydown = (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
+}
+
+/* ── Comment draft (§7.6) ───────────────────────────────── */
+function openComment(emoji) {
+  if (!savedRange) return;
+  const a = relRect(anchorRect(savedRange));
+  const page = relRect($("#page").getBoundingClientRect());
+  $("#bubble").removeAttribute("data-open");
+  if (window.Highlight) CSS.highlights.set("comment-draft", new Highlight(savedRange.cloneRange()));
+  if (emoji) {
+    const chip = document.createElement("div");
+    chip.className = "reaction";
+    chip.textContent = `${emoji} 1`;
+    chip.style.top = `${a.top}px`;
+    $("#scroller").append(chip);
+    say("Reaction added");
+    return;
+  }
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.top = `${a.top - 8}px`;
+  card.style[S.dir === "rtl" ? "right" : "left"] = `${Math.min(page.right + 16, $("#scroller").clientWidth - 256)}px`;
+  card.innerHTML = `<strong>New comment</strong><textarea aria-label="Comment" placeholder="Add a comment…"></textarea><div class="actions"><button class="btn" data-x>Cancel</button><button class="btn primary" data-x>Comment ${k("⌘↵", "Ctrl+Enter")}</button></div>`;
+  $("#scroller").append(card);
+  $("textarea", card).focus();
+  const close = () => { card.remove(); CSS.highlights?.delete("comment-draft"); editorEl().focus(); };
+  for (const b of $$("[data-x]", card)) b.onclick = close;
+  card.onkeydown = (e) => { if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) close(); };
+}
+
+/* ── + on the empty line and "/" (§8) ───────────────────── */
+let slash = null;
+function updatePlus() {
+  const plus = $("#plus");
+  if (!plus) return;
+  const r = selRange();
+  const allowed = S.ver === "proposed" && S.o5 === "a" && (S.device === "desktop" || S.device === "tabletfine") && S.kind !== "reading";
+  const block = r && r.collapsed && blockOf(r.startContainer);
+  if (!allowed || !block || block.tagName !== "P" || block.textContent.trim() !== "" || block === editorEl().firstElementChild) {
+    plus.removeAttribute("data-open");
+    return;
+  }
+  const b = relRect(block.getBoundingClientRect());
+  plus.style.top = `${b.top + (b.height - 28) / 2}px`;
+  plus.style.left = S.dir === "rtl" ? `${b.right + 8}px` : `${b.left - 36}px`;
+  plus.setAttribute("data-open", "");
+  plus._block = block;
+}
+function openInsertList(anchorEl, query = "", mode = "slash") {
+  openMenu(insertListHTML(query, { slash: true, coarse: S.device === "phone" }), anchorEl, { side: "bottom" });
+  const menu = $("#menu");
+  menu.setAttribute("role", "listbox");
+  menu.dataset.mode = mode;
+  menu.style.minWidth = S.ver === "proposed" ? "320px" : "288px";
+}
+function showGhost(block, caretRect) {
+  hideGhost();
+  if (S.ver !== "proposed") return;
+  const g = document.createElement("div");
+  g.className = "ghost";
+  g.id = "ghost";
+  g.setAttribute("aria-hidden", "true");
+  g.textContent = S.dir === "rtl" ? "برای جست‌وجو بنویسید" : "Type to search";
+  const cs = getComputedStyle(block);
+  g.style.font = cs.font;
+  const r = relRect(caretRect);
+  g.style.top = `${r.top}px`;
+  $("#scroller").append(g);
+  g.style.left = S.dir === "rtl" ? `${r.left - g.offsetWidth - 2}px` : `${r.right + 2}px`;
+}
+function hideGhost() { $("#ghost")?.remove(); }
+function handleSlashInput() {
+  const r = selRange();
+  if (!r || !r.collapsed) { slash = null; hideGhost(); return; }
+  const block = blockOf(r.startContainer);
+  const text = block?.textContent || "";
+  const upto = text.slice(0, r.startOffset);
+  const m = /^\/(\S*)$/.exec(text) || /(?:^|\s)\/(\S*)$/.exec(upto);
+  if (block && block.tagName === "P" && m) {
+    slash = { block, query: m[1] };
+    const caret = document.createElement("span");
+    const rr = r.cloneRange();
+    rr.insertNode(caret);
+    const caretRect = caret.getBoundingClientRect();
+    openInsertList(caret, slash.query, "slash");
+    caret.remove();
+    block.normalize();
+    const sel = getSelection(); sel.removeAllRanges(); const nr = document.createRange(); nr.selectNodeContents(block); nr.collapse(false); sel.addRange(nr);
+    // Ghost only for an empty query with nothing after the caret (spec §8.5).
+    const nothingAfter = text.slice(upto.length).trim() === "";
+    if (!slash.query && nothingAfter) showGhost(block, caretRect); else hideGhost();
+  } else if (slash) { closeSlash(false); }
+}
+function closeSlash(removeTyped) {
+  closeMenus();
+  hideGhost();
+  // A "+"-opened menu closed with an empty query takes its "/" back (spec §8.2).
+  if (removeTyped && S.slashFromPlus && slash && slash.query === "" && slash.block.textContent === "/") {
+    slash.block.innerHTML = "<br>";
+    markEmpty();
+  }
+  S.slashFromPlus = false;
+  slash = null;
+}
+function plusClick(block) {
+  const r = document.createRange();
+  r.setStart(block, 0);
+  r.collapse(true);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  editorEl().focus({ preventScroll: true });
+  S.slashFromPlus = true;
+  document.execCommand("insertText", false, "/"); // the app does this with addToHistory: false
+  $("#plus").removeAttribute("data-open");
+}
+function pickKind(id, fromSlash) {
+  closeMenus();
+  hideGhost();
+  const block = fromSlash ? slash?.block : null;
+  if (block) {
+    block.textContent = "";
+    block.append(document.createElement("br"));
+    const r = document.createRange(); r.setStart(block, 0); r.collapse(true);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    savedRange = r.cloneRange();
+  }
+  slash = null;
+  S.slashFromPlus = false;
+  if (INSERT_IDS.includes(id)) S.recentKinds = [id, ...S.recentKinds.filter((x) => x !== id)].slice(0, 3);
+  setBlock(id);
+  $("#plus")?.removeAttribute("data-open");
+}
+
+/* ── Phone ──────────────────────────────────────────────── */
+function updatePhoneBar(range) {
+  const slot = $("#pbar-slot");
+  if (!slot) return;
+  const selected = !!(range && !range.collapsed && range.toString().trim());
+  if (selected) savedRange = range.cloneRange();
+  if (slot.dataset.sel === String(selected)) return;
+  slot.dataset.sel = String(selected);
+  slot.innerHTML = phoneBarHTML(selected);
+  refreshIcons();
+}
+function openSheet(title, body) {
+  const sheet = $("#sheet");
+  sheet.setAttribute("aria-label", title);
+  sheet.innerHTML = `<div class="grab"></div><header><h3>${title}</h3><button class="btn" id="sheetdone">Done</button></header>${body}`;
+  refreshIcons();
+  sheet.setAttribute("data-open", "");
+  $("#scrim").setAttribute("data-open", "");
+  $("#sheetdone").onclick = closeSheet;
+  $("#scrim").onclick = closeSheet;
+  $("#sheetdone").focus();
+}
+function closeSheet() { $("#sheet")?.removeAttribute("data-open"); $("#scrim")?.removeAttribute("data-open"); }
+function aaSheetHTML() {
+  const cur = savedRange ? blockType(savedRange) : "Text";
+  const style = KINDS.slice(0, 8).map((x) => {
+    const on = { p: "Text", h1: "H1", h2: "H2", h3: "H3", ul: "List", ol: "Numbered", task: "Task" }[x.id] === cur;
+    return `<button class="cell" data-kind="${x.id}" aria-pressed="${on}"><span class="${x.flip ? "flip-rtl" : ""}">${icon(x.icon)}</span>${x.label}${on ? `<span class="note">${icon("check")}</span>` : ""}</button>`;
+  }).join("") + `<button class="cell" data-act="sheet-moreheads"><span>${icon("heading")}</span>More headings<span class="note flip-rtl">${icon("chevron-right")}</span></button>`;
+  const grid = (kind) => [`<button class="sw" data-${kind}="none" aria-label="${kind === "tc" ? "Default text colour" : "No highlight"}">${icon("ban")}</button>`, ...TOKENS.map((t) => `<button class="sw" data-${kind}="${t}" aria-label="${cap(t)} ${kind === "tc" ? "text" : "highlight"}" style="${kind === "tc" ? `color:var(--tc-${t})` : `background:var(--hl-${t})`}">A</button>`)].join("");
+  return `<h4>Style</h4><div class="cells">${style}</div><h4>Text colour</h4><div class="grid">${grid("tc")}</div><h4>Highlight</h4><div class="grid">${grid("hl")}</div><div class="caption" id="caption" aria-hidden="true">Current: Default text · No highlight</div><h4>Size · Align · More</h4><div class="caption">(unchanged)</div>`;
+}
+function insertSheetHTML() {
+  const cell = (x, note = "") => `<button class="cell" data-kind="${x.id}" aria-label="${x.label}${isNew(x.id) ? ", new" : ""}"><span class="${x.flip ? "flip-rtl" : ""}">${icon(x.icon)}</span>${x.label}${isNew(x.id) ? `<span class="note"><span class="badge">New</span></span>` : note || x.note ? `<span class="note">${note || x.note}</span>` : ""}</button>`;
+  const empty = savedRange ? (blockOf(savedRange.startContainer)?.textContent.trim() || "") === "" : true;
+  const sug = suggestedKinds();
+  return `${sug.length ? `<h4>Suggested</h4><div class="cells">${sug.map((x) => cell(x)).join("")}</div>` : ""}
+    <h4>${empty ? "Blocks" : "Turn into"}</h4><div class="cells">${KINDS.slice(0, 7).map((x) => cell(x)).join("")}</div>
+    <h4>Insert</h4><div class="cells">${KINDS.slice(7).map((x) => cell(x)).join("")}</div>`;
+}
+
+/* ── Wiring ─────────────────────────────────────────────── */
+function wire() {
+  const ed = editorEl();
+  const dev = $("#device");
+  markEmpty();
+  ed.addEventListener("pointerdown", () => { S.lastInput = "pointer"; closeMenus(); });
+  ed.addEventListener("pointerup", () => setTimeout(() => { updateBubble(); updatePlus(); }, 0));
+  ed.addEventListener("keydown", (e) => {
+    if (e.key === "Shift") S.lastInput = "keyboard";
+    if (e.shiftKey && /Arrow|Home|End/.test(e.key)) { S.lastInput = "keyboard"; if (S.ver === "proposed" && S.o7 !== "a") $("#bubble").removeAttribute("data-open"); }
+    if ($("#menu").hasAttribute("data-open") && $("#menu").dataset.mode === "slash") {
+      const items = $$(".mi", $("#menu"));
+      const i = items.findIndex((x) => x.classList.contains("active"));
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[i]?.classList.remove("active"); const n = items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]; n.classList.add("active"); n.scrollIntoView({ block: "nearest" }); updateTip(); return; }
+      if (e.key === "Enter") { e.preventDefault(); const a = items[i] || items[0]; if (a) pickKind(a.dataset.kind, true); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeSlash(true); return; }
+    }
+    if (e.key === "Escape" && $("#bubble").hasAttribute("data-open")) { $("#bubble").removeAttribute("data-open"); return; }
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) $("#bubble").removeAttribute("data-open");
+  });
+  ed.addEventListener("keyup", (e) => {
+    if (e.key === "Shift" || (e.shiftKey && /Arrow/.test(e.key))) {
+      clearTimeout(shiftTimer);
+      if (S.ver === "today" || S.o7 === "a") updateBubble();
+      else if (S.o7 === "b") shiftTimer = setTimeout(() => updateBubble(true), 300);
+    } else if (S.ver === "today" || S.o7 === "a") updateBubble();
+    updatePlus();
+  });
+  ed.addEventListener("input", () => { markEmpty(); handleSlashInput(); updatePlus(); });
+  ed.addEventListener("focus", updatePlus);
+  document.addEventListener("selectionchange", () => {
+    if (S.device === "phone") updatePhoneBar(selRange());
+    if (S.ver === "today" && S.lastInput === "keyboard") updateBubble();
+  });
+  $("#scroller").addEventListener("scroll", () => { if ($("#bubble").hasAttribute("data-open") && savedRange) place($("#bubble"), savedRange); updatePlus(); });
+
+  dev.addEventListener("mousedown", (e) => { if (e.target.closest(".float .tb, .float .mi, .float .sw, .pbar .tb, .plus")) e.preventDefault(); });
+  dev.addEventListener("click", onClick);
+  dev.addEventListener("pointerover", (e) => { const sw = e.target.closest("[data-tc],[data-hl]"); if (sw && sw.closest(".float, .sheet")) preview(sw.dataset.tc ? "tc" : "hl", sw.dataset.tc || sw.dataset.hl); });
+  dev.addEventListener("focusin", (e) => { const sw = e.target.closest("[data-tc],[data-hl]"); if (sw && sw.closest(".float")) preview(sw.dataset.tc ? "tc" : "hl", sw.dataset.tc || sw.dataset.hl); });
+  dev.addEventListener("pointerout", (e) => { if (e.target.closest("[data-tc],[data-hl]")) clearPreview(); });
+  $("#bubble").addEventListener("keydown", roving);
+  $("#menu").addEventListener("keydown", menuKeys);
+  $("#submenu").addEventListener("keydown", menuKeys);
+}
+function roving(e) {
+  const items = $$("button:not([aria-disabled='true']):not([hidden])", $("#bubble"));
+  const i = items.indexOf(document.activeElement);
+  const rtl = S.dir === "rtl";
+  const next = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1, ...(S.o11 === "b" ? { ArrowDown: 1, ArrowUp: -1 } : {}) }[e.key];
+  if (next) { e.preventDefault(); const n = items[(i + next + items.length) % items.length]; items.forEach((b) => (b.tabIndex = -1)); n.tabIndex = 0; n.focus(); }
+  if (e.key === "Home" || e.key === "End") { e.preventDefault(); items[e.key === "Home" ? 0 : items.length - 1].focus(); }
+  if (e.key === "Escape") { e.preventDefault(); restore(); editorEl().focus({ preventScroll: true }); restore(); }
+}
+function menuKeys(e) {
+  const menu = e.currentTarget;
+  const items = $$(".mi, .sw", menu);
+  const i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus(); }
+  if (e.key === "Escape") { e.preventDefault(); const t = menu._trigger; closeMenus(); if (t?.isConnected) t.focus(); }
+  // Two-column colour menu: Left/Right cross between Text and Highlight (visual order in RTL).
+  const groups = $$(".cols > [role='group']", menu);
+  const sub = document.activeElement?.dataset?.sub;
+  if (groups.length === 2 && !sub && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault();
+    const gi = groups.findIndex((g) => g.contains(document.activeElement));
+    const row = $$(".mi", groups[gi]).indexOf(document.activeElement);
+    const other = $$(".mi", groups[1 - gi]);
+    other[Math.min(row, other.length - 1)]?.focus();
+    return;
+  }
+  if ((e.key === "ArrowRight" && S.dir === "ltr") || (e.key === "ArrowLeft" && S.dir === "rtl")) { const sub = document.activeElement?.dataset?.sub; if (sub) { e.preventDefault(); document.activeElement.click(); } }
+}
+function onClick(e) {
+  const t = e.target.closest("button");
+  if (!t) return;
+  const kb = e.detail === 0;
+  if (t.dataset.cmd) { restore(); editorEl().focus({ preventScroll: true }); document.execCommand(t.dataset.cmd); if (S.device !== "phone") updateBubble(true); say(t.getAttribute("aria-label")); return; }
+  if (t.dataset.block) { closeMenus(); setBlock(t.dataset.block); updateBubble(true); return; }
+  if (t.dataset.tc || t.dataset.hl) { const kind = t.dataset.tc ? "tc" : "hl"; closeMenus(); applyColour(kind, t.dataset[kind]); if (S.device === "phone") { const nm = t.getAttribute("aria-label"); say(`${nm} · Undo`); const c = $("#caption"); if (c) c.textContent = `Current: ${nm}`; } else updateBubble(true); return; }
+  if (t.dataset.width) { S.width = t.dataset.width; $("#page").dataset.width = S.width; closeMenus(); say(`Page width: ${cap(S.width)}`); return; }
+  if (t.dataset.kind) { const fromSlash = $("#menu").dataset.mode === "slash"; if (t.closest(".sheet")) { closeSheet(); if (INSERT_IDS.includes(t.dataset.kind)) S.recentKinds = [t.dataset.kind, ...S.recentKinds.filter((x) => x !== t.dataset.kind)].slice(0, 3); if (savedRange) setBlock(t.dataset.kind); else say(t.textContent.trim()); return; } pickKind(t.dataset.kind, fromSlash); return; }
+  if (t.dataset.sub) {
+    const html = { moreheads: () => ["h4", "h5", "h6"].map((h) => `<button class="mi" role="menuitemradio" aria-checked="false" data-block="${h === "h4" ? "h4" : "h3"}"><span>Heading ${h[1]}</span><span class="end"><kbd>${k("⌘⌥" + h[1], "Ctrl+Alt+" + h[1])}</kbd></span></button>`).join(""), moretc: () => moreColoursHTML("tc"), morehl: () => moreColoursHTML("hl"), width: widthMenuHTML }[t.dataset.sub]();
+    openMenu(html, t, { sub: true, focus: kb });
+    return;
+  }
+  switch (t.dataset.act) {
+    case "style": if (t.getAttribute("aria-disabled") === "true") { say("Title is always H1."); return; } openMenu(styleMenuHTML(blockType(savedRange)), t, { side, focus: kb, avoid: savedRange?.getBoundingClientRect() }); break;
+    case "heading": openMenu(styleMenuHTML(blockType(savedRange), "heads"), t, { side, focus: kb, avoid: savedRange?.getBoundingClientRect() }); break;
+    case "lists": openMenu(styleMenuHTML(blockType(savedRange), "lists"), t, { side, focus: kb, avoid: savedRange?.getBoundingClientRect() }); break;
+    case "colour": openMenu(colourMenuHTML(), t, { side, focus: kb, avoid: savedRange?.getBoundingClientRect() }); break;
+    case "clear": restore(); editorEl().focus({ preventScroll: true }); document.execCommand("removeFormat"); say("Formatting cleared · links kept"); updateBubble(true); break;
+    case "colour-apply": applyColour("tc", S.lastText); updateBubble(true); break;
+    case "code": restore(); editorEl().focus({ preventScroll: true }); document.execCommand("insertHTML", false, `<code>${getSelection().toString()}</code>`); say("Inline code"); break;
+    case "link": if (S.device === "phone") { say("Link: the Hyperlink popover opens above the bar"); break; } openLink(); break;
+    case "paint": S.paint = !S.paint; t.setAttribute("aria-pressed", String(S.paint)); say(S.paint ? "Select text to paint the format · Esc to cancel" : "Paint format off"); break;
+    case "comment": if (S.device === "phone") { say("Comment: the thread opens in a bottom sheet"); break; } openComment(); break;
+    case "react": openMenu(["👍", "❤️", "🎉", "😄", "👀", "✅"].map((m) => `<button class="mi" data-emoji="${m}" style="justify-content:center;font-size:18px">${m}</button>`).join(""), t, { side, avoid: savedRange?.getBoundingClientRect() }); $("#menu").style.minWidth = "0"; break;
+    case "insert": openMenu(insertListHTML("", { alias: S.ver === "proposed" }), t, { side: "bottom", focus: kb }); $("#menu").dataset.mode = "row"; break;
+    case "more": openMenu(moreMenuHTML(), t, { side: "bottom", focus: kb }); break;
+    case "sheet-aa": savedRange = selRange()?.cloneRange() || savedRange; openSheet("Text format", aaSheetHTML()); break;
+    case "phone-insert": savedRange = selRange()?.cloneRange() || savedRange; if (S.o6 === "a" && S.ver === "proposed") openSheet("Insert", insertSheetHTML()); else { openMenu(insertListHTML("", { coarse: true }), t, { side: "top" }); $("#menu").dataset.mode = "row"; } break;
+    case "slash-close": closeSlash(true); editorEl().focus({ preventScroll: true }); break;
+    case "sheet-moreheads": say("H4, H5, H6"); break;
+    case "deselect": getSelection().removeAllRanges(); updatePhoneBar(null); break;
+  }
+  if (t.dataset.emoji) { closeMenus(); openComment(t.dataset.emoji); }
+  if (t.id === "plus" && t._block) plusClick(t._block);
+}
+
+/* Alt+F10 / ⌥F10: focus the bubble if open (Style ▾ first), else the row. */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "F10" && e.altKey) {
+    e.preventDefault();
+    const r = selRange();
+    if (r && !r.collapsed && !$("#bubble").hasAttribute("data-open")) updateBubble(true);
+    const first = $("#bubble[data-open] button") || $(".row .tb");
+    first?.focus();
+  }
+  if (e.key === "Escape" && $("#menu")?.hasAttribute("data-open") && !e.defaultPrevented) closeMenus();
+});
+document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".float, .plus, .row, .pbar")) closeMenus(); });
+
+/* Controls */
+for (const seg of $$(".seg")) seg.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  S[seg.dataset.k] = b.dataset.v;
+  render();
+});
+window.addEventListener("resize", () => { if ($("#bubble")?.hasAttribute("data-open") && savedRange) place($("#bubble"), savedRange); });
+render();
+</script>
+</body>
+</html>

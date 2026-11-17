@@ -7,6 +7,8 @@
 # next.js
 /.next/
 /out/
+# web metadata files parked during a desktop export (scripts/build-desktop.ts)
+/.desktop-export-parked/
 
 # production
 /build

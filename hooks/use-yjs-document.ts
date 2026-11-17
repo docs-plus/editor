@@ -51,6 +51,8 @@ export function useYjsDocument(documentId: string) {
 
   return {
     ydoc,
+    /** The session's one Awareness (DocSession shape); the provider's here. */
+    awareness: providerRef?.awareness ?? null,
     provider: providerRef,
     synced,
     serverSynced,

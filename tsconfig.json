@@ -33,6 +33,7 @@
   ],
   "exclude": [
     "node_modules",
+    "out",
     "lib/pwa/service-worker.ts",
     "desktop/smoke",
     "desktop/storage-harness",

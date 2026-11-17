@@ -98,6 +98,100 @@ worker and P2.7 builds the files sidebar on it.
   import-boundary allowance for `lib/schema-names.ts`, and that T7 is covered
   by `local-session`'s tests, not the storage soak.
 
+### Editor without a provider; WriteGate; the editor-chunk fence (P2.2)
+
+Desktop Phase 2, P2.2. The web editor behaves as before: it still gets its
+provider, and nothing passes the new read-only prop. The editor chunk goes
+from +15,284 B to +15,578 B (+294 B of P2.2's 300 B line in the D23 ledger),
+and the budget drops from 23.5 KB to +16,864 B (`main` plus the 1,580 B
+ledger), leaving 1,286 B for the ledger's other lines. No schema or protocol
+change; no Deploy note.
+
+#### Added
+
+- **Editor:** `DocumentEditor` takes the session's Awareness and accepts no
+  provider. With none, the connection chip isn't rendered and no socket
+  opens. Carets use the Awareness directly, and the extension list depends
+  on it rather than on the provider, so attaching a provider later never
+  rebuilds the extensions (no `setOptions`).
+- **Editor:** `WriteGate` (`extensions/write-gate/`), a `filterTransaction`
+  plugin over a ref. With the new `readOnly` prop, no local ProseMirror
+  change reaches the document, including the writes plugins make when a
+  document opens. Changes from collaborators still apply. The schema
+  guard's repair writes Yjs directly and is not gated yet; it must be when
+  something first sets `readOnly`.
+- **Editor:** the decoration host (`extensions/decoration-host/`): declared
+  layers each get a plugin holding a `DecorationSet`, set by the meta-only
+  `setDecorationLayer` command, either mapped or cleared on document
+  changes. No layer is declared yet; comments and Find will declare theirs.
+
+#### Changed
+
+- **Build:** `scripts/check-editor-chunk-size.ts` budget is `main` at
+  P2.2 plus the D23 ledger (+16,864 B), and it prints exact bytes.
+
+### Desktop renderer export (P2.4)
+
+`bun run build:desktop` builds the desktop renderer: the static export the
+Electron shell will load. The web build is unchanged. Its route table, client
+chunks (names and sizes), manifests and every page apart from `/icon`'s URL
+match `main`. The `/icon?<hash>` cache-buster changes because `app/icon.tsx`
+gained `dynamic = "force-static"`; the PNG is byte-identical.
+
+#### Added
+
+- `bun run build:desktop` (`scripts/build-desktop.ts`) writes `out/` with
+  `NEXT_PUBLIC_APP_TARGET=desktop` and `output: "export"`. Desktop routes:
+  `/`, `/about`, `/_not-found`, `/icon`. It fails if a web-only route, a web
+  metadata tag or the Windows segment layout (#103) reaches `out/`.
+- `desktop/shared/export-paths.ts`: the `app://` protocol handler's path rules
+  for P2.5. `/about` maps to `about.html`, RSC `.txt` files keep their
+  exported names, and the extension-less `/icon` is `image/png`. Unknown
+  types and traversal are refused. `scripts/serve-desktop-export.ts` serves
+  `out/` with them for tests.
+- The `desktop` Playwright project runs on the export instead of `next start`.
+  It checks that every request the renderer makes is answered and none goes
+  to a web-only route. Nightly runs it on Linux (`desktop-renderer`).
+
+#### Changed
+
+- Web-only route handlers are `route.web.ts(x)` (`app/api/**`, `llms.txt`,
+  `pwa-icons/[id]`). `next.config.ts` switches `pageExtensions`, `output` and
+  `headers()` on the target flag.
+- The export parks the five web metadata files and the `/privacy` and
+  `/offline` pages in `.desktop-export-parked/` for the build and puts them
+  back, as spike #115 measured is required. Renaming the pages would drop
+  their font preload on the web: Next 16.4.6 looks up `page.web` in a font
+  manifest keyed `page`.
+- `next.config.ts` refuses a web build while anything is parked.
+- The desktop build never registers the service worker, whose precache lists
+  `/privacy` (#117 follow-up).
+
+### Design: selection bubble and quick insert
+
+A draft design for the owner's review: a fuller one-row selection bubble, a
+caret-local way to insert blocks, amendments to the "/" menu (Suggested, an
+inline hint, a footer), and a phone Insert sheet. Documentation only; no app
+or server change.
+
+#### Added
+
+- **Docs:**
+  - `docs/superpowers/specs/2026-11-17-bubble-and-quick-insert-design.md`:
+    the audit of today's bubble, Insert, "/" and phone surfaces; research
+    across eight editors (two rounds of owner references, including Notion's
+    panel and "/" menu) and the platform guidance; the proposed design with
+    owner decisions O1–O12; and a phased plan.
+  - `docs/design/2026-11-17-bubble-quick-insert-prototype.html`: a clickable
+    prototype with a switch for each decision, theme, RTL, reduced motion and
+    device.
+  - Screenshots of today's UI and of the prototype in
+    `docs/design/2026-11-17-bubble-quick-insert/`.
+- **Finding:** the lazy selection bubble mounts Tiptap's React `<BubbleMenu>`,
+  which calls `registerPlugin` from a lazy chunk. When the chunk lands it
+  rebuilds every plugin view (29 of 29 measured), after the editor is already
+  interactive. The spec's phase 0 replaces it.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
