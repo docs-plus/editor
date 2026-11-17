@@ -69,27 +69,11 @@
 // The context slot cell names its kind (design pass §6): Heading, CodeXml,
 // Table2 or Image in place of the generic sliders, beside the menu's 12px
 // chevron. Drawn here (lucide's paths as masks) so the editor chunk, which
-// renders the cell, carries no extra icons.
+// renders the cell, carries no extra icons. The masks are files, not
+// `data:` URLs, so a CSP of `img-src 'self'` (the desktop app) allows them,
+// and each `url()` sits on its own rule: a relative URL passed through a
+// custom property can resolve against the page instead of this sheet.
 [data-phone-slot] {
-  --kind-icon: none;
-
-  &[data-kind="heading"] {
-    --kind-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 20V4M6 12h12M6 20V4'/%3E%3C/svg%3E");
-  }
-
-  &[data-kind="code"],
-  &[data-kind="mermaid"] {
-    --kind-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m18 16 4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16'/%3E%3C/svg%3E");
-  }
-
-  &[data-kind="table"] {
-    --kind-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 9h18M9 3v18'/%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3C/svg%3E");
-  }
-
-  &[data-kind="media"] {
-    --kind-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'/%3E%3C/svg%3E");
-  }
-
   &:is([data-kind="heading"], [data-kind="code"], [data-kind="mermaid"], [data-kind="table"], [data-kind="media"])
     [data-toolbar-item] {
     > svg:first-child {
@@ -102,8 +86,26 @@
       height: 1rem;
       flex-shrink: 0;
       background-color: currentColor;
-      mask: var(--kind-icon) center / contain no-repeat;
+      mask-position: center;
+      mask-size: contain;
+      mask-repeat: no-repeat;
     }
+  }
+
+  &[data-kind="heading"] [data-toolbar-item]::before {
+    mask-image: url("./icons/heading.svg");
+  }
+
+  &:is([data-kind="code"], [data-kind="mermaid"]) [data-toolbar-item]::before {
+    mask-image: url("./icons/code.svg");
+  }
+
+  &[data-kind="table"] [data-toolbar-item]::before {
+    mask-image: url("./icons/table.svg");
+  }
+
+  &[data-kind="media"] [data-toolbar-item]::before {
+    mask-image: url("./icons/media.svg");
   }
 }
 
