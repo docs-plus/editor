@@ -55,9 +55,9 @@ export function planDocMigrations(
 
 /**
  * Runs the steps a plan lists in one transaction under `origin`, so they
- * produce one update. For import, where a file is all-or-nothing; the open
- * hook in local-session runs one transaction per step instead. Returns the schema reached, or null when there was
- * nothing to do.
+ * produce one update. For import, where a file migrates all or nothing;
+ * the open hook in local-session runs one transaction per step instead.
+ * Returns the schema reached, or null when there was nothing to do.
  */
 export function runDocMigrations(
   doc: Y.Doc,
