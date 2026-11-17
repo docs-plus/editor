@@ -30,7 +30,7 @@ type StoredDoc = {
 };
 
 export type MemoryDocLibraryOptions = {
-  /** `schema` of a document loaded before anything created it. Default 1. */
+  /** `schema` of a document loaded before anything created it. Default 0, like the engine's `docs.schema`. */
   newDocSchema?: number;
 };
 
@@ -41,7 +41,7 @@ export class MemoryDocLibrary {
   private readonly newDocSchema: number;
 
   constructor(options: MemoryDocLibraryOptions = {}) {
-    this.newDocSchema = options.newDocSchema ?? 1;
+    this.newDocSchema = options.newDocSchema ?? 0;
   }
 
   /** Creates the document, as `DocumentIndex.create` would. */

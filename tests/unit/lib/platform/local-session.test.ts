@@ -81,7 +81,7 @@ function makeSession(
 }
 
 /** Seeds the library with `text` as one stored update row. */
-async function seed(text: string, schema = 1): Promise<void> {
+async function seed(text: string, schema = 0): Promise<void> {
   library.createDoc(DOC, schema);
   const writer = new MemoryDocStore({ library });
   await writer.load(DOC);
@@ -182,7 +182,7 @@ describe("local-session open", () => {
   });
 
   it("reports a load refusal and stays not ready", async () => {
-    library.createDoc(DOC, 1);
+    library.createDoc(DOC, 0);
     const otherWindow = new MemoryDocStore({ library });
     await otherWindow.load(DOC);
     const { session, store } = makeSession();
@@ -457,7 +457,7 @@ describe("local-session failures", () => {
   });
 
   it("reports stored content that cannot be applied as corrupt", async () => {
-    library.createDoc(DOC, 1);
+    library.createDoc(DOC, 0);
     const writer = new MemoryDocStore({ library });
     await writer.load(DOC);
     await writer.append(DOC, {
@@ -473,7 +473,7 @@ describe("local-session failures", () => {
   });
 
   it("loads again on the next open after a refused load", async () => {
-    library.createDoc(DOC, 1);
+    library.createDoc(DOC, 0);
     const otherWindow = new MemoryDocStore({ library });
     await otherWindow.load(DOC);
     const { session } = makeSession();
@@ -524,4 +524,19 @@ describe("local-session T7: slow hydrate never overwrites storage", () => {
     },
     { timeout: 5000 },
   );
+});
+
+describe("local-session schema defaults", () => {
+  it("matches the engine: schema 0, so a new document needs no migration append", async () => {
+    const { session, store } = makeSession();
+    const handle = session.open("brand-new");
+    await settle();
+    await handle.flush();
+    expect(handle.getState()).toMatchObject({
+      ready: true,
+      readOnlyReason: null,
+    });
+    expect(store.appends).toHaveLength(0);
+    expect((await store.load("brand-new")).schema).toBe(0);
+  });
 });
