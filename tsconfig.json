@@ -31,5 +31,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "lib/pwa/service-worker.ts", "desktop/smoke"]
+  "exclude": [
+    "node_modules",
+    "out",
+    "lib/pwa/service-worker.ts",
+    "desktop/smoke"
+  ]
 }

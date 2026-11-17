@@ -2,6 +2,8 @@ import { ImageResponse } from "next/og";
 
 import { BrandMark } from "@/components/brand";
 
+// Static in both builds; the desktop export (output: "export") requires it.
+export const dynamic = "force-static";
 export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 

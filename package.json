@@ -11,6 +11,7 @@
     "dev": "next dev",
     "hocus": "bun scripts/hocus-server.ts",
     "build": "next build",
+    "build:desktop": "bun scripts/build-desktop.ts",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",
