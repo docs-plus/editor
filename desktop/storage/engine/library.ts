@@ -488,6 +488,15 @@ export class Library {
       ),
       lastDailyCopy: readMeta(db, "last_daily_copy"),
       today: localDate(this.host.now()),
+      // Read back, as set (D-A6; S2 confirmed them on all three OSes).
+      pragmas: {
+        journalMode: scalar(db, "PRAGMA journal_mode"),
+        synchronous: scalar(db, "PRAGMA synchronous"),
+        fullfsync: scalar(db, "PRAGMA fullfsync"),
+        checkpointFullfsync: scalar(db, "PRAGMA checkpoint_fullfsync"),
+        foreignKeys: scalar(db, "PRAGMA foreign_keys"),
+      },
+      sqliteVersion: scalar(db, "SELECT sqlite_version()"),
     };
   }
 

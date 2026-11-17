@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { StorageError } from "@/desktop/storage/engine/errors";
-import { LIBRARY_FILE, Library } from "@/desktop/storage/engine/library";
+import { LIBRARY_FILE } from "@/desktop/storage/engine/library";
 import { LOCK_FILE } from "@/desktop/storage/engine/lock";
 import type { FormatStep } from "@/desktop/storage/engine/migrations";
 import { TABLES_V1 } from "@/desktop/storage/engine/schema";
@@ -338,6 +338,14 @@ describe("format migrations (T5)", () => {
   });
 });
 
-test("Library.open is the only constructor", () => {
-  expect(typeof Library.open).toBe("function");
+test("stats reads the pragmas back as set", () => {
+  const library = openTestLibrary(temp.dir, createTestHost(clock));
+  // checkpoint_fullfsync's default differs between SQLite builds.
+  expect(library.stats().pragmas).toMatchObject({
+    journalMode: "wal",
+    synchronous: 2,
+    fullfsync: 0,
+    foreignKeys: 1,
+  });
+  library.shutdown();
 });
