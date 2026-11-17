@@ -13,6 +13,8 @@ name: Nightly
 #                  the gate env at its default (spec §3.1 N+1 ship gate)
 #   desktop-smoke  the D-A12 Electron smoke (desktop-smoke.yml) on macOS,
 #                  Windows and Linux
+#   desktop-storage-soak  plan T1–T8 against the storage worker in Electron
+#                  (desktop-storage-soak.yml), 200 kills per case, 3 OSes
 #
 # Read-only token and no secrets, like CI. A red run means a regression in
 # offline editing, long sessions, concurrency or schema rollout safety that
@@ -361,3 +363,11 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/desktop-smoke.yml
+
+  desktop-storage-soak:
+    name: Desktop storage soak (T1–T8)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-storage-soak.yml
+    with:
+      kills: 200

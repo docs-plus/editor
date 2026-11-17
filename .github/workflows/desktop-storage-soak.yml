@@ -1,0 +1,147 @@
+name: Desktop storage soak
+
+# Plan T1–T8 (P2.6): the storage worker on node:sqlite inside Electron,
+# SIGKILLed during appends, compactions and migrations, quit with writes in
+# flight, opened by an older app, and run through a simulated year with
+# 1,000 documents. The verifier reopens every library with the engine on
+# bun:sqlite. See tests/load/desktop-durability-soak.ts.
+#
+# Pull requests that touch storage run a short profile (20 kills per case);
+# the nightly and manual runs use the plan's 200. Not a required check.
+# Read-only token and no secrets, like CI.
+
+on:
+  pull_request:
+    paths:
+      - desktop/storage/**
+      - desktop/storage-harness/**
+      - desktop/dev/bun-sqlite-driver.ts
+      - lib/platform/desktop/**
+      - tests/load/desktop-durability-soak.ts
+      - .github/workflows/desktop-storage-soak.yml
+  workflow_call:
+    inputs:
+      kills:
+        type: number
+        default: 200
+  workflow_dispatch:
+    inputs:
+      kills:
+        description: Kills per kill case (T1, T2; T1-dense runs half)
+        type: number
+        default: 200
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-storage-soak-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    name: ${{ matrix.group.name }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-latest, ubuntu-24.04]
+        group:
+          - name: contract, T3–T6
+            cases: contract,T3,T4,T5,T6
+          - name: T1 kill during append
+            cases: T1,T1-dense
+          - name: T2 kill during compaction
+            cases: T2
+          - name: T8 year and startup
+            cases: T8
+    defaults:
+      run:
+        shell: bash
+    env:
+      KILLS: ${{ github.event_name == 'pull_request' && 20 || inputs.kills || 200 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # The root install brings Yjs and the engine's dependencies; the
+      # harness has its own lockfile with Electron, whose binary downloads
+      # on first use.
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          cd desktop/storage-harness
+          bun install --frozen-lockfile
+          bun -e 'require("electron")'
+
+      # Everything after install runs on Bun. The runner image ships Node,
+      # so a stub makes any call to it fail loudly. Install comes first:
+      # lifecycle scripts (husky) call `node`.
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      # Windows process spawns look for node.exe and never run the sh stub
+      # above, so put a compiled stub beside it (found in spike S3).
+      - name: Block Node.js (node.exe on Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cat > "$RUNNER_TEMP/node-stub.ts" <<'EOF'
+          console.error(`::error::node was called: ${process.argv.slice(2).join(" ")}`);
+          process.exit(1);
+          EOF
+          bun build --compile "$RUNNER_TEMP/node-stub.ts" --outfile "$RUNNER_TEMP/no-node/node.exe"
+          if cmd.exe //d //c "node --version" > /dev/null 2>&1; then
+            echo "::error::the node.exe stub is not first on PATH"
+            exit 1
+          fi
+
+      - name: Audit the harness dependencies
+        working-directory: desktop/storage-harness
+        run: bun audit --audit-level=high
+
+      - name: Typecheck and build the harness
+        working-directory: desktop/storage-harness
+        run: |
+          bun run typecheck
+          bun run build
+
+      - name: Allow the Chromium sandbox (electron/electron#42510)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Soak
+        env:
+          CASES: ${{ matrix.group.cases }}
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --out=soak-out
+          else
+            bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --out=soak-out
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-soak-${{ matrix.os }}-${{ strategy.job-index }}
+          path: soak-out
+          if-no-files-found: ignore
+          retention-days: 30
