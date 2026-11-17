@@ -9,6 +9,63 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.6: the library storage worker
+
+The SQLite engine behind the desktop library, where documents, folders and
+tags live, and the `worker_thread` that runs it inside Electron main (D-A1).
+Nothing in the web app or its build uses it yet; P2.5's shell starts the
+worker and P2.7 builds the files sidebar on it.
+
+#### Added
+
+- **Desktop:** `desktop/storage/engine/`, with no `node:`, `bun:` or
+  Electron imports, behind a `SqliteDriver` seam (`node:sqlite` in the
+  worker, `bun:sqlite` in tests and the dev host):
+  - the format-1 schema, so the Local release needs no later migration:
+    `docs` (lineage and a `NOT NULL` `link_key` minted at insert, `kind`, the
+    list columns), `folders`, `tags`, `doc_tags`, `doc_view(doc_id, width,
+    place, remote_images)`, `import_sources`, `snapshots` and `updates` with
+    an `AUTOINCREMENT` seq;
+  - the open order: cloud-synced folders refused, `library.lock` with a pid
+    check, WAL with `synchronous=FULL` (`fullfsync` on macOS), and the
+    `format_version` guard before any write, so a newer library opens
+    read-only and untouched; `quick_check` after an unclean exit;
+  - format migrations with a `VACUUM INTO` copy first (2 kept), one
+    transaction per step, and read-only on failure;
+  - appends and renderer-driven compaction in one transaction each, with
+    one window per document (`already_open`, `forbidden`, `document_open`);
+  - documents, folders, tags, Trash (emptied after 30 days) and the sidebar
+    snapshot with `rev`;
+  - a daily `VACUUM INTO` copy on the first idle moment, keeping 7, and a
+    reader for restoring one document from a day;
+  - shutdown for the quit flush: WAL checkpoint, `unclean_exit` cleared,
+    lock released.
+- **Desktop:** `desktop/storage/worker.ts` and `client.ts`: the worker
+  answers main one request at a time with `Result` envelopes and transferred
+  bytes; the client rejects pending calls with `worker_restarting` if the
+  worker dies and ends with a 2 s shutdown.
+- **Platform:** `lib/doc-migrations/` (the open-time migration hook list,
+  empty so far, and `checkImport`, which refuses an import that is too
+  large, isn't Yjs, or carries a node, mark or root this build doesn't
+  know) and `lib/platform/desktop/rpc-doc-store.ts` (`DocStore` over worker
+  replies, for `IpcDocStore`).
+- **Tests:** engine suites on `bun:sqlite` (open, content, index, daily
+  copies, codes, and a property test of random appends, compactions,
+  crashes and reopens), the import-boundary test's storage rows, and
+  `tests/load/desktop-durability-soak.ts` with its Electron harness in
+  `desktop/storage-harness/` for soak cases T1–T6 and T8.
+- **CI:** `desktop-storage-soak.yml` on macOS, Windows and Linux: 20 kills
+  per case on pull requests that touch storage, 200 nightly or with the
+  `storage-soak-full` label. `bun run typecheck` also checks the new
+  `tsconfig.desktop-node.json`.
+
+#### Changed
+
+- **Docs:** the desktop architecture spec records where P2.6 put the engine
+  and the harness, the worker-side registry check and `claim`, the
+  import-boundary allowance for `lib/schema-names.ts`, and that T7 belongs to
+  the web library.
+
 ### Desktop P2.1a: `DocSession` and `DocStore` port types
 
 The first half of desktop plan P2.1: the types the editor, the storage worker
