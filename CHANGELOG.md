@@ -9,6 +9,35 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.3: the tab list behind a `DocumentIndex` port
+
+The shared tab list now sits behind a `DocumentIndex` port, so the desktop
+library (SQLite) and the web library (IndexedDB) can serve the same list
+later. Tab behaviour is unchanged: the tab e2e specs pass without changes.
+
+#### Added
+
+- **Platform:** `lib/platform/document-index.ts`, the `DocumentIndex` port:
+  `snapshot()` (`rev`, `ready`, `items`), `subscribe()` with `load` and
+  `change` events, `create`, `rename`, `move`, `trash`, `restore` and
+  `destroy`. The active tab stays per window, outside the port.
+- **Tests:** one contract suite (`tests/unit/platform/`) runs on
+  `MemoryDocumentIndex` (`tests/helpers/memory-document-index.ts`) and on the
+  web implementation. Web-only tests cover Playground, bootstrap and
+  poisoned entries.
+
+#### Changed
+
+- **Tabs:** `GlobalTabsIndex` (`lib/platform/web/global-tabs-index.ts`) now
+  holds the `global-tabs` Y.Doc logic: the bootstrap and legacy migration,
+  sanitized reads, rename, reorder, soft close (forgetting the device copy)
+  and restore. `useSyncedTabs` is its React adapter. It keeps the active tab,
+  the title debounce, the tab cap, the confirmations and the Undo pill.
+- **Tabs:** the legacy-list migration keeps the stored active tab id when it
+  clears the old list, because the hook now reads that id after the seed.
+- **Tabs:** first-load JS grows 564 B gz (319,253 B against 318,689 B on
+  `next start`). The editor chunk is unchanged.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
