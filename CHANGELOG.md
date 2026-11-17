@@ -23,14 +23,19 @@ nothing changes for users (editor chunk group +28 B gz, first load
   (`DocSessionProvider`, `useDocSession`) and
   `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
   sandbox `DocSession` over `collab-session`).
-- **Tests:** an import-boundary test that the hook loads neither
-  `collab-session` nor a platform adapter.
+- **Tests:** an import-boundary test that neither the hook nor any module in
+  `components/document-editor/` loads `collab-session` or a platform
+  adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
+  statically and its connection status reads `collab-session`.
 
 #### Changed
 
 - **Editor:** `EditorApp` provides `sandboxDocSession` around the editor;
   `use-yjs-document` returns the same fields as before, now read from the
   `DocSession` handle.
+- **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
+  Reload button saves through `DocSession.flush()` (on the web, the same
+  device-copy flush as before) before reloading.
 
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
