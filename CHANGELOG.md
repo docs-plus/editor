@@ -9,6 +9,29 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.1c: the editor opens documents through `DocSession`
+
+`use-yjs-document` now opens documents through the `DocSession` its
+composition root provides, instead of importing `collab-session`. The web
+provides the sandbox adapter, which wraps `collab-session` unchanged, so
+nothing changes for users (editor chunk group +28 B gz, first load
++428 B gz). The desktop and library roots will provide `local-session`.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session-context.tsx`
+  (`DocSessionProvider`, `useDocSession`) and
+  `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
+  sandbox `DocSession` over `collab-session`).
+- **Tests:** an import-boundary test that the hook loads neither
+  `collab-session` nor a platform adapter.
+
+#### Changed
+
+- **Editor:** `EditorApp` provides `sandboxDocSession` around the editor;
+  `use-yjs-document` returns the same fields as before, now read from the
+  `DocSession` handle.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
