@@ -12,7 +12,7 @@ import * as Y from "yjs";
 
 import type { SqliteDriver } from "./driver";
 import { StorageError } from "./errors";
-import { scalar, transaction } from "./sql";
+import { bumpRev, scalar, transaction } from "./sql";
 
 /** The stored `updates.origin` values: `UPDATE_ORIGINS` in `lib/platform/doc-store.ts`. */
 export const STORED_ORIGINS = [
@@ -140,6 +140,8 @@ export function append(
       );
     if (updated.changes === 0)
       throw new StorageError("not_found", "no such document");
+    // Title, snippet and modified time are on the sidebar (architecture §8.1).
+    bumpRev(db);
     return db
       .prepare(
         "INSERT INTO updates (doc_id, data, origin, created_at) VALUES (?, ?, ?, ?)",

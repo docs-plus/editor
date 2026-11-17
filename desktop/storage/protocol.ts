@@ -15,6 +15,7 @@ import type { Library, LibraryStatus } from "./engine/library";
 import type {
   CreateDocInput,
   CreatedDoc,
+  IndexChange,
   SidebarSnapshot,
 } from "./engine/library-index";
 
@@ -59,7 +60,7 @@ export type StorageOps = {
   readDailyCopy: { args: { date: string; docId: string }; result: Uint8Array };
   runIdleJobs: {
     args: Record<string, never>;
-    result: { dailyCopy: string | null; purged: number };
+    result: ReturnType<Library["runIdleJobs"]>;
   };
   stats: { args: Record<string, never>; result: ReturnType<Library["stats"]> };
   /** The quit flush's last step: checkpoint, clear `unclean_exit`, close. */
@@ -83,7 +84,7 @@ export type StorageMessage =
   | { type: "open_failed"; error: StorageErrorEnvelope }
   | { type: "reply"; id: number; result: Result<unknown> }
   /** Metadata changed (architecture §7 `index.changed`); main fans it out. */
-  | { type: "index_changed"; rev: number };
+  | { type: "index_changed"; rev: number; changes: IndexChange[] };
 
 /** Options the worker is started with (`workerData`). */
 export type StorageWorkerOptions = {
@@ -95,23 +96,6 @@ export type StorageWorkerOptions = {
   /** How often the worker looks for idle work, in ms (default 5000). */
   idlePollMs?: number;
 };
-
-/** Ops whose result is the new `rev`: each one emits `index_changed`. */
-export const REV_OPS: ReadonlySet<StorageOp> = new Set<StorageOp>([
-  "renameDoc",
-  "moveDoc",
-  "trashDoc",
-  "restoreDoc",
-  "purgeDoc",
-  "setDocTags",
-]);
-
-/** Ops whose result carries `rev` in an object. */
-const CREATE_OPS: ReadonlySet<StorageOp> = new Set<StorageOp>([
-  "createDoc",
-  "createFolder",
-  "createTag",
-]);
 
 function run(library: Library, request: StorageRequest): unknown {
   switch (request.op) {
@@ -181,22 +165,15 @@ function run(library: Library, request: StorageRequest): unknown {
   }
 }
 
-/**
- * Runs one request. Returns the reply, and the new `rev` when the request
- * changed metadata (the caller emits `index_changed`).
- */
+/** Runs one request; a failure becomes an envelope, never a throw. */
 export function dispatch(
   library: Library,
   request: StorageRequest,
-): { result: Result<unknown>; rev: number | null } {
+): Result<unknown> {
   try {
-    const value = run(library, request);
-    let rev: number | null = null;
-    if (REV_OPS.has(request.op)) rev = value as number;
-    else if (CREATE_OPS.has(request.op)) rev = (value as { rev: number }).rev;
-    return { result: { ok: true, value }, rev };
+    return { ok: true, value: run(library, request) };
   } catch (error) {
-    return { result: { ok: false, error: toEnvelope(error) }, rev: null };
+    return { ok: false, error: toEnvelope(error) };
   }
 }
 

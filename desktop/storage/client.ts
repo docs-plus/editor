@@ -12,6 +12,7 @@ import { Worker } from "node:worker_threads";
 
 import type { StorageErrorEnvelope } from "./engine/errors";
 import type { LibraryStatus } from "./engine/library";
+import type { IndexChange } from "./engine/library-index";
 import {
   type StorageMessage,
   type StorageOp,
@@ -34,7 +35,7 @@ export class StorageCallError extends Error {
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
 
 export type StorageClientEvents = {
-  onIndexChanged?: (rev: number) => void;
+  onIndexChanged?: (rev: number, changes: IndexChange[]) => void;
   /** The worker exited without being asked to (crash). */
   onExit?: (code: number) => void;
 };
@@ -65,7 +66,7 @@ export class StorageClient {
         if (message.result.ok) pending.resolve(message.result.value);
         else pending.reject(new StorageCallError(message.result.error));
       } else if (message.type === "index_changed") {
-        events.onIndexChanged?.(message.rev);
+        events.onIndexChanged?.(message.rev, message.changes);
       }
     });
     worker.on("exit", (code) => {

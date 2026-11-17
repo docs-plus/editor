@@ -40,7 +40,7 @@ export function createEngineDocStore(
     } as StorageRequest;
     // A microtask boundary, as a real transport has.
     await Promise.resolve();
-    const { result } = dispatch(library, request);
+    const result = dispatch(library, request);
     if (!result.ok) throw result.error;
     return copyBytes(result.value) as never;
   };

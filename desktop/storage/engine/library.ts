@@ -58,7 +58,7 @@ import {
   runFormatSteps,
 } from "./migrations";
 import { FORMAT_VERSION, SCHEMA_V1, YJS_ENCODING } from "./schema";
-import { readMeta, scalar, transaction, writeMeta } from "./sql";
+import { readMeta, readRev, scalar, transaction, writeMeta } from "./sql";
 
 export const LIBRARY_FILE = "library.sqlite";
 /** Idle jobs (daily copy, Trash purge) wait for this long without a write. */
@@ -153,6 +153,8 @@ export class Library {
   private readonly holders = new Map<string, string>();
   private readonly trace: Trace | undefined;
   private lastWriteAt: number;
+  private changes = new Map<string, index.IndexChange>();
+  private lastDailyCopyError: string | null = null;
 
   private constructor(fields: {
     dir: string;
@@ -289,6 +291,22 @@ export class Library {
     this.lastWriteAt = this.host.now();
   }
 
+  private changed(kind: index.IndexChange["kind"], id: string) {
+    this.changes.set(`${kind}:${id}`, { kind, id });
+  }
+
+  /**
+   * The rows changed since the last call, with the current `rev`, or null
+   * when nothing changed. The worker drains this after every request and
+   * idle pass and sends `index_changed` (architecture §7, §8.1).
+   */
+  takeIndexChanges(): { rev: number; changes: index.IndexChange[] } | null {
+    if (this.changes.size === 0 || !this.db) return null;
+    const changes = [...this.changes.values()];
+    this.changes.clear();
+    return { rev: readRev(this.conn), changes };
+  }
+
   // ── Content (DocStore) ────────────────────────────────────────────────
 
   load(docId: string, owner: string): LoadedContent {
@@ -300,6 +318,7 @@ export class Library {
     if (!this.status.readOnly) {
       try {
         index.markOpened(this.conn, docId, this.host.now());
+        this.changed("doc", docId);
       } catch {
         // "Opened" sorting is a nicety; opening must not fail on it.
       }
@@ -314,6 +333,7 @@ export class Library {
     const seq = append(this.conn, docId, input, this.host.now());
     this.trace?.(`ACK ${seq}`);
     this.wrote();
+    this.changed("doc", docId);
     return seq;
   }
 
@@ -376,6 +396,7 @@ export class Library {
     this.assertWritable();
     const created = index.createDoc(this.conn, input, this.host.now());
     this.wrote();
+    this.changed("doc", created.id);
     return created;
   }
 
@@ -383,27 +404,36 @@ export class Library {
     this.assertWritable();
     const created = index.createFolder(this.conn, input, this.host.now());
     this.wrote();
+    this.changed("folder", created.id);
     return created;
   }
 
   renameDoc(id: string, title: string): number {
     this.assertWritable();
-    return index.renameDoc(this.conn, id, title);
+    const rev = index.renameDoc(this.conn, id, title);
+    this.changed("doc", id);
+    return rev;
   }
 
   moveDoc(id: string, folderId: string | null, sortKey: string): number {
     this.assertWritable();
-    return index.moveDoc(this.conn, id, folderId, sortKey);
+    const rev = index.moveDoc(this.conn, id, folderId, sortKey);
+    this.changed("doc", id);
+    return rev;
   }
 
   trashDoc(id: string, group: string | null = null): number {
     this.assertWritable();
-    return index.trashDoc(this.conn, id, this.host.now(), group);
+    const rev = index.trashDoc(this.conn, id, this.host.now(), group);
+    this.changed("doc", id);
+    return rev;
   }
 
   restoreDoc(id: string): number {
     this.assertWritable();
-    return index.restoreDoc(this.conn, id);
+    const rev = index.restoreDoc(this.conn, id);
+    this.changed("doc", id);
+    return rev;
   }
 
   purgeDoc(id: string): number {
@@ -411,17 +441,22 @@ export class Library {
     this.assertClosed(id);
     const rev = index.purgeDoc(this.conn, id);
     this.wrote();
+    this.changed("doc", id);
     return rev;
   }
 
   createTag(name: string, color: string | null = null) {
     this.assertWritable();
-    return index.createTag(this.conn, name, color);
+    const created = index.createTag(this.conn, name, color);
+    this.changed("tag", created.id);
+    return created;
   }
 
   setDocTags(docId: string, tagIds: readonly string[]): number {
     this.assertWritable();
-    return index.setDocTags(this.conn, docId, tagIds);
+    const rev = index.setDocTags(this.conn, docId, tagIds);
+    this.changed("doc", docId);
+    return rev;
   }
 
   // ── Restore points ────────────────────────────────────────────────────
@@ -452,17 +487,36 @@ export class Library {
   /**
    * Runs the idle jobs when nothing was written for {@link IDLE_MS}: today's
    * daily copy, then Trash older than 30 days (skipping open documents).
-   * Returns what ran, for the worker's diagnostics.
+   * Returns what ran, for the worker's diagnostics. A failed daily copy is
+   * kept for `stats()` (app health `backups_failing`) and retried on the
+   * next idle pass; it never stops the purge.
    */
-  runIdleJobs(): { dailyCopy: string | null; purged: number } {
+  runIdleJobs(): {
+    dailyCopy: string | null;
+    dailyCopyMs: number | null;
+    purged: number;
+  } {
     const now = this.host.now();
-    const result = { dailyCopy: null as string | null, purged: 0 };
+    const result = {
+      dailyCopy: null as string | null,
+      dailyCopyMs: null as number | null,
+      purged: 0,
+    };
     if (this.status.readOnly || now - this.lastWriteAt < IDLE_MS) return result;
-    if (isDailyCopyDue(this.conn, now))
-      result.dailyCopy = takeDailyCopy(this.conn, this.host, this.dir, now);
+    if (isDailyCopyDue(this.conn, now)) {
+      const started = performance.now();
+      try {
+        result.dailyCopy = takeDailyCopy(this.conn, this.host, this.dir, now);
+        this.lastDailyCopyError = null;
+      } catch (error) {
+        this.lastDailyCopyError = storageErrorFrom(error).code;
+      }
+      result.dailyCopyMs = performance.now() - started;
+    }
     for (const id of index.expiredTrash(this.conn, now)) {
       if (this.holders.has(id)) continue;
       index.purgeDoc(this.conn, id);
+      this.changed("doc", id);
       result.purged += 1;
     }
     return result;
@@ -487,6 +541,7 @@ export class Library {
         ),
       ),
       lastDailyCopy: readMeta(db, "last_daily_copy"),
+      lastDailyCopyError: this.lastDailyCopyError,
       today: localDate(this.host.now()),
       // Read back, as set (D-A6; S2 confirmed them on all three OSes).
       pragmas: {

@@ -11,7 +11,7 @@
  */
 import type { SqliteDriver, SqlRow } from "./driver";
 import { StorageError } from "./errors";
-import { randomHex32, readMeta, scalar, transaction, writeMeta } from "./sql";
+import { bumpRev, randomHex32, readRev, scalar, transaction } from "./sql";
 
 export type DocKind = "doc" | "template";
 
@@ -63,6 +63,12 @@ export type SidebarDoc = {
 
 export type SidebarTag = { id: string; name: string; color: string | null };
 
+/**
+ * One changed row, for the change feed (architecture §7 `index.changed`):
+ * a window patches that row instead of re-reading the whole library.
+ */
+export type IndexChange = { kind: "doc" | "folder" | "tag"; id: string };
+
 /** Everything the files sidebar and lists paint from (P2.7a/b). */
 export type SidebarSnapshot = {
   rev: number;
@@ -84,17 +90,6 @@ function requireId(id: string, what: string) {
 
 function cleanName(name: string): string {
   return name.trim().slice(0, MAX_NAME_LENGTH);
-}
-
-export function readRev(db: SqliteDriver): number {
-  return Number.parseInt(readMeta(db, "rev") ?? "0", 10);
-}
-
-/** Bumps `meta.rev`; call inside the write's transaction. */
-function bumpRev(db: SqliteDriver): number {
-  const rev = readRev(db) + 1;
-  writeMeta(db, "rev", String(rev));
-  return rev;
 }
 
 /** Wraps a metadata write: one transaction, `rev` bumped, new rev returned. */

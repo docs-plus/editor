@@ -66,6 +66,12 @@ try {
   post({ type: "open_failed", error: toEnvelope(error) });
 }
 
+/** Sends `index_changed` if anything the sidebar shows moved. */
+function announceChanges(open: Library) {
+  const changed = open.takeIndexChanges();
+  if (changed) post({ type: "index_changed", ...changed });
+}
+
 let idleTimer: ReturnType<typeof setInterval> | null = null;
 if (library) {
   const open = library;
@@ -73,8 +79,9 @@ if (library) {
     try {
       open.runIdleJobs();
     } catch {
-      // A failed daily copy is reported through stats; the library is fine.
+      // Only the Trash purge can throw here; it retries on the next pass.
     }
+    announceChanges(open);
   }, options.idlePollMs ?? 5000);
   idleTimer.unref();
 }
@@ -95,12 +102,14 @@ port.on("message", (request: StorageRequest) => {
     });
     return;
   }
-  const { result, rev } = dispatch(library, request);
+  const open = library;
+  const result = dispatch(open, request);
   post({ type: "reply", id: request.id, result });
-  if (rev !== null) post({ type: "index_changed", rev });
   if (request.op === "shutdown") {
     if (idleTimer) clearInterval(idleTimer);
     library = null;
     port.close();
+    return;
   }
+  announceChanges(open);
 });

@@ -46,6 +46,18 @@ export function writeMeta(db: SqliteDriver, key: string, value: string) {
   ).run(key, value);
 }
 
+/** `meta.rev`: moves on every change the files sidebar shows. */
+export function readRev(db: SqliteDriver): number {
+  return Number.parseInt(readMeta(db, "rev") ?? "0", 10);
+}
+
+/** Bumps `meta.rev`; call inside the write's transaction. */
+export function bumpRev(db: SqliteDriver): number {
+  const rev = readRev(db) + 1;
+  writeMeta(db, "rev", String(rev));
+  return rev;
+}
+
 /** 32 lowercase hex characters from the platform CSPRNG (`link_key`). */
 export function randomHex32(): string {
   const bytes = new Uint8Array(16);
