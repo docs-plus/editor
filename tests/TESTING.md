@@ -87,6 +87,7 @@ tests/
 │   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
 │   ├── tab-close-undo.spec.ts            # Undo pill after closing, Recently closed, purge after the closed window
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
+│   ├── desktop-seams.spec.ts             # Desktop-flag build: no /privacy request, X post as a link card, no X request (desktop project)
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
@@ -229,7 +230,23 @@ make test-perf PERF_HEADINGS=200                  # single size
 make test-perf PERF_HEADINGS=10,50,200           # multiple sizes
 make test-perf PERF_SHAPE=mixed                   # random heading hierarchy (H2–H6)
 make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
+make test-perf PERF_HEADINGS=500                  # 500 headings: needs make dev's 2 MiB cap
 ```
+
+**Document size cap.** A 500-heading flat document is about 1.2 MB as JSON,
+over Hocuspocus's 1 MiB default `MAX_DOC_SIZE_BYTES`. The `Makefile` is the
+one source of the test cap: `make dev-hocus` (and so `make dev`, Playwright's
+`webServer`, CI's e2e job and every nightly job) starts Hocus with
+production's `MAX_DOC_SIZE_BYTES=2097152` (`ecosystem.config.cjs`); an
+environment value overrides it. A Hocus started some other way (`bun run
+hocus` by hand) keeps the 1 MiB default and refuses such a document. Every
+spec that seeds a large document (`performance.spec.ts`,
+`toolbar-perf.spec.ts`, `performance-collab.spec.ts`, `soak.spec.ts`,
+`soak-collab.spec.ts`) calls `EditorPage.expectSavedToServer()` after
+`setContent`: it waits until the server has acknowledged every edit and
+fails with the size notice's text if the server refused them instead, so a
+refusal never passes as a run with no samples. `performance.spec.ts` checks
+it again after typing, before requiring all 220 keystroke samples.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -240,7 +257,7 @@ make test-perf PERF_SHAPE=deep PERF_HEADINGS=50   # deep shape + 50 headings
 | `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run |
 | `TOOLBAR_PERF_CPU_THROTTLE` | `1` | CDP CPU throttle for both arms of the arrow p95 in `toolbar-perf.spec.ts` (local reproduction of a slow runner; informational, the ceilings are absolute) |
 
-`performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500`.
+`performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
 
 The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as CI and `make test-e2e` do) times typing only after the parallel suite has finished, so other workers never compete for the CPU. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
 
@@ -295,6 +312,22 @@ PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
 ```
 
 Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts`.
+
+### Desktop-flag build
+
+| Test | Project | Validates |
+|------|---------|-----------|
+| `desktop-seams.spec.ts` | `desktop` (production build with `NEXT_PUBLIC_APP_TARGET=desktop`) | `/about` and the editor never request `/privacy` (the Privacy links go to the website's page in a new window); a pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts or loads `widgets.js` |
+
+Prefetch runs only in production builds, so this needs one. Use free ports and localhost only:
+
+```bash
+NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build && PORT=3849 bun run start
+HOCUS_PORT=1296 HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
+DESKTOP_BASE_URL=http://localhost:3849 CI= bun playwright test --project=desktop
+```
+
+The web behaviour with the flag off, and the flag-on branches, are unit tested in `tests/unit/extensions/x-link-card.test.ts`, `tests/unit/helpers/media-embed.test.ts` and `tests/unit/components/privacy-link.test.tsx`.
 
 Manual install checklist (localhost production build):
 
@@ -396,7 +429,7 @@ nightly job runs server and script at production's 2 MiB
 | `COLOR_SOAK_RATE` | `1000` | Toggles per second, all clients (`0` = unpaced) |
 | `COLOR_SOAK_SEED` | time | PRNG seed, printed; set it to replay a run |
 | `COLOR_SOAK_URL` | `ws://127.0.0.1:1234` | Hocuspocus WebSocket URL |
-| `MAX_DOC_SIZE_BYTES` | `1048576` | Size cap; give the server the same value |
+| `MAX_DOC_SIZE_BYTES` | `1048576` | Size cap; give the server the same value (`make dev-hocus` alone runs at `2097152`, so the script's default is stricter than the server) |
 
 **Mixed-version soak (`mixed-version-soak.ts`, spec §3.1 N+1 ship gate).**
 `HOCUS_MIN_CLIENT_SCHEMA` stays unset (log-only by env), but the built-in

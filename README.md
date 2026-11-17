@@ -166,7 +166,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
 | `NEXT_PUBLIC_ACTION_PREVIEW` | on | `0` turns off colour previews: pointing at or arrowing to a swatch no longer shows it on the selection. |
 | `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size, Simplified toolbar) and the "Continue where you left off" place: it shows the defaults and writes nothing, and the Simplified toolbar item is disabled with the reason. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`, `tinydocy-continue`) and never reach the document, the server, URLs or analytics. |
-| `NEXT_PUBLIC_APP_TARGET` | `web` | `desktop` for the desktop app's build: Subscript moves to ⌘⇧, so ⌘, can open Settings. |
+| `NEXT_PUBLIC_APP_TARGET` | `web` | `desktop` for the desktop app's build: Subscript moves to ⌘⇧, so ⌘, can open Settings; Privacy links to the website's page in a new window; X posts render as a link card with no X script, and the Embed dialog leaves X out. See arch §3.1 in the desktop architecture spec. |
 | `NEXT_PUBLIC_BUILD_ID` | short git commit, else package version | Build identifier the client sends as `build=` on the socket URL; shows up in the server's per-minute `client_schema` log line. |
 | `NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES` | 262144 | Images are downscaled in the browser to this size before embedding. |
 | `NEXT_PUBLIC_MAX_TABS_PER_CLIENT` | 50 | Tab cap in the UI. |
@@ -185,7 +185,7 @@ operational guidance is in the
 | `HOCUS_PORT`, `HOCUS_HOST` | 1234, `0.0.0.0` | Where Hocuspocus listens. |
 | `TRUSTED_PROXY` | off | `1` only when every request comes through one reverse proxy that appends `X-Forwarded-For`. |
 | `HOCUS_ALLOWED_ORIGINS` | any | Comma-separated browser origins allowed to open sockets. |
-| `MAX_DOC_SIZE_BYTES` | 1 MiB | Per-document cap; production sets 2 MiB. Playground and tab-list caps are separate. |
+| `MAX_DOC_SIZE_BYTES` | 1 MiB | Per-document cap; production and `make dev` set 2 MiB. Playground and tab-list caps are separate. |
 | `WS_CONNECTION_LIMIT`, `WS_SOCKETS_PER_IP`, `MAX_WS_SOCKETS` | 10, 30, 5000 | Connection limits. |
 | `DOC_CREATION_RATE_LIMIT`, `MAX_TOTAL_DOCUMENTS` | 10/h, 2000 | Document creation limits. |
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |

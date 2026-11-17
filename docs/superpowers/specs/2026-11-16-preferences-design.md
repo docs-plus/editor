@@ -907,7 +907,7 @@ Desktop and the web library are new installs on new storage, so they get the new
 - **Size.** S: 0.5 day, with unit tests for each rule (including a Persian name with ZWNJ and an RTL-override attack string).
 
 **Links (F5):**
-- Add `.tiptap a { text-decoration: underline; text-underline-offset: .15em }`. *Shipped (F5): the underline already existed in the LINKS block of `paragraph-node.scss`; F5 added only the `0.15em` offset there, pinned underline and offset in every context (`tests/e2e/link-underlines.spec.ts`), and raised dark `--link-text-color` to `#5b9cf2` (7.05:1 on `--background`, 6.39:1 on `--card`).*
+- Add `.tiptap a { text-decoration: underline; text-underline-offset: .15em }`. *Shipped (F5): the underline already existed in the LINKS block of `paragraph-node.scss`; F5 added only the `0.15em` offset there, pinned underline and offset in every context (`tests/e2e/link-underlines.spec.ts`), and raised dark `--link-text-color` to `#5b9cf2` (7.05:1 on `--background`, 6.39:1 on `--card`). #104 then raised it to `#93c5fd` so links on every highlight colour reach 4.5:1 too (yellow is the limit at 4.60:1); `token-contrast.test.ts` pins every highlight × link pair in both themes.*
 - Check that `@docs.plus/extension-hyperlink`'s `text-decoration: none` (`styles.css:324`) targets only its popover, and override it if it hits document links.
 - This is WCAG 1.4.1, not a setting. S, with screenshots in the design review.
 
