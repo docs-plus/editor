@@ -9,6 +9,31 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Selection bubble P0: a plugin-free controller and a first-line anchor
+
+The selection bubble no longer registers a ProseMirror plugin from its lazy
+chunk, and it anchors to the line it belongs to (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §12.1, v1 contract A18). The
+editor chunk group is unchanged (393,171 B gz, −1 B against `main`), and the
+bubble chunk shrinks from 12,238 B to 9,625 B gz (−2,613 B).
+
+#### Changed
+
+- **Bubble:** a `BubbleController` per editor shows, hides and positions the
+  bubble instead of Tiptap's `BubbleMenu`, so the bubble chunk landing no
+  longer rebuilds all 29 plugin views. The DOM contract is unchanged: one
+  `[data-smart-bubble]` root, appended to the scroll container on show and
+  removed on hide.
+- **Bubble:** it anchors to the first selected line that shows, not to the
+  box around the whole selection, so a selection that starts on a wrapped
+  line no longer covers the line above. Below the text, it stays in view
+  when the selection runs past the bottom of the window.
+
+#### Fixed
+
+- **Bubble:** select all (⌘A / Ctrl+A) shows the bubble, under the first
+  visible line; a whitespace-only selection shows none.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
