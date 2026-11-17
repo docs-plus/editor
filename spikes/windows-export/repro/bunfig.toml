@@ -1,0 +1,7 @@
+# Same supply-chain guardrail as the repo root: only versions public for at
+# least 3 days (seconds).
+[install]
+minimumReleaseAge = 259200
+
+[run]
+bun = true
