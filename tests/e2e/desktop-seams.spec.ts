@@ -3,12 +3,13 @@ import { expect, type Page, test } from "@playwright/test";
 import { EditorPage } from "./helpers/editor-page";
 
 /**
- * The desktop renderer's web seams (#99, #101), against a production build
- * made with the desktop flag (prefetch runs only in production builds):
- *   NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build
- *   PORT=3849 bun run start
+ * The desktop renderer (#99, #101, P2.4), against the desktop static export
+ * served with the protocol handler's path rules (prefetch runs only in
+ * production builds):
+ *   NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build:desktop
+ *   PORT=3849 bun scripts/serve-desktop-export.ts
  *   HOCUS_PORT=1296 HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
- *   DESKTOP_BASE_URL=http://localhost:3849 CI= bun playwright test --project=desktop
+ *   DESKTOP_BASE_URL=http://127.0.0.1:3849 CI= bun playwright test --project=desktop
  */
 test.skip(!process.env.DESKTOP_BASE_URL, "needs a desktop-flag build");
 
@@ -41,6 +42,50 @@ async function paste(page: Page, text: string): Promise<void> {
 }
 
 test.describe("desktop build", () => {
+  test("the export answers every request the renderer makes", async ({
+    page,
+  }) => {
+    const origin = new URL(test.info().project.use.baseURL ?? "").origin;
+    const failed: string[] = [];
+    page.on("response", (response) => {
+      const url = new URL(response.url());
+      if (url.origin === origin && response.status() >= 400) {
+        failed.push(`${response.status()} ${url.pathname}${url.search}`);
+      }
+    });
+    const urls = recordRequests(page);
+
+    // The header links prefetch both pages' segments; the click is a
+    // client navigation that fetches the RSC payload (.txt).
+    await page.goto("/about");
+    await page.waitForLoadState("networkidle");
+    await page
+      .getByRole("navigation", { name: "Site" })
+      .getByRole("link", { name: "Open the editor" })
+      .click();
+    await expect(page).toHaveURL(/\/$/);
+    await new EditorPage(page).waitForSync();
+    await page.waitForLoadState("networkidle");
+
+    expect(failed).toEqual([]);
+    const paths = urls.map((url) => new URL(url).pathname);
+    expect(paths.some((path) => path.endsWith(".txt"))).toBe(true);
+    // The page links it; headless Chromium doesn't fetch icons itself.
+    const href = await page
+      .locator('link[rel="icon"][type="image/png"]')
+      .getAttribute("href");
+    const icon = await page.request.get(href ?? "");
+    expect(icon.status()).toBe(200);
+    expect(icon.headers()["content-type"]).toBe("image/png");
+    expect(
+      paths.filter((path) =>
+        /^\/(manifest\.webmanifest|opengraph-image|apple-icon|sitemap|robots|api\/|privacy|offline)/.test(
+          path,
+        ),
+      ),
+    ).toEqual([]);
+  });
+
   test("/about links to the website's privacy page and never fetches /privacy", async ({
     page,
   }) => {

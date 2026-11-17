@@ -102,6 +102,43 @@ change; no Deploy note.
 - **Build:** `scripts/check-editor-chunk-size.ts` budget is `main` at
   P2.2 plus the D23 ledger (+16,864 B), and it prints exact bytes.
 
+### Desktop renderer export (P2.4)
+
+`bun run build:desktop` builds the desktop renderer: the static export the
+Electron shell will load. The web build is unchanged. Its route table, client
+chunks (names and sizes), manifests and every page apart from `/icon`'s URL
+match `main`. The `/icon?<hash>` cache-buster changes because `app/icon.tsx`
+gained `dynamic = "force-static"`; the PNG is byte-identical.
+
+#### Added
+
+- `bun run build:desktop` (`scripts/build-desktop.ts`) writes `out/` with
+  `NEXT_PUBLIC_APP_TARGET=desktop` and `output: "export"`. Desktop routes:
+  `/`, `/about`, `/_not-found`, `/icon`. It fails if a web-only route, a web
+  metadata tag or the Windows segment layout (#103) reaches `out/`.
+- `desktop/shared/export-paths.ts`: the `app://` protocol handler's path rules
+  for P2.5. `/about` maps to `about.html`, RSC `.txt` files keep their
+  exported names, and the extension-less `/icon` is `image/png`. Unknown
+  types and traversal are refused. `scripts/serve-desktop-export.ts` serves
+  `out/` with them for tests.
+- The `desktop` Playwright project runs on the export instead of `next start`.
+  It checks that every request the renderer makes is answered and none goes
+  to a web-only route. Nightly runs it on Linux (`desktop-renderer`).
+
+#### Changed
+
+- Web-only route handlers are `route.web.ts(x)` (`app/api/**`, `llms.txt`,
+  `pwa-icons/[id]`). `next.config.ts` switches `pageExtensions`, `output` and
+  `headers()` on the target flag.
+- The export parks the five web metadata files and the `/privacy` and
+  `/offline` pages in `.desktop-export-parked/` for the build and puts them
+  back, as spike #115 measured is required. Renaming the pages would drop
+  their font preload on the web: Next 16.4.6 looks up `page.web` in a font
+  manifest keyed `page`.
+- `next.config.ts` refuses a web build while anything is parked.
+- The desktop build never registers the service worker, whose precache lists
+  `/privacy` (#117 follow-up).
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that
