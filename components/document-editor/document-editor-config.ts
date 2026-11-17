@@ -31,6 +31,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
 import DOMPurify from "dompurify";
 import { Marked, type marked } from "marked";
+import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension";
@@ -45,6 +46,7 @@ import {
   renderCaret,
   renderCaretSelection,
 } from "@/extensions/collaboration-caret/safe-caret-render";
+import { DecorationHost } from "@/extensions/decoration-host/decoration-host";
 import { EditorActionShortcuts } from "@/extensions/editor-action-shortcuts";
 import { HeadingDrag } from "@/extensions/heading-drag";
 import {
@@ -65,6 +67,7 @@ import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
+import { WriteGate } from "@/extensions/write-gate/write-gate";
 import { SUBSCRIPT_SHORTCUT } from "@/lib/app-shortcuts";
 import { lowlight } from "@/lib/lowlight";
 
@@ -143,7 +146,15 @@ function createMarkedInstance(): typeof marked {
 interface BuildDocumentEditorExtensionsOptions {
   documentId: string;
   ydoc: Y.Doc;
-  provider: HocuspocusProvider;
+  /**
+   * The session's one Awareness. It outlives any provider, so attaching or
+   * detaching one never rebuilds the extensions (no `setOptions`).
+   */
+  awareness: Awareness;
+  /** The provider of the moment, if any; read, never a dependency. */
+  getProvider: () => HocuspocusProvider | null;
+  /** WriteGate's check: false blocks every local document change. */
+  canWrite: () => boolean;
   onFoldChange: (foldedIds: Set<string>) => void;
   onFilterChange: (state: HeadingFilterCallbackState) => void;
   onTocUpdate: (anchors: TableOfContentData) => void;
@@ -176,7 +187,9 @@ function createHeadingFilterFoldAdapter() {
 export function buildDocumentEditorExtensions({
   documentId,
   ydoc,
-  provider,
+  awareness,
+  getProvider,
+  canWrite,
   onFoldChange,
   onFilterChange,
   onTocUpdate,
@@ -234,11 +247,22 @@ export function buildDocumentEditorExtensions({
     CaretBlockVisible,
     RepeatFormatting,
     SlashTrigger,
+    // The caret reads only `provider.awareness` (3.x runtime), so it gets
+    // the session's Awareness and works with no provider at all. UniqueID
+    // finds this option too and waits for its "synced" event: forwarded to
+    // the provider of the moment, as before (none on desktop Local).
     CollaborationCaret.configure({
-      provider,
+      provider: {
+        awareness,
+        on: (event: string, fn: () => void) => getProvider()?.on(event, fn),
+        off: (event: string, fn: () => void) => getProvider()?.off(event, fn),
+      },
       render: renderCaret,
       selectionRender: renderCaretSelection,
     }),
+    WriteGate.configure({ canWrite }),
+    // Comment highlights and Find hits declare their layers here (rule 6).
+    DecorationHost,
     HorizontalRule,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     TaskList,
