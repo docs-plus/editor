@@ -9,6 +9,28 @@ since the previous tag.
 
 ## [Unreleased]
 
+### CSS icons as files, so the desktop CSP needs no `data:` images
+
+The eight `data:image/svg+xml` icons in the stylesheets (seven unique) would be
+blocked by the desktop app's `img-src 'self'` (#102). They now ship as files.
+
+#### Changed
+
+- **Icons:** the phone bar's context-slot icons (Heading, Code, Table, Media),
+  the checklist tick and the heading drag grip are SVG files beside their
+  stylesheets. The bundler serves them as hashed `/_next/static/media/*.svg`
+  (`image/svg+xml`), so they look the same in both themes. The drag grip is
+  now one mask tinted per theme, and draws in the system text colour under
+  forced colours.
+- **Offline:** when the service worker stores a stylesheet, it also stores
+  the `/_next/static` files the sheet references, so CSS icons draw offline
+  even before they were first shown.
+- **Tests:** a unit test fails if a stylesheet uses a `data:` URL again or
+  points a relative `url()` at a missing file.
+
+The web CSP keeps `data:` in `img-src`: images inserted into documents are
+stored as `data:` URLs.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
