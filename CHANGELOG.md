@@ -14,8 +14,9 @@ since the previous tag.
 `use-yjs-document` now opens documents through the `DocSession` its
 composition root provides, instead of importing `collab-session`. The web
 provides the sandbox adapter, which wraps `collab-session` unchanged, so
-nothing changes for users (editor chunk group +28 B gz, first load
-+428 B gz). The desktop and library roots will provide `local-session`.
+nothing changes for users. The adapter loads with the lazy editor chunk,
+not on first load (first load −33 B gz, editor chunk group +415 B gz). The
+desktop and library roots will provide `local-session`.
 
 #### Added
 
@@ -23,6 +24,9 @@ nothing changes for users (editor chunk group +28 B gz, first load
   (`DocSessionProvider`, `useDocSession`) and
   `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
   sandbox `DocSession` over `collab-session`).
+- **Editor:** `components/editor-app/sandbox-document-editor.tsx`, the web
+  wrapper that `EditorApp` loads lazily in place of `DocumentEditor`: the
+  editor under the sandbox `DocSession`.
 - **Tests:** an import-boundary test that neither the hook nor any module in
   `components/document-editor/` loads `collab-session` or a platform
   adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
@@ -30,9 +34,8 @@ nothing changes for users (editor chunk group +28 B gz, first load
 
 #### Changed
 
-- **Editor:** `EditorApp` provides `sandboxDocSession` around the editor;
-  `use-yjs-document` returns the same fields as before, now read from the
-  `DocSession` handle.
+- **Editor:** `use-yjs-document` returns the same fields as before, now read
+  from the `DocSession` handle.
 - **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
   Reload button saves through `DocSession.flush()` (on the web, the same
   device-copy flush as before) before reloading.
