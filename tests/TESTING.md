@@ -55,11 +55,12 @@ tests/
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
 │   ├── api/                              # Route handlers: DELETE rate limit; soft close, batch restore and Recently closed list (temp DB_PATH)
-│   ├── scripts/                          # Retention purge (stale and closed documents), operator delete-document, Hocus client gate and root sweep
+│   ├── scripts/                          # Retention purge (stale and closed documents), operator delete-document, Hocus client gate and root sweep, desktop export parking and output check
 │   ├── lib/                              # Image embed planner and pipeline; `assets/` PNG, WebP and JPEG metadata stripper; security guardrails (incl. closed-documents store), import boundaries (server entries never reach `lib/tab-api` or `@hocuspocus/provider`), legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets, document link colour ≥ 4.5:1 on background and card in both themes), theme boot script and System theme (`theme.test.ts`), identity validation and blocked storage (`user-identity.test.ts`)
 │   ├── editor-actions/                   # Action contract and core actions; shortcut-bindings.test.ts: every advertised key bound once, tab-bar keys kept out of the editor keymap, Subscript by build target; playground-regenerate.test.ts: Regenerate Playground offered in the Playground only
 │   ├── components/                       # React components in happy-dom (toolbar button, menus, insert menu, ThemeToggle's phone cycle in `theme-toggle.test.tsx`); the identity dialog's inline name errors and the normalised broadcast (`user-identity-dialog.test.tsx`)
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds, remote caret names and colours clamped at render (`safe-caret-render.test.ts`)
+│   ├── desktop/                          # Desktop shared modules: the static export's path rules (`export-paths.test.ts`)
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
@@ -87,7 +88,7 @@ tests/
 │   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
 │   ├── tab-close-undo.spec.ts            # Undo pill after closing, Recently closed, purge after the closed window
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
-│   ├── desktop-seams.spec.ts             # Desktop-flag build: no /privacy request, X post as a link card, no X request (desktop project)
+│   ├── desktop-seams.spec.ts             # Desktop static export: every request answers, no web-only route or /privacy request, X post as a link card (desktop project)
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
@@ -313,19 +314,22 @@ PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
 
 Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts`.
 
-### Desktop-flag build
+### Desktop renderer (static export)
 
 | Test | Project | Validates |
 |------|---------|-----------|
-| `desktop-seams.spec.ts` | `desktop` (production build with `NEXT_PUBLIC_APP_TARGET=desktop`) | `/about` and the editor never request `/privacy` (the Privacy links go to the website's page in a new window); a pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts or loads `widgets.js` |
+| `desktop-seams.spec.ts` | `desktop` (the desktop static export, `bun run build:desktop`, served with the `app://` protocol handler's path rules) | Every same-origin request the renderer makes on `/about`, a client navigation to `/` and a synced editor answers (pages as `.html`, RSC `.txt` payloads and segment prefetches, `/icon` as `image/png`), and none goes to a web-only route (manifest, Open Graph image, Apple icon, sitemap, robots, `/api`, `/privacy`, `/offline`); `/about` and the editor never request `/privacy` (the Privacy links go to the website's page in a new window); a pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts or loads `widgets.js` |
 
-Prefetch runs only in production builds, so this needs one. Use free ports and localhost only:
+Prefetch runs only in production builds, so this runs on the export. Nightly runs it on Linux (`desktop-renderer` in `nightly.yml`), where releases build the renderer (#103). Use free ports and localhost only:
 
 ```bash
-NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build && PORT=3849 bun run start
+NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build:desktop
+PORT=3849 bun scripts/serve-desktop-export.ts
 HOCUS_PORT=1296 HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
-DESKTOP_BASE_URL=http://localhost:3849 CI= bun playwright test --project=desktop
+DESKTOP_BASE_URL=http://127.0.0.1:3849 CI= bun playwright test --project=desktop
 ```
+
+`bun run build:desktop` parks the web-only metadata files and pages for the build, puts them back, and fails if a web-only route, a web metadata tag or the Windows segment layout reaches `out/`. Its parking rules are unit tested in `tests/unit/scripts/desktop-export.test.ts`, the path rules in `tests/unit/desktop/export-paths.test.ts`, and the desktop build never registering the service worker in `tests/unit/components/service-worker-registration.test.ts`.
 
 The web behaviour with the flag off, and the flag-on branches, are unit tested in `tests/unit/extensions/x-link-card.test.ts`, `tests/unit/helpers/media-embed.test.ts` and `tests/unit/components/privacy-link.test.tsx`.
 
