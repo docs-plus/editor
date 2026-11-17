@@ -76,7 +76,8 @@ jobs:
 
       - name: Block Node.js (Windows twin)
         if: runner.os == 'Windows'
-        run: printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
+        run: |
+          printf '@echo ::error::node was called: %%*\r\n@exit /b 1\r\n' > "$RUNNER_TEMP/no-node/node.cmd"
 
       - name: Export
         run: bun next build
