@@ -9,6 +9,38 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Editor without a provider; WriteGate; the editor-chunk fence (P2.2)
+
+Desktop Phase 2, P2.2. The web editor behaves as before: it still gets its
+provider, and nothing passes the new read-only prop. The editor chunk goes
+from +15,691 B to +15,988 B (+297 B of P2.2's 300 B line in the D23 ledger),
+and the budget drops from 23.5 KB to +17,271 B (`main` plus the 1,580 B
+ledger), leaving 1,283 B for the ledger's other lines. No schema or protocol
+change; no Deploy note.
+
+#### Added
+
+- **Editor:** `DocumentEditor` takes the session's Awareness and accepts no
+  provider. With none, the connection chip isn't rendered and no socket
+  opens. Carets use the Awareness directly, and the extension list depends
+  on it rather than on the provider, so attaching a provider later never
+  rebuilds the extensions (no `setOptions`).
+- **Editor:** `WriteGate` (`extensions/write-gate/`), a `filterTransaction`
+  plugin over a ref. With the new `readOnly` prop, no local ProseMirror
+  change reaches the document, including the writes plugins make when a
+  document opens. Changes from collaborators still apply. The schema
+  guard's repair writes Yjs directly and is not gated yet; it must be when
+  something first sets `readOnly`.
+- **Editor:** the decoration host (`extensions/decoration-host/`): declared
+  layers each get a plugin holding a `DecorationSet`, set by the meta-only
+  `setDecorationLayer` command, either mapped or cleared on document
+  changes. No layer is declared yet; comments and Find will declare theirs.
+
+#### Changed
+
+- **Build:** `scripts/check-editor-chunk-size.ts` budget is `main` at
+  P2.2 plus the D23 ledger (+17,271 B), and it prints exact bytes.
+
 ### Deploy: run install scripts on Bun, not the host's Node 14
 
 The first automated deploy failed at `bun install`: husky's `prepare` script
