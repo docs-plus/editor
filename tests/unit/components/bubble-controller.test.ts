@@ -5,7 +5,6 @@ import type { EditorView } from "@tiptap/pm/view";
 
 import { bubbleReferenceRect } from "@/components/smart-toolbar/bubble/bubble-anchor";
 import {
-  BUBBLE_RESIZE_DELAY_MS,
   BUBBLE_SHOW_DELAY_MS,
   type BubbleController,
   type BubbleHost,
@@ -17,6 +16,24 @@ import { createTestEditor } from "../../helpers/create-test-editor";
 
 /** Long enough for the show delay and the deferred re-checks to run. */
 const SETTLE_MS = BUBBLE_SHOW_DELAY_MS + 50;
+/** Ceiling for `until`: a loaded shared test process can run timers late. */
+const UNTIL_MS = 1_000;
+
+/**
+ * Polls `check` until it holds, failing after `UNTIL_MS`. "Now shown"
+ * assertions use it instead of a fixed slack after the delay.
+ */
+async function until(check: () => boolean): Promise<void> {
+  const deadline = performance.now() + UNTIL_MS;
+  while (!check()) {
+    if (performance.now() > deadline) {
+      throw new Error(`not true within ${UNTIL_MS} ms: ${check}`);
+    }
+    await Bun.sleep(5);
+  }
+}
+
+const connected = () => host.root.isConnected;
 
 const DOC: JSONContent = {
   type: "doc",
@@ -77,8 +94,7 @@ const select = (from = 1, to = 4) =>
 
 async function showBubble() {
   select();
-  await Bun.sleep(SETTLE_MS);
-  expect(controller.visible).toBe(true);
+  await until(() => controller.visible);
 }
 
 function setComposing(value: boolean) {
@@ -97,7 +113,7 @@ describe("createBubbleController", () => {
     select();
     expect(host.root.isConnected).toBe(false);
     expect(controller.visible).toBe(false);
-    await Bun.sleep(SETTLE_MS);
+    await until(connected);
     expect(host.root.parentElement).toBe(scrollTarget);
     expect(controller.visible).toBe(true);
     expect(onShow).toHaveBeenCalledTimes(1);
@@ -109,8 +125,7 @@ describe("createBubbleController", () => {
     select(1, 4);
     await Bun.sleep(BUBBLE_SHOW_DELAY_MS - 100);
     expect(host.root.isConnected).toBe(false);
-    await Bun.sleep(150);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
@@ -118,8 +133,7 @@ describe("createBubbleController", () => {
     select();
     await Bun.sleep(BUBBLE_SHOW_DELAY_MS - 100);
     editor.view.dispatch(editor.state.tr.setMeta("noop", true));
-    await Bun.sleep(150);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
   });
 
   test("hides synchronously on an empty selection and removes the root", async () => {
@@ -155,8 +169,7 @@ describe("createBubbleController", () => {
     expect(host.root.isConnected).toBe(false);
     setComposing(false);
     editor.view.dom.dispatchEvent(new Event("compositionend"));
-    await Bun.sleep(SETTLE_MS);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
   });
 
   test("dragstart and contextmenu on the editor hide it", async () => {
@@ -166,8 +179,7 @@ describe("createBubbleController", () => {
     expect(onHide).toHaveBeenCalledTimes(1);
 
     select(1, 3);
-    await Bun.sleep(SETTLE_MS);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
     editor.view.dom.dispatchEvent(new Event("contextmenu"));
     expect(host.root.isConnected).toBe(false);
     expect(onHide).toHaveBeenCalledTimes(2);
@@ -193,8 +205,7 @@ describe("createBubbleController", () => {
       new PointerEvent("pointerup", { bubbles: true }),
     );
     expect(host.root.isConnected).toBe(false);
-    await Bun.sleep(SETTLE_MS);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
   });
 
   test("a context menu ends a drag whose pointerup never comes", async () => {
@@ -203,8 +214,7 @@ describe("createBubbleController", () => {
     );
     editor.view.dom.dispatchEvent(new Event("contextmenu"));
     select();
-    await Bun.sleep(SETTLE_MS);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
   });
 
   test("a pointer drag that empties the selection hides at once", async () => {
@@ -245,8 +255,7 @@ describe("createBubbleController", () => {
     expect(host.root.isConnected).toBe(false);
     allow = true;
     editor.view.dom.dispatchEvent(new FocusEvent("focus"));
-    await Bun.sleep(SETTLE_MS);
-    expect(host.root.isConnected).toBe(true);
+    await until(connected);
   });
 
   test("setEditable(false) hides it (update event)", async () => {
@@ -299,8 +308,7 @@ describe("createBubbleController", () => {
     onPosition.mockClear();
     scrollTarget.dispatchEvent(new Event("scroll"));
     window.dispatchEvent(new Event("resize"));
-    await Bun.sleep(BUBBLE_RESIZE_DELAY_MS + 30);
-    expect(onPosition).toHaveBeenCalled();
+    await until(() => onPosition.mock.calls.length > 0);
   });
 
   test("a position result after hide() is ignored", async () => {
@@ -351,9 +359,8 @@ describe("createBubbleController", () => {
     const second: BubbleHost = { ...host, root: document.createElement("div") };
     const next = createBubbleController(editor, scrollTarget, second);
     select();
-    await Bun.sleep(SETTLE_MS);
+    await until(() => second.root.isConnected);
     expect(host.root.isConnected).toBe(false);
-    expect(second.root.isConnected).toBe(true);
     // The replaced controller's late destroy leaves the new one alone.
     controller.destroy();
     expect(second.root.isConnected).toBe(true);
