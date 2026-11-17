@@ -17,6 +17,8 @@
  * - `readonly`: opens a newer library (T6) and tries to write.
  * - `commit-timing`: append round trips with `fullfsync` on or off (T3).
  * - `startup`: worker spawn → ready → sidebar rows (T8, the §10 budget).
+ * - `copy-quit`: quit while the daily copy runs in its thread (decision 5).
+ * - `copy-time`: how long the batched daily copy takes (decision 5).
  *
  * An uncaught throw in Electron main opens a modal dialog, so every failure
  * exits with `process.exit(1)` after printing `HARNESS_FAIL`.
@@ -279,6 +281,87 @@ async function commitTiming() {
   await client.shutdown();
 }
 
+/**
+ * Decision 5: quit while the daily copy runs in its thread. Waits for the
+ * library to go idle (the copy starts), keeps typing through the copy (the
+ * writer must not wait on it), then runs the quit flush.
+ */
+async function copyQuit() {
+  const docId = args.doc ?? fail("--doc is required");
+  const client = await StorageClient.start(workerPath(), {
+    dir: dir(),
+    trace: true,
+    idleMs: 300,
+    idlePollMs: 100,
+  });
+  const owner = "copy-quit";
+  const loaded = await client.call("load", { docId, owner });
+  const doc = new Y.Doc();
+  if (loaded.snapshot) Y.applyUpdate(doc, loaded.snapshot);
+  for (const update of loaded.updates) Y.applyUpdate(doc, update);
+  let k =
+    editCount(doc.getText(TEXT).toString()) ?? fail("stored text is broken");
+  say(`READY ${k}`);
+  // Stay idle until the copy thread is running, then type through it.
+  const waitUntil = performance.now() + 10_000;
+  while (!(await client.call("stats", {})).dailyCopyRunning) {
+    if (performance.now() > waitUntil) fail("the daily copy never started");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  const appendMs: number[] = [];
+  const typeFor = Number(args["type-ms"] ?? 150);
+  const started = performance.now();
+  while (performance.now() - started < typeFor) {
+    k += 1;
+    let update: Uint8Array = new Uint8Array();
+    doc.once("update", (u: Uint8Array) => {
+      update = u;
+    });
+    const text = doc.getText(TEXT);
+    text.insert(text.length, `${k};`);
+    const t0 = performance.now();
+    await client.call("append", {
+      docId,
+      owner,
+      record: { origin: "local", update },
+    });
+    appendMs.push(performance.now() - t0);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const quitAt = performance.now();
+  const outcome = await client.shutdown();
+  say(
+    `QUIT ${outcome} ${k} ${Math.round(performance.now() - quitAt)} ${Math.round(Math.max(...appendMs))}`,
+  );
+}
+
+/** Decision 5: how long the batched daily copy takes on node:sqlite. */
+async function copyTime() {
+  const client = await StorageClient.start(workerPath(), {
+    dir: dir(),
+    idleMs: 0,
+    idlePollMs: 50,
+  });
+  const today = (await client.call("stats", {})).today;
+  const deadline = performance.now() + 300_000;
+  for (;;) {
+    const stats = await client.call("stats", {});
+    if (stats.lastDailyCopy === today || stats.lastDailyCopyError) {
+      say(
+        `COPYTIME ${JSON.stringify({
+          ms: stats.lastDailyCopyMs,
+          error: stats.lastDailyCopyError,
+          libraryBytes: stats.bytes,
+        })}`,
+      );
+      break;
+    }
+    if (performance.now() > deadline) fail("the daily copy never finished");
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await client.shutdown();
+}
+
 async function startup() {
   // performance.now() counts from process start in Node and Electron main.
   const spawnAt = performance.now();
@@ -310,6 +393,8 @@ const MODES: Record<string, () => Promise<void>> = {
   readonly,
   "commit-timing": commitTiming,
   startup,
+  "copy-quit": copyQuit,
+  "copy-time": copyTime,
 };
 
 app.whenReady().then(async () => {
