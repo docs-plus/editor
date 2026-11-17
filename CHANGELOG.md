@@ -13,9 +13,9 @@ since the previous tag.
 
 Desktop Phase 2, P2.2. The web editor behaves as before: it still gets its
 provider, and nothing passes the new read-only prop. The editor chunk goes
-from +15,691 B to +15,988 B (+297 B of P2.2's 300 B line in the D23 ledger),
-and the budget drops from 23.5 KB to +17,271 B (`main` plus the 1,580 B
-ledger), leaving 1,283 B for the ledger's other lines. No schema or protocol
+from +15,674 B to +15,968 B (+294 B of P2.2's 300 B line in the D23 ledger),
+and the budget drops from 23.5 KB to +17,254 B (`main` plus the 1,580 B
+ledger), leaving 1,286 B for the ledger's other lines. No schema or protocol
 change; no Deploy note.
 
 #### Added
@@ -39,7 +39,7 @@ change; no Deploy note.
 #### Changed
 
 - **Build:** `scripts/check-editor-chunk-size.ts` budget is `main` at
-  P2.2 plus the D23 ledger (+17,271 B), and it prints exact bytes.
+  P2.2 plus the D23 ledger (+17,254 B), and it prints exact bytes.
 
 ### Dark links on highlighted text
 

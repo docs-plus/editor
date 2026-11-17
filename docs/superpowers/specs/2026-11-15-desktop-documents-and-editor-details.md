@@ -56,7 +56,7 @@ These came out of the staff feasibility review. Each one was checked against the
 
    | Line | PR (owner) | Cap (gz) |
    |---|---|---|
-   | No provider, `WriteGate` and the decoration host | P2.2 | 300 B (measured 297 B) |
+   | No provider, `WriteGate` and the decoration host | P2.2 | 300 B (measured 294 B) |
    | Comments hook | P4.9 | 150 B |
    | Smart-quotes gate | P2.9c-1 | 150 B |
    | i18n core (`t()`, registry labels, `lang`/`dir`; also pays L3's `matchShortcut` / `visualStep` bytes, languages §3.7.1) | L1a | 400 B |
@@ -68,7 +68,7 @@ These came out of the staff feasibility review. Each one was checked against the
    | Undo-gesture handler, **only if spike M18 shows native undo mutates the DOM** (D41, v8) | M19 | 80 B, conditional |
    | **Total** | | **1,580 B, or 1,660 B with the undo handler** |
 
-   - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,691 B, so P2.2 set the fence at +17,271 B (15,691 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,283 B remain for the other lines.
+   - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,674 B (1ed981e), so P2.2 set the fence at +17,254 B (15,674 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,286 B remain for the other lines.
    - **Phones (D41):** M27's hardware-keyboard listener (shortcut glyphs) stays **out** of the editor chunk.
    - **Fencing:** P2.2 lowers `EDITOR_CHUNK_BUDGET_BYTES` to the size on `main` plus the ledger total, so unrelated work can't spend these bytes. Raising it needs an amendment to this rule. While D41's conditional 80 B undo line is unconfirmed, the fence is `main` + 1,580 B. If spike M18 confirms the line, the fence rises to `main` + 1,660 B with no further approval (pre-approved by D41).
    - **A PR that would go over its line** stops for a budget review. A line's unused bytes don't move to another line without an amendment.

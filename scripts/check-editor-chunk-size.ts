@@ -21,11 +21,11 @@ import { join } from "node:path";
 /** Gzipped bytes of the editor chunk group at `58a9d22`. */
 export const EDITOR_CHUNK_BASELINE_BYTES = 377_888;
 /**
- * Growth on `main` (f9cfc3a) when P2.2 set the fence: the smart toolbar v1
+ * Growth on `main` (1ed981e) when P2.2 set the fence: the smart toolbar v1
  * and everything merged before the desktop work. Its old 23.5 KB budget
  * (contract A12) is replaced by the fence below.
  */
-export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_691;
+export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_674;
 /**
  * The D23 editor-chunk ledger (desktop details spec §1 rule 5): every line
  * the desktop, library and v1 feature work may add to this chunk, each
