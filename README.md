@@ -185,7 +185,7 @@ operational guidance is in the
 | `HOCUS_PORT`, `HOCUS_HOST` | 1234, `0.0.0.0` | Where Hocuspocus listens. |
 | `TRUSTED_PROXY` | off | `1` only when every request comes through one reverse proxy that appends `X-Forwarded-For`. |
 | `HOCUS_ALLOWED_ORIGINS` | any | Comma-separated browser origins allowed to open sockets. |
-| `MAX_DOC_SIZE_BYTES` | 1 MiB | Per-document cap; production sets 2 MiB. Playground and tab-list caps are separate. |
+| `MAX_DOC_SIZE_BYTES` | 1 MiB | Per-document cap; production and `make dev` set 2 MiB. Playground and tab-list caps are separate. |
 | `WS_CONNECTION_LIMIT`, `WS_SOCKETS_PER_IP`, `MAX_WS_SOCKETS` | 10, 30, 5000 | Connection limits. |
 | `DOC_CREATION_RATE_LIMIT`, `MAX_TOTAL_DOCUMENTS` | 10/h, 2000 | Document creation limits. |
 | `RETENTION_DAYS`, `TOMBSTONE_RETENTION_DAYS` | 30, 90 | Idle documents are deleted and tombstoned; tombstones outlive offline copies. |
