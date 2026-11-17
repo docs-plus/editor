@@ -9,12 +9,12 @@
  * never leaves a half file under a real name; the next open sweeps it.
  * Retention is by count, so a clock jump can't delete good copies early.
  *
- * The copy reads through its own read-only connection in a second thread
- * (`copy-worker.ts`): `VACUUM INTO` of a 240 MB library took up to 9 s on a
- * Windows runner, and on the writer it would hold every append, and the
- * quit flush, behind it.
+ * The copy itself is `copy-library.ts`: batched, from one read-only snapshot,
+ * verified before it is kept. The worker runs it in a second thread
+ * (`copy-worker.ts`) so the writer never waits on it, and stops that thread
+ * on quit.
  */
-import type { OpenSqlite, SqliteDriver } from "./driver";
+import type { SqliteDriver } from "./driver";
 import type { StorageHost } from "./host";
 import { readMeta, writeMeta } from "./sql";
 
@@ -82,24 +82,6 @@ export function planDailyCopy(
   sweepPartialCopies(host, dir);
   const target = host.join(folder, dailyCopyName(date));
   return { date, source, partial: `${target}.partial`, target };
-}
-
-/**
- * Writes the copy from its own read-only connection, so the writer never
- * waits on it: in WAL a reader never blocks the writer. Runs in the copy
- * thread (`desktop/storage/copy-worker.ts`); tests run it inline.
- */
-export function copyLibraryInto(
-  openSqlite: OpenSqlite,
-  source: string,
-  partial: string,
-) {
-  const reader = openSqlite(source, { readOnly: true });
-  try {
-    reader.prepare("VACUUM INTO ?").run(partial);
-  } finally {
-    reader.close();
-  }
 }
 
 /**

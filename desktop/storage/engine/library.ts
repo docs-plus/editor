@@ -37,8 +37,8 @@ import {
   pendingRows,
   stateOf,
 } from "./content";
+import { copyLibraryBatched } from "./copy-library";
 import {
-  copyLibraryInto,
   DAILY_DIR,
   type DailyCopyJob,
   dailyCopyName,
@@ -160,6 +160,7 @@ export class Library {
   private lastWriteAt: number;
   private changes = new Map<string, index.IndexChange>();
   private lastDailyCopyError: string | null = null;
+  private lastDailyCopyMs: number | null = null;
   private copyJob: DailyCopyJob | null = null;
   private readonly idleMs: number;
 
@@ -507,7 +508,7 @@ export class Library {
 
   /**
    * Starts today's daily copy when the library is idle and today has none:
-   * the caller runs {@link copyLibraryInto} on `job` (the worker, in its copy
+   * the caller runs `copyLibraryBatched` on `job` (the worker, in its copy
    * thread), then calls {@link completeDailyCopy} or {@link failDailyCopy}.
    * One job at a time; null otherwise.
    */
@@ -524,12 +525,13 @@ export class Library {
     return this.copyJob;
   }
 
-  completeDailyCopy(job: DailyCopyJob): string {
+  completeDailyCopy(job: DailyCopyJob, ms: number | null = null): string {
     if (job !== this.copyJob)
       throw new StorageError("invalid_argument", "not the running copy");
     this.copyJob = null;
     const name = finishDailyCopy(this.conn, this.host, this.dir, job);
     this.lastDailyCopyError = null;
+    this.lastDailyCopyMs = ms;
     this.trace?.(`COPY_DONE ${job.date}`);
     return name;
   }
@@ -547,6 +549,7 @@ export class Library {
       // Still open in the copy thread (Windows); swept on the next open.
     }
     this.lastDailyCopyError = reason;
+    this.trace?.(`COPY_ABANDONED ${job.date} ${reason}`);
   }
 
   /** Purges Trash older than 30 days, skipping open documents. */
@@ -567,11 +570,11 @@ export class Library {
    * Trash purge. Tests, the dev host and the soak's year use it; the worker
    * runs the copy in its copy thread instead.
    */
-  runIdleJobs(): {
+  async runIdleJobs(): Promise<{
     dailyCopy: string | null;
     dailyCopyMs: number | null;
     purged: number;
-  } {
+  }> {
     const result = {
       dailyCopy: null as string | null,
       dailyCopyMs: null as number | null,
@@ -580,25 +583,31 @@ export class Library {
     const job = this.beginDailyCopy();
     if (job) {
       const started = performance.now();
-      result.dailyCopy = this.copyInline(job);
+      result.dailyCopy = await this.copyInline(job);
       result.dailyCopyMs = performance.now() - started;
     }
     result.purged = this.purgeExpiredTrash();
     return result;
   }
 
-  private copyInline(job: DailyCopyJob): string | null {
+  private async copyInline(job: DailyCopyJob): Promise<string | null> {
+    const started = performance.now();
     try {
-      copyLibraryInto(this.openSqlite, job.source, job.partial);
-      return this.completeDailyCopy(job);
+      await copyLibraryBatched(this.openSqlite, job.source, job.partial, {
+        yieldNow: () => new Promise((resolve) => setTimeout(resolve, 0)),
+      });
+      return this.completeDailyCopy(job, performance.now() - started);
     } catch (error) {
-      this.failDailyCopy(job, storageErrorFrom(error).code);
+      this.failDailyCopy(
+        job,
+        `daily_copy_failed: ${storageErrorFrom(error).code}`,
+      );
       return null;
     }
   }
 
   /** Forces today's daily copy now, ignoring idle (diagnostics, tests). */
-  takeDailyCopyNow(): string | null {
+  async takeDailyCopyNow(): Promise<string | null> {
     this.assertWritable();
     if (this.copyJob) return null;
     const job = planDailyCopy(
@@ -627,6 +636,8 @@ export class Library {
       ),
       lastDailyCopy: readMeta(db, "last_daily_copy"),
       lastDailyCopyError: this.lastDailyCopyError,
+      lastDailyCopyMs: this.lastDailyCopyMs,
+      dailyCopyRunning: this.copyJob !== null,
       today: localDate(this.host.now()),
       // Read back, as set (D-A6; S2 confirmed them on all three OSes).
       pragmas: {
