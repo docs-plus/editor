@@ -54,6 +54,10 @@ const nextConfig: NextConfig = {
   pageExtensions: isDesktop
     ? ["desktop.tsx", "tsx", "ts"]
     : ["web.tsx", "web.ts", "tsx", "ts"],
+  // The export type-checks a tree with web-only files parked, which the
+  // route types `next dev` generated (.next/dev/types) still import.
+  // `bun run typecheck` checks every file, desktop ones included.
+  ...(isDesktop ? { typescript: { ignoreBuildErrors: true } } : {}),
   // Next 16.4+ rewrites AGENTS.md when it detects a coding agent; that file
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,
