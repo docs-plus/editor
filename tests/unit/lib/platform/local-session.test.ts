@@ -411,3 +411,84 @@ describe("local-session flush and compaction", () => {
     expect(store.appends[0].origin).toBe("local");
   });
 });
+
+describe("local-session failures", () => {
+  it("DocSession.flush also saves a session that is closing", async () => {
+    const store = new SpyStore(
+      new MemoryDocStore({ library, writeDelayMs: 20 }),
+    );
+    const { session } = makeSession({ store });
+    const handle = session.open(DOC);
+    await settle();
+    handle.doc.getText("t").insert(0, "last words");
+    handle.release();
+    await clock.advance(RELEASE_DELAY_MS); // closing: the append is in flight
+    await session.flush();
+    expect(store.appends).toHaveLength(1);
+  });
+
+  it("stops at a migration that throws: content kept, schema not advanced", async () => {
+    await seed("v1", 1);
+    const { session, store } = makeSession({
+      schema: 3,
+      migrations: [
+        { to: 2, migrate: (doc) => doc.getText("t").insert(0, "[2]") },
+        {
+          to: 3,
+          migrate: (doc) => {
+            doc.getText("t").insert(0, "[half]");
+            throw new Error("bad migration");
+          },
+        },
+      ],
+    });
+    const handle = session.open(DOC);
+    await settle();
+    expect(handle.getState().ready).toBe(false);
+    expect(handle.getState().error?.code).toBe("migration_failed");
+    await handle.flush();
+    // The half-done step's edit exists, so it is saved, but the schema stays at 2.
+    expect(handle.doc.getText("t").toString()).toBe("[half][2]v1");
+    expect(store.appends.map((a) => a.schemaTo ?? null)).toContain(2);
+    expect(store.appends.map((a) => a.schemaTo ?? null)).not.toContain(3);
+    handle.release();
+    await clock.advance(RELEASE_DELAY_MS);
+    expect((await new MemoryDocStore({ library }).load(DOC)).schema).toBe(2);
+  });
+
+  it("reports stored content that cannot be applied as corrupt", async () => {
+    library.createDoc(DOC, 1);
+    const writer = new MemoryDocStore({ library });
+    await writer.load(DOC);
+    await writer.append(DOC, {
+      origin: "local",
+      update: new Uint8Array([255, 255, 255]),
+    });
+    await writer.close(DOC);
+    const { session } = makeSession();
+    const handle = session.open(DOC);
+    await settle();
+    expect(handle.getState().ready).toBe(false);
+    expect(handle.getState().error?.code).toBe("corrupt");
+  });
+
+  it("loads again on the next open after a refused load", async () => {
+    library.createDoc(DOC, 1);
+    const otherWindow = new MemoryDocStore({ library });
+    await otherWindow.load(DOC);
+    const { session } = makeSession();
+    const refused = session.open(DOC);
+    await settle();
+    expect(refused.getState().error?.code).toBe("already_open");
+
+    await otherWindow.close(DOC);
+    const retried = session.open(DOC);
+    await settle();
+    expect(retried.getState()).toMatchObject({ ready: true, error: null });
+    refused.release();
+    await clock.advance(RELEASE_DELAY_MS);
+    expect(retried.getState().ready).toBe(true);
+    retried.doc.getText("t").insert(0, "still open");
+    await retried.flush();
+  });
+});

@@ -83,10 +83,14 @@ type Entry = {
   batcher: Batcher | null;
   /** Updates made before the batcher exists; never dropped. */
   early: { origin: UpdateOrigin; update: Uint8Array }[];
-  migratingTo: number | null;
   compacting: Promise<void> | null;
+  /** `load` succeeded, so `close` must give the document back to the store. */
+  held: boolean;
   closed: boolean;
 };
+
+/** A session being flushed and closed after its release delay. */
+type Closing = { done: Promise<void>; batcher: Batcher | null };
 
 function defaultScheduleIdle(fn: () => void): void {
   if (typeof requestIdleCallback === "function") requestIdleCallback(fn);
@@ -102,8 +106,11 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
   );
   const scheduleIdle = options.scheduleIdle ?? defaultScheduleIdle;
   const entries = new Map<string, Entry>();
-  /** Sessions still flushing and closing, so a re-open waits for the store to let go. */
-  const closing = new Map<string, Promise<void>>();
+  /**
+   * Sessions still flushing and closing: a re-open waits for the store to
+   * let go, and `flush()` (quit) still covers their last batches.
+   */
+  const closing = new Map<string, Closing>();
 
   function setState(entry: Entry, change: Partial<DocHandleState>): void {
     entry.state = { ...entry.state, ...change };
@@ -125,36 +132,54 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
       entry.early.push({ origin: stored, update });
       return;
     }
-    const schemaTo =
-      stored === "migration" ? (entry.migratingTo ?? undefined) : undefined;
-    entry.batcher.push(stored, update, schemaTo);
+    entry.batcher.push(stored, update);
+  }
+
+  function fail(entry: Entry, error: DocStoreError): void {
+    setState(entry, { error });
+  }
+
+  /** Drops the entry, so the next `open` starts a new session. */
+  function forget(entry: Entry): void {
+    if (entries.get(entry.docId) === entry) entries.delete(entry.docId);
   }
 
   async function hydrate(entry: Entry): Promise<void> {
-    await closing.get(entry.docId);
+    await closing.get(entry.docId)?.done;
     let loaded: LoadedDoc;
     try {
       loaded = await store.load(entry.docId);
     } catch (error) {
-      setState(entry, {
-        error: isDocStoreError(error)
+      // Not held (another window has it, say): the next open tries again.
+      fail(
+        entry,
+        isDocStoreError(error)
           ? error
           : new DocStoreError("library_unavailable", String(error)),
-      });
+      );
+      forget(entry);
       return;
     }
+    entry.held = true;
     if (entry.closed) {
       await store.close(entry.docId);
       return;
     }
-    Y.transact(
-      entry.doc,
-      () => {
-        if (loaded.snapshot) Y.applyUpdate(entry.doc, loaded.snapshot);
-        for (const update of loaded.updates) Y.applyUpdate(entry.doc, update);
-      },
-      HYDRATE_ORIGIN,
-    );
+    try {
+      Y.transact(
+        entry.doc,
+        () => {
+          if (loaded.snapshot) Y.applyUpdate(entry.doc, loaded.snapshot);
+          for (const update of loaded.updates) {
+            Y.applyUpdate(entry.doc, update);
+          }
+        },
+        HYDRATE_ORIGIN,
+      );
+    } catch (error) {
+      fail(entry, new DocStoreError("corrupt", String(error)));
+      return;
+    }
     const batcher = new Batcher({
       store,
       docId: entry.docId,
@@ -170,23 +195,29 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
 
     const readOnlyReason = loaded.schema > schema ? "doc_too_new" : null;
     if (!readOnlyReason && loaded.schema < schema) {
-      migrate(entry, batcher, loaded.schema);
+      try {
+        migrate(entry, batcher, loaded.schema);
+      } catch (error) {
+        fail(entry, new DocStoreError("migration_failed", String(error)));
+        return;
+      }
     }
     setState(entry, { ready: true, authoritative: true, readOnlyReason });
   }
 
   /**
-   * Runs the pending migrations, appended as `migration`. A closing empty
-   * update records `schemaTo` even when no migration changed anything; the
-   * batcher merges it into the same append.
+   * Runs the pending migrations, appended as `migration`. The schema moves
+   * only past steps that finished: after each one, an empty update carries
+   * its `schemaTo` (the batcher merges it into the same append). If a step
+   * throws, its partial edit is still saved, as content, and the schema stays
+   * at the last finished step, so the next open runs that step again.
    */
   function migrate(entry: Entry, batcher: Batcher, from: number): void {
     for (const migration of migrations) {
       if (migration.to <= from || migration.to > schema) continue;
-      entry.migratingTo = migration.to;
       entry.doc.transact(() => migration.migrate(entry.doc), MIGRATION_ORIGIN);
+      batcher.push("migration", EMPTY_UPDATE, migration.to);
     }
-    entry.migratingTo = null;
     batcher.push("migration", EMPTY_UPDATE, schema);
   }
 
@@ -208,7 +239,7 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
   }
 
   async function close(entry: Entry): Promise<void> {
-    entries.delete(entry.docId);
+    forget(entry);
     const batcher = entry.batcher;
     if (batcher) {
       await batcher.flush();
@@ -218,17 +249,18 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
     }
     // Set after the final compaction, so a load still in flight closes itself.
     entry.closed = true;
-    if (batcher) await store.close(entry.docId);
+    if (entry.held) await store.close(entry.docId);
     entry.awareness.destroy();
     entry.doc.destroy();
   }
 
   function startClose(entry: Entry): void {
     entry.releaseTimer = null;
-    const done = close(entry).finally(() => {
-      if (closing.get(entry.docId) === done) closing.delete(entry.docId);
+    const record: Closing = { done: close(entry), batcher: entry.batcher };
+    closing.set(entry.docId, record);
+    record.done = record.done.finally(() => {
+      if (closing.get(entry.docId) === record) closing.delete(entry.docId);
     });
-    closing.set(entry.docId, done);
   }
 
   function createEntry(docId: string): Entry {
@@ -243,8 +275,8 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
       releaseTimer: null,
       batcher: null,
       early: [],
-      migratingTo: null,
       compacting: null,
+      held: false,
       closed: false,
     };
     doc.on("update", (update: Uint8Array, origin: unknown) =>
@@ -292,9 +324,11 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
       return handleFor(entry);
     },
     async flush() {
-      await Promise.all(
-        [...entries.values()].map((entry) => entry.batcher?.flush()),
-      );
+      const batchers = [
+        ...[...entries.values()].map((entry) => entry.batcher),
+        ...[...closing.values()].map((record) => record.batcher),
+      ];
+      await Promise.all(batchers.map((batcher) => batcher?.flush()));
     },
   };
 }

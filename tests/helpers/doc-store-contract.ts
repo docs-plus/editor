@@ -17,7 +17,7 @@ import * as Y from "yjs";
 
 import {
   type DocStore,
-  DocStoreError,
+  type DocStoreErrorCode,
   type LoadedDoc,
   UPDATE_ORIGINS,
 } from "@/lib/platform/doc-store";
@@ -78,16 +78,17 @@ function assertSameContent(loaded: LoadedDoc, reference: Y.Doc): void {
   assert.equal(doc.store.pendingStructs, null);
 }
 
+/**
+ * The store rejected with `code`. Checked by property, not by class: the
+ * storage engine may not import `lib/` at runtime (architecture §3.3), so its
+ * errors are `{ code }`-shaped; the adapter turns them into `DocStoreError`.
+ */
 async function assertRejectsWith(
   promise: Promise<unknown>,
-  code: DocStoreError["code"],
+  code: DocStoreErrorCode,
 ): Promise<void> {
   await assert.rejects(promise, (error: unknown) => {
-    assert.ok(
-      error instanceof DocStoreError,
-      `expected DocStoreError(${code})`,
-    );
-    assert.equal(error.code, code);
+    assert.equal((error as { code?: unknown } | null)?.code, code);
     return true;
   });
 }

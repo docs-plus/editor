@@ -19,8 +19,11 @@ app uses it yet; `lib/collab-session.ts` is unchanged.
 
 - **Platform:** `lib/platform/local-session.ts`, the `DocSession` over a
   `DocStore`: load with no timeout, hydrate (never appended), migration hook
-  before ready, deferred release (1 s), then flush, compact and close; edits
-  made before the content loads are kept.
+  before ready, deferred release (1 s), then flush, compact and close. Edits
+  made before the content loads are kept, `flush()` also covers sessions
+  that are closing, a refused load is retried on the next open, and
+  unreadable content or a failing migration is reported (`corrupt`,
+  `migration_failed`) with the schema advanced only past finished steps.
 - **Platform:** `lib/platform/batcher.ts`: appends 250 ms after the last
   update or 1 s after the first, one append in flight per document, failed
   appends retried in order with backoff (2 s doubling to 60 s) and never
