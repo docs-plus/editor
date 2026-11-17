@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 
+import { PrivacyLink } from "@/components/site-page/privacy-link";
 import { Button } from "@/components/ui/button";
 import {
   ANALYTICS_CONSENT_EVENT,
@@ -77,9 +77,7 @@ export function GoogleAnalytics() {
       <p className="text-muted-foreground">
         Can we count visits and feature use with Google Analytics? It never sees
         what you write. Google sets a cookie for up to 13 months.{" "}
-        <Link href="/privacy" className="underline underline-offset-2">
-          Privacy
-        </Link>
+        <PrivacyLink className="underline underline-offset-2" />
       </p>
       <div className="mt-2 flex justify-end gap-2">
         <Button

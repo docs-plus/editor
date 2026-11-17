@@ -565,7 +565,7 @@ Each empty state is the list view's body: centred, a lucide icon at 32 px in mut
 | **Very large document** (crosses 5 MB; engineering confirms the threshold in P2.6/T8) | Pill, once per document per app run, never at open | “Q4 plan” is 5.2 MB. Very large documents can feel slower. Consider splitting it. | — |
 | **Remote images blocked** (decided at open) | Banner rendered **with the document** (part of the first layout, never inserted later), plus a placeholder per image | This document has images from the internet. Loading them tells those sites you opened it.<br>Placeholder: `ImageOff` *Image from example.com* | **[Load Images]** (remembered for this document) |
 | Remote image pasted during editing | The placeholder only. No banner appears mid-session. | Placeholder: *Image from example.com* [Load] | [Load] (this image) |
-| **X post** (plan §7) | A link card in the document | `ExternalLink` **Post on X** · x.com/user/status/… | Click opens the system browser |
+| **X post** (plan §7) | A link card in the document (built in #99) | **Post by @user** (or **Post on X** when the URL has no handle) · x.com/user/status/… · [Open on X `ExternalLink`] | **Open on X** opens the system browser. It is a button: the Hyperlink extension takes clicks on any `<a>` in the editor. Clicking elsewhere on the card selects the node. |
 | **Playground** | Chip `FlaskConical` **Playground**. Popover: A sample document on this computer. It can't be shared or deleted. | — | [Reset Playground…] (sheet: **Reset the Playground?** Your changes to it will be replaced with the original sample. [Cancel] [Reset]) |
 
 ### 5.4 File operations: feedback and copy
