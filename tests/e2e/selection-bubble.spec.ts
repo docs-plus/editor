@@ -994,7 +994,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await chunk.restore();
   });
 
-  test("a selection starting on a wrapped second line anchors to that line", async ({
+  test("a selection that wraps from the second line anchors to that line", async ({
     page,
   }) => {
     const long = Array.from(
@@ -1009,16 +1009,24 @@ test.describe("selection bubble controller (spec §12.1)", () => {
         paragraph(text(long)),
       ],
     });
-    // The first position of the paragraph's second visual line, then 12
-    // characters from it; the centre and top come from the range's rects.
+    // 12 characters from 6 before the end of the paragraph's second visual
+    // line, so the selection wraps onto the third. The anchor is the part
+    // on the second line: the rects on the top-most line only (the box
+    // between the two carets, the old anchor, centres mid-column).
     const target = await page.evaluate(() => {
       const editor = window.__tiptap_editor;
       if (!editor) throw new Error("editor missing");
       const view = editor.view;
+      const lineStart = (after: number) => {
+        const top = view.coordsAtPos(after, 1).top;
+        let pos = after;
+        while (view.coordsAtPos(pos, 1).top === top) pos += 1;
+        return pos;
+      };
       const start = (editor.state.doc.firstChild?.nodeSize ?? 0) + 1;
-      const firstTop = view.coordsAtPos(start, 1).top;
-      let from = start;
-      while (view.coordsAtPos(from, 1).top === firstTop) from += 1;
+      const second = lineStart(start);
+      const third = lineStart(second);
+      const from = third - 6;
       const to = from + 12;
       editor.chain().focus().setTextSelection({ from, to }).run();
       const a = view.domAtPos(from);
@@ -1027,30 +1035,26 @@ test.describe("selection bubble controller (spec §12.1)", () => {
       range.setStart(a.node, a.offset);
       range.setEnd(b.node, b.offset);
       const rects = [...range.getClientRects()].filter((r) => r.width > 0);
-      const left = Math.min(...rects.map((r) => r.left));
-      const right = Math.max(...rects.map((r) => r.right));
-      const column = document
-        .querySelector(".document-editor-content")
-        ?.getBoundingClientRect();
-      if (!column) throw new Error("no page column");
+      const lineTop = Math.min(...rects.map((r) => r.top));
+      const line = rects.filter((r) => Math.abs(r.top - lineTop) <= 2);
+      const left = Math.min(...line.map((r) => r.left));
+      const right = Math.max(...line.map((r) => r.right));
       return {
-        firstTop,
-        lineTop: Math.min(...rects.map((r) => r.top)),
+        secondTop: view.coordsAtPos(second, 1).top,
+        lineTop,
+        lines: new Set(rects.map((r) => Math.round(r.top))).size,
         centre: (left + right) / 2,
-        column: { left: column.left, right: column.right },
       };
     });
-    expect(target.lineTop).toBeGreaterThan(target.firstTop);
+    expect(target.lines).toBe(2);
+    expect(Math.abs(target.lineTop - target.secondTop)).toBeLessThanOrEqual(2);
     await expectBubbleOpen(page);
     await expect(bubble(page)).toHaveAttribute("data-placement", "top");
     await expect
       .poll(async () => {
         const box = await bubble(page).boundingBox();
         if (!box) return "no box";
-        const centred =
-          Math.abs(box.x + box.width / 2 - target.centre) <= 2 ||
-          Math.abs(box.x - (target.column.left + 8)) <= 2 ||
-          Math.abs(box.x + box.width - (target.column.right - 8)) <= 2;
+        const centred = Math.abs(box.x + box.width / 2 - target.centre) <= 2;
         const bottom = box.y + box.height;
         const above =
           bottom <= target.lineTop &&
@@ -1060,43 +1064,116 @@ test.describe("selection bubble controller (spec §12.1)", () => {
       .toBe("anchored");
   });
 
-  test("select all anchors to the first visible line", async ({ page }) => {
+  test("a selection that starts at a paragraph's end anchors to the next line's text", async ({
+    page,
+  }) => {
     await openDoc(page, {
       type: "doc",
       content: [
         { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
-        ...Array.from({ length: 300 }, (_, i) =>
-          paragraph(text(`Paragraph ${i + 1} of a long document`)),
-        ),
+        paragraph(text("A paragraph the selection starts after")),
+        paragraph(text("Short")),
+        paragraph(text("The paragraph where the selection ends")),
       ],
     });
-    // Off-screen blocks have estimated heights (`content-visibility`), and
-    // a selected block renders: select everything once so every block
-    // remembers its real height, or ⌘A would shift the page under the
-    // view. Then centre paragraph 150.
-    const ends = await page.evaluate(async () => {
+    // From the end of the first paragraph (nothing of it is selected on
+    // screen) into the third: the second is wholly inside the range, and
+    // a range over it returns its full-width border box too.
+    const target = await page.evaluate(() => {
       const editor = window.__tiptap_editor;
-      const middle = editor?.view.dom.children[150];
-      if (!editor || !middle) throw new Error("missing");
-      const frames = () =>
-        new Promise((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve)),
-        );
-      editor.commands.selectAll();
-      await frames();
-      editor.commands.setTextSelection(1);
-      await frames();
-      for (let i = 0; i < 5; i += 1) {
-        middle.scrollIntoView({ block: "center" });
-        await frames();
-      }
-      editor.view.dom.focus({ preventScroll: true });
-      const size = editor.state.doc.content.size;
-      return {
-        first: editor.view.coordsAtPos(1).top,
-        last: editor.view.coordsAtPos(size - 1).top,
-      };
+      if (!editor) throw new Error("editor missing");
+      const { doc } = editor.state;
+      const starts: number[] = [];
+      doc.forEach((_node, offset) => {
+        starts.push(offset);
+      });
+      const from = starts[2] - 1;
+      const to = starts[3] + 5;
+      editor.chain().focus().setTextSelection({ from, to }).run();
+      const a = editor.view.domAtPos(starts[2] + 1);
+      const range = document.createRange();
+      range.selectNodeContents(a.node);
+      const box = range.getBoundingClientRect();
+      return { top: box.top, centre: (box.left + box.right) / 2 };
     });
+    await expectBubbleOpen(page);
+    await expect(bubble(page)).toHaveAttribute("data-placement", "top");
+    await expect
+      .poll(async () => {
+        const box = await bubble(page).boundingBox();
+        if (!box) return "no box";
+        const centred = Math.abs(box.x + box.width / 2 - target.centre) <= 2;
+        const above = box.y + box.height <= target.top;
+        return centred && above ? "anchored" : JSON.stringify({ box, target });
+      })
+      .toBe("anchored");
+  });
+
+  /**
+   * A long document scrolled to its middle, then ⌘A: the bubble is in the
+   * view, just under the sticky row (under the first line that shows).
+   * `edge` puts the band's top edge in the gap between two paragraphs or
+   * inside one. Without `warm`, off-screen blocks keep their estimated
+   * heights (`content-visibility`), and ⌘A, which renders every selected
+   * block, shifts the page under the view.
+   */
+  async function expectSelectAllUnderRow(
+    page: Page,
+    blocks: unknown[],
+    { edge, warm = true }: { edge?: "gap" | "inside"; warm?: boolean } = {},
+  ) {
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        ...blocks,
+      ],
+    });
+    const ends = await page.evaluate(
+      async ([edgeAt, warmUp]) => {
+        const editor = window.__tiptap_editor;
+        const wrapper = document.querySelector(".document-editor-wrapper");
+        const toolbar = wrapper?.querySelector('[data-slot="toolbar"]');
+        const children = editor?.view.dom.children;
+        const count = children?.length ?? 0;
+        const middle = children?.[Math.floor(count / 2)];
+        if (!editor || !wrapper || !toolbar || !children || !middle) {
+          throw new Error("missing");
+        }
+        const frames = () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        if (warmUp) {
+          editor.commands.selectAll();
+          await frames();
+          editor.commands.setTextSelection(1);
+          await frames();
+        }
+        for (let i = 0; i < 5; i += 1) {
+          middle.scrollIntoView({ block: "center" });
+          await frames();
+        }
+        if (edgeAt) {
+          const bandTop = toolbar.getBoundingClientRect().bottom + 1;
+          const blocks = [...children].map((el) => el.getBoundingClientRect());
+          const k = blocks.findIndex((box) => box.bottom > bandTop);
+          const y =
+            edgeAt === "gap"
+              ? (blocks[k].bottom + blocks[k + 1].top) / 2
+              : (blocks[k].top + blocks[k].bottom) / 2;
+          wrapper.scrollTop += y - bandTop;
+          await frames();
+        }
+        editor.view.dom.focus({ preventScroll: true });
+        const size = editor.state.doc.content.size;
+        return {
+          first: editor.view.coordsAtPos(1).top,
+          last: editor.view.coordsAtPos(size - 1).top,
+        };
+      },
+      [edge, warm] as const,
+    );
     const viewport = page.viewportSize();
     // The selection runs past both edges of the view.
     expect(ends.first).toBeLessThan(0);
@@ -1120,7 +1197,35 @@ test.describe("selection bubble controller (spec §12.1)", () => {
           : JSON.stringify({ box, toolbarBottom });
       })
       .toBe("under the row");
+  }
+
+  const wrappingParagraph = (i: number) =>
+    paragraph(
+      text(
+        `Paragraph ${i + 1} is long enough to wrap onto three visual lines in the page column, so the top edge of the view can fall inside it or in the gap after it, and the anchor must still pick the first line that shows.`,
+      ),
+    );
+
+  test("select all anchors to the first visible line", async ({ page }) => {
+    await expectSelectAllUnderRow(
+      page,
+      Array.from({ length: 300 }, (_, i) =>
+        paragraph(text(`Paragraph ${i + 1} of a long document`)),
+      ),
+    );
   });
+
+  for (const edge of ["gap", "inside"] as const) {
+    test(`select all with multi-line paragraphs, the band edge ${edge === "gap" ? "between two" : "inside one"}`, async ({
+      page,
+    }) => {
+      await expectSelectAllUnderRow(
+        page,
+        Array.from({ length: 120 }, (_, i) => wrappingParagraph(i)),
+        { edge },
+      );
+    });
+  }
 
   test("a whitespace-only selection shows no bubble", async ({ page }) => {
     await openDoc(page, {
