@@ -8,7 +8,7 @@
  * connection with live statements open as a zombie that keeps the file
  * handles, which on Windows blocks deleting or replacing the library.
  */
-import { Database } from "bun:sqlite";
+import { constants, Database } from "bun:sqlite";
 
 import type {
   OpenSqlite,
@@ -19,9 +19,16 @@ import type {
 } from "@/desktop/storage/engine/driver";
 
 export const openBunSqlite: OpenSqlite = (path, { readOnly }) => {
-  const db = readOnly
-    ? new Database(path, { readonly: true })
-    : new Database(path, { create: true });
+  // SQLITE_OPEN_URI: the daily copy ATTACHes the library as
+  // `file:…?mode=ro`. node:sqlite accepts URIs by default; Bun's bundled
+  // SQLite (Linux, Windows) only with this flag.
+  const db = new Database(
+    path,
+    constants.SQLITE_OPEN_URI |
+      (readOnly
+        ? constants.SQLITE_OPEN_READONLY
+        : constants.SQLITE_OPEN_READWRITE | constants.SQLITE_OPEN_CREATE),
+  );
   const cache = new Map<string, SqliteStatement>();
   const statements: { finalize(): void }[] = [];
   const driver: SqliteDriver = {
