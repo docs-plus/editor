@@ -90,8 +90,9 @@ cleanup() {
   rm -rf "$node_shim"
 }
 trap cleanup EXIT
+(cd "$BUILD_DIR" && install_deps)
 cp .env.production "$BUILD_DIR/"
-(cd "$BUILD_DIR" && install_deps && bun run build)
+(cd "$BUILD_DIR" && bun run build)
 
 log "Updating the live checkout"
 git merge --ff-only --quiet "$sha"
