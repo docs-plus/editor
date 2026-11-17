@@ -994,6 +994,47 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await chunk.restore();
   });
 
+  test("Esc on a bubble item plays the exit fade before the root leaves", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
+    ).toBeFocused();
+    // Times, in the page, of `data-closing` appearing and the root leaving.
+    await page.evaluate(() => {
+      const root = document.querySelector("[data-smart-bubble]");
+      const wrapper = root?.parentElement;
+      if (!root || !wrapper) throw new Error("no bubble");
+      const times: { closing?: number; removed?: number } = {};
+      Object.assign(window, { __fadeTimes: times });
+      new MutationObserver(() => {
+        if (times.closing === undefined && root.hasAttribute("data-closing")) {
+          times.closing = performance.now();
+        }
+      }).observe(root, { attributeFilter: ["data-closing"] });
+      new MutationObserver(() => {
+        if (times.removed === undefined && !root.isConnected) {
+          times.removed = performance.now();
+        }
+      }).observe(wrapper, { childList: true });
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await expect(bubble(page)).toHaveCount(0);
+    const times = await page.evaluate(
+      () =>
+        (window as unknown as { __fadeTimes: Record<string, number> })
+          .__fadeTimes,
+    );
+    expect(times.closing).toBeDefined();
+    // The 90 ms exit fade, not a hide on the returning focus.
+    expect(times.removed - times.closing).toBeGreaterThanOrEqual(60);
+  });
+
   test("a selection that wraps from the second line anchors to that line", async ({
     page,
   }) => {
@@ -1329,6 +1370,11 @@ test.describe("selection bubble controller (spec §12.1)", () => {
 
       await selectText(pageA, "some words");
       await expectBubbleOpen(pageA);
+      // Focus inside the bubble: its removal must hand focus back.
+      await pageA.keyboard.press("Alt+F10");
+      await expect(
+        bubbleToolbar(pageA).getByRole("button", { name: "Bold", exact: true }),
+      ).toBeFocused();
       await pageB.evaluate(() => {
         const editor = window.__tiptap_editor;
         if (!editor) throw new Error("editor missing");
@@ -1345,9 +1391,10 @@ test.describe("selection bubble controller (spec §12.1)", () => {
         timeout: 15_000,
       });
       await expect(bubble(pageA)).toHaveCount(0);
-      expect(
-        await pageA.evaluate(() => document.activeElement !== document.body),
-      ).toBe(true);
+      await expect(pageA.locator(".tiptap")).toBeFocused();
+      // Not suppressed: a new selection (one that clears nothing) shows it.
+      await selectText(pageA, "First line");
+      await expectBubbleOpen(pageA);
     } finally {
       await contextA.close();
       await contextB.close();
