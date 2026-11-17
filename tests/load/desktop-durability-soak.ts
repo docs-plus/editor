@@ -8,7 +8,7 @@
  * the two drivers read each other's files. The shape follows spike S2's
  * kill harness.
  *
- *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T5|T6|T8
+ *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8
  *     [--kills=200] [--out=soak-out] [--verbose]
  *
  * T7 (slow-hydrate overwrite) is a web-library case: it tests the session
@@ -28,6 +28,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -695,7 +696,7 @@ async function caseT8(): Promise<CaseResult> {
     }
     // Idle: the daily copy and the Trash purge.
     clock.now += IDLE_MS;
-    const idle = library.runIdleJobs();
+    const idle = await library.runIdleJobs();
     if (idle.dailyCopyMs !== null) copyMs.push(idle.dailyCopyMs);
     if (idle.dailyCopy === null && idle.dailyCopyMs !== null)
       failures.push(
@@ -791,11 +792,15 @@ async function caseT8(): Promise<CaseResult> {
   const sortedCopies = [...copyMs].sort((a, b) => a - b);
   const copyMedian = sortedCopies[Math.floor(sortedCopies.length / 2)] ?? 0;
   const copyMax = sortedCopies.at(-1) ?? 0;
+  // Decision 5: the batched copy in its thread on node:sqlite, against
+  // VACUUM INTO on the same year-end library.
+  const comparison = args["no-electron"] ? null : await compareCopies(dir);
+  if (comparison?.error) failures.push(`batched copy: ${comparison.error}`);
   removeDir(dir);
   return {
     name: "T8",
     pass: failures.length === 0,
-    summary: `${days} days, ${appends} appends, ${compactions} compactions, ${trashed} trashed; ${(seededBytes / 1048576).toFixed(0)} → ${(stats.bytes / 1048576).toFixed(0)} MB; ${dailies.length} daily copies (VACUUM INTO median ${copyMedian.toFixed(0)} ms, max ${copyMax.toFixed(0)} ms); ${liveDocs} documents: worker ready ${toWorkerReady.toFixed(0)} ms and sidebar rows ${toSidebar.toFixed(0)} ms after process start (median of 5; §10 ${budget.workerReadyMs} / ${budget.sidebarMs} ms; excludes renderer IPC and paint); unclean-exit open with quick_check ${unclean ? unclean.openMs.toFixed(0) : "n/a"} ms`,
+    summary: `${days} days, ${appends} appends, ${compactions} compactions, ${trashed} trashed; ${(seededBytes / 1048576).toFixed(0)} → ${(stats.bytes / 1048576).toFixed(0)} MB; ${dailies.length} daily copies (bun inline median ${copyMedian.toFixed(0)} ms, max ${copyMax.toFixed(0)} ms)${comparison ? `; batched copy on node:sqlite ${comparison.batchedMs?.toFixed(0)} ms, ${(comparison.batchedBytes / 1048576).toFixed(1)} MB vs VACUUM INTO ${comparison.vacuumMs.toFixed(0)} ms, ${(comparison.vacuumBytes / 1048576).toFixed(1)} MB` : ""}; ${liveDocs} documents: worker ready ${toWorkerReady.toFixed(0)} ms and sidebar rows ${toSidebar.toFixed(0)} ms after process start (median of 5; §10 ${budget.workerReadyMs} / ${budget.sidebarMs} ms; excludes renderer IPC and paint); unclean-exit open with quick_check ${unclean ? unclean.openMs.toFixed(0) : "n/a"} ms`,
     details: {
       days,
       docs: liveDocs,
@@ -809,8 +814,155 @@ async function caseT8(): Promise<CaseResult> {
       unclean,
       budget,
       dailyCopyMs: { median: copyMedian, max: copyMax, count: copyMs.length },
+      comparison,
       simMs,
     },
+    failures,
+  };
+}
+
+/** Batched copy (Electron, its thread) vs VACUUM INTO (bun), same library. */
+async function compareCopies(dir: string) {
+  const daily = join(dir, "daily");
+  const before = new Set(createNodeHost().list(daily));
+  const run = await runHarness(["--mode=copy-time", `--dir=${dir}`]);
+  const line = run.lines.find((l) => l.startsWith("COPYTIME "));
+  if (!line)
+    return {
+      error: run.stderr.slice(0, 500),
+      batchedMs: null,
+      batchedBytes: 0,
+      vacuumMs: 0,
+      vacuumBytes: 0,
+    };
+  const timing = JSON.parse(line.slice(9)) as {
+    ms: number | null;
+    error: string | null;
+  };
+  const made = createNodeHost()
+    .list(daily)
+    .find((file) => !before.has(file) && file.endsWith(".sqlite"));
+  const batchedBytes = made ? statSync(join(daily, made)).size : 0;
+  const vacuumPath = join(dir, "vacuum-into.sqlite");
+  // Read-write: a read-only open of a WAL file with no -shm can't start.
+  const db = new Database(join(dir, LIBRARY_FILE));
+  const t0 = performance.now();
+  db.prepare("VACUUM INTO ?").run(vacuumPath);
+  const vacuumMs = performance.now() - t0;
+  db.close();
+  return {
+    error: timing.error ?? (made ? null : "no copy file"),
+    batchedMs: timing.ms,
+    batchedBytes,
+    vacuumMs,
+    vacuumBytes: statSync(vacuumPath).size,
+  };
+}
+
+// ── T4-copy: quit while the daily copy runs (decision 5) ──────────────
+
+function yesterday(): string {
+  const date = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
+  const dir = mkdtempSync(join(tmpdir(), "soak-t4c-"));
+  const docs = Number(args["copy-docs"] ?? 1000);
+  const failures: string[] = [];
+  // A library big enough that the copy outlasts the typing: ~200 MB.
+  const library = openEngine(dir);
+  const pad = new Y.Doc();
+  pad.getText(PAD).insert(0, "p".repeat(200 * 1024));
+  const padState = Y.encodeStateAsUpdate(pad);
+  for (let i = 0; i < docs; i += 1) {
+    const { id } = library.createDoc({ title: `Doc ${i}` });
+    library.load(id, "seed");
+    library.compact(id, "seed", padState, 0);
+    library.close(id, "seed");
+  }
+  const { id: docId } = library.createDoc({ title: "Typed" });
+  // The previous good copy, dated yesterday: it must survive every quit.
+  const previous = await library.takeDailyCopyNow();
+  library.shutdown();
+  const daily = join(dir, "daily");
+  const previousPath = join(daily, `library-${yesterday()}.sqlite`);
+  renameSync(join(daily, previous ?? ""), previousPath);
+  const resetDay = () => {
+    const db = new Database(join(dir, LIBRARY_FILE));
+    db.prepare("UPDATE meta SET value = ? WHERE key = 'last_daily_copy'").run(
+      yesterday(),
+    );
+    db.close();
+  };
+  resetDay();
+  const hashOf = (path: string) =>
+    createHash("sha256").update(readFileSync(path)).digest("hex");
+  const previousHash = hashOf(previousPath);
+  let midCopy = 0;
+  const quitMs: number[] = [];
+  const exitLagMs: number[] = [];
+  const appendMaxMs: number[] = [];
+  for (let i = 1; i <= runs; i += 1) {
+    let quitSeenAt = 0;
+    let began = false;
+    let done = false;
+    const run = await runHarness(
+      ["--mode=copy-quit", `--dir=${dir}`, `--doc=${docId}`],
+      (line) => {
+        if (line.startsWith("COPY_BEGIN")) began = true;
+        if (line.startsWith("COPY_DONE")) done = true;
+        if (line.startsWith("QUIT ")) quitSeenAt = performance.now();
+      },
+    );
+    const exitedAt = performance.now();
+    note(run.lines.filter((l) => !/^(BATCH_BEGIN|ACK)/.test(l)).join(" | "));
+    const quit = run.lines.find((l) => l.startsWith("QUIT "));
+    if (run.exitCode !== 0 || !quit) {
+      failures.push(
+        `run ${i}: exit ${run.exitCode} ${run.stderr.slice(0, 500)}`,
+      );
+      continue;
+    }
+    const [, outcome, kText, quitText, appendText] = quit.split(" ");
+    if (began && !done) midCopy += 1;
+    quitMs.push(Number(quitText));
+    appendMaxMs.push(Number(appendText));
+    exitLagMs.push(exitedAt - quitSeenAt);
+    if (outcome !== "clean") failures.push(`run ${i}: shutdown ${outcome}`);
+    if (Number(quitText) > 2000)
+      failures.push(`run ${i}: shutdown took ${quitText} ms (budget 2 s)`);
+    const partials = createNodeHost()
+      .list(daily)
+      .filter((file) => file.endsWith(".partial"));
+    if (partials.length > 0)
+      failures.push(
+        `run ${i}: partial copy left behind: ${partials.join(", ")}`,
+      );
+    if (!existsSync(previousPath) || hashOf(previousPath) !== previousHash)
+      failures.push(`run ${i}: the previous good copy changed`);
+    const reopened = openEngine(dir);
+    if (reopened.status.uncleanExit)
+      failures.push(`run ${i}: unclean_exit set`);
+    const k = editCount(textOf(reopened, docId).text);
+    reopened.shutdown();
+    if (k !== Number(kText))
+      failures.push(`run ${i}: ${k} edits stored, ${kText} typed before quit`);
+    // A run whose copy finished leaves today's copy: undo it for the next run.
+    for (const file of createNodeHost().list(daily))
+      if (file.endsWith(".sqlite") && join(daily, file) !== previousPath)
+        removeDir(join(daily, file));
+    resetDay();
+  }
+  removeDir(dir);
+  const max = (values: number[]) => Math.round(Math.max(0, ...values));
+  if (midCopy === 0) failures.push("no quit landed during a copy");
+  return {
+    name: "T4-copy",
+    pass: failures.length === 0,
+    summary: `${runs} quits, ${midCopy} during a daily copy: every typed edit stored, clean shutdowns (max ${max(quitMs)} ms), process gone ${max(exitLagMs)} ms after the quit at worst, no partial copy left, the previous copy byte-identical; slowest append during a copy ${max(appendMaxMs)} ms`,
+    details: { runs, midCopy, quitMs, exitLagMs, appendMaxMs },
     failures,
   };
 }
@@ -825,6 +977,7 @@ const CASES: Record<string, () => Promise<CaseResult>> = {
   T2: () => killLoop("T2", "compaction", KILLS),
   T3: caseT3,
   T4: () => caseT4(Number(args.quits ?? 20)),
+  "T4-copy": () => caseQuitDuringCopy(Number(args["copy-quits"] ?? 10)),
   T5: () => caseT5(Number(args["migration-kills"] ?? 40)),
   T6: caseT6,
   T8: caseT8,

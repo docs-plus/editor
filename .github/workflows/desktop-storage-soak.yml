@@ -55,8 +55,8 @@ jobs:
       matrix:
         os: [macos-26, windows-latest, ubuntu-24.04]
         group:
-          - name: contract, T3–T6
-            cases: contract,T3,T4,T5,T6
+          - name: contract, T3–T6, quit during a copy
+            cases: contract,T3,T4,T4-copy,T5,T6
           - name: T1 kill during append
             cases: T1,T1-dense
           - name: T2 kill during compaction
