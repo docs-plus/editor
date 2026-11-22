@@ -116,6 +116,106 @@ ledger line).
 - **Schema:** `CLIENT_SCHEMA` is 3 ("knows asset refs"). The server's floor
   stays 2, so schema-2 bundles still connect and are counted as `low` in the
   per-minute `client_schema` log line. No deploy step.
+
+### Live sharing P4.1 and P4.2a–d: the share server, dark
+
+The server side of live sharing, in the Hocus process, shipped **dark**:
+`HOCUS_SHARES` and `HOCUS_DELETE_ROUTE` default to off, and with both off
+production behaves as before. The only visible difference is that
+`/api/info`, `/api/shares…` and `/api/documents/…` on the Hocus host answer
+404 instead of the health check's `ok`. No client code changes (editor chunk
++0 B).
+
+#### Added
+
+- **Sharing (P4.2a):** `lib/sharing/`, with these parts:
+  - the `shares` table, created only when shares are on;
+  - the `share:<uuid v4>` name validator, which also refuses the reserved
+    `sync:` prefix (seam S6b);
+  - no auto-create: a share document needs its row;
+  - `MAX_TOTAL_SHARES` (2,000), counted apart from `MAX_TOTAL_DOCUMENTS`;
+  - per-address (IPv4, IPv6 /64, and a larger shared budget per /48) and
+    global hourly creation limits;
+  - a share that stays `pending` for an hour stops counting toward the cap
+    and is ended as `expired` on first contact;
+  - each hash column is unique, so a create or reset that reuses a hash
+    answers `409 hash_in_use`;
+  - `created_ip_hash` (an HMAC), cleared 30 days after creation by an
+    hourly sweep.
+
+  The client generates every secret. The server mints only `share_id` and
+  stores three distinct 32-byte SHA-256 hashes (seam S1). The token wire
+  format is frozen in `lib/sharing/share-token.ts`, with test vectors.
+- **Sharing (P4.2b):** `onAuthenticate` for `share:*`, active only with
+  shares on. It looks up the row by `share_id`, compares with
+  `timingSafeEqual`, and treats a view token as `readOnly`.
+  - An unknown share, a wrong token and a share over its failed-token
+    limit get the same refusal (`share_unavailable`, byte for byte), and an
+    unknown share costs the same digest comparisons. Only token holders
+    learn `sharing_stopped`, `link_reset`, `expired`, `removed` or
+    `view_only`.
+  - Failed tokens are counted per IPv4 address, IPv6 /64 and /48 (past the
+    limit the address gets `busy`) and per existing `share_id` (past the
+    limit its edit and view tokens are refused too, never its owner
+    secret). Both tables evict their least recently used key when full,
+    so neither stops counting nor refuses an address it has not seen.
+    Clients must retry `share_unavailable` with backoff, never treat it as
+    terminal.
+  - A connection that joins while its share is stopped or made view-only
+    is closed once connected.
+  - A share ends 30 days after its last stored edit.
+  - Viewers are marked in awareness (`viewer: true`, no cursor).
+  - Share connections have their own per-IP cap
+    (`SHARE_WS_CONNECTIONS_PER_IP`, 10, refused as `busy`), apart from the
+    sandbox's cap.
+  - Shares never get `document_activity` rows, so the sandbox retention
+    purge never touches them.
+- **Sharing (P4.2c):** owner endpoints, which need the owner secret as
+  `Authorization: Bearer`:
+  - `DELETE /api/shares/:id` (stop sharing)
+  - `POST …/reset` (a new `share_id` from three new hashes; the old link
+    ends as `link_reset`)
+  - `POST …/view-only`
+
+  Each closes the share's live connections. `GET …/status` takes any token
+  of the share. CORS is limited to `HOCUS_SHARE_ORIGINS`. A mutation from
+  any other `Origin` is refused. Bodies are JSON only, small, and unknown
+  keys are refused. The endpoints are rate-limited per address and per
+  IPv6 /48 (owner calls only per address, once the address is under its
+  failed-token limit), before the origin check.
+  `lineage` is a dashed UUID or 32 hex digits.
+- **Sharing (P4.2d):** `GET /api/info` returns `apiVersion` 1,
+  `serverVersion`, the schemas, `maxDocBytes`, `maxFrameBytes`, `yjsFormat`
+  and `features.shares`. Share connections and creates require client
+  schema ≥ 3 (`SHARE_SCHEMA_FLOOR`). `HOCUS_SHARES=on|readonly|off` is the
+  kill switch.
+- **Hocus (P4.1):** `DELETE /api/documents/:id` in the Hocus process
+  (`lib/security/hocus-delete-route.ts`), behind `HOCUS_DELETE_ROUTE=on`.
+  It keeps the Next.js route's contract and also refuses `share:*` and
+  `sync:*` names. The Next.js route stays the live one; a test pins that it
+  refuses those names too.
+- **Tests:** unit tests for the config defaults, the token format, the
+  store, the auth refusal matrix and the HTTP API. Hocus integration tests
+  (`tests/unit/scripts/hocus-shares.test.ts`) cover:
+  - dark by default;
+  - edit and view tokens, guesses and the schema floor;
+  - viewer awareness;
+  - stop and view-only;
+  - the separate share connection cap;
+  - the server never receiving, storing or logging a raw link secret.
+
+#### Changed
+
+- **Security:** `readJsonBody` and `withBusyRetry` moved to
+  `lib/security/json-body.ts`, so Hocus doesn't import `next/server`.
+  `http-route-guards` re-exports them.
+- **Security:** `countNonSystemDocuments` skips `share:*` names.
+
+**Deploy:** nothing to do. Leave `HOCUS_SHARES` and `HOCUS_DELETE_ROUTE`
+unset. Turning P4.1 on later is its own step: route `DELETE
+/api/documents/*` on `tiny.docs.plus` to Hocus in Traefik, set
+`HOCUS_DELETE_ROUTE=on`, restart with `--update-env`, and run the close-tab
+e2e suite on staging. Shares stay off until Gate 4.
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`
@@ -789,6 +889,7 @@ change.
   package's default), a line can break between the icon and the link's first
   word (18–28% of widths in headless Chromium, LTR and RTL). An inline,
   `nowrap` icon span with a word joiner after the svg never split.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

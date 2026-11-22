@@ -1,4 +1,4 @@
-function parseEnvInt(
+export function parseEnvInt(
   value: string | undefined,
   fallback: number,
   min: number,

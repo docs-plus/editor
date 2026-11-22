@@ -197,6 +197,8 @@ operational guidance is in the
 | `HOCUS_MIN_CLIENT_SCHEMA` | 0 | Raises the minimum client schema above the built-in floor of 2 (`SCHEMA_FLOOR`); lower values have no effect. Never set it above the highest schema a shipped bundle sends (currently 2). See the [schema rollout runbook](docs/operations/schema-rollout-runbook.md). |
 | `HOCUS_REWRITE_LEGACY_HIGHLIGHTS` | off | `1` rewrites stored legacy highlight colours (`var(--tt-color-highlight-X)`) to their token on load. Turn it on only once release N tabs are gone. |
 | `HOCUS_ALLOW_ISOLATED_TABS_DOCS` | off | `1` in dev and tests only. The server refuses to start with it in production. |
+| `HOCUS_SHARES` | off | Live-share server (not launched yet): `on`, `readonly` or `off`. Off means no `shares` table, `share:*` refused and the share endpoints answering 404. Limits and CORS origins are in `lib/sharing/share-config.ts`. |
+| `HOCUS_DELETE_ROUTE` | off | `on` serves `DELETE /api/documents/:id` from Hocuspocus too. Leave it off until the Traefik route moves (P4.1). |
 
 ## Deploying
 
