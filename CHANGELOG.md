@@ -75,6 +75,61 @@ change; no Deploy note.
   editor's hoisted module); the app shell grows by 1 B. The D23 ledger
   (details §1 rule 5) gains a 198 B line for it, and the fence rises by
   exactly that, to `main` + 2,053 B.
+
+### Desktop P2.4b: the dev bridge, the desktop root and the `local` project
+
+The desktop renderer now opens a document from storage. Under a
+desktop-target `next dev` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`, storage is a
+dev storage host on `MemoryDocLibrary` reached over a loopback socket, with no
+Hocus. The web build is unchanged: its route table, client chunks, pages and
+`sw.js` match the P2.1c baseline apart from Next's build id.
+
+#### Added
+
+- `components/desktop/desktop-root.tsx`, the desktop composition root. It
+  puts `local-session` over `createRpcDocStore` into `DocSessionProvider` and
+  opens one document (`?doc=`, until the library UI). It saves on blur, hide
+  and pagehide. `app/page.desktop.tsx` loads it with `ssr: false`.
+- The dev bridge. `lib/platform/desktop/dev-bridge.ts` is the renderer's
+  `call`, typed against P2.6's `DocStoreCalls`. `desktop/dev/storage-host.ts`
+  is the host.
+  - The host listens on 127.0.0.1 only, with a random token and an origin
+    check, and never runs in production.
+  - Each connection is one window: one holder per document, released when it
+    closes. Requests run in order.
+  - `lib/platform/desktop/dev-bridge-wire.ts` is the binary codec.
+  - Errors cross as `{ code, retryable }`, like the real IPC: no exception
+    message reaches the renderer, and unknown failures are `internal`.
+  - `DesktopRoot` retries `already_open` for about 500 ms, because a reload's
+    new connection can beat the old one's release.
+  - `next.config.ts` refuses a desktop production build with
+    `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`.
+  - P2.1's `DocStore` contract passes through the whole path.
+  - Architecture §11 lists how the bridge differs from the IPC path, so a
+    green `local` run is not read as proof of it.
+- The `local` Playwright project: one storage host per worker. An edit survives
+  a reload, the only sockets are the dev server's and the host's, and an X post
+  renders as the link card.
+- A `desktop` CI job builds the export on Linux and runs the `desktop` and
+  `local` projects, with no retries for `local`. The nightly copy is
+  removed.
+
+#### Changed
+
+- **Desktop routes are an allowlist.** The desktop target's `pageExtensions`
+  are `["desktop.tsx", "desktop.ts"]`. Its routes are the root page plus
+  re-exports of the layout, the error page and `/about`.
+  - This retires P2.4a's move-aside: nothing is parked for the export, and
+    `next.config.ts` no longer guards against parked files.
+  - The alternatives were measured and rejected. A `page.desktop.tsx` beside
+    `page.tsx` loses to it silently. Branching `page.tsx` on the flag pulls
+    desktop chunks into the web build.
+- The export check also fails on the dev bridge's marker string
+  (architecture §11 release check).
+- `next.config.ts` always defines `NEXT_PUBLIC_DESKTOP_BRIDGE`, so release
+  builds drop the bridge's branch.
+- The `desktop` project no longer needs Hocus. The X link card test moved to
+  `local`, because a release export has no storage until P2.5.
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
