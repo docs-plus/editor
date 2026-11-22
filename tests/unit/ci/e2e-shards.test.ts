@@ -4,6 +4,7 @@ import {
   packShards,
   parseTimings,
   smoothTimings,
+  type Timings,
   timingsFromReport,
 } from "../../../scripts/e2e-shards";
 
@@ -141,7 +142,12 @@ describe("timingsFromReport", () => {
 });
 
 describe("smoothTimings", () => {
-  it.each([
+  const cases: {
+    name: string;
+    current: Timings;
+    previous: Timings;
+    expected: Timings;
+  }[] = [
     {
       name: "averages a file timed in both runs",
       current: { a: 263 },
@@ -166,7 +172,9 @@ describe("smoothTimings", () => {
       previous: { a: 100 },
       expected: { a: 100 },
     },
-  ])("$name", ({ current, previous, expected }) => {
+  ];
+
+  it.each(cases)("$name", ({ current, previous, expected }) => {
     expect(smoothTimings(current, previous)).toEqual(expected);
   });
 
