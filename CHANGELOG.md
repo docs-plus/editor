@@ -9,6 +9,55 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Selection bubble P1: Style ▾, strike, code, clear and a gap-free link field
+
+The selection bubble gains the rest of its v2 row (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A20):
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌. The editor chunk group does not grow
+(393,820 → 393,795 B gz, −25 B against `main` at `903b5c8`); the bubble
+chunk grows from 9,798 to 12,317 B gz and the menu chunk that holds Turn
+into from 3,173 to 4,646 B gz. The colour rows (Task 1.4) and the keyboard
+settle in the controller land from their own branches.
+
+#### Added
+
+- **Bubble:** Style ▾ shows the selection's block type as one word (Text,
+  H1–H6, Title, List, Quote, Code, Mixed), sized once to the longest word,
+  and opens Turn into away from the text. Strike, inline code and clear
+  formatting join B, I and U. A comment slot is reserved at the end and
+  renders nothing until the comments work registers `comment.add`.
+- **Turn into:** one menu body for the bubble and the row's Text style ▾:
+  Text, Heading 1–3, More headings ▸ (4–6), the three lists, Quote and Code
+  block, with icons, shortcuts and a trailing ✓, and no Markdown chips.
+  Text and the headings turn a list item or a quote into that block,
+  unwrapped, in one undo step. The row keeps Your formats below them.
+- **Bubble:** Alt+F10 shows a bubble that is still waiting (its delay) at
+  once, with focus on Style ▾.
+- **Bubble:** applying inline code over linked or coloured text says "Link
+  and colour removed" (or "Link removed", "Colour removed") on the status
+  pill, with Undo.
+
+#### Changed
+
+- **Row:** the Text style ▾ face reads "Text" instead of "Normal text".
+- **Bubble:** inside inline code, B, I, U, S, colour and link say "Inline
+  code can't take other formatting." instead of the generic refusal; the
+  Paint format brush says the same on inline code on every surface
+  (phone cells included), where it said "Code has no formatting."
+- **Bubble:** a lighter edge in light mode, its own darker-than-page
+  surface in dark mode (`oklch(0.24 0 0)`, edge `oklch(1 0 0 / 36%)`), focus
+  rings drawn inside each button, a dashed bar for a mixed mark, and a
+  `CanvasText` edge under forced colours.
+- **Bubble:** motion follows the O10 token: 120 ms scale-in from the anchor
+  side, 80 ms fade out, and none at all under reduced motion
+  (`prefers-reduced-motion` or `data-motion="reduce"`).
+
+#### Fixed
+
+- **Bubble:** clicking 🔗 and pasting or typing a URL at once no longer
+  replaces the selected words: focus moves to the link field in the click
+  itself, and the bubble hides in the same task.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
