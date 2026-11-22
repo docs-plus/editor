@@ -52,6 +52,53 @@ about 900 pixels). Test only; no app or Deploy change.
   timer of the same dwell (`PREVIEW_DWELL_MS`), which fires after the
   pending clear. 40 repeats: no pixel failures (11 of 24 before).
 
+### Nightly back to green: offline shell, palette budget, soak
+
+The nightly had failed on every run since 2026-11-16. Three independent
+causes: two fixed in the app, and the soak's filter journey now judges
+commands apart from typing (owner's decision).
+
+#### Fixed
+
+- **Offline:** a document is saved on the device at its first server sync,
+  not 750 ms later. The tab list could already be on the device, so a reload
+  offline in that window showed the tab bar over an editor that never
+  loaded, with no message (the nightly's flaky "offline shell" test).
+- **Offline:** files a first visit loads before the service worker controls
+  the page (the editor chunk among them) are now stored in its static cache:
+  the page hands the worker its loaded `/_next/static` URLs once it takes
+  control, and then any that were still in flight then (files that did not
+  pass through the worker, `workerStart` 0). Before, offline reopening relied
+  on the browser's HTTP cache; with that evicted it showed "Something went
+  wrong" instead of the editor.
+- **Palette:** the first Alt+/ loads 13.4 KB gz again (contract A7: 20 KB),
+  down from 24.4 KB. The identity dialog's own chunk (#126/#129) moved the
+  shared `Dialog` out of the first-load bundle, so the palette now fetches
+  it; that tipped a palette already at 20,475 B. The fix removes dead weight
+  instead: cmdk builds its unused `Command.Dialog` from Radix Dialog at module
+  level, so all of Radix Dialog (focus scope, dismissable layer, scroll lock)
+  rode in the palette chunk. `@radix-ui/react-dialog`, which only cmdk
+  depends on, is aliased to a stub (`lib/cmdk-radix-dialog-stub.ts`).
+
+#### Changed
+
+- **Tests:** the `pwa` offline tests clear the browser's HTTP cache before
+  going offline, so only the service worker can serve the app; a new test
+  checks that every static file the first visit loaded ends up in its cache,
+  and the offline shell test waits for the device copy and asserts the
+  editor's title, not any `h1` (the error page has one).
+- **Nightly:** the palette budget step writes to its own output folder, so
+  it no longer deletes the pwa step's traces when both fail.
+- **Soak:** the `filter-lifecycle` journey judges its typing at 100 ms and
+  its commands (Mod+Shift+F to open the filter bar, Enter to commit a
+  filter) apart at 200 ms, INP's "good" bound. Its p95 was decided by those
+  six events, each a full editor-shell re-render costing 90–170 ms under
+  `next dev` on a runner, so it swung between 64 and 168 ms on one commit;
+  typing stayed at 40–72 ms. Moving the filter state out of the shell is a
+  tracked follow-up. Journeys log their slowest events with the step each
+  fell in and its input delay, processing and presentation times
+  (`tests/TESTING.md`, "Soak journeys").
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.

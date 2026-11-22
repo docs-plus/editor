@@ -92,13 +92,16 @@ jobs:
           bun playwright test --project=pwa --trace retain-on-failure
 
       # Contract A7: the palette chunk plus cmdk that the first Alt+/ loads
-      # stays within 20 KB gz. Only a production build measures it.
+      # stays within 20 KB gz. Only a production build measures it. Its own
+      # output folder: Playwright empties the folder it writes to, which
+      # deleted the pwa step's traces whenever both failed.
       - name: Palette budget
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
         run: >-
           PALETTE_BUDGET=1 E2E_BASE_URL=http://localhost:3847 CI=
           bun playwright test --project=chromium tests/e2e/palette.spec.ts
           --grep "palette budget" --trace retain-on-failure
+          --output test-results/palette-budget
 
       - name: Upload failure artifacts
         if: failure()

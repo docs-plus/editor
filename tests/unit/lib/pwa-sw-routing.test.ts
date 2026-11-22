@@ -5,6 +5,7 @@ import {
   extractCssAssets,
   extractStaticAssets,
   isCacheableResponse,
+  loadedStaticPaths,
 } from "@/lib/pwa/sw-routing";
 
 const origin = "https://tiny.docs.plus";
@@ -138,5 +139,51 @@ describe("isCacheableResponse", () => {
     { vary: "*" },
   ])("rejects %o", (headers) => {
     expect(isCacheableResponse(new Response("x", { headers }))).toBe(false);
+  });
+});
+
+describe("loadedStaticPaths", () => {
+  it("keeps same-origin /_next/static paths, deduplicated", () => {
+    expect(
+      loadedStaticPaths(
+        [
+          `${origin}/_next/static/chunks/a.js`,
+          `${origin}/_next/static/chunks/a.js`,
+          `${origin}/_next/static/media/font.woff2`,
+        ],
+        origin,
+      ),
+    ).toEqual(["/_next/static/chunks/a.js", "/_next/static/media/font.woff2"]);
+  });
+
+  it("drops other origins, other paths, the worker and non-strings", () => {
+    expect(
+      loadedStaticPaths(
+        [
+          "https://picsum.photos/seed/doc1/400/300",
+          "https://evil.example/_next/static/chunks/a.js",
+          `${origin}/api/documents/x`,
+          `${origin}/_next/static/service-worker/sw.js`,
+          `${origin}/`,
+          42,
+          null,
+          "http://[bad",
+        ],
+        origin,
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores anything but an array", () => {
+    expect(loadedStaticPaths("/_next/static/chunks/a.js", origin)).toEqual([]);
+    expect(loadedStaticPaths(undefined, origin)).toEqual([]);
+  });
+
+  it("caps one message at 200 paths", () => {
+    const urls = Array.from(
+      { length: 500 },
+      (_, i) => `${origin}/_next/static/chunks/${i}.js`,
+    );
+    expect(loadedStaticPaths(urls, origin)).toHaveLength(200);
   });
 });
