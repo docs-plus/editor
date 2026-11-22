@@ -12,13 +12,19 @@ import {
 import { createPortal } from "react-dom";
 
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
+import { announceLater } from "@/lib/announce-later";
+import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
+import { getEditorContextStore } from "@/lib/editor-context/store";
 
 import { ActionButton } from "../action-button";
-import { ColorSplit } from "../color-controls";
 import { PaintFormatButton } from "../formats/paint-format-button";
+import { EmptyLinePlus } from "../slash/empty-line-plus";
 import { StatusPill } from "../status-pill";
+import { BubbleActionButton } from "./bubble-action-button";
 import { bubbleReferenceRect } from "./bubble-anchor";
+import { BubbleColorSplit } from "./bubble-color-split";
 import {
   type BubbleController,
   createBubbleController,
@@ -29,17 +35,64 @@ import {
   chooseBubblePlacement,
   clearsBubbleSuppression,
   isBubbleDismissKey,
+  KEYBOARD_SETTLE_MS,
   OPEN_POPOVER_TRIGGER,
   POPOVER_CONTENT,
   shouldShowBubble,
 } from "./bubble-rules";
+import { BubbleStyleMenu } from "./bubble-style-menu";
 import "./selection-bubble.scss";
+// Installs the per-item lift behind the text styles (spec §7.2) in the
+// registry, keeping it out of the editor chunk (`core/blocks.ts`).
+import "@/lib/editor-actions/style-lift";
 
-/** Exit fade (spec §4.3: 140 ms in / 90 ms out). */
-const EXIT_MS = 90;
+/** Exit fade (spec §11.1, O10: 120 ms in / 80 ms out). */
+const EXIT_MS = 80;
+
+/** No motion: from the OS, or the app's own `data-motion="reduce"`. */
+const reducedMotion = () =>
+  document.documentElement.dataset.motion === "reduce" ||
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
+/** B I U S (spec §7.1 slots 2–5), refused inside inline code. */
+const MARK_IDS = [
+  "mark.bold",
+  "mark.italic",
+  "mark.underline",
+  "mark.strike",
+] as const;
+/** Registered by the comments PR (spec §7.6); until then, no slot. */
+const COMMENT_ID = "comment.add";
+
+/**
+ * Comment (spec §7.6): last, with its separator, only where `comment.add`
+ * is registered AND offered. `getView` reports a refusal, not absence, so
+ * an editor whose document takes no comments (the web sandbox: no
+ * `setCommentGate`) would otherwise show a disabled "Comment". A boolean
+ * snapshot, so the slot re-renders only when that answer flips.
+ */
+function CommentSlot({ editor }: { editor: Editor }) {
+  const store = getEditorContextStore(editor);
+  const offered = useSyncExternalStore(
+    store.subscribe,
+    () => {
+      const action = editorActions.get(COMMENT_ID);
+      return (
+        action !== undefined && action.offered?.(store.getContext()) !== false
+      );
+    },
+    () => false,
+  );
+  if (!offered) return null;
+  return (
+    <>
+      <ToolbarSeparator />
+      <ActionButton id={COMMENT_ID} editor={editor} variant="bubble" />
+    </>
+  );
+}
 
 /**
  * The bubble's one root (v1 contract §5.2). The controller appends it to
@@ -55,6 +108,50 @@ function createBubbleRoot(): HTMLDivElement {
   root.style.position = "absolute";
   root.style.visibility = "hidden";
   return root;
+}
+
+/**
+ * 🔗 hands off in place (spec §7.5): the Hyperlink package focuses its
+ * field 100 ms after it opens, so a URL typed or pasted at once would land
+ * in the editor, over the selection. Focus moves to the field in the click
+ * itself, and the bubble hides in the same task.
+ */
+function handOffToLink(controller: BubbleController | null) {
+  document
+    .querySelector<HTMLInputElement>(".hyperlink-create-popover input")
+    ?.focus();
+  controller?.hide();
+}
+
+const LINK_MARK = "hyperlink";
+const COLOUR_MARKS = ["textColor", "highlight"];
+
+/**
+ * ‹› over linked or coloured text: `inlineCode` excludes every other mark,
+ * so applying it removes them (spec §7.2). The pill says so, with Undo.
+ */
+function runInlineCode(editor: Editor, run: () => boolean) {
+  const { state } = editor;
+  const { from, to } = state.selection;
+  const has = (name: string) => {
+    const type = state.schema.marks[name];
+    return type !== undefined && state.doc.rangeHasMark(from, to, type);
+  };
+  const adding = !editor.isActive("inlineCode");
+  const link = adding && has(LINK_MARK);
+  const colour = adding && COLOUR_MARKS.some(has);
+  if (!run() || !(link || colour)) return;
+  const what = link && colour ? "Link and colour" : link ? "Link" : "Colour";
+  announceLater(`${what} removed`, {
+    action: {
+      label: "Undo",
+      // The registry's Undo, as the colour pill's (one path).
+      run: () => {
+        const undo = editorActions.get("history.undo");
+        if (undo) runAction(editor, undo);
+      },
+    },
+  });
 }
 
 /** Keeps the editor's focus and selection on a click between the items. */
@@ -97,13 +194,14 @@ export function SelectionBubbleView(props: SelectionBubbleViewProps) {
     <>
       {fine ? <BubbleView {...props} /> : null}
       <StatusPill placement="desktop" />
+      <EmptyLinePlus {...props} />
     </>
   );
 }
 
 /**
- * The desktop selection bubble (spec §4.3, design pass §1): B · I · U │
- * text colour split │ link │ Paint format. A `BubbleController` (spec
+ * The desktop selection bubble (spec §7.1): Style ▾ │ B I U S ‹› Tx │
+ * text colour split, link, Paint format │ 💬 (once registered). A `BubbleController` (spec
  * §12.1) shows, hides and positions it without a ProseMirror plugin, so
  * this lazy chunk never calls `registerPlugin`. Its items mount only while
  * it shows, so typing with no bubble runs no bubble code past the
@@ -126,8 +224,12 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
   const closeTimerRef = useRef<number | undefined>(undefined);
   const focusInsideRef = useRef(false);
   const restoreFocusRef = useRef(false);
+  const pendingFocusRef = useRef(false);
 
-  /** Esc: fade out for 90 ms, then hide; stays hidden until a new selection. */
+  /**
+   * Esc: fade out for 80 ms (at once with reduced motion), then hide; stays
+   * hidden until a new selection.
+   */
   const startClose = useCallback(() => {
     if (!root.isConnected) return;
     suppressedRef.current = true;
@@ -136,7 +238,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(
       () => controllerRef.current?.hide(),
-      EXIT_MS,
+      reducedMotion() ? 0 : EXIT_MS,
     );
   }, [root]);
 
@@ -160,6 +262,20 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       editor.view.focus();
     }
   }, [editor, root, scrollTarget]);
+
+  /**
+   * Hands focus to the first item once the bubble shown by Alt+F10 is laid
+   * out and visible (an item in a hidden root cannot take focus).
+   */
+  const focusPending = useCallback(() => {
+    if (!pendingFocusRef.current || root.style.visibility === "hidden") return;
+    const first = root.querySelector<HTMLElement>(
+      '[role="toolbar"] [data-toolbar-item]',
+    );
+    if (!first) return;
+    pendingFocusRef.current = false;
+    first.focus();
+  }, [root]);
 
   // One controller per editor for this view's lifetime (StrictMode's second
   // effect replaces the first).
@@ -193,6 +309,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
 
     const controller = createBubbleController(editor, scrollTarget, {
       root,
+      keyboardSettleMs: KEYBOARD_SETTLE_MS,
       shouldShow: () => shouldShowBubble(view, root, suppressedRef.current),
       getReferenceRect: (side) =>
         bubbleReferenceRect(
@@ -213,6 +330,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         window.clearTimeout(closeTimerRef.current);
         root.dataset.state = "closed";
         delete root.dataset.closing;
+        pendingFocusRef.current = false;
         restoreFocusRef.current = focusInsideRef.current;
         focusInsideRef.current = false;
         setShown(false);
@@ -220,6 +338,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       onPosition: () => {
         syncVisibility();
         place();
+        focusPending();
       },
     });
     controller.setPlacement(placementRef.current);
@@ -230,7 +349,43 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       controller.destroy();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [editor, scrollTarget, root, syncVisibility]);
+  }, [editor, scrollTarget, root, syncVisibility, focusPending]);
+
+  /**
+   * Alt+F10 with a selection the bubble has not shown yet (its delay, or a
+   * keyboard selection still settling): show it at once and put focus on
+   * its first item (Style ▾, spec §14) once it is laid out, instead of the
+   * row. A capture listener on the editor, so it runs before ProseMirror's
+   * keymap (`editor-action-shortcuts`), which would send focus to the row:
+   * a just-shown bubble has no items to focus yet.
+   */
+  useEffect(() => {
+    if (editor.isDestroyed) return;
+    const dom = editor.view.dom;
+    const onAltF10 = (event: KeyboardEvent) => {
+      if (event.key !== "F10" || !event.altKey) return;
+      const controller = controllerRef.current;
+      if (!controller || controller.visible) return;
+      // A Shift+Arrow just before may be only in the DOM yet: Chromium fires
+      // its `selectionchange` later, and ProseMirror drops it once focus
+      // has left the editor. Read it into the state first.
+      // ProseMirror's own keydown runs `forceFlush()`, which only flushes a
+      // flush already scheduled, not a selection change it has not seen.
+      // Private API, so fully guarded. The cause (a later
+      // `selectionchange`) is likely, not proven.
+      (
+        editor.view as unknown as { domObserver?: { flush?(): void } }
+      ).domObserver?.flush?.();
+      controller.update();
+      if (!controller.visible) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pendingFocusRef.current = true;
+    };
+    dom.addEventListener("keydown", onAltF10, { capture: true });
+    return () =>
+      dom.removeEventListener("keydown", onAltF10, { capture: true });
+  }, [editor]);
 
   // One keydown and one mousedown listener on the editor, for the editor's
   // lifetime. They do nothing unless the bubble is in the DOM, so typing
@@ -243,7 +398,16 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         suppressedRef.current = false;
         return;
       }
-      if (!root.isConnected || !isBubbleDismissKey(event)) return;
+      if (!isBubbleDismissKey(event)) return;
+      if (!root.isConnected) {
+        // A bubble still waiting (its delay, a keyboard settle): Esc says
+        // no to it too; the settle's or delay's re-check finds it
+        // suppressed until a new selection.
+        if (event.key === "Escape" && controllerRef.current?.pending) {
+          suppressedRef.current = true;
+        }
+        return;
+      }
       if (event.key === "Escape") {
         startClose();
         return;
@@ -365,15 +529,28 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         onEscape={onEscape}
         onMouseDown={keepEditorFocus}
       >
-        <ActionButton id="mark.bold" editor={editor} variant="bubble" />
-        <ActionButton id="mark.italic" editor={editor} variant="bubble" />
-        <ActionButton id="mark.underline" editor={editor} variant="bubble" />
+        <BubbleStyleMenu editor={editor} placement={placement} />
         <ToolbarSeparator />
-        <ColorSplit kind="text" editor={editor} popoverSide={placement} />
+        {MARK_IDS.map((id) => (
+          <BubbleActionButton key={id} id={id} editor={editor} />
+        ))}
+        <BubbleActionButton
+          id="mark.inlineCode"
+          editor={editor}
+          onRun={(run) => runInlineCode(editor, run)}
+        />
+        <ActionButton id="format.clear" editor={editor} variant="bubble" />
         <ToolbarSeparator />
-        <ActionButton id="mark.link" editor={editor} variant="bubble" />
-        <ToolbarSeparator />
+        <BubbleColorSplit editor={editor} placement={placement} />
+        <BubbleActionButton
+          id="mark.link"
+          editor={editor}
+          onRun={(run) => {
+            if (run()) handOffToLink(controllerRef.current);
+          }}
+        />
         <PaintFormatButton editor={editor} />
+        <CommentSlot editor={editor} />
       </Toolbar>
     ) : null,
     root,

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { type ReactNode, useId } from "react";
+import { type ComponentProps, type ReactNode, useId } from "react";
 
 import {
   DropdownMenuCheckboxItem,
@@ -42,15 +42,25 @@ const MENU_WIDTH =
 export function ToolbarMenuContent({
   finalFocus,
   label,
+  side = "bottom",
+  align = "start",
+  sideOffset = 4,
   children,
 }: {
   finalFocus: () => HTMLElement | boolean;
   label?: string;
+  /** The bubble opens its menus away from the text (spec §10.4). */
+  side?: "top" | "bottom";
+  align?: "start" | "center" | "end";
+  /** The bubble's moves the menu off the selection's lines (§10.4). */
+  sideOffset?: ComponentProps<typeof DropdownMenuContent>["sideOffset"];
   children?: ReactNode;
 }) {
   return (
     <DropdownMenuContent
-      align="start"
+      side={side}
+      align={align}
+      sideOffset={sideOffset}
       finalFocus={finalFocus}
       data-toolbar-popup=""
       aria-label={label}
@@ -175,7 +185,8 @@ export function ActionMenuItem({
   const body = (
     <>
       {Icon ? <Icon aria-hidden="true" /> : null}
-      <span>{label ?? action.label}</span>
+      {/* `auto`: an English label keeps its trailing "…" in RTL. */}
+      <span dir="auto">{label ?? action.label}</span>
       <Shortcut combo={action.shortcut} mac={mac} />
       <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </>
@@ -185,7 +196,7 @@ export function ActionMenuItem({
       {body}
     </DropdownMenuCheckboxItem>
   ) : (
-    <DropdownMenuItem {...common} className={checkColumn ? "pr-8" : undefined}>
+    <DropdownMenuItem {...common} className={checkColumn ? "pe-8" : undefined}>
       {body}
     </DropdownMenuItem>
   );
@@ -198,7 +209,7 @@ export function ActionMenuItem({
  * reason line are `order-1`: after the icon and label, in DOM order.
  */
 const CHECK_BEFORE_SHORTCUT =
-  "pr-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ml-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
+  "pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
 
 /** One registry action as a radio item of a value menu. */
 export function ActionRadioItem({
@@ -245,8 +256,8 @@ export function ActionRadioItem({
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : null}
-      <span>{label ?? action.label}</span>
-      <Shortcut combo={shortcut} mac={mac} className="order-1 ml-0" />
+      <span dir="auto">{label ?? action.label}</span>
+      <Shortcut combo={shortcut} mac={mac} className="order-1 ms-0" />
       <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </DropdownMenuRadioItem>
   );

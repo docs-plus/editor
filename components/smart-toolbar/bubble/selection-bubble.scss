@@ -6,29 +6,73 @@
   z-index: 9;
 }
 
+// Spec §7.1 Shape and colour. The dark surface lifts the bubble off the
+// page (`--popover` and `--card` are both 0.205 there); the edge is chosen
+// on looks, since 1.4.11 rests on the focus ring and the pressed bar.
 .st-bubble-panel {
-  // 4px around 2px-offset 2px outlines: a focused item's ring stays inside
-  // the panel instead of drawing over its border.
+  --bubble-surface: var(--popover);
+  --bubble-edge: oklch(0.87 0 0);
   padding: 4px;
   gap: 2px;
-  animation: st-bubble-in-above 140ms ease-out both;
-}
+  border-color: var(--bubble-edge);
+  border-radius: var(--radius);
+  background: var(--bubble-surface);
+  color: var(--popover-foreground);
+  animation: st-bubble-in 120ms cubic-bezier(0.2, 0, 0, 1) both;
 
-.st-bubble[data-placement="bottom"] .st-bubble-panel {
-  animation-name: st-bubble-in-below;
-}
+  :is(.dark *) & {
+    --bubble-surface: oklch(0.24 0 0);
+    --bubble-edge: oklch(1 0 0 / 36%);
+  }
 
-@keyframes st-bubble-in-above {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
+  // Inside each 28px button, so a ring never crosses the 2px gap onto a
+  // neighbour.
+  button:focus-visible {
+    outline-offset: -2px;
+  }
+
+  // Mixed is a 2 + 2 + 2px dashed bar, never pressed's solid bar in grey.
+  button[aria-pressed="mixed"]::after {
+    background: linear-gradient(
+      90deg,
+      var(--pressed-bar) 0 2px,
+      transparent 2px 4px,
+      var(--pressed-bar) 4px 6px
+    );
+  }
+
+  @media (forced-colors: active) {
+    border-color: CanvasText;
   }
 }
 
-@keyframes st-bubble-in-below {
+// Style ▾'s face (spec §7.1 Sizes): sized once to the longest face word
+// (`bubble-style-menu.tsx`), so it never moves the other items.
+.st-bubble-style {
+  justify-content: flex-start;
+  padding-inline: 8px 4px;
+  gap: 4px;
+}
+
+.st-bubble-style-word {
+  text-align: start;
+}
+
+// Motion (spec §11.1, O10): in 120ms, opacity and scale 0.98 → 1 from
+// the anchor side; out 80ms, opacity only, linear (`EXIT_MS`). The bubble
+// is interactive from its first frame: nothing waits for the animation.
+.st-bubble-panel {
+  transform-origin: 50% 100%;
+}
+
+.st-bubble[data-placement="bottom"] .st-bubble-panel {
+  transform-origin: 50% 0;
+}
+
+@keyframes st-bubble-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: scale(0.98);
   }
 }
 
@@ -38,23 +82,26 @@
   }
 }
 
-@keyframes st-bubble-fade-in {
-  from {
-    opacity: 0;
-  }
+// Last, so the exit fade wins over the enter.
+.st-bubble[data-closing] .st-bubble-panel {
+  animation: st-bubble-out 80ms linear forwards;
+  pointer-events: none;
 }
 
+// Reduced motion, from the OS or the app (`data-motion="reduce"`): none,
+// the bubble appears and leaves at once.
 @media (prefers-reduced-motion: reduce) {
   .st-bubble-panel,
-  .st-bubble[data-placement="bottom"] .st-bubble-panel {
-    animation-name: st-bubble-fade-in;
+  .st-bubble[data-closing] .st-bubble-panel {
+    animation: none;
   }
 }
 
-// Last, so the exit fade (opacity only already) wins over every in-motion.
-.st-bubble[data-closing] .st-bubble-panel {
-  animation: st-bubble-out 90ms ease-in forwards;
-  pointer-events: none;
+:root[data-motion="reduce"] {
+  .st-bubble-panel,
+  .st-bubble[data-closing] .st-bubble-panel {
+    animation: none;
+  }
 }
 
 // Paint format is armed (design pass §2, `paint-format.ts`): the class sits

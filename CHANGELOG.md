@@ -33,6 +33,210 @@ Two Windows soak failures on #170 and #171, fixed in the engine.
 
 **Deploy:** none.
 
+### Selection bubble P1: Style ▾, strike, code, clear and a gap-free link field
+
+The selection bubble gains the rest of its v2 row (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A21):
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. With P2–P4, the
+editor chunk group grows 26 B: 394,545 B gz against 394,519 B on `main` at
+`2764fb5`. That is a D23 ledger line the owner approved on 2026-11-22
+(`EDITOR_CHUNK_LEDGER_BYTES` 2,205 → 2,231 B), covering the style-lift hook,
+List and Quote in the style value and the Insert sheet's nested load. The
+per-item lift behind the text styles is injected from the lazy chunks.
+Merging `main` `2764fb5` first measured +981 B: the lazy menus imported
+lucide's Type, which made Turbopack split the editor group's small modules
+into two files. The menus now draw their own copy of the icon
+(`components/smart-toolbar/type-icon.ts`). The
+"/" chunk is under its 7 KB budget, 7,099 B gz by its own test
+(`SLASH_BUDGET=1`; 7,334 B on the P4 tip): the phone Insert sheet now gets
+the "/" items at load instead of importing them. The bubble chunk is
+14,860 B gz (9,797 B on `main` at `2764fb5`) and the colour chunk
+6,580 B gz (3,639 B).
+
+#### Added
+
+- **Bubble:** Style ▾ shows the selection's block type as one word (Text,
+  H1–H6, Title, List, Quote, Code, Mixed), sized once to the longest word,
+  and opens Turn into away from the text. Strike, inline code and clear
+  formatting join B, I and U. A comment slot is reserved at the end and
+  renders nothing until the comments work registers `comment.add`.
+- **Turn into:** one menu body for the bubble and the row's Text style ▾:
+  Text, Heading 1–3, More headings ▸ (4–6), the three lists, Quote and Code
+  block, with icons, shortcuts and a trailing ✓, and no Markdown chips.
+  The row keeps Your formats below them.
+- **Text styles:** Text and the headings turn the selected list items or
+  quote lines into that block, lifted to the top level, in one undo step,
+  wherever they run (Turn into, the palette, the "/" menu, the phone's
+  Style rows, the shortcuts); unselected items and lines stay in their list
+  or quote, and a range across a paragraph and a list converts every
+  block. The lift loads with the bubble (on idle), the menus, the phone
+  bar or the palette; before any of them, a style shortcut or a "/" pick
+  in a list restyles in place, as before.
+- **Turn into:** after select all it converts everything but the title
+  ("The title stays a heading."); Code block and Quote lift list items and
+  quote lines first; Code block over formatting says "Formatting
+  removed"; a range with table cells converts around them ("Table cells
+  keep their type."). Each pill has Undo. Opened toward the text, it goes
+  past the selection's lines, never over them.
+- **Colour:** the bubble's and the row's colour menus are named rows:
+  Recent, then Text | Highlight side by side (Default and No highlight
+  first, five colours each, the rest under More colours ▸ and More
+  highlights ▸), with ✓ on the current value, typeahead and the hover
+  preview. From the bubble the menu opens below or above the selection,
+  never over it. Enter or Space picks and closes the menu (a change from
+  O4, spec §7.10), and the pick is announced with Undo.
+- **Phone:** the Aa sheet keeps the swatch grid, six per line, names the
+  current colours under it, and each tap shows a pill naming the colour
+  ("Teal text") with a 44px Undo.
+- **Bubble:** a keyboard selection (Shift+arrows, ⌘A) shows the bubble
+  300 ms after Shift is released and the selection is still, never while
+  Shift is held or a key repeats.
+- **Bubble:** Alt+F10 shows a bubble that is still waiting (its delay) at
+  once, with focus on Style ▾.
+- **Bubble:** applying inline code over linked or coloured text says "Link
+  and colour removed" (or "Link removed", "Colour removed") on the status
+  pill, with Undo.
+
+#### Changed
+
+- **Text style:** the paragraph style is named "Text" everywhere (the
+  registry label, so the row, the palette, the "/" menu and the phone
+  agree), and the row's face reads "List" or "Quote" inside a list or
+  quote, as the bubble's does.
+- **Bubble:** inside inline code, B, I, U, S, colour and link say "Inline
+  code can't take other formatting." instead of the generic refusal; the
+  Paint format brush says the same on inline code on every surface
+  (phone cells included), where it said "Code has no formatting."
+- **Bubble:** a lighter edge in light mode, its own darker-than-page
+  surface in dark mode (`oklch(0.24 0 0)`, edge `oklch(1 0 0 / 36%)`), focus
+  rings drawn inside each button, a dashed bar for a mixed mark, and a
+  `CanvasText` edge under forced colours.
+- **Bubble:** motion follows the O10 token: 120 ms scale-in from the anchor
+  side, 80 ms fade out, and none at all under reduced motion
+  (`prefers-reduced-motion` or `data-motion="reduce"`).
+
+#### Fixed
+
+- **RTL:** the "/" menu's Markdown hint caps sit at the row's inline end
+  again (they had drifted next to the labels); the row ⋯ menu's rows line
+  up; menu shortcut glyphs read left to right; the phone Insert sheet keeps
+  a note ("3 × 3") next to its label, so it no longer reads as the next
+  column's.
+
+- **Bubble:** clicking 🔗 and pasting or typing a URL at once no longer
+  replaces the selected words: focus moves to the link field in the click
+  itself, and the bubble hides in the same task.
+- **Bubble:** Esc while the bubble is still waiting to show (its delay or
+  a keyboard selection's settle) cancels it.
+
+### Phone Insert sheet, Style first in the Aa sheet, words on tablet stand-ins (P4)
+
+Phase P4 of the selection bubble and quick insert design (spec §8.3, §13.1,
+§13.2). Phones get an Insert sheet in place of the desktop dropdown, the Aa
+sheet leads with Style, and touch tablets name the row's unclear stand-ins.
+
+#### Added
+
+- **Phone:** the bar's Insert cell opens a bottom sheet
+  (`components/smart-toolbar/phone/insert-sheet.tsx`): the "/" menu's items
+  as a two-column grid of 44px cells. Suggested (the "/" menu's own rows for the
+  recent kinds) comes first when there are any, then "Blocks" (the caret's block is empty)
+  or "Turn into" (it has text), then Insert. Kinds that can't run here show
+  their reason on a second line. Table and Embed open their step inside the
+  sheet; Diagram lists the templates. A pick closes the sheet and puts the
+  caret in the new block, with the keyboard back. "/embed" on a phone opens
+  the sheet at the embed step. The sheet rides above the keyboard while the
+  link field has focus, and a pick refused since it opened (a
+  collaborator's edit) says why inside it. Its cells and steps are their own
+  lazy chunk, fetched when the browser is idle and on the cell's press.
+- **Touch tablets:** on a coarse pointer from 768px, the row's stand-ins
+  read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from first paint
+  (CSS in `app/globals.css`). Below an 848px window the row has no room for
+  their 120px in a code block or table, so (owner decision, option b) Redo
+  moves from the row to the top of ⋯ there, and the list button keeps only
+  List ▾. ⌘⇧Z still redoes. Desktop's ⋯ menu is unchanged.
+
+#### Changed
+
+- **Toolbar:** the stand-ins are named "Format" (was "More text
+  formatting"), "Layout" (was "Paragraph") and "Block: Section tools" and so
+  on (was "Section tools"), so each name begins with the word shown on it
+  (WCAG 2.5.3). The phone's slot cell takes the same name.
+- **Phone:** the Aa sheet starts with Style: Text and H1–H3, a More
+  headings disclosure for H4–H6 (open when the current style is one of
+  them, closable all the same), then the lists and Quote, the current style
+  pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
+  above the home indicator.
+
+Measured against `main` at 84a9458, with the "/" menu's P2 and the grouped ⋯
+menu's P3 work merged in: the editor chunk group gets 23 B smaller (393,995 B
+gz against 394,018 B). The phone bar chunk grows 978 B gz (18,175 B), and the
+sheet body is a chunk of its own, 3,926 B gz. The app's CSS grows 494 B gz
+(16,487 B): 138 B for the tablet words and 71 B for the touch step that
+moves Redo; the rest is P2 and P3.
+
+### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
+
+The "/" menu gains what the second reference set showed it lacked, and a
+pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
+§8.2, §8.5; v1 contract A20). The editor chunk group is unchanged
+(393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
+from 5,772 B to 7,041 B gz, and its test budget (`SLASH_BUDGET=1`) is
+raised from 6 KB to 7 KB (7,168 B) by the owner's decision of 2026-11-22.
+The growth by feature (gz): the `+`'s undo handling 336 B, the footer
+269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor
+66 B; "New" badges compile out while none is declared. The bubble chunk, which now mounts the
+`+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
+rather than its own `slash-footer.tsx` (the plan's file list): it shares
+the menu's state and placement, and a separate module would only add
+bytes.
+
+#### Added
+
+- **"/" menu:** a Suggested section leads with your last 3 inserted kinds
+  (table, image, divider…) that can go at the caret; each stays in its own
+  section too. A new writer sees no Suggested section; "Forget my choices"
+  clears it. A query hides it and puts a recent kind first among equal
+  matches.
+- **"/" menu:** "Type to search" sits after the "/" while the query is
+  empty and nothing follows the caret (never during IME composition); a
+  pinned footer teaches the active row's Markdown shortcut ("Type ## then
+  space for Heading 2") and has a Close button (Esc still works). On touch
+  the footer is only a 44 px Close. Hints stay left to right in RTL ("1.",
+  never ".1").
+- **"/" menu:** rows can carry a "New" badge until a date, hidden once you
+  have used that kind; none are declared yet.
+- **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
+  margin of an empty paragraph (in line with the heading grips; the right
+  margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
+  shows beside the caret 300 ms after you stop typing, or under the
+  pointer after a 150 ms rest, never in the title, a list, a quote or a
+  table cell, and never on touch. The "/" it types is an ordinary one: a
+  query, a pick, Esc and undo work as after a typed "/". Only with the
+  query still empty, Esc removes it without an undo step and a pick
+  undoes to the empty line. It is mounted by
+  the lazy bubble chunk's desktop wrapper, so it appears once that chunk
+  has loaded (a deviation from the spec's §15 file split, which put it in
+  `SlashMenuHost`: that would have grown the editor chunk).
+- **Insert menu:** each row shows its "/" alias ("/table", "/code").
+
+#### Changed
+
+- **"/" menu:** 320 px wide (was 288); in an RTL paragraph its right edge
+  is at the "/".
+- **Placeholder:** an empty paragraph reads "Type / for blocks" (was
+  "Type something...").
+
+### Row ⋯ menu in three labelled groups (BQ4)
+
+The row's ⋯ menu is now Text (Superscript, Subscript, Inline code, Clear
+formatting, Paint format), View (Simplified toolbar, Appearance) and Help
+(All actions…), with "Forget my choices…" alone at the end. Each group has a
+visible heading and `role="group"` with the same label, and every row keeps a
+16 px leading slot so the labels line up (Simplified toolbar shows its check
+there). Nothing is added or removed. Page width follows with the preferences
+work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
+
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision

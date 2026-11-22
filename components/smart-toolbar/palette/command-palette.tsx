@@ -47,6 +47,9 @@ import {
   recentKeyOf,
 } from "./palette-sections";
 import type { PaletteMode } from "./palette-store";
+// Installs the per-item lift behind the text styles (spec §7.2) in the
+// registry, keeping it out of the editor chunk (`core/blocks.ts`).
+import "@/lib/editor-actions/style-lift";
 
 export interface CommandPaletteProps {
   editor: Editor;

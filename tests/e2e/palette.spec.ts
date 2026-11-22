@@ -679,7 +679,7 @@ test.describe("palette design pass (§7, §8)", () => {
     // The next open is an ordinary one.
     await page
       .getByRole("toolbar", { name: "Formatting", exact: true })
-      .getByRole("button", { name: "Normal text" })
+      .getByRole("button", { name: "Text", exact: true })
       .click();
     await expect(style).toBeVisible();
     await expect(remove).toBeHidden();

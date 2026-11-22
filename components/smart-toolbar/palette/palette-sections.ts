@@ -101,7 +101,7 @@ const REPEAT = "repeat.apply";
  * The action whose `value()` describes its own target, so it belongs in the
  * row's name ("Merge cells"). Others (style, align) return the selection's
  * current state, which would misname every row of the group ("Heading 1:
- * Normal text"; WCAG 2.4.6).
+ * Text"; WCAG 2.4.6).
  */
 const VALUE_IN_LABEL = "table.mergeOrSplit";
 /**

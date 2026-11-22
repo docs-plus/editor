@@ -145,7 +145,7 @@ export const LinkPolicyHyperlink = Hyperlink.extend({
 
 const PLACEHOLDER_TEXT: Record<string, string> = {
   heading: "Heading",
-  paragraph: "Type something...",
+  paragraph: "Type / for blocks",
   codeBlock: "Write code...",
 };
 

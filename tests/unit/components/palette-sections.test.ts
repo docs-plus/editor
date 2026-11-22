@@ -439,7 +439,7 @@ describe("buildPaletteSections", () => {
     const byKey = (key: string) => items.find((i) => i.key === key);
     expect(byKey("style.heading1")?.label).toBe("Heading 1");
     expect(byKey("style.heading1")?.current).toBeUndefined();
-    expect(byKey("style.paragraph")?.label).toBe("Normal text");
+    expect(byKey("style.paragraph")?.label).toBe("Text");
     expect(byKey("style.paragraph")?.current).toBe(true);
     expect(byKey("align.center")?.label).toBe("Align center");
     expect(byKey("align.center")?.current).toBeUndefined();

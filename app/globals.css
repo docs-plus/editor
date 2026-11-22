@@ -227,3 +227,72 @@ button[aria-pressed="mixed"]::after {
     color: GrayText;
   }
 }
+
+/*
+ * Touch tablets (O8 a, spec §13.2): the row's stand-ins whose icons don't
+ * explain themselves show one fixed word between the icon and the chevron
+ * ("Format", "Layout", "Block"; each stand-in's name begins with it, WCAG
+ * 2.5.3, `collapse-menus.tsx`). Here, with the app's first CSS, so the row
+ * has its final width at first paint and never shifts, at no cost to the
+ * editor chunk group.
+ */
+@media (min-width: 768px) and (pointer: coarse) {
+  :is(
+      [data-toolbar-group="marks"],
+      [data-toolbar-group="paragraph"],
+      [data-toolbar-group="slot"]
+    )
+    > [data-collapse-standin]
+    [data-toolbar-item]::after {
+    order: 1;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  :is(
+      [data-toolbar-group="marks"],
+      [data-toolbar-group="paragraph"],
+      [data-toolbar-group="slot"]
+    )
+    > [data-collapse-standin]
+    [data-toolbar-item]
+    > svg:last-child {
+    order: 2;
+  }
+
+  [data-toolbar-group="marks"]
+    > [data-collapse-standin]
+    [data-toolbar-item]::after {
+    content: "Format" / "";
+  }
+
+  [data-toolbar-group="paragraph"]
+    > [data-collapse-standin]
+    [data-toolbar-item]::after {
+    content: "Layout" / "";
+  }
+
+  [data-toolbar-group="slot"]
+    > [data-collapse-standin]
+    [data-toolbar-item]::after {
+    content: "Block" / "";
+  }
+}
+
+/*
+ * The touch ladder's last step (owner decision 2026-11-22, option b): the
+ * words add 120px, which a row narrower than 832px (the row spans the
+ * window less 16px, so a window under 848px) has no room for in a code or
+ * table block. There Redo leaves the row for the top of ⋯ (the same query,
+ * `TOUCH_ROW_REDO_IN_MORE` in `row/row-menu-bodies.tsx`), and the list
+ * split keeps only List ▾ (one tap more for the last list type). ⌘⇧Z
+ * still redoes.
+ */
+@media (min-width: 768px) and (max-width: 847.98px) and (pointer: coarse) {
+  [data-variant="fixed"]
+    [data-toolbar-group="history"]
+    [data-action-id="history.redo"],
+  [data-variant="fixed"] .st-split[data-list-face] > [data-action-id^="list."] {
+    display: none;
+  }
+}

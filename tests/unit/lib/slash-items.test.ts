@@ -11,6 +11,7 @@ import {
 } from "@/lib/editor-actions/v11-actions";
 import { v11Engine } from "@/lib/editor-actions/v11-engine";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import type { InsertKind } from "@/lib/remembered-choice";
 import {
   buildSlashItems,
   matchSlashItems,
@@ -183,8 +184,103 @@ describe("buildSlashItems", () => {
     expect(h2?.hint).toBe("##");
     expect(h2?.icon).toBeDefined();
     expect(list.find((item) => item.key === "insert.quote")?.hint).toBe(">");
-    // Every row has an icon (Normal text has none in the registry).
+    // Every row has an icon (Text has none in the registry).
     expect(list.every((item) => item.icon !== undefined)).toBe(true);
+  });
+});
+
+describe("Suggested (recent insert kinds, A20)", () => {
+  function built(recent: readonly InsertKind[], withMermaid = true) {
+    const ed = setup([{ type: "paragraph", content: [] }], withMermaid);
+    caretIn(ed, "");
+    return buildSlashItems(
+      computeContext(ed),
+      editorActions.list(),
+      SIZE,
+      recent,
+    );
+  }
+  const suggested = (list: readonly SlashItem[]) =>
+    list.filter((item) => item.section === "Suggested");
+
+  it("a new writer sees no Suggested section", () => {
+    expect(suggested(built([]))).toEqual([]);
+    expect(matchSlashItems(built([]), "")[0].section).toBe("Text");
+  });
+
+  it("leads with up to 3 recent kinds, newest first, each also in its own section", () => {
+    const list = built(["divider", "image", "table"]);
+    const top = suggested(list);
+    expect(top.map((item) => item.actionId)).toEqual([
+      "insert.divider",
+      "insert.image",
+      "insert.table",
+    ]);
+    // Unique keys: options, React keys and the active row stay distinct.
+    expect(new Set(keys(list)).size).toBe(list.length);
+    // The table copy carries the remembered size, like its own row.
+    expect(top[2].note).toBe("4 × 2");
+    expect(top[2].arg).toEqual(SIZE);
+    // Its own section still lists it, in place.
+    expect(keys(list)).toContain("insert.divider");
+    const shown = matchSlashItems(list, "");
+    expect(
+      shown.slice(0, 3).every((item) => item.section === "Suggested"),
+    ).toBe(true);
+    expect(shown[3].section).toBe("Text");
+  });
+
+  it("leaves out kinds that cannot go here", () => {
+    const ed = setup(
+      [
+        {
+          type: "blockquote",
+          content: [{ type: "paragraph", content: [] }],
+        },
+      ],
+      false,
+    );
+    caretIn(ed, "");
+    const list = buildSlashItems(
+      computeContext(ed),
+      editorActions.list(),
+      SIZE,
+      ["quote", "divider"],
+    );
+    expect(suggested(list).map((item) => item.actionId)).toEqual([
+      "insert.divider",
+    ]);
+  });
+
+  it("suggests the last used diagram template once templates are listed", () => {
+    const list = built(["mermaid"]);
+    const [diagram] = suggested(list);
+    const own = list.find(
+      (item) => item.section === "Diagrams" && (item.lead ?? false),
+    );
+    expect(diagram.actionId).toMatch(/^(template|insert)\.mermaid$/);
+    if (own) expect(diagram.arg).toBe(own.arg);
+  });
+
+  it("drops Suggested for a query, and breaks rank ties toward recent kinds", () => {
+    const fresh = built([]);
+    const used = built(["codeBlock"]);
+    for (const list of [fresh, used]) {
+      expect(
+        matchSlashItems(list, "co").some(
+          (item) => item.section === "Suggested",
+        ),
+      ).toBe(false);
+    }
+    // "/t": Task list and Table tie on a label prefix (as does Text, which
+    // leads by registry order); Task list comes first until Table is a
+    // recent kind.
+    const tie = (list: SlashItem[]) =>
+      keys(matchSlashItems(list, "t")).filter(
+        (key) => key === "list.task" || key === "insert.table",
+      );
+    expect(tie(fresh)).toEqual(["list.task", "insert.table"]);
+    expect(tie(built(["table"]))).toEqual(["insert.table", "list.task"]);
   });
 });
 

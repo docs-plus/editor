@@ -10,7 +10,7 @@ export const CHUNK_MARKERS = {
   insertStep: "function InsertStep",
   palette: "function CommandPalette({",
   engine: "const v11Engine = {",
-  menus: "function StyleMenuItems(",
+  menus: "function TurnIntoMenuItems(",
   slashMenu: "function SlashMenu({",
   continueChip: "function ContinueChip(",
   identityDialog: "function UserIdentityDialog(",

@@ -127,28 +127,33 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
     .getByRole("button", { name: "More highlight colours" })
     .click();
   const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-  // Named aria-pressed buttons, no radiogroup (spec §4.5, a11y #3).
+  // Named radio rows in a menu (spec §7.3, O2), no radiogroup.
   await expect(dialog.getByRole("radiogroup")).toHaveCount(0);
-  const blue = dialog.getByRole("button", { name: "Blue highlight" });
-  await expect(blue).toHaveAttribute("aria-pressed", "false");
+  await expect(dialog.getByRole("menu", { name: "Colours" })).toBeVisible();
+  const blue = dialog.getByRole("menuitemradio", { name: "Blue highlight" });
+  await expect(blue).toHaveAttribute("aria-checked", "false");
   await expect(blue).not.toHaveAttribute("aria-disabled", "true");
-  // PR C registers the text colour mark, so its swatches are live here.
+  await expect(blue).toContainText("Blue");
+  // PR C registers the text colour mark, so its rows are live here.
   const red = dialog
-    .getByRole("group", { name: "Text colour" })
-    .getByRole("button", { name: "Red text" });
+    .getByRole("group", { name: "Text" })
+    .getByRole("menuitemradio", { name: "Red text" });
   await expect(red).not.toHaveAttribute("aria-disabled", "true");
   // Arrow keys move focus only: nothing is applied.
   await expect(
-    dialog.getByRole("button", { name: "No highlight" }),
+    dialog.getByRole("menuitemradio", { name: "No highlight" }),
   ).toBeFocused();
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    dialog.getByRole("menuitemradio", { name: "Yellow highlight" }),
+  ).toBeFocused();
   expect(await lastHighlight(page)).toBeNull();
-  // Applying keeps the popover open (spec §4.5, O4); Esc closes it.
+  // A pick applies and closes the menu, focus back in the editor with the
+  // selection (spec §7.10; the grid kept it open, O4).
   await blue.click();
-  await expect(blue).toHaveAttribute("aria-pressed", "true");
-  expect(await lastHighlight(page)).toBe("blue");
-  await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+  expect(await lastHighlight(page)).toBe("blue");
+  await expect(page.locator(".tiptap")).toBeFocused();
 
   // M2: the face now names and reapplies blue.
   const face = toolbar(page).getByRole("button", {
@@ -166,13 +171,13 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
     .click();
   const recent = dialog.getByRole("group", { name: "Recent" });
   await expect(
-    recent.getByRole("button", { name: "Blue highlight" }),
+    recent.getByRole("menuitem", { name: "Blue highlight" }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("group", { name: "Highlight" }).getByRole("button", {
-      name: "Blue highlight",
-    }),
-  ).toHaveAttribute("aria-pressed", "true");
+    dialog
+      .getByRole("group", { name: "Highlight" })
+      .getByRole("menuitemradio", { name: "Blue highlight" }),
+  ).toHaveAttribute("aria-checked", "true");
   await expectNoSeriousA11yViolations(page, [
     '[role="dialog"][aria-label="Highlight colours"]',
   ]);
@@ -188,6 +193,190 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
       recentColors: { recent: [{ kind: "highlight", token: "blue" }] },
     },
   });
+});
+
+test("named rows: the rest of the colours wait under More, named", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Text colours" });
+  const text = dialog.getByRole("group", { name: "Text" });
+  // Visible names; the accessible names add "text" ("Red text").
+  await expect(text.locator(".st-color-named .st-color-item-label")).toHaveText(
+    ["Default", "Red", "Orange", "Green", "Blue", "Purple"],
+  );
+  await expect(
+    dialog.getByRole("menuitemradio", { name: "Teal text" }),
+  ).toHaveCount(0);
+  const moreRow = text.getByRole("menuitem", { name: "More colours" });
+  await moreRow.click();
+  const more = page.getByRole("menu", { name: "More colours" });
+  const teal = more.getByRole("menuitemradio", { name: "Teal text" });
+  await expect(teal.locator(".st-color-item-label")).toHaveText("Teal");
+  await teal.click();
+  // A pick closes every menu (spec §7.10).
+  await expect(more).toBeHidden();
+  await expect(dialog).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.__tiptap_editor?.state.doc.lastChild?.firstChild?.marks.find(
+            (m) => m.type.name === "textColor",
+          )?.attrs.color ?? null,
+      ),
+    )
+    .toBe("teal");
+  // Reopened: Default is no longer checked; the More row carries the ✓,
+  // and the roving stop starts on it.
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  await expect(
+    text.getByRole("menuitemradio", { name: "Default text" }),
+  ).toHaveAttribute("aria-checked", "false");
+  await expect(moreRow.locator(".st-color-check")).toBeVisible();
+  await expect(moreRow).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(teal).toBeFocused();
+  await expect(teal).toHaveAttribute("aria-checked", "true");
+});
+
+test("named rows: Up/Down wrap and a letter jumps to the next row with it", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const focused = page.locator(":focus");
+  await expect(focused).toHaveAccessibleName("Default text");
+  // No Recent yet: ↑ from the top wraps to More.
+  await page.keyboard.press("ArrowUp");
+  await expect(focused).toHaveAccessibleName("More colours");
+  await page.keyboard.press("ArrowDown");
+  await expect(focused).toHaveAccessibleName("Default text");
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green text");
+  // The next G is in Highlight; then it wraps back to Text.
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green highlight");
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green text");
+  expect(await lastHighlight(page)).toBeNull();
+});
+
+test("named rows: Enter picks, closes and announces it; Undo on the pill takes it back", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Text colours" });
+  await expect(page.locator(":focus")).toHaveAccessibleName("Default text");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".tiptap")).toBeFocused();
+  const colour = () =>
+    page.evaluate(
+      () =>
+        window.__tiptap_editor?.state.doc.lastChild?.firstChild?.marks.find(
+          (m) => m.type.name === "textColor",
+        )?.attrs.color ?? null,
+    );
+  await expect.poll(colour).toBe("red");
+  // The selection is kept: the next key styles the same words.
+  expect(
+    await page.evaluate(() => window.__tiptap_editor?.state.selection.empty),
+  ).toBe(false);
+  // Polite live region and pill (§14, WCAG 4.1.3).
+  await expect(page.locator('body > div[role="status"]')).toHaveText(
+    "Red text",
+  );
+  const pill = page.locator('[data-status-pill="desktop"]');
+  await expect(pill).toContainText("Red text");
+  await pill.getByRole("button", { name: "Undo: Red text" }).click();
+  await expect.poll(colour).toBeNull();
+});
+
+test("named rows: ←/→ cross columns, → opens More and ← or Esc closes it", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Text colours" });
+  const focused = page.locator(":focus");
+  await expect(focused).toHaveAccessibleName("Default text");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect(focused).toHaveAccessibleName("Orange text");
+  await page.keyboard.press("ArrowRight");
+  await expect(focused).toHaveAccessibleName("Green highlight");
+  await page.keyboard.press("ArrowLeft");
+  await expect(focused).toHaveAccessibleName("Orange text");
+  await page.keyboard.press("End");
+  await expect(focused).toHaveAccessibleName("More colours");
+  await page.keyboard.press("ArrowRight");
+  const more = page.getByRole("menu", { name: "More colours" });
+  await expect(more).toBeVisible();
+  await expect(focused).toHaveAccessibleName("Gray text");
+  await page.keyboard.press("ArrowDown");
+  await expect(focused).toHaveAccessibleName("Brown text");
+  await page.keyboard.press("ArrowLeft");
+  await expect(more).toBeHidden();
+  await expect(focused).toHaveAccessibleName("More colours");
+  // Esc closes only the submenu; the colour menu stays.
+  await page.keyboard.press("ArrowRight");
+  await expect(more).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(focused).toHaveAccessibleName("More colours");
+  // Nothing was applied by moving.
+  expect(await lastHighlight(page)).toBeNull();
+});
+
+test("named rows: ←/→ follow the visual order in RTL", async ({ page }) => {
+  await openRow(page);
+  await page.evaluate(() =>
+    document.documentElement.setAttribute("dir", "rtl"),
+  );
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const focused = page.locator(":focus");
+  await expect(focused).toHaveAccessibleName("Default text");
+  // Text sits on the right in RTL: ← crosses to Highlight.
+  await page.keyboard.press("ArrowLeft");
+  await expect(focused).toHaveAccessibleName("No highlight");
+  await page.keyboard.press("ArrowRight");
+  await expect(focused).toHaveAccessibleName("Default text");
+  // ← (the inline end) opens More, on the left; → closes it.
+  await page.keyboard.press("End");
+  const moreRow = page.getByRole("menuitem", { name: "More colours" });
+  await expect(moreRow).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  const more = page.getByRole("menu", { name: "More colours" });
+  await expect(more).toBeVisible();
+  await expect(focused).toHaveAccessibleName("Gray text");
+  await more.evaluate((el) =>
+    Promise.all(el.getAnimations().map((a) => a.finished)),
+  );
+  const [row, sub] = await Promise.all([
+    moreRow.boundingBox(),
+    more.boundingBox(),
+  ]);
+  expect(sub && row && sub.x + sub.width <= row.x + 1).toBe(true);
+  await page.keyboard.press("ArrowRight");
+  await expect(more).toBeHidden();
+  await expect(moreRow).toBeFocused();
 });
 
 test("size stepper is a named spinbutton, disabled with a reason in headings", async ({
@@ -237,7 +426,7 @@ test("size spinbutton keeps Home, End and Enter from the toolbar", async ({
   ).toBeFocused();
 });
 
-test("colour swatches keep their colours in forced colours", async ({
+test("colour chips keep their colours in forced colours", async ({
   page,
   browserName,
 }, testInfo) => {
@@ -249,40 +438,33 @@ test("colour swatches keep their colours in forced colours", async ({
   });
   await more.click();
   const dialog = page.getByRole("dialog", { name: "Highlight colours" });
-  await dialog.getByRole("button", { name: "Blue highlight" }).click();
+  await dialog.getByRole("menuitemradio", { name: "Blue highlight" }).click();
+  // A pick closes the menu: reopen it to see the checked row.
+  await expect(dialog).toBeHidden();
+  await more.click();
   const highlights = dialog.getByRole("group", { name: "Highlight" });
-  const blue = highlights.getByRole("button", { name: "Blue highlight" });
-  await expect(blue).toHaveAttribute("aria-pressed", "true");
-  const styles = await highlights.getByRole("button").evaluateAll((els) =>
+  const blue = highlights.getByRole("menuitemradio", {
+    name: "Blue highlight",
+  });
+  await expect(blue).toHaveAttribute("aria-checked", "true");
+  const styles = await highlights.locator(".st-color-chip").evaluateAll((els) =>
     els.map((el) => {
       const cs = getComputedStyle(el);
       return {
-        token: el.getAttribute("data-token"),
+        token: el.closest("[data-token]")?.getAttribute("data-token"),
         adjust: cs.forcedColorAdjust,
         bg: cs.backgroundColor,
-        shadow: cs.boxShadow,
       };
     }),
   );
   for (const style of styles) expect(style.adjust).toBe("none");
-  // Each highlight swatch shows its own colour.
+  // Each highlight chip shows its own colour.
   const colours = new Set(
     styles.filter((style) => style.token !== "none").map((style) => style.bg),
   );
   expect(colours.size).toBe(styles.length - 1);
-  // Pressed is a ring, not the focus outline, and keeps the swatch's own
-  // fill (the global forced-colours rule paints pressed buttons Highlight).
-  const pressed = styles.find((style) => style.token === "blue");
-  expect(pressed?.shadow).not.toBe("none");
-  const systemHighlight = await page.evaluate(() => {
-    const probe = document.createElement("div");
-    probe.style.background = "Highlight";
-    document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return colour;
-  });
-  expect(pressed?.bg).not.toBe(systemHighlight);
+  // Checked is the ✓ glyph, which forced colours keep.
+  await expect(blue.locator(".st-color-check")).toBeVisible();
   const face = await toolbar(page)
     .locator(".st-face-bar--highlight")
     .evaluate((el) => getComputedStyle(el).forcedColorAdjust);
@@ -353,7 +535,7 @@ for (const theme of ["light", "dark"] as const) {
       .click();
     const dialog = page.getByRole("dialog", { name: "Highlight colours" });
     await expect(
-      dialog.getByRole("button", { name: "Red text" }),
+      dialog.getByRole("menuitemradio", { name: "Red text" }),
     ).toBeVisible();
     await page.mouse.move(0, DESKTOP.height - 1);
     await dialog.evaluate((el) =>
@@ -535,4 +717,25 @@ test.describe("on a 375px touch phone", () => {
       });
     });
   }
+
+  test("the sheet keeps the grid, names the current value and pills each pick with Undo", async ({
+    page,
+  }) => {
+    const sheet = await openPhoneSheet(page);
+    // The grid of named swatches, never the desktop rows.
+    await expect(sheet.getByRole("menuitemradio")).toHaveCount(0);
+    const teal = sheet
+      .getByRole("group", { name: "Text colour" })
+      .getByRole("button", { name: "Teal text" });
+    await expect(teal).toHaveAttribute("aria-pressed", "false");
+    const caption = sheet.locator(".st-color-caption");
+    await expect(caption).toHaveText("Current: Default text, No highlight");
+    await teal.tap();
+    await expect.poll(() => lastMark(page, "textColor", "color")).toBe("teal");
+    await expect(caption).toHaveText("Current: Teal text, No highlight");
+    const pill = page.locator("[data-status-pill]");
+    await expect(pill).toContainText("Teal text");
+    await pill.getByRole("button", { name: "Undo" }).tap();
+    await expect.poll(() => lastMark(page, "textColor", "color")).toBeNull();
+  });
 });

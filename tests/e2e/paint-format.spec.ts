@@ -778,7 +778,7 @@ test.describe("Your formats in the text style dropdown", () => {
   });
 
   const styleMenu = (page: Page) =>
-    row(page).getByRole("button", { name: "Normal text" });
+    row(page).getByRole("button", { name: "Text", exact: true });
 
   test("each format is named in its own formatting and applies in one step", async ({
     page,

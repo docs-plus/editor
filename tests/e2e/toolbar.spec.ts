@@ -178,7 +178,7 @@ test.describe("toolbar focus and disabled controls", () => {
     const editorPage = await openToolbarTestDoc(page);
     await editorPage.buildDocument([{ level: 1, text: "Title" }]);
     await page.keyboard.type("Body");
-    await toolbarButton(page, "Normal text").click();
+    await toolbarButton(page, "Text").click();
     await delayAnimationFrames(page);
     await page.getByRole("menuitemradio", { name: "Heading 2" }).click();
     await page.keyboard.type("X");
@@ -191,8 +191,13 @@ test.describe("toolbar focus and disabled controls", () => {
   }) => {
     await openToolbarTestDoc(page);
     await toolbarButton(page, "Title").click();
+    // Turn into (spec §7.4): Text, H1–H3, three lists, Quote, Code block;
+    // H4–H6 sit under "More headings ▸", which is disabled too.
     const items = page.getByRole("menuitemradio");
-    await expect(items).toHaveCount(7);
+    await expect(items).toHaveCount(9);
+    await expect(
+      page.getByRole("menuitem", { name: "More headings" }),
+    ).toHaveAttribute("aria-disabled", "true");
     for (const item of await items.all()) {
       await expect(item).toHaveAttribute("aria-disabled", "true");
       await expect(item).toHaveAccessibleDescription("Title is always H1.");
