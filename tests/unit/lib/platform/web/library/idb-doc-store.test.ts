@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it } from "bun:test";
 import * as Y from "yjs";
 
 import type { AppendRecord } from "@/lib/platform/doc-store";
-import { IdbDocStore } from "@/lib/platform/web/library/idb-doc-store";
+import {
+  IdbDocStore,
+  MAX_TITLE_LENGTH,
+} from "@/lib/platform/web/library/idb-doc-store";
 import { createLibraryDoc } from "@/lib/platform/web/library/library-docs";
 import {
   META_KEYS,
@@ -307,7 +310,7 @@ describe("IdbDocStore: the index rev (§4.1)", () => {
       },
     );
 
-  it("leaves meta.rev alone on append and compact; only index writes bump it", async () => {
+  it("bumps meta.rev when an append changes the title or snippet, and only then", async () => {
     const library = await createFakeLibrary();
     await library.createDoc("doc", 1);
     const afterCreate = await readRev(library);
@@ -315,13 +318,47 @@ describe("IdbDocStore: the index rev (§4.1)", () => {
     const store = library.connect();
     const doc = new Y.Doc();
     await store.load("doc");
-    const seq = await store.append("doc", {
-      ...local(edit(doc, "x")),
+
+    // No title or snippet: modified_at and size_bytes change, rev doesn't.
+    await store.append("doc", local(edit(doc, "a")));
+    expect(await readRev(library)).toBe(afterCreate);
+
+    await store.append("doc", {
+      ...local(edit(doc, "b")),
       title: "A new title",
       snippet: "and a snippet",
     });
-    await store.compact("doc", Y.encodeStateAsUpdate(doc), seq);
-    expect(await readRev(library)).toBe(afterCreate);
+    expect(await readRev(library)).toBe(afterCreate + 1);
+
+    // The same title and snippet again: nothing list-visible changed.
+    await store.append("doc", {
+      ...local(edit(doc, "c")),
+      title: "A new title",
+      snippet: "and a snippet",
+    });
+    expect(await readRev(library)).toBe(afterCreate + 1);
+
+    // One bump per transaction, even when both change.
+    const seq = await store.append("doc", {
+      ...local(edit(doc, "d")),
+      title: "Another title",
+      snippet: "another snippet",
+    });
+    expect(await readRev(library)).toBe(afterCreate + 2);
+
+    // A title equal once truncated is no change either.
+    const long = "x".repeat(MAX_TITLE_LENGTH);
+    await store.append("doc", { ...local(edit(doc, "e")), title: long });
+    const afterLong = await readRev(library);
+    await store.append("doc", {
+      ...local(edit(doc, "f")),
+      title: `${long} and more`,
+    });
+    expect(await readRev(library)).toBe(afterLong);
+
+    // Compaction rewrites size_bytes only: no bump.
+    await store.compact("doc", Y.encodeStateAsUpdate(doc), seq + 2);
+    expect(await readRev(library)).toBe(afterLong);
     await library.dispose();
   });
 });

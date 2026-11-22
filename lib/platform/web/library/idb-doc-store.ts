@@ -38,6 +38,7 @@ import {
 import { normalizeSearchText } from "@/lib/search/normalize";
 
 import type { LibraryDb } from "./library-db";
+import { bumpRev } from "./library-docs";
 import {
   type DocRow,
   type SnapshotRow,
@@ -199,7 +200,13 @@ export class IdbDocStore implements DocStore {
     );
   }
 
-  /** The update row and the document's list metadata, in one strict transaction. */
+  /**
+   * The update row and the document's list metadata, in one strict
+   * transaction. When the title or snippet changes, `meta.rev` is bumped in
+   * the same transaction, so a tab that missed the BroadcastChannel message
+   * sees the jump (web library §2.2 As built). `modified_at` and
+   * `size_bytes` change on every append and never bump it.
+   */
   append(docId: string, record: AppendRecord): Promise<number> {
     return this.track(async () => {
       const library = await this.library;
@@ -208,7 +215,7 @@ export class IdbDocStore implements DocStore {
       const data = record.update.slice();
       const now = this.now();
       const seq = await library.run<number>(
-        [STORES.updates, STORES.docs],
+        [STORES.updates, STORES.docs, STORES.meta],
         "readwrite",
         "strict",
         (tx, { done, fail, guard }) => {
@@ -234,6 +241,11 @@ export class IdbDocStore implements DocStore {
               record.title === undefined
                 ? doc.title
                 : record.title.slice(0, MAX_TITLE_LENGTH);
+            const snippet =
+              record.snippet === undefined
+                ? doc.snippet
+                : record.snippet.slice(0, MAX_SNIPPET_LENGTH);
+            if (title !== doc.title || snippet !== doc.snippet) bumpRev(tx);
             // The derived rows are now behind (offline data-model §4.2).
             const headSeq = Math.max(doc.head_seq, addRequest.result as number);
             docs.put({
@@ -245,10 +257,7 @@ export class IdbDocStore implements DocStore {
                 title === doc.title
                   ? doc.title_key
                   : normalizeSearchText(title),
-              snippet:
-                record.snippet === undefined
-                  ? doc.snippet
-                  : record.snippet.slice(0, MAX_SNIPPET_LENGTH),
+              snippet,
               schema: record.schemaTo ?? doc.schema,
               head_seq: headSeq,
               stale: staleFlag(headSeq, doc.derived_seq),
