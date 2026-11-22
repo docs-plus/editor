@@ -1,91 +1,16 @@
 /**
- * Shared by `scripts/build-desktop.ts` and `next.config.ts`: what leaves the
- * desktop static export (NEXT_PUBLIC_APP_TARGET=desktop) and how. No Bun
- * APIs and no top-level await: `next.config.ts` imports it.
+ * The desktop export's output check (architecture §3.1, §11), run by
+ * `scripts/build-desktop.ts` after `next build`.
  *
- * What leaves the export, and how:
- * - Web-only route handlers (`app/api`, `llms.txt`, `/pwa-icons`) are
- *   `route.web.ts(x)`. `next.config.ts` gives the desktop target page
- *   extensions that don't match them. No file moves.
- * - The files in `WEB_ONLY_FILES` can't use that switch, so
- *   `bun run build:desktop` parks them for the build and puts them back:
- *   - Metadata files: Turbopack ignores `pageExtensions` for them (spike
- *     S1), and with `force-static` they would put the web manifest,
- *     `og:image` and `apple-touch-icon` tags into every desktop page (#115).
- *   - Pages: Next 16.4.6 drops the root layout's font preload from a
- *     `page.web.tsx` (`getPreloadableFonts` strips only `.tsx`, so it looks
- *     up `app/privacy/page.web` in a manifest keyed `app/privacy/page`).
- *     Renaming would change the web HTML.
- *
- * Parking rules (#111, #115): park inside the checkout (a rename across
- * drives fails with EXDEV on Windows runners), put back what an interrupted
- * run left first, put back in `finally` and on SIGINT/SIGTERM, and refuse to
- * run if a file is both in `app/` and parked. `next.config.ts` refuses a web
- * build while anything is parked, so a killed run can't ship a web build
- * without its sitemap or its privacy page.
+ * Nothing moves to keep web-only routes out: the desktop target's
+ * `pageExtensions` match only `*.desktop.tsx` files (`next.config.ts`), so
+ * every plain web page, route handler and metadata file is invisible to it.
+ * This check proves that on the output.
  */
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmdirSync,
-} from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-/** Web-only files parked during a desktop export, relative to the root. */
-export const WEB_ONLY_FILES = [
-  "app/sitemap.ts",
-  "app/robots.ts",
-  "app/manifest.ts",
-  "app/opengraph-image.tsx",
-  "app/apple-icon.tsx",
-  "app/privacy/page.tsx",
-  "app/offline/page.tsx",
-] as const;
-
-/** Where those files wait during a desktop export (gitignored). */
-export const PARKING_DIR = ".desktop-export-parked";
-
-const parkedName = (rel: string) => rel.replaceAll("/", "__");
-
-/** Files currently parked under `root`, as repo-relative paths. */
-export function listParked(root: string): string[] {
-  const dir = join(root, PARKING_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).map((name) => name.replaceAll("__", "/"));
-}
-
-/** Puts back every parked file. Throws if one also exists in `app/`. */
-export function restoreParked(root: string): string[] {
-  const restored: string[] = [];
-  for (const rel of listParked(root)) {
-    if (existsSync(join(root, rel))) {
-      throw new Error(
-        `${rel} is both in app/ and in ${PARKING_DIR}/; keep the right copy and delete the other`,
-      );
-    }
-    renameSync(join(root, PARKING_DIR, parkedName(rel)), join(root, rel));
-    restored.push(rel);
-  }
-  const dir = join(root, PARKING_DIR);
-  if (existsSync(dir)) rmdirSync(dir);
-  return restored;
-}
-
-/** Moves `WEB_ONLY_FILES` out of `app/`. */
-export function parkWebOnlyFiles(root: string): string[] {
-  const dir = join(root, PARKING_DIR);
-  mkdirSync(dir, { recursive: true });
-  const parked: string[] = [];
-  for (const rel of WEB_ONLY_FILES) {
-    if (!existsSync(join(root, rel))) continue;
-    renameSync(join(root, rel), join(dir, parkedName(rel)));
-    parked.push(rel);
-  }
-  return parked;
-}
+import { DEV_BRIDGE_MARKER } from "../lib/platform/desktop/dev-bridge-wire";
 
 /** Top-level names in `out/` that belong to the web build only. */
 const WEB_ONLY_OUTPUT =
@@ -110,10 +35,17 @@ function walk(dir: string, visit: (path: string) => void): void {
 
 /**
  * Problems with an exported `out/`, empty when it is a valid desktop
- * renderer: no web-only route, no web metadata tag in any page, and the
- * flat segment-prefetch layout (Windows writes `__next.<segment>/`, #103).
+ * renderer: no web-only route, no web metadata tag in any page, no dev
+ * bridge code (architecture §11), and the flat segment-prefetch layout
+ * (Windows writes `__next.<segment>/`, #103).
+ * With `bootScript`, every page must also inline that exact string: the
+ * desktop CSP allows inline scripts by their SHA-256, so a page whose boot
+ * script differs from the hashed one would run without preferences.
  */
-export function checkDesktopExport(outDir: string): string[] {
+export function checkDesktopExport(
+  outDir: string,
+  { bootScript }: { bootScript?: string } = {},
+): string[] {
   const problems: string[] = [];
   for (const name of readdirSync(outDir)) {
     if (WEB_ONLY_OUTPUT.test(name)) problems.push(`web-only output: ${name}`);
@@ -124,10 +56,17 @@ export function checkDesktopExport(outDir: string): string[] {
     if (name.startsWith("__next.") && !name.endsWith(".txt")) {
       problems.push(`nested segment directory (Windows layout): ${rel}`);
     }
+    if (!/\.(html|js)$/.test(rel)) return;
+    const text = readFileSync(path, "utf8");
+    if (text.includes(DEV_BRIDGE_MARKER)) {
+      problems.push(`${rel} has the dev bridge`);
+    }
     if (!rel.endsWith(".html")) return;
-    const html = readFileSync(path, "utf8");
     for (const tag of WEB_ONLY_TAGS) {
-      if (tag.test(html)) problems.push(`${rel} has ${tag.source}`);
+      if (tag.test(text)) problems.push(`${rel} has ${tag.source}`);
+    }
+    if (bootScript && !text.includes(`<script>${bootScript}</script>`)) {
+      problems.push(`${rel} lacks the boot script`);
     }
   });
   return problems;

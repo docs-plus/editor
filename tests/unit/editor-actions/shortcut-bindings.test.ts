@@ -93,6 +93,25 @@ describe("editor key bindings", () => {
     }
   });
 
+  it("leaves Find's keys to its window listener (P2.11)", async () => {
+    const { keys } = await loadEditor();
+    for (const combo of [
+      "Mod-f",
+      "Mod-g",
+      "Mod-Shift-g",
+      "Mod-Alt-f",
+      "Ctrl-h",
+      "F3",
+      "Shift-F3",
+    ]) {
+      const normalized = normalizeCombo(combo);
+      expect({ combo: normalized, bound: keys.get(normalized) }).toEqual({
+        combo: normalized,
+        bound: undefined,
+      });
+    }
+  });
+
   it("keeps Strike on Mod-Shift-s and leaves Mod-d free for Duplicate (P2.8)", async () => {
     const { keys } = await loadEditor();
     expect(keys.get("Mod-Shift-s")).toEqual(["strike"]);

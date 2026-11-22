@@ -7,11 +7,11 @@
 # next.js
 /.next/
 /out/
-# web metadata files parked during a desktop export (scripts/build-desktop.ts)
-/.desktop-export-parked/
 
 # production
 /build
+# desktop app stage and installers (desktop/build/build.ts, electron-builder)
+/dist/
 
 # misc
 .DS_Store
@@ -46,6 +46,8 @@ db.sqlite-shm
 # test results and reports (local-only)
 /test-results/
 /test-reports/
+/test-results-electron/
+/playwright-report-electron/
 
 # project docs (local only)
 .docs/
@@ -57,3 +59,6 @@ soak-report-*.json
 db-soak-test.sqlite
 db-soak-test.sqlite-wal
 db-soak-test.sqlite-shm
+
+# Pseudo-locale catalogs, built by `bun run i18n:pseudo` (scripts/i18n/pseudo.ts)
+/locales/pseudo/

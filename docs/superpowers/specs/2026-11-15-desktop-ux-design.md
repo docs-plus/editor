@@ -243,6 +243,7 @@ Rules:
   - **Verify in S1** that the role-less items still get native enablement, or drive enablement from `can().undo()`.
   - When focus is in the sidebar or a list, Undo undoes the last file operation instead (§6.2).
 - **Cut, Copy, Paste and Select All keep their roles.** Chromium routes them through the clipboard pipeline that ProseMirror already handles.
+- **Translated labels (languages design §3.9, L5).** One Electron label carries both casings: English messages hold `{platform, select, mac {Move to Trash} other {Move to trash}}`, and other languages write one form that their reviewer approves. Role items (Cut, Copy, Paste, Services, Hide, Quit, Emoji & Symbols) are translated by macOS only for the languages the app bundle declares (`<lang>.lproj`, electron-builder's `electronLanguages`), so every shipped language adds its `.lproj`. **S1 verifies** this (§14).
 
 ### 2.5 Context menus
 
@@ -482,7 +483,7 @@ The palette's budget rule (A7, 20 KB gz) applies to the web chunk. On desktop th
 | Focus toolbar | Alt+F10 | Alt+F10 | existing | — |
 | Context menu | ⇧F10, or ⌃-click | Shift+F10, Menu key | — | P2.7 |
 | Open the menu (Windows) | — | Alt (alone), F10 | AltGr must not trigger it | P2.9a |
-| Find in document | ⌘F, ⌘G, ⌘⇧G | Ctrl+F, F3, Shift+F3 | ⌘⇧F is the heading filter (`use-document-editor-effects.ts:107`). When a list has focus, ⌘F filters the list instead (P2.7b, **scoped**). | P2.11 |
+| Find in document | ⌘F, ⌘G, ⌘⇧G | Ctrl+F, F3, Shift+F3 | ⌘⇧F is the heading filter (`use-document-editor-effects.ts:107`). When a list has focus, ⌘F filters the list instead (P2.7b, **scoped**). As built: a window listener in the app shell (`components/find/find-keys.ts`) that skips a key a focused list already handled (`defaultPrevented`) or one pressed in another text field or a dialog (`isFindKeyTarget`); where the CSS Custom Highlight API is missing it still takes the keys and selects each hit it moves to (`SelectionPainter`); Ctrl+G and Ctrl+Shift+G also step off macOS, and non-Latin layouts match by physical key. | P2.11 |
 | Replace | ⌥⌘F | Ctrl+H (desktop) | v7: Ctrl+Alt+F is AltGr. On the web, Replace is reached from the find bar only (the browser owns Ctrl+H, history). | P2.11 |
 | Filter list **(scoped)** | ⌘F | Ctrl+F | Only when the tree or a list view has focus; metadata matching (D24) | P2.7b |
 | Heading filter **(scoped to the editor)** | ⌘⇧F | Ctrl+Shift+F | v7: today `use-document-editor-effects.ts` listens on `window` and matches `event.key === "f"`, so it fires outside the editor and fails on Persian and Arabic layouts. Fix: listen on the editor and match with `matchShortcut` (languages design §4.5, L3). | existing; fix in L3 |
@@ -495,6 +496,13 @@ The palette's budget rule (A7, 20 KB gz) applies to the web chunk. On desktop th
 **On the web library** (web library design): ⌘W, ⌘N and ⌘⇧N are reserved by the browser and never reach the page, so those actions are menu, button and palette only there; the `close-tab` hint never fires on the web; the ⌘/ sheet shows only the rows that work in a browser.
 
 **One keymap module (v7, owner PR: L3).** `APP_KEYMAP` (onboarding OB2), `matchShortcut` and `visualStep` (languages §4.5), `formatKeyCombo` (`lib/editor-actions/key-combo.ts`) and `lib/shortcuts.ts` merge into one module that both binds and formats. Today `lib/shortcuts.ts` only formats keys and binds nothing, so a "checked against `lib/shortcuts.ts`" claim proves no conflict. The module's duplicate-combo test is the check. **Open timing question:** L3 is a v1.1 PR under D26 (languages §9.1), but the ⌘⇧F scoping fix is v1 work. Either the module and `matchShortcut` move ahead of the rest of L3 (their bytes are already in L1a's ledger line), or ⌘⇧F keeps failing on Persian and Arabic layouts until v1.1. Not decided.
+
+**Right-to-left interfaces (languages design §4.5; L3, v1.1):**
+- **Arrows act visually** in every horizontal composite (toolbar, tabs, colour grid, table size grid, diagram templates): in an RTL interface ← moves toward the end, which is visually left. One helper, `visualStep(event, dir)`, does this for all of them.
+- **The tree mirrors:** in an RTL interface ← expands a folder or goes to its first child, and → collapses or goes to the parent. Tab reorder (⌘⌥← / ⌘⌥→) moves the tab visually in the arrow's direction.
+- **Back and Forward keep their keys** (⌘[ / ⌘], Alt+← / Alt+→): they are bound to physical keys and history, as in browsers.
+- **Shift+Space is reserved:** it types ZWNJ on the standard Persian layout, so no shortcut may bind it (`bun run i18n:check` refuses it in the registry).
+- **App shortcuts match `event.code`** through `matchShortcut`, never `event.key` alone, so they work on Persian, Arabic and Hebrew layouts (the ⌘⇧F row above).
 
 #### Editor keys (unchanged; listed so nothing above collides)
 
@@ -891,6 +899,16 @@ Each flow runs with no pointer:
   - `dialog.showMessageBox` handles this when `cancelId` and `defaultId` are set.
 - **An ellipsis (…)** only when the item needs more input before it acts: Move to…, Import…, Empty Trash… (confirms), Settings…
 
+### 9.4 Copy that translates (languages design §7, L0)
+
+English is the source language, written in code through `t()` (languages design §3.3). These rules keep every message translatable:
+
+- **No sentence is built from fragments.** Each message is a whole sentence: never `"Nothing to " + verb`.
+- **No message relies on word order, plural shape or casing.** Counts use ICU plurals (`{count, plural, one {# document} other {# documents}}`), never "1 vs many" in code.
+- **Glossary terms are fixed per language** (`locales/glossary.md`, seeded from §9.2).
+- **Placeholders get translator notes**: a `// i18n: …` comment on the line before the `t()` call ("{title} is a document title the user wrote; it may be in any language").
+- **Never put a shortcut, a brand name or a file path inside translatable text.** Use placeholders (`{shortcut}`, `{app}`, `{path}`); `bun run i18n:check` refuses ⌘, ⌥, ⇧, ⌃ and `Ctrl+` in catalogs.
+
 ---
 
 ## 10. Web vs desktop differences people will notice
@@ -1000,6 +1018,12 @@ No change to plan §5.5's state table for the Local release, beyond Q4.
 | Inter loads from the bundle, with no network request | all |
 | Electron GTK frame and IME on GNOME Wayland, and KDE | Linux |
 | `accent-color-changed` / `getAccentColor` live updates | macOS, Windows |
+| RTL: the menu bar and traffic lights follow the **system** direction, and the unified titlebar reserves their space on that side (`-AppleLanguages (he)`) (languages §4.8) | macOS |
+| RTL: an Arabic or Hebrew display language moves the caption buttons, and `titleBarOverlay` with `getTitlebarAreaRect()` keeps the titlebar clear on either side (languages §4.8) | Windows |
+| RTL: the GTK frame and menu bar take their direction from the process locale (smoke in L5) (languages §4.8) | Linux |
+| Role menu items (Cut, Copy, Paste, Services, Hide, Quit) are translated for a language only with its `.lproj` folder (`electronLanguages`) (languages §3.9) | macOS |
+| `--lang` changes anything visible, given that TinyDocy draws its own context menus (languages §3.9) | all |
+| `session.availableSpellCheckerLanguages` includes `fa`, `he` and `ar` (languages §6.4) | Windows, Linux |
 
 ---
 

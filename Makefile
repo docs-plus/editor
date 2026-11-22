@@ -2,7 +2,6 @@
 # perf or soak document (about 1.2 MB) is not refused by the 1 MiB default.
 # Every local, CI and nightly Hocus starts through dev-hocus; an env value wins.
 MAX_DOC_SIZE_BYTES ?= 2097152
-
 .PHONY: dev dev-next dev-hocus build start lint check test test-watch test-fuzz test-e2e test-perf test-perf-collab test-load test-stress test-soak test-soak-quick test-soak-collab test-soak-collab-quick test-yjs-soak test-reports-dir
 
 dev: ## Start Next.js and Hocuspocus dev servers in parallel

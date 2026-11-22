@@ -52,12 +52,21 @@ const line = (text: string) => {
   writeSync(1, `${text}\n`);
 };
 
+/** A clock that grows by at least 1 ms a call (`strictClock`). */
+function strictNow(): () => number {
+  let last = 0;
+  return () => {
+    last = Math.max(Date.now(), last + 1);
+    return last;
+  };
+}
+
 let library: Library | null = null;
 const started = performance.now();
 try {
   library = Library.open({
     dir: options.dir,
-    host: createNodeHost(),
+    host: createNodeHost(options.strictClock ? { now: strictNow() } : {}),
     openSqlite: openNodeSqlite,
     fullfsync: options.fullfsync,
     synchronous: options.synchronous,

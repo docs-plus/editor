@@ -8,6 +8,8 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { FindLoader } from "@/components/find/find-loader";
+import { PageFrame } from "@/components/prefs/page-frame";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
 import { useConnectionState } from "@/hooks/use-connection-state";
@@ -27,9 +29,14 @@ const UNREACHABLE_AFTER_MS = 10_000;
  * open the WebSocket first; the chunk downloads while the tab list syncs.
  */
 const loadDocumentEditor = () =>
-  // The sandbox wrapper: the editor plus its DocSession, in one lazy chunk.
-  import("@/components/editor-app/sandbox-document-editor").then(
-    (module) => module.SandboxDocumentEditor,
+  Promise.all([
+    // The sandbox wrapper: the editor, its DocSession and its status chip,
+    // in one lazy chunk.
+    import("@/components/editor-app/sandbox-document-editor"),
+    // The page rules the first paint doesn't need: the editor waits for them.
+    import("@/components/prefs/page-text-styles"),
+  ]).then(([module, styles]) =>
+    styles.ready().then(() => module.SandboxDocumentEditor),
   );
 
 const DocumentEditor = dynamic(loadDocumentEditor, {
@@ -166,13 +173,23 @@ export function EditorApp({ intro }: EditorAppProps) {
       {offline && !bannerDismissed && (
         <OfflineBanner onDismiss={() => setBannerDismissed(true)} />
       )}
-      <DocumentEditor
-        key={activeTabId}
-        documentId={activeTabId}
-        onTitleChange={(title) => updateTabTitle(activeTabId, title)}
-        playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-        onPlaygroundRegenerate={handlePlaygroundRegenerate}
-      />
+      <PageFrame>
+        {({ readOnly, outlineOverlay }) => (
+          <DocumentEditor
+            key={activeTabId}
+            documentId={activeTabId}
+            onTitleChange={(title) => updateTabTitle(activeTabId, title)}
+            playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+            onPlaygroundRegenerate={handlePlaygroundRegenerate}
+            readOnly={readOnly}
+            outlineOverlay={outlineOverlay}
+          />
+        )}
+      </PageFrame>
+      {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. The
+          check is `FIND_ENABLED` inlined here, so a build with Find off
+          leaves the loader out (an imported constant would not). */}
+      {process.env.NEXT_PUBLIC_FIND !== "0" ? <FindLoader /> : null}
     </div>
   );
 }

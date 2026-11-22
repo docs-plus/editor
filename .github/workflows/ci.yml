@@ -2,10 +2,14 @@ name: CI
 
 # Runs on every pull request, in the merge queue and on pushes to main:
 #   changes   decides whether the pull request needs the browser suites
+#             (not while it is a draft, nor for docs-only changes), and
+#             fetches the shard timings from the latest green main run
 #   checks    Biome, ESLint, typecheck, unit tests, production build
 #   e2e       the Playwright chromium and library projects in 3 shards,
 #             against `next dev` + Hocuspocus and the library's Bun harness
 #   perf      the typing-budget project on its own runner, one worker
+#   desktop   the desktop static export and the local (dev bridge) project;
+#             not a required check
 #   e2e-gate  "Playwright (Chromium)": merges the shard reports and passes
 #             only if every shard and perf passed, or if the pull request
 #             changes docs only
@@ -17,7 +21,10 @@ name: CI
 # Read-only token and no secrets: pull requests from forks run the same way.
 
 on:
+  # ready_for_review: a draft gets checks only, so marking it ready must
+  # start the full run.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   push:
     branches: [main]
@@ -44,8 +51,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # Reads the e2e-timings artifact of the latest green run on main.
+      actions: read
     outputs:
       e2e: ${{ steps.decide.outputs.e2e }}
+      skip-reason: ${{ steps.decide.outputs.skip-reason }}
+      timings: ${{ steps.timings.outputs.timings }}
     steps:
       # Pull requests only: pushes to main, the merge queue and manual runs
       # always run every suite. A renamed file counts at both paths.
@@ -61,25 +72,56 @@ jobs:
             > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
 
-      # Skips the browser suites only when every changed path is under docs/
-      # or a Markdown file, and none is under desktop/ (the web build can
-      # still change). tests/unit/ci/ci-workflow.test.ts runs this script.
+      # Skips the browser suites on pull requests only: while one is a draft
+      # (marking it ready runs them), or when every changed path is under
+      # docs/ or a Markdown file and none is under desktop/ (the web build
+      # can still change). tests/unit/ci/ci-workflow.test.ts runs this script.
       - name: Decide
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           FILES: ${{ runner.temp }}/changed-files.txt
         run: |
-          if [ "$EVENT" != pull_request ] || [ ! -s "$FILES" ]; then
+          reason=""
+          if [ "$EVENT" != pull_request ]; then
+            e2e=true
+          elif [ "$DRAFT" = true ]; then
+            e2e=false
+            reason=draft
+          elif [ ! -s "$FILES" ]; then
             e2e=true
           elif grep -qvE '^(docs/.*|.*\.md)$' "$FILES" ||
             grep -qE '^desktop/' "$FILES"; then
             e2e=true
           else
             e2e=false
+            reason=docs-only
           fi
           echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
-          echo "Browser suites: $e2e"
+          echo "skip-reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Browser suites: $e2e${reason:+ ($reason)}"
+
+      # Per-file seconds from the latest green push run on main (published
+      # by "Playwright (Chromium)" there; pull requests never write them).
+      # Fetched once here, so every shard packs the same plan; anything
+      # missing leaves it empty and the shards use Playwright's --shard.
+      - name: Find shard timings
+        id: timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          run=$(gh run list --workflow ci.yml --branch main --event push \
+            --status success --limit 1 --json databaseId \
+            --jq '.[0].databaseId // empty')
+          timings=""
+          if [ -n "$run" ] &&
+            gh run download "$run" -n e2e-timings -D "$RUNNER_TEMP/timings"; then
+            timings=$(jq -c . "$RUNNER_TEMP/timings/e2e-timings.json") || timings=""
+          fi
+          echo "timings=$timings" >> "$GITHUB_OUTPUT"
+          echo "Shard timings from run ${run:-none}: ${timings:+found}${timings:-none}"
 
   checks:
     name: Lint, typecheck, unit tests, build
@@ -229,18 +271,29 @@ jobs:
           done
           curl -sf -o /dev/null http://127.0.0.1:3871/
 
+      # Spec files packed by duration (scripts/e2e-shards.ts), or
+      # Playwright's own --shard (by test count) without usable timings.
+      - name: Plan shard
+        id: plan
+        env:
+          TIMINGS: ${{ needs.changes.outputs.timings }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          printf '%s' "$TIMINGS" > "$RUNNER_TEMP/e2e-timings.json"
+          args=$(bun scripts/e2e-shards.ts plan "$SHARD/3" \
+            "$RUNNER_TEMP/e2e-timings.json" "$RUNNER_TEMP/shard-tests.txt")
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
-      # as "flaky". Shards split by spec file (contiguous ranges by test
-      # count, see tests/TESTING.md); the blob report is merged by
-      # "Playwright (Chromium)".
+      # as "flaky". The blob report is merged by "Playwright (Chromium)".
       - name: Run Playwright
         env:
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-chromium-${{ matrix.shard }}.zip
+          SHARD_ARGS: ${{ steps.plan.outputs.args }}
         run: >-
           CI="" bun playwright test --project=chromium --project=library
-          --shard=${{ matrix.shard }}/3 --retries=1 --trace off
-          --reporter=list,blob
+          "$SHARD_ARGS" --retries=1 --trace off --reporter=list,blob
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -310,9 +363,69 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Not a required check. Docs-only pull requests skip it with the browser
+  # suites; desktop/** changes always run it (see `changes`).
+  desktop:
+    name: Desktop renderer (export and local)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - *checkout
+      - *setup-bun
+      - *install
+      - *block-node
+      - *install-chromium
+
+      # Built on Linux, as releases build it (#103). Fails if a web-only
+      # route, a web metadata tag, the dev bridge or the Windows segment
+      # layout reaches out/.
+      - name: Desktop export
+        run: bun run build:desktop
+
+      # The export served with the app:// protocol handler's path rules.
+      - name: Desktop project (export)
+        run: |
+          PORT=3849 bun scripts/serve-desktop-export.ts > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:3849/ && break
+            sleep 1
+          done
+          DESKTOP_BASE_URL=http://127.0.0.1:3849 CI="" bun playwright test --project=desktop --retries=1 --trace retain-on-failure
+
+      # The desktop renderer under next dev over the dev bridge, no Hocus
+      # (architecture §11). Each Playwright worker starts its own storage
+      # host, so each has its own library. No retries: a race between a
+      # reload's new connection and the old one's release must fail here.
+      - name: Local project (dev bridge)
+        run: |
+          NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_DESKTOP_BRIDGE=dev \
+            bun next dev -p 3926 > "$RUNNER_TEMP/next-local.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            curl -sf -o /dev/null http://localhost:3926/ && break
+            sleep 1
+          done
+          curl -sf -o /dev/null --max-time 120 http://localhost:3926/
+          LOCAL_BASE_URL=http://localhost:3926 CI="" bun playwright test --project=local --retries=0 --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-results
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The required check. It always runs, because a skipped required check
   # counts as passing: it passes only if every shard and perf passed, or if
-  # `changes` skipped them for a docs-only pull request.
+  # `changes` skipped them for a draft or docs-only pull request. Anywhere
+  # else (a ready pull request, the merge queue, main) a skip fails it.
   e2e-gate:
     name: Playwright (Chromium)
     needs: [changes, e2e, perf]
@@ -359,20 +472,45 @@ jobs:
       - name: Verdict
         if: always()
         env:
+          EVENT: ${{ github.event_name }}
           RUN_E2E: ${{ needs.changes.outputs.e2e }}
+          REASON: ${{ needs.changes.outputs.skip-reason }}
           CHANGES: ${{ needs.changes.result }}
           SHARDS: ${{ needs.e2e.result }}
           PERF: ${{ needs.perf.result }}
         run: |
-          echo "changes=$CHANGES e2e=$RUN_E2E shards=$SHARDS perf=$PERF"
+          echo "event=$EVENT changes=$CHANGES e2e=$RUN_E2E ($REASON) shards=$SHARDS perf=$PERF"
           if [ "$CHANGES" != success ]; then
             echo "::error::Changed files job: $CHANGES"; exit 1
           fi
-          if [ "$RUN_E2E" = false ] && [ "$SHARDS" = skipped ] &&
-            [ "$PERF" = skipped ]; then
-            echo "::notice::Docs-only pull request: browser suites skipped"
-            exit 0
+          if [ "$EVENT" = pull_request ] && [ "$RUN_E2E" = false ] &&
+            [ "$SHARDS" = skipped ] && [ "$PERF" = skipped ]; then
+            case "$REASON" in
+              draft)
+                echo "::notice::Draft pull request: browser suites run once it is marked ready for review"
+                exit 0 ;;
+              docs-only)
+                echo "::notice::Docs-only pull request: browser suites skipped"
+                exit 0 ;;
+            esac
           fi
           if [ "$SHARDS" != success ] || [ "$PERF" != success ]; then
             echo "::error::Playwright shards: $SHARDS, perf: $PERF"; exit 1
           fi
+
+      # Green pushes to main only: the shard timings the next runs pack by.
+      - name: Write shard timings
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/report.json
+        run: |
+          bun playwright merge-reports --reporter=json all-blob-reports
+          bun scripts/e2e-shards.ts timings "$RUNNER_TEMP/report.json" e2e-timings.json
+
+      - name: Publish shard timings
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-timings
+          path: e2e-timings.json
+          retention-days: 30

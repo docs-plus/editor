@@ -11,13 +11,15 @@ name: Nightly
 #                  from 3 clients against Hocuspocus (spec §7 abuse soak)
 #   mixed-version  N+1, release N and pre-N clients on one document with
 #                  the gate env at its default (spec §3.1 N+1 ship gate)
-#   desktop-renderer  the desktop static export (bun run build:desktop) on
-#                  Linux, where releases build it (#103), served with the
-#                  protocol handler's path rules, under the desktop project
+#   library-property  the web library's multi-writer compaction property
+#                  test (web library §2.5, W-D3) at 50,000 runs, seeded
+#                  from the run id; a failure prints the seed to replay
 #   desktop-smoke  the D-A12 Electron smoke (desktop-smoke.yml) on macOS,
 #                  Windows and Linux
 #   desktop-storage-soak  plan T1–T8 against the storage worker in Electron
 #                  (desktop-storage-soak.yml), 200 kills per case, 3 OSes
+#   desktop-shell  the unsigned internal installers, installed and driven by
+#                  the electron specs (desktop-shell.yml), 3 OSes
 #
 # Read-only token and no secrets, like CI. A red run means a regression in
 # offline editing, long sessions, concurrency or schema rollout safety that
@@ -95,13 +97,16 @@ jobs:
           bun playwright test --project=pwa --trace retain-on-failure
 
       # Contract A7: the palette chunk plus cmdk that the first Alt+/ loads
-      # stays within 20 KB gz. Only a production build measures it.
+      # stays within 20 KB gz. Only a production build measures it. Its own
+      # output folder: Playwright empties the folder it writes to, which
+      # deleted the pwa step's traces whenever both failed.
       - name: Palette budget
         if: ${{ !cancelled() && steps.servers.outcome == 'success' }}
         run: >-
           PALETTE_BUDGET=1 E2E_BASE_URL=http://localhost:3847 CI=
           bun playwright test --project=chromium tests/e2e/palette.spec.ts
           --grep "palette budget" --trace retain-on-failure
+          --output test-results/palette-budget
 
       - name: Upload failure artifacts
         if: failure()
@@ -359,10 +364,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  desktop-renderer:
-    name: Desktop renderer (static export)
+  library-property:
+    name: Web library compaction property (50,000 runs)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -379,49 +384,13 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Install Chromium
-        run: bun playwright install --with-deps chromium
-
-      # Fails if a web-only route or web metadata tag reaches out/, or on the
-      # Windows segment layout; leaves app/ as it was.
-      - name: Desktop export
-        run: NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build:desktop
-
-      - name: Web-only files are back in app/
-        run: git diff --exit-code --stat -- app
-
-      # The renderer still syncs through Hocus until the dev bridge (P2.4,
-      # after P2.1 and P2.2) replaces it.
-      - name: Start servers
-        id: servers
-        run: |
-          PORT=3849 bun scripts/serve-desktop-export.ts > "$RUNNER_TEMP/serve.log" 2>&1 &
-          make dev-hocus > "$RUNNER_TEMP/hocus.log" 2>&1 &
-          for _ in $(seq 1 60); do
-            if curl -s -o /dev/null http://127.0.0.1:1234 &&
-              curl -sf -o /dev/null http://127.0.0.1:3849/; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "::error::servers did not start"
-          exit 1
-
-      - name: Run the desktop project
-        run: >-
-          DESKTOP_BASE_URL=http://127.0.0.1:3849 CI=
-          bun playwright test --project=desktop --trace retain-on-failure
-
-      - name: Upload failure artifacts
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: nightly-desktop-renderer
-          path: |
-            test-results/
-            ${{ runner.temp }}/*.log
-          if-no-files-found: ignore
-          retention-days: 7
+      # PRs run 2,000 runs from seed 1; here every night starts somewhere
+      # new. Replay a failure with the LIBRARY_PROPERTY_SEED it prints.
+      - name: Property test
+        env:
+          LIBRARY_PROPERTY_RUNS: "50000"
+          LIBRARY_PROPERTY_BASE_SEED: ${{ github.run_id }}
+        run: bun test tests/unit/lib/platform/web/library/idb-compaction-property.test.ts
 
   # D-A12: node:sqlite, WAL, a worker thread and a custom app protocol in the
   # pinned Electron build, on the nightly schedule (no cron of its own).
@@ -438,3 +407,9 @@ jobs:
     uses: ./.github/workflows/desktop-storage-soak.yml
     with:
       kills: 200
+
+  desktop-shell:
+    name: Desktop shell (installers, electron specs)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-shell.yml

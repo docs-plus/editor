@@ -12,6 +12,8 @@ on:
   pull_request:
     paths:
       - desktop/smoke/**
+      # The protocol check uses the shell's origin and path rules.
+      - desktop/shared/**
       - .github/workflows/desktop-smoke.yml
   workflow_call:
   workflow_dispatch:

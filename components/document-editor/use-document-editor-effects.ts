@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import type * as Y from "yjs";
 
 import { preloadSurfaces } from "@/components/smart-toolbar/lazy-surface";
+import { loadMarkdownPaste } from "@/extensions/markdown-paste";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import { getUserIdentity } from "@/lib/user-identity";
 
@@ -37,14 +38,29 @@ export function useDocumentEditorEffects({
     toggleFilterBarRef.current = toggleFilterBar;
   }, [toggleFilterBar]);
 
+  // Dev-only Playwright hooks. Production builds keep an empty effect (the
+  // branch is constant-false), and make no chunk for the dynamic import.
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" && editor) {
       window.__tiptap_editor = editor;
+      // The comments perf case mounts comments, which are dark on the web.
+      let unmountComments: (() => void) | null = null;
+      let cancelled = false;
+      if (window.__COMMENTS_PERF) {
+        void import("./comments-test-hooks").then(
+          ({ mountCommentsForTests }) => {
+            if (!cancelled)
+              unmountComments = mountCommentsForTests(editor, ydoc);
+          },
+        );
+      }
       return () => {
+        cancelled = true;
+        unmountComments?.();
         delete window.__tiptap_editor;
       };
     }
-  }, [editor]);
+  }, [editor, ydoc]);
 
   useEffect(() => {
     if (!editor) return;
@@ -98,7 +114,10 @@ export function useDocumentEditorEffects({
   // offline use (`preloadSurfaces`).
   useEffect(() => {
     if (!serverSynced) return;
-    (window.requestIdleCallback ?? setTimeout)(preloadSurfaces);
+    (window.requestIdleCallback ?? setTimeout)(() => {
+      preloadSurfaces();
+      void loadMarkdownPaste();
+    });
   }, [serverSynced]);
 
   useEffect(() => {
