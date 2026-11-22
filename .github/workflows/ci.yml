@@ -3,7 +3,8 @@ name: CI
 # Runs on every pull request and on pushes to main:
 #   checks  Biome, ESLint, typecheck (3 projects), unit tests, production build
 #   e2e     Playwright Chromium suite, then the typing-budget perf project,
-#           against `next dev` + Hocuspocus
+#           against `next dev` + Hocuspocus; the library project against
+#           its Bun harness
 #
 # Read-only token and no secrets: pull requests from forks run the same way.
 
@@ -148,13 +149,24 @@ jobs:
             curl -sf -o /dev/null --max-time 120 "http://localhost:3000$path"
           done
 
+      # The shared library UI (components/library) runs on its own Bun
+      # harness, no Next.js or Hocus (tests/harness/library).
+      - name: Start library harness
+        run: |
+          bun tests/harness/library/serve.ts > "$RUNNER_TEMP/library.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:3871/; then break; fi
+            sleep 1
+          done
+          curl -sf -o /dev/null http://127.0.0.1:3871/
+
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
       # as "flaky" in the summary. The perf project (typing budget) starts
       # after the chromium suite and runs on one worker, so it is not timed
       # under parallel load.
       - name: Run Playwright
-        run: CI= bun playwright test --project=chromium --project=perf --retries=1 --trace off
+        run: CI= bun playwright test --project=chromium --project=library --project=perf --retries=1 --trace off
 
       - name: Upload failure artifacts
         if: failure()
@@ -164,5 +176,6 @@ jobs:
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
+            ${{ runner.temp }}/library.log
           if-no-files-found: ignore
           retention-days: 7
