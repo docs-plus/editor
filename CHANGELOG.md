@@ -29,7 +29,8 @@ of 7,030 B gz fetched when the browser is first idle.
   remembered query and dismissed leaves the caret where it was. Match case
   and Whole word are toggles. Only the document's text is searched, never
   the outline or other sidebar text. A key a focused list has already
-  handled, or one pressed in another text field or a dialog, is left alone.
+  handled, or one pressed in another text field (a node view's included),
+  another editable area or a dialog, is left alone.
 - **Replace:** from the bar's ▸ toggle; ⌥⌘F (macOS) and Ctrl+H (Windows and
   Linux) open it in the desktop app only, since the browser owns Ctrl+H.
   Replace moves past the replacement and keeps the replaced text's marks
@@ -38,9 +39,9 @@ of 7,030 B gz fetched when the browser is first idle.
   read-only document.
 - **Replace limits (abuse guard):** the replacement field stops at 1,000
   characters, and Replace all refuses ("Too large to replace") when it
-  would add more than 256 KiB of text, so one click can't build an update
-  the server's size guard refuses, which would leave the document
-  read-only with the change unsaved.
+  would add more than 256 KiB (counted in UTF-8, erring high). That keeps
+  one click's growth far below the server's 2 MiB limit, past which the
+  document turns read-only with the change unsaved.
 - **Right-to-left and Persian or Arabic text:** without Match case, Arabic
   ي/ك match Persian ی/ک, Persian and Arabic-Indic digits match ASCII, and
   harakat and tatweel are ignored. Whole word keeps ZWNJ inside a word.

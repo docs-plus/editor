@@ -175,6 +175,9 @@ describe("isFindKeyTarget", () => {
       <textarea id="notes"></textarea>
       <select id="pick"></select>
       <div id="rich" contenteditable="true"><span id="inner">x</span></div>
+      <div class="ProseMirror" contenteditable="true">
+        <div contenteditable="false"><textarea id="node-view-source"></textarea></div>
+      </div>
       <div role="dialog"><button id="dialog-button">ok</button></div>
       <div aria-modal="true"><p id="modal-text">x</p></div>`);
     for (const id of [
@@ -183,6 +186,7 @@ describe("isFindKeyTarget", () => {
       "pick",
       "rich",
       "inner",
+      "node-view-source",
       "dialog-button",
       "modal-text",
     ]) {

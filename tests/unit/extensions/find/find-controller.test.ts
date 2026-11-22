@@ -252,6 +252,8 @@ describe("FindController", () => {
     ];
     expect(projectedGrowth(hits, "abcd")).toBe(3 + 1);
     expect(projectedGrowth(hits, "")).toBe(-4);
+    // Persian letters are two bytes each in UTF-8, as Yjs stores them.
+    expect(projectedGrowth(hits, "کتاب")).toBe(2 * 8 - 4);
     expect(MAX_REPLACE_ALL_GROWTH).toBe(256 * 1024);
   });
 

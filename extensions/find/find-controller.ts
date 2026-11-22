@@ -27,23 +27,29 @@ export interface FindSnapshot extends FindOptions {
 export const MAX_REPLACEMENT_LENGTH = 1_000;
 
 /**
- * The most characters one Replace all may add to the document. Past it the
- * bar says "Too large to replace": one click must not build an update the
- * server refuses (`MAX_DOC_SIZE_BYTES`, 2 MiB in production), which would
- * leave the document read-only with the change unsaved and no undo.
+ * The most bytes one Replace all may add to the document. Past it the bar
+ * says "Too large to replace". It keeps one click's growth far below the
+ * server's limit (`MAX_DOC_SIZE_BYTES`, 2 MiB in production), past which
+ * the document turns read-only with the change unsaved; a document already
+ * near that limit is refused by the server as for any other edit.
  */
 export const MAX_REPLACE_ALL_GROWTH = 256 * 1024;
 
 /** What Replace all did. */
 export type ReplaceAllResult = { replaced: number } | { refused: "too-large" };
 
-/** Characters that replacing every hit with `text` adds (negative: removes). */
+/**
+ * Bytes that replacing every hit with `text` adds (negative: removes),
+ * erring high: `text` counts in UTF-8, as Yjs stores it, and each replaced
+ * character as one byte.
+ */
 export function projectedGrowth(
   hits: readonly FindHit[],
   text: string,
 ): number {
+  const bytes = new TextEncoder().encode(text).length;
   let growth = 0;
-  for (const hit of hits) growth += text.length - (hit.to - hit.from);
+  for (const hit of hits) growth += bytes - (hit.to - hit.from);
   return growth;
 }
 
@@ -195,8 +201,8 @@ export class FindController {
 
   /**
    * Replaces every hit, past the 10,000 shown, in one transaction (one undo
-   * step), unless that would add more than `MAX_REPLACE_ALL_GROWTH`
-   * characters or `text` is longer than `MAX_REPLACEMENT_LENGTH`.
+   * step), unless that would add more than `MAX_REPLACE_ALL_GROWTH` bytes
+   * or `text` is longer than `MAX_REPLACEMENT_LENGTH`.
    */
   replaceAll(text: string): ReplaceAllResult {
     if (text.length > MAX_REPLACEMENT_LENGTH) return { refused: "too-large" };

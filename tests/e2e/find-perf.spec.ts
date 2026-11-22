@@ -24,8 +24,11 @@ const KEYS_PER_ROUND = Number(process.env.FIND_PERF_KEYS ?? 30);
 const ROUNDS = Number(process.env.FIND_PERF_ROUNDS ?? 3);
 /** Most Find may add to the median keystroke, in ms (both arms unthrottled). */
 const MAX_MEDIAN_DELTA_MS = Number(process.env.FIND_PERF_MAX_MEDIAN_MS ?? 4);
-/** Most Find may add to the p95 keystroke: one frame. */
-const MAX_P95_DELTA_MS = Number(process.env.FIND_PERF_MAX_P95_MS ?? 16);
+/**
+ * Most Find may add to the p95 keystroke: about one frame. The samples
+ * step by frames, so one arm's p95 slipping a frame must not fail it.
+ */
+const MAX_P95_DELTA_MS = Number(process.env.FIND_PERF_MAX_P95_MS ?? 20);
 
 const heading = (text: string, level = 2): JSONContent => ({
   type: "heading",

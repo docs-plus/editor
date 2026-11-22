@@ -17,19 +17,24 @@ export function findAvailable(): boolean {
   return FIND_ENABLED && supportsHighlights();
 }
 
-/** A field, list or dialog that owns its own keys. */
-const FOREIGN_KEY_TARGET =
-  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], [aria-modal="true"]';
+/** A field or dialog that owns its keys, even inside the editor (a node view's field). */
+const FIELD_OR_DIALOG =
+  'input, textarea, select, [role="dialog"], [aria-modal="true"]';
 
 /**
- * Whether a Find key pressed on `target` is Find's: in the editor, the
- * find bar or the page, but not in another text field (a tab rename, a
- * dialog's search) or inside a dialog, which keep their own keys.
+ * Whether a Find key pressed on `target` is Find's: in the editor's text,
+ * the find bar or the page, but not in another text field (a tab rename, a
+ * node view's source field, a dialog's search), another editable area or
+ * a dialog, which keep their own keys.
  */
 export function isFindKeyTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return true;
-  if (target.closest("[data-find-bar], .ProseMirror")) return true;
-  return target.closest(FOREIGN_KEY_TARGET) === null;
+  if (target.closest("[data-find-bar]")) return true;
+  if (target.closest(FIELD_OR_DIALOG)) return false;
+  if (target.closest(".ProseMirror")) return true;
+  return (
+    target.closest('[contenteditable]:not([contenteditable="false"])') === null
+  );
 }
 
 /**
