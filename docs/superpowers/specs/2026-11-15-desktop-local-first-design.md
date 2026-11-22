@@ -740,6 +740,8 @@ If S1 or S2 fails, revisit the shell (Tauri is the runner-up).
 
 #### Phase 2: foundations and the Local desktop (weeks 3–12)
 
+> **Status:** where each Phase 2 row stands, and the decisions made while executing it, are in [`../plans/2026-11-22-phase-2-status.md`](../plans/2026-11-22-phase-2-status.md).
+
 | # | PR | Lens | Exit criteria |
 |---|---|---|---|
 | P2.1 | `DocSession` port and the platform-neutral `local-session` and batcher in `lib/platform/` (load, apply, append in batches), so the web library reuses them (D3). Shared contract tests run on a memory store and on SQLite **inside Electron**. | SE | The suite passes on `MemoryDocStore`. P2.6 adds the engine, on `bun:sqlite` and on `node:sqlite` in Electron. A kill during a batch loses at most the unflushed window (≤ 1 s). |
