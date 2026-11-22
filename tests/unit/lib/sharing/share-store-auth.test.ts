@@ -336,7 +336,7 @@ describe("failed-token keys", () => {
       now: () => t,
     });
     for (let i = 0; i < 3; i++) {
-      limiter.recordFailure(mintShareId(), `2001:db8:a:${i}::/64`);
+      limiter.recordFailure(`2001:db8:a:${i}::/64`, mintShareId());
     }
     expect(limiter.isAddressBlocked("2001:db8:a:ff::/64")).toBe(true);
     expect(limiter.isAddressBlocked("2001:db8:b:0::/64")).toBe(false);
@@ -351,16 +351,78 @@ describe("failed-token key table (M2)", () => {
       perShare: 3,
       perPrefix: 3,
       maxKeys: 4,
+      maxShareKeys: 4,
     });
     for (let i = 0; i < 50; i++) {
       expect(limiter.isAddressBlocked(`2001:db8:a:${i}::/64`)).toBe(false);
       expect(limiter.isShareBlocked(mintShareId())).toBe(false);
     }
-    // The table is still empty, so a real failure is still counted.
+    // The tables are still empty, so a real failure is still counted.
     const shareId = mintShareId();
-    for (let i = 0; i < 3; i++) limiter.recordFailure(shareId, IP);
+    for (let i = 0; i < 3; i++) limiter.recordFailure(IP, shareId);
     expect(limiter.isShareBlocked(shareId)).toBe(true);
     expect(limiter.isAddressBlocked(IP)).toBe(true);
+  });
+
+  it("a full address table blocks new addresses and logs it, once per window", () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => warnings.push(line);
+    try {
+      const limiter = createFailedTokenLimiter({
+        perShare: 100,
+        perPrefix: 100,
+        maxKeys: 3,
+        now: () => nowMs,
+      });
+      for (let i = 0; i < 3; i++) limiter.recordFailure(`198.51.100.${i}`);
+      // Tracked addresses are judged on their own count.
+      expect(limiter.isAddressBlocked("198.51.100.0")).toBe(false);
+      expect(limiter.isAddressBlocked("198.51.100.99")).toBe(true);
+      expect(limiter.isAddressBlocked("198.51.100.98")).toBe(true);
+      const events = warnings.filter((line) =>
+        line.includes("share_failed_token_table_full"),
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0]).toContain('"table":"addresses"');
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  it("unknown share ids take no share-key slot; a full share table fails closed", () => {
+    const ctx = context({
+      failedTokens: createFailedTokenLimiter({
+        perShare: 100,
+        perPrefix: 1000,
+        maxShareKeys: 1,
+        now: () => nowMs,
+      }),
+    });
+    const wrong = () => makeShareSecrets().authEdit;
+    for (let i = 0; i < 50; i++) {
+      authenticateShare(ctx, mintShareId(), wrong(), IP, "connection");
+    }
+    const first = seedShare(db, nowMs);
+    const second = seedShare(db, nowMs);
+    // The flood left the one slot free for a real share.
+    expect(
+      authenticateShare(ctx, first.shareId, wrong(), IP, "connection"),
+    ).toEqual({ ok: false, reason: SHARE_UNAVAILABLE });
+    // Now full: wrong tokens on an untracked share pause as busy ...
+    expect(
+      authenticateShare(ctx, second.shareId, wrong(), IP, "connection"),
+    ).toEqual({ ok: false, reason: SHARE_BUSY });
+    // ... and a right token still gets in.
+    expect(
+      authenticateShare(
+        ctx,
+        second.shareId,
+        second.secrets.authEdit,
+        IP,
+        "connection",
+      ),
+    ).toMatchObject({ ok: true });
   });
 
   it("a flood of random share ids from one /48 never makes a real share busy", () => {

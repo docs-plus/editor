@@ -1,3 +1,4 @@
+import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { RATE_LIMIT_MAX_KEYS } from "@/lib/security/guardrail-config";
 import { createTimestampWindows } from "@/lib/security/rate-limit";
 
@@ -10,18 +11,20 @@ import { createTimestampWindows } from "@/lib/security/rate-limit";
  * by flooding it. IPs arrive pinned (`pinClientIp`): IPv6 is already one
  * key per /64, and each /64 also counts toward its /48.
  *
- * Checks only read: a key is added when a failure is recorded, so a flood
- * of checks (random share ids, say) cannot fill the table. Share keys live
- * in their own smaller table. A full table drops new keys, which fails
- * open: the other limits (upgrade rate, HTTP rate, sockets) still bound
- * the load, and failing closed would make every share answer `busy`.
+ * Keys are added only when a failure is recorded, never by a check, and a
+ * share key only for a share that exists, so a flood of checks or of
+ * random share ids cannot fill a table: one /48 adds at most `perPrefix`
+ * /64 keys a minute before its /48 key blocks it. A full table fails
+ * closed (an address or share it does not track counts as over its
+ * limit) and logs `share_failed_token_table_full` once per window.
  */
 export type FailedTokenLimiter = {
   /** True when this address (IPv4, IPv6 /64 or its /48) is over its limit. */
   isAddressBlocked(ip: string): boolean;
   /** True when this share had too many wrong tokens; asked only after a miss. */
   isShareBlocked(shareId: string): boolean;
-  recordFailure(shareId: string, ip: string): void;
+  /** Counts a failure for `ip`, and for `shareId` when that share exists. */
+  recordFailure(ip: string, shareId?: string): void;
 };
 
 type FailedTokenLimiterOptions = {
@@ -47,36 +50,74 @@ export function addressKeys(ip: string): string[] {
   return [`ip:${ip}`, `p48:${match[1]}::/48`];
 }
 
+/** One bounded table of failure timestamps that fails closed when full. */
+function createFailureTable(
+  table: string,
+  maxKeys: number,
+  windowMs: number,
+  now: () => number,
+) {
+  const windows = createTimestampWindows(windowMs, now, maxKeys);
+  let loggedAt = Number.NEGATIVE_INFINITY;
+
+  function saturated(): void {
+    const at = now();
+    if (at - loggedAt < windowMs) return;
+    loggedAt = at;
+    logAbuseEvent("share_failed_token_table_full", {
+      table,
+      max_keys: maxKeys,
+    });
+  }
+
+  return {
+    /** Over `limit`, or untracked while the table is full. */
+    blocked(key: string, limit: number): boolean {
+      if (windows.peek(key) >= limit) return true;
+      if (windows.has(key) || windows.size() < maxKeys) return false;
+      saturated();
+      return true;
+    },
+    record(key: string, at: number): void {
+      const recent = windows.recent(key);
+      if (recent) recent.push(at);
+      else saturated();
+    },
+  };
+}
+
 export function createFailedTokenLimiter(
   options: FailedTokenLimiterOptions,
 ): FailedTokenLimiter {
   const now = options.now ?? Date.now;
   const windowMs = options.windowMs ?? ONE_MINUTE_MS;
-  const addresses = createTimestampWindows(
-    windowMs,
-    now,
+  const addresses = createFailureTable(
+    "addresses",
     options.maxKeys ?? RATE_LIMIT_MAX_KEYS,
-  );
-  const shares = createTimestampWindows(
     windowMs,
     now,
+  );
+  const shares = createFailureTable(
+    "shares",
     options.maxShareKeys ?? MAX_SHARE_KEYS,
+    windowMs,
+    now,
   );
 
   return {
     isAddressBlocked(ip) {
-      // The /48 first: a blocked /48 never needs its /64 looked at.
-      return addressKeys(ip)
-        .reverse()
-        .some((key) => addresses.peek(key) >= options.perPrefix);
+      return addressKeys(ip).some((key) =>
+        addresses.blocked(key, options.perPrefix),
+      );
     },
     isShareBlocked(shareId) {
-      return shares.peek(shareId) >= options.perShare;
+      return shares.blocked(shareId, options.perShare);
     },
-    recordFailure(shareId, ip) {
+    recordFailure(ip, shareId) {
       const at = now();
-      shares.recent(shareId)?.push(at);
-      for (const key of addressKeys(ip)) addresses.recent(key)?.push(at);
+      if (shareId) shares.record(shareId, at);
+      // The /48 first, so a nearly full table still counts the prefix.
+      for (const key of addressKeys(ip).reverse()) addresses.record(key, at);
     },
   };
 }

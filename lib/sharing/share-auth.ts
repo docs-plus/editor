@@ -120,7 +120,8 @@ export function authenticateShare(
   const role = share ? matched : null;
   if (!share || !role) {
     const shareBlocked = failedTokens.isShareBlocked(shareId);
-    failedTokens.recordFailure(shareId, ip);
+    // Only a share that exists gets a key, so random ids fill no table.
+    failedTokens.recordFailure(ip, share ? shareId : undefined);
     return { ok: false, reason: shareBlocked ? SHARE_BUSY : SHARE_UNAVAILABLE };
   }
   if (share.status === "ended") {

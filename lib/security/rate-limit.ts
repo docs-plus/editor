@@ -16,6 +16,8 @@ type SlidingWindowLimiterOptions = {
 
 export type SlidingWindowLimiter = {
   check(key: string): RateLimitDecision;
+  /** Requests `key` made in the window; never adds the key. */
+  peek(key: string): number;
   /** Number of tracked keys (for tests and metrics). */
   size(): number;
 };
@@ -61,6 +63,8 @@ export function createTimestampWindows(
       const cutoff = current - windowMs;
       return (windows.get(key) ?? []).filter((t) => t > cutoff).length;
     },
+    /** True while `key` is tracked (until a sweep drops it). */
+    has: (key: string) => windows.has(key),
     size: () => windows.size,
   };
 }
@@ -97,6 +101,7 @@ export function createSlidingWindowLimiter(
         remaining: Math.max(options.limit - recent.length, 0),
       };
     },
+    peek: windows.peek,
     size: windows.size,
   };
 }
