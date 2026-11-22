@@ -33,6 +33,11 @@ export type CreateDocInput = {
    * the engine accepts any {@link SAFE_ID}, which tests and imports use.
    */
   id?: string;
+  /**
+   * `docs.link_key`, 32 lowercase hex: minted when omitted. A caller that
+   * must answer before the write lands (`RpcLibraryIndex.create`) mints it.
+   */
+  linkKey?: string;
   /** `docs.schema`: `DOC_SCHEMA` for a new document, the file's on import. */
   schema?: number;
   /** The title until the content's first append says otherwise. */
@@ -72,6 +77,7 @@ export type SidebarDoc = {
   modifiedAt: number;
   openedAt: number | null;
   sizeBytes: number;
+  linkKey: string;
   kind: DocKind;
   tagIds: string[];
 };
@@ -200,7 +206,9 @@ export function createDoc(
   if (kind !== "doc" && kind !== "template")
     throw new StorageError("invalid_argument", "bad kind");
   const lineage = crypto.randomUUID();
-  const linkKey = randomHex32();
+  const linkKey = input.linkKey ?? randomHex32();
+  if (!isLinkKey(linkKey))
+    throw new StorageError("invalid_argument", "bad link key");
   const rev = indexWrite(db, () => {
     if (input.folderId) requireLiveFolder(db, input.folderId);
     insertDoc(
@@ -350,7 +358,7 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
   const docs = db
     .prepare(
       `SELECT id, title, folder_id, sort_key, pin_key, pinned, created_at,
-         modified_at, opened_at, size_bytes, kind
+         modified_at, opened_at, size_bytes, kind, link_key
        FROM docs WHERE trashed_at IS NULL`,
     )
     .all()
@@ -366,6 +374,7 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
         modifiedAt: row.modified_at as number,
         openedAt: nullableNumber(row.opened_at),
         sizeBytes: row.size_bytes as number,
+        linkKey: row.link_key as string,
         kind: row.kind as DocKind,
         tagIds: tagsByDoc.get(row.id as string) ?? [],
       }),

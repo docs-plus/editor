@@ -150,6 +150,8 @@ interface State {
   readonly listViews: Readonly<Record<string, Partial<ListViewPrefs>>>;
   readonly trash: readonly TrashedItem[];
   readonly trashCount: number;
+  /** Documents in the Trash, alone or in a folder, with their link keys. */
+  readonly trashed: readonly DocumentEntry[];
 }
 
 /** A change to a state; returns the same object when nothing changes. */
@@ -162,9 +164,17 @@ const EMPTY: State = {
   listViews: {},
   trash: [],
   trashCount: 0,
+  trashed: [],
 };
 
 const NAME_CAP = 200;
+
+/** A `link_key`: 32 lowercase hex, as the engine mints it (format 2). */
+function newLinkKey(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 function cleanName(name: string): string {
   return name.trim().slice(0, NAME_CAP);
@@ -203,6 +213,7 @@ function toEntry(row: LibraryLoad["sidebar"]["docs"][number]): DocumentEntry {
     title: row.title,
     createdAt: row.createdAt,
     modifiedAt: row.modifiedAt,
+    linkKey: row.linkKey,
     ...(row.folderId === null ? {} : { folderId: row.folderId }),
     ...(row.pinned && row.pinKey !== null ? { pinKey: row.pinKey } : {}),
     ...(row.openedAt === null ? {} : { openedAt: row.openedAt }),
@@ -246,6 +257,7 @@ export function stateFromLoad(load: LibraryLoad): State {
     listViews,
     trash: load.trash.items.map((item) => ({ ...item })),
     trashCount: load.trash.docCount,
+    trashed: load.trash.trashed.map((doc) => ({ ...doc })),
   };
 }
 
@@ -407,6 +419,7 @@ export class RpcLibraryIndex implements LibraryIndex {
         title: init?.title ?? "Untitled",
         createdAt: now,
         modifiedAt: now,
+        linkKey: newLinkKey(),
       },
       folderId,
       sortKey,
@@ -417,6 +430,7 @@ export class RpcLibraryIndex implements LibraryIndex {
       () =>
         this.options.call("createDoc", {
           id: entry.id,
+          linkKey: entry.linkKey,
           title: entry.title,
           folderId,
           sortKey: sortKey ?? "",
@@ -679,7 +693,7 @@ export class RpcLibraryIndex implements LibraryIndex {
       (state) =>
         state.trash.length === 0 && state.trashCount === 0
           ? state
-          : { ...state, trash: [], trashCount: 0 },
+          : { ...state, trash: [], trashCount: 0, trashed: [] },
       "purgeTrash",
       async () => {
         for (const item of items) {
@@ -1022,6 +1036,7 @@ export class RpcLibraryIndex implements LibraryIndex {
       tags: view.tags,
       listViews: view.listViews,
       trash: view.trash,
+      trashed: view.trashed,
     };
   }
 

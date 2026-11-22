@@ -90,6 +90,18 @@ export type TrashedDoc = {
   folderId: string | null;
 };
 
+/**
+ * A document in the Trash, alone or inside a trashed folder, with its
+ * `link_key`, so a link to it can say "In Trash" (search-linking §4.6).
+ */
+export type TrashedDocEntry = {
+  id: string;
+  title: string;
+  linkKey: string;
+  createdAt: number;
+  modifiedAt: number;
+};
+
 export type TrashedFolderRow = {
   kind: "folder";
   id: string;
@@ -103,10 +115,12 @@ export type TrashedFolderRow = {
 /**
  * What the Trash list shows, newest first: documents trashed alone, and
  * each trashed folder group as one unit (its documents are inside it).
+ * `trashed` is every document in the Trash, either way, with its link key.
  */
 export function trashList(db: SqliteDriver): {
   items: (TrashedDoc | TrashedFolderRow)[];
   docCount: number;
+  trashed: TrashedDocEntry[];
 } {
   const folderGroups = new Set<string>();
   const folders: TrashedFolderRow[] = [];
@@ -130,13 +144,24 @@ export function trashList(db: SqliteDriver): {
     });
   }
   const docs: TrashedDoc[] = [];
+  const trashed: TrashedDocEntry[] = [];
   let docCount = 0;
   for (const row of db
     .prepare(
-      "SELECT id, title, trashed_at, trash_group, trashed_from FROM docs WHERE trashed_at IS NOT NULL",
+      `SELECT id, title, trashed_at, trash_group, trashed_from, link_key,
+         created_at, modified_at, kind
+       FROM docs WHERE trashed_at IS NOT NULL`,
     )
     .all()) {
     docCount += 1;
+    if (row.kind === "doc")
+      trashed.push({
+        id: String(row.id),
+        title: String(row.title),
+        linkKey: String(row.link_key),
+        createdAt: Number(row.created_at),
+        modifiedAt: Number(row.modified_at),
+      });
     if (folderGroups.has(String(row.trash_group))) continue;
     docs.push({
       kind: "doc",
@@ -149,7 +174,7 @@ export function trashList(db: SqliteDriver): {
   const items = [...folders, ...docs].sort(
     (a, b) => b.trashedAt - a.trashedAt || a.id.localeCompare(b.id),
   );
-  return { items, docCount };
+  return { items, docCount, trashed };
 }
 
 /** Snippets for the rows a Preview list shows (fetched lazily, §3.5). */

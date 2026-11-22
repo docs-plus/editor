@@ -211,8 +211,13 @@ describe("RpcLibraryIndex", () => {
     expect(index.snapshot().trashCount).toBe(2);
     index.purgeTrash();
     expect(index.snapshot().trash).toEqual([]);
+    expect(index.snapshot().trashed).toEqual([]);
     await index.settle();
-    expect(lib.library.trashList()).toEqual({ items: [], docCount: 0 });
+    expect(lib.library.trashList()).toEqual({
+      items: [],
+      docCount: 0,
+      trashed: [],
+    });
     expect(lib.errors).toEqual([]);
   });
 });

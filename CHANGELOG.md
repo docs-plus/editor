@@ -69,6 +69,11 @@ unchanged.
 - **Platform:** `LibraryIndex` entries carry their `linkKey`, and the
   snapshot lists `trashed` documents. `MemoryDocumentIndex` mints keys and
   the contract suite covers both and the snapshot's identity.
+- **Desktop:** `RpcLibraryIndex` passes the same suite. `create` mints the
+  32-hex `link_key` with the id and sends it, and the engine's `createDoc`
+  keeps it (refusing a malformed one). `sidebar` returns each document's
+  `linkKey`, and `trashList` adds `trashed`: every document in the Trash,
+  alone or in a folder, with its key. No schema change.
 - **Editor:** `DocumentEditor` takes an optional, stable `linkHost` and
   spreads it into the Hyperlink configuration; it imports only its type
   (import-boundary rule). `DocumentEditor` passes its props through as
