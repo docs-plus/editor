@@ -1228,6 +1228,114 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
   });
 });
 
+/** The marks on the text node holding `needle`. */
+const marksOn = (page: Page, needle: string) =>
+  page.evaluate((target) => {
+    const names: string[] = [];
+    window.__tiptap_editor?.state.doc.descendants((node) => {
+      if (node.isText && node.text?.includes(target)) {
+        names.push(...node.marks.map((mark) => mark.type.name));
+      }
+    });
+    return names.sort();
+  }, needle);
+
+/** Pastes `text` as plain text through a real paste event on the editor. */
+const pasteText = (page: Page, value: string) =>
+  page.evaluate((text) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    window.__tiptap_editor?.view.dom.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, value);
+
+test.describe("bubble link handoff and pills (spec §7.2, §7.5)", () => {
+  test("click link and paste at once keeps the selected text", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page)
+      .getByRole("button", { name: "Link", exact: true })
+      .click();
+    // No wait: the field has focus in the click itself.
+    await page.keyboard.insertText("https://e.com");
+    await expect(page.locator(".tiptap")).toContainText(
+      "Select some words in this paragraph",
+    );
+    const field = page.locator(".hyperlink-create-popover input");
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue("https://e.com");
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    await expect.poll(() => marksOn(page, "some words")).toEqual(["hyperlink"]);
+    await expect(page.locator(".tiptap")).toContainText(
+      "Select some words in this paragraph",
+    );
+  });
+
+  test("a URL pasted over a selection links it", async ({ page }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await pasteText(page, "https://example.org/page");
+    await expect.poll(() => marksOn(page, "some words")).toEqual(["hyperlink"]);
+  });
+
+  test("a media URL pasted over a selection does not link it", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await pasteText(page, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(await marksOn(page, "some words")).not.toContain("hyperlink");
+  });
+
+  test("inline code over linked and coloured text says what it removed, with Undo", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // Linked and coloured "some" only: a selection inside one link shows
+    // the link's own card, not the bubble.
+    await selectText(page, "some");
+    await page.evaluate(() =>
+      window.__tiptap_editor
+        ?.chain()
+        .setTextColor("red")
+        .setHyperlink({ href: "https://example.com" })
+        .run(),
+    );
+    // "some words", across the marked and the plain text node.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const from = editor?.state.selection.from ?? 0;
+      editor
+        ?.chain()
+        .focus()
+        .setTextSelection({ from, to: from + "some words".length })
+        .run();
+    });
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page)
+      .getByRole("button", { name: "Inline code", exact: true })
+      .click();
+    await expect
+      .poll(() => marksOn(page, "some words"))
+      .toEqual(["inlineCode"]);
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Link and colour removed");
+    await pill.getByRole("button", { name: "Undo" }).click();
+    await expect
+      .poll(() => marksOn(page, "some"))
+      .toEqual(["hyperlink", "textColor"]);
+  });
+});
+
 test.describe("selection bubble controller (spec §12.1)", () => {
   test("mounting the bubble chunk registers no plugin", async ({ page }) => {
     const chunk = await holdChunk(page, CHUNK_MARKERS.bubble);

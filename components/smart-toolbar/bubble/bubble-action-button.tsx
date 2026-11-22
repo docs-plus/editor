@@ -51,15 +51,20 @@ export function useBubbleReason(
  * `aria-pressed` incl. "mixed", disabled with a reason), plus the inline
  * code reason (`useBubbleReason`). A copy, not a prop on `ActionButton`:
  * that module is in the editor chunk, and the phase's gate is 0 B. Keep the
- * two in step. B I U S and Link use it; ‹›, Tx and 💬 keep `ActionButton`,
- * since inline code never refuses them.
+ * two in step. B I U S, ‹› and Link use it; Tx and 💬 keep `ActionButton`.
  */
 export function BubbleActionButton({
   id,
   editor,
+  onRun,
 }: {
   id: string;
   editor: Editor;
+  /**
+   * Wraps the run, for what the bubble does around it (the link handoff,
+   * the pill after ‹›). It must call `run` once.
+   */
+  onRun?: (run: () => boolean) => void;
 }) {
   const view = useActionView(id, editor);
   const action = editorActions.get(id);
@@ -99,7 +104,11 @@ export function BubbleActionButton({
       disabledReason={reason}
       size="icon-sm"
       onMouseDown={keepSelection}
-      onClick={() => runAction(editor, action)}
+      onClick={() => {
+        const run = () => runAction(editor, action);
+        if (onRun) onRun(run);
+        else run();
+      }}
     >
       {Icon ? <Icon className="tiptap-button-icon" aria-hidden="true" /> : null}
     </ToolbarButton>

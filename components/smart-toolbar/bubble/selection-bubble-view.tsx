@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
+import { announceLater } from "@/lib/announce-later";
 import { editorActions } from "@/lib/editor-actions";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
@@ -72,6 +73,43 @@ function createBubbleRoot(): HTMLDivElement {
   root.style.position = "absolute";
   root.style.visibility = "hidden";
   return root;
+}
+
+/**
+ * 🔗 hands off in place (spec §7.5): the Hyperlink package focuses its
+ * field 100 ms after it opens, so a URL typed or pasted at once would land
+ * in the editor, over the selection. Focus moves to the field in the click
+ * itself, and the bubble hides in the same task.
+ */
+function handOffToLink(controller: BubbleController | null) {
+  document
+    .querySelector<HTMLInputElement>(".hyperlink-create-popover input")
+    ?.focus();
+  controller?.hide();
+}
+
+const LINK_MARK = "hyperlink";
+const COLOUR_MARKS = ["textColor", "highlight"];
+
+/**
+ * ‹› over linked or coloured text: `inlineCode` excludes every other mark,
+ * so applying it removes them (spec §7.2). The pill says so, with Undo.
+ */
+function runInlineCode(editor: Editor, run: () => boolean) {
+  const { state } = editor;
+  const { from, to } = state.selection;
+  const has = (name: string) => {
+    const type = state.schema.marks[name];
+    return type !== undefined && state.doc.rangeHasMark(from, to, type);
+  };
+  const adding = !editor.isActive("inlineCode");
+  const link = adding && has(LINK_MARK);
+  const colour = adding && COLOUR_MARKS.some(has);
+  if (!run() || !(link || colour)) return;
+  const what = link && colour ? "Link and colour" : link ? "Link" : "Colour";
+  announceLater(`${what} removed`, {
+    action: { label: "Undo", run: () => editor.chain().focus().undo().run() },
+  });
 }
 
 /** Keeps the editor's focus and selection on a click between the items. */
@@ -433,11 +471,21 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         {MARK_IDS.map((id) => (
           <BubbleActionButton key={id} id={id} editor={editor} />
         ))}
-        <ActionButton id="mark.inlineCode" editor={editor} variant="bubble" />
+        <BubbleActionButton
+          id="mark.inlineCode"
+          editor={editor}
+          onRun={(run) => runInlineCode(editor, run)}
+        />
         <ActionButton id="format.clear" editor={editor} variant="bubble" />
         <ToolbarSeparator />
         <BubbleColorSplit editor={editor} placement={placement} />
-        <BubbleActionButton id="mark.link" editor={editor} />
+        <BubbleActionButton
+          id="mark.link"
+          editor={editor}
+          onRun={(run) => {
+            if (run()) handOffToLink(controllerRef.current);
+          }}
+        />
         <PaintFormatButton editor={editor} />
         {/* Comment (spec §7.6): last, and absent until the comments PR
             registers `comment.add`, so its group shifts nothing. */}
