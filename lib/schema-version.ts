@@ -10,7 +10,12 @@ declare global {
   }
 }
 
-export const CLIENT_SCHEMA = 2;
+/**
+ * 3: knows `asset:sha256-…` image refs (image store, D4). Share documents
+ * will require it; the gate's floor stays 2, so sandbox clients on 2 still
+ * connect and are only counted as `low`.
+ */
+export const CLIENT_SCHEMA = 3;
 
 export const CLIENT_BUILD: string =
   process.env.NEXT_PUBLIC_BUILD_ID?.trim() || "dev";

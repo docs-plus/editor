@@ -37,13 +37,7 @@
   outline: none;
   caret-color: var(--foreground);
 
-  // Paragraph spacing
-  p:not(:first-child):not(td p):not(th p) {
-    font-size: 15px;
-    line-height: 1.15;
-    font-weight: normal;
-    margin-top: 12px;
-  }
+  // Paragraph size, line height and spacing: `styles/_page.scss`.
 
   // Selection styles
   &:not(.readonly):not(.ProseMirror-hideselection) {

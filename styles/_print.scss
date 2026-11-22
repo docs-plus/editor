@@ -15,16 +15,25 @@
 
   /* Chrome: everything but the document itself. Overlays the editor
      portals to the body (popovers, menus, tooltips) go with it. Pages
-     without the editor (About, Privacy) print as they are. */
+     without the editor (About, Privacy) print as they are. The page
+     frame (`PageFrame`, preferences) wraps the editor in the shell and
+     passes through. */
   body:has(> .app-shell) > :not(.app-shell),
-  .app-shell > :not(.document-editor-wrapper),
+  .app-shell > :not(.document-editor-wrapper, .page-frame),
+  .page-frame > :not(.document-editor-wrapper),
   .document-editor-wrapper > :not(.editor-with-toc),
   .editor-with-toc > :not(.document-editor-content) {
     display: none !important;
   }
 
   /* Let the document flow across pages instead of one clipped screen. */
-  html :is(.app-shell, .document-editor-wrapper, .editor-with-toc) {
+  html
+    :is(
+      .app-shell,
+      .page-frame,
+      .document-editor-wrapper,
+      .editor-with-toc
+    ) {
     display: block;
     height: auto;
     min-height: 0;

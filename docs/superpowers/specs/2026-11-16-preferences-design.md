@@ -659,6 +659,7 @@ CREATE TABLE doc_view (
 | IndexedDB `tinydocy-library.doc_view` | `{ width?, place? }` | Library only. W2's schema already reserves the store. `place` moves the library's continue position out of `tinydocy-continue`. The sandbox keeps `tinydocy-continue`. |
 | `tinydocy-user` | `{ name, color }` (legacy shape, now validated) | §5.12 |
 | `tinydocy-continue` | unchanged | Written only when `rememberPlace` is on. Turning it off deletes the key. |
+| `tinydocy-author` (P4.9) | the comment device secret: 22 base64url characters (128 bits) | Minted on first use (`lib/comments/author-id.ts`); never leaves the browser. Each comment stores the per-document author id derived from it (HMAC with the document's lineage, SEC-002), never the secret, and never in awareness. Not a preference: Forget and R=0 leave it, as they leave `tinydocy-user`. |
 
 - **The `page` slot stores a style name plus overrides.**
   - The effective value is `STYLES[style]` with the overrides merged over it.
@@ -825,7 +826,7 @@ Desktop and the web library are new installs on new storage, so they get the new
 | `appearance` (`tinydocy-theme`) | kept | **stored** (today) |
 | Page settings, `a11y`, `spellcheck`, `smartQuotes`, `outline`, `simpleToolbar` (`tinydocy-ui`) | kept | **session only**, with the "not saved" line. `simpleToolbar` changes from "disabled with a reason" to session-only, so all settings behave the same way. |
 | `rememberPlace` / `tinydocy-continue` | kept | forced off (today) |
-| `identity`, `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
+| `identity` (and the comment device secret, `tinydocy-author`), `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
 | Library `doc_view` | kept | the library origin is expected to keep R = 1. If 0, per-document width is session-only too. |
 
 - Desktop builds don't carry the flag. Desktop "Forget my formatting choices" clears the renderer's `tinydocy-choices` exactly as on the web.
@@ -955,6 +956,15 @@ Desktop and the web library are new installs on new storage, so they get the new
 | HTML | boot script about +0.9 KB per response | — |
 | Fonts | 0 until chosen | — |
 
+**Measured in P2.9c-1 (#161, against `main` at `84a9458`, gzipped)** — the first-load targets set in review (coordinator, 2026-11-22) and the results:
+
+| | Target | Measured | Notes |
+|---|---|---|---|
+| Editor chunk group | ≤ +150 B (the D23 smart-quotes line) | **+109 B** (394,127 B) | |
+| First-load JS | ≤ +600 B | **+537 B** | `PageFrame` only. The store, schema and applier are a lazy runtime loaded on idle (2,183 B). |
+| First-load CSS | ≤ +400 B | **+475 B, approved** | Over by 75 B for the increased-contrast set (about 230 B), which stays eager. OS "Increase contrast" users must never see a frame at normal contrast, so accessibility outranks 230 B (coordinator ruling, 2026-11-22). The knobs, the text rules, reading mode and motion are in `_page-text.scss` (724 B), which loads next to the editor. |
+| HTML | — | +1,413 B | The boot script is 2,445 B (1,212 B gzipped), including the inline knob values. |
+
 ### 5.15 Tests
 
 - **Unit** (`bun test`):
@@ -985,7 +995,11 @@ Desktop and the web library are new installs on new storage, so they get the new
   13. **Reading mode:** no Yjs update is emitted while toggling and scrolling.
 - **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and the `firefox` project (defined once by test strategy Q7; languages L7 adds its RTL specs there), checking joining, diacritics and caret movement. Letter spacing is already off in RTL blocks (§5.4), so this checks that word spacing and the fallback faces keep letters joined.
 - **`perf`:**
-  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds.
+  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds. *Amended in P2.9c-1 (#161):*
+    - The fixture is the 500-heading document, because the server refuses the 1,000-heading one (2 MiB cap).
+    - "One layout" holds for the engine itself, measured with every block rendered.
+    - On the real page, `content-visibility: auto` (off-screen blocks) adds at most one relevance pass in the same frame after any geometry change.
+    - A theme flip, which moves nothing, stays at one.
   - Typing latency is unchanged.
   - `check-editor-chunk-size` passes.
 - **Electron:**

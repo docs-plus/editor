@@ -605,6 +605,24 @@ const TEST_STEPS = [
   "Smoke",
   "Soak",
   "Property test",
+  // The desktop shell (#135): building, installing and checking the app.
+  "Export the desktop renderer",
+  "Audit the packaging dependencies",
+  "Bundle and stage (release)",
+  "Build the installers",
+  "Install (macOS)",
+  "Install (Windows)",
+  "Install (Linux)",
+  "Check the fuses in the installed binary (inspect off)",
+  "Smoke the installed release app (no inspector)",
+  "Check the tinydocy:// handler (Windows)",
+  "Smoke the release AppImage (Linux)",
+  "Bundle and stage (test)",
+  "Build the unpacked test app",
+  "Check the fuses in the test app (inspect on)",
+  "Start the test app once and quit",
+  "Electron specs (test app)",
+  "Quit timings",
 ];
 
 /** GitHub adds these to every job; no workflow file names them. */

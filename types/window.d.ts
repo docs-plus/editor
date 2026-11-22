@@ -10,5 +10,13 @@ declare global {
     __toolbarRenderMs?: number[];
     /** Dev-only Playwright hook: set before boot to render without the toolbar. */
     __TOOLBAR_OFF?: boolean;
+    /** Dev-only Playwright hook: set before boot to mount comments (dark on the web). */
+    __COMMENTS_PERF?: boolean;
+    /** Dev-only Playwright hook: load the comments controller and seed threads. */
+    __comments?: {
+      ready(): Promise<boolean>;
+      /** Writes up to `count` threads; returns how many it wrote. */
+      seed(count: number): number;
+    };
   }
 }

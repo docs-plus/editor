@@ -17,7 +17,13 @@ import type { Transaction } from "@tiptap/pm/state";
  * amendment).
  */
 
-export const CONTINUE_STORAGE_KEY = "tinydocy-continue";
+import {
+  CONTINUE_STORAGE_KEY,
+  PREFS_VERSION,
+  UI_STORAGE_KEY,
+} from "@/lib/prefs/keys";
+
+export { CONTINUE_STORAGE_KEY };
 export const CONTINUE_MAX_DOCS = 30;
 export const CONTINUE_MAX_AGE_DAYS = 14;
 /** Sections whose heading is one of the first top-level blocks are skipped. */
@@ -98,9 +104,45 @@ function save(entries: Entries): void {
 
 let killSwitchCleared = false;
 
+/** The last `tinydocy-ui` string read, and what it said. */
+let uiCache: { raw: string | null; off: boolean } | null = null;
+
+/**
+ * The `rememberPlace` preference (preferences design §2.1 row 18, default
+ * on), read straight from its `tinydocy-ui` slot: this chunk imports only
+ * the dependency-free `lib/prefs/keys`, never the schema. The parse is
+ * cached by the raw string. Turning it off already deleted the stored
+ * places.
+ */
+function rememberPlaceOff(): boolean {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(UI_STORAGE_KEY);
+  } catch {
+    return false;
+  }
+  if (uiCache?.raw === raw) return uiCache.off;
+  let off = false;
+  if (raw && raw.length <= MAX_PAYLOAD_CHARS * 4) {
+    try {
+      const payload = JSON.parse(raw) as {
+        v?: unknown;
+        slots?: { rememberPlace?: { last?: unknown } };
+      } | null;
+      off =
+        payload?.v === PREFS_VERSION &&
+        payload.slots?.rememberPlace?.last === false;
+    } catch {
+      // Not JSON: nothing turned it off.
+    }
+  }
+  uiCache = { raw, off };
+  return off;
+}
+
 /** Under the kill switch, removes what an earlier build stored, once. */
 function enabled(): boolean {
-  if (ENABLED) return true;
+  if (ENABLED) return !rememberPlaceOff();
   if (!killSwitchCleared) {
     killSwitchCleared = true;
     try {
