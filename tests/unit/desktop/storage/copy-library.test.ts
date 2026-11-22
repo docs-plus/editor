@@ -14,6 +14,8 @@ import {
   createClock,
   createTempDir,
   createTestHost,
+  mustFolder,
+  mustTag,
   openTestLibrary,
   type TestClock,
 } from "@/tests/helpers/storage-library";
@@ -49,11 +51,11 @@ function write(docId: string, text: string) {
 
 /** A library with every table populated, and a compacted document. */
 function populate() {
-  const folder = library.createFolder({ name: "Work" });
+  const folder = mustFolder(library, { name: "Work" });
   const docs = Array.from({ length: 12 }, (_, i) =>
     library.createDoc({ title: `Doc ${i}`, folderId: folder.id }),
   );
-  const tags = Array.from({ length: 5 }, (_, i) => library.createTag(`t${i}`));
+  const tags = Array.from({ length: 5 }, (_, i) => mustTag(library, `t${i}`));
   for (const doc of docs.slice(0, 6))
     library.setDocTags(
       doc.id,
@@ -63,10 +65,9 @@ function populate() {
     for (let n = 0; n < 5; n += 1) write(doc.id, `${i}:${n} `);
   }
   const first = docs[0]?.id ?? "";
-  const state = new Y.Doc();
-  state.getText("t").insert(0, "compacted");
   const seq = write(first, "x");
-  library.compact(first, "w1", Y.encodeStateAsUpdate(state), seq);
+  // The document's whole state: compaction refuses one that loses rows (I10).
+  library.compact(first, "w1", library.stateOf(first), seq);
   return docs.map((d) => d.id);
 }
 
@@ -304,4 +305,50 @@ test("batches are bounded by bytes, so a stop never waits on a big batch", async
   expect(byteBound.batches).toBeGreaterThan(rowBound.batches);
   expect(byteBound.rows).toBe(rowBound.rows);
   expect(describeFile(partial2).counts).toEqual(describeFile(partial).counts);
+});
+
+describe("the copy contract (offline revision §3.4)", () => {
+  test("copies every table, trigger, index and FK of the live schema", async () => {
+    populate();
+    const partial = join(out.dir, "contract.sqlite.partial");
+    await copyLibraryBatched(openBunSqlite, library.path, partial, {
+      yieldNow: tick,
+    });
+    const master = (path: string) => {
+      const db = new Database(path, { readonly: true });
+      const rows = db
+        .query("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+        .all();
+      const fks = db
+        .query(
+          "SELECT m.name, f.* FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type = 'table' ORDER BY m.name, f.id, f.seq",
+        )
+        .all();
+      const fkCheck = db.query("PRAGMA foreign_key_check").all();
+      db.close();
+      return { rows, fks, fkCheck };
+    };
+    const live = master(library.path);
+    const copy = master(partial);
+    expect(copy.rows).toEqual(live.rows);
+    expect(copy.fks).toEqual(live.fks);
+    expect(copy.fkCheck).toEqual([]);
+    expect(
+      copy.rows.filter((r) => (r as { type: string }).type === "trigger"),
+    ).toHaveLength(3);
+  });
+
+  test("a table missing from the copy order fails the copy", async () => {
+    const raw = new Database(library.path);
+    raw.exec("CREATE TABLE stray (x INTEGER) STRICT");
+    raw.close();
+    await expect(
+      copyLibraryBatched(
+        openBunSqlite,
+        library.path,
+        join(out.dir, "stray.partial"),
+        { yieldNow: tick },
+      ),
+    ).rejects.toMatchObject({ code: "corrupt" });
+  });
 });

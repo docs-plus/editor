@@ -25,8 +25,9 @@
  *   heading or for a whole-document link, as on desktop.
  * The real columns keep their desktop meaning (null for root, null for not
  * trashed); only the index keys use the sentinels. One index has no
- * sentinel on purpose: `by_opened` lists only documents that were opened
- * (Recent); a never-opened document has `opened_at` null and is left out.
+ * sentinel on purpose: `by_opened` lists only documents with `opened_at`
+ * (Recent). Creating or importing a document sets it; a row with
+ * `opened_at` null is left out.
  *
  * Versions (§3.6):
  * - {@link LIBRARY_DB_VERSION} bumps only when stores or indexes change.

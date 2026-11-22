@@ -27,6 +27,7 @@ export const ERROR_CODES = {
   library_unavailable: { retryable: true },
   // Content
   import_too_large: { retryable: false },
+  document_too_large: { retryable: false },
   unknown_schema: { retryable: false },
   doc_too_new: { retryable: false },
 } as const satisfies Record<string, { retryable: boolean }>;

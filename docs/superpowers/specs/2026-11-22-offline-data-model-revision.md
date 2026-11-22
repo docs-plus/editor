@@ -332,7 +332,7 @@ W2 is unmerged, so these changes go straight into its version 1, and `LIBRARY_DB
 
 | Operation | Contract |
 |---|---|
-| `mintDoc(input)` | The only way to create a document: new, duplicate, from a template, or import. It mints `id`, `link_key` and `lineage` in the worker (`randomHex32`). `head_seq = 0`, `derived_seq = NULL`. Derived columns from the caller are ignored. |
+| `mintDoc(input)` | The only way to create a document: new, duplicate, from a template, or import. It mints them in the worker: `lineage`, and `id` when the caller gives none, with `crypto.randomUUID()` (a dashed UUID), and `link_key` as 32 lowercase hex digits. The share server accepts a lineage as a dashed UUID or as 32 hex digits, for compatibility. `head_seq = 0`, `derived_seq = NULL`. Derived columns from the caller are ignored. |
 | `restoreDoc(row, state)` | Keeps `link_key` and `lineage`. If either collides with a live document, it inserts a **new** row with a new `id` and a new `link_key`, and reports the duplicate lineage. The default answer is Keep both (SEC-004). It never updates identity, so `docs_identity_frozen` holds. |
 | `duplicateDoc(id)` | `mintDoc` plus the merged state as one `origin='restore'` update, the `doc_tags` and `doc_view` rows, and `doc_blobs(kind='current')` rows. It never copies `links` or `doc_headings`: the new document is stale, and the queue derives it. |
 | `trashFolder(id)` | One new `trash_group` over the subtree's folders and documents. `trashed_from` = the parent at trash time. |

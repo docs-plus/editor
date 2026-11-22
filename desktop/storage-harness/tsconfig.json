@@ -9,7 +9,10 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "paths": { "@/*": ["../../*"] }
+    "paths": {
+      "@/*": ["../../*"],
+      "bun:test": ["../../tests/helpers/bun-test-shim.ts"]
+    }
   },
   "include": ["main.ts", "gen.ts", "format-steps.ts"]
 }

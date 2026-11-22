@@ -25,6 +25,7 @@
  */
 import type { OpenSqlite, SqliteDriver } from "./driver";
 import { StorageError } from "./errors";
+import { TABLES_V2 } from "./format-2";
 import { scalar } from "./sql";
 
 export type CopyOptions = {
@@ -54,6 +55,25 @@ export function readOnlyUri(path: string): string {
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 type SchemaObject = { type: string; name: string; sql: string };
+
+/**
+ * Tables in the explicit copy order (offline revision §3.4), not
+ * `sqlite_master` rowid order: `ALTER … RENAME` keeps the old rowid. A table
+ * missing from {@link TABLES_V2} fails the copy loudly, so a new table
+ * can't be left out of the daily copies by accident.
+ */
+function inCopyOrder(tables: SchemaObject[]): SchemaObject[] {
+  const order: readonly string[] = TABLES_V2;
+  for (const table of tables)
+    if (!order.includes(table.name))
+      throw new StorageError(
+        "corrupt",
+        `table ${table.name} is not in the copy order`,
+      );
+  return [...tables].sort(
+    (a, b) => order.indexOf(a.name) - order.indexOf(b.name),
+  );
+}
 
 /** An SQL expression for a row's stored size, from every column's length. */
 function rowSize(db: SqliteDriver, table: string): string {
@@ -151,6 +171,9 @@ export async function copyLibraryBatched(
   try {
     dest.exec("PRAGMA journal_mode = DELETE");
     dest.exec("PRAGMA synchronous = FULL");
+    // Off while rows go in (folders reference themselves, and rowid order
+    // can put a child before its parent); checked before COMMIT instead.
+    dest.exec("PRAGMA foreign_keys = OFF");
     dest.prepare("ATTACH DATABASE ? AS lib").run(readOnlyUri(source));
     attached = true;
     dest.exec("BEGIN");
@@ -161,8 +184,10 @@ export async function copyLibraryBatched(
         "SELECT type, name, sql FROM lib.sqlite_master WHERE sql IS NOT NULL ORDER BY rowid",
       )
       .all() as SchemaObject[];
-    const tables = objects.filter(
-      (o) => o.type === "table" && !o.name.startsWith("sqlite_"),
+    const tables = inCopyOrder(
+      objects.filter(
+        (o) => o.type === "table" && !o.name.startsWith("sqlite_"),
+      ),
     );
     for (const table of tables) dest.exec(table.sql);
     for (const pragma of ["user_version", "application_id"]) {
@@ -202,6 +227,12 @@ export async function copyLibraryBatched(
         count(dest, "lib", "sqlite_sequence")
     )
       throw new StorageError("corrupt", "copy of sqlite_sequence is short");
+    const violations = dest.prepare("PRAGMA main.foreign_key_check").all();
+    if (violations.length > 0)
+      throw new StorageError(
+        "corrupt",
+        `copy failed foreign_key_check: ${JSON.stringify(violations.slice(0, 3))}`,
+      );
     const check = String(scalar(dest, "PRAGMA main.integrity_check"));
     if (check !== "ok")
       throw new StorageError(
@@ -210,6 +241,8 @@ export async function copyLibraryBatched(
       );
     dest.exec("COMMIT");
     open = false;
+    // Every connection that writes runs with foreign keys on (§3.4).
+    dest.exec("PRAGMA foreign_keys = ON");
     return report;
   } finally {
     try {

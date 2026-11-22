@@ -6,9 +6,10 @@
 import type { FormatStep } from "../storage/engine/migrations";
 
 export const STEP_ROWS = 150_000;
-export const T5_TARGET = 4;
+/** Above format 2, the one every library is created at now. */
+export const T5_TARGET = 5;
 
-export const T5_STEPS: FormatStep[] = [2, 3, 4].map((to) => ({
+export const T5_STEPS: FormatStep[] = [3, 4, 5].map((to) => ({
   to,
   up(db) {
     db.exec(`CREATE TABLE soak_step_${to} (n INTEGER NOT NULL) STRICT`);

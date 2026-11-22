@@ -4,6 +4,13 @@
  * worker passes `createNodeHost()` (`desktop/storage/node-host.ts`); tests
  * pass the same host with a fake clock, or a fake pid check.
  */
+/** An incremental SHA-256 (the engine can't import `node:crypto`). */
+export interface Hasher {
+  update(data: Uint8Array | string): Hasher;
+  /** Lowercase hex. */
+  digest(): string;
+}
+
 export interface StorageHost {
   /** `process.platform`. */
   readonly platform: string;
@@ -29,4 +36,6 @@ export interface StorageHost {
   createExclusive(path: string, text: string): boolean;
   /** Whether a process with this pid is running. */
   isPidAlive(pid: number): boolean;
+  /** A new SHA-256 hasher. Synchronous, so `Library.open` can use it. */
+  sha256(): Hasher;
 }

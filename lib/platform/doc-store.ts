@@ -148,6 +148,9 @@ export const DOC_STORE_ERROR_CODES = [
   "cloud_folder",
   "worker_restarting",
   "library_unavailable",
+  // Content: the document is at its size cap (D-O3); not retryable, so a
+  // refused append is never resent. Deletions still pass.
+  "document_too_large",
   // Web library
   "quota_exceeded",
 ] as const;

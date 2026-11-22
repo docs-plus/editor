@@ -81,10 +81,15 @@ describe("desktop/storage/engine", () => {
     expect(banned).toEqual([]);
   });
 
-  test("stays inside desktop/storage/engine", () => {
+  // The pure normalizer core and the tag-name key (offline revision §3.2):
+  // the engine writes title_key and name_key with them (amended in §3.3).
+  const ENGINE_LIB = ["lib/search/normalize.ts", "lib/library/tag-rules.ts"];
+
+  test("stays inside desktop/storage/engine, but for the pure key functions", () => {
     const outside = [...files]
       .map(rel)
-      .filter((file) => !file.startsWith("desktop/storage/engine/"));
+      .filter((file) => !file.startsWith("desktop/storage/engine/"))
+      .filter((file) => !ENGINE_LIB.includes(file));
     expect(outside).toEqual([]);
   });
 });
@@ -100,6 +105,9 @@ const LIB_ALLOWED = [
   /^lib\/assets\//,
   // Pure name lists the import guard checks against (amended in §3.3).
   /^lib\/schema-names\.ts$/,
+  // The normalizer core and tag keys (offline revision §3.2).
+  /^lib\/search\/normalize\.ts$/,
+  /^lib\/library\/tag-rules\.ts$/,
 ];
 
 describe("desktop/storage", () => {
