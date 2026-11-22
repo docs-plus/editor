@@ -1,18 +1,20 @@
 import { describe, expect, it } from "bun:test";
 
-import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { Editor } from "@tiptap/core";
 import { marked } from "marked";
+import type { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
 import { buildDocumentEditorExtensions } from "@/components/document-editor/document-editor-config";
 
-/** The app's extensions, minus the two that need a live provider. */
+/** The app's extensions, minus the two collaboration ones (Yjs binding, carets). */
 function buildEditor(): Editor {
   const extensions = buildDocumentEditorExtensions({
     documentId: "markdown-test",
     ydoc: new Y.Doc(),
-    provider: {} as HocuspocusProvider,
+    awareness: {} as Awareness,
+    getProvider: () => null,
+    canWrite: () => true,
     onFoldChange() {},
     onFilterChange() {},
     onTocUpdate() {},

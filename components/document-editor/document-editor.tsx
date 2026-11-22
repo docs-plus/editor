@@ -14,6 +14,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { HocuspocusProvider } from "@hocuspocus/provider";
+import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
 import { focusRovingItem, Toolbar } from "@/components/ui/toolbar";
@@ -91,11 +93,20 @@ interface DocumentEditorProps {
   playgroundRegenerateTrigger?: number;
   /** The Playground tab's Regenerate, also run from the palette. */
   onPlaygroundRegenerate?: () => void;
+  /**
+   * View only: no local ProseMirror change reaches the document, plugin
+   * writes on open included (WriteGate, details spec §1). The schema
+   * guard's Yjs repair is not gated yet. The web sandbox never sets it.
+   */
+  readOnly?: boolean;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
   ydoc: Y.Doc;
-  provider: import("@hocuspocus/provider").HocuspocusProvider;
+  /** The session's one Awareness: carets and names, with or without a provider. */
+  awareness: Awareness;
+  /** Null for a document with no server (desktop Local): nothing dials out. */
+  provider: HocuspocusProvider | null;
   documentId: string;
   /** Why the server refuses edits (size, deleted, outdated…), if it does. */
   rejectedReason: string | null;
@@ -145,12 +156,14 @@ const EDITOR_PROPS = {
 
 function DocumentEditorContent({
   ydoc,
+  awareness,
   provider,
   documentId,
   onTitleChange,
   initialContent,
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
+  readOnly,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -191,22 +204,32 @@ function DocumentEditorContent({
     // A repair deferred while refused (offline budget) runs now.
     if (rejectedReason === null) schemaGuard.onWritable();
   }, [rejectedReason, schemaGuard]);
+  // Read by the extensions, never their deps: WriteGate on every
+  // transaction (from the first one on), UniqueID when it waits for a sync.
+  const liveRef = useRef({ provider, readOnly });
+  useEffect(() => {
+    liveRef.current = { provider, readOnly };
+  }, [provider, readOnly]);
 
   // `useEditor` compares its options on every render and, when any differ,
   // calls `editor.setOptions`: a full view update that also re-syncs the
-  // whole document to Yjs. Keep every option stable between renders.
+  // whole document to Yjs. Keep every option stable between renders: the
+  // deps hold the Awareness, never the provider, so attaching one later
+  // keeps this array.
   const extensions = useMemo(
     () =>
       buildDocumentEditorExtensions({
         documentId,
         ydoc,
-        provider,
+        awareness,
+        getProvider: () => liveRef.current.provider,
+        canWrite: () => !liveRef.current.readOnly,
         onFoldChange: setFoldedIds,
         onFilterChange: setFilterState,
         onTocUpdate: tocStore.set,
         onInvalidContent: schemaGuard.onInvalidContent,
       }),
-    [documentId, ydoc, provider, tocStore, schemaGuard],
+    [documentId, ydoc, awareness, tocStore, schemaGuard],
   );
 
   const editor = useEditor({
@@ -235,8 +258,8 @@ function DocumentEditorContent({
 
   // Stop accepting input the server would drop or the schema can't hold.
   useEffect(() => {
-    if (editor) editor.setEditable(reason === null);
-  }, [editor, reason]);
+    if (editor) editor.setEditable(reason === null && !readOnly);
+  }, [editor, reason, readOnly]);
 
   const headingFilter = useHeadingFilter({
     editor,
@@ -431,7 +454,8 @@ function DocumentEditorContent({
             rejectedReason={rejectedReason}
           />
         )}
-        <CollabStatusGroup />
+        {/* Its connection state opens the shared socket: only with a provider. */}
+        {provider && <CollabStatusGroup />}
       </EditorContext.Provider>
     </main>
   );
@@ -443,12 +467,13 @@ export function DocumentEditor({
   initialContent,
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
+  readOnly,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
-  const { ydoc, provider, synced, serverSynced, rejectedReason } =
+  const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
     useYjsDocument(docId);
 
-  if (!synced || !ydoc || !provider) {
+  if (!synced || !ydoc || !awareness) {
     return (
       <>
         {/* Refused with no device copy: explain instead of loading forever. */}
@@ -463,12 +488,14 @@ export function DocumentEditor({
   return (
     <DocumentEditorContent
       ydoc={ydoc}
+      awareness={awareness}
       provider={provider}
       documentId={docId}
       onTitleChange={onTitleChange}
       initialContent={initialContent}
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
       onPlaygroundRegenerate={onPlaygroundRegenerate}
+      readOnly={readOnly}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />

@@ -40,6 +40,189 @@ desktop and library roots will provide `local-session`.
   Reload button saves through `DocSession.flush()` (on the web, the same
   device-copy flush as before) before reloading.
 
+### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
+
+A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
+up to 9 s on a Windows runner. That included the quit flush, so a quit during
+a copy could drop the final batch of edits. The copy now runs in its own
+thread and can be stopped.
+
+#### Changed
+
+- **Desktop:** the daily copy (`desktop/storage/engine/copy-library.ts`)
+  - copies the library in batches of at most 256 rows or about 4 MiB, from
+    one read-only snapshot, inside one transaction;
+  - creates the schema verbatim and copies `sqlite_sequence`,
+    `user_version` and `application_id`;
+  - checks row counts and `integrity_check` before the copy is renamed into
+    place, then runs a passive WAL checkpoint;
+  - on failure, keeps the previous copies and records `daily_copy_failed`.
+- **Desktop:** the storage worker runs that copy in a second thread
+  (`desktop/storage/copy-worker.ts`), so saves never wait on it. On quit it
+  stops the copy in milliseconds and deletes the partial file; the previous
+  copy stays. Opening the library sweeps any partial copy left behind.
+- **Tests:** soak case `T4-copy` quits during a copy on all three OSes. T8
+  compares the copy's time and size with `VACUUM INTO`'s on the year-end
+  library. A unit test restores a copy and runs the `DocStore` contract on it.
+- **Docs:** the architecture spec records the quit budget (3 s flush, then
+  2 s worker shutdown), the batched copy, and `utilityProcess` as the
+  upgrade path once P2.5 exists.
+
+### Desktop P2.6: the library storage worker
+
+The SQLite engine behind the desktop library, where documents, folders and
+tags live, and the `worker_thread` that runs it inside Electron main (D-A1).
+Nothing in the web app or its build uses it yet; P2.5's shell starts the
+worker and P2.7 builds the files sidebar on it.
+
+#### Added
+
+- **Desktop:** `desktop/storage/engine/`, with no `node:`, `bun:` or
+  Electron imports, behind a `SqliteDriver` seam (`node:sqlite` in the
+  worker, `bun:sqlite` in tests and the dev host):
+  - the format-1 schema, so the Local release needs no later migration:
+    `docs` (lineage and a `NOT NULL` `link_key` minted at insert, `kind`, the
+    list columns), `folders`, `tags`, `doc_tags`, `doc_view(doc_id, width,
+    place, remote_images)`, `import_sources`, `snapshots` and `updates` with
+    an `AUTOINCREMENT` seq;
+  - the open order: cloud-synced folders refused, `library.lock` with a pid
+    check, WAL with `synchronous=FULL` (`fullfsync` on macOS), and the
+    `format_version` guard before any write, so a newer library opens
+    read-only and untouched; `quick_check` after an unclean exit;
+  - format migrations with a `VACUUM INTO` copy first (2 kept), one
+    transaction per step, and read-only on failure;
+  - appends and renderer-driven compaction in one transaction each, with
+    one window per document (`already_open`, `forbidden`, `document_open`);
+  - documents, folders, tags, Trash (emptied after 30 days) and the sidebar
+    snapshot, with a change feed: every change the sidebar shows, appends
+    included, moves `rev`, and the worker sends `index_changed` with the
+    changed rows;
+  - a daily `VACUUM INTO` copy on the first idle moment, keeping 7, and a
+    reader for restoring one document from a day;
+  - shutdown for the quit flush: WAL checkpoint, `unclean_exit` cleared,
+    lock released.
+- **Desktop:** `desktop/storage/worker.ts` and `client.ts`: the worker
+  answers main one request at a time with `Result` envelopes and transferred
+  bytes; the client rejects pending calls with `worker_restarting` if the
+  worker dies and ends with a 2 s shutdown.
+- **Platform:** `lib/doc-migrations/` (the open-time migration hook list,
+  empty so far, and `checkImport`, which refuses an import that is too
+  large, isn't Yjs, or carries a node, mark or root this build doesn't
+  know) and `lib/platform/desktop/rpc-doc-store.ts` (`DocStore` over worker
+  replies, for `IpcDocStore`).
+- **Tests:** P2.1's shared `DocStore` contract on the engine, on
+  `bun:sqlite` under `bun test` and on `node:sqlite` inside the Electron
+  worker; engine suites (open, content, index and its change feed, daily
+  copies, codes, and a property test of random appends, compactions,
+  crashes and reopens); the import-boundary test's storage rows; and
+  `tests/load/desktop-durability-soak.ts` with its Electron harness in
+  `desktop/storage-harness/` for soak cases T1–T6 and T8.
+- **CI:** `desktop-storage-soak.yml` on macOS, Windows and Linux: 20 kills
+  per case on pull requests that touch storage, 200 nightly or with the
+  `storage-soak-full` label. `bun run typecheck` also checks the new
+  `tsconfig.desktop-node.json`.
+
+#### Changed
+
+- **Docs:** the desktop architecture spec records where P2.6 put the engine
+  and the harness, the worker-side registry check and `claim`, the
+  import-boundary allowance for `lib/schema-names.ts`, and that T7 is covered
+  by `local-session`'s tests, not the storage soak.
+
+### Editor without a provider; WriteGate; the editor-chunk fence (P2.2)
+
+Desktop Phase 2, P2.2. The web editor behaves as before: it still gets its
+provider, and nothing passes the new read-only prop. The editor chunk goes
+from +15,284 B to +15,578 B (+294 B of P2.2's 300 B line in the D23 ledger),
+and the budget drops from 23.5 KB to +16,864 B (`main` plus the 1,580 B
+ledger), leaving 1,286 B for the ledger's other lines. No schema or protocol
+change; no Deploy note.
+
+#### Added
+
+- **Editor:** `DocumentEditor` takes the session's Awareness and accepts no
+  provider. With none, the connection chip isn't rendered and no socket
+  opens. Carets use the Awareness directly, and the extension list depends
+  on it rather than on the provider, so attaching a provider later never
+  rebuilds the extensions (no `setOptions`).
+- **Editor:** `WriteGate` (`extensions/write-gate/`), a `filterTransaction`
+  plugin over a ref. With the new `readOnly` prop, no local ProseMirror
+  change reaches the document, including the writes plugins make when a
+  document opens. Changes from collaborators still apply. The schema
+  guard's repair writes Yjs directly and is not gated yet; it must be when
+  something first sets `readOnly`.
+- **Editor:** the decoration host (`extensions/decoration-host/`): declared
+  layers each get a plugin holding a `DecorationSet`, set by the meta-only
+  `setDecorationLayer` command, either mapped or cleared on document
+  changes. No layer is declared yet; comments and Find will declare theirs.
+
+#### Changed
+
+- **Build:** `scripts/check-editor-chunk-size.ts` budget is `main` at
+  P2.2 plus the D23 ledger (+16,864 B), and it prints exact bytes.
+
+### Desktop renderer export (P2.4)
+
+`bun run build:desktop` builds the desktop renderer: the static export the
+Electron shell will load. The web build is unchanged. Its route table, client
+chunks (names and sizes), manifests and every page apart from `/icon`'s URL
+match `main`. The `/icon?<hash>` cache-buster changes because `app/icon.tsx`
+gained `dynamic = "force-static"`; the PNG is byte-identical.
+
+#### Added
+
+- `bun run build:desktop` (`scripts/build-desktop.ts`) writes `out/` with
+  `NEXT_PUBLIC_APP_TARGET=desktop` and `output: "export"`. Desktop routes:
+  `/`, `/about`, `/_not-found`, `/icon`. It fails if a web-only route, a web
+  metadata tag or the Windows segment layout (#103) reaches `out/`.
+- `desktop/shared/export-paths.ts`: the `app://` protocol handler's path rules
+  for P2.5. `/about` maps to `about.html`, RSC `.txt` files keep their
+  exported names, and the extension-less `/icon` is `image/png`. Unknown
+  types and traversal are refused. `scripts/serve-desktop-export.ts` serves
+  `out/` with them for tests.
+- The `desktop` Playwright project runs on the export instead of `next start`.
+  It checks that every request the renderer makes is answered and none goes
+  to a web-only route. Nightly runs it on Linux (`desktop-renderer`).
+
+#### Changed
+
+- Web-only route handlers are `route.web.ts(x)` (`app/api/**`, `llms.txt`,
+  `pwa-icons/[id]`). `next.config.ts` switches `pageExtensions`, `output` and
+  `headers()` on the target flag.
+- The export parks the five web metadata files and the `/privacy` and
+  `/offline` pages in `.desktop-export-parked/` for the build and puts them
+  back, as spike #115 measured is required. Renaming the pages would drop
+  their font preload on the web: Next 16.4.6 looks up `page.web` in a font
+  manifest keyed `page`.
+- `next.config.ts` refuses a web build while anything is parked.
+- The desktop build never registers the service worker, whose precache lists
+  `/privacy` (#117 follow-up).
+
+### Design: selection bubble and quick insert
+
+A draft design for the owner's review: a fuller one-row selection bubble, a
+caret-local way to insert blocks, amendments to the "/" menu (Suggested, an
+inline hint, a footer), and a phone Insert sheet. Documentation only; no app
+or server change.
+
+#### Added
+
+- **Docs:**
+  - `docs/superpowers/specs/2026-11-17-bubble-and-quick-insert-design.md`:
+    the audit of today's bubble, Insert, "/" and phone surfaces; research
+    across eight editors (two rounds of owner references, including Notion's
+    panel and "/" menu) and the platform guidance; the proposed design with
+    owner decisions O1–O12; and a phased plan.
+  - `docs/design/2026-11-17-bubble-quick-insert-prototype.html`: a clickable
+    prototype with a switch for each decision, theme, RTL, reduced motion and
+    device.
+  - Screenshots of today's UI and of the prototype in
+    `docs/design/2026-11-17-bubble-quick-insert/`.
+- **Finding:** the lazy selection bubble mounts Tiptap's React `<BubbleMenu>`,
+  which calls `registerPlugin` from a lazy chunk. When the chunk lands it
+  rebuilds every plugin view (29 of 29 measured), after the editor is already
+  interactive. The spec's phase 0 replaces it.
+
 ### Desktop P2.1b: `local-session`, the batcher and `MemoryDocStore`
 
 The second half of desktop plan P2.1: the platform-neutral storage path that

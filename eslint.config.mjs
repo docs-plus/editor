@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "desktop/smoke/dist/**",
+    "desktop/storage-harness/dist/**",
   ]),
   {
     settings: {
