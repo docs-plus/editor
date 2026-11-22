@@ -9,6 +9,43 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Nightly back to green: offline shell, palette budget, soak
+
+The nightly had failed on every run since 2026-11-16. Three independent
+causes, fixed in the app rather than in the budgets.
+
+#### Fixed
+
+- **Offline:** a document is saved on the device at its first server sync,
+  not 750 ms later. The tab list could already be on the device, so a reload
+  offline in that window showed the tab bar over an editor that never
+  loaded, with no message (the nightly's flaky "offline shell" test).
+- **Offline:** files a first visit loads before the service worker controls
+  the page (the editor chunk among them) are now stored in its static cache:
+  the page hands the worker its loaded `/_next/static` URLs once it takes
+  control. Before, offline reopening relied on the browser's HTTP cache; with
+  that evicted it showed "Something went wrong" instead of the editor.
+- **Palette:** the first Alt+/ loads 13.4 KB gz again (contract A7: 20 KB),
+  down from 24.4 KB. The identity dialog's own chunk (#126/#129) moved the
+  shared `Dialog` out of the first-load bundle, so the palette now fetches
+  it; that tipped a palette already at 20,475 B. The fix removes dead weight
+  instead: cmdk builds its unused `Command.Dialog` from Radix Dialog at module
+  level, so all of Radix Dialog (focus scope, dismissable layer, scroll lock)
+  rode in the palette chunk. `@radix-ui/react-dialog`, which only cmdk
+  depends on, is aliased to a stub (`lib/cmdk-radix-dialog-stub.ts`).
+
+#### Changed
+
+- **Tests:** the `pwa` offline tests clear the browser's HTTP cache before
+  going offline, so only the service worker can serve the app; a new test
+  checks that every static file the first visit loaded ends up in its cache,
+  and the offline shell test waits for the device copy and asserts the
+  editor's title, not any `h1` (the error page has one).
+- **Nightly:** the palette budget step writes to its own output folder, so
+  it no longer deletes the pwa step's traces when both fail.
+- **Tests:** the soak journeys log their slowest events with the step each
+  fell in and its input delay, processing and presentation times.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
