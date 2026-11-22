@@ -1,11 +1,11 @@
 import type { Editor } from "@tiptap/core";
-import type { Selection, Transaction } from "@tiptap/pm/state";
-import { liftTarget } from "@tiptap/pm/transform";
+import type { Selection } from "@tiptap/pm/state";
 
 import type { AnyAction, Ctx, IconComponent } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   BLOCK_CONVERTIBLE_TYPES,
+  prepareBlockToggle,
   selectionWithinConvertibleTypes,
 } from "@/lib/editor-utils";
 import {
@@ -118,57 +118,32 @@ function startsInTitle(selection: Selection): boolean {
   return selection.$from.index(0) === 0;
 }
 
-/** A textblock directly in one of these is lifted by a text style. */
-const WRAPS = /^(listItem|taskItem|blockquote)$/;
-
-/** The selected textblocks directly in a list item or quote, last first. */
-export function wrappedBlocks(tr: Transaction): number[] {
-  const found: number[] = [];
-  tr.doc.nodesBetween(
-    tr.selection.from,
-    tr.selection.to,
-    (node, pos, parent) => {
-      if (node.isTextblock && WRAPS.test(parent?.type.name ?? "")) {
-        found.unshift(pos);
-      }
-      return !node.isTextblock;
-    },
-  );
-  return found;
-}
-
 /**
- * Lifts each selected textblock out of its list items and quotes, one
- * block at a time and last first, so unselected siblings (and their
- * children) stay where they are (spec §7.2). A table cell is isolating:
- * nothing lifts out of one.
+ * Turns the selected list items and quote lines into a text style, lifted
+ * out one by one (spec §7.2), or returns `undefined` when the selection has
+ * none. Injected by `lib/editor-actions/style-lift.ts`, which every lazy
+ * chunk that offers text styles imports (bubble, menus, "/", phone,
+ * palette), so the editor chunk keeps none of it; until one loads, a style
+ * shortcut in a list keeps the plain `setTextStyle`.
  */
-export function liftWrapped(tr: Transaction): boolean {
-  for (let pos of wrappedBlocks(tr)) {
-    for (
-      let $pos = tr.doc.resolve(pos);
-      WRAPS.test($pos.parent.type.name);
-      $pos = tr.doc.resolve(pos)
-    ) {
-      const range = $pos.blockRange(
-        tr.doc.resolve(pos + ($pos.nodeAfter?.nodeSize ?? 0)),
-      );
-      const target = range && liftTarget(range);
-      if (!range || target === null) break;
-      const steps = tr.steps.length;
-      tr.lift(range, target);
-      pos = tr.mapping.slice(steps).map(pos + 1) - 1;
-    }
-  }
-  return true;
+type StyleLift = (
+  editor: Editor,
+  value: Exclude<TextStyleValue, "title">,
+) => boolean | undefined;
+
+let styleLift: StyleLift | null = null;
+
+/** Installs the lift (once is enough; installing again replaces it). */
+export function setStyleLift(lift: StyleLift): void {
+  styleLift = lift;
 }
 
 /**
  * Sets the text style of the selected blocks. Unlike `toggleHeading`,
  * picking the style every selected block already has does nothing; a mixed
- * range is converted, and the selected items of a list or quote are lifted
- * out first, in the same step (Turn into, spec §7.2, §7.4). A range that
- * starts in the title is refused.
+ * range is converted. Selected list items and quote lines go through the
+ * injected lift (`setStyleLift`) once a lazy chunk has installed it. A
+ * range that starts in the title is refused.
  */
 export function setTextStyle(
   editor: Editor | null,
@@ -177,23 +152,16 @@ export function setTextStyle(
   if (!editor?.isEditable) return false;
   const { selection } = editor.state;
   if (startsInTitle(selection)) return false;
-  // A list item or quote of that style still turns into it, unwrapped.
-  if (
-    wrappedBlocks(editor.state.tr).length === 0 &&
-    textStyleOf(computeContext(editor)) === value
-  ) {
-    return false;
-  }
+  const lifted = styleLift?.(editor, value);
+  if (lifted !== undefined) return lifted;
+  if (textStyleOf(computeContext(editor)) === value) return false;
   const level =
     value === "paragraph"
       ? undefined
       : (Number(value.slice(8)) as HeadingLevel);
   if (!canSetTextStyle(editor, level)) return false;
   try {
-    const chain = editor
-      .chain()
-      .focus()
-      .command(({ tr }) => liftWrapped(tr));
+    const chain = prepareBlockToggle(editor);
     (level
       ? chain.setNode("heading", { level })
       : chain.setNode("paragraph")

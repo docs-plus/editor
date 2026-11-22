@@ -16,6 +16,9 @@ import { runAction } from "@/lib/editor-actions/registry";
 import type { ContextKind } from "@/lib/editor-actions/types";
 import { ChevronRightIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
+// Installs the per-item lift behind the text styles (spec §7.2) in the
+// registry, keeping it out of the editor chunk (`core/blocks.ts`).
+import "@/lib/editor-actions/style-lift";
 
 /**
  * Style (spec §13.1): Text and H1–H3, More headings ▸ (H4–H6), then the

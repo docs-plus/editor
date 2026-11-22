@@ -45,6 +45,9 @@ import {
   stepIndex,
 } from "@/lib/slash-menu/slash-keys";
 import { cn } from "@/lib/utils";
+// Installs the per-item lift behind the text styles (spec §7.2) in the
+// registry, keeping it out of the editor chunk (`core/blocks.ts`).
+import "@/lib/editor-actions/style-lift";
 
 /*
  * The "/" block menu (lazy chunk, loaded on idle and on the first "/").

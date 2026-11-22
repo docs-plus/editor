@@ -40,6 +40,9 @@ import {
 } from "./bubble-rules";
 import { BubbleStyleMenu } from "./bubble-style-menu";
 import "./selection-bubble.scss";
+// Installs the per-item lift behind the text styles (spec §7.2) in the
+// registry, keeping it out of the editor chunk (`core/blocks.ts`).
+import "@/lib/editor-actions/style-lift";
 
 /**
  * A keyboard selection shows once Shift is up and the selection has been

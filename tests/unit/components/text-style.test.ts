@@ -13,6 +13,8 @@ import {
   setTextStyle,
 } from "@/lib/editor-actions/core/blocks";
 import { computeContext } from "@/lib/editor-context/snapshot";
+// The per-item lift is injected by this lazy module (spec §7.2).
+import "@/lib/editor-actions/style-lift";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 import {
