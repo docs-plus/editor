@@ -6,7 +6,12 @@
  * document link (as `context`); it builds no search index. `here#`,
  * external and malformed links are skipped.
  *
- * `linksHash` lets the caller skip a pass whose rows haven't changed.
+ * The same walk lists the headings (`extractHeadings`), and
+ * `deriveDocument` returns both for the derive layer (offline data-model
+ * revision §4: `links` and `doc_headings`; `toLinkRows` maps to the
+ * `links` columns). Pure: no DOM, no storage; works on a bare Y.Doc.
+ *
+ * `linksHash` is for tests; the storage worker computes the stored hash.
  */
 import * as Y from "yjs";
 
@@ -42,15 +47,105 @@ interface Run {
   readonly end: number;
 }
 
-export function extractLinks(fragment: Y.XmlFragment): LinkRow[] {
-  const rows: LinkRow[] = [];
+/**
+ * Versions everything derived here (offline data-model revision §4.5): a
+ * library whose stored `derive_version` differs re-derives every document.
+ * Bump it whenever `deriveDocument`'s output changes for the same content.
+ */
+export const DERIVE_VERSION = 1;
+
+/** A heading, for the `doc_headings` table (the worker adds `text_key`). */
+export interface HeadingRow {
+  /** Index in this document's list. */
+  readonly ord: number;
+  readonly tocId: string;
+  /** 1 to 6. */
+  readonly level: number;
+  /** Its text, whitespace collapsed. */
+  readonly text: string;
+}
+
+export interface DerivedDocument {
+  readonly links: LinkRow[];
+  readonly headings: HeadingRow[];
+}
+
+/**
+ * One walk over the top-level blocks for both derived lists. Headings
+ * without a `data-toc-id` yet are left out: nothing can link or jump to
+ * them until the outline names them.
+ */
+export function deriveDocument(fragment: Y.XmlFragment): DerivedDocument {
+  const links: LinkRow[] = [];
+  const headings: HeadingRow[] = [];
   let srcTocId: string | null = null;
   for (const child of fragment.toArray()) {
     if (!(child instanceof Y.XmlElement)) continue;
-    if (child.nodeName === "heading") srcTocId = tocIdOf(child);
-    collectBlock(child, srcTocId, rows);
+    if (child.nodeName === "heading") {
+      srcTocId = tocIdOf(child);
+      if (srcTocId !== null) {
+        headings.push({
+          ord: headings.length,
+          tocId: srcTocId,
+          level: levelOf(child),
+          text: blockText(child),
+        });
+      }
+    }
+    collectBlock(child, srcTocId, links);
   }
-  return rows;
+  return { links, headings };
+}
+
+export function extractLinks(fragment: Y.XmlFragment): LinkRow[] {
+  return deriveDocument(fragment).links;
+}
+
+export function extractHeadings(fragment: Y.XmlFragment): HeadingRow[] {
+  return deriveDocument(fragment).headings;
+}
+
+/** A row of format 2's `links` table, less `src_doc_id` (the caller's). */
+export interface LinkTableRow {
+  readonly ord: number;
+  readonly src_toc_id: string;
+  readonly target_key: string;
+  readonly target_toc_id: string;
+  readonly text: string;
+  readonly context: string;
+}
+
+/** `extractLinks` rows as `links` columns: `ord` by index, `''` for null. */
+export function toLinkRows(rows: readonly LinkRow[]): LinkTableRow[] {
+  return rows.map((row, ord) => ({
+    ord,
+    src_toc_id: row.srcTocId ?? "",
+    target_key: row.key,
+    target_toc_id: row.tocId ?? "",
+    text: row.text,
+    context: row.context,
+  }));
+}
+
+function levelOf(heading: Y.XmlElement): number {
+  const level = Number(heading.getAttribute("level"));
+  if (!Number.isFinite(level)) return 1;
+  return Math.min(6, Math.max(1, Math.trunc(level)));
+}
+
+/** A text block's text: atoms read as a space, whitespace collapsed. */
+function blockText(block: Y.XmlElement): string {
+  let text = "";
+  for (const child of block.toArray()) {
+    if (child instanceof Y.XmlText) {
+      for (const item of child.toDelta() as DeltaItem[]) {
+        text += typeof item.insert === "string" ? item.insert : " ";
+      }
+    } else {
+      text += " ";
+    }
+  }
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function tocIdOf(heading: Y.XmlElement): string | null {

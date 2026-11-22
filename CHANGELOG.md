@@ -40,7 +40,10 @@ never sets, at +31 B gz of the D23 ledger's 60 B line; web CSS unchanged.
 - **Links:** the links-only pass (`lib/links/extract-links.ts`): one row per
   document link with its section, key, heading, text and context, reading
   only link marks and their blocks, plus `linksHash`; and the P4.4 consent
-  line (`consentLinksLine`).
+  line (`consentLinksLine`). The same walk lists headings
+  (`extractHeadings`, `deriveDocument`), `toLinkRows` maps link rows to
+  format 2's `links` columns, and `DERIVE_VERSION` is 1 (offline data-model
+  revision §4).
 - **Platform:** `LibraryIndex` entries carry their `linkKey`, and the
   snapshot lists `trashed` documents. `MemoryDocumentIndex` mints keys and
   the contract suite covers both.
