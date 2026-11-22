@@ -2,7 +2,7 @@
  * Builds the desktop app folder (desktop architecture §3.1 steps 2–3):
  *
  *   bun run build:desktop        # the renderer, into out/ (Linux in CI, #103)
- *   bun desktop/build/build.ts   # bundles + stage, into dist/desktop-app/
+ *   bun desktop/build/build.ts [--flavor release|test]   # into dist/desktop-app/
  *
  * 1. Bundles `main.cjs`, `preload.cjs` and `worker.cjs` (and
  *    `copy-worker.cjs` once #128 adds it) with `Bun.build`: CJS, `node:*` and
@@ -32,6 +32,7 @@ import { join, relative } from "node:path";
 
 import { checkDesktopExport } from "../../scripts/desktop-export";
 import { sha256Source } from "../main/csp";
+import { type Flavor, validateSyncUrl } from "./sync-url";
 import { tiptapStyleText } from "./tiptap-style";
 
 const ROOT = join(import.meta.dir, "../..");
@@ -47,10 +48,23 @@ function gitSha(): string {
 const rootPackage = JSON.parse(
   readFileSync(join(ROOT, "package.json"), "utf8"),
 );
+/**
+ * `--flavor release` (the default) compiles the test hooks out
+ * (`desktop/main/test-hooks.ts`, SEC-006) and requires a `wss:` sync URL;
+ * `--flavor test` keeps them, for the electron specs.
+ */
+const flavorArg = process.argv.indexOf("--flavor");
+const FLAVOR: Flavor =
+  flavorArg > 0 && process.argv[flavorArg + 1] === "test" ? "test" : "release";
+
 const define = {
   __TINYDOCY_IPC_BUILD__: JSON.stringify(gitSha()),
+  __TINYDOCY_TEST_HOOKS__: FLAVOR === "test" ? "true" : "false",
   "process.env.TINYDOCY_SYNC_URL": JSON.stringify(
-    process.env.NEXT_PUBLIC_HOCUS_URL?.trim() || "ws://127.0.0.1:1234",
+    validateSyncUrl(
+      process.env.NEXT_PUBLIC_HOCUS_URL?.trim() || "ws://127.0.0.1:1234",
+      FLAVOR,
+    ),
   ),
   "process.env.TINYDOCY_RUNTIME_STYLE_HASHES": JSON.stringify(
     JSON.stringify([sha256Source(tiptapStyleText(ROOT))]),
@@ -150,7 +164,7 @@ async function main(): Promise<number> {
     )}\n`,
   );
   cpSync(OUT, join(STAGE, "renderer"), { recursive: true });
-  console.log(`[desktop-build] staged ${relative(ROOT, STAGE)}`);
+  console.log(`[desktop-build] staged ${relative(ROOT, STAGE)} (${FLAVOR})`);
   return 0;
 }
 

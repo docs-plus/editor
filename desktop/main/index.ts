@@ -4,7 +4,7 @@
  * Order matters:
  * 1. A crash handler, so an uncaught error never opens a modal dialog
  *    (that is what hung #106's Windows runs).
- * 2. `userData` (tests pass `TINYDOCY_USER_DATA`), then the single-instance
+ * 2. `userData` (test builds take `TINYDOCY_USER_DATA`), then the single-instance
  *    lock, which Electron keys on `userData`. A second instance hands its
  *    `argv` to the first and exits before registering anything.
  * 3. The privileged `app://` scheme, and macOS `open-file` / `open-url`
@@ -33,7 +33,24 @@ import { QuitCoordinator } from "./quit-coordinator";
 import { OpenDocRegistry } from "./registry";
 import { hardenSession } from "./session-hardening";
 import { StorageSupervisor } from "./storage-supervisor";
+import { testHooks } from "./test-hooks";
 import { hidden, WindowManager } from "./windows";
+
+/**
+ * The library folder (P2.6 hand-off §2; plan appendix A): under `userData`,
+ * except on Windows, where `userData` is the roaming profile and a SQLite
+ * library must stay local: `%LOCALAPPDATA%\TinyDocy\library`. A test
+ * userData keeps everything in one folder.
+ */
+function libraryDir(): string {
+  if (
+    process.platform === "win32" &&
+    !testHooks?.userData &&
+    process.env.LOCALAPPDATA
+  )
+    return join(process.env.LOCALAPPDATA, "TinyDocy", "library");
+  return join(app.getPath("userData"), "library");
+}
 
 /** Set by the build (`desktop/build/build.ts`) from the renderer's build env. */
 const SYNC_URL = process.env.TINYDOCY_SYNC_URL ?? "ws://127.0.0.1:1234";
@@ -48,8 +65,7 @@ process.on("unhandledRejection", () => {
   diagnostics.log("unhandled_rejection");
 });
 
-if (process.env.TINYDOCY_USER_DATA)
-  app.setPath("userData", process.env.TINYDOCY_USER_DATA);
+if (testHooks?.userData) app.setPath("userData", testHooks.userData);
 
 const isPrimary = app.requestSingleInstanceLock();
 if (!isPrimary) {
@@ -76,7 +92,7 @@ function start(): void {
     start: (events) =>
       StorageClient.start(
         join(appPath, "worker.cjs"),
-        { dir: join(app.getPath("userData"), "library") },
+        { dir: libraryDir() },
         events,
       ).then((client) => {
         diagnostics.log("storage_started", {
@@ -281,7 +297,7 @@ function start(): void {
 
     // Installer smoke (CI): start, show the first window, open the library,
     // then quit through the normal path and exit 0.
-    if (process.env.TINYDOCY_QUIT_AFTER_READY === "1") {
+    if (testHooks?.quitAfterReady) {
       const first = windows.latest();
       const shown = new Promise<void>((resolve) => {
         if (!first) resolve();

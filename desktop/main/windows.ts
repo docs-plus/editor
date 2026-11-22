@@ -8,8 +8,8 @@
  * - has no reload or DevTools item in the menu (menu.ts);
  * - knows which document main opened it for (`app.hello` returns it).
  *
- * `TINYDOCY_HIDDEN=1` never shows a window (local smoke runs on a desktop
- * that must stay undisturbed).
+ * `TINYDOCY_HIDDEN=1` (test builds only, `test-hooks.ts`) never shows a
+ * window, for local runs on a desktop that must stay undisturbed.
  */
 import { join } from "node:path";
 
@@ -17,9 +17,10 @@ import { app, BrowserWindow, nativeTheme } from "electron";
 
 import { APP_ORIGIN } from "../shared/app-identity";
 import { diagnostics } from "./diagnostics";
-import { spellcheckEnabled } from "./session-hardening";
+import { spellcheckEnabled } from "./spellcheck";
+import { testHooks } from "./test-hooks";
 
-export const hidden = process.env.TINYDOCY_HIDDEN === "1";
+export const hidden = testHooks?.hidden === true;
 
 const BACKGROUND = { light: "#ffffff", dark: "#0a0a0a" } as const;
 

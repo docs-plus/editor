@@ -3,11 +3,14 @@
  * each a code plus numbers or short enum strings. Never document text,
  * titles, paths, URLs or ids: refusals log a code, not what was refused.
  *
- * `TINYDOCY_DIAGNOSTICS_STDOUT=1` also prints each event as one JSON line
- * (CI reads the quit timings from it). The `electron` Playwright project
- * reads the ring through `globalThis.__tinydocyDiagnostics`.
+ * Test builds only (`test-hooks.ts`): `TINYDOCY_DIAGNOSTICS_STDOUT=1` also
+ * prints each event as one JSON line (CI reads the quit timings from it),
+ * and the `electron` Playwright project reads the ring through
+ * `globalThis.__tinydocyDiagnostics`.
  * Writing `logs/diagnostics.jsonl` and Copy diagnostics come with P2.9a.
  */
+import { exposeDiagnostics, testHooks } from "./test-hooks";
+
 export type SafeFields = Record<string, number | boolean | string>;
 export type DiagnosticEvent = { t: number; event: string } & SafeFields;
 
@@ -16,7 +19,7 @@ const MAX_STRING = 40;
 
 class Diagnostics {
   private readonly ring: DiagnosticEvent[] = [];
-  private readonly echo = process.env.TINYDOCY_DIAGNOSTICS_STDOUT === "1";
+  private readonly echo = testHooks?.diagnosticsStdout === true;
 
   log(event: string, fields: SafeFields = {}): void {
     try {
@@ -44,5 +47,5 @@ class Diagnostics {
 }
 
 export const diagnostics = new Diagnostics();
-(globalThis as { __tinydocyDiagnostics?: Diagnostics }).__tinydocyDiagnostics =
-  diagnostics;
+// Test builds only: the electron specs read the ring through Playwright.
+exposeDiagnostics(diagnostics);

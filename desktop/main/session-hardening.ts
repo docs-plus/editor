@@ -7,14 +7,15 @@
  *   the same way, `<webview>` can't attach, and an unload veto is ignored
  *   (#106: the quit coordinator owns quitting);
  * - YouTube player frames get a web Referer (D-A11: Error 153 without it);
- * - Linux spellcheck stays off: Chromium's Hunspell download would reach
- *   Google's servers (#100), and no offline delivery is proven yet.
+ * - spellcheck is configured last (`spellcheck.ts`; off on Linux, #100).
  */
 import { app, session, shell, type WebContents } from "electron";
 
 import { APP_ORIGIN, EMBED_REFERER } from "../shared/app-identity";
 import { DESKTOP_FRAME_HOSTS } from "./csp";
 import { diagnostics } from "./diagnostics";
+import { configureSpellcheck } from "./spellcheck";
+import { testHooks } from "./test-hooks";
 
 /** `${protocol}//${host}`: Node's `.origin` is "null" for `app:` (S1). */
 export function originOf(url: string): string | null {
@@ -28,7 +29,7 @@ export function originOf(url: string): string | null {
 
 export const isAppUrl = (url: string) => originOf(url) === APP_ORIGIN;
 
-/** `https:` URLs only, opened by the OS. Tests set TINYDOCY_EXTERNAL_OPEN=log. */
+/** `https:` URLs only, opened by the OS. Test builds can log instead (`test-hooks.ts`). */
 export function openExternally(url: string): boolean {
   let parsed: URL;
   try {
@@ -39,7 +40,7 @@ export function openExternally(url: string): boolean {
   if (parsed.protocol !== "https:" || parsed.username || parsed.password)
     return false;
   diagnostics.log("external_open");
-  if (process.env.TINYDOCY_EXTERNAL_OPEN !== "log")
+  if (!testHooks?.externalOpenLogOnly)
     void shell.openExternal(parsed.href).catch(() => {
       diagnostics.log("external_open_failed");
     });
@@ -47,8 +48,6 @@ export function openExternally(url: string): boolean {
 }
 
 const FRAME_ORIGINS = new Set(DESKTOP_FRAME_HOSTS);
-
-export const spellcheckEnabled = process.platform !== "linux";
 
 function hardenWebContents(contents: WebContents): void {
   contents.on("will-navigate", (event, url) => {
@@ -122,34 +121,4 @@ export function hardenSession(): void {
 
   // Last, so nothing above can be skipped if a spellcheck call throws.
   configureSpellcheck(ses);
-}
-
-function configureSpellcheck(ses: Electron.Session): void {
-  if (!spellcheckEnabled) {
-    // #100: disabling spellcheck alone still lets Chromium fetch the
-    // locale's Hunspell dictionary from Google (measured on ubuntu-24.04).
-    // No languages means no dictionary to fetch, and the download URL is a
-    // closed loopback port, so even a request never leaves the machine.
-    // Each step on its own, containment first, so one failure can't skip
-    // the others; a failure is logged and fails the electron spec.
-    const step = (name: string, run: () => void) => {
-      try {
-        run();
-      } catch {
-        diagnostics.log("spellcheck_config_failed", { step: name });
-      }
-    };
-    step("download_url", () =>
-      ses.setSpellCheckerDictionaryDownloadURL("http://127.0.0.1:9/"),
-    );
-    step("languages", () => ses.setSpellCheckerLanguages([]));
-    step("enabled", () => ses.setSpellCheckerEnabled(false));
-  }
-  // Evidence for #100.
-  ses.on("spellcheck-dictionary-download-begin", () =>
-    diagnostics.log("spellcheck_download_begin"),
-  );
-  ses.on("spellcheck-dictionary-download-success", () =>
-    diagnostics.log("spellcheck_download_success"),
-  );
 }
