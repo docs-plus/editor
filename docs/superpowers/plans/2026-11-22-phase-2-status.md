@@ -83,9 +83,10 @@ as the owner's own.
 
 - Reviewed PRs merge through `integrate/…` branches, so CI runs once.
   GitHub then marks each included PR merged.
-- `main`'s CI cancels an in-progress run on a newer push. Wait for each
-  `main` run to finish and deploy before the next merge, until the CI PR
-  (no cancels on `main`, merge queue) lands.
+- `main`'s CI used to cancel an in-progress run on a newer push, so merges
+  waited for each `main` run to finish and deploy. #143 stops that: started
+  `main` runs always finish. Once the owner turns on the merge queue, PRs go
+  through the queue instead of hand-built batches.
 - Every non-trivial PR gets an independent staff review: security for
   transport, Electron and the server; ProseMirror and Yjs for the editor.
   Visible UI also needs the owner's design review with screenshots.
