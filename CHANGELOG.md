@@ -88,6 +88,32 @@ spec file's measured time.
 
 **Deploy:** none. The first green push to `main` after this merges
 publishes the first timings; until then the shards split as before.
+
+### CI: the desktop shell can be a required check
+
+`desktop-shell.yml` ran only on pull requests that touched the shell, so a
+required check from it would have waited forever on every other pull
+request and in the merge queue.
+
+#### Changed
+
+- **CI:** `desktop-shell.yml` runs on every pull request (no paths filter;
+  `ready_for_review` included) and in the merge queue. A `Changed files` job
+  builds on a pull request only when it is ready for review and touches the
+  shell's paths (the same list as before); the merge queue, nightly
+  (`workflow_call`) and manual runs always build.
+- **CI:** `Desktop shell (gate)` always runs and passes only if the renderer
+  and every package leg passed, or if they were skipped on a pull request
+  for a draft or for no shell changes. In the merge queue, nightly and
+  manual runs a skip fails it.
+- **Tests:** `tests/unit/ci/desktop-shell-workflow.test.ts` pins the
+  triggers and the gate, and runs its decision and verdict scripts; the
+  nightly streak classifies the new steps as setup steps, so the gate never
+  turns a void nightly run red.
+
+**Deploy:** none. **Owner (once, after merge):** add `Desktop shell (gate)`
+to the required checks of ruleset **Protect main**
+(`docs/operations/deploy-runbook.md`, "Requiring the desktop shell").
 ### CI: draft pull requests run the checks job only
 
 About a dozen agent sessions keep draft pull requests open, and each CI run

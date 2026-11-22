@@ -411,7 +411,7 @@ The `electron` project (`playwright.electron.config.ts`, `tests/electron/`) driv
 
 **Two flavors.** `bun desktop/build/build.ts` builds the **release** flavor (no test hooks, `wss:` sync URL; the installers, with the inspect fuse off). `--flavor test` keeps the hooks (`desktop/main/test-hooks.ts`) and is packaged unpacked with the inspect fuse on; the specs and `self-test.ts` run against it. The installed release app gets `check-fuses --inspect off` and `release-smoke.ts`: it starts with its real userData, opens its library, refuses a second instance's `tinydocy://local/<uuid> --inspect=9229`, opens no inspector on 9229, and closes gracefully.
 
-It runs in `.github/workflows/desktop-shell.yml` (pull requests that touch the shell, nightly, on demand) against the unpacked **test-flavor** app on `macos-26`, `windows-latest` and `ubuntu-24.04`; that is where it is verified. Never run it locally with visible windows. On a desktop, set `TINYDOCY_HIDDEN=1` (no window, no Dock icon); the commands below are the CI steps, not yet tried that way locally:
+It runs in `.github/workflows/desktop-shell.yml` (every pull request that touches the shell and is not a draft, the merge queue, nightly, on demand; `Desktop shell (gate)` is the check the ruleset requires) against the unpacked **test-flavor** app on `macos-26`, `windows-latest` and `ubuntu-24.04`; that is where it is verified. Never run it locally with visible windows. On a desktop, set `TINYDOCY_HIDDEN=1` (no window, no Dock icon); the commands below are the CI steps, not yet tried that way locally:
 
 ```bash
 NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build:desktop
@@ -656,7 +656,13 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   merging a change it covers.
 - **Desktop:** `desktop-shell.yml` builds the unsigned internal installers on
   three OSes, installs them and runs the `electron` project (see "Desktop
-  shell" above); `desktop-smoke.yml` (D-A12) and `desktop-storage-soak.yml`
+  shell" above). It runs on every pull request, but its `Changed files` job
+  builds only when the pull request is ready for review and touches one of
+  the shell's paths (the list in its Decide step); the merge queue, nightly
+  and manual runs always build. `Desktop shell (gate)` always runs and fails
+  closed like `Playwright (Chromium)`;
+  `tests/unit/ci/desktop-shell-workflow.test.ts` runs its decision and
+  verdict scripts. `desktop-smoke.yml` (D-A12) and `desktop-storage-soak.yml`
   run on pull requests that touch them. Nightly calls all three.
 - **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
   CI on its branch itself (`gh workflow run ci.yml`), because pull requests
