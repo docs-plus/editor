@@ -9,6 +9,61 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.5: the Electron shell
+
+The desktop app now has a shell: an Electron main process, a sandboxed
+preload and an unsigned internal build for macOS, Windows and Linux. It
+serves the desktop export on `app://tinydocy` and stores documents through
+the storage worker. Nothing changes on the web.
+
+#### Added
+
+- **Desktop:** the typed bridge. `desktop/shared/ipc-contract.ts` declares
+  each call (`app.hello`, `app.flushed`, `doc.open`, `doc.append`,
+  `doc.compact`, `doc.close`, `doc.flush`, `index.create`) and event
+  (`app.flushRequested`, `index.changed`) once, with the guard main runs on
+  it. The preload exposes `window.tinydocy` (`build`, `invoke`, `on`) and
+  nothing else. Main refuses calls until a window's preload has said hello
+  with the same build.
+- **Desktop:** the main process (`desktop/main/`):
+  - serves the export through the `app://tinydocy` handler with a CSP built
+    per page (inline-script hashes, Tiptap's stylesheet by hash, no
+    `'unsafe-inline'` scripts, `img-src 'self'`, no X hosts);
+  - shows each window on `ready-to-show` over a background that matches
+    the OS theme, sandboxed, with no page zoom, reload or DevTools;
+  - refuses navigation and `window.open` (an `https` link opens in the
+    system browser) and denies permissions by default;
+  - sets YouTube's Referer to the website's origin;
+  - holds the single-instance lock, and filters `argv` and `open-file` to
+    `tinydocy://`, `tinydocy://local/<uuid>` and existing `.md`, `.html`
+    and `.tinydoc` files (import is P2.8);
+  - keeps the open-document registry: opening a document that another
+    window holds focuses that window;
+  - starts the storage worker beside the first window, restarts it after a
+    crash (at most 3 times a minute, replaying the registry), and is
+    otherwise read-only.
+- **Desktop:** quitting never waits on the page (#106). Main ignores
+  `beforeunload` vetoes and asks each window to flush through the bridge
+  (at most 3 s). It then shuts the worker down (at most 2 s) and exits; a
+  watchdog guarantees the exit.
+- **Desktop:** the unsigned internal build (`desktop/build/`): DMG, NSIS
+  installer, `.deb` and AppImage. Fuses: `RunAsNode` off, `NodeOptions`
+  off, cookie encryption on, ASAR integrity on, app only from the ASAR.
+  `check-fuses.ts` reads them back from the installed binary.
+- **Tests:** the `electron` Playwright project runs against the installed
+  app on all three OSes (`desktop-shell.yml`, also nightly). It covers the
+  D-A12 checks, the bridge, the registry, the refusals and the quit. Unit
+  tests cover the guards and the `argv` filter (both fuzzed), the
+  registry, the handlers, the supervisor and the quit coordinator.
+
+#### Changed
+
+- **Desktop:** the D-A12 smoke serves its fixture on `app://tinydocy` with
+  the shell's path rules. A test keeps every Electron pin at 45.3.2.
+- **Desktop:** Linux spellcheck stays off until dictionaries can be
+  delivered without a network download (#100). macOS and Windows use the
+  OS spellchecker.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for

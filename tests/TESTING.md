@@ -343,6 +343,33 @@ Manual install checklist (localhost production build):
 - **Edge desktop:** same as Chrome desktop.
 - DevTools → Application → Manifest shows no errors, App Id `/`, three icons; "Show only the minimum safe area for maskable icons" keeps the "T" inside the circle.
 
+### Desktop shell (packaged Electron app)
+
+The `electron` project (`playwright.electron.config.ts`, `tests/electron/`) drives the packaged or installed app with Playwright `_electron`. Each launch gets its own `TINYDOCY_USER_DATA` (so its own single-instance lock and library), prints main's diagnostics ring on stdout (`TINYDOCY_DIAGNOSTICS_STDOUT=1`) and logs links instead of opening them (`TINYDOCY_EXTERNAL_OPEN=log`).
+
+| Test | Validates |
+|------|-----------|
+| D-A12 | The storage worker opens `node:sqlite` in a worker thread (a write leaves `library.sqlite-wal`); `app://tinydocy/` answers with the hashed CSP (no `'unsafe-inline'` scripts, `img-src 'self'`) and `nosniff`; traversal paths are 404 |
+| Windows | Shown on `ready-to-show`; the menu has no Reload, DevTools or zoom; Ctrl/⌘ `=` leaves zoom at 0; the page sees only `window.tinydocy` (`build`, `invoke`, `on`), no `require` or `process` |
+| Bridge | `index.create`, `doc.open`, `doc.append`, `doc.flush`, `doc.close` round-trip through the real worker; a window that doesn't hold a document gets `forbidden`; a bad id, an extra key, an unknown origin or channel gets `invalid_argument` |
+| Registry | A second instance with `tinydocy://local/<uuid>` opens that document's window; the same link again focuses it (no new window); from another window, `doc.open` answers `already_open` and focuses the holder |
+| Refusals | Bad `argv` on the first launch and from a second instance is refused and counted; an existing `.md` is accepted (import is P2.8); navigation to `https:` or `file:` and `window.open` are refused, and only the `https:` ones go to the (logged) system browser |
+| #106 quit | With a vetoing `beforeunload`, a flush listener and unacked edits (Hocus stopped), quitting exits 0 in under 6 s with the marks `quit_start`, `flush_done`, `storage_closed` (clean), `exit`; timings go to `test-results-electron/quit-timings-<os>.json` |
+| Last window | On Windows and Linux, closing the last window flushes it and quits |
+
+It runs in `.github/workflows/desktop-shell.yml` (pull requests that touch the shell, nightly, on demand) against the **installed** app on `macos-26`, `windows-latest` and `ubuntu-24.04`. Never run it locally with visible windows; on a desktop set `TINYDOCY_HIDDEN=1` (no window, no Dock icon):
+
+```bash
+NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build:desktop
+bun desktop/build/build.ts                       # dist/desktop-app
+bun -e 'require("electron")'                     # fetch the Electron binary once
+TINYDOCY_HIDDEN=1 CI= bun playwright test -c playwright.electron.config.ts
+```
+
+Without `TINYDOCY_EXECUTABLE` it runs `electron dist/desktop-app`; set it to an installed binary to test that. The specs start Hocus on port 1234 (the port the renderer was exported with), so nothing else may hold it.
+
+The same workflow also checks, per OS: `desktop/build/check-fuses.ts` reads every fuse out of the installed binary; `desktop/build/self-test.ts` starts the installed app (and on Linux the AppImage) once with `TINYDOCY_QUIT_AFTER_READY=1` and requires a ready library and a clean exit. The pure parts (guards with a seeded fuzz, `argv` filter with a fuzz, registry, `doc-handlers`, storage supervisor, quit coordinator, CSP, the Tiptap style hash) are unit tested in `tests/unit/desktop/shell/`; `tests/unit/ci/import-boundaries.test.ts` covers main, the preload and `desktop/shared`, and `tests/unit/ci/electron-pins.test.ts` keeps every Electron pin equal.
+
 ## Layer 3: Soak Tests (Playwright, long-running)
 
 Sustained editing sessions that detect memory leaks, latency degradation, and schema corruption over time. Documents use realistic content (paragraphs, bullet lists, ordered lists, task lists, code blocks, blockquotes per section).
@@ -506,6 +533,10 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   soaks (50,000 colour toggles; mixed versions) every day at 03:41
   and 08:00 UTC, or from Actions → Nightly → Run workflow. Run the layer locally before
   merging a change it covers.
+- **Desktop:** `desktop-shell.yml` builds the unsigned internal installers on
+  three OSes, installs them and runs the `electron` project (see "Desktop
+  shell" above); `desktop-smoke.yml` (D-A12) and `desktop-storage-soak.yml`
+  run on pull requests that touch them. Nightly calls all three.
 - **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
   CI on its branch itself (`gh workflow run ci.yml`), because pull requests
   opened with the workflow token start no workflows.
