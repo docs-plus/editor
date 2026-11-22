@@ -35,8 +35,15 @@ describe("tagNameKey", () => {
     expect(tagNameKey("Café")).toBe(tagNameKey("Café"));
   });
 
-  it("keeps accented and plain letters apart", () => {
-    expect(tagNameKey("café")).not.toBe(tagNameKey("cafe"));
+  it("ignores accents, letter forms and digit shapes (shared normalizer)", () => {
+    expect(tagNameKey("café")).toBe(tagNameKey("CAFE"));
+    expect(tagNameKey("كتاب")).toBe(tagNameKey("کتاب"));
+    expect(tagNameKey("سال ۱۴۰۳")).toBe(tagNameKey("سال 1403"));
+  });
+
+  it("collapses spaces and keeps distinct words apart", () => {
+    expect(tagNameKey("  q4   plans ")).toBe(tagNameKey("Q4 Plans"));
+    expect(tagNameKey("plans")).not.toBe(tagNameKey("plan"));
   });
 });
 

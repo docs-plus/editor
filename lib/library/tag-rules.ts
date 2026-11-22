@@ -1,11 +1,18 @@
 /**
- * Tag names (details spec §3, D7): at most 40 characters, unique ignoring
- * case, and at most 20 tags per document. Every `LibraryIndex` applies
- * `tagNameKey` for uniqueness: SQLite's `COLLATE NOCASE` folds ASCII only,
- * so the desktop engine checks this key too (its NOCASE constraint is a
- * subset and never disagrees), and the web library stores it as `name_key`.
+ * Tag names (details spec §3, D7): at most 40 characters, unique by
+ * `tagNameKey`, and at most 20 tags per document. Pure (no React, no DOM).
+ *
+ * `tagNameKey` is the shared search normalizer (`lib/search/normalize.ts`,
+ * search-linking §3.2: case, accents, Arabic→Persian letters and digit
+ * shapes ignored), so "Café", "cafe" and "CAFE" are one tag. Every
+ * `LibraryIndex` enforces it: the desktop engine stores it as
+ * `tags.name_key` (offline data-model revision §3), and the web library
+ * likewise. SQLite's `COLLATE NOCASE` folds ASCII only, so it can't stand in.
+ * A change to the normalizer (`NORMALIZER_VERSION`) recomputes the keys and
+ * merges any new collisions with the `mergeTags` rule.
  */
 import type { TagEntry } from "@/lib/platform/document-index";
+import { normalizeSearchText } from "@/lib/search/normalize";
 
 export const TAG_NAME_MAX = 40;
 export const MAX_TAGS_PER_DOC = 20;
@@ -21,7 +28,7 @@ export function cleanTagName(name: string): string {
 
 /** Two names are the same tag when their keys are equal. */
 export function tagNameKey(name: string): string {
-  return cleanTagName(name).normalize("NFC").toLowerCase();
+  return normalizeSearchText(cleanTagName(name));
 }
 
 export function findTagByName(
