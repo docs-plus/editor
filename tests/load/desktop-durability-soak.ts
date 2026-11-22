@@ -906,6 +906,9 @@ async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
     createHash("sha256").update(readFileSync(path)).digest("hex");
   const previousHash = hashOf(previousPath);
   let midCopy = 0;
+  // How each running copy was stopped: "answered" (it closed its own files),
+  // or a terminate() fallback; and whether the partial was then deleted.
+  const stops: Record<string, number> = {};
   const quitMs: number[] = [];
   const exitLagMs: number[] = [];
   const appendMaxMs: number[] = [];
@@ -917,6 +920,13 @@ async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
       ["--mode=copy-quit", `--dir=${dir}`, `--doc=${docId}`],
       (line) => {
         if (line.startsWith("COPY_BEGIN")) began = true;
+        if (line.startsWith("COPY_STOPPED ")) {
+          const [, outcome, , removed] = line.split(" ");
+          const key = `${outcome}/${removed}`;
+          stops[key] = (stops[key] ?? 0) + 1;
+          if (removed !== "removed")
+            failures.push(`run ${i}: the partial copy was not deleted at quit`);
+        }
         if (line.startsWith("COPY_DONE")) done = true;
         if (line.startsWith("QUIT ")) quitSeenAt = performance.now();
       },
@@ -963,11 +973,13 @@ async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
   removeDir(dir);
   const max = (values: number[]) => Math.round(Math.max(0, ...values));
   if (midCopy === 0) failures.push("no quit landed during a copy");
+  if (midCopy < runs)
+    failures.push(`${runs - midCopy} of ${runs} quits missed the copy`);
   return {
     name: "T4-copy",
     pass: failures.length === 0,
-    summary: `${runs} quits, ${midCopy} during a daily copy: every typed edit stored, clean shutdowns (max ${max(quitMs)} ms), process gone ${max(exitLagMs)} ms after the quit at worst, no partial copy left, the previous copy byte-identical; slowest append during a copy ${max(appendMaxMs)} ms`,
-    details: { runs, midCopy, quitMs, exitLagMs, appendMaxMs },
+    summary: `${runs} quits, ${midCopy} during a daily copy (stops: ${JSON.stringify(stops)}): every typed edit stored, clean shutdowns (max ${max(quitMs)} ms), process gone ${max(exitLagMs)} ms after the quit at worst, no partial copy left, the previous copy byte-identical; slowest append during a copy ${max(appendMaxMs)} ms`,
+    details: { runs, midCopy, stops, quitMs, exitLagMs, appendMaxMs },
     failures,
   };
 }

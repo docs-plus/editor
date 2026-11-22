@@ -9,7 +9,8 @@ on a push to `main` (a merged pull request) and deploys that commit.
 
 Automatic deploys are **off** until the repository variable `AUTO_DEPLOY` is
 `on`. Turn them on only after the [one-time setup](#one-time-setup) is done,
-including the first manual deploy (its last step).
+including the first manual deploy (its last step). Production has had
+`AUTO_DEPLOY=on` since 2026-11-17.
 
 ```bash
 gh variable set AUTO_DEPLOY --body on    # turn on
@@ -144,11 +145,14 @@ says what a run may do:
 - **Restore** a document from a backup by copying its `documents` row back
   and deleting its `document_tombstones` row, with Hocus stopped. Restoring
   the whole file loses every edit made since the backup.
-- **Turning it on.** The file ships with `dry-run`. Review the
-  `retention_purge_dry_run` lines from a few daily runs:
+- **Turning it on.** The file shipped with `dry-run`. Production switched
+  to `on` on 2026-11-22 (#138), after four daily dry runs that each listed
+  the same 2 idle documents. To review runs, on the host:
   ```bash
   bunx pm2@6.0.14 logs editor-purge --lines 50 --nostream | grep retention_purge
   ```
+  Over a plain `ssh host '…'` command, use `~/.bun/bin/bunx`, because a
+  non-login shell doesn't have `~/.bun/bin` on `PATH`.
   When the listed documents are ones that should go, change `PURGE_MODE` to
   `on` in `ecosystem.config.cjs` in a pull request. The deploy after it merges
   updates the app (without purging); the next 03:17 run writes
@@ -184,11 +188,12 @@ pull requests ahead of it, and merges only what passed. CI already runs on
 1. Settings → Rules → Rulesets → **Protect main** → Add rule →
    **Require merge queue**:
    - Merge method: **Merge commit** (what `main` uses today).
-   - Build concurrency: **3** (each entry runs about seven jobs; GitHub's free
-     plan runs 20 jobs at a time across the organisation).
-   - Merge limits: minimum **1**, maximum **5**; wait **5 minutes** to fill
-     a group, so pull requests queued together land as one push to `main`,
-     one CI run and one deploy.
+   - Build concurrency: **2** (each entry runs about seven jobs, and GitHub's
+     free plan runs 20 jobs at a time across the organisation: three entries
+     would take about 21, leaving nothing for pull requests).
+   - Merge limits: minimum **1**, maximum **5**; wait **1 minute** to fill
+     a group, so pull requests queued together usually land as one push to
+     `main`, one CI run and one deploy, without holding a lone one back.
    - Only merge non-failing pull requests: on (**All green**).
    - Status check timeout: **60 minutes**.
 2. In the same ruleset, keep **Require status checks to pass** with exactly
@@ -205,8 +210,8 @@ gh api repos/docs-plus/editor/rulesets/26847251 \
   | jq '{name, target, enforcement, conditions, bypass_actors,
          rules: (.rules + [{type: "merge_queue", parameters: {
            merge_method: "MERGE", grouping_strategy: "ALLGREEN",
-           max_entries_to_build: 3, min_entries_to_merge: 1,
-           max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 5,
+           max_entries_to_build: 2, min_entries_to_merge: 1,
+           max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 1,
            check_response_timeout_minutes: 60}}])}' \
   | gh api -X PUT repos/docs-plus/editor/rulesets/26847251 --input -
 ```

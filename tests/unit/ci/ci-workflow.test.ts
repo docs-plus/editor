@@ -79,6 +79,7 @@ describe("CI workflow", () => {
     expect(e2e.strategy?.["fail-fast"]).toBe(false);
     const run = runOf(e2e, "Run Playwright");
     expect(run).toContain("--project=chromium");
+    expect(run).toContain("--project=library");
     expect(run).toContain(`--shard=\${{ matrix.shard }}/3`);
     expect(run).toContain("--retries=1");
     expect(run).toContain("blob");

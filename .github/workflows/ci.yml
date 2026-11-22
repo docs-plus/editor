@@ -3,8 +3,8 @@ name: CI
 # Runs on every pull request, in the merge queue and on pushes to main:
 #   changes   decides whether the pull request needs the browser suites
 #   checks    Biome, ESLint, typecheck, unit tests, production build
-#   e2e       the Playwright chromium project in 3 shards against
-#             `next dev` + Hocuspocus
+#   e2e       the Playwright chromium and library projects in 3 shards,
+#             against `next dev` + Hocuspocus and the library's Bun harness
 #   perf      the typing-budget project on its own runner, one worker
 #   e2e-gate  "Playwright (Chromium)": merges the shard reports and passes
 #             only if every shard and perf passed, or if the pull request
@@ -199,15 +199,28 @@ jobs:
             curl -sf -o /dev/null --max-time 120 "http://localhost:3000$path"
           done
 
+      # The shared library UI (components/library) runs on its own Bun
+      # harness, no Next.js or Hocus (tests/harness/library). Started in
+      # every shard (about a second): sharding decides which one runs it.
+      - name: Start library harness
+        run: |
+          bun tests/harness/library/serve.ts > "$RUNNER_TEMP/library.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:3871/; then break; fi
+            sleep 1
+          done
+          curl -sf -o /dev/null http://127.0.0.1:3871/
+
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
-      # as "flaky". Shards split by spec file; the blob report is merged by
+      # as "flaky". Shards split by spec file (contiguous ranges by test
+      # count, see tests/TESTING.md); the blob report is merged by
       # "Playwright (Chromium)".
       - name: Run Playwright
         env:
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-chromium-${{ matrix.shard }}.zip
         run: >-
-          CI="" bun playwright test --project=chromium
+          CI="" bun playwright test --project=chromium --project=library
           --shard=${{ matrix.shard }}/3 --retries=1 --trace off
           --reporter=list,blob
 
@@ -228,6 +241,7 @@ jobs:
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
+            ${{ runner.temp }}/library.log
           if-no-files-found: ignore
           retention-days: 7
 
