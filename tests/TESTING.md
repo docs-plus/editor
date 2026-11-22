@@ -376,7 +376,6 @@ The `electron` project (`playwright.electron.config.ts`, `tests/electron/`) driv
 | Strict CSP, spellcheck | With the editor open and text typed, the only CSP violations are remote images (`img-src https:`), and no spellcheck event (attempt, download or failed setup) is logged |
 | #106 quit | With a vetoing `beforeunload`, a flush listener and unacked edits (Hocus stopped), quitting exits 0 in under 6 s with the marks `quit_start`, `flush_done`, `storage_closed` (clean), `exit`; timings go to `test-results-electron/quit-timings-<os>.json` and the job summary |
 | Last window | With the same veto and edits, closing the last window flushes it; Windows and Linux then quit, macOS keeps running with no window |
-
 | Hardening (`hardening.spec.ts`) | A subframe can neither navigate the top window to `https` nor `window.open` one (no `external_open`); the top frame's links reach the browser at most 3 per 10 s; a download is refused; scripts, stylesheets, `/icon` and a 404 carry a CSP |
 | Offline (`offline.spec.ts`) | A whole session with Chromium's net-log on: no host off the machine (exact allowlist: Chromium's IPv6 route probe `[2001:4860:4860::8888]`, which sends nothing, and Windows' `wpad` lookup), nothing unparsed, no `gvt1.com`; hosts go to `netlog-hosts-<os>.json` |
 
