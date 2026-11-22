@@ -24,14 +24,23 @@ chunk is unchanged (0 B).
   state), `doc-images`, `doc-rtl`, `doc-legacy`, `exif` and `hostile`. Each
   set writes a `manifest.json`; `--list` names the sets still waiting on
   unmerged work (comments, preferences, the web library, the asset store,
-  `.tinydoc`), and `--cache-key` prints a hash of the generator sources for
-  CI caching.
+  `.tinydoc`), and `--cache-key` prints a hash of every module the
+  generators import (a unit test walks the imports so the list can't fall
+  behind). A set folder that already holds files is refused unless `--force`
+  empties it; bad input prints one line and exits 2. `FIXTURES_FULL_SIZE=1`
+  (off by default) adds the slow full-size replay tests (12 MP photos,
+  `library-1k`, `library-10k`). The `doc-images` photos are PNGs with an
+  `eXIf` block, not JPEGs; each is written to disk as it is drawn.
 - **Nightly streak:** `bun scripts/nightly-streak.ts` reads the scheduled
   runs of `nightly.yml` (and `nightly-desktop.yml` once it exists) with
   read-only `gh` calls and prints the §1.6 streak per gate as Markdown for
   the pinned streak issue: green, red and void days, the one re-run per void
   run, at most 2 void days per streak, and "not running yet" for a gate
-  whose job sets no nightly job carries.
+  whose job sets no nightly job carries. A job set counts only when every
+  job carrying its label finished `success` (a skipped job or matrix leg
+  doesn't), a day missing a run of either gating workflow is void, and the
+  setup steps that void a run are pinned against the workflow files by a
+  unit test.
 
 #### Changed
 
