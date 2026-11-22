@@ -6,6 +6,8 @@ name: CI
 #   e2e       the Playwright chromium and library projects in 3 shards,
 #             against `next dev` + Hocuspocus and the library's Bun harness
 #   perf      the typing-budget project on its own runner, one worker
+#   desktop   the desktop static export and the local (dev bridge) project;
+#             not a required check
 #   e2e-gate  "Playwright (Chromium)": merges the shard reports and passes
 #             only if every shard and perf passed, or if the pull request
 #             changes docs only
@@ -289,6 +291,65 @@ jobs:
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Not a required check. Docs-only pull requests skip it with the browser
+  # suites; desktop/** changes always run it (see `changes`).
+  desktop:
+    name: Desktop renderer (export and local)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - *checkout
+      - *setup-bun
+      - *install
+      - *block-node
+      - *install-chromium
+
+      # Built on Linux, as releases build it (#103). Fails if a web-only
+      # route, a web metadata tag, the dev bridge or the Windows segment
+      # layout reaches out/.
+      - name: Desktop export
+        run: bun run build:desktop
+
+      # The export served with the app:// protocol handler's path rules.
+      - name: Desktop project (export)
+        run: |
+          PORT=3849 bun scripts/serve-desktop-export.ts > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:3849/ && break
+            sleep 1
+          done
+          DESKTOP_BASE_URL=http://127.0.0.1:3849 CI="" bun playwright test --project=desktop --retries=1 --trace retain-on-failure
+
+      # The desktop renderer under next dev over the dev bridge, no Hocus
+      # (architecture §11). Each Playwright worker starts its own storage
+      # host, so each has its own library. No retries: a race between a
+      # reload's new connection and the old one's release must fail here.
+      - name: Local project (dev bridge)
+        run: |
+          NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_DESKTOP_BRIDGE=dev \
+            bun next dev -p 3926 > "$RUNNER_TEMP/next-local.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            curl -sf -o /dev/null http://localhost:3926/ && break
+            sleep 1
+          done
+          curl -sf -o /dev/null --max-time 120 http://localhost:3926/
+          LOCAL_BASE_URL=http://localhost:3926 CI="" bun playwright test --project=local --retries=0 --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-results
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
           if-no-files-found: ignore
           retention-days: 7
 

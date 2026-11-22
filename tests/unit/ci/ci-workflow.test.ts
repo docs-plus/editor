@@ -107,7 +107,7 @@ describe("CI workflow", () => {
   });
 
   it("skips the browser suites only through the changes job", () => {
-    for (const name of ["e2e", "perf"]) {
+    for (const name of ["e2e", "perf", "desktop"]) {
       expect(needsOf(jobs[name])).toContain("changes");
       expect(jobs[name].if).toBe("needs.changes.outputs.e2e == 'true'");
     }
