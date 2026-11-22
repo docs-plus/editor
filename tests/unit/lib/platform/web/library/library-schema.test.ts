@@ -227,18 +227,19 @@ describe("tinydocy-library version 1", () => {
     library.close();
   });
 
-  it("leaves never-opened documents out of by_opened (Recent lists opened ones)", async () => {
+  it("lists a created document in by_opened at once (Recent), and leaves out rows with no opened_at", async () => {
     const library = await createFakeBrowser().open();
-    await createLibraryDoc(library, { id: "never" });
+    await createLibraryDoc(library, { id: "created" }, 42);
+    expect((await docRow(library, "created")).opened_at).toBe(42);
     await put(library, STORES.docs, {
-      ...(await docRow(library, "never")),
-      id: "opened",
+      ...(await docRow(library, "created")),
+      id: "never",
       link_key: "d".repeat(32),
-      opened_at: 5,
+      opened_at: null,
     });
     expect(
       ids(await readAll<DocRow>(library, STORES.docs, "by_opened")),
-    ).toEqual(["opened"]);
+    ).toEqual(["created"]);
     library.close();
   });
 

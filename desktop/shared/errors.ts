@@ -27,10 +27,9 @@ export const ERROR_CODES = {
   library_unavailable: { retryable: true },
   // Content
   import_too_large: { retryable: false },
+  document_too_large: { retryable: false },
   unknown_schema: { retryable: false },
   doc_too_new: { retryable: false },
-  // A document at its size cap (D-O3): growth is refused, deletions pass.
-  document_too_large: { retryable: false },
 } as const satisfies Record<string, { retryable: boolean }>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

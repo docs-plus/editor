@@ -61,77 +61,82 @@ idempotent: a second run changes nothing.
     than 4, and that a malformed file made open throw instead of opening
     read-only as `corrupt`. P2.6d fixes both, and the folder case runs here
     as an ordinary test.
-- **Desktop:** `document_too_large` (the 32 MiB cap) is an IPC error code,
-  as the Electron shell's contract test requires of every storage code.
 
-### Desktop P2.6d: library format 2 and the relationship layer
 
-The desktop library moves to format 2, the offline data-model revision's
-schema (`docs/superpowers/specs/2026-11-22-offline-data-model-revision.md`,
-§3 and §4), in one forward step from format 1. Nothing outside the desktop
-storage worker uses it yet; P2.6e persists P2.7b's library port on it.
+
+### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
+
+Printing (and Save as PDF) now prints only the document. The block move and
+duplicate commands, the word count engine and the Markdown paste rule are
+built and tested but not yet wired to a menu or to paste, so P2.12 stays open
+(details spec §5, "P2.12 status"). The paste hook waits on a 152 B gz ledger
+line. The editor chunk group is unchanged: 393,820 B gz, 0 B against `main`
+at `1548d5e` (every editor JS and CSS chunk identical; `1548d5e` changed no
+web code since `903b5c8`). An import-boundary test keeps these modules out
+of it.
 
 #### Added
 
-- **Desktop:** `desktop/storage/engine/format-2.ts`, the 1→2 step:
-  - It rebuilds `folders`, `docs` and `tags` with foreign keys, CHECKs, the
-    folder Trash columns, `head_seq`/`derived_seq` staleness and normalized
-    `title_key`/`name_key`.
-  - It adds `links`, `doc_headings`, `blobs` and `doc_blobs`, the index each
-    named query needs, and triggers: `link_key` and `lineage` are frozen,
-    `head_seq` only rises, and a folder can't become its own ancestor.
-  - `updates` and `snapshots` are never rebuilt.
-- **Desktop:** the migration runner's rebuild mode (§3.1):
-  - a read-only preflight refuses bad format-1 rows and writes nothing;
-  - `foreign_keys` is turned off before `BEGIN` and asserted;
-  - the `updates` row count, bytes and hash are checked before and after;
-  - `foreign_key_check` runs before `COMMIT`;
-  - `foreign_keys` is back on, and asserted, in a `finally`.
+- **Print:** a print stylesheet (`styles/_print.scss`, loaded by the root
+  layout). It hides the tab bar, toolbar, outline, bubbles, notices and status
+  chips. It prints folded sections open, keeps headings with the text after
+  them and lets the document run across pages. Pages without the editor print
+  as before.
+- **Print:** the dark theme prints light. `ThemeRuntime` removes the `dark`
+  class for the print and restores it afterwards (`lib/print-theme.ts`),
+  also when `beforeprint` fires twice first (Chromium rebuilds the preview
+  when a setting changes). The saved theme is not changed.
+- **Block move and duplicate** (`extensions/block-move/`, E4): `moveBlock`
+  and `duplicateBlock` work on the top-level blocks of the selection.
+  - Each run is one Yjs undo step on the live document.
+  - The title never moves and is never duplicated.
+  - A folded section moves as one unit.
+  - A duplicated heading gets new ids.
+  - On a concurrent edit, the larger side of a move keeps a collaborator's
+    typing. The smaller side is re-created whole, so typing anywhere in
+    it, a list item or table cell included, is lost.
+- **Markdown paste rule** (`lib/markdown/parse.ts`, E2, shared with IM1):
+  `markdownPasteSlice` returns formatted content only for plain text with
+  explicit Markdown syntax that parses to formatting. Bare URLs are left to
+  the link and embed rules. `parseMarkdownFragment` gives IM1 schema-checked
+  blocks from any parser, with no DOM or editor.
+  - It gives nothing an HTML paste of the same content would not: a
+    Markdown image is the image node an `<img>` paste makes, iframes are
+    dropped, and a link whose href the link extension empties
+    (`javascript:`, `data:`) keeps its text without the link.
+  - Markdown with a raw HTML block (`<div>`, `<img>` on its own line) and
+    text over 256 KiB paste as plain text. The parser turned an HTML block
+    into a level-1 heading against the title-first schema.
+  - The syntax check stays linear on long lines (a 200 KB line of `[`).
+  - The caller passes `Fragment` and `Slice` (`MarkdownModel`), so the
+    rule can load as a lazy chunk of the editor without splitting the
+    editor's chunk group (+1,092 B gz when it imported them itself).
+- **Word count** (`lib/word-count.ts`, E3): `countWords` counts words,
+  characters and characters without spaces in the document, or in the
+  selection when given one, using `Intl.Segmenter` (a ZWNJ stays inside a
+  Persian word; an emoji sequence is one character).
+### CI: draft pull requests run the checks job only
 
-  New libraries start at format 1 and run the same step.
-- **Desktop:** engine operations (§4.2):
-  - folders: create, rename and move, with the depth limit;
-  - folder Trash, restore and purge by trash group; a restore whose old
-    parent has moved too deep for the subtree goes to the root;
-  - new and imported documents show in Recent at once;
-  - tags: create, rename, merge, add and remove by `tagNameKey`;
-  - duplicate, and backup restore that never changes identity;
-  - `derive.put`, with row caps, control stripping, freshness against
-    `head_seq` and worker-computed hashes;
-  - pins, Manual order, list views, the Trash list, lazy snippets and
-    prefix search on titles and headings.
-- **Desktop:** a `quick_check` that throws on a damaged file opens the
-  library read-only as `corrupt` instead of failing to open.
-- **Desktop:** a 32 MiB per-document cap (D-O3): growth is refused with
-  `document_too_large`, which isn't retryable, and deletions still pass.
-- **Desktop:** compaction checks that the new snapshot dominates what it
-  replaces (I10). New libraries use `auto_vacuum = INCREMENTAL`, and a
-  compaction that leaves more than 25% free pages gives them back.
-- **Desktop:** `secure_delete = FAST`, a WAL truncate after each purge, and
-  pre-migration copies deleted after 7 clean opens (SEC-005).
-- **Desktop:** the daily copy uses an explicit table order, checks
-  `foreign_key_check` and turns foreign keys back on.
-- **Tests:** the migration and engine-operation suites, the §3.5 query-plan
-  checks, and soak cases T20 (storage half), T23, T24 and T24b.
+About a dozen agent sessions keep draft pull requests open, and each CI run
+takes eight jobs of the organisation's twenty, so runs queued for up to
+nine minutes before starting and up to eleven before the gate got a runner.
 
 #### Changed
 
-- **Desktop:** the title has one writer, the content (G4): the engine's
-  `renameDoc` and `moveDoc` are gone (`moveItems` replaces `moveDoc`).
-  `modified_at` changes only with content (D-O5).
-- **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`, which
-  isn't retryable. When an append is refused at the cap, the batcher halts:
-  no retry loop runs, and the refused batch and everything after it stay
-  queued, never dropped. Every `flush()` rejects with the refusal instead of
-  waiting, so close, re-open and quit never hang. `local-session` makes the
-  document read-only with `readOnlyReason: "document_too_large"`. The open
-  Y.Doc still holds every edit, and "Copy into a new tab" carries them.
-  Duplicate copies stored state, which doesn't have them. Any other
-  non-retryable refusal halts the same way, except a transient `forbidden`
-  during a worker restart.
-- **Docs:** the architecture spec allows `lib/search/normalize.ts` and
-  `lib/library/tag-rules.ts` into the storage code, and records how format 2
-  was built.
+- **CI:** while a pull request is a draft, the shards, perf and the desktop
+  job are skipped and `Playwright (Chromium)` passes with a notice; the
+  checks job still runs. `ready_for_review` is now a `pull_request` trigger,
+  so marking a draft ready starts the full run.
+- **CI:** the gate fails closed: a skip passes only on a pull request run,
+  for a draft or a docs-only change. In the merge queue, on `main` and in
+  manual runs every suite runs, and a skip fails the gate.
+- **Tests:** `ci-workflow.test.ts` runs the verdict script over a table of
+  events, skip reasons and job results, and the decision script with the
+  draft flag.
+
+**Deploy:** none. **Agents:** open pull requests as drafts and mark them
+ready for review when they are.
+
 ### Phones M20: one keyboard measurement, sheets ride the keyboard
 
 The on-screen keyboard is measured once for the whole page (phones and
@@ -386,6 +391,119 @@ note. `NEXT_PUBLIC_COMMENTS` (default off) and the browser's
   agreement (including offline catch-up and `comments_full` recovery)
   and view-only silence. The `perf` Playwright typing case with 300
   threads is written but skipped unless `PERF_COMMENTS=1`.
+
+### Desktop P2.6e: the library port on SQLite
+
+P2.7b's `LibraryIndex` port now persists on the desktop SQLite library,
+through the storage worker. Nothing in the app uses it yet: the
+composition root (P2.5) wires it in.
+
+#### Added
+
+- **Desktop:** `lib/platform/desktop/library-index-rpc.ts`, `RpcLibraryIndex`:
+  - It loads the sidebar, the Trash list and the saved list choices into a
+    snapshot.
+  - It applies each port operation to the snapshot at once, then persists it
+    over `call(op, args)` on one serial chain. The same code runs over the
+    worker or in-process.
+  - Changes not yet saved are reapplied after every reload. A refused write
+    reloads what storage holds.
+  - It follows the worker's `index_changed` feed with a full reload, skipping
+    its own changes.
+  - `rename` goes through an injected `renameTitle`, which edits the title
+    heading in a session: the title has one writer (G4).
+- **Desktop:** storage worker ops for the port: folders, folder Trash, tags,
+  pins, Manual order, list choices, the Trash list, lazy snippets, title and
+  heading search, `putDerived` and backlinks.
+- **Tests:** P2.7b's `LibraryIndex` contract runs on SQLite in two places:
+  - on `bun:sqlite` in `bun test`, with `settle` and `reopen`;
+  - on `node:sqlite` in the Electron worker, in the soak's `contract` case,
+    through a small `bun:test` shim.
+- **Tests:** soak case T21, the storage half: 10,000 documents with 200,000
+  links and 100,000 headings. It measures:
+  - the sidebar's SQL time and its round trip through the worker;
+  - backlinks queued behind a `putDerived`;
+  - title search against Quick Open's 16 ms budget.
+
+### Desktop P2.6d: library format 2 and the relationship layer
+
+The desktop library moves to format 2, the offline data-model revision's
+schema (`docs/superpowers/specs/2026-11-22-offline-data-model-revision.md`,
+§3 and §4), in one forward step from format 1. Nothing outside the desktop
+storage worker uses it yet; P2.6e persists P2.7b's library port on it.
+
+#### Added
+
+- **Desktop:** `desktop/storage/engine/format-2.ts`, the 1→2 step:
+  - It rebuilds `folders`, `docs` and `tags` with foreign keys, CHECKs, the
+    folder Trash columns, `head_seq`/`derived_seq` staleness and normalized
+    `title_key`/`name_key`.
+  - It adds `links`, `doc_headings`, `blobs` and `doc_blobs`, the index each
+    named query needs, and triggers: `link_key` and `lineage` are frozen,
+    `head_seq` only rises, and a folder can't become its own ancestor.
+  - `updates` and `snapshots` are never rebuilt.
+- **Desktop:** the migration runner's rebuild mode (§3.1):
+  - a read-only preflight refuses bad format-1 rows and writes nothing;
+  - `foreign_keys` is turned off before `BEGIN` and asserted;
+  - the `updates` row count, bytes and hash are checked before and after;
+  - `foreign_key_check` runs before `COMMIT`;
+  - `foreign_keys` is back on, and asserted, in a `finally`.
+
+  New libraries start at format 1 and run the same step.
+- **Desktop:** engine operations (§4.2):
+  - folders: create, rename and move, with the depth limit;
+  - folder Trash, restore and purge by trash group; a restore whose old
+    parent has moved too deep for the subtree goes to the root;
+  - new and imported documents show in Recent at once;
+  - tags: create, rename, merge, add and remove by `tagNameKey`;
+  - duplicate, and backup restore that never changes identity;
+  - `derive.put`, with row caps, control stripping, freshness against
+    `head_seq` and worker-computed hashes;
+  - pins, Manual order, list views, the Trash list, lazy snippets and
+    prefix search on titles and headings.
+- **Desktop:** a `quick_check` that throws on a damaged file opens the
+  library read-only as `corrupt` instead of failing to open.
+- **Desktop:** a 32 MiB per-document cap (D-O3): growth is refused with
+  `document_too_large`, which isn't retryable, and deletions still pass.
+- **Desktop:** compaction checks that the new snapshot dominates what it
+  replaces (I10). New libraries use `auto_vacuum = INCREMENTAL`, and a
+  compaction that leaves more than 25% free pages gives them back.
+- **Desktop:** `secure_delete = FAST`, a WAL truncate after each purge, and
+  pre-migration copies deleted after 7 clean opens (SEC-005).
+- **Desktop:** the daily copy uses an explicit table order, checks
+  `foreign_key_check` and turns foreign keys back on.
+- **Tests:** the migration and engine-operation suites, the §3.5 query-plan
+  checks, and soak cases T20 (storage half), T23, T24 and T24b.
+
+#### Changed
+
+- **Desktop:** the title has one writer, the content (G4): the engine's
+  `renameDoc` and `moveDoc` are gone (`moveItems` replaces `moveDoc`).
+  `modified_at` changes only with content (D-O5).
+- **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`, which
+  isn't retryable. When an append is refused at the cap, the batcher halts:
+  no retry loop runs, and the refused batch and everything after it stay
+  queued, never dropped. Every `flush()` rejects with the refusal instead of
+  waiting, so close, re-open and quit never hang. `local-session` makes the
+  document read-only with `readOnlyReason: "document_too_large"`. The open
+  Y.Doc still holds every edit, and "Copy into a new tab" carries them.
+  Duplicate copies stored state, which doesn't have them. Any other
+  non-retryable refusal halts the same way, except a transient `forbidden`
+  during a worker restart.
+- **Docs:** the architecture spec allows `lib/search/normalize.ts` and
+  `lib/library/tag-rules.ts` into the storage code, and records how format 2
+  was built.
+
+### Web library: new documents join Recent at once (dark)
+
+`createLibraryDoc` sets `opened_at` to the creation time, so a document the
+user creates, or later imports, is in Recent (`by_opened`) at once instead
+of only after it is first opened. The W2 "As built" notes record this and
+the other coordinator decisions of 2026-11-22. Nothing in the web app
+imports the library, so the web build is unchanged.
+
+**Deploy:** none.
+
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`
@@ -888,6 +1006,52 @@ the storage worker. Nothing changes on the web.
   let Chromium download a dictionary from Google, so Linux also sets no
   spellcheck languages and a closed loopback download URL; a spec fails
   on any spellcheck event. macOS and Windows use the OS spellchecker.
+
+### Docs: smart chips for document links
+
+A design, approved by the owner on 2026-11-22 (C1–C9). Nothing in the app
+changes.
+
+#### Added
+
+- **Docs:** §4.2a "Smart chips" in
+  `docs/superpowers/specs/2026-11-16-search-linking-design.md`. It specifies
+  an inline `docChip { href, label }` node whose title is resolved only when
+  it renders and never written. It covers the DOM and accessible name per
+  state, the keys, the card, inserting from ⌘K, "/" and paste, conversion
+  both ways, exports, bytes and schema, tests, and nine owner decisions
+  (C1–C9). The LK2 row grows to M–L, about 5.5 days.
+- **Docs:** a self-contained clickable prototype,
+  `docs/design/2026-11-22-smart-chips-prototype.html`, with an Accessibility
+  panel showing each element's role, name and state, and 39 headless
+  screenshots in `docs/design/2026-11-22-smart-chips/`.
+
+#### Changed
+
+- **Polish round (2026-11-22):** one accessibility-first pass, C1–C9
+  unchanged. The states follow the approved linking decisions Q4–Q7: one
+  Not available state, `FileMinus` for In Trash, and a card that is the Q7
+  preview, whose default focus never lands on Remove Link. The suffix is
+  inline (IME-safe, exact names), chip paint fits a 15/1.15 line, the card
+  and picker reflow at 320 px, and paste never writes the key. It also adds
+  reading-mode preview keys, undo-step and announcement rules, and the tests
+  that go with them. The screenshots are re-taken (57 numbered, Chromium,
+  Firefox and WebKit) with 11 before/after pairs.
+- **Chip colour and corner (2026-11-22):** a per-device Chip colour preference (C10, pending the owner's sign-off: six colours, Blue by default, set as `data-chip-color` before first paint, +0 B to the editor chunk) and the smaller `--radius-sm` corner, with a colour grid scene and screenshots 58–67 and `p12`.
+
+### Link card redesign for document links and smart chips (docs only)
+
+A design proposal, pending owner approval. Nothing in the app changes, so there is no Deploy note.
+
+#### Added
+
+- **Spec §4.5a "Link card (hover and preview)"** in `docs/superpowers/specs/2026-11-16-search-linking-design.md`. It is the card that opens on a document link or a smart chip: a hover card for the pointer, a preview dialog for click, Mod-K and Alt+Enter, and a sheet for a long-press on phones. All three share one body, and the card stays 20rem wide on every surface.
+  - It covers the anatomy, tokens, type, spacing, states, copy, motion, keyboard and timing (WCAG 1.4.13), ARIA, phone and right to left.
+  - Its acceptance criteria include 16 anti-slop design rules: no gradients, blur, emoji, pills, decorative icons or shimmer; one elevation token; the app's popover radius; type does the hierarchy.
+  - It lists the §4.5, §4.6, §8 and §4.2a lines to update on approval, and six owner decisions (L1–L6).
+- **Prototype** `docs/design/2026-11-22-link-card-prototype.html`. It is fully self-contained (Inter and its lucide icons are inlined) and has every state in light and dark, right to left, phone and reduced motion. It also has a working "Try it" paragraph and computed Anti-slop checklist and Accessibility panels.
+- **Screenshots** in `docs/design/2026-11-22-link-card/`, including side by sides of the #163 and #167 cards and the new one.
+- **Revised after the owner's review (2026-11-22):** the state icon leads the title row and actions carry icons again; the hover card and the dialog show only Open, Copy Link and ⋯, with every other action in ⋯ and listed on the phone sheet (decision L2, superseding §4.2a's visible edit group).
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 

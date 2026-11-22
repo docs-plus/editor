@@ -81,7 +81,9 @@ export function createLibraryDoc(
     pinned: false,
     created_at: now,
     modified_at: now,
-    opened_at: null,
+    // Creating or importing a document is the user's own recent activity,
+    // so it joins Recent at once (coordinator decision, 2026-11-22).
+    opened_at: now,
     trashed_at: null,
     trash_group: null,
     trashed_from: null,

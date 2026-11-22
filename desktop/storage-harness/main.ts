@@ -7,7 +7,9 @@
  *
  * Modes (`--mode=`):
  * - `contract`: P2.1's shared `DocStore` contract over the worker
- *   (`CASE_OK` / `CASE_FAIL` lines).
+ *   (`CASE_OK` / `CASE_FAIL` lines), then P2.7b's `LibraryIndex` contract
+ *   through `RpcLibraryIndex` over the worker (`LIBRARY_CASE_OK` /
+ *   `LIBRARY_CASE_FAIL`).
  * - `churn`: edits a document with product batching (or `--dense`) until
  *   killed; `--target=compaction` compacts after every ack;
  *   `--quit-after-ms` runs the quit flush instead (T4). The worker prints
@@ -19,6 +21,8 @@
  * - `startup`: worker spawn → ready → sidebar rows (T8, the §10 budget).
  * - `copy-quit`: quit while the daily copy runs in its thread (decision 5).
  * - `copy-time`: how long the batched daily copy takes (decision 5).
+ * - `t21`: sidebar, backlinks and title search on 10,000 linked documents
+ *   (offline revision §5.3).
  * - `migrate-v2`: the 1→2 step, optionally killed at a boundary (T24, T24b).
  * - `long-doc`: load, compact and grow a long document (T20, T20b).
  *
@@ -34,10 +38,17 @@ import * as Y from "yjs";
 
 import { createRpcDocStore } from "../../lib/platform/desktop/rpc-doc-store";
 import type { DocStore } from "../../lib/platform/doc-store";
+import { takeCases } from "../../tests/helpers/bun-test-shim";
 import {
   DOC_STORE_CONTRACT,
   type DocStoreHarness,
 } from "../../tests/helpers/doc-store-contract";
+import {
+  createLibraryContractFactory,
+  type LibraryTransport,
+  type StorageCall,
+} from "../../tests/helpers/library-index-harness";
+import { describeLibraryIndexContract } from "../../tests/unit/platform/document-index-contract";
 import { StorageClient } from "../storage/client";
 import { openNodeSqlite } from "../storage/drivers/node-sqlite";
 import { Library } from "../storage/engine/library";
@@ -137,7 +148,92 @@ async function contract() {
     }
   }
   say(`CONTRACT ${passed} passed, ${failed} failed`);
-  if (failed > 0) fail(`${failed} contract case(s) failed`);
+  const library = await libraryContract();
+  if (failed > 0 || library > 0)
+    fail(`${failed + library} contract case(s) failed`);
+}
+
+/** A transport to a worker on `dir`, started on first use. */
+function workerTransport(dir: string): LibraryTransport {
+  const listeners: ((rev: number, changes: unknown[]) => void)[] = [];
+  const started = StorageClient.start(
+    workerPath(),
+    { dir, strictClock: true },
+    {
+      onIndexChanged: (rev, changes) => {
+        for (const listener of listeners) listener(rev, changes);
+      },
+    },
+  );
+  // A failed start rejects every call instead.
+  started.catch(() => {});
+  let closed = false;
+  return {
+    call: (async (op, callArgs) =>
+      (await started).call(op, copied(callArgs))) as StorageCall,
+    onIndexChanged: (listener) => listeners.push(listener),
+    async close() {
+      if (closed) return;
+      closed = true;
+      const client = await started.catch(() => null);
+      await client?.shutdown();
+    },
+  };
+}
+
+/**
+ * P2.7b's `LibraryIndex` contract (P2.6e) through `RpcLibraryIndex` over the
+ * real worker on `node:sqlite`: each case seeds a temp library on this
+ * thread, shuts it down, and starts a worker on it. Returns the failures.
+ */
+async function libraryContract(): Promise<number> {
+  const cleanups: (() => Promise<void>)[] = [];
+  describeLibraryIndexContract(
+    "RpcLibraryIndex on the storage worker (node:sqlite)",
+    createLibraryContractFactory({
+      tempDir() {
+        const libraryDir = mkdtempSync(path.join(tmpdir(), "library-"));
+        return {
+          dir: libraryDir,
+          remove: () =>
+            rmSync(libraryDir, {
+              recursive: true,
+              force: true,
+              maxRetries: 10,
+              retryDelay: 200,
+            }),
+        };
+      },
+      open: (libraryDir, now) =>
+        Library.open({
+          dir: libraryDir,
+          host: createNodeHost({ now }),
+          openSqlite: openNodeSqlite,
+          fullfsync: false,
+        }),
+      attach(libraryDir, seeded) {
+        seeded?.shutdown();
+        return workerTransport(libraryDir);
+      },
+      track: (cleanup) => cleanups.push(cleanup),
+    }),
+  );
+  let passed = 0;
+  let failed = 0;
+  for (const testCase of takeCases()) {
+    try {
+      await testCase.run();
+      passed += 1;
+      say(`LIBRARY_CASE_OK ${testCase.name}`);
+    } catch (error) {
+      failed += 1;
+      say(`LIBRARY_CASE_FAIL ${testCase.name}: ${String(error)}`);
+    } finally {
+      for (const cleanup of cleanups.splice(0)) await cleanup().catch(() => {});
+    }
+  }
+  say(`LIBRARY_CONTRACT ${passed} passed, ${failed} failed`);
+  return failed;
 }
 
 async function churn() {
@@ -485,6 +581,147 @@ async function startup() {
   await client.shutdown();
 }
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN;
+}
+
+async function timed<T>(run: () => T | Promise<T>): Promise<[T, number]> {
+  const t0 = performance.now();
+  const value = await run();
+  return [value, performance.now() - t0];
+}
+
+/** Derived rows for `t21`: `links` links to `targets`, `headings` headings. */
+function derivedRows(
+  targets: string[],
+  links: number,
+  headings: number,
+  salt: number,
+) {
+  return {
+    title: `Busy ${salt}`,
+    snippet: `Body ${salt}`,
+    links: Array.from({ length: links }, (_, ord) => ({
+      ord,
+      src_toc_id: `h${ord % headings}`,
+      target_key: targets[(ord + salt) % targets.length] as string,
+      target_toc_id: "",
+      text: `link ${ord} ${salt}`,
+      context: `context for link ${ord}`,
+    })),
+    headings: Array.from({ length: headings }, (_, ord) => ({
+      ord,
+      toc_id: `h${ord}`,
+      level: 1 + (ord % 3),
+      text: `Heading ${ord} ${salt}`,
+    })),
+  };
+}
+
+/**
+ * T21 (offline revision §5.3) on a seeded `library-10k-linked`: the
+ * sidebar's SQL time on `node:sqlite` (this thread, the worker's driver
+ * and engine), its round trip through the real worker, backlinks for one
+ * document queued behind a `putDerived` on another, and `searchTitles`.
+ * Args: `--dir`, `--link-key` (the watched document's), `--busy` (the id
+ * whose rows are rewritten), `--targets` (comma-separated link keys).
+ */
+async function t21() {
+  const linkKey = args["link-key"] ?? fail("--link-key is required");
+  const busy = args.busy ?? fail("--busy is required");
+  const targets = (args.targets ?? fail("--targets is required")).split(",");
+  const queries = ["pro", "plan", "note", "q", "zeb"];
+  const rounds = Number(args.rounds ?? 30);
+
+  const library = Library.open({
+    dir: dir(),
+    host: createNodeHost(),
+    openSqlite: openNodeSqlite,
+    fullfsync: false,
+  });
+  const sqlSidebar: number[] = [];
+  let docs = 0;
+  for (let i = 0; i < 6; i += 1) {
+    const [sidebar, ms] = await timed(() => library.sidebar());
+    docs = sidebar.docs.length;
+    if (i > 0) sqlSidebar.push(ms);
+  }
+  const sqlSearch: number[] = [];
+  for (const query of queries)
+    sqlSearch.push((await timed(() => library.searchTitles(query)))[1]);
+  const sqlBacklinks: number[] = [];
+  for (let i = 0; i < 10; i += 1)
+    sqlBacklinks.push((await timed(() => library.backlinks(linkKey)))[1]);
+  library.shutdown();
+
+  const client = await StorageClient.start(workerPath(), { dir: dir() });
+  const ipcSidebar: number[] = [];
+  for (let i = 0; i < 6; i += 1)
+    ipcSidebar.push((await timed(() => client.call("sidebar", {})))[1]);
+  const ipcSearch: number[] = [];
+  let hits = 0;
+  for (const query of queries) {
+    const [found, ms] = await timed(() =>
+      client.call("searchTitles", { query }),
+    );
+    hits += found.length;
+    ipcSearch.push(ms);
+  }
+  const alone: number[] = [];
+  for (let i = 0; i < 10; i += 1)
+    alone.push((await timed(() => client.call("backlinks", { linkKey })))[1]);
+  // Backlinks sent right behind a putDerived: the worker answers in order,
+  // so the round trip includes the rest of that transaction.
+  const behind: number[] = [];
+  const derive: number[] = [];
+  let backlinkRows = 0;
+  for (let i = 0; i < rounds; i += 1) {
+    const t0 = performance.now();
+    const put = client
+      .call("putDerived", {
+        docId: busy,
+        atSeq: 0,
+        rows: derivedRows(targets, 50, 20, i + 1),
+      })
+      .then((result) => {
+        derive.push(performance.now() - t0);
+        return result;
+      });
+    const t1 = performance.now();
+    const rows = await client.call("backlinks", { linkKey });
+    behind.push(performance.now() - t1);
+    backlinkRows = rows.length;
+    const result = await put;
+    if (result !== "ok") fail(`putDerived answered ${result}`);
+  }
+  await client.shutdown();
+  say(
+    `T21 ${JSON.stringify({
+      docs,
+      sidebar: {
+        sqlMs: median(sqlSidebar),
+        ipcFirstMs: ipcSidebar[0],
+        ipcMs: median(ipcSidebar.slice(1)),
+      },
+      searchTitles: {
+        sqlMaxMs: Math.max(...sqlSearch),
+        ipcMs: median(ipcSearch),
+        ipcMaxMs: Math.max(...ipcSearch),
+        hits,
+      },
+      backlinks: {
+        rows: backlinkRows,
+        sqlMs: median(sqlBacklinks),
+        aloneMs: median(alone),
+        behindPutMs: median(behind),
+        behindPutMaxMs: Math.max(...behind),
+        putDerivedMs: median(derive),
+      },
+    })}`,
+  );
+}
+
 const MODES: Record<string, () => Promise<void>> = {
   contract,
   churn,
@@ -496,6 +733,7 @@ const MODES: Record<string, () => Promise<void>> = {
   "migrate-v2": migrateV2,
   "long-doc": longDoc,
   "copy-time": copyTime,
+  t21,
 };
 
 app.whenReady().then(async () => {
