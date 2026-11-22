@@ -99,4 +99,12 @@ test("a link off the allowlist from Yjs has no href and never opens", async ({
   await expect
     .poll(() => page.evaluate(() => window.__opened?.[0]?.[0]))
     .toBe("https://example.com/");
+
+  // A plain click opens the preview, which shows the href as text only:
+  // nothing on the page links to it.
+  await page.keyboard.press("Escape");
+  await evil.click();
+  await expect(page.getByText("ms-msdt:/id x")).toBeVisible();
+  await expect(page.locator('a[href*="ms-msdt"]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__opened)).toHaveLength(1);
 });
