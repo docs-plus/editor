@@ -20,6 +20,7 @@ import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 
 import { focusRovingItem, Toolbar } from "@/components/ui/toolbar";
+import { markdownTextParser } from "@/extensions/markdown-paste";
 import type { HeadingFilterCallbackState } from "@/extensions/heading-filter";
 import "@docs.plus/extension-hyperlink/styles.css";
 import "@docs.plus/extension-hypermultimedia/styles.css";
@@ -163,6 +164,8 @@ const EDITOR_PROPS = {
   // getters: the object's identity never changes, so no `setOptions`).
   scrollMargin: SCROLL_CLEARANCE,
   scrollThreshold: SCROLL_CLEARANCE,
+  // Markdown paste (E2): the rule itself is a lazy chunk.
+  clipboardTextParser: markdownTextParser,
 };
 
 function DocumentEditorContent({

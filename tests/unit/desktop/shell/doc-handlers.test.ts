@@ -208,6 +208,34 @@ describe("doc-handlers", () => {
     expect(calls).toEqual([{ op: "createDoc", args: { title: "Notes" } }]);
   });
 
+  test("shell.openLink answers whether main opened it (N2)", async () => {
+    const opened: Array<[number, string]> = [];
+    const { handlers } = createDocHandlers({
+      registry: new OpenDocRegistry(),
+      call: (async () => null) as StorageCall,
+      focusWindow: () => {},
+      windowDoc: () => null,
+      openLink: (windowId, url) => {
+        opened.push([windowId, url]);
+        return url.startsWith("https:");
+      },
+    });
+    expect(
+      await handlers["shell.openLink"](A, { url: "https://example.com/" }),
+    ).toEqual({ ok: true, value: { opened: true } });
+    expect(
+      await handlers["shell.openLink"](A, { url: "http://example.com/" }),
+    ).toEqual({ ok: true, value: { opened: false } });
+    expect((await handlers["shell.openLink"](A, { url: 3 })).ok).toBe(false);
+    expect(
+      (await handlers["shell.openLink"](A, { url: "x".repeat(5000) })).ok,
+    ).toBe(false);
+    expect(opened).toEqual([
+      [A, "https://example.com/"],
+      [A, "http://example.com/"],
+    ]);
+  });
+
   test("app.flushed reaches the coordinator", async () => {
     const { handlers, flushed } = setup();
     await handlers["app.flushed"](A, { requestId: 3 });
