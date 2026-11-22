@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
 import { Editor, type JSONContent } from "@tiptap/core";
-import type { Slice } from "@tiptap/pm/model";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import type { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
 import { buildDocumentEditorExtensions } from "@/components/document-editor/document-editor-config";
 import { markdownPasteSlice } from "@/lib/markdown/parse";
+
+const MODEL = { Fragment, Slice };
 
 /**
  * The Markdown paste rule (details spec E2) against the editor's real
@@ -60,7 +62,7 @@ const parser = () => {
 
 /** The pasted blocks, as JSON, or null when the rule leaves it as text. */
 function slice(text: string): JSONContent[] | null {
-  const result = markdownPasteSlice(parser(), editor.schema, text);
+  const result = markdownPasteSlice(parser(), editor.schema, text, MODEL);
   return result ? (result.content.toJSON() as JSONContent[]) : null;
 }
 
@@ -227,7 +229,7 @@ describe("Markdown paste through ProseMirror's paste pipeline", () => {
           // Typed as never null, but ProseMirror falls back to its plain
           // text parse when it is.
           clipboardTextParser: (text) =>
-            markdownPasteSlice(parser(), editor.schema, text) as Slice,
+            markdownPasteSlice(parser(), editor.schema, text, MODEL) as Slice,
         },
       }),
     );

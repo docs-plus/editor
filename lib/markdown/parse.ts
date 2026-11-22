@@ -3,10 +3,22 @@
  * P2.12) and the import engine (IM1) share it. Pure: no DOM, no editor,
  * no schema of its own. The caller passes the parser (the editor's
  * `editor.markdown`, or a headless `MarkdownManager` built from the
- * headless schema's extensions) and the schema to check against.
+ * headless schema's extensions), the schema to check against and the
+ * ProseMirror model classes (`MarkdownModel`).
  */
 import type { JSONContent } from "@tiptap/core";
-import { Fragment, type Schema, Slice } from "@tiptap/pm/model";
+import type { Fragment, Schema, Slice } from "@tiptap/pm/model";
+
+/**
+ * `Fragment` and `Slice` from `@tiptap/pm/model`, passed in rather than
+ * imported: the paste rule is a lazy chunk of the editor, and a lazy chunk
+ * that imports a module the editor's chunk group also loads splits that
+ * group (about +1 KB gz, measured). Headless callers pass the same two.
+ */
+export interface MarkdownModel {
+  Fragment: typeof Fragment;
+  Slice: typeof Slice;
+}
 
 /** `editor.markdown`, or `new MarkdownManager({ extensions })` headless. */
 export interface MarkdownParser {
@@ -109,8 +121,12 @@ function withoutEmptyLinks(content: JSONContent): JSONContent {
 }
 
 /** The blocks of `json` as a fragment of `schema`, each one checked. */
-function checkedFragment(schema: Schema, json: JSONContent): Fragment {
-  const fragment = Fragment.fromJSON(schema, json.content ?? []);
+function checkedFragment(
+  schema: Schema,
+  json: JSONContent,
+  model: MarkdownModel,
+): Fragment {
+  const fragment = model.Fragment.fromJSON(schema, json.content ?? []);
   fragment.forEach((node) => {
     node.check();
   });
@@ -126,8 +142,13 @@ export function parseMarkdownFragment(
   parser: MarkdownParser,
   schema: Schema,
   markdown: string,
+  model: MarkdownModel,
 ): Fragment {
-  return checkedFragment(schema, withoutEmptyLinks(parser.parse(markdown)));
+  return checkedFragment(
+    schema,
+    withoutEmptyLinks(parser.parse(markdown)),
+    model,
+  );
 }
 
 /**
@@ -160,6 +181,7 @@ export function markdownPasteSlice(
   parser: MarkdownPasteParser,
   schema: Schema,
   text: string,
+  model: MarkdownModel,
 ): Slice | null {
   if (text.length > MARKDOWN_PASTE_MAX_CHARS) return null;
   if (!hasMarkdownSyntax(text)) return null;
@@ -168,9 +190,9 @@ export function markdownPasteSlice(
     if (hasHtmlBlock(parser.instance.lexer(text))) return null;
     const json = withoutEmptyLinks(parser.parse(text));
     if (!hasMarkdownFormatting(json)) return null;
-    fragment = checkedFragment(schema, json);
+    fragment = checkedFragment(schema, json, model);
   } catch {
     return null;
   }
-  return fragment.size > 0 ? Slice.maxOpen(fragment) : null;
+  return fragment.size > 0 ? model.Slice.maxOpen(fragment) : null;
 }

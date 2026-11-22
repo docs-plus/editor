@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { Editor, Extension, JSONContent } from "@tiptap/core";
 import { Markdown } from "@tiptap/markdown";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { Marked, type marked } from "marked";
 
@@ -12,6 +13,10 @@ import {
   markdownPasteSlice,
   parseMarkdownFragment,
 } from "@/lib/markdown/parse";
+
+/** What the rule builds slices with (injected, see `MarkdownModel`). */
+const MODEL = { Fragment, Slice };
+
 import {
   createTestEditor,
   DEFAULT_EXTENSIONS,
@@ -75,7 +80,7 @@ function bodyMarkdown(): string {
 
 /** Pastes `slice` at the caret in the (empty) body paragraph. */
 function pasteIntoBody(text: string): boolean {
-  const slice = markdownPasteSlice(parser(), editor.schema, text);
+  const slice = markdownPasteSlice(parser(), editor.schema, text, MODEL);
   if (!slice) return false;
   const end = editor.state.doc.content.size - 1;
   editor.view.dispatch(
@@ -208,22 +213,28 @@ describe("markdownPasteSlice (details spec E2)", () => {
 
   it("returns null for plain text, so the editor pastes it as before", () => {
     expect(
-      markdownPasteSlice(parser(), editor.schema, "Just text."),
+      markdownPasteSlice(parser(), editor.schema, "Just text.", MODEL),
     ).toBeNull();
     expect(
-      markdownPasteSlice(parser(), editor.schema, "one\n\ntwo paragraphs"),
+      markdownPasteSlice(
+        parser(),
+        editor.schema,
+        "one\n\ntwo paragraphs",
+        MODEL,
+      ),
     ).toBeNull();
   });
 
   it("returns null for a bare URL (the link and embed paste rules own it)", () => {
     expect(
-      markdownPasteSlice(parser(), editor.schema, "https://example.com"),
+      markdownPasteSlice(parser(), editor.schema, "https://example.com", MODEL),
     ).toBeNull();
     expect(
       markdownPasteSlice(
         parser(),
         editor.schema,
         "https://www.youtube.com/watch?v=abc_def",
+        MODEL,
       ),
     ).toBeNull();
   });
@@ -236,7 +247,9 @@ describe("markdownPasteSlice (details spec E2)", () => {
       }),
       instance: parser().instance,
     };
-    expect(markdownPasteSlice(broken, editor.schema, "**x**")).toBeNull();
+    expect(
+      markdownPasteSlice(broken, editor.schema, "**x**", MODEL),
+    ).toBeNull();
   });
 
   it(`returns null over ${MARKDOWN_PASTE_MAX_CHARS} characters, without parsing`, () => {
@@ -250,7 +263,7 @@ describe("markdownPasteSlice (details spec E2)", () => {
     };
     const long = "**bold** ".repeat(MARKDOWN_PASTE_MAX_CHARS / 9 + 1);
     expect(long.length).toBeGreaterThan(MARKDOWN_PASTE_MAX_CHARS);
-    expect(markdownPasteSlice(counting, editor.schema, long)).toBeNull();
+    expect(markdownPasteSlice(counting, editor.schema, long, MODEL)).toBeNull();
     expect(parsed).toBe(false);
   });
 });
@@ -271,7 +284,12 @@ describe("hasMarkdownSyntax on long single lines", () => {
 
 describe("parseMarkdownFragment (shared with IM1)", () => {
   it("returns schema-checked blocks", () => {
-    const fragment = parseMarkdownFragment(parser(), editor.schema, SAMPLE);
+    const fragment = parseMarkdownFragment(
+      parser(),
+      editor.schema,
+      SAMPLE,
+      MODEL,
+    );
     const types: string[] = [];
     fragment.forEach((node) => {
       types.push(node.type.name);
@@ -296,6 +314,8 @@ describe("parseMarkdownFragment (shared with IM1)", () => {
         content: [{ type: "paragraph", content: [{ type: "heading" }] }],
       }),
     };
-    expect(() => parseMarkdownFragment(broken, editor.schema, "x")).toThrow();
+    expect(() =>
+      parseMarkdownFragment(broken, editor.schema, "x", MODEL),
+    ).toThrow();
   });
 });

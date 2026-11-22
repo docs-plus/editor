@@ -199,6 +199,7 @@ describe("editor chunk boundary (P2.12)", () => {
   it("lib/markdown/parse.ts loads no DOM, React or editor code (IM1's worker)", () => {
     const { files, packages } = staticImports("lib/markdown/parse.ts");
     expect([...files]).toEqual(["lib/markdown/parse.ts"]);
-    expect([...packages].sort()).toEqual(["@tiptap/pm/model"]);
+    // Type-only: the model classes are passed in (`MarkdownModel`).
+    expect([...packages]).toEqual([]);
   });
 });
