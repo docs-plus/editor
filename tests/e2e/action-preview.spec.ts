@@ -6,6 +6,7 @@
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { PREVIEW_DWELL_MS } from "@/components/smart-toolbar/color/swatch-preview";
 import { HIGHLIGHT_PALETTE, TEXT_COLOR_PALETTE } from "@/lib/text-style-tokens";
 
 import { resolveRgb, setTheme } from "./helpers/a11y";
@@ -434,6 +435,16 @@ test.describe("hover preview", () => {
           await expect(button).toHaveAttribute("aria-pressed", "true");
           await dialog.locator(".st-color-row-label").first().hover();
           await expect(previews(page)).toHaveCount(0);
+          // Leaving the swatch scheduled its preview's clear for after the
+          // dwell (`preview.leave`); applying had already removed the
+          // preview, so the count above passes before that clear runs. Let
+          // it run first, or it erases the render drawn below mid-capture
+          // (about 40% of runs). A page timer of the same delay, set after
+          // it, fires after it: timers run in deadline order.
+          await page.evaluate(
+            (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            PREVIEW_DWELL_MS,
+          );
           // The applied result under the same wrapper the preview used (it
           // inherits every colour and only drops the blurred selection's
           // tint, skipping the same inline code), so the two renders differ

@@ -20,5 +20,7 @@ describeLibraryIndexContract("MemoryDocumentIndex", (options) => {
     index,
     load: () => index.load(),
     purge: () => index.purgeTrash(),
+    settle: async () => {},
+    reopen: () => index.reopen(),
   };
 });
