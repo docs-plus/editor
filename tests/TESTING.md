@@ -530,10 +530,14 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   adjacent files leaves its tests at the same positions, so in the same shard
   (simulated with real per-test times: shard totals unchanged at 796, 940 and
   940 s). Renaming files to move them is a per-shard list that drifts as tests
-  are added, and `PWTEST_SHARD_WEIGHTS` is internal and undocumented. The
-  structural gap is about 50 s of wall time; larger gaps come from runner
-  speed (one 2.2 min gap had every test in the shard about 33% slower, no
-  retries). Balance is judged on the median of several runs.
+  are added, and `PWTEST_SHARD_WEIGHTS` is internal and undocumented. Two
+  things set shard times (A/B on #155, six runs): the runner's CPU (the same
+  shard took 4.3 min on an Intel Xeon 6975P and 6.1 min on an AMD EPYC 7763;
+  each job logs its CPU before the browser suites), and shard 2's range,
+  which holds the slow-per-test specs (palette, selection-bubble,
+  paint-format, slash-menu, outline-overlay) and runs about 1.5–2.5 min
+  longer than the others on any CPU. Balance is judged on the median of
+  several runs.
 - **Parallel unit tests (shadow):** after the serial `Unit tests` gate, the
   checks job runs the same files with `bun test --parallel` (`continue-on-error`)
   and `scripts/compare-unit-runs.ts` compares the two JUnit reports file by
