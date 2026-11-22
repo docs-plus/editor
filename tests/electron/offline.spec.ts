@@ -22,13 +22,20 @@ const EDITOR = '.tiptap[contenteditable="true"]';
 const RESULTS = join(ROOT, "test-results-electron");
 
 /**
- * Hosts allowed to appear, each with its reason. Keep this list short.
- * - `wpad`: Windows' proxy auto-detect DNS lookup. Chromium makes it on
- *   every Windows start whatever the app does (spike S1, every Windows
- *   net-log); it is a lookup, never a connection.
+ * Hosts allowed to appear, each with its reason. Exact names; keep it short.
+ * - `[2001:4860:4860::8888]` (every OS): Chromium's IPv6 reachability
+ *   probe. The resolver `connect()`s a UDP socket to Google's public DNS
+ *   address to learn whether an IPv6 route exists; a UDP connect sends no
+ *   packet, so nothing leaves the machine (measured on all three runners).
+ * - `wpad` (Windows): the proxy auto-detect DNS lookup Chromium makes on
+ *   every Windows start whatever the app does (spike S1); a lookup, never
+ *   a connection.
  */
+const IPV6_PROBE = "[2001:4860:4860::8888]";
 const ALLOWED: Partial<Record<NodeJS.Platform, string[]>> = {
-  win32: ["wpad"],
+  darwin: [IPV6_PROBE],
+  linux: [IPV6_PROBE],
+  win32: [IPV6_PROBE, "wpad"],
 };
 
 let hocus: Awaited<ReturnType<typeof startHocus>> | null = null;

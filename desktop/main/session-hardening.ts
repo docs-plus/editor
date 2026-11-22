@@ -109,9 +109,11 @@ function hardenWebContents(contents: WebContents): void {
     // links open with `noreferrer`, so the referrer alone can't tell; the
     // focused frame can: a click inside an embed focuses that embed. A
     // referrer from another origin is refused outright.
+    // Unknown provenance is untrusted: no focused frame means no link.
     const focused = contents.focusedFrame;
     const fromTop =
-      (focused === null || isTopAppFrame(focused)) &&
+      focused !== null &&
+      isTopAppFrame(focused) &&
       (!referrer?.url || isAppUrl(referrer.url));
     openExternally(windowId, url, fromTop);
     return { action: "deny" };

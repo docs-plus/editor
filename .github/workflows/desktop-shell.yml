@@ -245,7 +245,7 @@ jobs:
           Write-Output "tinydocy:// handler: $cmd"
           if (-not $cmd) { throw "tinydocy:// is not registered" }
           if (-not $cmd.StartsWith('"' + $env:RELEASE_EXECUTABLE + '"', [StringComparison]::OrdinalIgnoreCase)) { throw "the handler does not run the installed app" }
-          if (-not $cmd.EndsWith('"--" "%1"')) { throw 'the handler must end with "--" "%1"' }
+          if (-not $cmd.EndsWith(' -- "%1"')) { throw 'the handler must end with -- "%1"' }
 
       # No FUSE on the runner: run the AppImage's extracted AppRun, with a
       # fresh default userData so the library check isn't the .deb's.

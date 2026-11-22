@@ -68,8 +68,13 @@ test("a subframe can't send a link to the browser, by window.open or by navigati
   await waitForEvent(app, "navigation_refused");
   await waitForEvent(app, "external_open_refused", (e) => e.reason === "frame");
 
-  // window.open after the user clicked into the subframe: refused too.
-  await page.locator("#probe").click({ position: { x: 20, y: 20 } });
+  // window.open while the subframe has focus (as after a click into an
+  // embed): refused too.
+  await probe.evaluate(() => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+  });
   await expect
     .poll(() =>
       app.evaluate(

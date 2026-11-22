@@ -334,7 +334,7 @@ function start(): void {
     installIpc(handlers, windows);
     const storageReady = storage.start();
     if (app.isPackaged && process.platform === "win32")
-      // `"…\TinyDocy.exe" "--" "%1"`: the link is always last and after
+      // `"…\TinyDocy.exe" -- "%1"`: the link is always last and after
       // `--`, so it can never be read as a switch (SEC-001).
       app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME, process.execPath, [
         "--",
