@@ -1,10 +1,12 @@
 /**
  * The "/" menu's rows (lazy chunk): one more view of the action registry
- * (spec §2), so it adds no command of its own. Pure: the menu passes the
- * snapshot, the registry's actions and the remembered table size.
+ * (spec §2), so it adds no command of its own. The builders are pure:
+ * the menu passes the snapshot, the registry's actions, the remembered
+ * table size and the recent insert kinds; only `recentInsertKinds()` reads
+ * the memory layer (local storage).
  *
- * Import rule: types, the registry gate and icons only. Never
- * `components/**` or the palette (its first Alt+/ has no room, A7).
+ * Import rule: types, the registry gate, the memory layer and icons only.
+ * Never `components/**` or the palette (its first Alt+/ has no room, A7).
  */
 import { availability } from "@/lib/editor-actions/registry";
 import type {
