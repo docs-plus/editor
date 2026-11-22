@@ -1447,6 +1447,48 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
     });
   }
 
+  test("turn into Heading 2 from an item's second paragraph keeps its first in the list", async ({
+    page,
+  }) => {
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                paragraph(text("Intro line")),
+                paragraph(text("Second line")),
+              ],
+            },
+            { type: "listItem", content: [paragraph(text("Beta line"))] },
+          ],
+        },
+      ],
+    });
+    await turnInto(page, "Second line", "Heading 2");
+    const shape = () =>
+      page.evaluate(() => {
+        const out: string[] = [];
+        window.__tiptap_editor?.state.doc.forEach((node) => {
+          if (node.content.size > 0)
+            out.push(`${node.type.name}:${node.textContent}`);
+        });
+        return out;
+      });
+    await expect
+      .poll(shape)
+      .toEqual([
+        "heading:Title",
+        "bulletList:Intro line",
+        "heading:Second line",
+        "bulletList:Beta line",
+      ]);
+  });
+
   test("select all then Turn into converts all but the title, and says so", async ({
     page,
   }) => {

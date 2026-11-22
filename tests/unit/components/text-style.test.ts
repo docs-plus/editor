@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
 
+import { turnInto } from "@/components/smart-toolbar/row/turn-into-run";
 import { toggleList } from "@/components/tiptap-ui/list-button";
 import {
   getListValue,
@@ -274,6 +276,195 @@ describe("text style", () => {
     editor.commands.setTextSelection(2);
     expect(setTextStyle(editor, "paragraph")).toBe(false);
     expect(getTextStyleValue(editor)).toBe("title");
+  });
+});
+
+describe("a block after the first in a list item (spec §7.2)", () => {
+  /** The document as nested `type[children]` and `type:text`, items kept. */
+  const tree = () => {
+    const show = (node: PMNode): string => {
+      const kind =
+        node.type.name === "heading" ? `h${node.attrs.level}` : node.type.name;
+      if (node.isTextblock) return `${kind}:${node.textContent}`;
+      const inner: string[] = [];
+      node.forEach((child) => {
+        inner.push(show(child));
+      });
+      return `${kind}[${inner.join(",")}]`;
+    };
+    const out: string[] = [];
+    editor.state.doc.forEach((node) => {
+      out.push(show(node));
+    });
+    // The trailing-node plugin's empty paragraph is not part of the shape.
+    if (out.at(-1) === "paragraph:") out.pop();
+    return out;
+  };
+
+  const turnIntoQuote = () => {
+    const quote = editorActions.get("insert.quote");
+    if (!quote) throw new Error("missing insert.quote");
+    return turnInto(editor as never, quote);
+  };
+
+  for (const [list, item, names] of [
+    [bulletList, listItem, ["bulletList", "listItem"]],
+    [orderedList, listItem, ["orderedList", "listItem"]],
+    [taskList, taskItem, ["taskList", "taskItem"]],
+  ] as const) {
+    const [listName, itemName] = names;
+    it(`turns an item's second paragraph into Heading 2; the first stays a list (${listName})`, () => {
+      editor = createTestEditor({
+        content: doc(
+          h1("Title"),
+          list(item(p("Intro"), p("Second")), item(p("Beta"))),
+        ).toJSON(),
+      });
+      editor.commands.setTextSelection(posInside(editor, "Second"));
+      expect(setTextStyle(editor, "heading-2")).toBe(true);
+      expect(tree()).toEqual([
+        "h1:Title",
+        `${listName}[${itemName}[paragraph:Intro]]`,
+        "h2:Second",
+        `${listName}[${itemName}[paragraph:Beta]]`,
+      ]);
+      // One undo step restores the original.
+      editor.commands.undo();
+      expect(tree()).toEqual([
+        "h1:Title",
+        `${listName}[${itemName}[paragraph:Intro,paragraph:Second],${itemName}[paragraph:Beta]]`,
+      ]);
+    });
+  }
+
+  it("keeps a checked task item's first paragraph checked", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        taskList(
+          taskItem({ checked: true }, p("Intro"), p("Second"), p("Tail")),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Second"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "taskList[taskItem[paragraph:Intro]]",
+      "h2:Second",
+      "taskList[taskItem[paragraph:Tail]]",
+    ]);
+    const checked: boolean[] = [];
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "taskItem") checked.push(node.attrs.checked);
+    });
+    expect(checked).toEqual([true, true]);
+  });
+
+  it("keeps the item's later paragraphs in the list, after the heading", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(listItem(p("Intro"), p("Second"), p("Third"))),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Second"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Intro]]",
+      "h2:Second",
+      "bulletList[listItem[paragraph:Third]]",
+    ]);
+  });
+
+  it("turns a quote line in an item into Heading 2; the item's first paragraph stays", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(p("Intro"), blockquote(p("Quoted"))),
+          listItem(p("Beta")),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Quoted"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Intro]]",
+      "h2:Quoted",
+      "bulletList[listItem[paragraph:Beta]]",
+    ]);
+  });
+
+  it("Turn into Quote on an item's second paragraph quotes only that paragraph", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(listItem(p("Intro"), p("Second")), listItem(p("Beta"))),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Second"));
+    expect(turnIntoQuote()).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Intro]]",
+      "blockquote[paragraph:Second]",
+      "bulletList[listItem[paragraph:Beta]]",
+    ]);
+  });
+
+  it("turns a range over the second paragraph and the next item into headings", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(p("Intro"), p("Second")),
+          listItem(p("Beta")),
+          listItem(p("Gamma")),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection({
+      from: posInside(editor, "Second"),
+      to: posInside(editor, "Beta") + 2,
+    });
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Intro]]",
+      "h2:Second",
+      "h2:Beta",
+      "bulletList[listItem[paragraph:Gamma]]",
+    ]);
+    editor.commands.undo();
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Intro,paragraph:Second],listItem[paragraph:Beta],listItem[paragraph:Gamma]]",
+    ]);
+  });
+
+  it("lifts a nested item's second paragraph; its parent and siblings stay lists", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(
+            p("Parent"),
+            bulletList(listItem(p("Intro"), p("Second")), listItem(p("Next"))),
+          ),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Second"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(tree()).toEqual([
+      "h1:Title",
+      "bulletList[listItem[paragraph:Parent,bulletList[listItem[paragraph:Intro]]]]",
+      "h2:Second",
+      "bulletList[listItem[paragraph:Next]]",
+    ]);
   });
 });
 

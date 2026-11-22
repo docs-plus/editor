@@ -7,7 +7,7 @@ import {
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
-import { liftTarget } from "@tiptap/pm/transform";
+import { canSplit, liftTarget } from "@tiptap/pm/transform";
 
 import {
   setStyleLift,
@@ -73,13 +73,40 @@ function runAt(tr: Transaction, command: Command, pos: number): boolean {
   return stepped;
 }
 
+/**
+ * Gives the textblock at `pos` a list item of its own, so lifting the item
+ * moves only it: the item's later blocks start a new item (keeping its
+ * attrs) and its earlier ones stay in the old one. A nested list after the
+ * block stays with it (its sub-items follow as a list). The block's new
+ * position, or null when the item cannot split there.
+ */
+function isolateInItem(tr: Transaction, pos: number): number | null {
+  const $pos = tr.doc.resolve(pos);
+  const item = $pos.parent;
+  const first = $pos.index() === 0;
+  // The lifted half leaves the list, so it starts unchecked.
+  const attrs =
+    item.type.name === "taskItem"
+      ? { ...item.attrs, checked: false }
+      : item.attrs;
+  const types = [{ type: item.type, attrs }];
+  if (!first && !canSplit(tr.doc, pos, 1, types)) return null;
+  // The later blocks first, so `pos` stays put.
+  const end = pos + ($pos.nodeAfter?.nodeSize ?? 0);
+  if (end < $pos.end() && canSplit(tr.doc, end)) tr.split(end);
+  if (first) return pos;
+  tr.split(pos, 1, types);
+  return pos + 2;
+}
+
 /** One level out: a list item as `liftListItem` does it, a quote line by its range. */
 function liftOnce(tr: Transaction, pos: number): boolean {
   const $pos = tr.doc.resolve(pos);
   const wrapper = $pos.parent.type;
   if (wrapper.name !== "blockquote") {
+    const at = isolateInItem(tr, pos);
     // Its sub-items follow as a list; later siblings become its children.
-    return runAt(tr, liftListItem(wrapper), pos + 1);
+    return at !== null && runAt(tr, liftListItem(wrapper), at + 1);
   }
   const range = $pos.blockRange(
     tr.doc.resolve(pos + ($pos.nodeAfter?.nodeSize ?? 0)),
