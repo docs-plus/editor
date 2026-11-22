@@ -12,9 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "include": [
-    "desktop/storage/**/*.ts",
-    "desktop/main/**/*.ts",
-    "desktop/build/**/*.ts"
-  ]
+  "include": ["desktop/storage/**/*.ts", "desktop/main/**/*.ts"]
 }

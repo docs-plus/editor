@@ -4,9 +4,9 @@ import { getHocuspocusWsUrl } from "@/lib/hocuspocus";
 import { CLIENT_BUILD, withClientVersion } from "@/lib/schema-version";
 
 describe("withClientVersion", () => {
-  it("adds schema=2 and build without touching host or path", () => {
+  it("adds schema=3 and build without touching host or path", () => {
     const url = new URL(withClientVersion("wss://ws.example/collab?x=1"));
-    expect(url.searchParams.get("schema")).toBe("2");
+    expect(url.searchParams.get("schema")).toBe("3");
     expect(url.searchParams.get("build")).toBe(CLIENT_BUILD);
     expect(url.searchParams.get("x")).toBe("1");
     expect(url.host).toBe("ws.example");

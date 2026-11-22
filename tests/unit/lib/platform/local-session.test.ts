@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import * as Y from "yjs";
 
+import { COMMENT_ORIGIN, COMMENTS_ROOT } from "@/lib/comments/model";
 import { BATCH_IDLE_MS } from "@/lib/platform/batcher";
 import { MIGRATION_ORIGIN, STORAGE_ORIGIN } from "@/lib/platform/doc-session";
 import type {
@@ -156,6 +157,34 @@ describe("local-session open", () => {
     await clock.advance(BATCH_IDLE_MS);
     expect(store.appends).toHaveLength(1);
     expect(store.appends[0]).toMatchObject({ origin: "local", title: "hello" });
+  });
+
+  it("stores comment writes, so comment roots count in size_bytes (I9)", async () => {
+    // Comments live in the document's own Y.Doc (comments design §4.1)
+    // and write with their own origin; nothing may filter that origin out
+    // (offline data-model revision, P4.9 row).
+    const { session, store } = makeSession();
+    const handle = session.open(DOC);
+    await settle();
+    handle.doc.getText("t").insert(0, "hello");
+    await clock.advance(BATCH_IDLE_MS);
+    const before = store.appends.reduce((n, r) => n + r.update.byteLength, 0);
+    handle.doc.transact(() => {
+      handle.doc.getMap(COMMENTS_ROOT).set(`t:${"A".repeat(22)}`, {
+        v: 1,
+        q: "hello",
+        c: 0,
+        au: { id: "B".repeat(22), n: "Calm Otter", k: "#64B5F6" },
+      });
+    }, COMMENT_ORIGIN);
+    await clock.advance(BATCH_IDLE_MS);
+    expect(store.appends).toHaveLength(2);
+    expect(store.appends[1]?.origin).toBe("local");
+    const stored = store.appends.reduce((n, r) => n + r.update.byteLength, 0);
+    expect(stored - before).toBeGreaterThan(60);
+    const doc = new Y.Doc();
+    for (const { update } of store.appends) Y.applyUpdate(doc, update);
+    expect(doc.getMap(COMMENTS_ROOT).size).toBe(1);
   });
 
   it("keeps edits made before the content loads", async () => {

@@ -94,6 +94,9 @@ async function startOnce(
     // Env from other test files in this process must not leak into the server.
     HOCUS_MIN_CLIENT_SCHEMA: undefined,
     HOCUS_ALLOWED_ORIGINS: undefined,
+    HOCUS_SHARES: undefined,
+    HOCUS_DELETE_ROUTE: undefined,
+    HOCUS_SHARE_ORIGINS: undefined,
     NODE_ENV: "test",
     HOCUS_HOST: "127.0.0.1",
     HOCUS_PORT: String(port),

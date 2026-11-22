@@ -1,0 +1,163 @@
+@use "sass:map";
+@use "page-scopes" as *;
+
+// The page rules the first paint doesn't need (preferences design §5.4):
+// the document text's font, line spacing and gaps, Full's text cap, a
+// document's own width, reading mode and the motion override. This sheet
+// loads with the editor (`components/prefs/page-text-styles.ts`), which
+// waits for it, so the editor never shows a page without it; the first
+// paint carries only `_page.scss`, and the boot script writes the card's
+// text size and width inline.
+//
+// `classic`'s rules are today's rules, moved here unchanged.
+
+// `lib/prefs/page-metrics.ts` and `_page.scss` hold the same table.
+$measures: (
+  narrow: 30,
+  standard: 33,
+  wide: 46,
+);
+// Full: the card takes the whole main area; text keeps 46 em.
+$full-measure: 10000;
+$full-text-measure: 46;
+
+$spacings: (
+  compact: (
+    leading: 1.45,
+    gap: 0.75em,
+    list-gap: 0.25em,
+    heading-leading: 1.2,
+  ),
+  normal: (
+    leading: 1.6,
+    gap: 1em,
+    list-gap: 0.35em,
+    heading-leading: 1.2,
+  ),
+  relaxed: (
+    leading: 1.8,
+    gap: 1.5em,
+    list-gap: 0.5em,
+    heading-leading: 1.25,
+  ),
+);
+
+@mixin spacing($name) {
+  $values: map.get($spacings, $name);
+  --page-leading: #{map.get($values, leading)};
+  --page-gap: #{map.get($values, gap)};
+  --page-list-gap: #{map.get($values, list-gap)};
+  --page-heading-leading: #{map.get($values, heading-leading)};
+}
+
+/* =====================
+     WIDTH: Full's text cap, and a document's own width on its frame
+     (library hosts). The card's measure for the app-wide width is inline.
+     ===================== */
+:root[data-page-width="full"] {
+  --page-text-cap: calc(#{$full-text-measure} * var(--page-size));
+}
+
+@each $width in (narrow, standard, wide, full) {
+  .page-frame[data-doc-width="#{$width}"] {
+    @if $width == full {
+      --page-measure: #{$full-measure};
+      --page-text-cap: calc(#{$full-text-measure} * var(--page-size));
+    } @else {
+      --page-measure: #{map.get($measures, $width)};
+    }
+  }
+}
+
+// Full never docks the outline, so the skeleton never shows its column.
+:root[data-page-width="full"]:not([data-page-style="classic"]) .skeleton-toc {
+  display: none;
+}
+
+/* =====================
+     VARIABLES: the Default style, then the spacing knob
+     ===================== */
+:root {
+  --page-font: Arial, "Liberation Sans", Arimo, sans-serif;
+  @include spacing(normal);
+}
+
+@each $name, $_ in $spacings {
+  :root[data-spacing="#{$name}"] {
+    @include spacing($name);
+  }
+}
+
+// Today's line heights for list items and headings, and headings in pt
+// (twelfths of 16 px) at any browser text size (a real selector, so it
+// outranks the Default variables on `:root`).
+:root[data-page-style="classic"] {
+  --hd-unit: 16px;
+  --page-leading: 1.15;
+  --page-heading-leading: 1.15;
+}
+
+/* =====================
+     BODY TEXT
+     ===================== */
+#{$classic} .tiptap.ProseMirror {
+  font-family: Arial, sans-serif;
+
+  p:not(:first-child):not(td p):not(th p) {
+    font-size: 15px;
+    line-height: 1.15;
+    font-weight: normal;
+    margin-top: 12px;
+  }
+}
+
+// Every paragraph, in lists, cells and blockquotes too, at one size.
+#{$paged} .tiptap.ProseMirror {
+  font-family: var(--page-font);
+  font-size: var(--page-size);
+
+  p {
+    line-height: var(--page-leading);
+    font-weight: normal;
+  }
+
+  // Cells keep their own tight spacing (`table-node.scss`), as before.
+  p:not(:first-child):not(td p):not(th p) {
+    margin-top: var(--page-gap);
+  }
+
+  li + li {
+    margin-top: var(--page-list-gap);
+  }
+
+  // Full width: tables, media, diagrams and code use the whole card; text
+  // keeps a readable line.
+  > :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-inline-size: var(--page-text-cap, none);
+  }
+}
+
+// Reading mode: no toolbar row and no phone bar; the editor is read-only.
+:root[data-reading]
+  [data-slot="toolbar"]:is([data-variant="fixed"], [data-variant="docked"]) {
+  display: none;
+}
+
+/* =====================
+     REDUCED MOTION (web override)
+     The OS setting already matches each rule's own
+     `prefers-reduced-motion` query (and Tailwind's `motion-reduce:`).
+     "Always" stops every animation and transition at once, so it needs no
+     twin of each of those rules; it loads with the editor, before any menu,
+     popover or the palette can open.
+     ===================== */
+:root[data-motion="reduce"] {
+  scroll-behavior: auto;
+
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

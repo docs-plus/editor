@@ -66,6 +66,7 @@ const SERVER_ENTRIES = [
 const PLATFORM_ENTRIES = [
   "lib/platform/local-session.ts",
   "lib/platform/memory-doc-store.ts",
+  "lib/platform/memory-blob-store.ts",
   "lib/platform/web/library/idb-doc-store.ts",
   "lib/platform/web/library/storage-health.ts",
   "lib/platform/web/library/library-flag.ts",
@@ -230,12 +231,120 @@ describe("editor import boundaries", () => {
   }
 });
 
+// The lazy comments chunk shares no module with the editor chunk (a shared
+// one splits the editor group, contract A16): it reaches the editor's
+// Yjs, y-tiptap and ProseMirror code only through `CommentsDeps`.
+describe("comments chunk boundary", () => {
+  it("extensions/comments/comments-controller.ts loads only comments code", () => {
+    const { files, packages } = staticImports(
+      "extensions/comments/comments-controller.ts",
+    );
+    for (const file of files) {
+      expect(
+        file.startsWith("lib/comments/") ||
+          file === "extensions/comments/comments-controller.ts",
+      ).toBe(true);
+    }
+    expect([...files]).not.toContain("lib/comments/entry-check.ts");
+    expect([...packages]).toEqual([]);
+  });
+
+  it("extensions/comments/comments-host.ts loads only comments code", () => {
+    const { files, packages } = staticImports(
+      "extensions/comments/comments-host.ts",
+    );
+    for (const file of files) {
+      expect(
+        file.startsWith("lib/comments/") ||
+          file === "extensions/comments/comments-host.ts",
+      ).toBe(true);
+    }
+    expect([...packages]).toEqual([]);
+  });
+});
+
 describe("import boundaries", () => {
   for (const entry of SERVER_ENTRIES) {
     it(`${entry} imports neither the client tab API nor @hocuspocus/provider`, () => {
       const { files, packages } = staticImports(entry);
       expect([...files]).not.toContain("lib/tab-api.ts");
       expect([...packages]).not.toContain("@hocuspocus/provider");
+    });
+  }
+});
+
+// The image store (spec §9, A1): the asset kit holds only `asset-ref`, the
+// parse rules and the §6.2 fallback's routing; the rest is lazy. The resolver, the object-URL cache, the strippers,
+// sniffing, hashing and the insert pipeline stay lazy chunks.
+const LAZY_ASSET_MODULES = [
+  "lib/assets/asset-resolver.ts",
+  "lib/assets/object-url-cache.ts",
+  "lib/assets/strip-metadata.ts",
+  "lib/assets/sniff.ts",
+  "lib/assets/hash.ts",
+  "lib/assets/prepare-image-asset.ts",
+  "lib/assets/encode-client.ts",
+  "lib/assets/encode-image.ts",
+  "extensions/hyper-multimedia/alt-text-popover.ts",
+  "extensions/hyper-multimedia/asset-media-actions.ts",
+  "extensions/hyper-multimedia/asset-image-view.ts",
+  "extensions/hyper-multimedia/asset-image-lazy.ts",
+];
+
+// Asset modules the Hocus server and the storage worker may import: no DOM,
+// React, editor or platform code.
+const SERVER_SAFE_ASSET_MODULES = [
+  "lib/assets/asset-ref.ts",
+  "lib/assets/limits.ts",
+  "lib/assets/sniff.ts",
+  "lib/assets/hash.ts",
+  "lib/assets/strip-metadata.ts",
+];
+
+describe("image store import boundaries", () => {
+  // A1 has no D23 ledger line: the sandbox editor's graph must hold no
+  // asset code at all. Hosts with an image store use `asset-kit.ts`.
+  it("the sandbox editor loads no image store module", () => {
+    // `document-editor.tsx` is the editor chunk's root (the chunk check
+    // finds the group by a string only it renders).
+    const { files } = staticImports(
+      "components/document-editor/document-editor.tsx",
+    );
+    expect([...files]).toContain(
+      "extensions/hyper-multimedia/hyper-multimedia-kit.ts",
+    );
+    for (const file of files) {
+      expect(file.startsWith("lib/assets/")).toBe(false);
+      expect(file.startsWith("extensions/hyper-multimedia/asset-")).toBe(false);
+      expect(file).not.toBe("lib/platform/blob-store.ts");
+    }
+  });
+
+  // The headless schema (P2.8a) applies these rules: no env, scss or DOM.
+  it("asset-image-parse imports only the dependency-free asset-ref", () => {
+    const { files, packages } = staticImports(
+      "extensions/hyper-multimedia/asset-image-parse.ts",
+    );
+    expect([...packages]).toEqual([]);
+    expect([...files].sort()).toEqual([
+      "extensions/hyper-multimedia/asset-image-parse.ts",
+      "lib/assets/asset-ref.ts",
+    ]);
+  });
+
+  it("the asset kit loads no lazy asset module eagerly", () => {
+    const { files } = staticImports("extensions/hyper-multimedia/asset-kit.ts");
+    for (const lazy of LAZY_ASSET_MODULES) {
+      expect([...files]).not.toContain(lazy);
+    }
+  });
+
+  for (const entry of SERVER_SAFE_ASSET_MODULES) {
+    it(`${entry} imports only other asset modules`, () => {
+      const { files, packages } = staticImports(entry);
+      expect([...packages]).toEqual([]);
+      for (const file of files)
+        expect(file.startsWith("lib/assets/")).toBe(true);
     });
   }
 });

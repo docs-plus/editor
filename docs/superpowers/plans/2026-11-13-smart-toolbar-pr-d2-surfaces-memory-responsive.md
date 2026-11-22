@@ -192,7 +192,7 @@ E2E_BASE_URL=http://localhost:3800 CI= bun playwright test <spec> --project=chro
 | `components/editor-toolbar/tier.tsx`, `toolbar-tiers.scss`, `collapsed/*.tsx` | Ladder | Create |
 | `components/ui/toolbar-focus-repair.ts`, `hooks/use-toolbar-focus-repair.ts` | Focus repair | Create |
 | `hooks/use-outline-open.ts`, `components/document-editor/outline-panel.tsx` | M6, overlay | Create |
-| `components/document-editor/mobile-toolbar-content.tsx`, `format-sheet.tsx`, `hooks/use-keyboard-inset.ts`, `lib/editor-scroll-clearance.ts`, `components/ui/sheet.tsx` | Phone bar + sheet | Rewrite / Create |
+| `components/document-editor/mobile-toolbar-content.tsx`, `format-sheet.tsx`, `hooks/use-keyboard-inset.ts` (historical: since M20 `lib/keyboard-inset.ts`), `lib/editor-scroll-clearance.ts`, `components/ui/sheet.tsx` | Phone bar + sheet | Rewrite / Create |
 | `components/tiptap-ui/color-highlight-button/`, `color-highlight-popover/` | Replaced | Delete (Task 10) |
 
 ---
@@ -1173,7 +1173,7 @@ Spec §4.7 (constant 44 px bar docked above the keyboard; cells; Aa sheet with s
 
 **Files:**
 - Run: `bun shadcn add sheet`. Make `components/ui/sheet.tsx` use named exports on Base UI `Dialog`, matching `components/ui/dialog.tsx`.
-- Create: `components/document-editor/format-sheet.tsx` (lazy; root `data-format-sheet`), `hooks/use-keyboard-inset.ts`, `lib/editor-scroll-clearance.ts`
+- Create: `components/document-editor/format-sheet.tsx` (lazy; root `data-format-sheet`), `hooks/use-keyboard-inset.ts` (historical: since M20 `lib/keyboard-inset.ts`, tests in `tests/unit/lib/keyboard-inset.test.ts`), `lib/editor-scroll-clearance.ts`
 - Rewrite: `components/document-editor/mobile-toolbar-content.tsx` (`MobileToolbarContent` becomes the docked bar)
 - Modify:
   - `components/document-editor/document-editor.tsx`:

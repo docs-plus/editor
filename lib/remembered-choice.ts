@@ -50,6 +50,12 @@ export const CHOICE_SLOTS = {
   mermaidTemplate: "choices", // M17b (E)
   outlineOpen: "ui", // M6 (D2)
   toolbarDensity: "ui", // simplified toolbar (A15)
+  // Page and writing preferences (P2.9c-1), written by `lib/prefs/store-web`.
+  page: "ui",
+  a11y: "ui",
+  spellcheck: "ui",
+  smartQuotes: "ui",
+  rememberPlace: "ui",
 } as const satisfies Record<string, "choices" | "ui">;
 
 export type ChoiceSlot = keyof typeof CHOICE_SLOTS;

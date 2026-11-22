@@ -3,8 +3,9 @@
  * `Bun.Transpiler().scanImports()` (type-only imports are dropped, as at
  * runtime) and followed transitively through relative and `@/` paths.
  *
- * Rows checked so far: the storage engine, the storage worker, and
- * `lib/platform/desktop`. P2.5 adds the main, preload and renderer rows.
+ * Rows checked so far: the storage engine, the storage worker, main,
+ * the preload, `desktop/shared` and `lib/platform/desktop`. The renderer
+ * rows come with DesktopRoot (P2.4b).
  */
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -93,21 +94,23 @@ describe("desktop/storage/engine", () => {
   });
 });
 
-describe("desktop/storage", () => {
-  // Architecture §3.3: main and storage may reach only these parts of lib/.
-  const LIB_ALLOWED = [
-    /^lib\/security\/content-security-policy\.ts$/,
-    /^lib\/doc-migrations\//,
-    /^lib\/prefs\/schema\.ts$/,
-    /^lib\/comments\/validate\.ts$/,
-    /^lib\/assets\//,
-    // Pure name lists the import guard checks against (amended in §3.3).
-    /^lib\/schema-names\.ts$/,
-    // The normalizer core and tag keys (offline revision §3.2).
-    /^lib\/search\/normalize\.ts$/,
-    /^lib\/library\/tag-rules\.ts$/,
-  ];
+// Architecture §3.3: main and storage may reach only these parts of lib/.
+const LIB_ALLOWED = [
+  /^lib\/security\/content-security-policy\.ts$/,
+  // Its one import: the GA host lists, pure constants.
+  /^lib\/analytics-config\.ts$/,
+  /^lib\/doc-migrations\//,
+  /^lib\/prefs\/schema\.ts$/,
+  /^lib\/comments\/validate\.ts$/,
+  /^lib\/assets\//,
+  // Pure name lists the import guard checks against (amended in §3.3).
+  /^lib\/schema-names\.ts$/,
+  // The normalizer core and tag keys (offline revision §3.2).
+  /^lib\/search\/normalize\.ts$/,
+  /^lib\/library\/tag-rules\.ts$/,
+];
 
+describe("desktop/storage", () => {
   test("reaches lib/ only through the allowlist, and never React", () => {
     const { files, bare } = reach(filesUnder(join(ROOT, "desktop/storage")));
     const libFiles = [...files]
@@ -133,5 +136,50 @@ describe("lib/platform/desktop", () => {
       .map(rel)
       .filter((file) => /^desktop\/(main|preload|storage)\//.test(file));
     expect(crossing).toEqual([]);
+  });
+});
+
+describe("desktop/main", () => {
+  const { files, bare } = reach(filesUnder(join(ROOT, "desktop/main")));
+
+  test("reaches lib/ only through the allowlist, and never React or bun:*", () => {
+    const libFiles = [...files]
+      .map(rel)
+      .filter((file) => file.startsWith("lib/"))
+      .filter((file) => !LIB_ALLOWED.some((pattern) => pattern.test(file)));
+    expect(libFiles).toEqual([]);
+    expect(
+      [...bare.keys()].filter((spec) => /^(react|bun:|@tiptap\/)/.test(spec)),
+    ).toEqual([]);
+  });
+
+  test("never imports the renderer's code", () => {
+    const renderer = [...files]
+      .map(rel)
+      .filter((file) => /^(app|components|hooks)\//.test(file));
+    expect(renderer).toEqual([]);
+  });
+});
+
+describe("desktop/preload", () => {
+  const { files, bare } = reach(filesUnder(join(ROOT, "desktop/preload")));
+
+  test("imports only desktop/shared and electron", () => {
+    const outside = [...files]
+      .map(rel)
+      .filter((file) => !/^desktop\/(preload|shared)\//.test(file));
+    expect(outside).toEqual([]);
+    expect([...bare.keys()]).toEqual(["electron"]);
+  });
+});
+
+describe("desktop/shared", () => {
+  test("imports nothing outside itself", () => {
+    const { files, bare } = reach(filesUnder(join(ROOT, "desktop/shared")));
+    const outside = [...files]
+      .map(rel)
+      .filter((file) => !file.startsWith("desktop/shared/"));
+    expect(outside).toEqual([]);
+    expect([...bare.keys()]).toEqual([]);
   });
 });

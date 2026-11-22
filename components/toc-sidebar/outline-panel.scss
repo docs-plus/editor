@@ -1,15 +1,11 @@
-// Outline frame: docked beside the page, or an overlay below 950px
-// (spec §4.6). The overlay sits inside `.editor-with-toc`, so it starts
-// below the sticky toolbar and stays under it (toolbar z-index 10).
+// Outline frame: docked beside the page, or an overlay when the page frame
+// is too narrow to dock it (spec §4.6; preferences design §5.9, decided by
+// `PageFrame` before the first paint). The overlay sits inside
+// `.editor-with-toc`, so it starts below the sticky toolbar and stays under
+// it (toolbar z-index 10).
 
 .outline-panel[data-mode="docked"] {
   display: contents;
-
-  // Before hydration the mode is unknown and the outline renders docked;
-  // never let it push the page aside where it will be an overlay.
-  @media (max-width: 949px) {
-    display: none;
-  }
 }
 
 .outline-panel[data-mode="overlay"] {

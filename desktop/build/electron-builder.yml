@@ -1,0 +1,75 @@
+# The unsigned internal build matrix (plan P2.5; architecture §3.1 step 3;
+# spikes S3 and S4). Run from this folder after `bun desktop/build/build.ts`:
+#
+#   bun electron-builder --config electron-builder.yml --mac dmg   (macOS)
+#   bun electron-builder --config electron-builder.yml --win nsis  (Windows)
+#   bun electron-builder --config electron-builder.yml --linux deb AppImage
+#
+# Unsigned until signing enrolment (D35); the first signed Gate 3 build
+# locks appId, the scheme, the MIME type and the WM class (D33).
+appId: plus.docs.tinydocy
+productName: TinyDocy
+copyright: Copyright © 2026 docs.plus
+electronVersion: 45.3.2
+directories:
+  app: ../../dist/desktop-app
+  output: ../../dist/desktop-release
+asar: true
+npmRebuild: false
+publish: null
+
+# Electron fuses (plan §7), flipped in the packaged binary and read back by
+# check-fuses.ts in CI. EnableNodeCliInspectArguments is off in every
+# installer (SEC-001). Only the test flavor's unpacked build turns it on
+# (-c.electronFuses.enableNodeCliInspectArguments=true), because
+# Playwright's _electron attaches through the inspector.
+electronFuses:
+  # Flipping fuses edits the binary; an unsigned arm64 Mac app must be
+  # ad-hoc signed again or the kernel kills it at launch.
+  resetAdHocDarwinSignature: true
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+
+protocols:
+  - name: TinyDocy
+    schemes: [tinydocy]
+fileAssociations:
+  - ext: tinydoc
+    name: TinyDocy document
+    description: TinyDocy document
+    mimeType: application/x-tinydoc
+    role: Editor
+
+mac:
+  target: [dmg]
+  identity: null
+  category: public.app-category.productivity
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+win:
+  target: nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  artifactName: ${name}-${version}-setup.${ext}
+
+linux:
+  target: [deb, AppImage]
+  executableName: tinydocy
+  category: Office
+  maintainer: docs.plus <hello@docs.plus>
+  synopsis: TinyDocy, by docs.plus
+  artifactName: ${name}-${version}-${arch}.${ext}
+  desktop:
+    entry:
+      # The class Electron sets from desktopName (S3 run 43911539534).
+      StartupWMClass: TinyDocy
+deb:
+  artifactName: ${name}_${version}_${arch}.${ext}
