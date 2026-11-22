@@ -362,6 +362,46 @@ use them: nothing in the web build imports `components/library` or
   libraries (`?seed=10000`), a Trash (`?trash=1`) and builds production
   React with `LIBRARY_HARNESS_PROD=1`.
 
+### Security: the web editor links only to https, http and mailto
+
+The Hyperlink extension's own check is a denylist (`javascript:`, `data:`,
+`vbscript:`, `file:`, `blob:`), so a pasted or collaborator-delivered (Yjs)
+link to `ms-msdt:`, `search-ms:`, `smb:`, `vscode:` or any other OS protocol
+handler stayed a live `<a href>` that Mod-click, middle-click or the
+browser's "Open link" handed to the OS. The editor now allows only
+`https:`, `http:` and `mailto:` (editor chunk group +145 B gz, CSS
+unchanged).
+
+#### Security
+
+- **Editor:** `isWebLink` is the editor's `isAllowedUri`, so commands,
+  autolink, paste rules and every open the extension makes refuse any other
+  scheme. `LinkPolicyHyperlink` applies the same option where the extension
+  skips it: a pasted `<a href>` off the policy keeps its text and loses the
+  link, and a stored one (Yjs, older documents) renders with no `href`, so
+  it can't be followed at all.
+- **Editor:** the scheme is checked after leading whitespace only; a
+  scheme split by whitespace or led by a control character is refused.
+- **Editor:** pasted link titles are dropped (a tooltip a stranger chose).
+  Titles already in a document still render.
+
+#### Changed
+
+- **Editor:** links that worked before and are now refused (none is used by
+  the app itself): `tel:` (including bare E.164 numbers, which no longer
+  autolink), `sms:`, `ftp:`/`ftps:`, the extension's app-scheme catalog
+  (`whatsapp:`, `tg:`, `zoommtg:`, `msteams:`, `slack:`, `spotify:`,
+  `vscode:`…), relative links (`#anchor`, `/path`, `./x`, `?q`) and
+  protocol-relative `//host` links. The link form shows its error for them;
+  existing ones stay as text that looks like a link but does not open.
+- **Docs:** search-linking spec §4.4 and §4.8 say what the sandbox now does
+  with a `tinydocy:` link; `docs/upstream/extension-hyperlink-allowuri-parse.md`
+  is a ready-to-file issue for the extension.
+- **Build:** the details spec's editor-chunk ledger (§1 rule 5) and the
+  chunk script record "#168 security allowlist: +145 B", a security
+  exemption outside LK1's line (coordinator-approved 2026-11-22). The
+  fence still passes, so it is unchanged.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
