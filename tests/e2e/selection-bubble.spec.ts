@@ -25,6 +25,24 @@ import { listenerCounts } from "./helpers/listener-counts";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
 
+/*
+ * Named waits, from the bubble's own delays where it has one. A wait here
+ * proves something stays (or stays away) past a delay, so it cannot be a
+ * web-first assertion.
+ */
+/** Past the show delay (and the plugin's update debounce, also 250 ms). */
+const PAST_SHOW_MS = BUBBLE_SHOW_DELAY_MS + 150;
+/** Past a keyboard selection's settle and the show delay after it. */
+const PAST_SETTLE_MS = KEYBOARD_SETTLE_MS + BUBBLE_SHOW_DELAY_MS + 150;
+/** Past a reposition (scroll or resize) and its frame. */
+const PAST_REPOSITION_MS = BUBBLE_RESIZE_DELAY_MS + 200;
+/** The scale-in and focus ring before a screenshot or a box read. */
+const PAINT_SETTLE_MS = 200;
+/** What `EditorPage.setContent` gives before a mouse drag (see `openDoc`). */
+const CONTENT_SETTLE_MS = 200;
+/** Past collab-session's deferred release (1 s). */
+const PAST_RELEASE_MS = 1_100;
+
 const text = (value: string, marks?: unknown[]) => ({
   type: "text",
   text: value,
@@ -81,7 +99,7 @@ async function openDoc(page: Page, doc: object = DOC): Promise<EditorPage> {
   }, doc);
   // The settle time `EditorPage.setContent` gives: a mouse drag right after
   // the content lands opens no bubble in Chromium (not investigated here).
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(CONTENT_SETTLE_MS);
   return editorPage;
 }
 
@@ -278,7 +296,7 @@ test.describe("selection bubble", () => {
   }) => {
     await openDoc(page);
     const hidden = async () => {
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(PAST_SHOW_MS);
       await expect(bubble(page)).toHaveCount(0);
     };
 
@@ -320,7 +338,7 @@ test.describe("selection bubble", () => {
     await selectText(page, "some");
     await expectBubbleOpen(page);
     await page.keyboard.press("Shift+ArrowRight");
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
 
     await page.keyboard.press("Escape");
@@ -329,7 +347,7 @@ test.describe("selection bubble", () => {
     await expect(bubble(page)).toHaveCount(0, { timeout: 500 });
     // Esc keeps the selection, and the bubble stays away until a new one.
     expect(await selectionRange(page)).not.toEqual({ from: 0, to: 0 });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
     await page.keyboard.press("Shift+ArrowRight");
     await expectBubbleOpen(page);
@@ -340,7 +358,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     // A shortcut keeps it.
     await page.keyboard.press("ControlOrMeta+b");
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
   });
 
@@ -407,7 +425,7 @@ test.describe("selection bubble", () => {
       )
       .not.toBeNull();
     // Past the plugin's 250 ms update debounce: still attached.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
     // Enter picked and closed the menu; focus is back in the text (§7.10).
     await expect(dialog).toBeHidden();
@@ -594,7 +612,7 @@ test.describe("selection bubble", () => {
     await expect(page.locator(".ProseMirror")).toBeFocused();
     expect(await selectionRange(page)).toEqual(before);
     // It stays away on that focus, as after Esc, until a new selection.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
     await page.keyboard.press("Shift+ArrowRight");
     await expectBubbleOpen(page);
@@ -670,7 +688,7 @@ test.describe("selection bubble", () => {
     });
     await expect(bold).toBeFocused();
     await page.keyboard.press("PageDown");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(PAST_SHOW_MS);
     expect(
       await page.evaluate(() => document.activeElement === document.body),
     ).toBe(false);
@@ -690,7 +708,7 @@ test.describe("selection bubble", () => {
         .getByRole("button", { name: "More text colours" })
         .click();
       await expect(dialog.locator("button:focus")).toHaveCount(1);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       const box = await dialog.boundingBox();
       const sel = await page.evaluate(() => {
         const editor = window.__tiptap_editor;
@@ -726,7 +744,7 @@ test.describe("selection bubble", () => {
       const line = editor.view.coordsAtPos(editor.state.selection.from);
       wrapper.scrollTop += line.top - window.innerHeight / 2 - 60;
     });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(PAST_REPOSITION_MS);
     await expect(bubble(page)).toHaveAttribute("data-placement", "top");
     expect(await overlaps()).toBe(false);
 
@@ -880,8 +898,8 @@ test.describe("selection bubble", () => {
     for (let i = 0; i < 5; i += 1) {
       await page.keyboard.press("ArrowRight", { delay: 30 });
     }
-    // Held well past the normal 250 ms show delay: nothing yet.
-    await page.waitForTimeout(600);
+    // Held past the settle and the show delay: nothing yet.
+    await page.waitForTimeout(PAST_SETTLE_MS);
     await expect(bubble(page)).toHaveCount(0);
     await page.keyboard.up("Shift");
     await expectBubbleOpen(page);
@@ -919,9 +937,7 @@ test.describe("selection bubble", () => {
       }
       await page.keyboard.press("Escape");
       // Past the settle and the show delay, which would have shown it.
-      await page.waitForTimeout(
-        KEYBOARD_SETTLE_MS + BUBBLE_SHOW_DELAY_MS + 150,
-      );
+      await page.waitForTimeout(PAST_SETTLE_MS);
       await expect(bubble(page)).toHaveCount(0);
     });
   }
@@ -1012,7 +1028,7 @@ test.describe("selection bubble", () => {
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog).toBeVisible();
     // The editor blurs into the popup: past the 250 ms debounce, still open.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
     await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
     await expect(bubble(page)).toHaveCount(0);
@@ -1052,7 +1068,7 @@ test.describe("selection bubble", () => {
     release();
     await expectBubbleOpen(page);
     // Past the deferred removal (one frame) and the 250 ms update debounce.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
   });
 
@@ -1177,7 +1193,7 @@ test.describe("selection bubble", () => {
       await openDoc(page);
       await selectText(page, "some words");
       await expectBubbleOpen(page);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-above-${theme}.png` });
 
       await bubbleToolbar(page)
@@ -1185,13 +1201,13 @@ test.describe("selection bubble", () => {
         .click();
       const dialog = page.getByRole("dialog", { name: "Text colours" });
       await expect(dialog.locator("button:focus")).toHaveCount(1);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-popover-${theme}.png` });
       await page.keyboard.press("Escape");
 
       await selectUnderToolbar(page);
       await expect(bubble(page)).toHaveAttribute("data-placement", "bottom");
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-below-${theme}.png` });
     });
   }
@@ -1210,7 +1226,7 @@ test("no bubble on a coarse pointer", async ({ browser }) => {
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
     await selectText(page, "some words");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
   } finally {
     await context.close();
@@ -1313,7 +1329,7 @@ test.describe("bubble Style ▾ placement (spec §10.4)", () => {
         wrapper.scrollTop += line.top - target;
       }, top);
       // The scroll repositions (and may flip) after its debounce.
-      await page.waitForTimeout(BUBBLE_RESIZE_DELAY_MS + 200);
+      await page.waitForTimeout(PAST_REPOSITION_MS);
       await expectBubbleOpen(page);
       await styleButton(page).click();
       const menu = page.getByRole("menu", { name: "Turn into" });
@@ -1885,7 +1901,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     });
     await selectText(page, "     ");
     expect(await selectionRange(page)).not.toEqual({ from: 0, to: 0 });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
   });
 
@@ -1917,7 +1933,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await expect(bubble(page)).toHaveCount(0);
     const cdp = await page.context().newCDPSession(page);
     // Past collab-session's deferred release (1 s).
-    await page.waitForTimeout(1_100);
+    await page.waitForTimeout(PAST_RELEASE_MS);
     const before = await listenerCounts(cdp);
 
     for (let i = 0; i < 5; i += 1) {
@@ -1933,7 +1949,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     expect(
       await page.evaluate(() => window.__tiptap_editor?.state.selection.empty),
     ).toBe(true);
-    await page.waitForTimeout(1_100);
+    await page.waitForTimeout(PAST_RELEASE_MS);
     const after = await listenerCounts(cdp);
     test.info().annotations.push({
       type: "document + window listeners",
