@@ -495,11 +495,6 @@ test.describe("more menu groups", () => {
     await expect(more).toBeVisible();
     return more;
   };
-  const registered = (page: Page, id: string) =>
-    page.evaluate(
-      (target) => !!document.querySelector(`[data-action-id="${target}"]`),
-      id,
-    );
   const idsIn = (group: Locator) =>
     group
       .locator('[role^="menuitem"]')
@@ -533,6 +528,8 @@ test.describe("more menu groups", () => {
       "Simplified toolbar",
     );
     await expect(view.getByRole("menuitem")).toHaveAccessibleName("Appearance");
+    // Help and Forget are asserted unconditionally: this app always
+    // registers palette.open and memory.forget.
     const help = more.getByRole("group", { name: "Help" });
     expect(await idsIn(help)).toEqual(["palette.open"]);
     await expect(help.getByRole("menuitem")).toHaveAccessibleName(
@@ -547,7 +544,6 @@ test.describe("more menu groups", () => {
     for (const heading of ["Text", "View", "Help"]) {
       await expect(more.getByText(heading, { exact: true })).toBeVisible();
     }
-    expect(await registered(page, "palette.open")).toBe(true);
   });
 
   test("ArrowDown crosses the groups and never lands on a heading", async ({
