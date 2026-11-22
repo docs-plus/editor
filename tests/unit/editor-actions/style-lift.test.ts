@@ -78,17 +78,3 @@ describe("style lift injection (spec §7.2, A20)", () => {
     expect(types(editor)).toEqual(["heading", "heading"]);
   });
 });
-
-describe("Text's icon", () => {
-  it("is installed on the registry's Text action with the lift", async () => {
-    const { editorActions } = await importFresh<
-      typeof import("@/lib/editor-actions")
-    >("@/lib/editor-actions");
-    const { TypeIcon } = await import("@/lib/icons");
-    // The editor chunk's registry carries none (+34 B gz for the icon).
-    expect(editorActions.get("style.paragraph")?.icon).toBeUndefined();
-    // Same module instances as above (`importFresh` reset them first).
-    await import("@/lib/editor-actions/style-lift");
-    expect(editorActions.get("style.paragraph")?.icon).toBe(TypeIcon);
-  });
-});

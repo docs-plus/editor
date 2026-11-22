@@ -9,13 +9,10 @@ import {
 } from "@tiptap/pm/state";
 import { liftTarget } from "@tiptap/pm/transform";
 
-import { editorActions } from "@/lib/editor-actions";
 import {
   setStyleLift,
   type TextStyleValue,
 } from "@/lib/editor-actions/core/blocks";
-import type { IconComponent } from "@/lib/editor-actions/types";
-import { TypeIcon } from "@/lib/icons";
 
 /*
  * The per-item lift behind the text styles (Turn into, spec §7.2), kept out
@@ -142,18 +139,4 @@ export function liftStyle(
   return true;
 }
 
-/**
- * Gives Text its icon, with the lift and for the same reason: in the
- * registry it would put the icon in the editor chunk (+34 B gz). Every
- * surface that shows text styles imports this module, so they all read it
- * from the registry; "/" keeps its own fallback for its 7 KB budget.
- */
-function installTextIcon(): void {
-  const text = editorActions.get("style.paragraph") as
-    | { icon?: IconComponent }
-    | undefined;
-  if (text && !text.icon) text.icon = TypeIcon;
-}
-
 setStyleLift(liftStyle);
-installTextIcon();

@@ -22,6 +22,7 @@ import {
 } from "@/lib/editor-actions/key-combo";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
+import { TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 
 import { type StyleFace, styleFace } from "../bubble/style-face";
@@ -63,6 +64,11 @@ export const MORE_HEADING_IDS = [
 const HEADING_IDS = TURN_INTO_IDS.slice(0, 4);
 const LIST_IDS = TURN_INTO_IDS.slice(4, 7);
 const BLOCK_IDS = TURN_INTO_IDS.slice(7);
+
+/** Text has no icon in the registry; kept here, in the lazy menu chunk. */
+const ICONS: Partial<Record<string, IconComponent>> = {
+  "style.paragraph": TypeIcon,
+};
 
 const LIST_ID_BY_TYPE: Readonly<Record<string, string>> = {
   bulletList: "list.bullet",
@@ -160,7 +166,7 @@ function TurnIntoItem({
       ? undefined
       : refused;
   const disabled = titleReasonId !== undefined || own !== undefined;
-  const Icon = action.icon;
+  const Icon = action.icon ?? ICONS[id];
   const mac = isMac();
   const combo = action.shortcut;
   return (
