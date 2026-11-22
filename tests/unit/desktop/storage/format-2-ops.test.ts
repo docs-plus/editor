@@ -474,3 +474,15 @@ test("a tag keeps the id its caller minted, unless the name is taken", () => {
   expect(library.createFolder({ name: "f" })).not.toBeNull();
   expect(library.sidebar().folders[0]?.createdAt).toBe(clock.now);
 });
+
+test("a new document lists in Recent at once; a duplicate or restore waits to be opened", () => {
+  const { id } = library.createDoc({ title: "fresh" });
+  write(id, "x");
+  const created = library.sidebar().docs.find((d) => d.id === id);
+  expect(created?.openedAt).toBe(clock.now);
+  library.close(id, "w1");
+  const copy = library.duplicateDoc(id);
+  expect(
+    library.sidebar().docs.find((d) => d.id === copy.id)?.openedAt,
+  ).toBeNull();
+});
