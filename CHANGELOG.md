@@ -58,6 +58,12 @@ the storage worker. Nothing changes on the web.
   tests cover the guards and the `argv` filter (both fuzzed), the
   registry, the handlers, the supervisor and the quit coordinator.
 
+- **Desktop:** the packaged renderer opens documents from local storage:
+  `DesktopRoot` puts `local-session` over `IpcDocStore`
+  (`createRpcDocStore` over `window.tinydocy`). A window gets its document
+  from main; one opened with none gets this install's default document
+  until the library UI (P2.7).
+
 #### Security (review of #135)
 
 - **Desktop:** two build flavors. The **release** flavor (installers) has
