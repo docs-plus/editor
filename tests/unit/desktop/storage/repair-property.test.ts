@@ -74,6 +74,20 @@ function headSeq(db: SqliteDriver, id: string): number {
   );
 }
 
+/**
+ * The derive queue's next document, in insert order: `nextStale` walks
+ * `docs_stale` in id order, and ids are random UUIDs, so a seed wouldn't
+ * replay.
+ */
+function firstStale(db: SqliteDriver): string | null {
+  const row = db
+    .prepare(
+      "SELECT id FROM docs WHERE derived_seq IS NOT head_seq ORDER BY rowid LIMIT 1",
+    )
+    .get();
+  return row ? String(row.id) : null;
+}
+
 /** Folder depth (1 at the root) and the height of a folder's subtree. */
 function folderShape(db: SqliteDriver) {
   const parent = new Map<string, string | null>();
@@ -107,26 +121,26 @@ function randomOperation(rng: Rng, identities: Map<string, Identity>): string {
   const db = rawDb(library);
   const liveDocs = ids(
     db,
-    "SELECT id FROM docs WHERE trashed_at IS NULL ORDER BY id",
+    "SELECT id FROM docs WHERE trashed_at IS NULL ORDER BY rowid",
   );
   const trashedDocs = ids(
     db,
-    "SELECT id FROM docs WHERE trashed_at IS NOT NULL ORDER BY id",
+    "SELECT id FROM docs WHERE trashed_at IS NOT NULL ORDER BY rowid",
   );
   const allDocs = [...liveDocs, ...trashedDocs];
   const liveFolders = ids(
     db,
-    "SELECT id FROM folders WHERE trashed_at IS NULL ORDER BY id",
+    "SELECT id FROM folders WHERE trashed_at IS NULL ORDER BY rowid",
   );
   // Trash units: a trashed folder whose parent isn't in its group.
   const trashedRoots = ids(
     db,
     `SELECT id FROM folders f WHERE trashed_at IS NOT NULL AND (parent_id IS NULL
        OR parent_id NOT IN (SELECT id FROM folders g WHERE g.trash_group = f.trash_group))
-     ORDER BY id`,
+     ORDER BY rowid`,
   );
-  const tags = ids(db, "SELECT id FROM tags ORDER BY id");
-  const linkKeys = ids(db, "SELECT link_key FROM docs ORDER BY id");
+  const tags = ids(db, "SELECT id FROM tags ORDER BY rowid");
+  const linkKeys = ids(db, "SELECT link_key FROM docs ORDER BY rowid");
   const remember = (id: string) => {
     const row = db
       .prepare("SELECT link_key, lineage FROM docs WHERE id = ?")
@@ -257,7 +271,7 @@ function randomOperation(rng: Rng, identities: Map<string, Identity>): string {
     case 13:
     case 14: {
       // The derive queue's path; sometimes a stale write, which must be refused.
-      const id = rng.next() < 0.7 ? library.nextStale() : rng.pick(allDocs);
+      const id = rng.next() < 0.7 ? firstStale(db) : rng.pick(allDocs);
       if (!id) return "derive (none)";
       const head = headSeq(db, id);
       const rows = stubDerive(library.stateOf(id));
@@ -351,7 +365,10 @@ describe("P2: rebuild restores damaged derived rows exactly", () => {
     const created: string[] = [];
     for (let i = 0; i < count; i += 1)
       created.push(library.createDoc({ title: `Doc ${i}` }).id);
-    const keys = ids(rawDb(library), "SELECT link_key FROM docs ORDER BY id");
+    const keys = ids(
+      rawDb(library),
+      "SELECT link_key FROM docs ORDER BY rowid",
+    );
     for (const id of created) {
       library.load(id, OWNER);
       for (let edit = 0; edit < 6; edit += 1)

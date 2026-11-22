@@ -388,38 +388,60 @@ function copyLibraryFiles(from: string, to: string) {
 }
 
 /**
+ * The leaf pages of `table`'s b-tree in key order, with their cell counts,
+ * read from the file's bytes (`dbstat` isn't in every SQLite build). Read
+ * after `shutdown()`: its TRUNCATE checkpoint leaves the WAL empty.
+ */
+function leavesInKeyOrder(path: string, table: string) {
+  const db = openBunSqlite(path, { readOnly: true });
+  let pageSize: number;
+  let root: number;
+  try {
+    pageSize = Number(column(db, "PRAGMA page_size"));
+    root = Number(
+      column(db, "SELECT rootpage FROM sqlite_master WHERE name = ?", table),
+    );
+  } finally {
+    db.close();
+  }
+  const file = readFileSync(path);
+  const leaves: { page: number; cells: number }[] = [];
+  const walk = (page: number) => {
+    const start = (page - 1) * pageSize;
+    const kind = file.readUInt8(start);
+    const cells = file.readUInt16BE(start + 3);
+    // 0x0d and 0x0a are table and index leaves; 0x05 and 0x02 interiors.
+    if (kind === 0x0d || kind === 0x0a) {
+      leaves.push({ page, cells });
+      return;
+    }
+    if (kind !== 0x05 && kind !== 0x02)
+      throw new Error(`page ${page} is not a b-tree page`);
+    for (let cell = 0; cell < cells; cell += 1)
+      walk(file.readUInt32BE(start + file.readUInt16BE(start + 12 + 2 * cell)));
+    walk(file.readUInt32BE(start + 8));
+  };
+  walk(root);
+  return { leaves, pageSize };
+}
+
+/**
  * Overwrites one leaf page of `table` in the middle of the file with
- * garbage, at a page boundary (`dbstat` names the page). Returns how many
- * rows the page held and how many rows come before it in key order.
+ * garbage, at a page boundary. Returns how many rows the page held and how
+ * many rows the leaves before it hold (a rowid table keeps every row in its
+ * leaves).
  */
 function corruptMiddleLeaf(
   path: string,
   table: string,
 ): { cells: number; before: number } {
-  const db = openBunSqlite(path, { readOnly: false });
-  let page: number;
-  let pageSize: number;
-  let cells: number;
-  let before: number;
-  try {
-    pageSize = Number(column(db, "PRAGMA page_size"));
-    // Leaves in key order (`path`), with their cell counts.
-    const leaves = db
-      .prepare(
-        "SELECT pageno, ncell FROM dbstat WHERE name = ? AND pagetype = 'leaf' ORDER BY path",
-      )
-      .all(table)
-      .map((row) => ({ page: Number(row.pageno), cells: Number(row.ncell) }));
-    const index = Math.floor(leaves.length / 2);
-    const middle = leaves[index];
-    if (!middle || leaves.length < 3)
-      throw new Error(`too few ${table} leaves`);
-    page = middle.page;
-    cells = middle.cells;
-    before = leaves.slice(0, index).reduce((sum, leaf) => sum + leaf.cells, 0);
-  } finally {
-    db.close();
-  }
+  const { leaves, pageSize } = leavesInKeyOrder(path, table);
+  const index = Math.floor(leaves.length / 2);
+  const middle = leaves[index];
+  if (!middle || leaves.length < 3) throw new Error(`too few ${table} leaves`);
+  const before = leaves
+    .slice(0, index)
+    .reduce((sum, leaf) => sum + leaf.cells, 0);
   const fd = openSync(path, "r+");
   try {
     writeSync(
@@ -427,12 +449,12 @@ function corruptMiddleLeaf(
       Buffer.alloc(pageSize, 0xab),
       0,
       pageSize,
-      (page - 1) * pageSize,
+      (middle.page - 1) * pageSize,
     );
   } finally {
     closeSync(fd);
   }
-  return { cells, before };
+  return { cells: middle.cells, before };
 }
 
 /** Every update's seq and document, from a file before it is damaged. */

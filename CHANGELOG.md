@@ -54,7 +54,7 @@ idempotent: a second run changes nothing.
   `derived_seq`, rebuilds, drains, and gets the same rows back. The rebuild
   tests corrupt a page of `updates` or `links` in a copy of a library.
   - The engine half of T22 drains 1,000 stale documents with the stub
-    deriver (about 0.45 s on an Apple silicon Mac). The real T22 waits for LK4a's queue.
+    deriver (0.27 to 0.47 s on an Apple silicon Mac). The real T22 waits for LK4a's queue.
   - A known engine gap is kept as a failing test: `restoreFolder` can nest
     a folder deeper than 4 when its old parent moved deeper while it was in
     the Trash.
