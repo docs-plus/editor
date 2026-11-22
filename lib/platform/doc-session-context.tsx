@@ -11,26 +11,25 @@
  * a default value: the production minifier inlines that default as a new
  * function on every render, which re-runs any effect depending on it (P2.3).
  */
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, useContext } from "react";
 
-import type { DocSession } from "@/lib/platform/doc-session";
+import type { DocHandleState, DocSession } from "@/lib/platform/doc-session";
+
+/** A document not loaded yet: the hook's state before open, and the adapters' first. */
+export const DOC_LOADING: DocHandleState = {
+  ready: false,
+  authoritative: false,
+  readOnlyReason: null,
+  error: null,
+};
 
 const DocSessionContext = createContext<DocSession | null>(null);
 
-export function DocSessionProvider({
-  session,
-  children,
-}: {
-  /** Keep it stable: a new session reopens every document. */
-  session: DocSession;
-  children: ReactNode;
-}) {
-  return (
-    <DocSessionContext.Provider value={session}>
-      {children}
-    </DocSessionContext.Provider>
-  );
-}
+/**
+ * Provides the `DocSession` as `value`. Keep it stable: a new session
+ * reopens every document.
+ */
+export const DocSessionProvider = DocSessionContext.Provider;
 
 /** The `DocSession` of the nearest `DocSessionProvider`. Throws without one. */
 export function useDocSession(): DocSession {

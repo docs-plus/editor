@@ -15,7 +15,7 @@ since the previous tag.
 composition root provides, instead of importing `collab-session`. The web
 provides the sandbox adapter, which wraps `collab-session` unchanged, so
 nothing changes for users. The adapter loads with the lazy editor chunk,
-not on first load (first load −33 B gz, editor chunk group +415 B gz). The
+not on first load (first load −28 B gz, editor chunk group +275 B gz). The
 desktop and library roots will provide `local-session`.
 
 #### Added
@@ -35,7 +35,16 @@ desktop and library roots will provide `local-session`.
 #### Changed
 
 - **Editor:** `use-yjs-document` returns the same fields as before, now read
-  from the `DocSession` handle.
+  from the `DocSession` handle (`ydoc` and `awareness` are `undefined`, not
+  `null`, before the first open).
+- **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
+  (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
+  that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
 - **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
   Reload button saves through `DocSession.flush()` (on the web, the same
   device-copy flush as before) before reloading.

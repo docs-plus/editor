@@ -61,7 +61,7 @@ describe("DocumentNotice Reload", () => {
       value: () => events.push("reload"),
     });
     const container = render(
-      <DocSessionProvider session={session}>
+      <DocSessionProvider value={session}>
         <DocumentNotice reason="client_outdated" />
       </DocSessionProvider>,
     );
@@ -82,7 +82,7 @@ describe("DocumentNotice Reload", () => {
   it("offers Reload for the schema guard's outdated state too", () => {
     const { session } = flushingSession();
     const container = render(
-      <DocSessionProvider session={session}>
+      <DocSessionProvider value={session}>
         <DocumentNotice reason="outdated" />
       </DocSessionProvider>,
     );
