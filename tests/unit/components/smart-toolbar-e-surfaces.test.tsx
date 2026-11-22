@@ -275,8 +275,9 @@ describe("Paint format brush", () => {
       ?.split(" ")
       .find((id) => document.getElementById(id)?.textContent);
     expect(brush()?.getAttribute("aria-disabled")).toBe("true");
+    // Spec §7.2: inline code takes no other mark, so the brush says so.
     expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
-      "Code has no formatting.",
+      "Inline code can't take other formatting.",
     );
   });
 });

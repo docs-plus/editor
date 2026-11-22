@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import type { IconComponent } from "@/lib/editor-actions/types";
 import {
   BlockquoteIcon,
   ChevronDownIcon,
@@ -43,14 +42,13 @@ const FACE_MAX = 96;
 const FACE_CHROME = 8 + 4 + 4 + 12;
 
 /** The icon face, for a locale whose longest word would pass 96px. */
-const FACE_ICONS: Partial<Record<StyleFace, IconComponent>> = {
-  List: ListIcon,
-  Quote: BlockquoteIcon,
-  Code: CodeBlockIcon,
-};
-
-const faceIcon = (face: StyleFace): IconComponent =>
-  FACE_ICONS[face] ?? (face.startsWith("H") ? HeadingIcon : TypeIcon);
+function FaceIcon({ face }: { face: StyleFace }) {
+  if (face === "List") return <ListIcon aria-hidden="true" />;
+  if (face === "Quote") return <BlockquoteIcon aria-hidden="true" />;
+  if (face === "Code") return <CodeBlockIcon aria-hidden="true" />;
+  if (face.startsWith("H")) return <HeadingIcon aria-hidden="true" />;
+  return <TypeIcon aria-hidden="true" />;
+}
 
 /** The widest face word, in the face's own font and untransformed. */
 function widestFaceWord(host: HTMLElement): number {
@@ -152,7 +150,6 @@ export function BubbleStyleMenu({
   const face = useStyleFace(editor);
   const name = STYLE_FACE_NAMES[face];
   const iconOnly = wordWidth !== null && wordWidth + FACE_CHROME > FACE_MAX;
-  const Icon = faceIcon(face);
   return (
     <DirectionProvider direction={direction}>
       <DropdownMenu open={menu.open} onOpenChange={onOpenChange}>
@@ -172,7 +169,7 @@ export function BubbleStyleMenu({
           }
         >
           <span className="sr-only">Turn into </span>
-          {iconOnly ? <Icon aria-hidden="true" /> : null}
+          {iconOnly ? <FaceIcon face={face} /> : null}
           <span
             ref={wordRef}
             className="st-bubble-style-word"
