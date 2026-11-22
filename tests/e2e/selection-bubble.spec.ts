@@ -834,6 +834,60 @@ test.describe("selection bubble", () => {
     });
   }
 
+  test("a keyboard selection shows 300–450 ms after Shift is released, never while held", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    // In-page times: when Shift goes up and when the root is appended.
+    await page.evaluate(() => {
+      const times = { up: 0, shown: 0 };
+      (window as unknown as { __settle: typeof times }).__settle = times;
+      window.addEventListener(
+        "keyup",
+        (event) => {
+          if (event.key === "Shift") times.up = performance.now();
+        },
+        { capture: true },
+      );
+      const wrapper = document.querySelector(".document-editor-wrapper");
+      if (!wrapper) throw new Error("no wrapper");
+      new MutationObserver(() => {
+        if (
+          !times.shown &&
+          wrapper.querySelector(":scope > [data-smart-bubble]")
+        ) {
+          times.shown = performance.now();
+        }
+      }).observe(wrapper, { childList: true });
+    });
+    await page.keyboard.down("Shift");
+    // Each arrow held 30 ms, as a hand does: ProseMirror reads a native
+    // Shift+Arrow from `selectionchange`, which lands before a real keyup.
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press("ArrowRight", { delay: 30 });
+    }
+    // Held well past the normal 250 ms show delay: nothing yet.
+    await page.waitForTimeout(600);
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.up("Shift");
+    await expectBubbleOpen(page);
+    const { up, shown } = await page.evaluate(
+      () =>
+        (window as unknown as { __settle: { up: number; shown: number } })
+          .__settle,
+    );
+    expect(shown - up).toBeGreaterThanOrEqual(300);
+    expect(shown - up).toBeLessThanOrEqual(450);
+  });
+
   test("Alt+F10 shows a pending bubble at once, focus on Style ▾", async ({
     page,
   }) => {
@@ -851,6 +905,14 @@ test.describe("selection bubble", () => {
     for (let i = 0; i < 5; i += 1) {
       await page.keyboard.press("Shift+ArrowRight");
     }
+    // ProseMirror reads the native selection from `selectionchange`.
+    await expect
+      .poll(async () => {
+        const { from, to } = await selectionRange(page);
+        return (to ?? 0) - (from ?? 0);
+      })
+      .toBe(5);
+    // Still settling (300 ms after Shift goes up): no bubble yet.
     await expect(bubble(page)).toHaveCount(0);
     // Times, in the page, of the Alt+F10 keydown and focus entering it.
     await page.evaluate(() => {

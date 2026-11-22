@@ -39,6 +39,12 @@ import {
 import { BubbleStyleMenu } from "./bubble-style-menu";
 import "./selection-bubble.scss";
 
+/**
+ * A keyboard selection shows once Shift is up and the selection has been
+ * still this long, never on auto-repeat (spec §7.2, O7 b).
+ */
+const KEYBOARD_SETTLE_MS = 300;
+
 /** Exit fade (spec §11.1, O10: 120 ms in / 80 ms out). */
 const EXIT_MS = 80;
 
@@ -266,6 +272,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
 
     const controller = createBubbleController(editor, scrollTarget, {
       root,
+      keyboardSettleMs: KEYBOARD_SETTLE_MS,
       shouldShow: () => shouldShowBubble(view, root, suppressedRef.current),
       getReferenceRect: (side) =>
         bubbleReferenceRect(
