@@ -9,6 +9,14 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Throwaway entry B (union merge test)
+
+Do not merge.
+
+#### Added
+
+- Entry B.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
