@@ -1,6 +1,6 @@
 # TinyDocy Desktop and v1: test and release strategy
 
-- **Status:** Draft v1, 2026-11-16, amended by plan v7. Planning only. Nothing here is built yet.
+- **Status:** Draft v1, 2026-11-16, amended by plan v7. Planning only, except Q1 (the fixture generators, §3.2) and Q5 (the streak tracker, §1.6), built 2026-11-22.
 - **Owner answers (plan v7, 2026-11-16):**
   - **D31:** feedback goes to a **new dedicated email alias** the owner reads; the owner files sanitised GitHub issues (owner question 2, as recommended). Owner action: create the alias.
   - **D32:** testers **4 macOS / 4 Windows / 2 Linux** (owner question 3). Builds: **Gate 2** unsigned for the owner and 2 technical testers; **Gate 3** signed `0.2.0-beta` for all 10; **Gate 5** public `1.0.0-beta`; **stable `1.0.0`** after 8 weeks (owner question 1, as recommended).
@@ -324,7 +324,7 @@ Every new workflow (`nightly-desktop.yml`, `release-desktop.yml`, `update-snapsh
 - the asset-store part of `doc-images` and the images of `library-1k`: the asset store (P2.6b)
 - the bad `.tinydoc` header in `hostile/`, and the schema 1 and 2 bundles of `doc-legacy`: the `.tinydoc` format (P2.8) and the first `DOC_SCHEMA` bump
 
-`--cache-key` prints `fixtures-<hash>` over the generator sources, the helpers they extend, the storage engine, the schema snapshot and `bun.lock`; the first workflow that generates fixtures uses it as its `actions/cache` key (none does yet).
+`--cache-key` prints `fixtures-<hash>` over the generator sources, the helpers they extend, the storage engine, the schema snapshot and `bun.lock`; the first workflow that generates fixtures uses it as its `actions/cache` key (none does yet), with `runner.os` added: a seed replays the same bytes within one runtime, but PNG deflate output can differ between zlib builds.
 
 **Seeding commands** (all Bun):
 - `bun scripts/fixtures/generate.ts --set library-1k --seed 42 --out $TMP`
