@@ -426,6 +426,19 @@ ul.st-sheet-list {
   color: var(--muted-foreground);
 }
 
+// "New", as on its "/" row (`slash-badges.ts`); only while one is declared.
+.st-sheet-list .st-insert-cell > .st-insert-new {
+  flex: none;
+  min-width: auto;
+  padding-inline: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.125rem;
+  background: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
 .st-insert-chevron {
   flex: none;
   margin-inline-start: auto;

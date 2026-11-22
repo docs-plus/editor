@@ -1848,6 +1848,29 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     await page.evaluate(() => window.__tiptap_editor?.setEditable(true));
   });
 
+  test("“New” badges agree with the “/” menu: none while none are declared", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(insertSheet(page).locator("[data-slash-new]")).toHaveCount(0);
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    // The same development override the "/" menu's tests use.
+    await page.evaluate(() => {
+      (
+        globalThis as { __SLASH_NEW_UNTIL?: Record<string, string> }
+      ).__SLASH_NEW_UNTIL = { "insert.divider": "2099-12-31" };
+    });
+    await openInsertSheet(page);
+    const divider = insertSheet(page).locator(
+      '[data-action-id="insert.divider"]:not([data-suggested])',
+    );
+    await expect(divider.locator("[data-slash-new]")).toHaveText("New");
+    await expect(divider).toHaveAccessibleName(/^Divider\s*, new$/);
+    await expect(insertSheet(page).locator("[data-slash-new]")).toHaveCount(1);
+  });
+
   test("a pick refused since the sheet opened says why in the sheet", async ({
     page,
   }) => {

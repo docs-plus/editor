@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  DIAGRAM_CELL,
   insertSheetGroups,
-  suggestedKinds,
 } from "@/components/smart-toolbar/phone/insert-sheet-items";
 import type { SlashItem, SlashSection } from "@/lib/slash-menu/slash-items";
 
@@ -19,8 +19,9 @@ const item = (
   ...extra,
 });
 
-/** `buildSlashItems`' shape: registry order, templates last. */
+/** `buildSlashItems`' shape: Suggested copies first, templates last. */
 const ITEMS: SlashItem[] = [
+  item("insert.divider", "Suggested", { key: "suggested:insert.divider" }),
   item("style.paragraph", "Text"),
   item("style.heading1", "Text"),
   item("style.heading4", "Text", { searchOnly: true }),
@@ -28,7 +29,7 @@ const ITEMS: SlashItem[] = [
   item("insert.image", "Insert"),
   item("insert.table", "Insert", { arg: { rows: 3, cols: 3 } }),
   item("insert.quote", "Insert", { reason: "Already in a quote." }),
-  item("insert.divider", "Insert"),
+  item("insert.divider", "Insert", { recent: true }),
   item("template.mermaid:flowchart", "Diagrams", {
     actionId: "template.mermaid",
     lead: true,
@@ -36,33 +37,21 @@ const ITEMS: SlashItem[] = [
   item("template.mermaid:pie", "Diagrams", { actionId: "template.mermaid" }),
 ];
 
-const keys = (items: readonly SlashItem[]) => items.map((i) => i.key);
+const WITHOUT_SUGGESTED = ITEMS.filter((i) => i.section !== "Suggested");
 
-describe("suggestedKinds", () => {
-  it("prefers the recent kinds, else the last one, else none", () => {
-    expect(
-      suggestedKinds({ last: "table", recent: ["divider", "image"] }),
-    ).toEqual(["divider", "image"]);
-    expect(suggestedKinds({ last: "table", recent: [] })).toEqual(["table"]);
-    expect(suggestedKinds({ last: null, recent: [] })).toEqual([]);
-    expect(suggestedKinds({ last: null, recent: [null, "quote"] })).toEqual([
-      "quote",
-    ]);
-  });
-});
+const keys = (items: readonly SlashItem[]) => items.map((i) => i.key);
 
 describe("insertSheetGroups", () => {
   it("titles the block section by whether the caret's block is empty", () => {
-    const empty = insertSheetGroups(ITEMS, { emptyBlock: true, kinds: [] });
+    const empty = insertSheetGroups(WITHOUT_SUGGESTED, { emptyBlock: true });
     expect(empty.groups.map((g) => g.title)).toEqual(["Blocks", "Insert"]);
-    const text = insertSheetGroups(ITEMS, { emptyBlock: false, kinds: [] });
+    const text = insertSheetGroups(WITHOUT_SUGGESTED, { emptyBlock: false });
     expect(text.groups.map((g) => g.title)).toEqual(["Turn into", "Insert"]);
   });
 
   it("keeps the menu's order, drops search-only rows, keeps reasons", () => {
-    const { groups, diagrams } = insertSheetGroups(ITEMS, {
+    const { groups, diagrams } = insertSheetGroups(WITHOUT_SUGGESTED, {
       emptyBlock: true,
-      kinds: [],
     });
     expect(keys(groups[0].items)).toEqual([
       "style.paragraph",
@@ -82,45 +71,17 @@ describe("insertSheetGroups", () => {
     ]);
   });
 
-  it("puts Suggested first, also leaving each kind in its own section", () => {
-    const { groups } = insertSheetGroups(ITEMS, {
-      emptyBlock: true,
-      kinds: ["divider", "embed", "mermaid", "table"],
-    });
+  it("leads with the menu's own Suggested rows; each kind keeps its cell", () => {
+    const { groups } = insertSheetGroups(ITEMS, { emptyBlock: true });
     expect(groups.map((g) => g.key)).toEqual(["suggested", "blocks", "insert"]);
-    // Embed is not built here (no item): skipped. A diagram is the last
-    // used template.
-    expect(keys(groups[0].items)).toEqual([
-      "insert.divider",
-      "template.mermaid:flowchart",
-      "insert.table",
-    ]);
+    expect(keys(groups[0].items)).toEqual(["suggested:insert.divider"]);
     expect(keys(groups[2].items)).toContain("insert.divider");
   });
 
-  it("caps Suggested at three", () => {
-    const { groups } = insertSheetGroups(ITEMS, {
-      emptyBlock: true,
-      kinds: ["divider", "image", "table", "quote"],
-    });
-    expect(keys(groups[0].items)).toEqual([
-      "insert.divider",
-      "insert.image",
-      "insert.table",
-    ]);
-  });
-
   it("seats Diagram ▸ at insert.mermaid's place, as the one Diagram cell", () => {
-    const diagram = {
-      key: "insert.mermaid",
-      actionId: "insert.mermaid",
-      label: "Diagram",
-      keywords: [],
-      section: "Insert" as const,
-    };
-    const { groups } = insertSheetGroups(ITEMS, {
+    const diagram = item("insert.mermaid", "Insert", { label: "Diagram" });
+    const { groups } = insertSheetGroups(WITHOUT_SUGGESTED, {
       emptyBlock: true,
-      kinds: [],
       diagram,
       insertOrder: [
         "insert.image",
@@ -134,7 +95,7 @@ describe("insertSheetGroups", () => {
       "insert.image",
       "insert.table",
       "insert.quote",
-      "diagram",
+      DIAGRAM_CELL,
       "insert.divider",
     ]);
   });

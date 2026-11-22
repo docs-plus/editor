@@ -20,18 +20,19 @@ import { editorActions } from "@/lib/editor-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/lib/icons";
+import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
 import {
-  INSERT_KIND_CHOICE,
-  readChoice,
-  TABLE_SIZE_CHOICE,
-} from "@/lib/remembered-choice";
-import { buildSlashItems, type SlashItem } from "@/lib/slash-menu/slash-items";
+  HAS_NEW_BADGES,
+  isNewItem,
+  localDay,
+} from "@/lib/slash-menu/slash-badges";
+import {
+  buildSlashItems,
+  recentInsertKinds,
+  type SlashItem,
+} from "@/lib/slash-menu/slash-items";
 
-import {
-  DIAGRAM_CELL,
-  insertSheetGroups,
-  suggestedKinds,
-} from "./insert-sheet-items";
+import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
 
 /*
  * The Insert sheet's body (spec §8.3): its own lazy chunk, loaded by the
@@ -80,20 +81,34 @@ function diagramItem(): SlashItem | null {
     : null;
 }
 
-/** The sheet's model, built once per open from the live document. */
+/**
+ * The sheet's model, built once per open from the live document: the "/"
+ * menu's items with its Suggested rows (the recent kinds, A19), and the
+ * keys that show "New" as they do there (none while none are declared).
+ */
 function buildModel(editor: Editor) {
   const actions = editorActions.list();
+  const recent = recentInsertKinds();
   const items = buildSlashItems(
     computeContext(editor),
     actions,
     readChoice(TABLE_SIZE_CHOICE).last,
+    recent,
   );
-  return insertSheetGroups(items, {
-    emptyBlock: editor.state.selection.$from.parent.content.size === 0,
-    kinds: suggestedKinds(readChoice(INSERT_KIND_CHOICE)),
-    insertOrder: actions.map((action) => action.id),
-    diagram: diagramItem(),
-  });
+  return {
+    ...insertSheetGroups(items, {
+      emptyBlock: editor.state.selection.$from.parent.content.size === 0,
+      insertOrder: actions.map((action) => action.id),
+      diagram: diagramItem(),
+    }),
+    fresh: new Set(
+      HAS_NEW_BADGES
+        ? items
+            .filter((item) => isNewItem(item, localDay(), recent))
+            .map((item) => item.key)
+        : [],
+    ),
+  };
 }
 
 /** Whether the cell opens a step (▸) instead of running. */
@@ -108,11 +123,14 @@ const opensStep = (item: SlashItem) =>
 function InsertCell({
   item,
   suggested,
+  fresh,
   onPick,
 }: {
   item: SlashItem;
   /** The Suggested copy of a kind that also has its own section's cell. */
   suggested?: boolean;
+  /** Shows "New", as its "/" row does (`isNewItem`). */
+  fresh?: boolean;
   onPick: (item: SlashItem) => void;
 }) {
   const Icon = item.icon;
@@ -133,13 +151,23 @@ function InsertCell({
         <span aria-hidden="true" className="size-4 shrink-0" />
       )}
       <span className="st-insert-cell-text">
-        <span className="st-insert-cell-label">{item.label}</span>
+        <span className="st-insert-cell-label">
+          {item.label}
+          {HAS_NEW_BADGES && fresh ? (
+            <span className="sr-only">, new</span>
+          ) : null}
+        </span>
         {item.reason ? (
           <span aria-hidden="true" className="st-insert-reason">
             {item.reason}
           </span>
         ) : null}
       </span>
+      {HAS_NEW_BADGES && fresh ? (
+        <span aria-hidden="true" data-slash-new="" className="st-insert-new">
+          New
+        </span>
+      ) : null}
       {item.note && !item.reason ? (
         <span className="st-insert-note">{item.note}</span>
       ) : null}
@@ -161,11 +189,13 @@ function CellGroup({
   labelledBy,
   items,
   suggested,
+  fresh,
   onPick,
 }: {
   labelledBy: string;
   items: readonly SlashItem[];
   suggested?: boolean;
+  fresh: ReadonlySet<string>;
   onPick: (item: SlashItem) => void;
 }) {
   return (
@@ -175,6 +205,7 @@ function CellGroup({
           key={item.key}
           item={item}
           suggested={suggested}
+          fresh={fresh.has(item.key)}
           onPick={onPick}
         />
       ))}
@@ -214,7 +245,9 @@ export function InsertSheetBody({
 }: InsertSheetBodyProps) {
   // Once per open (the body unmounts when the sheet closes), and again
   // after a refusal, so the refused cell shows its reason.
-  const [{ groups, diagrams }, setModel] = useState(() => buildModel(editor));
+  const [{ groups, diagrams, fresh }, setModel] = useState(() =>
+    buildModel(editor),
+  );
   const [refused, setRefused] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const stepTitle = useId();
@@ -269,7 +302,12 @@ export function InsertSheetBody({
           </h3>
         </div>
         {step === "diagram" ? (
-          <CellGroup labelledBy={stepTitle} items={diagrams} onPick={pick} />
+          <CellGroup
+            labelledBy={stepTitle}
+            items={diagrams}
+            fresh={fresh}
+            onPick={pick}
+          />
         ) : (
           <InsertStep
             step={step}
@@ -293,6 +331,7 @@ export function InsertSheetBody({
           title={group.title}
           items={group.items}
           suggested={group.key === "suggested"}
+          fresh={fresh}
           onPick={pick}
         />
       ))}
