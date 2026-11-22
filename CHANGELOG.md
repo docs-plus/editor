@@ -9,6 +9,29 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Docs: offline data model revision (format 2)
+
+Design only; nothing changes for users and there is no deploy step.
+
+#### Added
+
+- **Specs:** `docs/superpowers/specs/2026-11-22-offline-data-model-revision.md`.
+  It contains:
+  - the verdict on the offline goal;
+  - library format 2 as one forward migration: FKs, CHECKs, `links`,
+    `doc_headings`, `blobs`, `doc_blobs`, and `head_seq`/`derived_seq`
+    staleness;
+  - the relationship invariants and the repair job;
+  - the long-document policy and benchmarks T20–T25;
+  - the offline feature matrix;
+  - new plan rows: P2.6d–f, LK4a, LJ1, P2.5b, B0, OF1, OF2;
+  - instructions for the work in progress;
+  - owner decisions D-O1–D-O8.
+
+#### Changed
+
+- **Specs:** the desktop local-first plan §3 points to the revision.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
