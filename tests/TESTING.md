@@ -42,6 +42,7 @@ tests/
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
 │   ├── memory-document-index.ts          # MemoryDocumentIndex: the in-memory DocumentIndex and LibraryIndex (folders, pins, folder trash; deferLoad, failTrash, purgeTrash)
+│   ├── fake-idb.ts                       # fake-indexeddb browsers for the web library (createFakeBrowser, createFakeLibrary, injectQuotaFault)
 │   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── editor-keymap.ts                  # collectEditorKeys(): every combo the editor's extensions bind; normalizeCombo()
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
@@ -159,6 +160,17 @@ Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDr
 - **Chaos fuzz:** 5000 random malformed operations (invalid positions, null content, out-of-range levels) — verifies the editor never crashes
 - **Schema fuzz:** 5000 random valid operations (insert heading, delete, split, join) — verifies invariants hold after each
 
+### Web library storage (`tests/unit/lib/platform/web/library/`)
+
+happy-dom has no IndexedDB, so the web library's tests use `fake-indexeddb` through `tests/helpers/fake-idb.ts`: each `createFakeBrowser()` is a fresh, empty profile, and nothing is installed on `globalThis`. `injectQuotaFault()` makes the next readwrite transaction abort with `QuotaExceededError` after its request runs, as a full disk does at commit.
+
+- **Contract:** P2.1's shared `DocStore` suite (`tests/helpers/doc-store-contract.ts`) on `IdbDocStore`, with `exclusiveOpen: false` (any tab may append).
+- **Compaction property** (`idb-compaction-property.test.ts`, W-D3): 2–3 tabs append, compact and reload at random, some at the same time; after every step a fresh `load()` must equal the union of every acked update. Every choice and every Yjs client id comes from the seed. Seeds run from `LIBRARY_PROPERTY_BASE_SEED` (1 by default, so every PR run is the same), and a failure prints `LIBRARY_PROPERTY_SEED=<n>` to replay it. `LIBRARY_PROPERTY_RUNS` sets the run count: 2,000 by default; the timeout is 120 s or 30 ms a run, whichever is longer. The nightly `library-property` job runs 50,000 from the run id.
+- **Schema** (`library-schema.test.ts`): the exact stores and indexes of version 1, null-free index keys (`''` for null, `stale` as `1`/`0`), `head_seq`, `stale` and `title_key` through create, append and compact, an upgrade of a populated library to version 2 with every row unchanged, the eviction sentinel and its `localStorage` marker, and the `library.json` field lists. It also shows that `fake-indexeddb` leaves records with a null or boolean index key out of the index and throws `DataError` for such a primary key, as browsers do.
+- **Opening and versions** (`library-db.test.ts`): an upgrade in another tab, a blocked upgrade and its clearing (also when the open then fails), close hooks that throw or never settle (`CLOSE_HOOK_TIMEOUT_MS`), a newer database or `format_version` (read-only), and no IndexedDB.
+- **Reload-only recovery** (`idb-local-session.test.ts`): with `local-session` over `IdbDocStore`, a session drain registered as a close hook writes a queued batch before another tab's upgrade closes the connection; without it the batch stays queued and fails with `library_unavailable`.
+- **Not covered by `fake-indexeddb`:** `durability: "strict"`, the `[docId, Infinity]` key range, `onblocked` and `onversionchange` timing and real quota aborts are only modelled. No test runs the library in a real browser.
+
 ### Stress Probe
 
 Binary search for the heading count ceiling where ProseMirror transaction time exceeds 16ms (one frame budget). Tests 5 transaction types (text insert, heading insert/delete, fold toggle, filter apply) on flat and deep document shapes. Reports the ceiling — expected minimum 200 headings.
@@ -265,6 +277,8 @@ it again after typing, before requiring all 220 keystroke samples.
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
 
 The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as `make test-e2e` does) times typing only after the parallel suite has finished, so other workers never compete for the CPU; CI runs `perf` on a runner of its own instead. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+
+**Web library:** the `perf` project doesn't exercise the web library's IndexedDB store; no route mounts it.
 
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 

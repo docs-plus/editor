@@ -144,6 +144,79 @@ unchanged (0 B).
   details E9 Arabic-script and Hebrew folding and §14 `ar-XB` gallery;
   comments §11.2 sides follow the interface; toolbar contract A19.
 
+### Web library W2: the IndexedDB storage engine (dark)
+
+The storage core of My documents, the personal library stored in the
+browser (spec `2026-11-16-web-library-design.md` §2, PR W2). It lands dark:
+nothing in the web app imports it, `NEXT_PUBLIC_LIBRARY` defaults to off,
+and the web build is unchanged: every JS and CSS file under
+`.next/static` matches a build of `main` at `903b5c8` (apart from the
+build's version string), the editor chunk group measures 393,820 B gz on
+both (+0 B, 1,207 B under the fence), and no built file contains the
+library. W2 is not done: `IdbDocumentIndex` is still open, and the
+contract suite in three browsers and the `perf` comparison are deferred to
+the CI session's Q7 job (spec §2.2, "Still open for W2").
+
+#### Added
+
+- **Web library:** `IdbDocStore`, the `DocStore` port over a new IndexedDB
+  database `tinydocy-library` (schema version 1, every store the library
+  will need, including the image store and Live seams). Every content write
+  is one `durability: "strict"` transaction that settles on commit; a full
+  disk or any other abort rejects with a retryable error and writes
+  nothing, so the batcher keeps the batch and retries it in order.
+- **Web library:** version 1 takes the desktop's format 2 data model
+  (offline data-model revision §3.6): the derived `links` and `headings`
+  stores, `head_seq`, `derived_seq`, `links_hash`, `headings_hash`,
+  `title_key` and a numeric `stale` sentinel (`by_stale`) on documents,
+  folder trash groups, snake_case `doc_blobs`, `''` for every nullable
+  index key part, the `pre-v<n>` copy name, an eviction sentinel with its
+  `localStorage` marker, and the `library.json` field lists
+  (`lib/library-format/fields.ts`).
+- **Web library:** compaction that stays safe with any number of tabs
+  writing the same document (W-D3): it merges into the stored snapshot and
+  deletes only the rows its own session applied, and returns another tab's
+  snapshot as `foreign` for `local-session` to apply.
+- **Web library:** compaction treats `foreign` as apply-then-ack: until a
+  later compaction's state covers it, each compaction merges the stored
+  snapshot again, so a caller that drops `foreign` loses nothing.
+- **Web library:** opening handles an upgrade in another tab (close hooks,
+  close, "Reload"), a blocked upgrade and its clearing
+  (`library_upgrade_unblocked`), a newer database or `format_version`
+  (read-only), and a browser that won't store anything (never a silent
+  fallback to memory). Close hooks get 5 s together and may throw without
+  an unhandled rejection. `IdbDocStore.dispose()` unregisters its close
+  hook and forgets every open document, also one still loading. After an
+  upgrade in another tab, a reload is the only recovery; the contract W4
+  must wire up (register the session drain as a close hook) is tested.
+- **Web library:** `persist()`, `persisted()` and `estimate()` helpers with
+  the §2.6–§2.7 rules (silent requests on Chromium and Safari only, every
+  iOS browser counted as Safari, also in iPadOS desktop mode, the 10 GiB
+  Chromium quota report
+  ignored), and the `NEXT_PUBLIC_LIBRARY` switch, which never deletes the
+  library.
+- **Tests:** the shared `DocStore` contract suite on `IdbDocStore` under
+  `fake-indexeddb` (new dev dependency), a seeded multi-writer compaction
+  property test (2,000 runs from seed 1 on every PR, about 21 s;
+  `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_BASE_SEED`,
+  `LIBRARY_PROPERTY_SEED`, Yjs client ids from the seed), quota fault
+  injection through `local-session`, the exact version 1 schema and an
+  upgrade of a populated library, web library import boundaries, and a
+  check that no import, static or dynamic, from `app/`, `components/`,
+  `hooks/`, `extensions/`, `lib/`, `scripts/` or `types/` resolves into the
+  library.
+- **CI:** the nightly `library-property` job runs the property test at
+  50,000 runs, seeded from the run id.
+
+#### Changed
+
+- **Spec:** a web library append bumps `meta.rev` only when it changes the
+  title or snippet; `modified_at` and `size_bytes` never do, and neither
+  does compaction. `IdbDocumentIndex` also reloads its snapshot on
+  `pageshow` from bfcache and when the tab becomes visible (spec §2.2).
+- **Spec:** the image store's web `doc_blobs` and `blobs` rows are
+  snake_case, as on desktop.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
@@ -265,6 +338,7 @@ Hocus. The web build is unchanged: its route table, client chunks, pages and
   builds drop the bridge's branch.
 - The `desktop` project no longer needs Hocus. The X link card test moved to
   `local`, because a release export has no storage until P2.5.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
