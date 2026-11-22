@@ -9,6 +9,31 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.8a: headless schema, Markdown export and safe file names
+
+The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
+
+#### Added
+
+- **Headless schema** (`lib/headless/`): the editor's ProseMirror schema built from its schema extensions, with no view, DOM, React or collaboration plugins.
+  - It converts a Y.Doc to ProseMirror and back through `@tiptap/y-tiptap`. Reading never writes to the Y.Doc, and an unknown node or mark name throws instead of being dropped.
+  - It runs in Bun, in a `worker_thread` and in a browser bundle.
+  - Tests compare it with the editor's schema (names, content, groups, attribute defaults, mark order) and keep it free of `components/`, React, Hocuspocus, DOMPurify, lowlight and Mermaid.
+  - Markdown export, the import engine (IM1) and the web library's export (W7) share it.
+- **Markdown export:** `exportMarkdown(ydoc, { tags, createdAt, modifiedAt })` writes front matter (title, tags, ISO dates), then the body.
+  - The front matter is JSON-quoted, so a hostile title stays one YAML scalar.
+  - The body escapes literal Markdown syntax: line starts, `==`, code fences and inline code that hold backticks.
+  - The node and mark mapping and every degradation are in `docs/design/2026-11-22-markdown-mapping.md`. Colours, font sizes, paragraph and heading alignment, link titles and embed options are dropped. Line breaks in headings become spaces. Letter and roman list numbers become digits. Merged table cells are unmerged in place.
+  - Only the document fragment and the metadata passed in reach the file: comments and secrets never do.
+- **Markdown import (first piece of IM1):** `importMarkdown(text)` reads the title (front matter, then a leading H1, then the file name), tags (capped at 40 characters and 20 per document), and dates.
+  - A restricted front matter reader accepts string scalars and flat lists only. It refuses anchors, aliases, tags, block scalars and nested maps, and caps the block at 64 KiB.
+  - Round-trip tests export then import every editor fixture plus an all-nodes document, and expect exactly the documented losses.
+- **Safe file names** (`lib/filenames.ts`): titles become names that work on macOS, Windows and Linux.
+  - Separators, `<>:"|?*`, control, bidi and zero-width characters are removed. So are leading dots, trailing dots and spaces, and `..`.
+  - Windows device names (`CON`, `nul.tar.gz`, `COM¹`) get a `_`.
+  - Names are cut at a grapheme boundary to 255 UTF-8 bytes, and relative paths are kept to 240 characters.
+  - Collisions get ` (2)`, compared without regard to case or Unicode normalisation.
+  - A property test runs 1,000 hostile titles.
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
