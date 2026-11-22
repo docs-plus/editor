@@ -4,6 +4,7 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  type ReactNode,
   lazy,
   Profiler,
   Suspense,
@@ -62,7 +63,6 @@ import {
   FilterBar,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
-import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
@@ -99,6 +99,12 @@ interface DocumentEditorProps {
    * guard's Yjs repair is not gated yet. The web sandbox never sets it.
    */
   readOnly?: boolean;
+  /**
+   * The connection and identity chip, chosen by the composition root (the
+   * web sandbox passes `CollabStatusGroup`); shown only with a provider. The
+   * editor never imports it: it reads `collab-session` (architecture §3.3).
+   */
+  statusChip?: ReactNode;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -164,6 +170,7 @@ function DocumentEditorContent({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  statusChip,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -455,7 +462,7 @@ function DocumentEditorContent({
           />
         )}
         {/* Its connection state opens the shared socket: only with a provider. */}
-        {provider && <CollabStatusGroup />}
+        {provider && statusChip}
       </EditorContext.Provider>
     </main>
   );
@@ -468,6 +475,7 @@ export function DocumentEditor({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  statusChip,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
@@ -496,6 +504,7 @@ export function DocumentEditor({
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
       onPlaygroundRegenerate={onPlaygroundRegenerate}
       readOnly={readOnly}
+      statusChip={statusChip}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />
