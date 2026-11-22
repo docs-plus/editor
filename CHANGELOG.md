@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### `CHANGELOG.md` merges keep both sides
+
+Parallel pull requests each add an entry under Unreleased, so merging
+`origin/main` into a branch used to conflict on this file every time.
+
+#### Changed
+
+- **Repo:** `.gitattributes` merges `CHANGELOG.md` with git's built-in
+  `union` driver: `git merge origin/main` keeps both entries. GitHub's merge
+  check ignores merge drivers (checked with a throwaway pull request), so a
+  pull request behind `main` still shows a conflict until that local merge is
+  pushed. Read the merged section before committing: a blank line between
+  two entries can go missing, and a line both sides edited is kept twice.
+
+**Deploy:** none.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy

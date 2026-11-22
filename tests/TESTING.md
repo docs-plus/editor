@@ -513,6 +513,13 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   workflow file. Each workflow needs a read-only default token, explicit
   per-job permissions, `persist-credentials: false` on checkout, and actions
   pinned to commit SHAs.
+- **`CHANGELOG.md` merges:** `.gitattributes` sets `merge=union`, so merging
+  `origin/main` into a branch keeps both sides' Unreleased entries instead of
+  conflicting. GitHub's own merge check ignores merge drivers, so a pull
+  request still shows "conflicting" until that local merge is pushed. The
+  merged text can lose the blank line between two entries and keeps both
+  copies of a line that both sides edited: read the section before
+  committing the merge.
 
 ## Key Conventions
 

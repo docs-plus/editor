@@ -14,7 +14,7 @@
 - Keep `.cursor/skills/` and `.cursor/rules/` tracked in git — never ignore them
 - Always verify changes by running them — open the app and screenshot for UI; run tests end-to-end for test code; fix issues before considering work done
 - When writing specifications or design documents, keep them self-contained; update related docs after feature implementation to keep teams synchronized
-- Record every merged change in `CHANGELOG.md` (Keep a Changelog, grouped by merged PR, newest first, with an operator "Deploy" note when a release needs one); add the entry under Unreleased in the same PR
+- Record every merged change in `CHANGELOG.md` (Keep a Changelog, grouped by merged PR, newest first, with an operator "Deploy" note when a release needs one); add the entry under Unreleased in the same PR (`.gitattributes` merges `CHANGELOG.md` with `merge=union`, so `git merge origin/main` keeps both entries; GitHub still shows the conflict until that merge is pushed; check the merged blank lines)
 - Prefer working in parallel on independent tracks (background agents in isolated worktrees with disjoint file ownership), then integrate, resolve overlaps and re-verify everything in one place
 - Never test against the live site (tiny.docs.plus); reproduce on localhost with production builds when behaviour depends on them
 

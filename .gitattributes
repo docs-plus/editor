@@ -1,0 +1,6 @@
+# Parallel pull requests each add an entry under "## [Unreleased]": merging
+# origin/main into a branch with `git merge` keeps both sides instead of
+# conflicting. GitHub's own merge check ignores merge drivers, so a pull
+# request behind main still shows a conflict until that merge is pushed.
+# Read the merged section before committing (a blank line can go missing).
+CHANGELOG.md merge=union
