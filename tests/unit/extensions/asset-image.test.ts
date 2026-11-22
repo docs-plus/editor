@@ -32,6 +32,7 @@ import {
   refreshMediaSrc,
 } from "@/extensions/hyper-multimedia/asset-image";
 import { ASSET_IMAGE_COPY } from "@/extensions/hyper-multimedia/asset-image-view";
+import { AssetHyperMultimediaKit } from "@/extensions/hyper-multimedia/asset-kit";
 import { HyperMultimediaKit } from "@/extensions/hyper-multimedia/hyper-multimedia-kit";
 import { getNotice } from "@/lib/announce";
 import { formatAssetRef, isAssetRef } from "@/lib/assets/asset-ref";
@@ -79,7 +80,7 @@ function makeEditor(
   content: string | Record<string, unknown> = "<p></p>",
 ): Editor {
   const editor = new Editor({
-    extensions: [StarterKit, HyperMultimediaKit.configure({ assets })],
+    extensions: [StarterKit, AssetHyperMultimediaKit.configure({ assets })],
     content,
   });
   editors.push(editor);
@@ -160,12 +161,6 @@ describe("isHostSrc (the editor chunk's cheap check)", () => {
 });
 
 describe("HyperMultimedia 2.3 internals the fallback relies on (pins)", () => {
-  it("the base kit has no default options for addOptions to keep", () => {
-    // `hyper-multimedia-kit.ts` returns its options without spreading the
-    // parent's; restore the spread if this ever fails.
-    expect(BaseKit.options as object).toEqual({});
-  });
-
   it("the stock view sets img.src from the node's src", () => {
     const editor = baseEditor(imageHtml("https://example.com/a.png"));
     expect(imageDom(editor).querySelector("img")?.getAttribute("src")).toBe(
@@ -446,6 +441,23 @@ describe("asset: images in the public sandbox (no asset scope)", () => {
     expect(imageDom(editor).classList).toContain(
       "hypermultimedia--image__content",
     );
+  });
+});
+
+describe("the sandbox kit (HyperMultimediaKit) is unchanged", () => {
+  it("has no Alt text… and drops asset: images like the stock kit", async () => {
+    const { src } = await desktopScope();
+    const editor = new Editor({
+      extensions: [StarterKit, HyperMultimediaKit],
+      content: imageHtml(src) + imageHtml("https://example.com/a.png"),
+    });
+    editors.push(editor);
+    expect(images(editor).map((attrs) => attrs.src)).toEqual([
+      "https://example.com/a.png",
+    ]);
+    await loadAssetImages();
+    const ids = resolveMediaActions(editor, "image").map((action) => action.id);
+    expect(ids).not.toContain("alt-text");
   });
 });
 

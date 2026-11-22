@@ -5,14 +5,18 @@
  * lands** (AGENTS.md: remove shims once a migration is done);
  * `asset-image.test.ts` pins the 2.3 internals they rely on.
  *
- * The editor-chunk part, kept small (A1's 600 B gz allowance):
+ * Used only by `asset-kit.ts` (`AssetHyperMultimediaKit`), the kit for
+ * documents with an image store; the public sandbox's editor never imports
+ * it. Nothing here runs at import.
+ *
  * - `withAssetSrc` routes an image whose src is an `asset:` ref to the lazy
  *   view (`asset-image-view.ts`); until that chunk is loaded it shows an
  *   empty box, then refreshes. A host with library documents can call
  *   `loadAssetImages()` early (desktop at startup) to skip that box.
- * - `assetParseRules` keeps `asset:` images on paste, drop and HTML import
- *   in a library document. Without an asset scope (the public sandbox, I7)
- *   they are dropped, as the stock kit drops them, and the writer is told.
+ * - `assetImageParseRules` keeps `asset:` images on paste, drop and HTML
+ *   import in a library document (`asset-image-parse.ts`, shared with the
+ *   headless schema). Without an asset scope they are dropped, as the stock
+ *   kit drops them, and the writer is told.
  * - `assetRefreshPlugin` holds the refresh decorations `refreshMediaSrc`
  *   sets (meta-only, outside history).
  * - `assetMediaActions` hands the image toolbar to the lazy chunk, which adds
@@ -32,32 +36,33 @@ import { Decoration, DecorationSet, type NodeView } from "@tiptap/pm/view";
 import type { AssetScope } from "@/lib/assets/asset-resolver";
 
 import type { AltTextDeps } from "./alt-text-popover";
+import { assetParseRules, isHostSrc } from "./asset-image-parse";
 import type { AssetImageDeps } from "./asset-image-view";
 
 export type { AssetScope };
+export { isHostSrc };
 
 /** Reads the current document's scope; `null` in the sandbox. Never changes identity. */
 export type AssetScopeGetter = () => AssetScope | null;
 
+let refreshKey: PluginKey<DecorationSet> | undefined;
+let deps: (AssetImageDeps & AltTextDeps) | undefined;
+
 /**
- * U1's `isHostSrc`: an `asset:<alg>-<digest>` src, kept on paste and drawn
- * by the lazy view. Looser than `parseAssetRef` (a malformed sha256 ref
- * passes here and shows "needs a newer version"), so the editor chunk need
- * not hold the full parser.
+ * Editor-chunk values the lazy chunk receives instead of importing them.
+ * Made on first use, so importing this module has no side effects.
  */
-export const isHostSrc = (src: unknown): src is string =>
-  typeof src === "string" && /^asset:[a-z0-9]+-[\w-]+$/.test(src);
-
-const refreshKey = new PluginKey<DecorationSet>("asset");
-
-/** Editor-chunk values the lazy chunk receives instead of importing them. */
-const deps: AssetImageDeps & AltTextDeps = {
-  deco: Decoration,
-  shell: wrapMediaWithLoadingShell,
-  key: refreshKey,
-  open: openMediaPopover,
-  close: closeToolbarPopover,
-};
+function getDeps(): AssetImageDeps & AltTextDeps {
+  refreshKey ??= new PluginKey<DecorationSet>("asset");
+  deps ??= {
+    deco: Decoration,
+    shell: wrapMediaWithLoadingShell,
+    key: refreshKey,
+    open: openMediaPopover,
+    close: closeToolbarPopover,
+  };
+  return deps;
+}
 
 type LazyModule = typeof import("./asset-image-lazy");
 let lazy: LazyModule | undefined;
@@ -83,7 +88,7 @@ function callLazy(name: LazyCall, ...args: unknown[]): void {
   void loadAssetImages().then((module) =>
     (module?.[name] as ((...all: unknown[]) => void) | undefined)?.(
       ...args,
-      deps,
+      getDeps(),
     ),
   );
 }
@@ -94,15 +99,16 @@ export function refreshMediaSrc(editor: Editor, src: string): void {
 }
 
 export function assetRefreshPlugin(): Plugin<DecorationSet> {
+  const { key } = getDeps();
   return new Plugin<DecorationSet>({
-    key: refreshKey,
+    key,
     state: {
       init: () => DecorationSet.empty,
       apply: (tr, set) =>
-        (tr.getMeta(refreshKey) as DecorationSet | undefined) ??
+        (tr.getMeta(key) as DecorationSet | undefined) ??
         set.map(tr.mapping, tr.doc),
     },
-    props: { decorations: (state) => refreshKey.getState(state) },
+    props: { decorations: (state) => key.getState(state) },
   });
 }
 
@@ -134,37 +140,30 @@ export function withAssetSrc(
   return (props) => {
     const { src } = props.node.attrs;
     if (!isHostSrc(src)) return parent(props);
-    if (lazy) return lazy.view(parent, props, getScope(), deps);
+    if (lazy) return lazy.view(parent, props, getScope(), getDeps());
     refreshMediaSrc(props.editor, src);
     return { dom: document.createElement("div"), update: () => false };
   };
 }
 
-/** The stock image parse rules, plus `asset:` srcs (U1 change 2). */
-export function assetParseRules(
+/** The image parse rules: `asset:` kept with a scope, else dropped with a notice. */
+export function assetImageParseRules(
   rules: readonly TagParseRule[],
   getScope: AssetScopeGetter,
 ): TagParseRule[] {
-  return rules.map((rule) => ({
-    ...rule,
-    getAttrs: (element: HTMLElement) => {
-      // The figure rule's `<img>`, or the `<img>` rule's own element.
-      const img = element.querySelector("img") ?? element;
-      if (!isHostSrc(img.getAttribute("src"))) {
-        return rule.getAttrs?.(element) ?? {};
-      }
-      if (getScope()) return {};
-      callLazy("pasteRefused");
-      return false;
-    },
-  }));
+  return assetParseRules(
+    rules,
+    () => getScope() !== null,
+    () => callLazy("pasteRefused"),
+  );
 }
 
 /**
- * Image toolbar extras, from the lazy chunk (`imageActions` in `asset-media-actions.ts`): Alt text…,
- * and Download and Copy that use an `asset:` image's bytes. The chunk loads
+ * Image toolbar extras, from the lazy chunk (`imageActions` in
+ * `asset-media-actions.ts`): Alt text…, and Download and Copy that use an
+ * `asset:` image's bytes. The chunk loads
  * when the first image view renders, so it is there before any toolbar
  * opens; until then the stock actions show.
  */
 export const assetMediaActions: MediaActionsResolver = (defaults, context) =>
-  lazy?.actions(defaults, context, deps) ?? defaults;
+  lazy?.actions(defaults, context, getDeps()) ?? defaults;

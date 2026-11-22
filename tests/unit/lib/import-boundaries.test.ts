@@ -178,8 +178,8 @@ describe("import boundaries", () => {
   }
 });
 
-// The image store (spec §9, A1): the editor chunk holds only the host-src
-// check and the §6.2 fallback's routing. The resolver, the object-URL cache, the strippers,
+// The image store (spec §9, A1): the asset kit holds only the host-src
+// check and the §6.2 fallback's routing; the rest is lazy. The resolver, the object-URL cache, the strippers,
 // sniffing, hashing and the insert pipeline stay lazy chunks.
 const LAZY_ASSET_MODULES = [
   "lib/assets/asset-ref.ts",
@@ -208,12 +208,38 @@ const SERVER_SAFE_ASSET_MODULES = [
 ];
 
 describe("image store import boundaries", () => {
-  it("the media kit loads no lazy asset module eagerly", () => {
+  // A1 has no D23 ledger line: the sandbox editor's graph must hold no
+  // asset code at all. Hosts with an image store use `asset-kit.ts`.
+  it("the sandbox editor loads no image store module", () => {
     const { files } = staticImports(
+      "components/document-editor/document-editor-config.ts",
+    );
+    expect([...files]).toContain(
       "extensions/hyper-multimedia/hyper-multimedia-kit.ts",
     );
-    for (const lazy of LAZY_ASSET_MODULES)
+    for (const file of files) {
+      expect(file.startsWith("lib/assets/")).toBe(false);
+      expect(file.startsWith("extensions/hyper-multimedia/asset-")).toBe(false);
+      expect(file).not.toBe("lib/platform/blob-store.ts");
+    }
+  });
+
+  // The headless schema (P2.8a) applies these rules: no env, scss or DOM.
+  it("asset-image-parse imports nothing at runtime", () => {
+    const { files, packages } = staticImports(
+      "extensions/hyper-multimedia/asset-image-parse.ts",
+    );
+    expect([...packages]).toEqual([]);
+    expect([...files]).toEqual([
+      "extensions/hyper-multimedia/asset-image-parse.ts",
+    ]);
+  });
+
+  it("the asset kit loads no lazy asset module eagerly", () => {
+    const { files } = staticImports("extensions/hyper-multimedia/asset-kit.ts");
+    for (const lazy of LAZY_ASSET_MODULES) {
       expect([...files]).not.toContain(lazy);
+    }
   });
 
   for (const entry of SERVER_SAFE_ASSET_MODULES) {
