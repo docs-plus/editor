@@ -2,17 +2,11 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import type { DocHandle, DocHandleState } from "@/lib/platform/doc-session";
-import { useDocSession } from "@/lib/platform/doc-session-context";
+import type { DocHandle } from "@/lib/platform/doc-session";
+import { DOC_LOADING, useDocSession } from "@/lib/platform/doc-session-context";
 
-const LOADING: DocHandleState = {
-  ready: false,
-  authoritative: false,
-  readOnlyReason: null,
-  error: null,
-};
 const subscribeNone = () => () => {};
-const getLoading = () => LOADING;
+const getLoading = () => DOC_LOADING;
 
 /**
  * Opens `documentId` through the `DocSession` in context (the sandbox's
@@ -26,10 +20,8 @@ export function useYjsDocument(documentId: string) {
   useEffect(() => {
     const opened = docSession.open(documentId);
     setHandle(opened);
-    return () => {
-      opened.release();
-      setHandle(null);
-    };
+    // The next open replaces the handle in the same flush.
+    return opened.release;
   }, [docSession, documentId]);
 
   const state = useSyncExternalStore(
@@ -39,9 +31,10 @@ export function useYjsDocument(documentId: string) {
   );
 
   return {
-    ydoc: handle?.doc ?? null,
+    /** Undefined until the first open. */
+    ydoc: handle?.doc,
     /** The session's one Awareness (DocSession shape). */
-    awareness: handle?.awareness ?? null,
+    awareness: handle?.awareness,
     provider: handle?.provider ?? null,
     /** Renderable: loaded, synced, or restored from the device copy. */
     synced: state.ready,

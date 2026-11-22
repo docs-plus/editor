@@ -17,7 +17,7 @@ export function SandboxDocumentEditor(
   props: ComponentProps<typeof DocumentEditor>,
 ) {
   return (
-    <DocSessionProvider session={sandboxDocSession}>
+    <DocSessionProvider value={sandboxDocSession}>
       <DocumentEditor {...props} />
     </DocSessionProvider>
   );

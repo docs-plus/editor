@@ -48,7 +48,7 @@ function renderHook(session: DocSession | null, documentId: string) {
       const probe = <Probe id={id} results={results} />;
       root.render(
         session ? (
-          <DocSessionProvider session={session}>{probe}</DocSessionProvider>
+          <DocSessionProvider value={session}>{probe}</DocSessionProvider>
         ) : (
           probe
         ),
@@ -113,8 +113,8 @@ describe("useYjsDocument", () => {
     expect(manual.opened).toEqual(["doc-a"]);
     const handle = manual.handle("doc-a");
     expect(hook.latest()).toEqual({
-      ydoc: handle?.doc ?? null,
-      awareness: handle?.awareness ?? null,
+      ydoc: handle?.doc,
+      awareness: handle?.awareness,
       provider: null,
       synced: false,
       serverSynced: false,
