@@ -1,0 +1,25 @@
+/*
+ * Document links that don't open (search-linking §4.6): deleted, not in
+ * this library, or a form from a newer version. Their underline is dashed,
+ * so the state never rests on the icon or colour alone. The icon is the
+ * `.doc-link-icon` that `linkIcon` puts inside the link. A host that passes
+ * a link host imports this file; the web sandbox doesn't.
+ */
+.ProseMirror a:has(> .doc-link-icon[data-link-state="deleted"]),
+.ProseMirror a:has(> .doc-link-icon[data-link-state="not_in_library"]),
+.ProseMirror a:has(> .doc-link-icon[data-link-state="unknown_form"]) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+}
+
+.ProseMirror .doc-link-icon {
+  display: inline-flex;
+  vertical-align: -0.125em;
+  margin-inline-end: 0.15em;
+  color: var(--muted-foreground);
+}
+
+.ProseMirror .doc-link-icon > svg {
+  width: 1em;
+  height: 1em;
+}

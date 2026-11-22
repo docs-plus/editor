@@ -33,6 +33,8 @@ import { cycleRegion, trackRegionFocus } from "@/lib/region-focus";
 import { isMac } from "@/lib/shortcuts";
 import { MemoryDocumentIndex } from "@/tests/helpers/memory-document-index";
 
+import { LinksHarness } from "./links-view";
+
 const params = new URLSearchParams(location.search);
 const NARROW = 720;
 const HOUR = 3_600_000;
@@ -367,4 +369,8 @@ function Harness() {
 }
 
 const root = document.getElementById("root");
-if (root) createRoot(root).render(<Harness />);
+if (root) {
+  createRoot(root).render(
+    params.get("view") === "links" ? <LinksHarness /> : <Harness />,
+  );
+}

@@ -144,3 +144,10 @@ body {
   font: inherit;
   font-weight: 600;
 }
+.h-editor .ProseMirror {
+  outline: none;
+  line-height: 1.6;
+}
+.h-editor .ProseMirror a {
+  color: var(--primary-ink, var(--primary));
+}
