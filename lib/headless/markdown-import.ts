@@ -145,6 +145,11 @@ function fileStem(fileName: string | undefined): string | null {
  * heading equal to the title is the title, so an exported file comes back
  * without a repeated title. Throws `SchemaMismatchError` when the result
  * does not fit the schema.
+ *
+ * Not yet the full import engine (IM1): `javascript:` and `data:` links
+ * come back with an empty href, but raw HTML is not sanitised, there are
+ * no size caps, and images are not run through the image pipeline. Use it
+ * on untrusted files only behind IM1's guards.
  */
 export function importMarkdown(
   text: string,

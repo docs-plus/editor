@@ -44,19 +44,19 @@ Body…
 | Node | Markdown | Comes back as | Lost |
 |---|---|---|---|
 | `doc` | Blocks separated by a blank line | Same | — |
-| `heading` (title) | `# Title`, plus front matter `title` | Title heading | `id`, `data-toc-id` (regenerated), `textAlign` |
-| `heading` 1–6 | `#`–`######`; a trailing ` #` is escaped | Same level | `id`, `data-toc-id`, `textAlign`. An **empty** heading below the title comes back as an empty paragraph. |
+| `heading` (title) | `# Title`, plus front matter `title` | Title heading | `id`, `data-toc-id` (regenerated), `textAlign`. Hard breaks become spaces. |
+| `heading` 1–6 | `#`–`######`; a trailing ` #` is escaped | Same level | `id`, `data-toc-id`, `textAlign`. **Hard breaks become spaces:** a Markdown heading is one line. An **empty** heading below the title comes back as an empty paragraph. |
 | `paragraph` | Text. Line starts that Markdown would read as block syntax (`# `, `- `, `+ `, `1. `, `1) `, `>`, `---`, `===`, `* * *`) are backslash-escaped. Leading spaces and tabs become `&#32;` / `&#9;`. | Same text | `textAlign` |
 | empty `paragraph` | Blank lines; `&nbsp;` from the second one in a run (Tiptap's convention) | Empty paragraph | — |
 | `hardBreak` | Two trailing spaces and a newline | Same | — |
 | `blockquote` | `> ` | Same | — |
 | `bulletList` / `listItem` | `- `, nested by indentation | Same | — |
-| `orderedList` | `3. ` (keeps `start`) | Same | `type` |
+| `orderedList` | `3. ` (keeps `start`), always digits | Same | `type` (letters, roman). Letter and roman markers are ambiguous in Markdown: `c.` reads back as the roman numeral 100. |
 | `taskList` / `taskItem` | `- [ ]` / `- [x]`, nested | Same, checked state kept | — |
 | `codeBlock` | A fence one backtick longer than any backtick run inside (at least ```` ``` ````), with the language | Same | An unsafe language (not `^[A-Za-z0-9_+#.-]{1,40}$`) is dropped on export, as in the editor. |
 | `codeBlock` with language `mermaid` (Mermaid diagrams) | ```` ```mermaid ```` fence holding the source | A Mermaid block | — (other viewers show the source; GitHub renders it) |
 | `horizontalRule` | `---` | Same | — |
-| `table` / `tableRow` / `tableHeader` / `tableCell` | GFM table; `\|` escaped in cells | Same | **Merged cells are unmerged:** the text stays in the first cell, and the cells it covered come back empty. **A cell with several blocks** becomes one paragraph with line breaks (`<br>`); a list in a cell becomes `- ` text. **A table without a header row** gets an empty header row. `align` and `colwidth` are lost. |
+| `table` / `tableRow` / `tableHeader` / `tableCell` | GFM table on a full grid; `\|` escaped in cells; header alignment as `:---:` / `---:` | Same | **Merged cells are unmerged:** the text stays in the top-left cell, and the places it covered come back as empty cells in the same columns. (The stock renderer shifted cells below a row span to the left; the headless table fixes that.) **Alignment is per column:** every cell takes its header cell's `align`. **A cell with several blocks** becomes one paragraph with line breaks (`<br>`); a list in a cell becomes `- ` text. **A table without a header row** gets an empty header row. `colwidth` is lost. |
 | `image` | `![alt](src "caption"){width=… height=… float=… display=… clear=…}` (the media kit's form) | Same | Hover `title`, `margin`. `asset:` sources are kept as they are; the image store's P2.8+ step rewrites them to an `<name>-images/` folder. |
 | `youtube`, `vimeo`, `loom`, `soundcloud`, `spotify`, `x`, `video`, `audio` | `![youtube](src "caption"){…}`: the media kit's image syntax, with the node name as the alt text | The same embed | Embed options (`start`, `autoplay`, `controls`…) and `margin`. **Other viewers show a broken image** with the node name. This form was kept on purpose: it is what the editor's own Markdown serializer (Copy as Markdown) writes, and it is the only form that comes back as an embed. |
 | `imageUpload` | Nothing (left out) | — | The node: it is a placeholder that only exists while an upload runs. |
@@ -94,6 +94,8 @@ Markdown syntax typed as text is escaped so it comes back unchanged (tested): `*
 - **Dates:** `created` › `date`, and `modified` › `updated`, as epoch milliseconds.
 - **Other properties:** dropped, and named in `droppedProperties` with the ones the restricted reader refused (anchors, aliases, tags, block scalars, nested maps).
 - **Blocks the parser leaves inside a paragraph** (embeds) are lifted out, and the result is checked against the schema.
+
+**Unsafe links.** A `javascript:` or `data:` link or image source comes back with an empty `href` or `src`, because the extensions refuse those schemes. Raw `<a href="javascript:…">` becomes plain text (tested). The link or image node itself stays, though. IM1 should turn such links into their text and drop such images.
 
 **Left to IM1:** the link scheme filter (`http`, `https`, `mailto` only), the sanitiser for raw HTML, wikilink and relative-path bookkeeping, footnotes and callouts, Notion id stripping, the images pipeline, and size caps.
 

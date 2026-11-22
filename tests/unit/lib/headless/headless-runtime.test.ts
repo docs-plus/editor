@@ -14,11 +14,14 @@ const FORBIDDEN_INPUT =
 
 describe("headless module runtimes", () => {
   it("runs in a worker_thread with no DOM", async () => {
-    const child = Bun.spawn(["bun", "tests/helpers/headless-worker-host.ts"], {
-      cwd: ROOT,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const child = Bun.spawn(
+      [process.execPath, "tests/helpers/headless-worker-host.ts"],
+      {
+        cwd: ROOT,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),

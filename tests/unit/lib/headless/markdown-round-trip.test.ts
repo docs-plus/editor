@@ -9,7 +9,7 @@ import {
   jsonToYDoc,
   yDocToJSON,
 } from "@/lib/headless/headless-schema";
-import { exportMarkdown } from "@/lib/headless/markdown-export";
+import { documentTitle, exportMarkdown } from "@/lib/headless/markdown-export";
 import { importMarkdown } from "@/lib/headless/markdown-import";
 
 import { ALL_NODES_DOC } from "../../../fixtures/all-nodes-document";
@@ -30,10 +30,42 @@ const DROPPED_MARKS = new Set(["textColor", "fontSize"]);
  */
 const DROPPED_ATTRS: Record<string, readonly string[]> = {
   heading: ["id", "data-toc-id", "textAlign"],
+  orderedList: ["type"],
   paragraph: ["textAlign"],
-  tableCell: ["align", "colwidth"],
-  tableHeader: ["align", "colwidth"],
+  tableCell: ["colwidth"],
+  tableHeader: ["colwidth"],
 };
+
+/** A heading is one Markdown line: its hard breaks come back as spaces. */
+function headingBreaksAsSpaces(node: JSONContent): JSONContent {
+  if (node.type !== "heading" || !node.content) return node;
+  return {
+    ...node,
+    content: node.content.map((child) =>
+      child.type === "hardBreak" ? { type: "text", text: " " } : child,
+    ),
+  };
+}
+
+/**
+ * GFM keeps one alignment per column, from the header row: every cell of
+ * a column comes back with its header cell's `align` (simple tables; the
+ * fixtures merge no cells).
+ */
+function columnAlignment(node: JSONContent): JSONContent {
+  if (node.type !== "table" || !node.content) return node;
+  const header = node.content[0]?.content ?? [];
+  return {
+    ...node,
+    content: node.content.map((row) => ({
+      ...row,
+      content: row.content?.map((cell, column) => ({
+        ...cell,
+        attrs: { ...cell.attrs, align: header[column]?.attrs?.align ?? null },
+      })),
+    })),
+  };
+}
 
 const MEDIA_NODES = new Set([
   "audio",
@@ -66,8 +98,9 @@ const KEPT_IMAGE_ATTRS = new Set([...KEPT_MEDIA_ATTRS, "alt"]);
  * The documented degradation (docs/design/2026-11-22-markdown-mapping.md), applied to
  * a document: what a Markdown export then import must give back exactly.
  */
-function normalizeForMarkdown(node: JSONContent): JSONContent | null {
-  if (node.type === "imageUpload") return null;
+function normalizeForMarkdown(source: JSONContent): JSONContent | null {
+  if (source.type === "imageUpload") return null;
+  const node = columnAlignment(headingBreaksAsSpaces(source));
   const out: JSONContent = { type: node.type };
   if (node.attrs) {
     const attrs = { ...node.attrs };
@@ -161,10 +194,9 @@ describe("Markdown round trip", () => {
 
     it(`${name}: metadata survives through front matter`, () => {
       const { ydoc, imported } = roundTrip(doc);
-      const title =
-        getHeadlessSchema()
-          .nodeFromJSON(yDocToJSON(ydoc))
-          .firstChild?.textContent.trim() ?? "";
+      const title = documentTitle(
+        getHeadlessSchema().nodeFromJSON(yDocToJSON(ydoc)),
+      );
       expect(imported.title).toBe(title);
       expect(imported.tags).toEqual(META.tags);
       expect(imported.createdAt).toBe(META.createdAt);
@@ -394,6 +426,40 @@ describe("documented degradations", () => {
     );
   });
 
+  it("keeps the cells below a row-spanning cell in their columns", () => {
+    const [table] = importedBlocks({
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            tableCell("tableHeader", [textParagraph("h1")]),
+            tableCell("tableHeader", [textParagraph("h2")]),
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            tableCell("tableCell", [textParagraph("tall")], { rowspan: 2 }),
+            tableCell("tableCell", [textParagraph("b")]),
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [tableCell("tableCell", [textParagraph("c")])],
+        },
+      ],
+    });
+    const texts = table.content?.map((row) =>
+      row.content?.map((cell) => cell.content?.[0]?.content?.[0]?.text ?? ""),
+    );
+    expect(texts).toEqual([
+      ["h1", "h2"],
+      ["tall", "b"],
+      ["", "c"],
+    ]);
+  });
+
   it("joins a cell's blocks into one paragraph with line breaks", () => {
     const [table] = importedBlocks({
       type: "table",
@@ -496,6 +562,20 @@ describe("exportMarkdown", () => {
 });
 
 describe("importMarkdown", () => {
+  it("never keeps a javascript: or data: link or image source", () => {
+    for (const source of [
+      "[x](javascript:alert(1))",
+      "![x](javascript:alert(1))",
+      '<a href="javascript:alert(1)">x</a>',
+      "[x](data:text/html,<script>alert(1)</script>)",
+      "[x](JaVaScRiPt:alert(1))",
+    ]) {
+      const json = JSON.stringify(importMarkdown(`# T\n\n${source}`).doc);
+      expect(json.toLowerCase()).not.toContain("javascript:");
+      expect(json).not.toContain("data:text/html");
+    }
+  });
+
   it("takes the title from front matter, then a leading H1, then the file name", () => {
     expect(importMarkdown("---\ntitle: Front\n---\nText").title).toBe("Front");
     expect(importMarkdown("# Heading\n\nText").title).toBe("Heading");

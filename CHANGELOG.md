@@ -23,7 +23,7 @@ The first part of plan P2.8: the parts that need no Electron shell. Nothing in t
 - **Markdown export:** `exportMarkdown(ydoc, { tags, createdAt, modifiedAt })` writes front matter (title, tags, ISO dates), then the body.
   - The front matter is JSON-quoted, so a hostile title stays one YAML scalar.
   - The body escapes literal Markdown syntax: line starts, `==`, code fences and inline code that hold backticks.
-  - The node and mark mapping and every degradation are in `docs/design/2026-11-22-markdown-mapping.md`. Colours, font sizes, alignment, link titles and embed options are dropped. Merged table cells are unmerged.
+  - The node and mark mapping and every degradation are in `docs/design/2026-11-22-markdown-mapping.md`. Colours, font sizes, paragraph and heading alignment, link titles and embed options are dropped. Line breaks in headings become spaces. Letter and roman list numbers become digits. Merged table cells are unmerged in place.
   - Only the document fragment and the metadata passed in reach the file: comments and secrets never do.
 - **Markdown import (first piece of IM1):** `importMarkdown(text)` reads the title (front matter, then a leading H1, then the file name), tags (capped at 40 characters and 20 per document), and dates.
   - A restricted front matter reader accepts string scalars and flat lists only. It refuses anchors, aliases, tags, block scalars and nested maps, and caps the block at 64 KiB.

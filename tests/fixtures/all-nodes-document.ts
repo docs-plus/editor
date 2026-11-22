@@ -23,16 +23,29 @@ const item = (type: string, value: string, ...nested: JSONContent[]) => ({
   content: [paragraph(text(value)), ...nested],
 });
 
-const cell = (type: string, value: string): JSONContent => ({
+const cell = (
+  type: string,
+  value: string,
+  attrs?: Record<string, unknown>,
+): JSONContent => ({
   type,
+  ...(attrs ? { attrs } : {}),
   content: [paragraph(text(value))],
 });
 
 export const ALL_NODES_DOC: JSONContent = {
   type: "doc",
   content: [
-    heading(1, "Kitchen sink"),
-    heading(2, "Second level"),
+    {
+      type: "heading",
+      attrs: { level: 1, "data-toc-id": "toc-title" },
+      content: [text("Kitchen"), { type: "hardBreak" }, text("sink")],
+    },
+    {
+      type: "heading",
+      attrs: { level: 2, textAlign: "center", "data-toc-id": "toc-second" },
+      content: [text("Second"), { type: "hardBreak" }, text("level")],
+    },
     heading(3, "Third level"),
     heading(4, "Fourth level"),
     heading(5, "Fifth level"),
@@ -90,7 +103,7 @@ export const ALL_NODES_DOC: JSONContent = {
     },
     {
       type: "orderedList",
-      attrs: { start: 3 },
+      attrs: { start: 3, type: "a" },
       content: [item("listItem", "Third"), item("listItem", "Fourth")],
     },
     {
@@ -137,11 +150,17 @@ export const ALL_NODES_DOC: JSONContent = {
       content: [
         {
           type: "tableRow",
-          content: [cell("tableHeader", "Name"), cell("tableHeader", "Value")],
+          content: [
+            cell("tableHeader", "Name", { align: "center", colwidth: [140] }),
+            cell("tableHeader", "Value", { align: "right" }),
+          ],
         },
         {
           type: "tableRow",
-          content: [cell("tableCell", "a"), cell("tableCell", "1")],
+          content: [
+            cell("tableCell", "a", { align: "left" }),
+            cell("tableCell", "1"),
+          ],
         },
       ],
     },

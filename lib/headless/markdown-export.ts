@@ -19,13 +19,22 @@ export interface MarkdownExportMeta {
 /** Nodes Markdown leaves out (docs/design/2026-11-22-markdown-mapping.md). */
 const DROPPED_NODES = new Set(["imageUpload"]);
 
-function withoutDroppedNodes(node: JSONContent): JSONContent {
-  if (!node.content) return node;
+/**
+ * The document as Markdown writes it: dropped nodes removed, and ordered
+ * lists numbered with digits. Letter and roman markers (`c.`) are
+ * ambiguous in Markdown: `c` reads back as the roman numeral 100.
+ */
+function prepareForMarkdown(node: JSONContent): JSONContent {
+  const prepared =
+    node.type === "orderedList"
+      ? { ...node, attrs: { ...node.attrs, type: null } }
+      : node;
+  if (!prepared.content) return prepared;
   return {
-    ...node,
-    content: node.content
+    ...prepared,
+    content: prepared.content
       .filter((child) => !DROPPED_NODES.has(child.type ?? ""))
-      .map(withoutDroppedNodes),
+      .map(prepareForMarkdown),
   };
 }
 
@@ -52,7 +61,7 @@ export function documentToMarkdown(
     modifiedAt: meta.modifiedAt,
   });
   const body = serializeMarkdownBody(
-    withoutDroppedNodes(doc.toJSON() as JSONContent),
+    prepareForMarkdown(doc.toJSON() as JSONContent),
   );
   return body ? `${frontMatter}\n${body}\n` : frontMatter;
 }

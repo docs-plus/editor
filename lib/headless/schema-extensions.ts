@@ -1,7 +1,7 @@
 import { Hyperlink } from "@docs.plus/extension-hyperlink";
 import { HyperMultimediaKit } from "@docs.plus/extension-hypermultimedia";
 import { InlineCode } from "@docs.plus/extension-inline-code";
-import { type AnyExtension, Node } from "@tiptap/core";
+import { type AnyExtension, type JSONContent, Node } from "@tiptap/core";
 import { Code } from "@tiptap/extension-code";
 import { CodeBlock } from "@tiptap/extension-code-block";
 import { Heading } from "@tiptap/extension-heading";
@@ -119,25 +119,78 @@ const HeadlessParagraph = Paragraph.extend({
 });
 
 /**
- * A heading ending in ` #` would lose those characters: Markdown reads them
- * as an optional closing sequence.
+ * A heading is one line in Markdown: a hard break would end it, so it
+ * becomes a space (as in the document's title everywhere else). A heading
+ * ending in ` #` would lose those characters: Markdown reads them as an
+ * optional closing sequence.
  */
 const HeadlessHeading = Heading.extend({
   renderMarkdown(node, helpers, context) {
-    return (this.parent?.(node, helpers, context) ?? "").replace(
-      /([ \t])(#+)([ \t]*)$/,
-      "$1\\$2$3",
+    const content = node.content?.map((child) =>
+      child.type === "hardBreak"
+        ? { type: "text", text: " ", marks: child.marks }
+        : child,
     );
+    return (
+      this.parent?.({ ...node, content }, helpers, context) ?? ""
+    ).replace(/([ \t])(#+)([ \t]*)$/, "$1\\$2$3");
   },
 });
 
+const emptyCell = (type: string | undefined): JSONContent => ({
+  type,
+  content: [{ type: "paragraph" }],
+});
+
 /**
- * The stock table renderer starts and ends with a newline; at the end of a
- * document that newline reads back as an extra empty paragraph.
+ * The table on a full grid: every cell spans one row and one column, and
+ * the places a merged cell covered hold empty cells. The stock renderer
+ * pads short rows at their end, so a cell spanning rows would shift the
+ * cells below it left.
+ */
+export function unmergeTable(table: JSONContent): JSONContent {
+  const rows = table.content ?? [];
+  const covered = rows.map(() => new Map<number, string | undefined>());
+  const content = rows.map((row, r) => {
+    const cells: JSONContent[] = [];
+    let col = 0;
+    const fillCovered = () => {
+      while (covered[r].has(col)) {
+        cells.push(emptyCell(covered[r].get(col)));
+        col += 1;
+      }
+    };
+    for (const cell of row.content ?? []) {
+      fillCovered();
+      const colspan = Math.max(1, Number(cell.attrs?.colspan) || 1);
+      const rowspan = Math.max(1, Number(cell.attrs?.rowspan) || 1);
+      cells.push({ ...cell, attrs: { ...cell.attrs, colspan: 1, rowspan: 1 } });
+      for (let c = 1; c < colspan; c += 1) cells.push(emptyCell(cell.type));
+      for (
+        let below = 1;
+        below < rowspan && r + below < rows.length;
+        below += 1
+      ) {
+        for (let c = 0; c < colspan; c += 1) {
+          covered[r + below].set(col + c, cell.type);
+        }
+      }
+      col += colspan;
+    }
+    fillCovered();
+    return { ...row, content: cells };
+  });
+  return { ...table, content };
+}
+
+/**
+ * Tables go out on a full grid (`unmergeTable`), and without the stock
+ * renderer's leading and trailing newline, which at the end of a document
+ * reads back as an extra empty paragraph.
  */
 const HeadlessTable = Table.extend({
   renderMarkdown(node, helpers, context) {
-    return (this.parent?.(node, helpers, context) ?? "").replace(
+    return (this.parent?.(unmergeTable(node), helpers, context) ?? "").replace(
       /^\n+|\n+$/g,
       "",
     );
