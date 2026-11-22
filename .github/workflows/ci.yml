@@ -1,14 +1,16 @@
 name: CI
 
-# Runs on every pull request and on pushes to main:
+# Runs on every pull request, in the merge queue and on pushes to main:
 #   checks  Biome, ESLint, typecheck (3 projects), unit tests, production build
 #   e2e     Playwright Chromium suite, then the typing-budget perf project,
-#           against `next dev` + Hocuspocus
+#           against `next dev` + Hocuspocus; the library project against
+#           its Bun harness
 #
 # Read-only token and no secrets: pull requests from forks run the same way.
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -16,9 +18,15 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels a pull request's older run. Runs on main are never
+# cancelled once started, so each one finishes and can deploy; they queue in
+# commit order. GitHub keeps one pending run per group, so when a third push
+# arrives while one runs, the waiting run is dropped and only the newest
+# waits: the newest commit always deploys. Merge queue runs each have their
+# own ref (gh-readonly-queue/...), and the queue cancels them itself.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -148,13 +156,24 @@ jobs:
             curl -sf -o /dev/null --max-time 120 "http://localhost:3000$path"
           done
 
+      # The shared library UI (components/library) runs on its own Bun
+      # harness, no Next.js or Hocus (tests/harness/library).
+      - name: Start library harness
+        run: |
+          bun tests/harness/library/serve.ts > "$RUNNER_TEMP/library.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:3871/; then break; fi
+            sleep 1
+          done
+          curl -sf -o /dev/null http://127.0.0.1:3871/
+
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
       # as "flaky" in the summary. The perf project (typing budget) starts
       # after the chromium suite and runs on one worker, so it is not timed
       # under parallel load.
       - name: Run Playwright
-        run: CI= bun playwright test --project=chromium --project=perf --retries=1 --trace off
+        run: CI= bun playwright test --project=chromium --project=library --project=perf --retries=1 --trace off
 
       - name: Upload failure artifacts
         if: failure()
@@ -164,5 +183,83 @@ jobs:
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
+            ${{ runner.temp }}/library.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  desktop:
+    name: Desktop renderer (export and local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Install Chromium
+        run: bun playwright install --with-deps chromium
+
+      # Built on Linux, as releases build it (#103). Fails if a web-only
+      # route, a web metadata tag, the dev bridge or the Windows segment
+      # layout reaches out/.
+      - name: Desktop export
+        run: bun run build:desktop
+
+      # The export served with the app:// protocol handler's path rules.
+      - name: Desktop project (export)
+        run: |
+          PORT=3849 bun scripts/serve-desktop-export.ts > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:3849/ && break
+            sleep 1
+          done
+          DESKTOP_BASE_URL=http://127.0.0.1:3849 CI= bun playwright test --project=desktop --retries=1 --trace retain-on-failure
+
+      # The desktop renderer under next dev over the dev bridge, no Hocus
+      # (architecture §11). Each Playwright worker starts its own storage
+      # host, so each has its own library. No retries: a race between a
+      # reload's new connection and the old one's release must fail here.
+      - name: Local project (dev bridge)
+        run: |
+          NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_DESKTOP_BRIDGE=dev \
+            bun next dev -p 3926 > "$RUNNER_TEMP/next-local.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            curl -sf -o /dev/null http://localhost:3926/ && break
+            sleep 1
+          done
+          curl -sf -o /dev/null --max-time 120 http://localhost:3926/
+          LOCAL_BASE_URL=http://localhost:3926 CI= bun playwright test --project=local --retries=0 --trace retain-on-failure
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-results
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
           if-no-files-found: ignore
           retention-days: 7

@@ -21,6 +21,8 @@ export default defineConfig({
         "**/yjs-soak/**",
         "**/pwa-offline.spec.ts",
         "**/desktop-seams.spec.ts",
+        "**/local/**",
+        "**/library-sidebar.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
       ],
@@ -87,6 +89,28 @@ export default defineConfig({
         browserName: "chromium",
         viewport: { width: 1280, height: 720 },
         baseURL: process.env.DESKTOP_BASE_URL ?? "http://localhost:3849",
+      },
+    },
+    {
+      // The desktop renderer over the dev bridge, no Hocus (architecture
+      // §11): needs a desktop-target dev server; see tests/TESTING.md.
+      name: "local",
+      testMatch: ["**/local/*.spec.ts"],
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 720 },
+        baseURL: process.env.LOCAL_BASE_URL ?? "http://localhost:3926",
+      },
+    },
+    {
+      // The shared library UI (components/library) on its Bun harness, with
+      // no Next.js or Hocus: `bun tests/harness/library/serve.ts` first.
+      name: "library",
+      testMatch: ["**/library-sidebar.spec.ts"],
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 800 },
+        baseURL: process.env.LIBRARY_BASE_URL ?? "http://127.0.0.1:3871",
       },
     },
     {

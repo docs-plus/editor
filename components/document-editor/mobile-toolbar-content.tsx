@@ -17,6 +17,7 @@ import {
 
 import { ActionButton } from "@/components/smart-toolbar/action-button";
 import { FormatSheetBody } from "@/components/smart-toolbar/phone/format-sheet";
+import { InsertSheet } from "@/components/smart-toolbar/phone/insert-sheet";
 import {
   type MobileBarMode,
   nextMobileBarMode,
@@ -122,8 +123,9 @@ interface MobileToolbarContentProps {
   /** Esc on a cell: back to the document with its selection. */
   onEscape?: () => void;
   /**
-   * The last cells (List ▾, Indent, Insert ▾: `PhoneMenuCells`), rendered
-   * by the editor shell so the row's menus stay in the editor chunk.
+   * List ▾, Indent and the context slot (`PhoneMenuCells`), rendered by
+   * the editor shell so the row's menus stay in the editor chunk. Insert
+   * (its sheet) follows them, from this chunk.
    */
   menuCells: ReactNode;
 }
@@ -134,11 +136,11 @@ interface MobileToolbarContentProps {
  * undo, redo (from 404px; below, the sheet carries it, so the slot cell
  * never shifts the others), Aa (the
  * "Text format" sheet: style, size, colours, align, more), B, I, then
- * `menuCells` (list, indent, the context slot, Insert). Toggles show their
- * state with `aria-pressed` (#269). Hidden in a read-only document (#308),
- * which also closes the sheet. While text is selected it swaps to
- * `PhoneSelectionCells` (PR E, spec §4.7), never while focus is in the bar
- * or the sheet is open; ✕ keeps the normal cells until the selection
+ * `menuCells` (list, indent, the context slot), then Insert (its sheet,
+ * spec §8.3). Toggles show their state with `aria-pressed` (#269). Hidden
+ * in a read-only document (#308), which also closes the sheets. While text
+ * is selected it swaps to `PhoneSelectionCells` (PR E, spec §4.7), never
+ * while focus is in the bar or a sheet is open; ✕ keeps the normal cells until the selection
  * collapses. Clear of the home indicator while the keyboard is closed
  * (`data-keyboard`, `phone.scss`). The status pill (design pass §5) sits
  * 8px above it, a sibling of the cells, never in a masked element. Its own
@@ -151,6 +153,7 @@ export function MobileToolbarContent({
   menuCells,
 }: MobileToolbarContentProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [insertOpen, setInsertOpen] = useState(false);
   /** Opened for `formats.remove`: Your formats starts at its Remove list. */
   const [removing, setRemoving] = useState(false);
   const recent = useRememberedChoice(RECENT_COLORS_CHOICE);
@@ -172,7 +175,7 @@ export function MobileToolbarContent({
   const [focusInBar, setFocusInBar] = useState(false);
   const [mode, setMode] = useState<MobileBarMode>("all");
   const nextMode = nextMobileBarMode({
-    hasTextSelection: selectionKey !== null && !sheetOpen,
+    hasTextSelection: selectionKey !== null && !sheetOpen && !insertOpen,
     focusInBar,
     dismissedForSelection: dismissed,
     current: mode,
@@ -263,6 +266,14 @@ export function MobileToolbarContent({
     [editor, readOnly, onSheetOpenChange],
   );
 
+  const onInsertOpenChange = useCallback(
+    (open: boolean) => {
+      setPageInert(editor, open);
+      setInsertOpen(open);
+    },
+    [editor],
+  );
+
   /** Closes the sheet for an action that moves focus elsewhere itself. */
   const closeSheet = useCallback(() => {
     keepFocusOnCloseRef.current = true;
@@ -270,8 +281,10 @@ export function MobileToolbarContent({
   }, [onSheetOpenChange]);
 
   useEffect(() => {
-    if (readOnly) onSheetOpenChange(false);
-  }, [readOnly, onSheetOpenChange]);
+    if (!readOnly) return;
+    onSheetOpenChange(false);
+    onInsertOpenChange(false);
+  }, [readOnly, onSheetOpenChange, onInsertOpenChange]);
 
   useEffect(() => () => setPageInert(editor, false), [editor]);
 
@@ -359,6 +372,15 @@ export function MobileToolbarContent({
           {menuCells}
         </>
       )}
+      {/* Mounted in both modes: it answers "/" and palette picks of Table
+          and Embed (`insert.open`) even while the selection cells show. */}
+      <InsertSheet
+        editor={editor}
+        open={insertOpen}
+        onOpenChange={onInsertOpenChange}
+        cell={mode !== "selection"}
+        keyboardInset={inset}
+      />
       {sheetOpen ? null : <StatusPill placement="phone" />}
     </Toolbar>
   );

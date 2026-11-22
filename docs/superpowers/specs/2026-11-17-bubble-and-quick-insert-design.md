@@ -968,6 +968,8 @@ Forget my choices…
 | Colour named rows | colour chunk | 0 B |
 | `+` on the empty line | slash chunk, plus **a little eager JSX in `SlashMenuHost`**, which renders chunk code only while the menu is open | about +100–200 B (estimate), **inside** the 1,000 B slash cap; measure |
 | "/" Suggested, ghost hint, footer, badges | slash chunk; `INSERT_KIND_CHOICE.maxRecent` 0 → 3 is one constant | 0 to +4 B |
+
+**Lazy slash chunk budget (owner, 2026-11-22):** the quick-insert phase measured the slash chunk at 7,041 B gz (from 5,772 B), over its 6 KB test budget. The owner raised the budget to **7 KB (7,168 B gz)**. The growth by feature (gz): the `+`'s undo handling 336 B, the footer 269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor 66 B; "New" badges compile out while none is declared. A later lazy piece for Suggested and the footer was rejected: both must render on the first frame. The `+` itself mounts from the bubble chunk (0 eager bytes), not the slash host.
 | Phone Insert sheet | phone chunk; the table and embed steps load only through `lazySurface(loadInsertStep)` (A9 measured +1.5 KB when phone imported menus statically) | 0 B |
 | ⋯ regroup and Page width | menus chunk | 0 B |
 | Comment button | comments PR's own ledger line (150 B) | — |
@@ -1004,6 +1006,15 @@ Forget my choices…
 - **Coarse pointer** (O8 a):
   - No bubble, unchanged.
   - **The row's stand-ins get a visible word** at 768 px and wider on coarse pointers: `Aa Format ▾`, `¶ Layout ▾`, `⋯ Block ▾`. "Text" would collide with the Style value, and "Paragraph" reads as a block type (UX review). That follows the fixed-faces rule: one icon plus at most one fixed word (ux:46).
+  - **Decision, 2026-11-22: the owner chose option (b)** (P4 decision pack, `docs/design/2026-11-17-bubble-quick-insert/p4/tablet-decision/`).
+    - The words add 120 px. Below an 848 px window (an 832 px row), a code or table block has no room for them.
+    - The touch ladder therefore takes one more step there, on a coarse pointer only:
+      - **Redo** leaves the row and leads the ⋯ menu, on its own. ⌘⇧Z still redoes.
+      - **The list split** keeps only List ▾, so applying the last-used list type takes one more tap.
+    - As built:
+      - The words and the step are CSS in `app/globals.css`, outside the editor chunk group.
+      - The ⋯ menu reads the same media query when it opens, so a desktop ⋯ menu is unchanged.
+      - Each stand-in's accessible name begins with its word: "Format", "Layout", "Block: …" (WCAG 2.5.3).
 - **O8 b spike** (not built): on a real iPad, show the phone selection cells as a bar docked at the bottom while text is selected. Measure:
   - whether the iOS callout and the WebKit r241971 avoidance stay clear of it;
   - whether the hardware keyboard's shortcut bar collides with it.

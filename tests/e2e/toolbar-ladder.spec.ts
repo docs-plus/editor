@@ -7,6 +7,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { openToolbarTestDoc } from "./helpers/a11y";
+import { CHUNK_MARKERS, holdChunk } from "./helpers/lazy-chunk";
 
 const MOUSE_WIDTHS = [1440, 1280, 1128, 1024, 1008, 900, 860, 840, 768];
 const TOUCH_WIDTHS = [1440, 1224, 1096, 920, 824, 768];
@@ -61,6 +62,28 @@ async function caretIn(page: Page, type: (typeof CONTEXTS)[number]) {
     kind,
   );
 }
+
+/**
+ * The fixed word each visible stand-in draws (`::after`, CSS only), by
+ * its accessible name; "" when it draws none.
+ */
+const standInWords = (page: Page) =>
+  row(page).evaluate((el) =>
+    Object.fromEntries(
+      Array.from(
+        el.querySelectorAll<HTMLElement>(
+          "[data-collapse-standin] [data-toolbar-item]",
+        ),
+      )
+        .filter((item) => item.checkVisibility())
+        .map((item) => {
+          const content = getComputedStyle(item, "::after").content;
+          const word = /^"([^"]*)"/.exec(content)?.[1] ?? "";
+          return [item.getAttribute("aria-label") ?? "", word];
+        })
+        .filter(([, word]) => word),
+    ),
+  );
 
 async function expectRowFits(page: Page, label: string) {
   const fit = await row(page).evaluate((el) => {
@@ -168,6 +191,125 @@ test.describe("touch", () => {
     await sweep(page, [1600, 1560, ...TOUCH_WIDTHS], "touch+face");
   });
 
+  test("tablet: the stand-ins show one fixed word at every tablet width (O8 a, option b)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 1180 });
+    await openToolbarTestDoc(page);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    await seedContexts(page);
+    await caretIn(page, "heading");
+    await expect
+      .poll(() => standInWords(page))
+      .toEqual({
+        Format: "Format",
+        Layout: "Layout",
+        "Block: Section tools": "Block",
+      });
+    // WCAG 2.5.3: each name begins with the word on screen, so a spoken
+    // "Layout" finds its control.
+    const words = Object.entries(await standInWords(page)).map(
+      ([name, word]) => [name, String(word)] as const,
+    );
+    for (const [name, word] of words) {
+      expect(name.startsWith(word), `${name} starts with ${word}`).toBe(true);
+    }
+    await expectRowFits(page, "touch words @900");
+    await caretIn(page, "table");
+    expect((await standInWords(page))["Block: Table tools"]).toBe("Block");
+    await expectRowFits(page, "touch words @900 table");
+    // Option b (owner, 2026-11-22): words at every tablet width. Below an
+    // 848px window Redo and the list quick-toggle leave the row so they
+    // fit in every context; from 848px both are back.
+    const redo = row(page).locator('[data-action-id="history.redo"]');
+    const listFace = row(page).locator(
+      '.st-split[data-list-face] > [data-action-id^="list."]',
+    );
+    for (const width of [1100, 900, 848, 846, 820, 768]) {
+      await page.setViewportSize({ width, height: 1180 });
+      const narrow = width < 848;
+      for (const context of CONTEXTS) {
+        await caretIn(page, context);
+        expect(
+          Object.values(await standInWords(page)),
+          `words @${width} ${context}`,
+        ).toContain("Layout");
+        await expectRowFits(page, `touch words @${width} ${context}`);
+      }
+      if (narrow) {
+        await expect(redo).toBeHidden();
+        await expect(listFace).toBeHidden();
+        await expect(
+          row(page).getByRole("button", { name: "List" }),
+        ).toBeVisible();
+      } else {
+        await expect(redo).toBeVisible();
+        await expect(listFace).toBeVisible();
+      }
+    }
+  });
+
+  for (const width of [768, 820]) {
+    test(`tablet @${width}: Redo leads ⋯ while the row hides it, and redoes`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 1180 });
+      await openToolbarTestDoc(page);
+      await seedContexts(page);
+      await caretIn(page, "paragraph");
+      await page.keyboard.type("!");
+      await page.evaluate(() => window.__tiptap_editor?.commands.undo());
+      const text = () =>
+        page.evaluate(
+          () => window.__tiptap_editor?.state.doc.textContent ?? "",
+        );
+      expect(await text()).not.toContain("!");
+      await row(page).getByRole("button", { name: "More formatting" }).tap();
+      const menu = page.getByRole("menu", { name: "More formatting" });
+      const items = menu.getByRole("menuitem");
+      await expect(items.first()).toHaveAccessibleName(/^Redo/);
+      await items.first().tap();
+      await expect(menu).toBeHidden();
+      await expect.poll(text).toContain("!");
+    });
+  }
+
+  test("tablet: the words are there at first paint; the row never shifts when the menu chunk lands", async ({
+    page,
+  }) => {
+    const held = await holdChunk(page, CHUNK_MARKERS.menus);
+    await page.setViewportSize({ width: 900, height: 1180 });
+    await openToolbarTestDoc(page);
+    await seedContexts(page);
+    await caretIn(page, "heading");
+    /** Each visible item's right edge, by name. */
+    const edges = () =>
+      row(page).evaluate((el) =>
+        Array.from(el.querySelectorAll<HTMLElement>("[data-toolbar-item]"))
+          .filter((item) => item.checkVisibility())
+          .map(
+            (item) =>
+              `${item.getAttribute("aria-label")}@${Math.round(item.getBoundingClientRect().right)}`,
+          ),
+      );
+    // The menu chunk is still held: the words are drawn already.
+    expect(await standInWords(page)).toEqual({
+      Format: "Format",
+      Layout: "Layout",
+      "Block: Section tools": "Block",
+    });
+    const before = await edges();
+    held.release();
+    await held.restore();
+    // The chunk is in once a stand-in's menu opens.
+    await row(page).getByRole("button", { name: "Layout" }).click();
+    await expect(page.getByRole("menu", { name: "Layout" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(await edges()).toEqual(before);
+  });
+
   test("phone: the docked bar replaces the row, 44px cells, Aa on screen", async ({
     page,
   }) => {
@@ -206,6 +348,21 @@ test.describe("touch", () => {
   });
 });
 
+test("fine pointer: Redo stays in the row and ⋯ has no Redo", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 820, height: 900 });
+  await openToolbarTestDoc(page);
+  await expect(
+    row(page).locator('[data-action-id="history.redo"]'),
+  ).toBeVisible();
+  await row(page).getByRole("button", { name: "More formatting" }).click();
+  const menu = page.getByRole("menu", { name: "More formatting" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /^Redo/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+});
+
 test("collapsed groups come back through their stand-ins", async ({ page }) => {
   await page.setViewportSize({ width: 860, height: 900 });
   await openToolbarTestDoc(page);
@@ -217,20 +374,23 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
       toolbar.getByRole("button", { name, exact: true }),
     ).toBeHidden();
   }
-  await toolbar.getByRole("button", { name: "Paragraph" }).click();
+  await toolbar.getByRole("button", { name: "Layout" }).click();
   await expect(
     page.getByRole("menuitemradio", { name: "Align center" }),
   ).toBeVisible();
   await expect(page.getByRole("menuitem", { name: /^Indent/ })).toBeVisible();
   await page.keyboard.press("Escape");
+  // A fine pointer gets no words on the stand-ins (tablet touch only),
+  // even with the menu chunk that draws them in.
+  expect(await standInWords(page)).toEqual({});
 
-  await toolbar.getByRole("button", { name: "Section tools" }).click();
+  await toolbar.getByRole("button", { name: "Block: Section tools" }).click();
   await expect(page.getByRole("menuitem", { name: /fold|Fold/ })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // The table's stand-in: Delete row and Delete column carry a trash icon.
   await caretIn(page, "table");
-  await toolbar.getByRole("button", { name: "Table tools" }).click();
+  await toolbar.getByRole("button", { name: "Block: Table tools" }).click();
   const tableMenu = page.getByRole("menu", { name: "Table tools" });
   for (const name of ["Delete row", "Delete column"]) {
     const item = tableMenu.getByRole("menuitem", { name });

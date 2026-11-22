@@ -341,10 +341,13 @@ export const LIST_TYPE_CHOICE: ChoiceSpec<ListType> = {
   fallback: "bulletList",
 };
 
-/** M10: the last inserted kind (the T1 face; pre-highlighted in the menu). */
+/**
+ * M10: the last inserted kind (the T1 face; pre-highlighted in the menu).
+ * A19: its last 3 kinds are the "/" menu's Suggested section.
+ */
 export const INSERT_KIND_CHOICE: ChoiceSpec<InsertKind | null> = {
   slot: "insertKind",
-  maxRecent: 0,
+  maxRecent: 3,
   validate: isInsertKind,
   // Nothing remembered: the Insert face stays "+ Insert" (D2 Decision 1).
   fallback: null,

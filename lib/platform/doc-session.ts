@@ -93,7 +93,8 @@ export interface DocHandle {
   /**
    * Gives the handle back. The session is kept for a short delay, so a
    * release and a re-open in the same tick reuse it; then it flushes, compacts
-   * and closes. Call once per `open`.
+   * and closes. Call once per `open`. It must work unbound (callers may pass
+   * `handle.release` as a cleanup function).
    */
   release(): void;
 }

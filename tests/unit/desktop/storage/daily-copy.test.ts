@@ -168,3 +168,30 @@ describe("daily copy off the writer (begin, copy, complete or fail)", () => {
     expect(host.exists(partial)).toBe(false);
   });
 });
+
+test("a partial copy Windows won't delete yet doesn't stop the library opening", async () => {
+  const host = createTestHost(clock);
+  library.shutdown();
+  host.mkdirp(host.join(temp.dir, "daily"));
+  const partial = host.join(
+    temp.dir,
+    "daily",
+    "library-2026-11-16.sqlite.partial",
+  );
+  host.createExclusive(partial, "still open elsewhere");
+  const busy = createTestHost(clock, {
+    remove(path) {
+      if (path.endsWith(".partial"))
+        throw Object.assign(new Error("EBUSY: resource busy or locked"), {
+          code: "EBUSY",
+        });
+      host.remove(path);
+    },
+  });
+  library = openTestLibrary(temp.dir, busy);
+  expect(host.exists(partial)).toBe(true);
+  library.shutdown();
+  // Once the handle is gone, the next open sweeps it.
+  library = openTestLibrary(temp.dir, host);
+  expect(host.exists(partial)).toBe(false);
+});

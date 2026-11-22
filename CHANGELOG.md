@@ -64,6 +64,423 @@ own branch.
   replaces the selected words: focus moves to the link field in the click
   itself, and the bubble hides in the same task.
 
+### Phone Insert sheet, Style first in the Aa sheet, words on tablet stand-ins (P4)
+
+Phase P4 of the selection bubble and quick insert design (spec §8.3, §13.1,
+§13.2). Phones get an Insert sheet in place of the desktop dropdown, the Aa
+sheet leads with Style, and touch tablets name the row's unclear stand-ins.
+
+#### Added
+
+- **Phone:** the bar's Insert cell opens a bottom sheet
+  (`components/smart-toolbar/phone/insert-sheet.tsx`): the "/" menu's items
+  as a two-column grid of 44px cells. Suggested (the "/" menu's own rows for the
+  recent kinds) comes first when there are any, then "Blocks" (the caret's block is empty)
+  or "Turn into" (it has text), then Insert. Kinds that can't run here show
+  their reason on a second line. Table and Embed open their step inside the
+  sheet; Diagram lists the templates. A pick closes the sheet and puts the
+  caret in the new block, with the keyboard back. "/embed" on a phone opens
+  the sheet at the embed step. The sheet rides above the keyboard while the
+  link field has focus, and a pick refused since it opened (a
+  collaborator's edit) says why inside it. Its cells and steps are their own
+  lazy chunk, fetched when the browser is idle and on the cell's press.
+- **Touch tablets:** on a coarse pointer from 768px, the row's stand-ins
+  read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from first paint
+  (CSS in `app/globals.css`). Below an 848px window the row has no room for
+  their 120px in a code block or table, so (owner decision, option b) Redo
+  moves from the row to the top of ⋯ there, and the list button keeps only
+  List ▾. ⌘⇧Z still redoes. Desktop's ⋯ menu is unchanged.
+
+#### Changed
+
+- **Toolbar:** the stand-ins are named "Format" (was "More text
+  formatting"), "Layout" (was "Paragraph") and "Block: Section tools" and so
+  on (was "Section tools"), so each name begins with the word shown on it
+  (WCAG 2.5.3). The phone's slot cell takes the same name.
+- **Phone:** the Aa sheet starts with Style: Text and H1–H3, a More
+  headings disclosure for H4–H6 (open when the current style is one of
+  them, closable all the same), then the lists and Quote, the current style
+  pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
+  above the home indicator.
+
+Measured against `main` at 84a9458, with the "/" menu's P2 and the grouped ⋯
+menu's P3 work merged in: the editor chunk group gets 23 B smaller (393,995 B
+gz against 394,018 B). The phone bar chunk grows 978 B gz (18,175 B), and the
+sheet body is a chunk of its own, 3,926 B gz. The app's CSS grows 494 B gz
+(16,487 B): 138 B for the tablet words and 71 B for the touch step that
+moves Redo; the rest is P2 and P3.
+
+### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
+
+The "/" menu gains what the second reference set showed it lacked, and a
+pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
+§8.2, §8.5; v1 contract A19). The editor chunk group is unchanged
+(393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
+from 5,772 B to 7,041 B gz, and its test budget (`SLASH_BUDGET=1`) is
+raised from 6 KB to 7 KB (7,168 B) by the owner's decision of 2026-11-22.
+The growth by feature (gz): the `+`'s undo handling 336 B, the footer
+269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor
+66 B; "New" badges compile out while none is declared. The bubble chunk, which now mounts the
+`+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
+rather than its own `slash-footer.tsx` (the plan's file list): it shares
+the menu's state and placement, and a separate module would only add
+bytes.
+
+#### Added
+
+- **"/" menu:** a Suggested section leads with your last 3 inserted kinds
+  (table, image, divider…) that can go at the caret; each stays in its own
+  section too. A new writer sees no Suggested section; "Forget my choices"
+  clears it. A query hides it and puts a recent kind first among equal
+  matches.
+- **"/" menu:** "Type to search" sits after the "/" while the query is
+  empty and nothing follows the caret (never during IME composition); a
+  pinned footer teaches the active row's Markdown shortcut ("Type ## then
+  space for Heading 2") and has a Close button (Esc still works). On touch
+  the footer is only a 44 px Close. Hints stay left to right in RTL ("1.",
+  never ".1").
+- **"/" menu:** rows can carry a "New" badge until a date, hidden once you
+  have used that kind; none are declared yet.
+- **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
+  margin of an empty paragraph (in line with the heading grips; the right
+  margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
+  shows beside the caret 300 ms after you stop typing, or under the
+  pointer after a 150 ms rest, never in the title, a list, a quote or a
+  table cell, and never on touch. The "/" it types is an ordinary one: a
+  query, a pick, Esc and undo work as after a typed "/". Only with the
+  query still empty, Esc removes it without an undo step and a pick
+  undoes to the empty line. It is mounted by
+  the lazy bubble chunk's desktop wrapper, so it appears once that chunk
+  has loaded (a deviation from the spec's §15 file split, which put it in
+  `SlashMenuHost`: that would have grown the editor chunk).
+- **Insert menu:** each row shows its "/" alias ("/table", "/code").
+
+#### Changed
+
+- **"/" menu:** 320 px wide (was 288); in an RTL paragraph its right edge
+  is at the "/".
+- **Placeholder:** an empty paragraph reads "Type / for blocks" (was
+  "Type something...").
+
+### Row ⋯ menu in three labelled groups (BQ4)
+
+The row's ⋯ menu is now Text (Superscript, Subscript, Inline code, Clear
+formatting, Paint format), View (Simplified toolbar, Appearance) and Help
+(All actions…), with "Forget my choices…" alone at the end. Each group has a
+visible heading and `role="group"` with the same label, and every row keeps a
+16 px leading slot so the labels line up (Simplified toolbar shows its check
+there). Nothing is added or removed. Page width follows with the preferences
+work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
+
+
+### Desktop P2.8a: headless schema, Markdown export and safe file names
+
+The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
+
+#### Added
+
+- **Headless schema** (`lib/headless/`): the editor's ProseMirror schema built from its schema extensions, with no view, DOM, React or collaboration plugins.
+  - It converts a Y.Doc to ProseMirror and back through `@tiptap/y-tiptap`. Reading never writes to the Y.Doc, and an unknown node or mark name throws instead of being dropped.
+  - It runs in Bun, in a `worker_thread` and in a browser bundle.
+  - Tests compare it with the editor's schema (names, content, groups, attribute defaults, mark order) and keep it free of `components/`, React, Hocuspocus, DOMPurify, lowlight and Mermaid.
+  - Markdown export, the import engine (IM1) and the web library's export (W7) share it.
+- **Markdown export:** `exportMarkdown(ydoc, { tags, createdAt, modifiedAt })` writes front matter (title, tags, ISO dates), then the body.
+  - The front matter is JSON-quoted, so a hostile title stays one YAML scalar.
+  - The body escapes literal Markdown syntax: line starts, `==`, code fences and inline code that hold backticks.
+  - The node and mark mapping and every degradation are in `docs/design/2026-11-22-markdown-mapping.md`. Colours, font sizes, paragraph and heading alignment, link titles and embed options are dropped. Line breaks in headings become spaces. Letter and roman list numbers become digits. Merged table cells are unmerged in place.
+  - Only the document fragment and the metadata passed in reach the file: comments and secrets never do.
+- **Markdown import (first piece of IM1):** `importMarkdown(text)` reads the title (front matter, then a leading H1, then the file name), tags (capped at 40 characters and 20 per document), and dates.
+  - A restricted front matter reader accepts string scalars and flat lists only. It refuses anchors, aliases, tags, block scalars and nested maps, and caps the block at 64 KiB.
+  - Round-trip tests export then import every editor fixture plus an all-nodes document, and expect exactly the documented losses.
+- **Safe file names** (`lib/filenames.ts`): titles become names that work on macOS, Windows and Linux.
+  - Separators, `<>:"|?*`, control, bidi and zero-width characters are removed. So are leading dots, trailing dots and spaces, and `..`.
+  - Windows device names (`CON`, `nul.tar.gz`, `COM¹`) get a `_`.
+  - Names are cut at a grapheme boundary to 255 UTF-8 bytes, and relative paths are kept to 240 characters.
+  - Collisions get ` (2)`, compared without regard to case or Unicode normalisation.
+  - A property test runs 1,000 hostile titles.
+
+### Typing-latency check judges paired rounds
+
+`performance.spec.ts` failed on clean runs about once in twenty: across 63 CI
+results the toolbar-on/off ratio of the two arms' median p95s had an sd of
+0.051 around 1.02, so the 10% budget sat about 2 sd out. It failed before
+P2.2 as well (1.26 and 1.20 on branches without it); P2.2 did not shift it
+(median ratio 1.00 with it). Test only; no Deploy note.
+
+#### Changed
+
+- **Tests:** the verdict is the median of the per-round on/off ratios (each
+  round types both arms back to back, which cancels the runner's drift: sd
+  0.037 on the same 63 runs). The 10% budget is unchanged.
+- **Tests:** a run over budget after `PERF_ROUNDS` (7) runs
+  `PERF_EXTRA_ROUNDS` more (default 7, `0` disables) and is judged on all of
+  them, so a noisy draw gets a second look and a real regression still fails.
+
+### The editor no longer imports the sandbox status chip
+
+`components/document-editor/` no longer reaches `collab-session` through the
+status chip, so the desktop graph won't load it from there (desktop
+architecture §3.3). The web looks and loads the same: the chip still paints in
+the same commit as the editor (12 cold loads on a production build, median
+0.0 ms apart, as on `main`) and no new chunk is made. No schema or protocol
+change; no Deploy note.
+
+#### Changed
+
+- **Editor:** `DocumentEditor` takes the connection and identity chip as a
+  `statusChip` prop, still shown only with a provider. The web sandbox's root,
+  `components/editor-app/sandbox-document-editor.tsx`, wraps the editor in the
+  sandbox `DocSession` and passes `CollabStatusGroup`; `EditorApp` lazy-loads
+  it in place of the editor, so the chip stays in the editor's chunk group.
+- **Tests:** the editor import-boundary test has no exceptions left (the
+  `user-identity-button.tsx` entry P2.1c listed is gone).
+- **Bytes:** the editor chunk group grows by 198 B gz on `main` after P2.1c
+  (about 100 B of code; the rest is the minifier re-ranking names in the
+  editor's hoisted module); the app shell grows by 1 B. The D23 ledger
+  (details §1 rule 5) gains a 198 B line for it, and the fence rises by
+  exactly that, to `main` + 2,053 B.
+
+### Desktop P2.4b: the dev bridge, the desktop root and the `local` project
+
+The desktop renderer now opens a document from storage. Under a
+desktop-target `next dev` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`, storage is a
+dev storage host on `MemoryDocLibrary` reached over a loopback socket, with no
+Hocus. The web build is unchanged: its route table, client chunks, pages and
+`sw.js` match the P2.1c baseline apart from Next's build id.
+
+#### Added
+
+- `components/desktop/desktop-root.tsx`, the desktop composition root. It
+  puts `local-session` over `createRpcDocStore` into `DocSessionProvider` and
+  opens one document (`?doc=`, until the library UI). It saves on blur, hide
+  and pagehide. `app/page.desktop.tsx` loads it with `ssr: false`.
+- The dev bridge. `lib/platform/desktop/dev-bridge.ts` is the renderer's
+  `call`, typed against P2.6's `DocStoreCalls`. `desktop/dev/storage-host.ts`
+  is the host.
+  - The host listens on 127.0.0.1 only, with a random token and an origin
+    check, and never runs in production.
+  - Each connection is one window: one holder per document, released when it
+    closes. Requests run in order.
+  - `lib/platform/desktop/dev-bridge-wire.ts` is the binary codec.
+  - Errors cross as `{ code, retryable }`, like the real IPC: no exception
+    message reaches the renderer, and unknown failures are `internal`.
+  - `DesktopRoot` retries `already_open` for about 500 ms, because a reload's
+    new connection can beat the old one's release.
+  - `next.config.ts` refuses a desktop production build with
+    `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`.
+  - P2.1's `DocStore` contract passes through the whole path.
+  - Architecture §11 lists how the bridge differs from the IPC path, so a
+    green `local` run is not read as proof of it.
+- The `local` Playwright project: one storage host per worker. An edit survives
+  a reload, the only sockets are the dev server's and the host's, and an X post
+  renders as the link card.
+- A `desktop` CI job builds the export on Linux and runs the `desktop` and
+  `local` projects, with no retries for `local`. The nightly copy is
+  removed.
+
+#### Changed
+
+- **Desktop routes are an allowlist.** The desktop target's `pageExtensions`
+  are `["desktop.tsx", "desktop.ts"]`. Its routes are the root page plus
+  re-exports of the layout, the error page and `/about`.
+  - This retires P2.4a's move-aside: nothing is parked for the export, and
+    `next.config.ts` no longer guards against parked files.
+  - The alternatives were measured and rejected. A `page.desktop.tsx` beside
+    `page.tsx` loses to it silently. Branching `page.tsx` on the flag pulls
+    desktop chunks into the web build.
+- The export check also fails on the dev bridge's marker string
+  (architecture §11 release check).
+- `next.config.ts` always defines `NEXT_PUBLIC_DESKTOP_BRIDGE`, so release
+  builds drop the bridge's branch.
+- The `desktop` project no longer needs Hocus. The X link card test moved to
+  `local`, because a release export has no storage until P2.5.
+### Desktop P2.1c: the editor opens documents through `DocSession`
+
+`use-yjs-document` now opens documents through the `DocSession` its
+composition root provides, instead of importing `collab-session`. The web
+provides the sandbox adapter, which wraps `collab-session` unchanged, so
+nothing changes for users. The adapter loads with the lazy editor chunk,
+not on first load (first load −32 B gz, editor chunk group +275 B gz). The
+desktop and library roots will provide `local-session`.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session-context.tsx`
+  (`DocSessionProvider`, `useDocSession`) and
+  `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
+  sandbox `DocSession` over `collab-session`).
+- **Editor:** `components/editor-app/sandbox-document-editor.tsx`, the web
+  wrapper that `EditorApp` loads lazily in place of `DocumentEditor`: the
+  editor under the sandbox `DocSession`.
+- **Tests:** an import-boundary test that neither the hook nor any module in
+  `components/document-editor/` loads `collab-session` or a platform
+  adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
+  statically and its connection status reads `collab-session`.
+
+#### Changed
+
+- **Editor:** `use-yjs-document` returns the same fields as before, now read
+  from the `DocSession` handle (`ydoc` and `awareness` are `undefined`, not
+  `null`, before the first open).
+- **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
+  (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
+  that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
+- **Tests:** the SIGKILL batcher test kills its child once at least 10
+  tokens are past the 1 s window and it is still typing, instead of at a
+  fixed time, so a slow CI runner makes the run longer rather than failing
+  its "enough typed" check.
+- **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
+  Reload button saves through `DocSession.flush()` (on the web, the same
+  device-copy flush as before) before reloading.
+
+### Desktop P2.7a: files sidebar, Quick Open and Move to…
+
+The library's files sidebar for desktop and the web library (D3), in
+`components/library/`, driven by a `LibraryIndex`. The web sandbox doesn't
+use it: the web build is unchanged (every JS and CSS chunk identical to
+`main`; first load and editor chunk +0 B).
+
+#### Added
+
+- **Platform:** `LibraryIndex` extends the `DocumentIndex` port with
+  folders (4 levels), all-or-none moves that refuse a folder into its own
+  subtree, pins in their own order, `markOpened`, and a folder trashed and
+  restored as one unit (to the root when its parent is gone).
+  `GlobalTabsIndex` stays a plain `DocumentIndex`. `MemoryDocumentIndex`
+  implements it, and the shared contract suite covers it for P2.6's
+  `IpcDocumentIndex` and W2's `IdbDocumentIndex`.
+- **Search:** `lib/search/normalize.ts`, the one metadata normalizer
+  (D-A8): case, Latin, Arabic and Hebrew marks, tatweel, Arabic yeh and kaf
+  to Persian, Persian and Arabic-Indic digits to ASCII, with an offset map
+  so highlights keep the original text. `lib/search/match.ts` matches word
+  prefixes before substrings.
+- **Library:** the files sidebar (Search, Recent, Pinned, the Library tree,
+  Trash), an APG tree with one tab stop, multi-select, type-ahead, F2
+  rename, Move to Trash (⌘⌫ / Delete) and file-operation undo (⌘Z, 20
+  steps), Shift+F10 row menus, and pointer drag and drop with
+  spring-loaded folders (700 ms, or Space). Move to… lists recent
+  destinations first and keeps refused folders visible with the reason.
+  Quick Open searches titles and folder names only (D24), shows the folder
+  path, offers Create when nothing matches, and opens in a new tab with
+  ⌘Enter. Right-to-left sidebars mirror, ← and → included. New Document
+  goes into the folder that has focus in the sidebar, else the root.
+  Document renames go through the host's `onRenameDocument`, so desktop and
+  the web library can edit the title heading (details spec §2.3).
+- **Focus:** `lib/region-focus.ts` moves between regions with F6 /
+  Shift+F6 and returns to the last focused element of each.
+- **Tests:** the `library` Playwright project runs the keyboard checklist,
+  folder refusals, drag and drop, RTL keys and axe on a Bun harness
+  (`tests/harness/library`, `bun run harness:library`); CI starts it in
+  the e2e job. Unit tests cover the normalizer, the matcher, folder and
+  drop rules, tree rows, keys, the undo stack and F6 regions; the import
+  boundary test keeps the library UI free of sandbox, desktop, editor and
+  test code.
+
+#### Changed
+
+- **Build:** `app/globals.css` leaves `components/library` and
+  `tests/harness` out of Tailwind's sources; the library styles itself in
+  plain CSS on the shadcn tokens, shipped only with the components.
+
+### Retention purge: on
+
+The daily `editor-purge` run now deletes. Four dry runs in production
+(2026-11-19 to 2026-11-22, 03:17) each listed the same 2 documents idle for
+more than 30 days (`staleTotal` 2), no closed documents past 7 days and no
+expired tombstones.
+
+#### Changed
+
+- **Ops:** `PURGE_MODE` is `on` for `editor-purge` in `ecosystem.config.cjs`.
+  Each run first backs the database up to `backups/` (`db-first.sqlite` kept
+  forever, dated copies 14 days) and deletes nothing if the backup fails.
+
+**Deploy:** nothing to do by hand. The automatic deploy registers the new env
+without purging; the next 03:17 run writes `db-first.sqlite` and does the
+first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
+pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
+
+### CI: `main` runs are never cancelled; merge queue support
+
+A merge on `main` no longer cancels the previous commit's CI run, which left
+that commit undeployed (29f6faf and e64ae84). CI also runs in the merge queue,
+so the owner can require it on `main`. No app change.
+
+#### Changed
+
+- **CI:** only pull request runs are cancelled by a newer push. A started run
+  on `main` always finishes and can deploy; runs queue in commit order, and
+  when several merges land together the newest commit's run waits and
+  deploys everything before it.
+- **CI:** a `merge_group` trigger. Merge queue runs never deploy (Deploy acts
+  only on CI runs from a push to `main`).
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the
+  no-cancel rule and the two required check names;
+  `workflow-permissions.test.ts` requires explicit read-only permissions on
+  every job of a `pull_request` or `merge_group` workflow.
+
+**Deploy:** none. **Owner (once):** to turn the merge queue on, add
+**Require merge queue** to the **Protect main** ruleset as
+`docs/operations/deploy-runbook.md` → *Turning the merge queue on*
+describes; the required checks keep their names.
+
+### Desktop: no partial daily copy left after a quit on Windows
+
+On Windows, a quit during a daily copy could leave
+`daily/library-<date>.sqlite.partial` behind. The copy thread was stopped
+with `terminate()`, which skips its cleanup, so its SQLite handle could still
+hold the file when shutdown tried to delete it. Windows won't delete an open
+file, and nothing retried.
+
+#### Fixed
+
+- **Desktop:** quit now asks the copy thread to stop. At its next batch the
+  thread rolls back, closes its connection and the read-only attach, and only
+  then exits; `terminate()` is the fallback after 500 ms. The partial file is
+  then deleted with retries for about 420 ms, inside the 2 s shutdown budget.
+  The previous copies are never touched.
+- **Desktop:** the storage host's deletes retry briefly on `EBUSY`. Opening a
+  library still succeeds when a partial can't be deleted yet; the next open
+  removes it.
+- **Tests:** T4-copy runs 30 times on `windows-latest`. Every quit must land
+  during a copy, and every copy must be stopped with its partial deleted.
+
+### Docs: Phase 2 status, and the runbook and AGENTS.md brought up to date
+
+Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/superpowers/plans/2026-11-22-phase-2-status.md`. It
+  records:
+  - where each Phase 2 row stands;
+  - the decisions made while executing it: the daily-copy design, the
+    editor-chunk ledger lines and the 0 B rule, the bubble redesign
+    rulings, landing dark;
+  - how work merges;
+  - what waits on the owner;
+  - the head-of-engineering estimates.
+
+  The design spec's Phase 2 heading links to it.
+
+#### Changed
+
+- **Docs:** the deploy runbook records that automatic deploys and the
+  retention purge are on in production, and that over a non-login SSH
+  command PM2 runs as `~/.bun/bin/bunx`.
+- **Docs:** `AGENTS.md` records:
+  - the desktop and local-first layering: the ports, contract suites,
+    storage worker, desktop export, library UI and landing dark;
+  - the editor-chunk budget rule;
+  - the batch-and-wait merge practice;
+  - the Node 14 `install_deps` shim on the host;
+  - the purge state.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy

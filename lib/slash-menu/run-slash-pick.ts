@@ -1,7 +1,6 @@
 import type { Editor, EditorEvents } from "@tiptap/core";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { Mapping } from "@tiptap/pm/transform";
-import { yUndoPluginKey } from "@tiptap/y-tiptap";
 
 import {
   closeSlash,
@@ -12,16 +11,12 @@ import { editorActions } from "@/lib/editor-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { AnyAction } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import {
+  isPlusSlash,
+  removePlusSlash,
+  undoManagerOf,
+} from "@/lib/slash-menu/plus-origin";
 import type { SlashItem } from "@/lib/slash-menu/slash-items";
-
-interface UndoManagerLike {
-  stopCapturing(): void;
-}
-
-const undoManagerOf = (editor: Editor) =>
-  (yUndoPluginKey.getState(editor.state)?.undoManager as
-    | UndoManagerLike
-    | undefined) ?? null;
 
 /**
  * Why `action` cannot run on the live document, as the menu's own note
@@ -82,6 +77,10 @@ function withMapping(editor: Editor, run: () => boolean) {
  * announcer chunk is preloaded on idle, so this chunk does not carry its
  * own copy. A run that was allowed but did nothing, or a missing action
  * (a bug), says nothing.
+ *
+ * A bare "/" the `+` typed (spec §8.2, `isPlusSlash`) leaves the history
+ * with it (`removePlusSlash`), so undo returns the empty line. After a
+ * typed query it is an ordinary "/": undo restores "/query".
  */
 export function runSlashPick(editor: Editor, item: SlashItem): boolean {
   const state = getSlashState(editor);
@@ -98,10 +97,9 @@ export function runSlashPick(editor: Editor, item: SlashItem): boolean {
   const typed = editor.state.doc.slice(from, to);
   const undo = undoManagerOf(editor);
   undo?.stopCapturing();
-  editor.view.dispatch(
-    // Without its "/" the trigger closes.
-    editor.state.tr.delete(from, to),
-  );
+  // Without its "/" the trigger closes.
+  if (isPlusSlash(editor)) removePlusSlash(editor);
+  else editor.view.dispatch(editor.state.tr.delete(from, to));
   const { ok, mapping } = withMapping(editor, () =>
     runAction(editor, action, item.arg),
   );
