@@ -178,11 +178,10 @@ describe("import boundaries", () => {
   }
 });
 
-// The image store (spec §9, A1): the asset kit holds only the host-src
-// check and the §6.2 fallback's routing; the rest is lazy. The resolver, the object-URL cache, the strippers,
+// The image store (spec §9, A1): the asset kit holds only `asset-ref`, the
+// parse rules and the §6.2 fallback's routing; the rest is lazy. The resolver, the object-URL cache, the strippers,
 // sniffing, hashing and the insert pipeline stay lazy chunks.
 const LAZY_ASSET_MODULES = [
-  "lib/assets/asset-ref.ts",
   "lib/assets/asset-resolver.ts",
   "lib/assets/object-url-cache.ts",
   "lib/assets/strip-metadata.ts",
@@ -211,8 +210,10 @@ describe("image store import boundaries", () => {
   // A1 has no D23 ledger line: the sandbox editor's graph must hold no
   // asset code at all. Hosts with an image store use `asset-kit.ts`.
   it("the sandbox editor loads no image store module", () => {
+    // `document-editor.tsx` is the editor chunk's root (the chunk check
+    // finds the group by a string only it renders).
     const { files } = staticImports(
-      "components/document-editor/document-editor-config.ts",
+      "components/document-editor/document-editor.tsx",
     );
     expect([...files]).toContain(
       "extensions/hyper-multimedia/hyper-multimedia-kit.ts",
@@ -225,13 +226,14 @@ describe("image store import boundaries", () => {
   });
 
   // The headless schema (P2.8a) applies these rules: no env, scss or DOM.
-  it("asset-image-parse imports nothing at runtime", () => {
+  it("asset-image-parse imports only the dependency-free asset-ref", () => {
     const { files, packages } = staticImports(
       "extensions/hyper-multimedia/asset-image-parse.ts",
     );
     expect([...packages]).toEqual([]);
-    expect([...files]).toEqual([
+    expect([...files].sort()).toEqual([
       "extensions/hyper-multimedia/asset-image-parse.ts",
+      "lib/assets/asset-ref.ts",
     ]);
   });
 

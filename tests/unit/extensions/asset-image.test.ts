@@ -27,6 +27,7 @@ import { StarterKit } from "@tiptap/starter-kit";
 import { saveAltText } from "@/extensions/hyper-multimedia/alt-text-popover";
 import {
   type AssetScope,
+  coldView,
   isHostSrc,
   loadAssetImages,
   refreshMediaSrc,
@@ -139,24 +140,22 @@ async function webScope() {
   };
 }
 
-describe("isHostSrc (the editor chunk's cheap check)", () => {
-  it("agrees with isAssetRef, except that it lets malformed sha256 refs through", () => {
+describe("isHostSrc", () => {
+  it("is exactly isAssetRef, so parse rules, views and exports agree", () => {
     const hex = "ab".repeat(32);
-    const agree = [
+    for (const src of [
       `asset:sha256-${hex}`,
+      `asset:sha256-${hex.toUpperCase()}`,
+      `asset:sha256-${hex}0`,
       "asset:blake3-abc",
       "asset:sha256-../x",
-      `asset:sha256-${hex}?x`,
-      ` asset:sha256-${hex}`,
       "asset:",
       "https://example.com/a.png",
       "data:image/png;base64,AA==",
       null,
-    ];
-    for (const src of agree) expect(isHostSrc(src)).toBe(isAssetRef(src));
-    // Shown as "needs a newer version" by the lazy view, never fetched.
-    expect(isHostSrc(`asset:sha256-${hex.toUpperCase()}`)).toBe(true);
-    expect(isAssetRef(`asset:sha256-${hex.toUpperCase()}`)).toBe(false);
+    ]) {
+      expect(isHostSrc(src)).toBe(isAssetRef(src));
+    }
   });
 });
 
@@ -226,7 +225,8 @@ describe("before the lazy chunk has loaded (first asset image of the session)", 
     const editor = makeEditor(() => scope, imageHtml(src));
     // The first render comes before the chunk has loaded.
     const box = imageDom(editor);
-    expect(box.childElementCount).toBe(0);
+    expect(box.classList).toContain("asset-image-state");
+    expect(box.getAttribute("aria-label")).toBe("Loading image");
     const ids = () =>
       resolveMediaActions(editor, "image").map((action) => action.id);
     expect(ids()).not.toContain("alt-text"); // stock toolbar until it loads
@@ -237,6 +237,29 @@ describe("before the lazy chunk has loaded (first asset image of the session)", 
       `app://tinydocy/_asset/${hex}`,
     );
     expect(editor.can().undo()).toBe(false);
+  });
+});
+
+describe("when the view's chunk cannot load (offline before first use)", () => {
+  it("shows an error state with a role and the alt text, not an empty box", async () => {
+    const { scope, src } = await desktopScope();
+    const editor = makeEditor(() => scope, imageHtml(src));
+    const pos = imagePos(editor);
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node) throw new Error("no image");
+    const view = coldView(
+      { node, editor } as unknown as Parameters<typeof coldView>[0],
+      async () => null,
+    );
+    await settle();
+    expect(view.dom.getAttribute("role")).toBe("img");
+    expect(view.dom.getAttribute("aria-label")).toBe(
+      "a diagram: This image can't be shown right now.",
+    );
+    expect(view.dom.textContent).toContain(
+      "This image can't be shown right now.",
+    );
+    view.destroy();
   });
 });
 
@@ -302,6 +325,32 @@ describe("asset: images in a library document", () => {
     expect(images(editor)[0]?.src).toBe(src);
     // The swap is a forward refresh outside history.
     expect(editor.can().undo()).toBe(false);
+  });
+
+  it("refresh many images in one transaction per frame", async () => {
+    const store = new MemoryBlobStore();
+    const refs: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      refs.push(
+        formatAssetRef(
+          (await store.put("doc", contractImage(i), "image/png")).hex,
+        ),
+      );
+    }
+    const editor = makeEditor(
+      () => ({ store, docId: "doc" }),
+      refs.map((src) => imageHtml(src)).join(""),
+    );
+    let transactions = 0;
+    editor.on("transaction", () => {
+      transactions += 1;
+    });
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(transactions).toBe(1);
+    expect(editor.view.dom.querySelectorAll("img[src^='blob:']")).toHaveLength(
+      12,
+    );
   });
 
   it("show the missing state when the bytes are not on this computer", async () => {

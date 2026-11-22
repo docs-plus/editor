@@ -33,11 +33,13 @@ import type { TagParseRule } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type NodeView } from "@tiptap/pm/view";
 
+import { announceLater } from "@/lib/announce-later";
+import { parseAssetRef } from "@/lib/assets/asset-ref";
 import type { AssetScope } from "@/lib/assets/asset-resolver";
 
-import type { AltTextDeps } from "./alt-text-popover";
 import { assetParseRules, isHostSrc } from "./asset-image-parse";
 import type { AssetImageDeps } from "./asset-image-view";
+import type { ImageActionDeps } from "./asset-media-actions";
 
 export type { AssetScope };
 export { isHostSrc };
@@ -46,13 +48,13 @@ export { isHostSrc };
 export type AssetScopeGetter = () => AssetScope | null;
 
 let refreshKey: PluginKey<DecorationSet> | undefined;
-let deps: (AssetImageDeps & AltTextDeps) | undefined;
+let deps: (AssetImageDeps & ImageActionDeps) | undefined;
 
 /**
  * Editor-chunk values the lazy chunk receives instead of importing them.
  * Made on first use, so importing this module has no side effects.
  */
-function getDeps(): AssetImageDeps & AltTextDeps {
+function getDeps(): AssetImageDeps & ImageActionDeps {
   refreshKey ??= new PluginKey<DecorationSet>("asset");
   deps ??= {
     deco: Decoration,
@@ -60,6 +62,8 @@ function getDeps(): AssetImageDeps & AltTextDeps {
     key: refreshKey,
     open: openMediaPopover,
     close: closeToolbarPopover,
+    parse: parseAssetRef,
+    announce: announceLater,
   };
   return deps;
 }
@@ -112,6 +116,49 @@ export function assetRefreshPlugin(): Plugin<DecorationSet> {
   });
 }
 
+/** Shown in the editor chunk when the view's chunk fails to load. */
+const UNAVAILABLE = "This image can't be shown right now.";
+
+/**
+ * The first `asset:` image of a session, before the lazy chunk has loaded:
+ * the kit's loading shell, then a refresh into the real view, or, if the
+ * chunk can't load (offline before first use), an error state.
+ */
+export function coldView(
+  props: Parameters<NodeViewRenderer>[0],
+  load: () => Promise<LazyModule | null> = loadAssetImages,
+) {
+  const { node, editor } = props;
+  const dom = document.createElement("div");
+  dom.className = "asset-image-state";
+  dom.setAttribute("role", "img");
+  dom.setAttribute("aria-label", "Loading image");
+  const shell = wrapMediaWithLoadingShell(
+    editor,
+    {
+      kind: "image",
+      width: Number(node.attrs.width) || 320,
+      height: Number(node.attrs.height) || 240,
+    },
+    document.createElement("img"),
+  );
+  dom.append(shell.dom);
+  void load().then((module) => {
+    if (module) return module.refresh(editor, node.attrs.src, getDeps());
+    shell.controller.markError(UNAVAILABLE);
+    const alt = node.attrs.alt as string | null;
+    dom.setAttribute(
+      "aria-label",
+      alt ? `${alt}: ${UNAVAILABLE}` : UNAVAILABLE,
+    );
+  });
+  return {
+    dom,
+    update: () => false,
+    destroy: () => shell.controller.destroy(),
+  };
+}
+
 /** The image node view, with `asset:` srcs drawn by the lazy view. */
 export function withAssetSrc(
   stock: NodeViewRenderer,
@@ -141,8 +188,7 @@ export function withAssetSrc(
     const { src } = props.node.attrs;
     if (!isHostSrc(src)) return parent(props);
     if (lazy) return lazy.view(parent, props, getScope(), getDeps());
-    refreshMediaSrc(props.editor, src);
-    return { dom: document.createElement("div"), update: () => false };
+    return coldView(props);
   };
 }
 

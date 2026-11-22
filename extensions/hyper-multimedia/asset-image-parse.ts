@@ -1,8 +1,8 @@
 /**
  * The image parse rules for `asset:` srcs (image store spec §6.2, U1 change
- * 2), shared by the editor kit (`hyper-multimedia-kit.ts`) and the headless
- * schema (P2.8a, `lib/headless/schema-extensions.ts`). No runtime imports,
- * no env, no DOM work at import.
+ * 2), shared by the asset kit (`asset-kit.ts`) and the headless
+ * schema (P2.8a, `lib/headless/schema-extensions.ts`). Its only import is
+ * the dependency-free `asset-ref`: no env, scss or DOM work at import.
  *
  * Apply it to the kit's `image` node without changing its attributes, so
  * the headless/editor schema parity test still holds:
@@ -15,13 +15,14 @@
  */
 import type { TagParseRule } from "@tiptap/pm/model";
 
+import { isAssetRef } from "@/lib/assets/asset-ref";
+
 /**
- * U1's `isHostSrc`: an `asset:<alg>-<digest>` src. Looser than
- * `parseAssetRef` (a malformed sha256 ref passes here and renders as "needs
- * a newer version"), so the editor chunk need not hold the full parser.
+ * U1's `isHostSrc`: exactly `parseAssetRef(src) !== null`, so the parse
+ * rules, the view and the exporters agree on what an asset ref is (an
+ * unknown algorithm included; a malformed sha256 ref is not one).
  */
-export const isHostSrc = (src: unknown): src is string =>
-  typeof src === "string" && /^asset:[a-z0-9]+-[\w-]+$/.test(src);
+export const isHostSrc = (src: unknown): src is string => isAssetRef(src);
 
 /**
  * The stock image rules (`figure[data-hm-figure]` and `img[src]`), plus

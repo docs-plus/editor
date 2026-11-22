@@ -4,9 +4,9 @@
  * nothing outside this device. A lazy chunk.
  *
  * - Download saves `image.<ext>`, typed by the bytes.
- * - Copy puts an `<img>` with the ref (so it pastes as the same image
- *   inside TinyDocy) and a PNG of the bytes on the clipboard, so pasting
- *   elsewhere, or into the public sandbox, pastes the picture.
+ * - Copy puts the bytes on the clipboard as PNG, so pasting anywhere
+ *   (another app, the public sandbox, a library document) pastes the
+ *   picture.
  *
  * `imageActions` builds the image toolbar from the kit's defaults: these
  * two, and Alt text… (spec §7).
@@ -20,9 +20,15 @@ import type {
   MediaActionList,
 } from "@docs.plus/extension-hypermultimedia";
 
-import { isAssetRef } from "@/lib/assets/asset-ref";
+import type { parseAssetRef } from "@/lib/assets/asset-ref";
 
 import { type AltTextDeps, openAltTextPopover } from "./alt-text-popover";
+
+/** `imageActions`' editor-chunk values, passed in like the view's. */
+export type ImageActionDeps = AltTextDeps & { parse: typeof parseAssetRef };
+
+/** How long a download's object URL outlives the click. */
+export const DOWNLOAD_URL_LIFETIME_MS = 1000;
 
 const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -51,16 +57,14 @@ export async function downloadAsset(ctx: MediaActionContext): Promise<void> {
   ctx.close();
   if (!blob) return;
   const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `image.${EXTENSIONS[blob.type] ?? "img"}`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `image.${EXTENSIONS[blob.type] ?? "img"}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // The download starts after this task; revoking at once can cancel it.
+  setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
 }
 
 /** Clipboards take PNG everywhere; other types are redrawn as PNG. */
@@ -91,15 +95,26 @@ export function imageHtml(attrs: Record<string, unknown>): string {
   return img.outerHTML;
 }
 
-export async function copyAsset(ctx: MediaActionContext): Promise<void> {
+/**
+ * Puts the image's bytes on the clipboard as PNG. With `html`, also an
+ * `<img>` with the `asset:` ref, which pastes as the same image inside a
+ * library document but as a broken image anywhere else (Gmail, Docs, Slack,
+ * the public sandbox prefer HTML to the picture), so it is off by default.
+ */
+export async function copyAsset(
+  ctx: MediaActionContext,
+  { html = false }: { html?: boolean } = {},
+): Promise<void> {
   const blob = await resolvedImageBlob(ctx);
   const png = blob ? await asPng(blob) : null;
   ctx.close();
-  if (typeof ClipboardItem === "undefined") return;
-  const items: Record<string, Blob> = {
-    "text/html": new Blob([imageHtml(ctx.attrs)], { type: "text/html" }),
-  };
-  if (png) items["image/png"] = png;
+  if (!png || typeof ClipboardItem === "undefined") return;
+  const items: Record<string, Blob> = { "image/png": png };
+  if (html) {
+    items["text/html"] = new Blob([imageHtml(ctx.attrs)], {
+      type: "text/html",
+    });
+  }
   await navigator.clipboard?.write([new ClipboardItem(items)]).catch(() => {});
 }
 
@@ -114,7 +129,7 @@ const ALT_TEXT_ICON =
 export function imageActions(
   defaults: MediaActionList,
   { nodeType }: { nodeType: string },
-  deps: AltTextDeps,
+  deps: ImageActionDeps,
 ): MediaActionList {
   if (nodeType !== "image") return defaults;
   const altText: MediaAction = {
@@ -130,11 +145,11 @@ export function imageActions(
       action.id === "download"
         ? downloadAsset
         : action.id === "copy"
-          ? copyAsset
+          ? (actionCtx: MediaActionContext) => copyAsset(actionCtx)
           : null;
     if (!forAsset) return [action];
     const run = (ctx: MediaActionContext) =>
-      isAssetRef(ctx.attrs.src) ? void forAsset(ctx) : action.run?.(ctx);
+      deps.parse(ctx.attrs.src) ? void forAsset(ctx) : action.run?.(ctx);
     return [{ ...action, run }];
   });
 }

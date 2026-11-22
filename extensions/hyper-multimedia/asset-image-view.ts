@@ -23,14 +23,16 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type { PluginKey } from "@tiptap/pm/state";
 import type { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-import { announce } from "@/lib/announce";
-import { parseAssetRef } from "@/lib/assets/asset-ref";
+import type { NoticeOptions } from "@/lib/announce";
+import type { parseAssetRef } from "@/lib/assets/asset-ref";
 import { type AssetScope, assetResolver } from "@/lib/assets/asset-resolver";
 
 export const ASSET_IMAGE_COPY = {
   loading: "Loading image",
   missing: "Image not found on this computer.",
   newer: "This image needs a newer version of TinyDocy.",
+  /** The view's own chunk could not load (offline before first use). */
+  unavailable: "This image can't be shown right now.",
   pasteRefused: "Library images can't be pasted here.",
 } as const;
 
@@ -38,8 +40,8 @@ export const ASSET_IMAGE_COPY = {
  * The public sandbox dropped pasted `asset:` images (no asset scope, I7):
  * says so on the status pill and to screen readers.
  */
-export function pasteRefused(): void {
-  announce(ASSET_IMAGE_COPY.pasteRefused);
+export function pasteRefused(deps: AssetImageDeps): void {
+  deps.announce(ASSET_IMAGE_COPY.pasteRefused);
 }
 
 /** Editor-chunk values the lazy chunk must not import itself; short names, as the editor chunk spells each key out. */
@@ -48,6 +50,10 @@ export interface AssetImageDeps {
   shell: typeof wrapMediaWithLoadingShell;
   /** The refresh plugin's key (`asset-image.ts`). */
   key: PluginKey<DecorationSet>;
+  /** `parseAssetRef`: the asset kit's graph holds `asset-ref`. */
+  parse: typeof parseAssetRef;
+  /** `announceLater`: `lib/announce` is in the editor chunk. */
+  announce: (message: string, options?: NoticeOptions) => void;
 }
 
 type RendererProps = Parameters<NodeViewRenderer>[0];
@@ -55,14 +61,42 @@ type RefreshSpec = { assetSrc: string; assetRefresh: number };
 
 let refreshCount = 0;
 
+/** Sources waiting for the next frame's refresh, per editor. */
+const queued = new WeakMap<Editor, Set<string>>();
+
+const nextFrame = (fn: () => void) =>
+  typeof requestAnimationFrame === "function"
+    ? requestAnimationFrame(fn)
+    : setTimeout(fn, 16);
+
 /**
  * Rebuilds every image view showing `src`: a spec-only node decoration per
  * image (no DOM attribute), set through a meta-only transaction outside
  * history. Views compare the decoration's count to know they must rebuild.
+ * Calls within one frame share one transaction: a document opening with 200
+ * images refreshes once a frame, not 200 times.
  */
 export function refreshAssetViews(
   editor: Editor,
   src: string,
+  deps: AssetImageDeps,
+): void {
+  const pending = queued.get(editor);
+  if (pending) {
+    pending.add(src);
+    return;
+  }
+  const srcs = new Set([src]);
+  queued.set(editor, srcs);
+  nextFrame(() => {
+    queued.delete(editor);
+    applyRefresh(editor, srcs, deps);
+  });
+}
+
+function applyRefresh(
+  editor: Editor,
+  srcs: ReadonlySet<string>,
   deps: AssetImageDeps,
 ): void {
   if (editor.isDestroyed) return;
@@ -72,7 +106,8 @@ export function refreshAssetViews(
   refreshCount += 1;
   const fresh: Decoration[] = [];
   state.doc.descendants((node, pos) => {
-    if (node.type.name === "image" && node.attrs.src === src) {
+    const { src } = node.attrs;
+    if (node.type.name === "image" && srcs.has(src)) {
       fresh.push(
         deps.deco.node(pos, pos + node.nodeSize, {}, {
           assetSrc: src,
@@ -81,10 +116,8 @@ export function refreshAssetViews(
       );
     }
   });
-  const stale = current.find(
-    undefined,
-    undefined,
-    (spec) => (spec as Partial<RefreshSpec>).assetSrc === src,
+  const stale = current.find(undefined, undefined, (spec) =>
+    srcs.has((spec as Partial<RefreshSpec>).assetSrc ?? ""),
   );
   editor.view.dispatch(
     state.tr
@@ -111,11 +144,17 @@ function resolvedView(
   const refresh = refreshOf(props.decorations);
   const withUrl = (next: PMNode) =>
     next.type.create({ ...next.attrs, src: url }, next.content, next.marks);
-  const view = parent({
-    ...props,
-    node: withUrl(node),
-    HTMLAttributes: { ...props.HTMLAttributes, src: url },
-  });
+  let view: ReturnType<NodeViewRenderer>;
+  try {
+    view = parent({
+      ...props,
+      node: withUrl(node),
+      HTMLAttributes: { ...props.HTMLAttributes, src: url },
+    });
+  } catch (error) {
+    controller.abort(); // release the URL this view held
+    throw error;
+  }
   return {
     ...view,
     update: (
@@ -184,7 +223,7 @@ export function assetImageView(
   deps: AssetImageDeps,
 ) {
   const src = props.node.attrs.src as string;
-  const ref = parseAssetRef(src);
+  const ref = deps.parse(src);
   const controller = new AbortController();
   if (ref?.alg === "sha256" && scope) {
     assetResolver.track(props.editor);
