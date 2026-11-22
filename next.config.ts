@@ -46,6 +46,8 @@ const nextConfig: NextConfig = {
     // Always defined, so the bundler inlines it and drops the other target's
     // branches; an unset NEXT_PUBLIC_* stays a runtime lookup.
     NEXT_PUBLIC_APP_TARGET: process.env.NEXT_PUBLIC_APP_TARGET ?? "web",
+    // Same for Find (P2.11): a web build without it drops the key listener.
+    NEXT_PUBLIC_FIND: process.env.NEXT_PUBLIC_FIND ?? "",
   },
   // Web-only route handlers are `route.web.ts(x)`, which the desktop
   // extensions don't match; `*.desktop.tsx` is the desktop-only

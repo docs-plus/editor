@@ -8,7 +8,6 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
-import { FIND_ENABLED } from "@/components/find/find-keys";
 import { FindLoader } from "@/components/find/find-loader";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
@@ -175,8 +174,14 @@ export function EditorApp({ intro }: EditorAppProps) {
         playgroundRegenerateTrigger={playgroundRegenerateTrigger}
         onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
-      {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. */}
-      {FIND_ENABLED ? <FindLoader /> : null}
+      {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. The
+          check is `FIND_ENABLED` inlined here, so a build with Find off
+          leaves the loader out (an imported constant would not). */}
+      {process.env.NEXT_PUBLIC_FIND === "1" ||
+      (process.env.NEXT_PUBLIC_FIND !== "0" &&
+        process.env.NEXT_PUBLIC_APP_TARGET === "desktop") ? (
+        <FindLoader />
+      ) : null}
     </div>
   );
 }

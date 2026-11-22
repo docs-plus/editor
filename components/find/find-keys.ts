@@ -5,8 +5,9 @@ import { supportsHighlights } from "@/extensions/find/highlight-support";
  * off on the web until the owner decides to take ⌘F from the browser there
  * (#158). `NEXT_PUBLIC_FIND=1` turns it on for any build and `0` turns it
  * off for any build, when ⌘F / Ctrl+F opens the browser's own find bar.
- * Both comparisons are inlined at build time, so a build with Find off
- * leaves its key listener out.
+ * Both are inlined at build time (`next.config.ts` always defines them);
+ * `editor-app.tsx` repeats the check inline so a build with Find off
+ * leaves the key listener out, which an imported constant does not.
  */
 export const FIND_ENABLED =
   process.env.NEXT_PUBLIC_FIND === "1" ||
