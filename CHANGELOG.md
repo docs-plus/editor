@@ -9,6 +9,52 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.7b: list views, sort, filter and tags
+
+The library's list views for desktop and the web library (D3), in
+`components/library/`, on top of P2.7a's sidebar. The web sandbox doesn't
+use them: nothing in the web build imports `components/library` or
+`lib/library`.
+
+#### Added
+
+- **Platform:** `LibraryIndex` gains tags (`tags`, `addTag`, `removeTag`,
+  `createTag`, `renameTag`, `mergeTags`; unique by `tagNameKey`, 40
+  characters, 20 per document), list choices per place (`listViews`,
+  `setListView`; a folder's map to `folders.sort`, `view` and `"group"`,
+  the rest to `meta`), Manual order inside a folder (`moveInFolder`,
+  `docs.sort_key`), the Trash list (`trash`: documents and folder units,
+  newest first) and list metadata on entries (`modifiedAt`, `snippet`,
+  `tagIds`, `sortKey`). `MemoryDocumentIndex` implements them and the
+  shared contract suite covers them for P2.6's `IpcDocumentIndex` and W2's
+  `IdbDocumentIndex`.
+- **Library:** list views for Recent, Pinned, the Library root, a folder,
+  a tag and Trash, as an ARIA grid with one tab stop: sort by Title,
+  Modified, Created, Opened or Manual (pin order in Pinned), List or
+  Preview (title plus a 2-line snippet), group by date (Today, Yesterday,
+  This week, This month, Earlier) or by folder, all kept per folder. The
+  tree keeps sorting by title. Lists are windowed (first paint 26 ms at
+  1,000 documents and 28 ms at 10,000 on a production build; targets 100
+  and 300 ms). Arrow, Home/End and Page keys, Shift to extend, Space,
+  ⌘A, Enter (a folder opens its list), F2, ⌘⌫ / Delete, ⌘Z, Shift+F10,
+  type-to-select, and ⌥⌘↑ / ⌥⌘↓ in a Manual folder.
+- **Library:** the filter bar: ⌘F while a list has focus, matching titles,
+  tags and folder names through the shared normalizer, never body text
+  (D24); a tag filter that combines tags with AND; and a Modified date
+  range. It is per window and not saved.
+- **Library:** the Tags section in the sidebar (collapsed, no counts),
+  each tag opening a list of its documents; F2 renames a tag everywhere,
+  and a name another tag has asks "Merge “plans” into “planning”?" with
+  Cancel focused.
+- **Library:** the Trash list with Restore (row menu, Shift+F10, or the
+  header button), "Restored “Q4 plan” to Drafts." in the pill, and the
+  UX §5.2 empty states. Delete Forever and Empty Trash come with P2.8.
+- **Tests:** `library-lists.spec.ts` (UX §8.3 item 4, list keys, filter,
+  per-folder choices, Manual order, tags, axe in both themes and RTL) and
+  `library-lists-speed.spec.ts` on the harness, which now seeds large
+  libraries (`?seed=10000`), a Trash (`?trash=1`) and builds production
+  React with `LIBRARY_HARNESS_PROD=1`.
+
 ### Desktop P2.7a: files sidebar, Quick Open and Move to…
 
 The library's files sidebar for desktop and the web library (D3), in
