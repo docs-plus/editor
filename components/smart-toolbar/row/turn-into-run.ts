@@ -165,11 +165,18 @@ type Chain = ReturnType<Editor["chain"]>;
 function wrapChain(editor: Editor, id: string, chain: Chain, dryRun = false) {
   const lifted = chain.command(({ tr }) => liftWrapped(tr));
   if (id === "insert.quote") return lifted.setBlockquote();
-  // The dry run (`liftsInto`, every render of an open menu) skips the
-  // language, whose suggestion scans the whole document.
+  // The dry run (`liftsInto`) skips the language, whose suggestion scans
+  // the whole document.
   const language = dryRun ? null : suggestedCodeLanguage(editor.state.doc);
   return lifted.toggleCodeBlock(language ? { language } : undefined);
 }
+
+/**
+ * The dry runs per editor state: an open menu renders its rows on every
+ * store change, and the answer only changes with the document or the
+ * selection, so each state runs them once (once per open, in practice).
+ */
+const dryRuns = new WeakMap<EditorState, Map<string, boolean>>();
 
 /**
  * Whether Turn into runs Code block or Quote by lifting first: the
@@ -177,9 +184,23 @@ function wrapChain(editor: Editor, id: string, chain: Chain, dryRun = false) {
  */
 export function liftsInto(editor: Editor, id: string): boolean {
   if (id !== "insert.codeBlock" && id !== "insert.quote") return false;
-  if (!editor.isEditable || wrappedBlocks(editor.state.tr).length === 0) {
-    return false;
+  if (!editor.isEditable) return false;
+  const { state } = editor;
+  let answers = dryRuns.get(state);
+  if (!answers) {
+    answers = new Map();
+    dryRuns.set(state, answers);
   }
+  let answer = answers.get(id);
+  if (answer === undefined) {
+    answer = dryRun(editor, id);
+    answers.set(id, answer);
+  }
+  return answer;
+}
+
+function dryRun(editor: Editor, id: string): boolean {
+  if (wrappedBlocks(editor.state.tr).length === 0) return false;
   // Inside a quote, Quote stays the checked, refused row.
   if (id === "insert.quote" && computeContext(editor).inBlockquote) {
     return false;

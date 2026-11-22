@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it } from "bun:test";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { AllSelection } from "@tiptap/pm/state";
 
-import { turnInto } from "@/components/smart-toolbar/row/turn-into-run";
+import {
+  liftsInto,
+  turnInto,
+} from "@/components/smart-toolbar/row/turn-into-run";
 import { dismissNotice, getNotice } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 
@@ -112,6 +115,26 @@ describe("Turn into (spec §7.2)", () => {
       "codeBlock:Two",
       "bulletList[paragraph:Three]",
     ]);
+  });
+
+  it("an open menu's rows dry-run the lift once per editor state", () => {
+    make(h(1, "Title"), list("One", "Two", "Three"));
+    editor.commands.setTextSelection(posInside(editor, "Two"));
+    const can = editor.can.bind(editor);
+    let dryRuns = 0;
+    editor.can = () => {
+      dryRuns += 1;
+      return can();
+    };
+    // Every render of the open menu asks again; only the first runs it.
+    for (let render = 0; render < 3; render += 1) {
+      expect(liftsInto(editor, "insert.codeBlock")).toBe(true);
+    }
+    expect(dryRuns).toBe(1);
+    // A new selection is a new state: asked again, run again.
+    editor.commands.setTextSelection(posInside(editor, "One"));
+    expect(liftsInto(editor, "insert.codeBlock")).toBe(true);
+    expect(dryRuns).toBe(2);
   });
 
   it("Quote lifts a list item into a quote; its siblings stay", () => {

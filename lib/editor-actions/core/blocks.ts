@@ -24,7 +24,6 @@ import {
   ListIcon,
   ListOrderedIcon,
   ListTodoIcon,
-  TypeIcon,
 } from "@/lib/icons";
 import { canToggleList, toggleList } from "@/lib/list-commands";
 import {
@@ -406,7 +405,7 @@ function indentAction(
 }
 
 export const blockActions: readonly AnyAction[] = [
-  styleAction("paragraph", "Mod-Alt-0", TypeIcon),
+  styleAction("paragraph", "Mod-Alt-0"),
   ...([1, 2, 3, 4, 5, 6] as const).map((level) =>
     styleAction(`heading-${level}`, `Mod-Alt-${level}`, HEADING_ICONS[level]),
   ),
