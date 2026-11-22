@@ -22,7 +22,6 @@ import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
 import "@/styles/_page.scss";
-
 import "@/styles/_print.scss";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
