@@ -373,6 +373,13 @@ The web behaviour with the flag off, and the flag-on branches, are unit tested i
 | `library-lists.spec.ts` | `library` | List views (P2.7b): UX §8.3 item 4 (open Trash and restore with the keyboard), the empty Trash, list keys (arrows, Home/End, Shift extends, ⌘A, Esc, ⌘⌫/Delete with focus on the next row, ⌘Z, Enter on a folder focuses its list), F2 and type-to-select, ⌘F and the filter bar (titles, tags and folders, never the snippet; D24), the AND tag filter, sort/view/group kept per folder, By date groups, Manual order with ⌥⌘↓ and ⌘Z, the Tags section (rename everywhere, merge asks with Cancel focused), axe in both themes and RTL |
 | `library-lists-speed.spec.ts` | `library` | First paint of a folder list and of Recent at 1,000 and 10,000 documents (details §6.3: ≤ 100 ms and ≤ 300 ms), plus the filter keystroke. Asserted only on a production harness (`LIBRARY_HARNESS_PROD=1`); the development harness in CI records the numbers |
 
+`library-links.spec.ts` (same project) runs the document links core (LK1)
+on the harness's links view (`?view=links`): each link state's icon and
+dashed underline, ⌘-click following to a document and a heading,
+⌘⇧-click and middle-click opening a new tab, `here#` jumps, the removed
+heading notice, icons redrawn when a target is trashed, and only web links
+reaching the external opener.
+
 The harness (`tests/harness/library/`) serves the shared library components on
 a `MemoryDocumentIndex`, built with `Bun.build` and `app/globals.css` through
 Tailwind's PostCSS plugin, so nothing reaches the web build. `?dir=rtl`,

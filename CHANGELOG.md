@@ -175,6 +175,85 @@ commit pins.
 - Every later Bun upgrade follows the runbook: merge the `.tool-versions`
   change with automatic deploys off, upgrade the host, then deploy.
 
+### Links between documents LK1: the document links core
+
+The pieces desktop and the web library need to link one document to
+another (search-linking design §4.1–§4.7, §5, D25). Nothing in the web
+sandbox uses them: the editor gains a `linkHost` pass-through that the web
+never sets, so the web keeps #168's `isWebLink` policy. Editor chunk group
+−3 B gz against `main` 1e535b4 (its D23 ledger line is 60 B); web CSS
+unchanged.
+
+#### Added
+
+- **Links:** `lib/links/doc-link.ts` parses `tinydocy:doc/<link_key>`,
+  `tinydocy:doc/<link_key>#<heading>` and `tinydocy:here#<heading>`
+  strictly, tells a form from a later version apart from an invalid one,
+  and recognises our scheme behind whitespace, controls, zero-width and
+  bidi characters in any case, so none of them reaches an external opener.
+- **Links:** `createLinkHost` (`lib/links/link-host.ts`) builds the
+  Hyperlink options a host passes the editor, with one identity for its
+  life:
+  - `isAllowedUri`: document links that parse, and https, http and mailto
+    (`isWebLink`), applied by #168's `LinkPolicyHyperlink` to commands,
+    paste, rendering and opening. No `protocols`, so typing `tinydocy:`
+    never autolinks;
+  - `linkIcon`: one icon per state, in the link's own colour — FileText
+    (opens), Hash (`here#`), FileMinus (In Trash) and FileQuestion (Not
+    available, Not a valid link, Needs a newer version); the states that
+    don't open are `role="img"` with their label, and `refreshIcons`
+    redraws icons and labels after index changes
+    (`createIconRefresher` debounces it, 100 ms);
+  - `navigate`: ⌘-click opens in this tab, ⌘⇧-click or middle-click in a
+    new one, `here#` jumps in place, web links open as before after a
+    second allowlist check; a link that can't open shows its preview card,
+    or is announced from the keyboard. One announcement per follow.
+    `onFollow` gives the shell the source document and a Yjs relative
+    position for Back;
+  - `popovers`: a document link's preview shows its title and place
+    ("Library › folder", In Trash) or why it can't open, with Open, Copy
+    Link and Remove Link (never the default focus) — never the href or
+    key. Web links keep the package's preview;
+  - `openAtHeading` goes to the heading after a document opens, looking it
+    up again after the first sync before saying "The section this link
+    pointed to was removed."
+  - `lib/links/doc-links.css` dashes the underline of links that don't
+    open, inner styled runs included.
+- **Links:** `lib/links/extract-links.ts`, the links-only pass:
+  `deriveDocument` lists link rows (section, key, heading, text, context;
+  text capped at 200 characters; deduplicated on key, heading and section,
+  at most 2,000 per document) and heading rows in one walk, under 8 ms at
+  500 headings and 10,000 links. `toLinkRows` and `toHeadingRows` map them
+  to format 2's `links` and `doc_headings` columns; `linksHash` and
+  `DERIVE_VERSION` (1) tell when to derive again, and `trackLinkChanges`
+  marks a document dirty only when its links may have changed.
+- **Links:** `stripPrivateDocLinks` turns links to documents that aren't
+  shared into plain text in one transaction when a document is shared
+  (D-O8), keeping `here#` links; `countPrivateDocLinks` and
+  `consentLinksLine` give the consent line ("3 links to your other
+  documents will become plain text." with Keep Links).
+- **Platform:** `LibraryIndex` entries carry their `linkKey`, and the
+  snapshot lists `trashed` documents. `MemoryDocumentIndex` mints keys and
+  the contract suite covers both and the snapshot's identity.
+- **Desktop:** `RpcLibraryIndex` passes the same suite. `create` mints the
+  32-hex `link_key` with the id and sends it, and the engine's `createDoc`
+  keeps it (refusing a malformed one). `sidebar` returns each document's
+  `linkKey`, and `trashList` adds `trashed`: every document in the Trash,
+  alone or in a folder, with its key. No schema change.
+- **Editor:** `DocumentEditor` takes an optional, stable `linkHost` and
+  spreads it into the Hyperlink configuration; it imports only its type
+  (import-boundary rule). `DocumentEditor` passes its props through as
+  given, so new props need no plumbing.
+- **Links:** `lib/web-link.ts` holds `isWebLink`, shared by the editor
+  config and the link host so the two policies can't drift.
+- **Tests:** unit tests for every module (a navigate table, a no-host
+  safety test on the real editor, bare Y.Doc derive tests and a timing
+  budget), and a links view in the library harness (`?view=links`, with a
+  read-only toggle and `&matrix=1`) with Playwright specs for every state,
+  the gesture table in both modes, previews, `here#` jumps, the external
+  opener, and a visual matrix (icon colour, 4.5:1 contrast, dashed runs,
+  RTL) in light and dark.
+
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and

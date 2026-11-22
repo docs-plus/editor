@@ -42,6 +42,12 @@ export interface DocumentEntry {
   /** `LibraryIndex` only: when it was last opened, if ever. */
   readonly openedAt?: number;
   /**
+   * `LibraryIndex` only: the document's link key (32 lowercase hex),
+   * minted when it is created and never derived from its id; links to it
+   * are `tinydocy:doc/<linkKey>` (search-linking §4.1).
+   */
+  readonly linkKey?: string;
+  /**
    * `LibraryIndex` only: the last content change (`docs.modified_at`). Only
    * content edits change it (title included, since the title is the first
    * heading); moves, pins, tags and opening don't (owner decision D-O5).
@@ -220,6 +226,12 @@ export interface LibraryIndexSnapshot extends DocumentIndexSnapshot {
    * (their documents are inside them), newest first.
    */
   readonly trash: readonly TrashedItem[];
+  /**
+   * The documents in the Trash, alone or inside trashed folders, with
+   * their `linkKey`s, so a link to one can say "In Trash" (search-linking
+   * §4.6). Optional: an index that doesn't list them yet leaves it out.
+   */
+  readonly trashed?: readonly DocumentEntry[];
 }
 
 export type LibraryIndexListener = (
