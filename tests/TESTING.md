@@ -597,6 +597,44 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   pinned to commit SHAs. Every job in a workflow that runs on `pull_request`
   or `merge_group` must have explicit read-only permissions.
 
+## Generated fixtures and the nightly streak
+
+Large fixtures are generated from a seed at test time, never committed (test
+strategy §3, Q1). `bun scripts/fixtures/generate.ts --list` names the sets
+and the ones still waiting on unmerged work.
+
+```bash
+bun scripts/fixtures/generate.ts --set library-1k --seed 42 --out "$TMPDIR/fx"
+bun scripts/fixtures/generate.ts --set doc-rtl,hostile --out "$TMPDIR/fx"   # seed: --seed, then SEED, then 42
+bun scripts/fixtures/generate.ts --cache-key                               # actions/cache key: a hash of the generator sources
+```
+
+- The seed is printed first; `SEED=<n>` replays a run. Each set lands in
+  `<out>/<set>/` with a `manifest.json` (sha256 per file; a logical summary
+  for libraries, whose SQLite bytes vary run to run). A set folder that
+  already holds files is refused; `--force` empties it first.
+- `FIXTURES_FULL_SIZE=1 bun test tests/unit/scripts/fixtures.test.ts` also
+  replays the slow full-size sets (12 MP photos, `library-1k`,
+  `library-10k`); it is off by default.
+- `doc-images` photos are PNGs with an `eXIf` block (no JPEG encoder is in
+  the tree); a JPEG-only EXIF path is covered by the structural JPEG in
+  `exif`.
+- Libraries are written through the storage engine's own API. Images join
+  `library-1k` with the asset store (P2.6b).
+- Document generators take an optional seeded `random`
+  (`generateLargeDocument(n, { random })`); callers that pass none keep
+  `Math.random`.
+
+`bun scripts/nightly-streak.ts` prints the §1.6 streak per gate as Markdown,
+for the pinned streak issue (read-only `gh run list` / `gh run view`; the
+owner pastes the output). A gating job counts towards a gate when its name
+contains the gate's label (`T1–T8`, `T16–T18`, `T9–T15`, `T19`,
+`library-soak`), and a set passes only when every job carrying its label
+finished `success`; a label no job carries yet reports the gate as not
+running. A new step in a gating workflow must be classified as setup
+(`SETUP_STEPS` in the script) or test (`TEST_STEPS` in its unit test), or
+the test fails.
+
 ## Key Conventions
 
 - **Rich document content** — `generateLargeDocument` produces 3-5 paragraphs + mixed structured blocks per heading section by default. Pass `{ richContent: false }` for lightweight documents. Playground content includes tables, syntax-highlighted code blocks (multi-language), and highlighted text.

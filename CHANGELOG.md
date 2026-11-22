@@ -217,6 +217,44 @@ the CI session's Q7 job (spec §2.2, "Still open for W2").
 - **Spec:** the image store's web `doc_blobs` and `blobs` rows are
   snake_case, as on desktop.
 
+### Test infrastructure: seeded fixtures and the nightly streak tracker
+
+Test strategy Q1 and Q5 (`2026-11-16-test-release-strategy.md` §1.6, §3).
+Scripts and tests only: no app, server or workflow change, and the editor
+chunk is unchanged (0 B).
+
+#### Added
+
+- **Fixtures:** `bun scripts/fixtures/generate.ts --set <name> --seed <n>
+  --out <dir>` builds the §3.2 sets from a seed it prints first
+  (`SEED=<n>` replays): `library-s`, `library-1k`, `library-10k` (written
+  through the storage engine), `doc-large`, `doc-near-cap` (1.9 MiB of Yjs
+  state), `doc-images`, `doc-rtl`, `doc-legacy`, `exif` and `hostile`. Each
+  set writes a `manifest.json`; `--list` names the sets still waiting on
+  unmerged work (comments, preferences, the web library, the asset store,
+  `.tinydoc`), and `--cache-key` prints a hash of every module the
+  generators import (a unit test walks the imports so the list can't fall
+  behind). A set folder that already holds files is refused unless `--force`
+  empties it; bad input prints one line and exits 2. `FIXTURES_FULL_SIZE=1`
+  (off by default) adds the slow full-size replay tests (12 MP photos,
+  `library-1k`, `library-10k`). The `doc-images` photos are PNGs with an
+  `eXIf` block, not JPEGs; each is written to disk as it is drawn.
+- **Nightly streak:** `bun scripts/nightly-streak.ts` reads the scheduled
+  runs of `nightly.yml` (and `nightly-desktop.yml` once it exists) with
+  read-only `gh` calls and prints the §1.6 streak per gate as Markdown for
+  the pinned streak issue: green, red and void days, the one re-run per void
+  run, at most 2 void days per streak, and "not running yet" for a gate
+  whose job sets no nightly job carries. A job set counts only when every
+  job carrying its label finished `success` (a skipped job or matrix leg
+  doesn't), a day missing a run of either gating workflow is void, and the
+  setup steps that void a run are pinned against the workflow files by a
+  unit test.
+
+#### Changed
+
+- **Tests:** `generateLargeDocument` and `generateRandomDocument` take an
+  optional seeded `random`; callers that pass none keep `Math.random`.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
