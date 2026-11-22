@@ -58,6 +58,34 @@ the storage worker. Nothing changes on the web.
   tests cover the guards and the `argv` filter (both fuzzed), the
   registry, the handlers, the supervisor and the quit coordinator.
 
+#### Security (review of #135)
+
+- **Desktop:** two build flavors. The **release** flavor (installers) has
+  the inspect fuse off and compiles every test hook out (a build check
+  refuses a release bundle that names one). The **test** flavor (unpacked,
+  never shipped) keeps the hooks and the inspector for Playwright.
+- **Desktop:** Windows registers `tinydocy://` as `… -- "%1"`; a link with
+  `--inspect=9229` after it opens no inspector (checked on the installed
+  release app on all three OSes).
+- **Desktop:** only the app's own top frame can send an `https` link to
+  the system browser, at most 3 per window per 10 s; embed frames and an
+  unknown focused frame are refused. Downloads and device choosers
+  (Bluetooth, HID, serial, USB) are refused.
+- **Desktop:** every response from `app://tinydocy` carries a CSP (a
+  minimal one for non-HTML, SVG sandboxed); symlinks are never served,
+  and a renderer export containing one fails the build.
+- **Desktop:** a `tinydocy://local/<uuid>` link opens a window only for a
+  document that exists, at most 5 new windows per 10 s; CSP reports from
+  a page are capped per window; a renderer may append only `local` and
+  `migration` updates, and `schemaTo` only with `migration`.
+- **Desktop:** the sync URL baked into `connect-src` must be a bare
+  `ws:`/`wss:` origin (`wss:` for release). On Windows the library lives
+  under `%LOCALAPPDATA%\TinyDocy`.
+- **Desktop:** the Linux spellcheck guard is installed on every session as
+  it is created. An offline spec reads Chromium's net-log for a whole
+  session and finds nothing leaving the machine; the only entry besides
+  loopback is Chromium's IPv6 reachability probe, which sends no packet.
+
 #### Changed
 
 - **Desktop:** the D-A12 smoke serves its fixture on `app://tinydocy` with
