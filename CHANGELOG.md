@@ -63,6 +63,59 @@ lives in the phone bar's lazy chunk.
   against a bar-less baseline instead of matching source names, so it works
   on minified builds and also catches a leaked `focusout`.
 
+### Image store A1: the shared asset core
+
+The shared core of the image store (spec `2026-11-16-image-store-design.md`,
+D4, PR A1). Library documents will store `asset:sha256-<hex>` refs instead of
+data URLs; desktop storage (P2.6b) and the web library (W11) build on this.
+No web code path produces a ref yet, and the public sandbox is unchanged:
+its editor imports none of this. The editor chunk group and first-load JS
+are byte for byte the same as `main` at `84a9458` (+0 B gz; A1 has no D23
+ledger line).
+
+#### Added
+
+- **Image store:** `lib/assets/`:
+  - `asset-ref` (format, parse, `findAssetRefs`, `rewriteAssetRefs` for
+    exports);
+  - `sniff` (magic bytes, plus header-only sizes: refuses SVG renamed as
+    PNG, mismatched types, truncated headers and pixel bombs);
+  - `hash` (SHA-256);
+  - `prepareImageAsset` (the insert pipeline: GIFs pass through without
+    their comments and XMP, within 2560 px a side, 1,000 frames and 160 MP
+    summed over frames; PNG and WebP metadata stripping; JPEG always
+    re-encoded; a 2 MB / 2560 px cap; a format whose size the header doesn't
+    give, such as AVIF, HEIC or BMP, decodes only in the worker);
+  - an encode worker (`createImageBitmap` + `OffscreenCanvas`) that falls
+    back to the main-thread canvas when it can't load or times out (60 s),
+    but never retries an image that crashed it. A 12 MP photo encodes with
+    the main thread's longest gap at 11 ms, against 75 ms on the main
+    thread (Chromium);
+  - the resolver, and a reference-counted object-URL cache released through
+    `AbortSignal`.
+- **Platform:** the `BlobStore` port (`lib/platform/blob-store.ts`) over
+  format 2's `blobs` and `doc_blobs` tables (no new tables), `MemoryBlobStore`,
+  and a framework-free contract suite for P2.6b and W11
+  (`tests/helpers/blob-store-contract.ts`), including the GC property test:
+  no referenced or restorable blob is ever collected.
+- **Editor:** `AssetHyperMultimediaKit` (`extensions/hyper-multimedia/asset-kit.ts`)
+  for hosts with an image store (P2.6b, W11). It renders `asset:` images
+  through the §6.2 fallback until HyperMultimedia 2.4 (U1), drops pasted
+  `asset:` images with a notice when the document has no image store, adds
+  Alt text… to the image toolbar, copies an image as PNG (so it pastes as a
+  picture anywhere), and keeps `<img alt>` in step with alt changes,
+  including undo and collaborators' edits. Everything but its
+  routing is one lazy chunk. The upstream request is written up in
+  `docs/research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md`.
+- **Headless:** `extensions/hyper-multimedia/asset-image-parse.ts`, the
+  `asset:` image parse rules with no runtime imports, for the headless
+  schema (P2.8a).
+
+#### Changed
+
+- **Schema:** `CLIENT_SCHEMA` is 3 ("knows asset refs"). The server's floor
+  stays 2, so schema-2 bundles still connect and are counted as `low` in the
+  per-minute `client_schema` log line. No deploy step.
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`

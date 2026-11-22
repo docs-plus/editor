@@ -27,6 +27,8 @@ export default defineConfig({
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
         "**/page-engine-perf.spec.ts",
+
+        "**/image-asset-encoder-perf.spec.ts",
       ],
       use: {
         browserName: "chromium",
@@ -51,6 +53,7 @@ export default defineConfig({
         "**/collaboration.spec.ts",
         "**/editor-leak.spec.ts",
         "**/image-metadata.spec.ts",
+        "**/image-asset-encoder.spec.ts",
       ],
       testIgnore: ["**/toolbar-perf.spec.ts"],
       use: {
@@ -67,6 +70,8 @@ export default defineConfig({
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
         "**/page-engine-perf.spec.ts",
+
+        "**/image-asset-encoder-perf.spec.ts",
       ],
       dependencies: ["chromium"],
       workers: 1,
