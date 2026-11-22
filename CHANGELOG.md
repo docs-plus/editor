@@ -74,6 +74,28 @@ of 7,030 B gz fetched when the browser is first idle.
   and `0` turns it off for any build. `make dev` (and so CI's e2e) runs
   with `NEXT_PUBLIC_FIND=1`. A unit test pins the defaults.
 
+### CI: draft pull requests run the checks job only
+
+About a dozen agent sessions keep draft pull requests open, and each CI run
+takes eight jobs of the organisation's twenty, so runs queued for up to
+nine minutes before starting and up to eleven before the gate got a runner.
+
+#### Changed
+
+- **CI:** while a pull request is a draft, the shards, perf and the desktop
+  job are skipped and `Playwright (Chromium)` passes with a notice; the
+  checks job still runs. `ready_for_review` is now a `pull_request` trigger,
+  so marking a draft ready starts the full run.
+- **CI:** the gate fails closed: a skip passes only on a pull request run,
+  for a draft or a docs-only change. In the merge queue, on `main` and in
+  manual runs every suite runs, and a skip fails the gate.
+- **Tests:** `ci-workflow.test.ts` runs the verdict script over a table of
+  events, skip reasons and job results, and the decision script with the
+  draft flag.
+
+**Deploy:** none. **Agents:** open pull requests as drafts and mark them
+ready for review when they are.
+
 ### Phones M20: one keyboard measurement, sheets ride the keyboard
 
 The on-screen keyboard is measured once for the whole page (phones and
