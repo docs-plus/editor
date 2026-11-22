@@ -112,6 +112,58 @@ t("core.same", "Two");
   });
 });
 
+describe("extractMessages: comments and imports", () => {
+  it("skips t( in comments, and keeps URLs inside English text", () => {
+    const root = fixture({
+      "components/a.tsx": `${IMPORT}
+// Call t(key, english) with literals.
+/**
+ * Example: t(name, text)
+ */
+/* t(old) */ const a = t("core.link", "See https://docs.plus/help");
+const b = 1; // then t(more)
+`,
+    });
+    const result = extractMessages(root, { actions: [] });
+    expect(result.errors).toEqual([]);
+    expect(result.catalogs.get("core")).toEqual({
+      "core.link": "See https://docs.plus/help",
+    });
+  });
+
+  it("refuses imports that would hide t() calls from the extractor", () => {
+    const root = fixture({
+      "components/alias.tsx": `import { t as tr } from "@/lib/i18n/format";\ntr("library.a", "A");\n`,
+      "components/star.tsx": `import * as i18n from "@/lib/i18n/t-core";\ni18n.t("library.b", "B");\n`,
+      "lib/x/relative.ts": `import { t } from "../i18n/t-core";\nt("library.c", "C");\n`,
+      "lib/x/barrel.ts": `export { t } from "@/lib/i18n/format";\n`,
+      "lib/x/dynamic.ts": `const m = await import("@/lib/i18n/format");\n`,
+    });
+    const { errors } = extractMessages(root, { actions: [] });
+    expect(errors).toHaveLength(5);
+    const text = errors.join("\n");
+    expect(text).toContain("components/alias.tsx:1: renames t");
+    expect(text).toContain("components/star.tsx:1: import *");
+    expect(text).toContain("lib/x/relative.ts:1: imports ../i18n/t-core");
+    expect(text).toContain("lib/x/barrel.ts:1: re-exports");
+    expect(text).toContain("lib/x/dynamic.ts:1: dynamic import");
+  });
+
+  it("allows other names and type-only imports from the i18n modules", () => {
+    const root = fixture({
+      "components/boot.ts": `export interface Boot { lang: string }
+import { setUiLocale } from "@/lib/i18n/t-core";
+import type { MessageValues } from "@/lib/i18n/format";
+import { formatMessage, t } from "@/lib/i18n/format";
+t("library.d", "D");
+`,
+    });
+    const result = extractMessages(root, { actions: [] });
+    expect(result.errors).toEqual([]);
+    expect(result.catalogs.get("library")).toEqual({ "library.d": "D" });
+  });
+});
+
 describe("writeExtraction", () => {
   it("writes sorted catalogs and notes, and removes emptied ones", () => {
     const root = fixture({

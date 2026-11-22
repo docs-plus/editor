@@ -47,6 +47,48 @@ const IMPORTS_T =
   /import\s*\{[^}]*\bt\b[^}]*\}\s*from\s*["']@\/lib\/i18n\/(?:t-core|format)["']/;
 const CALL = /(?<![\w.$])t\(/g;
 const NOTE = /^\s*\/\/\s*i18n:\s*(.+?)\s*$/;
+/**
+ * A line prefix that puts what follows inside a comment: after `//`, on a
+ * JSDoc `*` line, or after a `/*` not closed on the line. A heuristic, not
+ * a parser: URLs in strings (`https://`) have no space before `//`.
+ */
+const IN_COMMENT = /(^|\s)\/\/|^\s*\*(?!\/)|(^|[\s{(])\/\*(?!.*\*\/)/;
+/** The one way to import a module whose `t()` calls are extracted. */
+const T_MODULE = /^@\/lib\/i18n\/(?:t-core|format)$/;
+/** Any specifier naming one of those modules (alias, relative, extension). */
+const T_MODULE_ANY = /(?:^|\/)i18n\/(?:t-core|format)(?:\.tsx?)?$/;
+const IMPORT_OR_EXPORT =
+  /\b(import|export)\s+(type\s+)?(\*(?:\s+as\s+[\w$]+)?|\{[^}]*\}|[\w$]+(?:\s*,\s*(?:\{[^}]*\}|\*\s+as\s+[\w$]+))?)\s*from\s*(["'])([^"']+)\4|\bimport\(\s*(["'])([^"']+)\6\s*\)/g;
+
+/**
+ * Imports of `t-core` or `format` that would hide `t()` calls from the
+ * extractor (relative paths, `t as x`, `import *`, re-exports, dynamic
+ * imports), so their messages would silently never reach a catalog.
+ * Importing other names (`setUiLocale`, `formatMessage`) is fine.
+ */
+function importProblems(src: string, file: string): string[] {
+  const problems: string[] = [];
+  for (const match of src.matchAll(IMPORT_OR_EXPORT)) {
+    const [, kind, typeOnly, clause = "", , spec, , dynamicSpec] = match;
+    const target = spec ?? dynamicSpec;
+    if (!T_MODULE_ANY.test(target) || typeOnly) continue;
+    const line = src.slice(0, match.index).split("\n").length;
+    const at = `${file}:${line}`;
+    const fix = `import { t } from "@/lib/i18n/…" so the extractor sees its calls`;
+    if (dynamicSpec)
+      problems.push(`${at}: dynamic import of ${target}: ${fix}`);
+    else if (kind === "export")
+      problems.push(`${at}: re-exports ${target}: ${fix}`);
+    else if (!T_MODULE.test(target)) {
+      problems.push(`${at}: imports ${target} by a relative path: ${fix}`);
+    } else if (/\*/.test(clause)) {
+      problems.push(`${at}: import * from ${target}: ${fix}`);
+    } else if (/\bt\s+as\b/.test(clause)) {
+      problems.push(`${at}: renames t from ${target}: ${fix}`);
+    }
+  }
+  return problems;
+}
 
 export interface ExtractableAction {
   readonly id: string;
@@ -163,10 +205,13 @@ export function extractMessages(
 
   for (const file of sourceFiles(root)) {
     const src = readFileSync(join(root, file), "utf8");
+    if (src.includes("i18n/")) errors.push(...importProblems(src, file));
     if (!IMPORTS_T.test(src)) continue;
     const lines = src.split("\n");
     for (const match of src.matchAll(CALL)) {
       const start = match.index ?? 0;
+      const lineStart = src.lastIndexOf("\n", start - 1) + 1;
+      if (IN_COMMENT.test(src.slice(lineStart, start))) continue;
       const line = src.slice(0, start).split("\n").length;
       const at = `${file}:${line}`;
       const call = readCall(src, start + match[0].length);
