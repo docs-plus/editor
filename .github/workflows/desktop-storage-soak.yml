@@ -63,6 +63,8 @@ jobs:
             cases: T2
           - name: T8 year and startup
             cases: T8
+          - name: format 2 (T20, T23, T24, T24b)
+            cases: T20,T23,T24,T24b
     defaults:
       run:
         shell: bash

@@ -153,6 +153,9 @@ function createLibrary(db: SqliteDriver, now: number) {
   });
 }
 
+/** Free pages above this share of the file trigger an incremental vacuum. */
+export const SPARSE_RATIO = 0.25;
+
 /** Clean opens before pre-migration copies are deleted (SEC-005). */
 export const CLEAN_OPENS_TO_KEEP_PRE_COPIES = 7;
 
@@ -230,8 +233,11 @@ export class Library {
     let db: SqliteDriver | null = null;
     try {
       db = openSqlite(path, { readOnly: false });
-      applyPragmas(db, host, options);
       const fresh = !hasTable(db, "meta");
+      // Only takes effect on an empty file, before journal_mode writes its
+      // header: compaction gives freed pages back (T23).
+      if (fresh) db.exec("PRAGMA auto_vacuum = INCREMENTAL");
+      applyPragmas(db, host, options);
       if (fresh) createLibrary(db, host.now());
       const version = readFormatVersion(db);
       const libraryId = readMeta(db, "library_id") ?? "";
@@ -402,6 +408,7 @@ export class Library {
     compact(this.conn, docId, state, upToSeq);
     this.trace?.(`COMPACT_ACK ${upToSeq}`);
     this.wrote();
+    this.vacuumIfSparse();
     return { foreign: null };
   }
 
@@ -456,6 +463,7 @@ export class Library {
   // Folders (folders.ts)
 
   createFolder(input: {
+    id?: string;
     name: string;
     parentId?: string | null;
     sortKey?: string;
@@ -570,6 +578,19 @@ export class Library {
   }
 
   /**
+   * T23: when more than 25% of the file is free pages after a compaction,
+   * give them back (`auto_vacuum = INCREMENTAL`, set when a library is
+   * created). A no-op on a library created without it.
+   */
+  private vacuumIfSparse() {
+    const db = this.conn;
+    const pages = Number(scalar(db, "PRAGMA page_count"));
+    const free = Number(scalar(db, "PRAGMA freelist_count"));
+    if (pages > 0 && free / pages > SPARSE_RATIO)
+      db.exec("PRAGMA incremental_vacuum");
+  }
+
+  /**
    * After a purge (SEC-005): truncate the WAL so the deleted pages don't
    * linger in it (`secure_delete` overwrites the ones in the main file).
    */
@@ -580,9 +601,9 @@ export class Library {
 
   // Tags (tags.ts)
 
-  createTag(name: string, color: string | null = null) {
+  createTag(name: string, color: string | null = null, id?: string) {
     this.assertWritable();
-    const created = tags.createTag(this.conn, name, this.host.now(), color);
+    const created = tags.createTag(this.conn, name, this.host.now(), color, id);
     if (created) this.changed("tag", created.id);
     return created;
   }

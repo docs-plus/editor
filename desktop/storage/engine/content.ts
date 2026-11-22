@@ -116,11 +116,14 @@ function validateAppend(input: AppendInput) {
 export const DOC_CAP_BYTES = 32 * 1024 * 1024;
 
 /**
- * True when an update only deletes: it carries no structs, so its state
- * vector is empty. No document structure is parsed (principle 5).
+ * True when an update only deletes: the clock range it adds is empty.
+ * `parseUpdateMeta` reads the update's header (its from and to clocks);
+ * no document structure is parsed (principle 5). Not
+ * `encodeStateVectorFromUpdate`: that skips clients whose structs don't
+ * start at clock 0, so every follow-up insert would look delete-only.
  */
 export function isDeleteOnly(update: Uint8Array): boolean {
-  return Y.decodeStateVector(Y.encodeStateVectorFromUpdate(update)).size === 0;
+  return Y.parseUpdateMeta(update).to.size === 0;
 }
 
 /**
