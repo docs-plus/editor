@@ -13,11 +13,16 @@ import {
 
 /*
  * Page preferences apply through `<html>` attributes and CSS variables
- * (preferences design §5.15 `perf`): a text size or spacing change on the
- * 1,000-heading document lays out once and runs no editor transaction, so
- * HeadingScale rebuilds nothing.
+ * (preferences design §5.15 `perf`): a text size or spacing change on a
+ * large document lays out once and runs no editor transaction, so
+ * HeadingScale rebuilds nothing. The design names a 1,000-heading
+ * fixture; the server refuses that one (2 MiB cap), so this uses 500.
  */
 
+/**
+ * The 500-heading document (about 1.2 MB, the largest the server keeps
+ * under its 2 MiB cap; the typing suite uses the same generator).
+ */
 async function openLarge(page: Page, look: "new" | "classic") {
   await page.addInitScript((look) => {
     if (!localStorage.getItem("tinydocy-look")) {
@@ -27,54 +32,75 @@ async function openLarge(page: Page, look: "new" | "classic") {
   const editor = new EditorPage(page);
   await editor.goto();
   await editor.waitForSync();
-  await editor.setContent(generateLargeDocument(1000));
+  await editor.setContent(generateLargeDocument(500));
   await editor.expectSavedToServer();
   return editor;
 }
 
-test("a text size or spacing change lays out once and runs no transaction", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await openLarge(page, "new");
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Performance.enable");
-  const layouts = async () => {
-    const { metrics } = await cdp.send("Performance.getMetrics");
-    return metrics.find((metric) => metric.name === "LayoutCount")?.value ?? 0;
-  };
-  await page.evaluate(() => {
-    const win = window as Window & { __transactions?: number };
-    win.__transactions = 0;
-    window.__tiptap_editor?.on("transaction", () => {
-      win.__transactions = (win.__transactions ?? 0) + 1;
-    });
-  });
-  await waitForMainThreadIdle(page);
+const CHANGES = [
+  () => window.__tinydocyPrefs?.setPageKnob("size", 20),
+  () => window.__tinydocyPrefs?.setPageKnob("spacing", "relaxed"),
+  () => window.__tinydocyPrefs?.setPageKnob("size", 24),
+];
 
-  for (const change of [
-    () => window.__tinydocyPrefs?.setPageKnob("size", 20),
-    () => window.__tinydocyPrefs?.setPageKnob("spacing", "relaxed"),
-    () => window.__tinydocyPrefs?.setPageKnob("size", 14),
-  ]) {
-    const before = await layouts();
-    await page.evaluate(change);
-    // Two frames: the change's own layout, and anything it scheduled.
-    await page.evaluate(
-      () =>
-        new Promise((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve)),
-        ),
-    );
+/**
+ * Layout passes per change, counted over the change's frame and the next
+ * one, with no editor transaction in between.
+ * - The engine itself costs one layout: measured with every block
+ *   rendered (`content-visibility: visible`).
+ * - On the real page, `content-visibility: auto` (off-screen blocks,
+ *   `document-editor.scss`) adds its relevance pass after any geometry
+ *   change, in the same frame; a theme flip, which moves nothing, stays
+ *   at one.
+ */
+for (const [name, renderAll, perChange] of [
+  ["the engine lays out once per change", true, 1],
+  ["with off-screen blocks skipped, one extra relevance pass", false, 2],
+] as const) {
+  test(`page preferences: ${name}, no transaction`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openLarge(page, "new");
+    if (renderAll) {
+      await page.addStyleTag({
+        content: "* { content-visibility: visible !important; }",
+      });
+    }
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Performance.enable");
+    const layouts = async () => {
+      const { metrics } = await cdp.send("Performance.getMetrics");
+      return (
+        metrics.find((metric) => metric.name === "LayoutCount")?.value ?? 0
+      );
+    };
+    await page.evaluate(() => {
+      const win = window as Window & { __transactions?: number };
+      win.__transactions = 0;
+      window.__tiptap_editor?.on("transaction", () => {
+        win.__transactions = (win.__transactions ?? 0) + 1;
+      });
+    });
     await waitForMainThreadIdle(page);
-    expect(await layouts()).toBe(before + 1);
-  }
-  expect(
-    await page.evaluate(
-      () => (window as Window & { __transactions?: number }).__transactions,
-    ),
-  ).toBe(0);
-});
+
+    for (const change of CHANGES) {
+      const before = await layouts();
+      await page.evaluate(change);
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      await waitForMainThreadIdle(page);
+      expect(await layouts()).toBe(before + perChange);
+    }
+    expect(
+      await page.evaluate(
+        () => (window as Window & { __transactions?: number }).__transactions,
+      ),
+    ).toBe(0);
+  });
+}
 
 /** One fresh-context typing run on the large document; p95 in ms. */
 async function typingP95(

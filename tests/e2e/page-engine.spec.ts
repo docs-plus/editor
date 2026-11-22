@@ -49,13 +49,6 @@ const cardWidth = (page: Page) =>
     .locator(".document-editor-content")
     .evaluate((card) => card.getBoundingClientRect().width);
 
-const outlineMode = (page: Page) =>
-  page
-    .locator(".outline-panel")
-    .first()
-    .getAttribute("data-mode")
-    .catch(() => null);
-
 test.describe("page engine", () => {
   test("a new visitor gets the Default page: 16 px text, a 624 px card", async ({
     page,
@@ -201,8 +194,8 @@ test.describe("page engine", () => {
     });
     expect(card).toBeGreaterThan(wrapper - 40);
     expect(text).toBe("736px");
-    // Full never docks the outline.
-    expect(await outlineMode(page)).not.toBe("docked");
+    // Full never docks the outline (the overlay starts closed).
+    await expect(page.locator(".outline-panel")).toHaveCount(0);
   });
 
   test("the outline docks by the formula: 926 px for Default, 950 px in classic", async ({
