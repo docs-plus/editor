@@ -528,7 +528,7 @@ async function caseT5(kills: number): Promise<CaseResult> {
   return {
     name: "T5",
     pass: failures.length === 0,
-    summary: `${kills} kills during a 3-step migration (${Math.round(fullMs)} ms); stopped at v1–v4: ${JSON.stringify(reached)}; each step all-or-nothing, every resume reached v${T5_TARGET}`,
+    summary: `${kills} kills during a 3-step migration (${Math.round(fullMs)} ms); stopped at v2–v5: ${JSON.stringify(reached)}; each step all-or-nothing, every resume reached v${T5_TARGET}`,
     details: { kills, fullMs, reached },
     failures,
   };
@@ -602,11 +602,11 @@ async function caseT8(): Promise<CaseResult> {
   // Seed: 1,000 documents of about 200 KB in 30 folders, with tags.
   const folders = Array.from(
     { length: 30 },
-    (_, i) => library.createFolder({ name: `Folder ${i}` }).id,
+    (_, i) => library.createFolder({ name: `Folder ${i}` })?.id ?? null,
   );
   const tags = Array.from(
     { length: 20 },
-    (_, i) => library.createTag(`tag-${i}`).id,
+    (_, i) => library.createTag(`tag-${i}`)?.id ?? "",
   );
   const template = new Y.Doc();
   template.getText(PAD).insert(0, "p".repeat(docBytes));

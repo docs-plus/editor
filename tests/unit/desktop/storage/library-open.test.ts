@@ -4,10 +4,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { StorageError } from "@/desktop/storage/engine/errors";
+import { TABLES_V2 } from "@/desktop/storage/engine/format-2";
 import { LIBRARY_FILE } from "@/desktop/storage/engine/library";
 import { LOCK_FILE } from "@/desktop/storage/engine/lock";
 import type { FormatStep } from "@/desktop/storage/engine/migrations";
-import { TABLES_V1 } from "@/desktop/storage/engine/schema";
 import {
   crash,
   createClock,
@@ -42,7 +42,7 @@ function rejectsWith(code: string, run: () => unknown) {
 }
 
 describe("creating a library", () => {
-  test("creates every format-1 table and the meta rows", () => {
+  test("creates every format-2 table and the meta rows", () => {
     const library = openTestLibrary(temp.dir, createTestHost(clock));
     library.shutdown();
     const db = raw();
@@ -52,7 +52,7 @@ describe("creating a library", () => {
       )
       .all()
       .map((row) => (row as { name: string }).name);
-    expect(tables).toEqual([...TABLES_V1]);
+    expect(tables).toEqual([...TABLES_V2].sort());
     const meta = Object.fromEntries(
       db
         .query("SELECT key, value FROM meta")
@@ -62,7 +62,7 @@ describe("creating a library", () => {
           return [key, value];
         }),
     );
-    expect(meta.format_version).toBe("1");
+    expect(meta.format_version).toBe("2");
     expect(meta.yjs_encoding).toBe("v1");
     expect(meta.library_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(meta.unclean_exit).toBe("0");
@@ -256,27 +256,28 @@ describe("format_version guard (T6)", () => {
 });
 
 describe("format migrations (T5)", () => {
+  // Fresh libraries are format 2; these test steps go above it.
   const addColumn: FormatStep = {
-    to: 2,
+    to: 3,
     up: (db) => db.exec("ALTER TABLE docs ADD COLUMN extra TEXT"),
   };
   const addTable: FormatStep = {
-    to: 3,
+    to: 4,
     up: (db) => db.exec("CREATE TABLE later (x INTEGER) STRICT"),
   };
 
   test("takes a pre-migration copy, then runs each step", () => {
     openTestLibrary(temp.dir, createTestHost(clock)).shutdown();
     const library = openTestLibrary(temp.dir, createTestHost(clock), {
-      formatVersion: 3,
+      formatVersion: 4,
       formatSteps: [addColumn, addTable],
     });
-    expect(library.status.formatVersion).toBe(3);
+    expect(library.status.formatVersion).toBe(4);
     expect(library.status.readOnly).toBeNull();
     library.shutdown();
     const copies = createTestHost(clock)
       .list(temp.dir)
-      .filter((f) => f.startsWith("library.pre-v1-"));
+      .filter((f) => f.startsWith("library.pre-v2-"));
     expect(copies).toHaveLength(1);
     const copy = new Database(join(temp.dir, copies[0] ?? ""));
     expect(
@@ -285,18 +286,18 @@ describe("format migrations (T5)", () => {
           .query("SELECT value FROM meta WHERE key = 'format_version'")
           .get() as { value: string }
       ).value,
-    ).toBe("1");
+    ).toBe("2");
     copy.close();
   });
 
   test("a failed step leaves the library read-only at the last good version", () => {
     openTestLibrary(temp.dir, createTestHost(clock)).shutdown();
     const library = openTestLibrary(temp.dir, createTestHost(clock), {
-      formatVersion: 3,
+      formatVersion: 4,
       formatSteps: [
         addColumn,
         {
-          to: 3,
+          to: 4,
           up: (db) => {
             db.exec("CREATE TABLE half (x)");
             throw new Error("boom");
@@ -305,7 +306,7 @@ describe("format migrations (T5)", () => {
       ],
     });
     expect(library.status.readOnly).toBe("migration_failed");
-    expect(library.status.formatVersion).toBe(2);
+    expect(library.status.formatVersion).toBe(3);
     rejectsWith("library_read_only", () => library.createDoc());
     library.shutdown();
     const db = raw();
@@ -317,14 +318,14 @@ describe("format migrations (T5)", () => {
 
   test("keeps the newest two pre-migration copies", () => {
     openTestLibrary(temp.dir, createTestHost(clock)).shutdown();
-    for (const to of [2, 3, 4]) {
+    for (const to of [3, 4, 5]) {
       clock.advance(60_000);
       openTestLibrary(temp.dir, createTestHost(clock), {
         formatVersion: to,
         formatSteps: [
-          { to: 2, up: () => {} },
           { to: 3, up: () => {} },
           { to: 4, up: () => {} },
+          { to: 5, up: () => {} },
         ],
       }).shutdown();
     }
@@ -333,8 +334,8 @@ describe("format migrations (T5)", () => {
       .filter((f) => f.startsWith("library.pre-v"))
       .sort();
     expect(copies).toHaveLength(2);
-    expect(copies[0]).toStartWith("library.pre-v2-");
-    expect(copies[1]).toStartWith("library.pre-v3-");
+    expect(copies[0]).toStartWith("library.pre-v3-");
+    expect(copies[1]).toStartWith("library.pre-v4-");
   });
 });
 

@@ -8,9 +8,21 @@
  * `meta.rev` in the same transaction, so the change feed can say "changed
  * since rev N". Inserting a document mints its `lineage` and `link_key`
  * (seam S16): never lazily, so two synced devices can't mint different keys.
+ *
+ * Format 2 (offline revision §4.2): `createDoc` is `mintDoc`, the only way
+ * to create a document (a backup restore that keeps identity is
+ * `restoreDocFromBackup`, `docs-copy.ts`). The title has one writer: the
+ * content (`append` and `derive.put`); there is no rename here (G4).
+ * Folders are in `folders.ts`, tags in `tags.ts`.
+ *
+ * Trash pointers: a document trashed on its own keeps its folder only in
+ * `trashed_from` (`folder_id` becomes NULL), so a later purge of that
+ * folder isn't blocked by `ON DELETE RESTRICT`. Documents inside a trashed
+ * folder keep `folder_id`: the folder's `trash_group` carries them.
  */
 import type { SqliteDriver, SqlRow } from "./driver";
 import { StorageError } from "./errors";
+import { titleKey } from "./format-2";
 import { bumpRev, randomHex32, readRev, scalar, transaction } from "./sql";
 
 export type DocKind = "doc" | "template";
@@ -23,14 +35,12 @@ export type CreateDocInput = {
   id?: string;
   /** `docs.schema`: `DOC_SCHEMA` for a new document, the file's on import. */
   schema?: number;
+  /** The title until the content's first append says otherwise. */
   title?: string;
+  /** A live folder, or the root when absent. */
   folderId?: string | null;
   sortKey?: string;
   kind?: DocKind;
-  /** Kept only by a backup restore (S8c); everything else gets a new one. */
-  lineage?: string;
-  /** Kept only by a backup zip or `library.json` restore (S8c). */
-  linkKey?: string;
 };
 
 export type CreatedDoc = {
@@ -91,31 +101,87 @@ export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 export const MAX_NAME_LENGTH = 200;
 
-function requireId(id: string, what: string) {
+export function requireId(id: string, what: string) {
   if (!SAFE_ID.test(id))
     throw new StorageError("invalid_argument", `bad ${what}`);
 }
 
-function requireUuid(id: string, what: string) {
+export function requireUuid(id: string, what: string) {
   if (!UUID.test(id)) throw new StorageError("invalid_argument", `bad ${what}`);
 }
 
-function cleanName(name: string): string {
+export function isLinkKey(value: string): boolean {
+  return HEX32.test(value);
+}
+
+export function cleanName(name: string): string {
   return name.trim().slice(0, MAX_NAME_LENGTH);
 }
 
 /** Wraps a metadata write: one transaction, `rev` bumped, new rev returned. */
-function indexWrite(db: SqliteDriver, body: () => void): number {
+export function indexWrite(db: SqliteDriver, body: () => void): number {
   return transaction(db, () => {
     body();
     return bumpRev(db);
   });
 }
 
-function requireChanged(changes: number, what: string) {
+export function requireChanged(changes: number, what: string) {
   if (changes === 0) throw new StorageError("not_found", `no such ${what}`);
 }
 
+/** Throws unless `folderId` is a folder that isn't in the Trash. */
+export function requireLiveFolder(db: SqliteDriver, folderId: string) {
+  const trashed = scalar(
+    db,
+    "SELECT trashed_at IS NOT NULL FROM folders WHERE id = ?",
+    folderId,
+  );
+  if (trashed === undefined)
+    throw new StorageError("not_found", "no such folder");
+  if (trashed === 1)
+    throw new StorageError("invalid_argument", "folder is in the Trash");
+}
+
+/** Inserts a minted row; the caller's transaction. */
+export function insertDoc(
+  db: SqliteDriver,
+  row: {
+    id: string;
+    title: string;
+    folderId: string | null;
+    sortKey: string;
+    kind: DocKind;
+    schema: number;
+    lineage: string;
+    linkKey: string;
+  },
+  now: number,
+) {
+  db.prepare(
+    `INSERT INTO docs (id, title, title_key, folder_id, sort_key, created_at,
+       modified_at, lineage, link_key, kind, schema)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.title,
+    titleKey(row.title),
+    row.folderId,
+    row.sortKey,
+    now,
+    now,
+    row.lineage,
+    row.linkKey,
+    row.kind,
+    row.schema,
+  );
+}
+
+/**
+ * `mintDoc` (§4.2): the only way to create a document (new, duplicate, from
+ * a template, or import). Mints `id` when absent, and always `link_key` and
+ * `lineage`; `head_seq` 0, `derived_seq` NULL.
+ */
 export function createDoc(
   db: SqliteDriver,
   input: CreateDocInput,
@@ -123,94 +189,33 @@ export function createDoc(
 ): CreatedDoc {
   const id = input.id ?? crypto.randomUUID();
   requireId(id, "document id");
-  const lineage = input.lineage ?? crypto.randomUUID();
-  requireUuid(lineage, "lineage");
   const schema = input.schema ?? 0;
   if (!Number.isInteger(schema) || schema < 0)
     throw new StorageError("invalid_argument", "bad schema");
-  const linkKey = input.linkKey ?? randomHex32();
-  if (!HEX32.test(linkKey))
-    throw new StorageError("invalid_argument", "bad link key");
   if (input.folderId) requireId(input.folderId, "folder id");
   const kind = input.kind ?? "doc";
   if (kind !== "doc" && kind !== "template")
     throw new StorageError("invalid_argument", "bad kind");
+  const lineage = crypto.randomUUID();
+  const linkKey = randomHex32();
   const rev = indexWrite(db, () => {
-    db.prepare(
-      `INSERT INTO docs (id, title, folder_id, sort_key, created_at, modified_at,
-         lineage, link_key, kind, schema)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      cleanName(input.title ?? ""),
-      input.folderId ?? null,
-      input.sortKey ?? "",
+    if (input.folderId) requireLiveFolder(db, input.folderId);
+    insertDoc(
+      db,
+      {
+        id,
+        title: cleanName(input.title ?? ""),
+        folderId: input.folderId ?? null,
+        sortKey: input.sortKey ?? "",
+        kind,
+        schema,
+        lineage,
+        linkKey,
+      },
       now,
-      now,
-      lineage,
-      linkKey,
-      kind,
-      schema,
     );
   });
   return { id, lineage, linkKey, rev };
-}
-
-export function createFolder(
-  db: SqliteDriver,
-  input: {
-    id?: string;
-    name: string;
-    parentId?: string | null;
-    sortKey?: string;
-  },
-  now: number,
-): { id: string; rev: number } {
-  const id = input.id ?? crypto.randomUUID();
-  requireId(id, "folder id");
-  if (input.parentId) requireId(input.parentId, "parent id");
-  const rev = indexWrite(db, () => {
-    db.prepare(
-      `INSERT INTO folders (id, parent_id, name, sort_key, created_at, modified_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      input.parentId ?? null,
-      cleanName(input.name),
-      input.sortKey ?? "",
-      now,
-      now,
-    );
-  });
-  return { id, rev };
-}
-
-export function renameDoc(db: SqliteDriver, id: string, title: string): number {
-  return indexWrite(db, () => {
-    requireChanged(
-      db
-        .prepare("UPDATE docs SET title = ? WHERE id = ?")
-        .run(cleanName(title), id).changes,
-      "document",
-    );
-  });
-}
-
-export function moveDoc(
-  db: SqliteDriver,
-  id: string,
-  folderId: string | null,
-  sortKey: string,
-): number {
-  if (folderId) requireId(folderId, "folder id");
-  return indexWrite(db, () => {
-    requireChanged(
-      db
-        .prepare("UPDATE docs SET folder_id = ?, sort_key = ? WHERE id = ?")
-        .run(folderId, sortKey, id).changes,
-      "document",
-    );
-  });
 }
 
 export function markOpened(db: SqliteDriver, id: string, now: number): number {
@@ -223,17 +228,22 @@ export function markOpened(db: SqliteDriver, id: string, now: number): number {
   });
 }
 
+/**
+ * Moves a document to the Trash on its own, under a new `trash_group`. Its
+ * folder moves to `trashed_from` (see the file comment).
+ */
 export function trashDoc(
   db: SqliteDriver,
   id: string,
   now: number,
-  group: string | null = null,
+  group: string = crypto.randomUUID(),
 ): number {
   return indexWrite(db, () => {
     requireChanged(
       db
         .prepare(
-          `UPDATE docs SET trashed_at = ?, trash_group = ?, trashed_from = folder_id
+          `UPDATE docs SET trashed_at = ?, trash_group = ?,
+             trashed_from = folder_id, folder_id = NULL
            WHERE id = ? AND trashed_at IS NULL`,
         )
         .run(now, group, id).changes,
@@ -242,36 +252,59 @@ export function trashDoc(
   });
 }
 
-export function restoreDoc(db: SqliteDriver, id: string): number {
-  return indexWrite(db, () => {
-    requireChanged(
-      db
-        .prepare(
-          `UPDATE docs SET trashed_at = NULL, trash_group = NULL,
-             folder_id = CASE WHEN trashed_from IS NULL
-               OR EXISTS (SELECT 1 FROM folders WHERE id = docs.trashed_from AND trashed_at IS NULL)
-               THEN trashed_from ELSE NULL END,
-             trashed_from = NULL
-           WHERE id = ? AND trashed_at IS NOT NULL`,
-        )
-        .run(id).changes,
-      "trashed document",
-    );
+/**
+ * Brings one document back from the Trash: to its folder when that folder
+ * is live, otherwise to the root. Returns where it went.
+ */
+export function restoreDoc(
+  db: SqliteDriver,
+  id: string,
+): { rev: number; folderId: string | null } {
+  let folderId: string | null = null;
+  const rev = indexWrite(db, () => {
+    const row = db
+      .prepare(
+        "SELECT COALESCE(folder_id, trashed_from) AS home FROM docs WHERE id = ? AND trashed_at IS NOT NULL",
+      )
+      .get(id);
+    if (!row) throw new StorageError("not_found", "no such trashed document");
+    const home = typeof row.home === "string" ? row.home : null;
+    const live =
+      home !== null &&
+      scalar(
+        db,
+        "SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL",
+        home,
+      ) !== undefined;
+    folderId = live ? home : null;
+    db.prepare(
+      `UPDATE docs SET trashed_at = NULL, trash_group = NULL, trashed_from = NULL,
+         folder_id = ? WHERE id = ?`,
+    ).run(folderId, id);
   });
+  return { rev, folderId };
 }
 
 /**
- * Deletes a document and everything that cascades from it: rows, snapshot,
- * tags, view and import source. The caller (`Library`) refuses a document
- * that is open (`document_open`).
+ * `purgeDoc` (§4.2): its `doc_blobs` rows get `dropped_at = now` where they
+ * have none (the image store's 30-day GC grace starts here, §4.6; an
+ * earlier drop time is never moved), then the row is deleted, which
+ * cascades to `links`, `doc_headings`, `snapshots`, `updates`, `doc_tags`,
+ * `doc_view` and `import_sources`. The caller (`Library`) refuses a
+ * document that is open (`document_open`).
  */
-export function purgeDoc(db: SqliteDriver, id: string): number {
-  return indexWrite(db, () => {
-    requireChanged(
-      db.prepare("DELETE FROM docs WHERE id = ?").run(id).changes,
-      "document",
-    );
-  });
+export function purgeDocRows(db: SqliteDriver, id: string, now: number) {
+  db.prepare(
+    "UPDATE doc_blobs SET dropped_at = ? WHERE doc_id = ? AND dropped_at IS NULL",
+  ).run(now, id);
+  requireChanged(
+    db.prepare("DELETE FROM docs WHERE id = ?").run(id).changes,
+    "document",
+  );
+}
+
+export function purgeDoc(db: SqliteDriver, id: string, now: number): number {
+  return indexWrite(db, () => purgeDocRows(db, id, now));
 }
 
 /** Ids of documents in Trash for longer than {@link TRASH_RETENTION_MS}. */
@@ -282,41 +315,6 @@ export function expiredTrash(db: SqliteDriver, now: number): string[] {
     )
     .all(now - TRASH_RETENTION_MS)
     .map((row) => row.id as string);
-}
-
-export function createTag(
-  db: SqliteDriver,
-  name: string,
-  color: string | null = null,
-): { id: string; rev: number } {
-  const clean = cleanName(name);
-  if (!clean) throw new StorageError("invalid_argument", "empty tag name");
-  const id = crypto.randomUUID();
-  const rev = indexWrite(db, () => {
-    db.prepare("INSERT INTO tags (id, name, color) VALUES (?, ?, ?)").run(
-      id,
-      clean,
-      color,
-    );
-  });
-  return { id, rev };
-}
-
-export function setDocTags(
-  db: SqliteDriver,
-  docId: string,
-  tagIds: readonly string[],
-): number {
-  for (const tagId of tagIds) requireId(tagId, "tag id");
-  return indexWrite(db, () => {
-    if (scalar(db, "SELECT 1 FROM docs WHERE id = ?", docId) === undefined)
-      throw new StorageError("not_found", "no such document");
-    db.prepare("DELETE FROM doc_tags WHERE doc_id = ?").run(docId);
-    const insert = db.prepare(
-      "INSERT INTO doc_tags (doc_id, tag_id) VALUES (?, ?)",
-    );
-    for (const tagId of new Set(tagIds)) insert.run(docId, tagId);
-  });
 }
 
 const nullableString = (value: SqlRow[string]) =>

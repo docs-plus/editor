@@ -14,6 +14,8 @@ import {
   createClock,
   createTempDir,
   createTestHost,
+  mustFolder,
+  mustTag,
   openTestLibrary,
   type TestClock,
 } from "@/tests/helpers/storage-library";
@@ -49,11 +51,11 @@ function write(docId: string, text: string) {
 
 /** A library with every table populated, and a compacted document. */
 function populate() {
-  const folder = library.createFolder({ name: "Work" });
+  const folder = mustFolder(library, { name: "Work" });
   const docs = Array.from({ length: 12 }, (_, i) =>
     library.createDoc({ title: `Doc ${i}`, folderId: folder.id }),
   );
-  const tags = Array.from({ length: 5 }, (_, i) => library.createTag(`t${i}`));
+  const tags = Array.from({ length: 5 }, (_, i) => mustTag(library, `t${i}`));
   for (const doc of docs.slice(0, 6))
     library.setDocTags(
       doc.id,
@@ -63,10 +65,9 @@ function populate() {
     for (let n = 0; n < 5; n += 1) write(doc.id, `${i}:${n} `);
   }
   const first = docs[0]?.id ?? "";
-  const state = new Y.Doc();
-  state.getText("t").insert(0, "compacted");
   const seq = write(first, "x");
-  library.compact(first, "w1", Y.encodeStateAsUpdate(state), seq);
+  // The document's whole state: compaction refuses one that loses rows (I10).
+  library.compact(first, "w1", library.stateOf(first), seq);
   return docs.map((d) => d.id);
 }
 

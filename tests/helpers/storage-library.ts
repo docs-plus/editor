@@ -66,3 +66,24 @@ export function crash(library: Library) {
   (library as unknown as { db: { close(): void } | null }).db?.close();
   (library as unknown as { db: unknown }).db = null;
 }
+
+/** A folder that must be created (tests don't expect a refusal). */
+export function mustFolder(
+  library: Library,
+  input: { name: string; parentId?: string | null },
+): { id: string; rev: number } {
+  const created = library.createFolder(input);
+  if (!created) throw new Error(`folder ${input.name} was refused`);
+  return created;
+}
+
+/** A tag that must be created or found. */
+export function mustTag(
+  library: Library,
+  name: string,
+  color: string | null = null,
+): { id: string; rev: number } {
+  const tag = library.createTag(name, color);
+  if (!tag) throw new Error(`tag ${name} was refused`);
+  return tag;
+}

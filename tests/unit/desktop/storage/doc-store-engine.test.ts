@@ -9,6 +9,8 @@ import {
   createClock,
   createTempDir,
   createTestHost,
+  mustFolder,
+  mustTag,
   openTestLibrary,
 } from "@/tests/helpers/storage-library";
 
@@ -60,11 +62,10 @@ describe("the index change feed", () => {
   });
 
   test("index writes report each changed row once", async () => {
-    const folder = library.createFolder({ name: "A" });
+    const folder = mustFolder(library, { name: "A" });
     const { id } = library.createDoc({ folderId: folder.id });
-    library.renameDoc(id, "x");
-    library.moveDoc(id, null, "a");
-    const tag = library.createTag("t");
+    library.moveItems([{ kind: "doc", id }], null);
+    const tag = mustTag(library, "t");
     expect(library.takeIndexChanges()?.changes).toEqual([
       { kind: "folder", id: folder.id },
       { kind: "doc", id },

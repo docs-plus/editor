@@ -48,9 +48,12 @@ import {
   planDailyCopy,
   sweepPartialCopies,
 } from "./daily-copy";
+import * as derive from "./derive";
+import * as docsCopy from "./docs-copy";
 import type { OpenSqlite, SqliteDriver } from "./driver";
 import { storageErrorFrom } from "./driver";
 import { StorageError } from "./errors";
+import * as folders from "./folders";
 import type { StorageHost } from "./host";
 import * as index from "./library-index";
 import { acquireLock, releaseLock } from "./lock";
@@ -62,6 +65,7 @@ import {
 } from "./migrations";
 import { FORMAT_VERSION, SCHEMA_V1, YJS_ENCODING } from "./schema";
 import { readMeta, readRev, scalar, transaction, writeMeta } from "./sql";
+import * as tags from "./tags";
 
 export const LIBRARY_FILE = "library.sqlite";
 /** Idle jobs (daily copy, Trash purge) wait for this long without a write. */
@@ -96,6 +100,8 @@ export type OpenLibraryOptions = {
   trace?: Trace;
   /** How long without a write counts as idle; default {@link IDLE_MS}. Soak only. */
   idleMs?: number;
+  /** Soak T24b only: called at each statement boundary of a migration. */
+  migrationBoundary?: (name: string) => void;
 };
 
 function applyPragmas(
@@ -106,6 +112,8 @@ function applyPragmas(
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(`PRAGMA synchronous = ${options.synchronous ?? "FULL"}`);
   db.exec("PRAGMA foreign_keys = ON");
+  // Delete forever overwrites freed pages it can (SEC-005).
+  db.exec("PRAGMA secure_delete = FAST");
   if (host.platform === "darwin" && options.fullfsync !== false) {
     db.exec("PRAGMA fullfsync = 1");
     db.exec("PRAGMA checkpoint_fullfsync = 1");
@@ -122,6 +130,10 @@ function hasTable(db: SqliteDriver, name: string): boolean {
   );
 }
 
+/**
+ * Creates a format-1 library; `open` then runs the format steps on it (with
+ * no rows and no backup), so a fresh file and a migrated one are the same.
+ */
 function createLibrary(db: SqliteDriver, now: number) {
   const tables = Number(
     scalar(db, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"),
@@ -130,13 +142,31 @@ function createLibrary(db: SqliteDriver, now: number) {
     throw new StorageError("corrupt", "not a TinyDocy library (no meta)");
   transaction(db, () => {
     db.exec(SCHEMA_V1);
-    writeMeta(db, "format_version", String(FORMAT_VERSION));
+    writeMeta(db, "format_version", "1");
     writeMeta(db, "yjs_encoding", YJS_ENCODING);
     writeMeta(db, "library_id", crypto.randomUUID());
     writeMeta(db, "created_at", String(now));
     writeMeta(db, "rev", "0");
     writeMeta(db, "unclean_exit", "0");
   });
+}
+
+/** Clean opens before pre-migration copies are deleted (SEC-005). */
+export const CLEAN_OPENS_TO_KEEP_PRE_COPIES = 7;
+
+/**
+ * Counts an open after a clean exit at this format. After the seventh, the
+ * `library.pre-v<n>` copies a migration left are deleted: the new format has
+ * proven itself, and they hold old content (SEC-005).
+ */
+function countCleanOpen(db: SqliteDriver, host: StorageHost, dir: string) {
+  const key = `clean_opens_v${readFormatVersion(db)}`;
+  const count = Number.parseInt(readMeta(db, key) ?? "0", 10) + 1;
+  writeMeta(db, key, String(count));
+  if (count < CLEAN_OPENS_TO_KEEP_PRE_COPIES) return;
+  for (const file of host.list(dir))
+    if (/^library\.pre-v\d+-.*\.sqlite$/.test(file))
+      host.remove(host.join(dir, file));
 }
 
 function quickCheck(db: SqliteDriver): string {
@@ -199,7 +229,8 @@ export class Library {
     try {
       db = openSqlite(path, { readOnly: false });
       applyPragmas(db, host, options);
-      if (!hasTable(db, "meta")) createLibrary(db, host.now());
+      const fresh = !hasTable(db, "meta");
+      if (fresh) createLibrary(db, host.now());
       const version = readFormatVersion(db);
       const libraryId = readMeta(db, "library_id") ?? "";
       const status: LibraryStatus = {
@@ -227,6 +258,11 @@ export class Library {
               dir,
               target,
               options.formatSteps ?? FORMAT_STEPS,
+              {
+                fresh,
+                log: (entry) => options.trace?.(`MIGRATION ${entry}`),
+                boundary: options.migrationBoundary,
+              },
             );
           } catch (error) {
             if (
@@ -239,6 +275,7 @@ export class Library {
           }
         }
         if (!status.readOnly) {
+          if (!status.uncleanExit) countCleanOpen(db, host, dir);
           writeMeta(db, "unclean_exit", "1");
           sweepPartialCopies(host, dir);
         }
@@ -414,63 +451,209 @@ export class Library {
     return created;
   }
 
-  createFolder(input: { name: string; parentId?: string | null }) {
+  // Folders (folders.ts)
+
+  createFolder(input: {
+    name: string;
+    parentId?: string | null;
+    sortKey?: string;
+  }): { id: string; rev: number } | null {
     this.assertWritable();
-    const created = index.createFolder(this.conn, input, this.host.now());
-    this.wrote();
-    this.changed("folder", created.id);
+    const created = folders.createFolder(this.conn, input, this.host.now());
+    if (created) this.changed("folder", created.id);
     return created;
   }
 
-  renameDoc(id: string, title: string): number {
+  renameFolder(id: string, name: string): number {
     this.assertWritable();
-    const rev = index.renameDoc(this.conn, id, title);
+    const rev = folders.renameFolder(this.conn, id, name, this.host.now());
+    this.changed("folder", id);
+    return rev;
+  }
+
+  setFolderView(
+    id: string,
+    columns: { sort: string | null; view: string | null; group: string | null },
+  ): number {
+    this.assertWritable();
+    const rev = folders.setFolderView(this.conn, id, columns);
+    this.changed("folder", id);
+    return rev;
+  }
+
+  moveItems(
+    items: readonly folders.FolderMoveItem[],
+    folderId: string | null,
+  ): folders.MoveResult {
+    this.assertWritable();
+    const result = folders.moveItems(this.conn, items, folderId);
+    if (result.ok) for (const item of items) this.changed(item.kind, item.id);
+    return result;
+  }
+
+  trashFolder(id: string) {
+    this.assertWritable();
+    const result = folders.trashFolder(this.conn, id, this.host.now());
+    this.changed("folder", id);
+    return result;
+  }
+
+  restoreFolder(id: string) {
+    this.assertWritable();
+    const result = folders.restoreFolder(this.conn, id);
+    this.changed("folder", id);
+    return result;
+  }
+
+  /** Main's own content write: refused while any document in it is open. */
+  purgeFolder(id: string) {
+    this.assertWritable();
+    const result = folders.purgeFolder(
+      this.conn,
+      id,
+      this.host.now(),
+      (docId) => this.holders.has(docId),
+    );
+    this.afterPurge();
+    this.changed("folder", id);
+    for (const docId of result.docIds) this.changed("doc", docId);
+    return result;
+  }
+
+  // Documents
+
+  trashDoc(id: string): number {
+    this.assertWritable();
+    const rev = index.trashDoc(this.conn, id, this.host.now());
     this.changed("doc", id);
     return rev;
   }
 
-  moveDoc(id: string, folderId: string | null, sortKey: string): number {
+  restoreDoc(id: string): { rev: number; folderId: string | null } {
     this.assertWritable();
-    const rev = index.moveDoc(this.conn, id, folderId, sortKey);
+    const result = index.restoreDoc(this.conn, id);
     this.changed("doc", id);
-    return rev;
-  }
-
-  trashDoc(id: string, group: string | null = null): number {
-    this.assertWritable();
-    const rev = index.trashDoc(this.conn, id, this.host.now(), group);
-    this.changed("doc", id);
-    return rev;
-  }
-
-  restoreDoc(id: string): number {
-    this.assertWritable();
-    const rev = index.restoreDoc(this.conn, id);
-    this.changed("doc", id);
-    return rev;
+    return result;
   }
 
   purgeDoc(id: string): number {
     this.assertWritable();
     this.assertClosed(id);
-    const rev = index.purgeDoc(this.conn, id);
-    this.wrote();
+    const rev = index.purgeDoc(this.conn, id, this.host.now());
+    this.afterPurge();
     this.changed("doc", id);
     return rev;
   }
 
+  duplicateDoc(id: string) {
+    this.assertWritable();
+    const created = docsCopy.duplicateDoc(this.conn, id, this.host.now());
+    this.wrote();
+    this.changed("doc", created.id);
+    return created;
+  }
+
+  /** Main's own content write (P2.8b's backup restore). */
+  restoreDocFromBackup(row: docsCopy.BackupDoc, state: Uint8Array) {
+    this.assertWritable();
+    const restored = docsCopy.restoreDocFromBackup(
+      this.conn,
+      row,
+      state,
+      this.host.now(),
+    );
+    this.wrote();
+    this.changed("doc", restored.id);
+    return restored;
+  }
+
+  /**
+   * After a purge (SEC-005): truncate the WAL so the deleted pages don't
+   * linger in it (`secure_delete` overwrites the ones in the main file).
+   */
+  private afterPurge() {
+    this.wrote();
+    this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  }
+
+  // Tags (tags.ts)
+
   createTag(name: string, color: string | null = null) {
     this.assertWritable();
-    const created = index.createTag(this.conn, name, color);
-    this.changed("tag", created.id);
+    const created = tags.createTag(this.conn, name, this.host.now(), color);
+    if (created) this.changed("tag", created.id);
     return created;
+  }
+
+  renameTag(id: string, name: string): tags.TagRename {
+    this.assertWritable();
+    const result = tags.renameTag(this.conn, id, name);
+    if (result.ok) this.changed("tag", id);
+    return result;
+  }
+
+  mergeTags(fromId: string, intoId: string): number | false {
+    this.assertWritable();
+    const docIds = this.conn
+      .prepare("SELECT doc_id FROM doc_tags WHERE tag_id = ?")
+      .all(fromId)
+      .map((row) => String(row.doc_id));
+    const rev = tags.mergeTags(this.conn, fromId, intoId);
+    if (rev !== false) {
+      this.changed("tag", fromId);
+      this.changed("tag", intoId);
+      for (const docId of docIds) this.changed("doc", docId);
+    }
+    return rev;
+  }
+
+  addTag(docId: string, tagId: string): number | false {
+    this.assertWritable();
+    const rev = tags.addTag(this.conn, docId, tagId);
+    if (rev !== false) this.changed("doc", docId);
+    return rev;
+  }
+
+  removeTag(docId: string, tagId: string): number {
+    this.assertWritable();
+    const rev = tags.removeTag(this.conn, docId, tagId);
+    this.changed("doc", docId);
+    return rev;
   }
 
   setDocTags(docId: string, tagIds: readonly string[]): number {
     this.assertWritable();
-    const rev = index.setDocTags(this.conn, docId, tagIds);
+    const rev = tags.setDocTags(this.conn, docId, tagIds);
     this.changed("doc", docId);
     return rev;
+  }
+
+  // Derived rows (derive.ts; LK4a's derive.put)
+
+  putDerived(
+    docId: string,
+    atSeq: number,
+    rows: derive.DerivedRows,
+  ): derive.DeriveResult {
+    this.assertWritable();
+    const result = derive.putDerived(
+      this.conn,
+      () => this.host.sha256(),
+      docId,
+      atSeq,
+      rows,
+    );
+    if (result === "ok") this.changed("doc", docId);
+    return result;
+  }
+
+  /** The next document the derive queue should derive, or null. */
+  nextStale(): string | null {
+    return derive.nextStale(this.conn, (id) => this.holders.has(id));
+  }
+
+  backlinks(linkKey: string) {
+    return derive.backlinks(this.conn, linkKey);
   }
 
   // ── Restore points ────────────────────────────────────────────────────
@@ -555,13 +738,30 @@ export class Library {
   /** Purges Trash older than 30 days, skipping open documents. */
   purgeExpiredTrash(): number {
     if (!this.isIdle()) return 0;
+    const now = this.host.now();
     let purged = 0;
-    for (const id of index.expiredTrash(this.conn, this.host.now())) {
+    for (const id of folders.expiredFolders(
+      this.conn,
+      now - index.TRASH_RETENTION_MS,
+    )) {
+      try {
+        const result = folders.purgeFolder(this.conn, id, now, (docId) =>
+          this.holders.has(docId),
+        );
+        this.changed("folder", id);
+        for (const docId of result.docIds) this.changed("doc", docId);
+        purged += result.docIds.length;
+      } catch {
+        // A document in it is open: the next idle pass tries again.
+      }
+    }
+    for (const id of index.expiredTrash(this.conn, now)) {
       if (this.holders.has(id)) continue;
-      index.purgeDoc(this.conn, id);
+      index.purgeDoc(this.conn, id, now);
       this.changed("doc", id);
       purged += 1;
     }
+    if (purged > 0) this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     return purged;
   }
 

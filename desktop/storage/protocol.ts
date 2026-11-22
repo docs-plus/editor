@@ -41,19 +41,17 @@ export type StorageOps = {
   createDoc: { args: CreateDocInput; result: CreatedDoc };
   createFolder: {
     args: { name: string; parentId?: string | null };
-    result: { id: string; rev: number };
+    result: ReturnType<Library["createFolder"]>;
   };
-  renameDoc: { args: { id: string; title: string }; result: number };
-  moveDoc: {
-    args: { id: string; folderId: string | null; sortKey: string };
-    result: number;
+  trashDoc: { args: { id: string }; result: number };
+  restoreDoc: {
+    args: { id: string };
+    result: ReturnType<Library["restoreDoc"]>;
   };
-  trashDoc: { args: { id: string; group?: string | null }; result: number };
-  restoreDoc: { args: { id: string }; result: number };
   purgeDoc: { args: { id: string }; result: number };
   createTag: {
     args: { name: string; color?: string | null };
-    result: { id: string; rev: number };
+    result: ReturnType<Library["createTag"]>;
   };
   setDocTags: { args: { docId: string; tagIds: string[] }; result: number };
   listDailyCopies: { args: Record<string, never>; result: string[] };
@@ -136,16 +134,8 @@ function run(library: Library, request: StorageRequest): unknown {
       return library.createDoc(request.args);
     case "createFolder":
       return library.createFolder(request.args);
-    case "renameDoc":
-      return library.renameDoc(request.args.id, request.args.title);
-    case "moveDoc":
-      return library.moveDoc(
-        request.args.id,
-        request.args.folderId,
-        request.args.sortKey,
-      );
     case "trashDoc":
-      return library.trashDoc(request.args.id, request.args.group ?? null);
+      return library.trashDoc(request.args.id);
     case "restoreDoc":
       return library.restoreDoc(request.args.id);
     case "purgeDoc":
