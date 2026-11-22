@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { CACHE_PREFIX } from "@/lib/pwa/sw-config";
+import { CACHE_LOADED_MESSAGE } from "@/lib/pwa/sw-routing";
 
 /**
  * Build-time switch, inlined by `bun run build`: NEXT_PUBLIC_SERVICE_WORKER=0
@@ -41,6 +42,26 @@ function registerServiceWorker(): void {
 }
 
 /**
+ * A first visit loads its chunks (the editor among them) before the worker
+ * controls the page, so they bypass its cache and an offline reload has
+ * only the browser's HTTP cache for them. When the worker takes control,
+ * this hands it every file the page loaded; it stores the static ones.
+ */
+export function cacheLoadedFilesOnControl(
+  container: ServiceWorkerContainer,
+): () => void {
+  if (container.controller) return () => undefined;
+  const post = () => {
+    container.controller?.postMessage({
+      type: CACHE_LOADED_MESSAGE,
+      urls: performance.getEntriesByType("resource").map(({ name }) => name),
+    });
+  };
+  container.addEventListener("controllerchange", post, { once: true });
+  return () => container.removeEventListener("controllerchange", post);
+}
+
+/**
  * Registers after `load` plus idle time, so installing the worker never
  * competes with hydration, the collaboration socket or the editor chunk.
  */
@@ -51,6 +72,7 @@ export function ServiceWorkerRegistration() {
       void removeServiceWorker().catch(() => undefined);
       return;
     }
+    const stopCaching = cacheLoadedFilesOnControl(navigator.serviceWorker);
 
     let idleId: number | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -68,6 +90,7 @@ export function ServiceWorkerRegistration() {
     else window.addEventListener("load", schedule, { once: true });
 
     return () => {
+      stopCaching();
       window.removeEventListener("load", schedule);
       if (idleId !== undefined) window.cancelIdleCallback(idleId);
       clearTimeout(timer);

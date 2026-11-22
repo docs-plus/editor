@@ -55,3 +55,57 @@ describe("SERVICE_WORKER_ENABLED", () => {
     ).toBe(false);
   });
 });
+
+describe("cacheLoadedFilesOnControl", () => {
+  function fakeContainer(controlled: boolean) {
+    const target = new EventTarget();
+    const posted: unknown[] = [];
+    const worker = { postMessage: (message: unknown) => posted.push(message) };
+    const container = Object.assign(target, {
+      controller: controlled ? worker : null,
+    });
+    const takeControl = () => {
+      container.controller = worker;
+      container.dispatchEvent(new Event("controllerchange"));
+    };
+    return {
+      container: container as unknown as ServiceWorkerContainer,
+      posted,
+      takeControl,
+    };
+  }
+
+  async function load() {
+    return importFresh<RegistrationModule>(
+      "@/components/pwa/service-worker-registration",
+    );
+  }
+
+  it("posts the loaded files once, when the worker takes control", async () => {
+    const { cacheLoadedFilesOnControl } = await load();
+    const { container, posted, takeControl } = fakeContainer(false);
+    cacheLoadedFilesOnControl(container);
+    expect(posted).toEqual([]);
+    takeControl();
+    takeControl(); // an update later: already cached through the worker
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ type: "tinydocy:cache-loaded" });
+    expect(Array.isArray((posted[0] as { urls: unknown }).urls)).toBe(true);
+  });
+
+  it("does nothing on a page the worker already controls", async () => {
+    const { cacheLoadedFilesOnControl } = await load();
+    const { container, posted, takeControl } = fakeContainer(true);
+    cacheLoadedFilesOnControl(container);
+    takeControl();
+    expect(posted).toEqual([]);
+  });
+
+  it("stops listening on cleanup", async () => {
+    const { cacheLoadedFilesOnControl } = await load();
+    const { container, posted, takeControl } = fakeContainer(false);
+    cacheLoadedFilesOnControl(container)();
+    takeControl();
+    expect(posted).toEqual([]);
+  });
+});
