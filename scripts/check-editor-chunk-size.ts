@@ -33,6 +33,10 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * unconfirmed the total is 1,855 B (1,580 B, plus P2.1c's 275 B sandbox
  * DocSession line, K14); if spike M18 confirms it, this becomes 1,935 B
  * with no further approval.
+ *
+ * Spent so far, as measured in each PR (gzipped, against `main` then):
+ * - LK1 `linkHost` pass-through and the no-host `tinydocy:` deny: +41 B of
+ *   its 60 B line (903b5c8 → +15,932 B; LK1 → +15,973 B).
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 1_855;
 /**
