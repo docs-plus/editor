@@ -1,0 +1,550 @@
+/*
+ * Files sidebar, Quick Open and Move to… (P2.7a). Plain CSS on the shadcn
+ * tokens: `components/library` is outside Tailwind's sources
+ * (`app/globals.css`), so nothing here reaches the web sandbox's CSS until
+ * the web library imports these components. Logical properties only, so
+ * a right-to-left interface mirrors (languages design §4.6).
+ * Visual rules: UX §6.3 (no motion on rows), §6.4 (focus, hover,
+ * selection), §8.5–8.6 (contrast, forced colours).
+ */
+
+.lib-sidebar,
+.lib-dialog,
+.lib-drag-chip {
+  /* Muted text at 4.5:1 on the sidebar and on selected rows, where the
+     page's --muted-foreground (made for --background) falls short. */
+  --lib-muted: color-mix(
+    in oklab,
+    var(--muted-foreground) 78%,
+    var(--foreground)
+  );
+}
+
+.lib-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-inline-end: 1px solid var(--sidebar-border);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.lib-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lib-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-inline: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
+  background: var(--background);
+  color: var(--lib-muted);
+  font: inherit;
+  text-align: start;
+  cursor: default;
+  box-shadow: 0 -8px 0 8px var(--sidebar);
+}
+.dark .lib-search {
+  background: color-mix(in oklab, var(--input) 30%, transparent);
+}
+.lib-search:hover {
+  border-color: var(--ring);
+}
+.lib-search svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.lib-search-label {
+  flex: 1;
+}
+.lib-search kbd,
+.lib-qo-foot kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--lib-muted);
+}
+
+.lib-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--radius-md, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: default;
+}
+.lib-item > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--lib-muted);
+}
+.lib-item:hover {
+  background: color-mix(in oklab, var(--sidebar-accent) 100%, transparent);
+}
+.lib-item[aria-current="page"] {
+  background: var(--sidebar-accent);
+  font-weight: 600;
+}
+.lib-item[aria-current="page"] > svg {
+  color: var(--sidebar-foreground);
+}
+.lib-item-sub {
+  height: 26px;
+  padding-inline-start: 30px;
+}
+.lib-item-sub > svg {
+  width: 14px;
+  height: 14px;
+}
+.lib-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-count {
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--lib-muted);
+  font-variant-numeric: tabular-nums;
+}
+.lib-sub {
+  list-style: none;
+  margin: 0 0 2px;
+  padding: 0;
+}
+.lib-sep {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--sidebar-border);
+}
+.lib-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline-end: 2px;
+  border-radius: var(--radius-md, 6px);
+}
+.lib-head .lib-item {
+  flex: 1;
+  width: auto;
+}
+.lib-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--sidebar-border);
+}
+.lib-foot .lib-item {
+  flex: 1;
+  width: auto;
+}
+.lib-empty-row {
+  margin: 0;
+  padding-block: 4px;
+  padding-inline: 30px 8px;
+  color: var(--lib-muted);
+}
+
+/* Tree (APG Tree View): flat rows, indented by level. */
+.lib-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lib-treeitem {
+  outline: none;
+  border-radius: var(--radius-md, 6px);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.lib-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding-inline: calc(4px + (var(--lib-level, 1) - 1) * 14px) 8px;
+  border-radius: inherit;
+}
+.lib-treeitem:hover > .lib-row {
+  background: color-mix(in oklab, var(--sidebar-accent) 100%, transparent);
+}
+/* Selected: grey while the tree doesn't have focus (macOS convention),
+   accent with full-weight text while it does (UX §6.4). */
+.lib-treeitem[aria-selected="true"] > .lib-row {
+  background: var(--sidebar-accent);
+  font-weight: 500;
+}
+.lib-tree:focus-within .lib-treeitem[aria-selected="true"] > .lib-row {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.lib-tree:focus-within .lib-treeitem[aria-selected="true"] .lib-row-icon,
+.lib-tree:focus-within .lib-treeitem[aria-selected="true"] .lib-chevron {
+  color: inherit;
+}
+.lib-treeitem[aria-current="page"] > .lib-row {
+  font-weight: 600;
+}
+.lib-treeitem:focus-visible > .lib-row,
+.lib-dest:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.lib-tree:focus-within
+  .lib-treeitem[aria-selected="true"]:focus-visible
+  > .lib-row {
+  /* On the accent fill the ring sits just inside the row, in the fill's
+     text colour, so it reads as one ring. */
+  outline-color: var(--primary-foreground);
+  outline-offset: -3px;
+}
+.lib-chevron {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--lib-muted);
+}
+.lib-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+[aria-expanded="true"] > .lib-row .lib-chevron svg {
+  transform: rotate(90deg);
+}
+[dir="rtl"] .lib-chevron svg {
+  transform: scaleX(-1);
+}
+[dir="rtl"] [aria-expanded="true"] > .lib-row .lib-chevron svg {
+  transform: rotate(90deg);
+}
+.lib-row-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--lib-muted);
+}
+.lib-treeitem[data-dragging] {
+  opacity: 0.5;
+}
+
+/* Drop targets: an inset ring when the drop is allowed, a red tint and a
+   not-allowed cursor when it is refused (never colour alone: the ring). */
+[data-drop="ok"] > .lib-row,
+.lib-item[data-drop="ok"],
+.lib-head[data-drop="ok"] {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+[data-drop="refused"] > .lib-row,
+.lib-item[data-drop="refused"],
+.lib-head[data-drop="refused"] {
+  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  box-shadow: inset 0 0 0 1px var(--destructive);
+  cursor: not-allowed;
+}
+.lib-drag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  height: 26px;
+  padding-inline: 8px 10px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  font-size: 13px;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent),
+    0 8px 24px rgb(0 0 0 / 0.16);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grabbing;
+}
+.lib-drag-chip svg {
+  width: 14px;
+  height: 14px;
+  color: var(--lib-muted);
+}
+
+/* Inline rename */
+.lib-rename {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.lib-rename-input {
+  width: 100%;
+  height: 24px;
+  padding-inline: 6px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 400;
+  outline: none;
+}
+.lib-rename-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+.lib-rename-input[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+.lib-rename-error {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(100% + 2px);
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--popover);
+  color: var(--destructive);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+/* F6 focus flash on a region (UX §8.2); steady under reduced motion. */
+[data-region][data-region-flash] {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Dialogs */
+.lib-dialog {
+  font-size: 13px;
+}
+.lib-move-dialog {
+  max-width: min(480px, calc(100% - 2rem));
+}
+.lib-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding-inline: 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg, 8px);
+  color: var(--lib-muted);
+}
+.lib-filter:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+}
+.lib-filter svg {
+  width: 14px;
+  height: 14px;
+}
+.lib-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+}
+.lib-section-label {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lib-muted);
+}
+.lib-recent-dest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.lib-recent-dest-button {
+  font-weight: 400;
+  max-width: 100%;
+}
+.lib-recent-dest-button[aria-disabled="true"] {
+  opacity: 0.5;
+}
+.lib-dest-tree {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 8px);
+}
+.lib-dest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-inline: calc(8px + (var(--lib-level, 1) - 1) * 16px) 8px;
+  border-radius: var(--radius-md, 6px);
+  outline: none;
+  cursor: default;
+}
+.lib-dest > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--lib-muted);
+}
+.lib-dest:hover {
+  background: var(--muted);
+}
+.lib-dest[aria-selected="true"] {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+[dir="rtl"] .lib-dest[aria-selected="true"] {
+  box-shadow: inset -2px 0 0 var(--primary);
+}
+/* Refused destinations are dimmed (inactive controls are exempt from the
+   contrast minimum); the reason is in the hint line and the tooltip. */
+.lib-dest[aria-disabled="true"] {
+  color: var(--muted-foreground);
+}
+.lib-dest[aria-disabled="true"] > svg {
+  opacity: 0.6;
+}
+.lib-dest-note {
+  margin-inline-start: auto;
+  font-size: 12px;
+}
+.lib-dest-empty {
+  padding: 8px;
+}
+.lib-dest-hint {
+  min-height: 1.3em;
+  margin: -8px 0 0;
+  font-size: 12px;
+}
+.lib-muted {
+  color: var(--lib-muted);
+}
+.lib-dialog-footer {
+  align-items: center;
+}
+.lib-footer-start {
+  margin-inline-end: auto;
+}
+
+/* Quick Open: centred 20% from the top, 560 px (UX §4.3). */
+.lib-quick-open {
+  --tw-translate-y: 0;
+  top: 12vh;
+  max-width: min(560px, calc(100% - 2rem));
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.lib-qo-list {
+  padding: 4px;
+}
+.lib-qo-row {
+  min-height: 34px;
+}
+.lib-qo-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-qo-path {
+  flex-shrink: 1;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--lib-muted);
+}
+.lib-qo-row mark,
+.lib-qo-path mark {
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+}
+.lib-qo-note {
+  margin: 0;
+  padding-block: 2px 8px;
+  padding-inline: 32px 8px;
+  font-size: 12px;
+  color: var(--lib-muted);
+}
+.lib-qo-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--lib-muted);
+}
+.lib-qo-foot kbd {
+  margin-inline-end: 2px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.lib-qo-foot-end {
+  margin-inline-start: auto;
+}
+
+@media (forced-colors: active) {
+  .lib-tree:focus-within .lib-treeitem[aria-selected="true"] > .lib-row,
+  .lib-treeitem[aria-selected="true"] > .lib-row,
+  .lib-dest[aria-selected="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .lib-treeitem:focus-visible > .lib-row,
+  .lib-dest:focus-visible {
+    outline-color: CanvasText;
+  }
+  [data-drop="ok"] > .lib-row,
+  .lib-item[data-drop="ok"] {
+    outline: 2px solid Highlight;
+  }
+}
