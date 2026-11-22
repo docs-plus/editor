@@ -595,7 +595,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 | Job | Runs |
 |---|---|
-| Changed files | Pull requests only: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run |
+| Changed files | Pull requests only: decides whether the browser suites run (not on a draft; not when only docs or Markdown changed, from `gh api .../pulls/N/files`) |
 | Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
 | Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `CI= bun playwright test --project=chromium --project=library --shard=N/3 --retries=1` with a blob report |
 | Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
@@ -607,10 +607,18 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   shard and perf job behind the second. `tests/unit/ci/ci-workflow.test.ts`
   checks the job names, the shards, the gate's `needs` and runs the docs-only
   and verdict scripts. Merge queue setup: `docs/operations/deploy-runbook.md`.
+- **Draft pull requests:** while a pull request is a draft, `Changed files`
+  skips the shards, perf and the desktop job, and `Playwright (Chromium)`
+  passes with a notice; the checks job still runs. Marking it ready for
+  review (`ready_for_review`) starts the full run. Open pull requests as
+  drafts until they are ready, so the shared runners go to the ones about to
+  merge; run the suites locally meanwhile.
 - **Docs-only pull requests:** when every changed path is under `docs/` or is
-  a Markdown file, and none is under `desktop/`, the shards, perf and the
-  desktop job are skipped and `Playwright (Chromium)` passes with a notice. Pushes to `main`,
-  the merge queue and manual runs always run every suite.
+  a Markdown file, and none is under `desktop/`, the same jobs are skipped
+  and `Playwright (Chromium)` passes with a notice.
+- **Fails closed:** a skip passes only on a `pull_request` run with one of
+  those two reasons. In the merge queue, on `main` and in manual runs every
+  suite always runs, and `Playwright (Chromium)` fails if any was skipped.
 - **Shards:** Playwright splits the `chromium` project by spec file. To run
   one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
 - **Stress probe:** `bun run test:stress` runs as a separate step with
