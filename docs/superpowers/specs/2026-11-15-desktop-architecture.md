@@ -462,6 +462,7 @@ export const events = {                          // main → renderer (webConten
   - **Why hand-written instead of zod or valibot:** the messages are flat, the caps are one-liners, and the signed main bundle stays free of a dependency (K6, `minimumReleaseAge`). Revisit past about 60 channels.
   - A fuzz test checks that no guard throws and none accepts input out of bounds.
 - **Sender checks.** Every handler checks that `event.senderFrame` is the top frame of a window main created, that its URL has the app origin (**decided by S1**), and that the channel is in `calls`. For `doc.append`, `doc.compact`, `doc.markdown` and `asset.put`, the registry must hold `docId` open **for this window**. The YouTube iframe gets no preload.
+- **Navigation (P2.5).** `will-navigate` refuses every main-frame navigation off `app://tinydocy` (an `https` one goes to the system browser), and `setWindowOpenHandler` refuses every `window.open` the same way. A navigation **within** the app origin is allowed, a deliberate narrowing of plan §7's "in-app navigation is blocked": Next's router falls back to a full document load on the same origin when a client navigation fails, and blocking it would strand the window on an error. Such a load is the app's own CSP-guarded export; the window says hello again after it commits. Reload has no menu item or accelerator.
 - **No path from the renderer, ever.** Import, export, the backup folder and Reveal all take paths from main's native dialogs or settings.
 - **Error envelope.** Nothing is thrown across IPC:
 

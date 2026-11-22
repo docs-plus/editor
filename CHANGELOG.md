@@ -31,8 +31,9 @@ the storage worker. Nothing changes on the web.
     `'unsafe-inline'` scripts, `img-src 'self'`, no X hosts);
   - shows each window on `ready-to-show` over a background that matches
     the OS theme, sandboxed, with no page zoom, reload or DevTools;
-  - refuses navigation and `window.open` (an `https` link opens in the
-    system browser) and denies permissions by default;
+  - refuses navigation away from the app origin and `window.open` (an
+    `https` link opens in the system browser) and denies permissions by
+    default;
   - sets YouTube's Referer to the website's origin;
   - holds the single-instance lock, and filters `argv` and `open-file` to
     `tinydocy://`, `tinydocy://local/<uuid>` and existing `.md`, `.html`
@@ -48,8 +49,9 @@ the storage worker. Nothing changes on the web.
   watchdog guarantees the exit.
 - **Desktop:** the unsigned internal build (`desktop/build/`): DMG, NSIS
   installer, `.deb` and AppImage. Fuses: `RunAsNode` off, `NodeOptions`
-  off, cookie encryption on, ASAR integrity on, app only from the ASAR.
-  `check-fuses.ts` reads them back from the installed binary.
+  off, cookie encryption on, ASAR integrity on (Electron enforces it on
+  macOS and Windows only), app only from the ASAR. `check-fuses.ts` reads
+  them back from the installed binary.
 - **Tests:** the `electron` Playwright project runs against the installed
   app on all three OSes (`desktop-shell.yml`, also nightly). It covers the
   D-A12 checks, the bridge, the registry, the refusals and the quit. Unit
