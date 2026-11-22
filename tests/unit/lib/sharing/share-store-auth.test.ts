@@ -8,7 +8,6 @@ import {
 } from "@/lib/sharing/failed-tokens";
 import {
   authenticateShare,
-  SHARE_BUSY,
   SHARE_UNAVAILABLE,
   SHARE_VIEW_ONLY,
   type ShareAuthContext,
@@ -303,7 +302,7 @@ describe("share authentication refusal matrix", () => {
         IP,
         "connection",
       );
-    const unavailable = { ok: false, reason: SHARE_UNAVAILABLE };
+    const unavailable = { ok: false, reason: SHARE_UNAVAILABLE } as const;
     expect(unknown()).toEqual(unavailable);
     expect(refuse(makeShareSecrets().authEdit)).toEqual(unavailable);
     for (let i = 0; i < 3; i++) {
