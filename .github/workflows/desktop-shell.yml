@@ -202,8 +202,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y ./dist/desktop-release/*.deb
-          bin=$(dpkg -L tinydocy | grep -E '/tinydocy$' | head -1)
-          test -x "$bin"
+          # The package links /usr/bin/tinydocy (update-alternatives) to
+          # the installed binary.
+          bin=$(readlink -f /usr/bin/tinydocy)
+          test -f "$bin" && test -x "$bin"
           echo "TINYDOCY_EXECUTABLE=$bin" >> "$GITHUB_ENV"
           echo "FUSE_TARGET=$bin" >> "$GITHUB_ENV"
           grep -E '^(MimeType|StartupWMClass)=' /usr/share/applications/tinydocy.desktop
