@@ -991,22 +991,37 @@ test.describe("menu row polish", () => {
         );
         return Math.round(span?.getBoundingClientRect().left ?? -1);
       };
-      const kbds = [...el.querySelectorAll("kbd")]
-        .filter((kbd) => /\d$/.test(kbd.textContent ?? ""))
-        .map((kbd) => {
-          const r = kbd.getBoundingClientRect();
-          return { left: Math.round(r.left), right: Math.round(r.right) };
-        });
-      return { labels: rows.map(labelLeft), kbds };
+      const box = (kbd: Element) => {
+        const r = kbd.getBoundingClientRect();
+        return { width: r.width, right: r.right };
+      };
+      // Text and Heading 1–3 share one combo shape (⌘⌥0 … ⌘⌥3, or
+      // Ctrl+Alt+0 … Ctrl+Alt+3 off macOS), so only their widths compare;
+      // the lists' Ctrl+Shift+8 is wider than Ctrl+Alt+0 on Linux.
+      const styleKbds = [
+        ...el.querySelectorAll('[data-action-id^="style."] kbd'),
+      ].map(box);
+      const allKbds = [...el.querySelectorAll("kbd")]
+        .filter((kbd) => (kbd.textContent ?? "") !== "")
+        .map(box);
+      return { labels: rows.map(labelLeft), styleKbds, allKbds };
     });
     expect(new Set(geometry.labels).size, JSON.stringify(geometry.labels)).toBe(
       1,
     );
-    // ⌘⌥0 … ⌘⌥3: same width, so the digits line up.
+    const spread = (values: number[]) =>
+      Math.max(...values) - Math.min(...values);
+    // ⌘⌥0 … ⌘⌥3: tabular digits, so the four are one width (sub-pixel).
+    expect(geometry.styleKbds).toHaveLength(4);
     expect(
-      new Set(geometry.kbds.map((kbd) => kbd.right - kbd.left)).size,
-      JSON.stringify(geometry.kbds),
-    ).toBe(1);
+      spread(geometry.styleKbds.map((kbd) => kbd.width)),
+      JSON.stringify(geometry.styleKbds),
+    ).toBeLessThan(0.5);
+    // Every shortcut ends at one inline end, so the digits line up.
+    expect(
+      spread(geometry.allKbds.map((kbd) => kbd.right)),
+      JSON.stringify(geometry.allKbds),
+    ).toBeLessThan(0.5);
   });
 });
 
