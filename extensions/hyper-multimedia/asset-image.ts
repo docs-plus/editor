@@ -62,6 +62,7 @@ const deps: AssetImageDeps & AltTextDeps = {
 type LazyModule = typeof import("./asset-image-lazy");
 let lazy: LazyModule | undefined;
 let lazyLoad: Promise<LazyModule | null> | undefined;
+let prefetch = true;
 
 /** Loads the lazy chunk once; `null` when it can't (retried next time). */
 export function loadAssetImages(): Promise<LazyModule | null> {
@@ -114,7 +115,12 @@ export function withAssetSrc(
   // layout attrs, so an alt edit, its undo or a collaborator's change would
   // leave `<img alt>` stale for screen readers (upstream note U1).
   const parent: NodeViewRenderer = (props) => {
-    void loadAssetImages(); // the toolbar extras (assetMediaActions)
+    // The toolbar extras (assetMediaActions). Once per session: offline,
+    // a failed chunk is not retried for every image.
+    if (prefetch) {
+      prefetch = false;
+      void loadAssetImages();
+    }
     const view = stock(props) as NodeView;
     const { update } = view;
     const img = (view.dom as HTMLElement).querySelector("img");

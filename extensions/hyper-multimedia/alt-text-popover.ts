@@ -81,6 +81,7 @@ export function createAltTextForm(
     if (event.key !== "Escape") return;
     event.preventDefault();
     close();
+    ctx.editor.commands.focus();
   });
   form.append(input, save);
   return form;
