@@ -72,6 +72,35 @@ describe("trackLinkGestures (search-linking §4.3)", () => {
     expect(tracker.wantsNewTab()).toBe(true);
   });
 
+  it("records the link the gesture landed on", () => {
+    tracker = trackLinkGestures(window);
+    const link = document.createElement("a");
+    link.href = "tinydocy:doc/x";
+    const inner = document.createElement("span");
+    link.append(inner);
+    document.body.append(link);
+    expect(tracker.lastAnchor()).toBeNull();
+    inner.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, metaKey: true }),
+    );
+    expect(tracker.lastAnchor()).toBe(link);
+    // A gesture elsewhere (Alt+Enter in the editor) clears it.
+    key({ altKey: true });
+    expect(tracker.lastAnchor()).toBeNull();
+    link.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
+    expect(tracker.lastAnchor()).toBe(link);
+    link.remove();
+  });
+
+  it("ignores anchors without an href", () => {
+    tracker = trackLinkGestures(window);
+    const anchor = document.createElement("a");
+    document.body.append(anchor);
+    anchor.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(tracker.lastAnchor()).toBeNull();
+    anchor.remove();
+  });
+
   it("stops listening once disposed", () => {
     tracker = trackLinkGestures(window);
     tracker.dispose();

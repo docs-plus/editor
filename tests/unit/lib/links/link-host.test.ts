@@ -1,20 +1,27 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import { Hyperlink } from "@docs.plus/extension-hyperlink";
 import { Editor } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
+import { Heading } from "@tiptap/extension-heading";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
+import { relativePositionToAbsolutePosition } from "@tiptap/y-tiptap";
 
 import { docHref, hereHref } from "@/lib/links/doc-link";
+import {
+  LINK_COPY,
+  MERGE_DELETED_INTO_NOT_AVAILABLE,
+} from "@/lib/links/link-copy";
 import {
   createLinkHost,
   isAllowedLinkUri,
   type LinkHostDeps,
   openAtHeading,
 } from "@/lib/links/link-host";
-import { LINK_MESSAGES } from "@/lib/links/navigate";
+import type { LinkFollow } from "@/lib/links/navigate";
 import type { LinkIndexSnapshot } from "@/lib/links/resolve";
+import { createCollabEditor } from "@/tests/helpers/collab-editor";
 
 const KEY = "a".repeat(32);
 const TOC = "6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b";
@@ -23,11 +30,10 @@ const LIVE: LinkIndexSnapshot = {
   items: [{ id: "doc-a", title: "Q4 budget", createdAt: 0, linkKey: KEY }],
 };
 
-let cleanups: (() => void)[] = [];
+const cleanups: (() => void)[] = [];
 
 afterEach(() => {
-  for (const cleanup of cleanups) cleanup();
-  cleanups = [];
+  for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 
 function setup(overrides: Partial<LinkHostDeps> = {}) {
@@ -54,6 +60,14 @@ function setup(overrides: Partial<LinkHostDeps> = {}) {
 
 const defaultValidate = (uri: string) => /^https?:/.test(uri);
 
+/** Two frames: `openAtHeading` re-scrolls on the second. */
+const frames = (count: number) =>
+  new Promise<void>((resolve) => {
+    const step = (left: number) =>
+      left === 0 ? resolve() : requestAnimationFrame(() => step(left - 1));
+    step(count);
+  });
+
 describe("isAllowedLinkUri (search-linking §4.1)", () => {
   it("writes only document links that parse", () => {
     const ctx = { defaultValidate: mock(defaultValidate) };
@@ -75,11 +89,9 @@ describe("isAllowedLinkUri (search-linking §4.1)", () => {
 });
 
 describe("createLinkHost (search-linking §4.1)", () => {
-  it("registers the tinydocy scheme with optional slashes", () => {
+  it("registers no linkify protocol (typed tinydocy: never autolinks)", () => {
     const { host } = setup();
-    expect(host.protocols).toEqual([
-      { scheme: "tinydocy", optionalSlashes: true },
-    ]);
+    expect(host.protocols).toBeUndefined();
   });
 
   it("keeps one host object that never changes", () => {
@@ -107,6 +119,7 @@ describe("createLinkHost (search-linking §4.1)", () => {
     expect(deps.openDocument).toHaveBeenLastCalledWith("doc-a", {
       newTab: false,
       tocId: TOC,
+      title: "Q4 budget",
     });
     document.body.dispatchEvent(
       new MouseEvent("mousedown", {
@@ -119,6 +132,7 @@ describe("createLinkHost (search-linking §4.1)", () => {
     expect(deps.openDocument).toHaveBeenLastCalledWith("doc-a", {
       newTab: true,
       tocId: TOC,
+      title: "Q4 budget",
     });
     expect(deps.onFollow).toHaveBeenCalledTimes(2);
   });
@@ -128,7 +142,11 @@ describe("createLinkHost (search-linking §4.1)", () => {
       purgedKeys: () => new Set(["c".repeat(32)]),
     });
     host.navigate?.(docHref("c".repeat(32)), { newTab: false });
-    expect(deps.announce).toHaveBeenCalledWith(LINK_MESSAGES.deleted);
+    expect(deps.announce).toHaveBeenCalledWith(
+      MERGE_DELETED_INTO_NOT_AVAILABLE
+        ? LINK_COPY.notAvailable
+        : LINK_COPY.deleted,
+    );
   });
 
   it("stops tracking gestures once disposed", () => {
@@ -141,24 +159,194 @@ describe("createLinkHost (search-linking §4.1)", () => {
     expect(deps.openDocument).toHaveBeenLastCalledWith("doc-a", {
       newTab: false,
       tocId: null,
+      title: "Q4 budget",
     });
+  });
+
+  it("two create/dispose cycles leave no window listeners behind", () => {
+    const added = spyOn(window, "addEventListener");
+    const removed = spyOn(window, "removeEventListener");
+    const key = ([type, listener, options]: unknown[]) => {
+      const capture =
+        typeof options === "boolean"
+          ? options
+          : Boolean((options as AddEventListenerOptions | undefined)?.capture);
+      return { type, listener, capture };
+    };
+    try {
+      for (let cycle = 0; cycle < 2; cycle++) {
+        createLinkHost({
+          getSnapshot: () => LIVE,
+          openDocument() {},
+          goToHeadingHere: () => false,
+          openExternal() {},
+          announce() {},
+        }).dispose();
+      }
+      const live = added.mock.calls.map(key);
+      for (const call of removed.mock.calls.map(key)) {
+        const at = live.findIndex(
+          (entry) =>
+            entry.type === call.type &&
+            entry.listener === call.listener &&
+            entry.capture === call.capture,
+        );
+        if (at >= 0) live.splice(at, 1);
+      }
+      expect(added).toHaveBeenCalled();
+      expect(live).toEqual([]);
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
   });
 });
 
+/** Headings with their `data-toc-id`, as the app's schema keeps them. */
+const TocHeading = Heading.extend({
+  addAttributes() {
+    return { ...this.parent?.(), "data-toc-id": { default: null } };
+  },
+});
+
+function headingDoc(withTravel: boolean) {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1, "data-toc-id": "title" },
+        content: [{ type: "text", text: "Q4 budget" }],
+      },
+      ...(withTravel
+        ? [
+            {
+              type: "heading",
+              attrs: { level: 2, "data-toc-id": TOC },
+              content: [{ type: "text", text: "Travel" }],
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
 describe("openAtHeading (search-linking §4.3, §4.4)", () => {
-  it("goes to the heading at the start of the viewport", () => {
-    const editor = { id: "e" };
-    const goToHeading = mock(() => true);
-    const announce = mock(() => {});
-    expect(openAtHeading(editor, TOC, goToHeading, announce)).toBe(true);
-    expect(goToHeading).toHaveBeenCalledWith(editor, TOC, "start");
-    expect(announce).not.toHaveBeenCalled();
+  function target(withTravel: boolean): Editor {
+    const element = document.createElement("div");
+    document.body.append(element);
+    const editor = new Editor({
+      element,
+      extensions: [Document, Paragraph, Text, TocHeading],
+      content: headingDoc(withTravel),
+    });
+    cleanups.push(() => {
+      if (!editor.isDestroyed) editor.destroy();
+      element.remove();
+    });
+    return editor;
+  }
+
+  function options(overrides: { waitForSync?: Promise<unknown> } = {}) {
+    return {
+      title: "Q4 budget",
+      goToHeading: mock(() => true),
+      announce: mock(() => {}),
+      ...overrides,
+    };
+  }
+
+  it("goes to the heading at the start and says where it landed", async () => {
+    const editor = target(true);
+    const opts = options();
+    expect(await openAtHeading(editor, TOC, opts)).toBe(true);
+    expect(opts.goToHeading).toHaveBeenCalledWith(editor, TOC, "start");
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(
+      LINK_COPY.opened("Q4 budget", "Travel"),
+    );
   });
 
-  it("says so when the heading is gone", () => {
-    const announce = mock(() => {});
-    expect(openAtHeading({}, TOC, () => false, announce)).toBe(false);
-    expect(announce).toHaveBeenCalledWith(LINK_MESSAGES.headingRemoved);
+  it("scrolls the heading to the top again on the second frame", async () => {
+    const editor = target(true);
+    const scroll = spyOn(HTMLElement.prototype, "scrollIntoView");
+    try {
+      await openAtHeading(editor, TOC, options());
+      await frames(1);
+      expect(scroll).not.toHaveBeenCalled();
+      await frames(2);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+      const heading = scroll.mock.contexts[0] as unknown as HTMLElement;
+      expect(heading.getAttribute("data-toc-id")).toBe(TOC);
+    } finally {
+      scroll.mockRestore();
+    }
+  });
+
+  it("says the section was removed when the heading is gone", async () => {
+    const opts = options();
+    expect(await openAtHeading(target(false), TOC, opts)).toBe(false);
+    expect(opts.goToHeading).not.toHaveBeenCalled();
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(LINK_COPY.headingRemoved);
+  });
+
+  it("retries once after the first server sync", async () => {
+    const editor = target(false);
+    let synced!: () => void;
+    const opts = options({
+      waitForSync: new Promise<void>((resolve) => {
+        synced = resolve;
+      }),
+    });
+    const done = openAtHeading(editor, TOC, opts);
+    await Promise.resolve();
+    expect(opts.announce).not.toHaveBeenCalled();
+    // The server's copy arrives with the heading.
+    editor.commands.setContent(headingDoc(true));
+    synced();
+    expect(await done).toBe(true);
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(
+      LINK_COPY.opened("Q4 budget", "Travel"),
+    );
+  });
+
+  it("says removed once when the heading is still gone after the sync", async () => {
+    const opts = options({ waitForSync: Promise.resolve() });
+    expect(await openAtHeading(target(false), TOC, opts)).toBe(false);
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(LINK_COPY.headingRemoved);
+  });
+
+  it("treats a failed sync like a sync without the heading", async () => {
+    const opts = options({ waitForSync: Promise.reject(new Error("offline")) });
+    expect(await openAtHeading(target(false), TOC, opts)).toBe(false);
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(LINK_COPY.headingRemoved);
+  });
+
+  it("says nothing when the editor closes while it waits", async () => {
+    const editor = target(false);
+    let synced!: () => void;
+    const opts = options({
+      waitForSync: new Promise<void>((resolve) => {
+        synced = resolve;
+      }),
+    });
+    const done = openAtHeading(editor, TOC, opts);
+    editor.destroy();
+    synced();
+    expect(await done).toBe(false);
+    expect(opts.announce).not.toHaveBeenCalled();
+  });
+
+  it("says removed when goToHeading can't go there", async () => {
+    const opts = { ...options(), goToHeading: mock(() => false) };
+    expect(await openAtHeading(target(true), TOC, opts)).toBe(false);
+    expect(opts.announce).toHaveBeenCalledTimes(1);
+    expect(opts.announce).toHaveBeenCalledWith(LINK_COPY.headingRemoved);
   });
 });
 
@@ -183,15 +371,30 @@ describe("the Hyperlink mark with the link host", () => {
       a.getAttribute("href"),
     );
 
-  function link(editor: Editor, href: string): boolean {
+  function link(editor: Editor, href: string, from = 1, to = 5): boolean {
     return editor
       .chain()
-      .setTextSelection({ from: 1, to: 5 })
+      .setTextSelection({ from, to })
       .setHyperlink({ href })
       .run();
   }
 
-  it("writes a valid document link and draws its state icon", () => {
+  /** Mod-click as a person does it: the extension follows on Mod. */
+  function modClick(anchor: Element) {
+    for (const type of ["mousedown", "mouseup", "click"]) {
+      anchor.dispatchEvent(
+        new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          metaKey: true,
+          ctrlKey: true,
+        }),
+      );
+    }
+  }
+
+  it("writes a valid document link unchanged and draws its state icon", () => {
     const { host } = setup();
     const editor = createEditor(host);
     expect(link(editor, docHref(KEY))).toBe(true);
@@ -226,6 +429,60 @@ describe("the Hyperlink mark with the link host", () => {
     expect(editor.view.dom.querySelector(".doc-link-icon")).toBeNull();
   });
 
+  it("follows a document link on Mod-click without a linkify protocol", () => {
+    const { host, deps } = setup();
+    const editor = createEditor(host);
+    link(editor, docHref(KEY));
+    const anchor = editor.view.dom.querySelector("a[href]");
+    if (!anchor) throw new Error("no link");
+    const open = spyOn(window, "open").mockImplementation(() => null);
+    try {
+      modClick(anchor);
+      expect(deps.openDocument).toHaveBeenCalledTimes(1);
+      expect(deps.openDocument).toHaveBeenCalledWith("doc-a", {
+        newTab: false,
+        tocId: null,
+        title: "Q4 budget",
+      });
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("hands onFollow the clicked link as a Yjs relative position", () => {
+    let source: { docId: string; editor: Editor } | null = null;
+    const onFollow = mock((_event: LinkFollow) => {});
+    const { host } = setup({ getSource: () => source, onFollow });
+    const fixture = createCollabEditor({
+      extensions: [Hyperlink.configure({ ...host })],
+    });
+    cleanups.push(fixture.destroy);
+    document.body.append(fixture.editor.view.dom);
+    cleanups.push(() => fixture.editor.view.dom.remove());
+    source = { docId: "doc-here", editor: fixture.editor };
+    // "Title" then "hello world": link "world" (14..19).
+    expect(link(fixture.editor, docHref(KEY), 14, 19)).toBe(true);
+    const anchor = fixture.editor.view.dom.querySelector("a[href]");
+    if (!anchor) throw new Error("no link");
+
+    modClick(anchor);
+
+    expect(onFollow).toHaveBeenCalledTimes(1);
+    const [[event]] = onFollow.mock.calls;
+    expect(event.source.docId).toBe("doc-here");
+    const binding = fixture.binding();
+    if (!binding || !event.source.position) throw new Error("no position");
+    expect(
+      relativePositionToAbsolutePosition(
+        binding.doc,
+        binding.type,
+        event.source.position,
+        binding.mapping,
+      ),
+    ).toBe(14);
+  });
+
   it("redraws stale icons in place after the index changes", async () => {
     const { host, refreshIcons, setSnapshot } = setup();
     const editor = createEditor(host);
@@ -245,7 +502,6 @@ describe("the Hyperlink mark with the link host", () => {
     refreshIcons(editor.view.dom);
     expect(icon()).toBe(first);
     expect(icon()?.getAttribute("data-link-state")).toBe("in_trash");
-    expect(icon()?.querySelector("path[d='M3 6h18']")).not.toBeNull();
     // ProseMirror's observer ignores changes inside the icon: no re-parse.
     await new Promise((resolve) => setTimeout(resolve, 20));
     editor.view.dispatch(editor.state.tr.setMeta("probe", true));
