@@ -44,7 +44,7 @@ export interface DocumentEntry {
   /**
    * `LibraryIndex` only: the last content change (`docs.modified_at`). Only
    * content edits change it (title included, since the title is the first
-   * heading); moves, pins, tags and opening don't (D-O5, provisional).
+   * heading); moves, pins, tags and opening don't (owner decision D-O5).
    */
   readonly modifiedAt?: number;
   /**
@@ -321,7 +321,11 @@ export interface LibraryIndex extends DocumentIndex {
     title?: string;
     folderId?: string | null;
   }): DocumentEntry | null;
-  /** Null when refused: not ready, unknown parent, or too deep. */
+  /**
+   * Null when refused: not ready, unknown parent, or too deep. Sibling
+   * folders may share a name (owner decision D-O6): no operation refuses
+   * a folder name.
+   */
   createFolder(init: {
     name: string;
     parentId?: string | null;

@@ -360,6 +360,25 @@ export function describeLibraryIndexContract(
     });
 
     describe("folders", () => {
+      it("lets sibling folders share a name (D-O6)", () => {
+        const { index, dir } = setup();
+        const twin = index.createFolder({ name: "Work", parentId: null });
+        expect(twin).not.toBeNull();
+        expect(twin?.name).toBe("Work");
+        const other = index.createFolder({ name: "Other", parentId: null });
+        index.renameFolder(other?.id ?? "", "Home");
+        expect(dir(other?.id ?? "")?.name).toBe("Home");
+        const inner = index.createFolder({ name: "Q4", parentId: twin?.id });
+        expect(
+          index.moveItems([{ kind: "folder", id: inner?.id ?? "" }], work.id),
+        ).toMatchObject({ ok: true });
+        expect(
+          index
+            .snapshot()
+            .folders.filter((f) => f.parentId === work.id && f.name === "Q4"),
+        ).toHaveLength(2);
+      });
+
       it("createFolder lists a folder at the root or inside another", () => {
         const { index, dir } = setup();
         const events = record(index);
@@ -806,7 +825,7 @@ export function describeLibraryIndexContract(
       });
     });
 
-    describe("Modified counts content edits only (D-O5, provisional)", () => {
+    describe("Modified counts content edits only (D-O5)", () => {
       it("is set at creation and left alone by moves, pins, tags and opening", () => {
         const { index, doc } = setup();
         const created = index.create({ title: "New" });

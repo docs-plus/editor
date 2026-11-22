@@ -27,7 +27,8 @@ use them: nothing in the web build imports `components/library` or
   `docs.sort_key`), the Trash list (`trash`: documents and folder units,
   newest first), one `trashGroup` per trashed folder's subtree, and list
   metadata on entries (`modifiedAt`, `snippet`, `tagIds`, `sortKey`).
-  Modified counts content edits only (D-O5, provisional), and `rename` on
+  Modified counts content edits only (D-O5), sibling folders may share a
+  name (D-O6), and `rename` on
   a `LibraryIndex` is documented as editing the title heading through a
   session, never the stored title (offline data-model revision §4.2). `MemoryDocumentIndex` implements them and the
   shared contract suite covers them for P2.6's `IpcDocumentIndex` and W2's
