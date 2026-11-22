@@ -962,6 +962,20 @@ changes.
   Firefox and WebKit) with 11 before/after pairs.
 - **Chip colour and corner (2026-11-22):** a per-device Chip colour preference (C10, pending the owner's sign-off: six colours, Blue by default, set as `data-chip-color` before first paint, +0 B to the editor chunk) and the smaller `--radius-sm` corner, with a colour grid scene and screenshots 58–67 and `p12`.
 
+### Link card redesign for document links and smart chips (docs only)
+
+A design proposal, pending owner approval. Nothing in the app changes, so there is no Deploy note.
+
+#### Added
+
+- **Spec §4.5a "Link card (hover and preview)"** in `docs/superpowers/specs/2026-11-16-search-linking-design.md`. It is the card that opens on a document link or a smart chip: a hover card for the pointer, a preview dialog for click, Mod-K and Alt+Enter, and a sheet for a long-press on phones. All three share one body, and the card stays 20rem wide on every surface.
+  - It covers the anatomy, tokens, type, spacing, states, copy, motion, keyboard and timing (WCAG 1.4.13), ARIA, phone and right to left.
+  - Its acceptance criteria include 16 anti-slop design rules: no gradients, blur, emoji, pills, decorative icons or shimmer; one elevation token; the app's popover radius; type does the hierarchy.
+  - It lists the §4.5, §4.6, §8 and §4.2a lines to update on approval, and six owner decisions (L1–L6).
+- **Prototype** `docs/design/2026-11-22-link-card-prototype.html`. It is fully self-contained (Inter and its lucide icons are inlined) and has every state in light and dark, right to left, phone and reduced motion. It also has a working "Try it" paragraph and computed Anti-slop checklist and Accessibility panels.
+- **Screenshots** in `docs/design/2026-11-22-link-card/`, including side by sides of the #163 and #167 cards and the new one.
+- **Revised after the owner's review (2026-11-22):** the state icon leads the title row and actions carry icons again; the hover card and the dialog show only Open, Copy Link and ⋯, with every other action in ⋯ and listed on the phone sheet (decision L2, superseding §4.2a's visible edit group).
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
