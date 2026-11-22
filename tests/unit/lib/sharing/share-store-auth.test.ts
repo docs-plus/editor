@@ -288,34 +288,37 @@ describe("share authentication refusal matrix", () => {
     ).toMatchObject({ ok: true, role: "edit", readOnly: true });
   });
 
-  it("pauses a share as busy after too many failed tokens, per share_id", () => {
+  it("refuses a flooded share's tokens as unavailable, but never its owner", () => {
     const { shareId, secrets } = seedShare(db, nowMs);
     const ctx = context({
       failedTokens: createFailedTokenLimiter({ perShare: 3, perPrefix: 100 }),
     });
-    for (let i = 0; i < 3; i++) {
-      const ip = `198.51.100.${i}`;
+    const refuse = (token: string, ip = IP) =>
+      authenticateShare(ctx, shareId, token, ip, "connection");
+    const unknown = () =>
       authenticateShare(
         ctx,
-        shareId,
-        makeShareSecrets().authEdit,
-        ip,
-        "connection",
-      );
-    }
-    // Wrong tokens now pause the share; a right token still gets in (M1).
-    expect(
-      authenticateShare(
-        ctx,
-        shareId,
+        mintShareId(),
         makeShareSecrets().authEdit,
         IP,
         "connection",
-      ),
-    ).toEqual({ ok: false, reason: SHARE_BUSY });
+      );
+    const unavailable = { ok: false, reason: SHARE_UNAVAILABLE };
+    expect(unknown()).toEqual(unavailable);
+    expect(refuse(makeShareSecrets().authEdit)).toEqual(unavailable);
+    for (let i = 0; i < 3; i++) {
+      refuse(makeShareSecrets().authEdit, `198.51.100.${i}`);
+    }
+    // Over the share's limit: the same answer as an unknown share or a
+    // wrong token, even for a right edit or view token ...
+    expect(refuse(makeShareSecrets().authEdit)).toEqual(unavailable);
+    expect(refuse(secrets.authEdit)).toEqual(unavailable);
+    expect(refuse(secrets.authView)).toEqual(unavailable);
+    expect(unknown()).toEqual(unavailable);
+    // ... but the owner secret always works (M1).
     expect(
-      authenticateShare(ctx, shareId, secrets.authEdit, IP, "connection"),
-    ).toMatchObject({ ok: true, role: "edit" });
+      authenticateShare(ctx, shareId, secrets.ownerToken, IP, "owner"),
+    ).toMatchObject({ ok: true, role: "owner" });
   });
 });
 
@@ -364,24 +367,28 @@ describe("failed-token key table (M2)", () => {
     expect(limiter.isAddressBlocked(IP)).toBe(true);
   });
 
-  it("a full address table blocks new addresses and logs it, once per window", () => {
+  it("a full address table evicts the least recently used key, never refusing a new address", () => {
     const warnings: string[] = [];
     const warn = console.warn;
     console.warn = (line: string) => warnings.push(line);
     try {
       const limiter = createFailedTokenLimiter({
         perShare: 100,
-        perPrefix: 100,
+        perPrefix: 2,
         maxKeys: 3,
         now: () => nowMs,
       });
-      for (let i = 0; i < 3; i++) limiter.recordFailure(`198.51.100.${i}`);
-      // Tracked addresses are judged on their own count.
+      for (let i = 0; i < 10; i++) {
+        limiter.recordFailure(`198.51.100.${i}`);
+        limiter.recordFailure(`198.51.100.${i}`);
+      }
+      // A fresh, unrelated address is never refused because it is full.
+      expect(limiter.isAddressBlocked("203.0.113.99")).toBe(false);
+      // Recent keys keep their counts; the oldest were evicted.
+      expect(limiter.isAddressBlocked("198.51.100.9")).toBe(true);
       expect(limiter.isAddressBlocked("198.51.100.0")).toBe(false);
-      expect(limiter.isAddressBlocked("198.51.100.99")).toBe(true);
-      expect(limiter.isAddressBlocked("198.51.100.98")).toBe(true);
       const events = warnings.filter((line) =>
-        line.includes("share_failed_token_table_full"),
+        line.includes("share_failed_token_table_evicting"),
       );
       expect(events).toHaveLength(1);
       expect(events[0]).toContain('"table":"addresses"');
@@ -390,35 +397,56 @@ describe("failed-token key table (M2)", () => {
     }
   });
 
-  it("unknown share ids take no share-key slot; a full share table fails closed", () => {
+  it("a flood rotating through the /64s of one /48 stays blocked by the /48", () => {
+    const limiter = createFailedTokenLimiter({
+      perShare: 100,
+      perPrefix: 5,
+      maxKeys: 3,
+      now: () => nowMs,
+    });
+    for (let i = 0; i < 200; i++) {
+      const ip = `2001:db8:a:${i}::/64`;
+      if (!limiter.isAddressBlocked(ip)) limiter.recordFailure(ip);
+    }
+    expect(limiter.isAddressBlocked("2001:db8:a:ffff::/64")).toBe(true);
+    expect(limiter.isAddressBlocked("2001:db8:b:1::/64")).toBe(false);
+  });
+
+  it("unknown share ids take no share-key slot, so a real share keeps its count", () => {
     const ctx = context({
       failedTokens: createFailedTokenLimiter({
-        perShare: 100,
-        perPrefix: 1000,
+        perShare: 2,
+        perPrefix: 100_000,
         maxShareKeys: 1,
         now: () => nowMs,
       }),
     });
     const wrong = () => makeShareSecrets().authEdit;
-    for (let i = 0; i < 50; i++) {
+    const flooded = seedShare(db, nowMs);
+    for (let i = 0; i < 2; i++) {
+      authenticateShare(ctx, flooded.shareId, wrong(), IP, "connection");
+    }
+    for (let i = 0; i < 500; i++) {
       authenticateShare(ctx, mintShareId(), wrong(), IP, "connection");
     }
-    const first = seedShare(db, nowMs);
-    const second = seedShare(db, nowMs);
-    // The flood left the one slot free for a real share.
-    expect(
-      authenticateShare(ctx, first.shareId, wrong(), IP, "connection"),
-    ).toEqual({ ok: false, reason: SHARE_UNAVAILABLE });
-    // Now full: wrong tokens on an untracked share pause as busy ...
-    expect(
-      authenticateShare(ctx, second.shareId, wrong(), IP, "connection"),
-    ).toEqual({ ok: false, reason: SHARE_BUSY });
-    // ... and a right token still gets in.
+    // Still over its limit: the random ids evicted nothing.
     expect(
       authenticateShare(
         ctx,
-        second.shareId,
-        second.secrets.authEdit,
+        flooded.shareId,
+        flooded.secrets.authEdit,
+        IP,
+        "connection",
+      ),
+    ).toEqual({ ok: false, reason: SHARE_UNAVAILABLE });
+    // Another real share's failure evicts it (LRU), and it opens again.
+    const other = seedShare(db, nowMs);
+    authenticateShare(ctx, other.shareId, wrong(), IP, "connection");
+    expect(
+      authenticateShare(
+        ctx,
+        flooded.shareId,
+        flooded.secrets.authEdit,
         IP,
         "connection",
       ),

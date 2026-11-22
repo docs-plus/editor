@@ -63,8 +63,6 @@ export function createTimestampWindows(
       const cutoff = current - windowMs;
       return (windows.get(key) ?? []).filter((t) => t > cutoff).length;
     },
-    /** True while `key` is tracked (until a sweep drops it). */
-    has: (key: string) => windows.has(key),
     size: () => windows.size,
   };
 }

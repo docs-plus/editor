@@ -499,9 +499,10 @@ describe("owner endpoints", () => {
     for (let i = 0; i < 10; i++) {
       await stopWith(makeShareSecrets().ownerToken, `198.51.100.${i}`);
     }
+    // Refused like any wrong token: nothing says the share is flooded.
     expect(
       (await stopWith(makeShareSecrets().ownerToken, "198.51.100.200")).status,
-    ).toBe(429);
+    ).toBe(404);
 
     const response = await stopWith(secrets.ownerToken, IP);
     expect(response.status).toBe(200);
@@ -627,7 +628,7 @@ describe("owner endpoints", () => {
     });
   });
 
-  it("pauses wrong owner secrets after too many of them", async () => {
+  it("answers an unknown share, a wrong token and a flooded share byte for byte alike", async () => {
     const http = createHttp({
       auth: {
         db,
@@ -636,19 +637,33 @@ describe("owner endpoints", () => {
         failedTokens: createFailedTokenLimiter({ perShare: 2, perPrefix: 100 }),
       },
     });
-    const { shareId } = await createShare(http);
-    const stop = (token: string) =>
-      http.handle(
-        new Request(`${BASE}/api/shares/${shareId}`, {
-          method: "DELETE",
+    const { shareId, secrets } = await createShare(http);
+    const status = async (id: string, token: string) => {
+      const response = await http.handle(
+        new Request(`${BASE}/api/shares/${id}/status`, {
           headers: bearer(token),
         }),
         IP,
       );
-    await stop(makeShareSecrets().ownerToken);
-    await stop(makeShareSecrets().ownerToken);
-    expect((await stop(makeShareSecrets().ownerToken)).status).toBe(429);
-    expect(getShare(db, shareId)?.status).toBe("pending");
+      return JSON.stringify({
+        status: response.status,
+        headers: [...response.headers],
+        body: await response.text(),
+      });
+    };
+    const unknown = await status(mintShareId(), makeShareSecrets().authView);
+    const wrong = await status(shareId, makeShareSecrets().authView);
+    await status(shareId, makeShareSecrets().authView);
+    const floodedWrong = await status(shareId, makeShareSecrets().authView);
+    const floodedRight = await status(shareId, secrets.authView);
+    expect(JSON.parse(unknown).status).toBe(404);
+    for (const answer of [wrong, floodedWrong, floodedRight]) {
+      expect(answer).toBe(unknown);
+    }
+    // The owner secret still reads it.
+    expect(JSON.parse(await status(shareId, secrets.ownerToken)).status).toBe(
+      200,
+    );
   });
 
   it("rejects unknown routes and wrong methods", async () => {

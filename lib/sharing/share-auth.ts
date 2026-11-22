@@ -24,7 +24,10 @@ import {
  */
 export const SHARE_UNAVAILABLE = "share_unavailable";
 
-/** Over a failed-token or capacity limit: the client pauses and retries. */
+/**
+ * The caller's address is over a limit (failed tokens, share connections):
+ * the client pauses and retries. Never about a specific share.
+ */
 export const SHARE_BUSY = "busy";
 
 /** An edit token on a share made view-only for everyone. */
@@ -95,11 +98,16 @@ function matchRole(
 /**
  * Checks `token` for `shareId`, in this order: the address's failed-token
  * limit, the row, the token (constant-time, against 32-byte SHA-256
- * hashes), and only then the share's state. The share's own failed-token
- * limit applies to wrong tokens only, so a flood of them never locks out a
- * token holder. `credential` picks which tokens count: the WebSocket takes
- * `auth_edit` / `auth_view`, owner calls take the owner secret, and the
- * status read takes any of them.
+ * hashes), and only then the share's state. `credential` picks which
+ * tokens count: the WebSocket takes `auth_edit` / `auth_view`, owner calls
+ * take the owner secret, and the status read takes any of them.
+ *
+ * Refusals tell a caller without a token nothing about the share: an
+ * unknown share, a wrong token and a share over its failed-token limit all
+ * answer `share_unavailable`. That limit is back-pressure only: while a
+ * share is over it, its edit and view tokens are refused too, but never
+ * its owner secret, so the owner can always stop or reset a flooded link.
+ * `busy` comes only from limits on the caller's address.
  */
 export function authenticateShare(
   context: ShareAuthContext,
@@ -119,10 +127,12 @@ export function authenticateShare(
     : null;
   const role = share ? matched : null;
   if (!share || !role) {
-    const shareBlocked = failedTokens.isShareBlocked(shareId);
     // Only a share that exists gets a key, so random ids fill no table.
     failedTokens.recordFailure(ip, share ? shareId : undefined);
-    return { ok: false, reason: shareBlocked ? SHARE_BUSY : SHARE_UNAVAILABLE };
+    return { ok: false, reason: SHARE_UNAVAILABLE };
+  }
+  if (role !== "owner" && failedTokens.isShareBlocked(shareId)) {
+    return { ok: false, reason: SHARE_UNAVAILABLE };
   }
   if (share.status === "ended") {
     return { ok: false, reason: share.ended_reason ?? "sharing_stopped" };
