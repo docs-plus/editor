@@ -135,11 +135,14 @@ jobs:
       - name: Soak
         env:
           CASES: ${{ matrix.group.cases }}
+          # Windows holds files open longest (handles, Defender), so the
+          # quit-during-a-copy case runs 30 times there.
+          COPY_QUITS: ${{ runner.os == 'Windows' && 30 || 10 }}
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --out=soak-out
+            xvfb-run -a bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --copy-quits="$COPY_QUITS" --out=soak-out
           else
-            bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --out=soak-out
+            bun tests/load/desktop-durability-soak.ts --case="$CASES" --kills="$KILLS" --copy-quits="$COPY_QUITS" --out=soak-out
           fi
 
       - name: Upload results
