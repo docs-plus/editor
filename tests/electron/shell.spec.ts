@@ -362,6 +362,8 @@ test("navigation, window.open and bad argv from a second instance are refused", 
   current = await launch();
   const { app, userData } = current;
   const page = await firstPage(app);
+  // DesktopRoot's link router routes window.open to the bridge (N2).
+  await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
 
   const bad = [
     "tinydocy://local/not-a-uuid",
@@ -405,12 +407,15 @@ test("navigation, window.open and bad argv from a second instance are refused", 
     () => window.open("https://example.com/") === null,
   );
   expect(opened).toBe(true);
-  await waitForEvent(app, "window_open_refused");
-  const external = (await diagnostics(app)).filter(
-    (e) => e.event === "external_open",
-  );
-  // The two https URLs went to the (logged) system browser; file: did not.
-  expect(external).toHaveLength(2);
+  // The two https URLs went to the (logged) system browser, the second
+  // through shell.openLink; file: did not.
+  await expect
+    .poll(
+      async () =>
+        (await diagnostics(app)).filter((e) => e.event === "external_open")
+          .length,
+    )
+    .toBe(2);
   expect(await windowIds(current)).toHaveLength(1);
 
   // A refused navigation never commits, so the page's hello still stands.

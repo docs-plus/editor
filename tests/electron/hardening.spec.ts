@@ -84,23 +84,28 @@ test("a subframe can't send a link to the browser, by window.open or by navigati
       ),
     )
     .toBe("about:blank");
-  const before = count(await diagnostics(app), "external_open_refused");
+  // Main denies every window.open outright (N2); the frame has no bridge.
+  const before = count(await diagnostics(app), "window_open_refused");
   const opened = await probe.evaluate(
     () => window.open("https://example.com/popup") === null,
   );
   expect(opened).toBe(true);
   await expect
-    .poll(async () => count(await diagnostics(app), "external_open_refused"))
+    .poll(async () => count(await diagnostics(app), "window_open_refused"))
     .toBe(before + 1);
 
   expect(page.url()).toMatch(/^app:\/\/tinydocy\//);
   expect(count(await diagnostics(app), "external_open")).toBe(0);
 });
 
-test("the top frame's links reach the browser, a few per window at most", async () => {
+test("the top frame's links reach the browser through the bridge, a few per window at most", async () => {
   current = await launch();
   const { app } = current;
   const page = await firstPage(app);
+  // DesktopRoot installs the link router once it mounts.
+  await page.locator('.tiptap[contenteditable="true"]').first().waitFor({
+    timeout: 60_000,
+  });
   const denied = await page.evaluate(() => {
     let nulls = 0;
     for (let i = 0; i < 6; i++)

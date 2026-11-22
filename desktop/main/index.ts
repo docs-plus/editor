@@ -39,7 +39,7 @@ import { installMenu } from "./menu";
 import { QuitCoordinator } from "./quit-coordinator";
 import { FixedWindowLimiter } from "./rate-limit";
 import { OpenDocRegistry } from "./registry";
-import { hardenSession } from "./session-hardening";
+import { hardenSession, openExternally } from "./session-hardening";
 import { installSpellcheckGuard } from "./spellcheck";
 import { StorageSupervisor } from "./storage-supervisor";
 import { testHooks } from "./test-hooks";
@@ -193,6 +193,11 @@ function start(): void {
     call: storage.call,
     focusWindow: (windowId) => windows.focus(windowId),
     windowDoc: (windowId) => windows.docOf(windowId),
+    openLink: (windowId, url) => {
+      const contents = windows.get(windowId)?.webContents;
+      // The IPC sender check already proved the top app frame sent it.
+      return contents ? openExternally(contents.id, url, true) : false;
+    },
     onFlushed: (windowId, requestId) =>
       quit.confirmFlushed(windowId, requestId),
   });

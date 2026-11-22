@@ -103,19 +103,11 @@ function hardenWebContents(contents: WebContents): void {
     event.preventDefault();
     diagnostics.log("redirect_refused");
   });
-  contents.setWindowOpenHandler(({ url, referrer }) => {
+  // Every window.open is denied and never reaches the browser (N2): the
+  // app's own links go through the `shell.openLink` bridge call, which
+  // only the top app frame can make, so an embed can't open a tab.
+  contents.setWindowOpenHandler(() => {
     diagnostics.log("window_open_refused");
-    // Electron doesn't say which frame called window.open. The app's own
-    // links open with `noreferrer`, so the referrer alone can't tell; the
-    // focused frame can: a click inside an embed focuses that embed. A
-    // referrer from another origin is refused outright.
-    // Unknown provenance is untrusted: no focused frame means no link.
-    const focused = contents.focusedFrame;
-    const fromTop =
-      focused !== null &&
-      isTopAppFrame(focused) &&
-      (!referrer?.url || isAppUrl(referrer.url));
-    openExternally(windowId, url, fromTop);
     return { action: "deny" };
   });
   // No device chooser on desktop (permissions are denied anyway).

@@ -14,5 +14,7 @@ export const MAX_TITLE_LENGTH = 200;
 export const MAX_SNIPPET_LENGTH = 300;
 /** `docs.schema` values the renderer may migrate to. */
 export const MAX_DOC_SCHEMA = 1_000;
+/** A link the app asks main to open in the browser (`shell.openLink`). */
+export const MAX_LINK_LENGTH = 4096;
 /** The IPC build id the preload sends (a git SHA or "dev"). */
 export const MAX_BUILD_ID_LENGTH = 64;
