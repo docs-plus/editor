@@ -463,6 +463,19 @@ describe("keyboard selection settle (O7 b)", () => {
     expect(controller.visible).toBe(false);
   });
 
+  // Without Shift (a held Ctrl+A), only the repeat flag holds it back: the
+  // repeats come slower than the settle, so no selection change restarts it.
+  test("a repeating key with no Shift held never shows until it is released", async () => {
+    for (let i = 0; i < 3; i++) {
+      key("keydown", { key: "a", ctrlKey: true, repeat: true });
+      await Bun.sleep(SETTLE + 100);
+    }
+    // Past one settle since the first keydown, still repeating.
+    expect(controller.visible).toBe(false);
+    key("keyup", { key: "a", ctrlKey: true });
+    await until(() => controller.visible);
+  });
+
   test("an arrow keyup with Shift still held does not start the settle", async () => {
     key("keydown", { key: "Shift", shiftKey: true });
     shiftArrow();
@@ -556,9 +569,45 @@ describe("keyboard selection settle (O7 b)", () => {
     await until(() => controller.visible);
   });
 
+  /** Live window key listeners, counted through add/remove. */
+  function countWindowKeyListeners() {
+    const live = new Set<EventListenerOrEventListenerObject>();
+    const add = window.addEventListener.bind(window);
+    const remove = window.removeEventListener.bind(window);
+    const isKey = (type: string) => type === "keydown" || type === "keyup";
+    type Args = [
+      string,
+      EventListenerOrEventListenerObject,
+      (boolean | AddEventListenerOptions)?,
+    ];
+    window.addEventListener = ((...[type, listener, options]: Args) => {
+      if (isKey(type)) live.add(listener);
+      add(type, listener, options);
+    }) as typeof window.addEventListener;
+    window.removeEventListener = ((...[type, listener, options]: Args) => {
+      if (isKey(type)) live.delete(listener);
+      remove(type, listener, options);
+    }) as typeof window.removeEventListener;
+    return {
+      live,
+      restore() {
+        window.addEventListener = add;
+        window.removeEventListener = remove;
+      },
+    };
+  }
+
   test("a replaced controller leaks no key listeners and the new one settles", async () => {
+    const counter = countWindowKeyListeners();
+    controller.destroy();
+    controller = createBubbleController(editor, scrollTarget, host);
+    // One controller: its keydown and keyup.
+    expect(counter.live.size).toBe(2);
     const first = controller;
     controller = createBubbleController(editor, scrollTarget, host);
+    // Replacing it removed the first one's pair.
+    expect(counter.live.size).toBe(2);
+    counter.restore();
     expect(first).not.toBe(controller);
     shiftArrow();
     key("keyup", { key: "Shift" });
@@ -569,9 +618,15 @@ describe("keyboard selection settle (O7 b)", () => {
   });
 
   test("destroy removes the listeners and timers", async () => {
+    const counter = countWindowKeyListeners();
+    controller.destroy();
+    controller = createBubbleController(editor, scrollTarget, host);
+    expect(counter.live.size).toBe(2);
     shiftArrow();
     key("keyup", { key: "Shift" });
     controller.destroy();
+    expect(counter.live.size).toBe(0);
+    counter.restore();
     key("keydown", { key: "ArrowLeft", shiftKey: true });
     key("keyup", { key: "Shift" }, window);
     await Bun.sleep(SETTLE + 100);

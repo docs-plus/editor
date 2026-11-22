@@ -53,6 +53,12 @@ function FaceIcon({ face }: { face: StyleFace }) {
   return <TypeIcon aria-hidden="true" />;
 }
 
+/**
+ * The widest face word per computed font: measured on the first show (12
+ * probe layouts), then read back on every later show.
+ */
+const FACE_WIDTHS = new Map<string, number>();
+
 /** The widest face word, in the face's own font and untransformed. */
 function widestFaceWord(host: HTMLElement): number {
   const probe = document.createElement("span");
@@ -78,13 +84,25 @@ function useFaceWordWidth(word: React.RefObject<HTMLSpanElement | null>) {
   const [width, setWidth] = useState<number | null>(null);
   useLayoutEffect(() => {
     let live = true;
-    const measure = () => {
+    const measure = (fresh: boolean) => {
       const host = word.current;
-      const widest = live && host ? widestFaceWord(host) : 0;
+      if (!live || !host) return;
+      const font = getComputedStyle(host).font;
+      let widest = fresh ? undefined : FACE_WIDTHS.get(font);
+      if (widest === undefined) {
+        widest = widestFaceWord(host);
+        if (widest > 0) FACE_WIDTHS.set(font, widest);
+      }
       if (widest > 0) setWidth(widest);
     };
-    measure();
-    document.fonts?.ready.then(measure, () => undefined);
+    measure(false);
+    // Once: a web font still loading would change every word's width.
+    if (document.fonts && document.fonts.status !== "loaded") {
+      document.fonts.ready.then(
+        () => measure(true),
+        () => undefined,
+      );
+    }
     return () => {
       live = false;
     };

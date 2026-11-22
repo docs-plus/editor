@@ -889,6 +889,33 @@ test.describe("selection bubble", () => {
     expect(shown - up).toBeLessThanOrEqual(450);
   });
 
+  for (const [how, keys] of [
+    ["the keyboard settle", "Shift+ArrowRight"],
+    ["the show delay", "mouse"],
+  ] as const) {
+    test(`Esc during ${how} cancels the pending bubble`, async ({ page }) => {
+      await openDoc(page);
+      if (keys === "mouse") {
+        await dragSelect(page, "some words");
+      } else {
+        await selectText(page, "Select some");
+        await expectBubbleOpen(page);
+        await page.evaluate(() => {
+          const editor = window.__tiptap_editor;
+          if (!editor) throw new Error("editor missing");
+          editor.commands.setTextSelection(editor.state.selection.from);
+        });
+        await expect(bubble(page)).toHaveCount(0);
+        for (let i = 0; i < 4; i += 1) {
+          await page.keyboard.press(keys, { delay: 30 });
+        }
+      }
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(700);
+      await expect(bubble(page)).toHaveCount(0);
+    });
+  }
+
   test("Alt+F10 shows a pending bubble at once, focus on Style ▾", async ({
     page,
   }) => {
@@ -1296,7 +1323,7 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
     await expectBubbleOpen(page);
     await expect(styleButton(page)).toHaveAttribute("data-face", "Text");
     await expect(styleButton(page)).toHaveAccessibleName("Turn into Text");
-    // Shift+Arrow keeps the bubble; the selection grows into the list.
+    // A new selection in the list, the bubble still open.
     await selectText(page, "Listed words");
     await expect(styleButton(page)).toHaveAttribute("data-face", "List");
     // The row's Text style ▾ agrees (ruling a: the registry's value).

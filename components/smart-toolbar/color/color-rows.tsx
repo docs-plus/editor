@@ -58,8 +58,9 @@ import { type SwatchPreview, useSwatchPreview } from "./swatch-preview";
  * the focus put on a row when the menu opens previews nothing. A kind
  * that cannot apply keeps its rows focusable but `aria-disabled`,
  * described by the reason; highlights below AA on the current text get a
- * dotted chip and the note under Highlight (O3). Applying keeps the menu
- * open, so writers can try colours; Esc closes it.
+ * dotted chip and the note under Highlight (O3). A pick (Enter, Space or
+ * a click) applies, closes the menu and names the colour on the pill
+ * (spec §7.10); Esc closes it without applying.
  */
 
 type Kind = Swatch["kind"];

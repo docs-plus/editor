@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
 import { announceLater } from "@/lib/announce-later";
 import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
 import { ActionButton } from "../action-button";
@@ -115,7 +116,14 @@ function runInlineCode(editor: Editor, run: () => boolean) {
   if (!run() || !(link || colour)) return;
   const what = link && colour ? "Link and colour" : link ? "Link" : "Colour";
   announceLater(`${what} removed`, {
-    action: { label: "Undo", run: () => editor.chain().focus().undo().run() },
+    action: {
+      label: "Undo",
+      // The registry's Undo, as the colour pill's (one path).
+      run: () => {
+        const undo = editorActions.get("history.undo");
+        if (undo) runAction(editor, undo);
+      },
+    },
   });
 }
 
@@ -353,7 +361,14 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         suppressedRef.current = false;
         return;
       }
-      if (!root.isConnected || !isBubbleDismissKey(event)) return;
+      if (!isBubbleDismissKey(event)) return;
+      if (!root.isConnected) {
+        // A bubble still waiting (its delay, a keyboard settle): Esc says
+        // no to it too; the settle's or delay's re-check finds it
+        // suppressed until a new selection.
+        if (event.key === "Escape") suppressedRef.current = true;
+        return;
+      }
       if (event.key === "Escape") {
         startClose();
         return;
