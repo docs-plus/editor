@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { DocumentEditor } from "@/components/document-editor/document-editor";
 import type { DocSession } from "@/lib/platform/doc-session";
 import { DocSessionProvider } from "@/lib/platform/doc-session-context";
+import { type DocStore, isDocStoreError } from "@/lib/platform/doc-store";
 
 type Opened = { session: DocSession; docId: string; flush(): Promise<void> };
 
@@ -32,6 +33,40 @@ declare global {
 
 /** The document opened until the library UI exists; `?doc=` overrides it. */
 const DEFAULT_DOC_ID = "desktop-dev";
+
+const RELEASE_RETRIES = 5;
+const RELEASE_RETRY_MS = 100;
+
+/**
+ * Retries `load` on `already_open` for about half a second. A reload opens a
+ * new connection, and its `load` can reach the dev storage host before the
+ * old connection's close has released the document (two sockets, two
+ * queues). Dev bridge only: in the shell, main's registry keeps a window's
+ * hold across its own reload.
+ */
+export function retryWhileReleasing(
+  store: DocStore,
+  wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+): DocStore {
+  return {
+    append: (docId, record) => store.append(docId, record),
+    compact: (docId, state, upToSeq) => store.compact(docId, state, upToSeq),
+    close: (docId) => store.close(docId),
+    flush: () => store.flush(),
+    async load(docId) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await store.load(docId);
+        } catch (error) {
+          const releasing =
+            isDocStoreError(error) && error.code === "already_open";
+          if (!releasing || attempt >= RELEASE_RETRIES) throw error;
+          await wait(RELEASE_RETRY_MS);
+        }
+      }
+    },
+  };
+}
 
 function devBridgeConfig(): DevBridgeConfig | null {
   if (window.__TINYDOCY_DEV_BRIDGE) return window.__TINYDOCY_DEV_BRIDGE;
@@ -68,7 +103,7 @@ export function DesktopRoot() {
           close = () => bridge.close();
           await bridge.call("create", { docId });
           const session = local.createLocalSession({
-            store: rpc.createRpcDocStore(bridge.call),
+            store: retryWhileReleasing(rpc.createRpcDocStore(bridge.call)),
           });
           return { session, docId, flush: () => session.flush() };
         })
