@@ -16,8 +16,11 @@ The data model, anchoring and re-anchoring for comments (spec
 web sandbox and the Playground never take comments, and
 `canComment()` is off unless `NEXT_PUBLIC_COMMENTS=on`. The editor chunk
 group grows 140 B gz (P4.9's 150 B line in the D23 ledger, v1 contract
-A19); the lazy comments chunk is about 5.3 KB gz. No schema or protocol
-change; no Deploy note.
+A19); the lazy comments chunk is about 5.3 KB gz. `mountComments`, which
+nothing imports yet, is not in that figure: it measured +617 B gz with a
+throwaway import, and P4.10 needs a ledger decision for it. No schema or
+protocol change; no Deploy note. `NEXT_PUBLIC_COMMENTS` (default off) and
+the browser's `tinydocy-author` key are in the README's build-time table.
 
 #### Added
 
@@ -31,16 +34,22 @@ change; no Deploy note.
   thread's range, re-anchors after local structural edits, re-resolves
   after remote ones, draws open threads in the decoration host's new
   `comments` layer and shows a failing anchor as Detached only after
-  1.5 s. `mountComments` loads it for a document that takes comments;
-  no page mounts it yet.
+  1.5 s. Undo (local or a collaborator's) brings a deleted thread back
+  for every client; the re-anchor runs in a microtask, before any
+  collaborator's update, and one pass is one Yjs update.
+  `mountComments` loads it for a document that takes comments; no page
+  mounts it yet.
 - **Actions:** `comment.add`, which the bubble, palette and menus will
   call. It is offered only in an editor marked with `setCommentGate`, so
   it never appears on the web.
 - **Editor:** `moveSection` names the moved slice in a `sectionMove` meta,
   so comments shift the ranges inside it instead of collapsing them.
 - **Tests:** the anchor fuzz (2,000 cases; 50,000 in the stress probe),
-  three-client convergence, client-server agreement (including offline
-  catch-up and `comments_full` recovery) and view-only silence.
+  three-client convergence (headless, and through live editors and their
+  controllers with undo, redo and held-back updates), client-server
+  agreement (including offline catch-up and `comments_full` recovery)
+  and view-only silence. The `perf` Playwright typing case moves to
+  P4.10.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
