@@ -1,7 +1,7 @@
 "use client";
 
 import { TextSelection } from "@tiptap/pm/state";
-import type { Editor } from "@tiptap/react";
+import type { Editor, EditorEvents } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -10,12 +10,17 @@ import { PlusIcon } from "@/lib/icons";
 
 /*
  * The `+` on an empty line (spec §8.2, O5 a). It lives in the slash folder
- * and mounts from the lazy bubble chunk's desktop wrapper, so the editor
- * chunk carries none of it (head-of-engineering ruling: 0 B). A click
- * types the "/" for the writer, outside the undo history, so the ordinary
- * "/" menu opens: one code path. No plugin: it follows the editor's
- * events and the pointer, positions itself with `coordsAtPos`, and
- * changes no React state per transaction.
+ * but is mounted by the lazy bubble chunk's desktop wrapper
+ * (`SelectionBubbleView`), so it depends on that chunk having loaded and
+ * the editor chunk carries none of it (0 B ruling). A click types the "/"
+ * for the writer, outside the undo history, so the ordinary "/" menu
+ * opens: one code path. No plugin: it follows the editor's events and the
+ * pointer, positions itself with `coordsAtPos`, and sets no React state
+ * per transaction.
+ *
+ * It must not import the slash menu statically: `plus-origin`'s record
+ * would then have a second copy in this chunk. It loads it with
+ * `import("./slash-menu")`, the same module the "/" host loads.
  */
 
 /** The caret's empty line shows it this long after the last keystroke. */
@@ -25,39 +30,33 @@ const HOVER_DWELL_MS = 150;
 /** 28 px square; centred on the heading grip's column (20 px, 4 px out). */
 const SIZE = 28;
 const FINE_POINTER = "(hover: hover) and (pointer: fine)";
+const PASSIVE = { passive: true } as const;
 
-/** The "/" the `+` typed, until the menu it opened closes. */
-let plusSlash: { editor: Editor; from: number } | null = null;
-
-/** Whether the `+` typed the "/" at `from` (read once by the menu). */
-export const typedByPlus = (editor: Editor, from: number): boolean =>
-  plusSlash?.editor === editor && plusSlash.from === from;
-
-/** The menu that `+` opened has closed. */
-export const clearPlusSlash = (): void => {
-  plusSlash = null;
-};
-
-/** Pos of the top-level empty paragraph at `pos`, else null. */
-function emptyLine(editor: Editor, pos: number | null): number | null {
-  if (pos === null || pos < 0) return null;
-  const { doc } = editor.state;
-  if (pos >= doc.content.size) return null;
-  const node = doc.nodeAt(pos);
-  return node?.type.name === "paragraph" &&
-    node.content.size === 0 &&
-    doc.resolve(pos).depth === 0
+/**
+ * The position of `dom`, a top-level child of the editor, if it is an
+ * empty paragraph; derived from the DOM each time, so it never goes stale
+ * through a collaborator's edit.
+ */
+function emptyLineAt(editor: Editor, dom: Element | null): number | null {
+  const { view } = editor;
+  if (!(dom instanceof HTMLParagraphElement) || dom.parentElement !== view.dom)
+    return null;
+  const pos = view.posAtDOM(dom, 0) - 1;
+  const node = pos >= 0 ? editor.state.doc.nodeAt(pos) : null;
+  return node?.type.name === "paragraph" && node.content.size === 0
     ? pos
     : null;
 }
 
 /** The caret's line, if it is an empty paragraph at the top level. */
-function caretLine(editor: Editor): number | null {
+function caretLine(editor: Editor): Element | null {
   const { selection } = editor.state;
   const { $head } = selection;
-  return selection.empty && $head.depth === 1
-    ? emptyLine(editor, $head.before())
-    : null;
+  if (!selection.empty || $head.depth !== 1) return null;
+  if ($head.parent.type.name !== "paragraph" || $head.parent.content.size)
+    return null;
+  const dom = editor.view.nodeDOM($head.before());
+  return dom instanceof Element ? dom : null;
 }
 
 function useFinePointer(): boolean {
@@ -93,7 +92,7 @@ export function EmptyLinePlus({
   const [host, setHost] = useState<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   /** The line the `+` is shown beside, or null. */
-  const shown = useRef<number | null>(null);
+  const shown = useRef<Element | null>(null);
 
   useEffect(() => {
     if (!fine || editor.isDestroyed) return;
@@ -111,9 +110,10 @@ export function EmptyLinePlus({
     let typing = 0;
     let dwell = 0;
     let frame = 0;
+    let reading = 0;
     /** The line the pointer rests on (after the dwell), and the candidate. */
-    let hovered: number | null = null;
-    let pending: number | null = null;
+    let hovered: Element | null = null;
+    let pending: Element | null = null;
     let target: EventTarget | null = null;
 
     const hide = () => {
@@ -132,20 +132,19 @@ export function EmptyLinePlus({
         hide();
         return;
       }
-      const line =
-        emptyLine(editor, hovered) ??
-        (settled && editor.isFocused ? caretLine(editor) : null);
-      const dom = line === null ? null : view.nodeDOM(line);
-      if (line === null || !(dom instanceof HTMLElement)) {
+      const caret = settled && editor.isFocused ? caretLine(editor) : null;
+      const line = emptyLineAt(editor, hovered) !== null ? hovered : caret;
+      const pos = emptyLineAt(editor, line);
+      if (!(line instanceof HTMLElement) || pos === null) {
         hide();
         return;
       }
-      const caret = view.coordsAtPos(line + 1);
-      const block = dom.getBoundingClientRect();
+      const at = view.coordsAtPos(pos + 1);
+      const block = line.getBoundingClientRect();
       const origin = host.getBoundingClientRect();
-      const rtl = getComputedStyle(dom).direction === "rtl";
+      const rtl = getComputedStyle(line).direction === "rtl";
       const x = rtl ? block.right : block.left - SIZE;
-      const y = (caret.top + caret.bottom - SIZE) / 2;
+      const y = (at.top + at.bottom - SIZE) / 2;
       el.style.left = `${x - origin.left + host.scrollLeft - host.clientLeft}px`;
       el.style.top = `${y - origin.top + host.scrollTop - host.clientTop}px`;
       el.style.display = "";
@@ -154,10 +153,16 @@ export function EmptyLinePlus({
     const schedule = () => {
       frame ||= requestAnimationFrame(render);
     };
+    // Typing in a line with text costs one check: nothing shown, nothing
+    // hovered, and the caret's line is not empty.
+    const onTransaction = ({ transaction }: EditorEvents["transaction"]) => {
+      if (!transaction.docChanged && !transaction.selectionSet) return;
+      if (shown.current || hovered || caretLine(editor)) schedule();
+    };
 
     const onKey = () => {
       settled = false;
-      if (hovered === null) hide();
+      if (!hovered) hide();
       clearTimeout(typing);
       typing = window.setTimeout(() => {
         settled = true;
@@ -174,22 +179,20 @@ export function EmptyLinePlus({
     };
 
     /** The empty top-level line under the pointer (read once per frame). */
-    const pointed = (): number | null => {
+    const pointed = (): Element | null => {
       if (target instanceof Node && el.contains(target)) return shown.current;
       let node = target instanceof Element ? target : null;
       while (node && node.parentElement !== view.dom) node = node.parentElement;
-      if (!(node instanceof HTMLParagraphElement)) return null;
-      return emptyLine(editor, view.posAtDOM(node, 0) - 1);
+      return emptyLineAt(editor, node) === null ? null : node;
     };
-    let reading = 0;
     const readPointer = () => {
       reading = 0;
       const line = pointed();
       if (line === pending) return;
       pending = line;
       clearTimeout(dwell);
-      if (line === null) {
-        if (hovered !== null) {
+      if (!line) {
+        if (hovered) {
           hovered = null;
           schedule();
         }
@@ -213,10 +216,10 @@ export function EmptyLinePlus({
     dom.addEventListener("keydown", onKey);
     dom.addEventListener("compositionstart", onCompositionStart);
     dom.addEventListener("compositionend", onCompositionEnd);
-    scrollTarget.addEventListener("mousemove", onPointerMove);
-    scrollTarget.addEventListener("mouseleave", onPointerLeave);
-    window.addEventListener("resize", schedule);
-    editor.on("transaction", schedule);
+    scrollTarget.addEventListener("mousemove", onPointerMove, PASSIVE);
+    scrollTarget.addEventListener("mouseleave", onPointerLeave, PASSIVE);
+    window.addEventListener("resize", schedule, PASSIVE);
+    editor.on("transaction", onTransaction);
     editor.on("focus", schedule);
     editor.on("blur", schedule);
     editor.on("update", schedule);
@@ -232,29 +235,34 @@ export function EmptyLinePlus({
       scrollTarget.removeEventListener("mousemove", onPointerMove);
       scrollTarget.removeEventListener("mouseleave", onPointerLeave);
       window.removeEventListener("resize", schedule);
-      editor.off("transaction", schedule);
+      editor.off("transaction", onTransaction);
       editor.off("focus", schedule);
       editor.off("blur", schedule);
       editor.off("update", schedule);
     };
   }, [editor, host, scrollTarget]);
 
-  /** Types the "/" into the line, outside the history: the menu opens. */
-  const insert = () => {
+  /**
+   * Types the "/" into the line, outside the history, so the menu opens;
+   * then marks that "/" as the `+`'s. The slash chunk is loaded on idle,
+   * so the import is normally settled already.
+   */
+  const insert = async () => {
+    const line = shown.current;
+    const slash = await import("./slash-menu").catch(() => null);
+    const pos = emptyLineAt(editor, line);
+    if (!slash || pos === null || editor.isDestroyed) return;
     const view = editor.view;
-    const line = emptyLine(editor, shown.current);
-    if (line === null) return;
     // The hover path may find the editor blurred; a blur closes the menu.
     view.focus();
-    plusSlash = { editor, from: line + 1 };
     const { tr } = view.state;
     view.dispatch(
       tr
-        .setSelection(TextSelection.create(tr.doc, line + 1))
+        .setSelection(TextSelection.create(tr.doc, pos + 1))
         .insertText("/")
         .setMeta("addToHistory", false),
     );
-    if (!getSlashState(editor).open) plusSlash = null;
+    slash.markPlusSlash(editor);
   };
 
   if (!fine || !host) return null;

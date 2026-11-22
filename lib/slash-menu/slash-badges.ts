@@ -5,6 +5,7 @@
  * most 60 days after its release. No storage of its own: a kind the
  * writer has inserted (`INSERT_KIND_CHOICE`'s recents) is not new to them.
  */
+import type { InsertKind } from "@/lib/remembered-choice";
 import { insertKindOf, type SlashItem } from "@/lib/slash-menu/slash-items";
 
 /** Ships empty; the first feature that wants a badge adds its date. */
@@ -35,7 +36,7 @@ export function localDay(now = new Date()): string {
 export function isNewItem(
   item: SlashItem,
   today: string,
-  recentKinds: readonly string[],
+  recentKinds: readonly InsertKind[],
 ): boolean {
   const table = declared();
   const key = item.key.replace(/^suggested:/, "");

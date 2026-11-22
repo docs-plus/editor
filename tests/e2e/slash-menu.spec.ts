@@ -1097,6 +1097,124 @@ test.describe("the + on an empty line", () => {
     expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
   });
 
+  test("a + menu closed before it mounts leaves a later typed '/' alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    // Close it inside the "/" transaction itself: before any React render.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          type Tr = { docChanged: boolean };
+          const ed = (
+            window as unknown as {
+              __tiptap_editor: {
+                on(e: string, f: (p: { transaction: Tr }) => void): void;
+                off(e: string, f: (p: { transaction: Tr }) => void): void;
+                state: { tr: { setMeta(k: string, v: unknown): unknown } };
+                view: { dispatch(tr: unknown): void };
+              };
+            }
+          ).__tiptap_editor;
+          const close = ({ transaction }: { transaction: Tr }) => {
+            if (!transaction.docChanged) return;
+            ed.off("transaction", close);
+            ed.view.dispatch(ed.state.tr.setMeta("blur", true));
+            resolve();
+          };
+          ed.on("transaction", close);
+          document
+            .querySelector<HTMLElement>("[data-empty-line-plus]")
+            ?.click();
+        }),
+    );
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await page.keyboard.press("Backspace");
+    // Past the undo manager's capture window, so the "/" is its own step.
+    await page.waitForTimeout(600);
+    const depth = await undoDepth(page);
+    await page.keyboard.type("/");
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect.poll(() => undoDepth(page)).toBe(depth);
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
+  });
+
+  test("a collaborator's edit above a + menu: Esc still removes its '/'", async ({
+    browser,
+  }) => {
+    const docId = `test-plus-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    try {
+      const pageA = await contextA.newPage();
+      const pageB = await contextB.newPage();
+      await openDoc(pageA, docId);
+      await openDoc(pageB, docId);
+      await emptyLine(pageA);
+      await expect(plus(pageA)).toBeVisible();
+      const depth = await undoDepth(pageA);
+      await plus(pageA).click();
+      await expect(menu(pageA)).toBeVisible();
+      await expect(editorDom(pageB)).toContainText("/");
+      // B adds a paragraph right after the title, above A's line.
+      await pageB.evaluate(() => {
+        const ed = (
+          window as unknown as {
+            __tiptap_editor: {
+              state: { doc: { child(i: number): { nodeSize: number } } };
+              commands: {
+                insertContentAt(pos: number, content: unknown): boolean;
+              };
+            };
+          }
+        ).__tiptap_editor;
+        ed.commands.insertContentAt(ed.state.doc.child(0).nodeSize, {
+          type: "paragraph",
+          content: [{ type: "text", text: "remote line" }],
+        });
+      });
+      await expect(editorDom(pageA)).toContainText("remote line");
+      await expect(menu(pageA)).toBeVisible();
+      await pageA.keyboard.press("Escape");
+      await expect(menu(pageA)).toHaveCount(0);
+      expect(await caretBlock(pageA)).toMatchObject({
+        type: "paragraph",
+        text: "",
+      });
+      await expect(editorDom(pageB)).not.toContainText("/");
+      expect(await undoDepth(pageA)).toBe(depth);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+
+  test("sits in the right margin of an RTL line", async ({ page }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const gap = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const button = document.querySelector("[data-empty-line-plus]");
+      if (!view || !button) return null;
+      const { $head } = view.state.selection;
+      const block = (
+        view.nodeDOM($head.before()) as HTMLElement
+      ).getBoundingClientRect();
+      return button.getBoundingClientRect().left - block.right;
+    });
+    expect(Math.abs(gap ?? 99)).toBeLessThanOrEqual(1);
+  });
+
   test("hides during IME composition", async ({ page }) => {
     await openDoc(page);
     await emptyLine(page);

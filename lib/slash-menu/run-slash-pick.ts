@@ -12,6 +12,7 @@ import { editorActions } from "@/lib/editor-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import type { AnyAction } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { isPlusSlash } from "@/lib/slash-menu/plus-origin";
 import type { SlashItem } from "@/lib/slash-menu/slash-items";
 
 interface UndoManagerLike {
@@ -83,15 +84,11 @@ function withMapping(editor: Editor, run: () => boolean) {
  * own copy. A run that was allowed but did nothing, or a missing action
  * (a bug), says nothing.
  *
- * `typedByPlus`: the `+` typed the "/" outside the history (spec §8.2),
- * so it leaves the same way and the pick's undo step holds only the
- * query and the block change.
+ * A "/" the `+` typed outside the history (spec §8.2, `isPlusSlash`)
+ * leaves the same way, so the pick's undo step holds only the query and
+ * the block change.
  */
-export function runSlashPick(
-  editor: Editor,
-  item: SlashItem,
-  typedByPlus = false,
-): boolean {
+export function runSlashPick(editor: Editor, item: SlashItem): boolean {
   const state = getSlashState(editor);
   const action = editorActions.get(item.actionId);
   if (!state.open) return false;
@@ -104,6 +101,7 @@ export function runSlashPick(
   const from = state.from;
   const to = from + 1 + state.query.length;
   const typed = editor.state.doc.slice(from, to);
+  const typedByPlus = isPlusSlash(editor);
   const undo = undoManagerOf(editor);
   undo?.stopCapturing();
   if (typedByPlus) {

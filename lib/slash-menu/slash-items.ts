@@ -21,7 +21,13 @@ import {
   NetworkIcon,
   TypeIcon,
 } from "@/lib/icons";
-import type { InsertKind, TableSize } from "@/lib/remembered-choice";
+import {
+  INSERT_KIND_CHOICE,
+  type InsertKind,
+  isInsertKind,
+  readChoice,
+  type TableSize,
+} from "@/lib/remembered-choice";
 
 export type SlashSection =
   | "Suggested"
@@ -139,15 +145,22 @@ function templateItem(
 export const hintNeedsSpace = (hint: string): boolean => !/^-{3}$/.test(hint);
 
 /** Up to this many recent insert kinds lead the empty query (A19). */
-const MAX_SUGGESTED = 3;
+export const MAX_SUGGESTED = 3;
+
+/** The writer's recent insert kinds, newest first (A19); local only. */
+export const recentInsertKinds = (): InsertKind[] =>
+  readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind);
 
 /** The insert kind an item adds ("insert.table" → "table"), if any. */
-export const insertKindOf = (item: SlashItem): string | null =>
-  item.actionId === "template.mermaid"
-    ? "mermaid"
-    : item.actionId.startsWith("insert.")
-      ? item.actionId.slice(7)
-      : null;
+export function insertKindOf(item: SlashItem): InsertKind | null {
+  const kind =
+    item.actionId === "template.mermaid"
+      ? "mermaid"
+      : item.actionId.startsWith("insert.")
+        ? item.actionId.slice(7)
+        : null;
+  return isInsertKind(kind) ? kind : null;
+}
 
 /**
  * Suggested (A19): a copy of each recent kind's runnable row, newest
@@ -226,7 +239,7 @@ export function buildSlashItems(
   const all = [...items, ...diagrams];
   for (const item of all) {
     const kind = insertKindOf(item);
-    if (kind && (recentKinds as readonly string[]).includes(kind)) {
+    if (kind && recentKinds.includes(kind)) {
       item.recent = true;
     }
   }

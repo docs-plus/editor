@@ -20,18 +20,15 @@ import {
 import { editorActions } from "@/lib/editor-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
-import {
-  INSERT_KIND_CHOICE,
-  isInsertKind,
-  readChoice,
-  TABLE_SIZE_CHOICE,
-} from "@/lib/remembered-choice";
+import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
+import { isPlusSlash } from "@/lib/slash-menu/plus-origin";
 import { runSlashPick } from "@/lib/slash-menu/run-slash-pick";
 import { isNewItem, localDay } from "@/lib/slash-menu/slash-badges";
 import {
   buildSlashItems,
   hintNeedsSpace,
   matchSlashItems,
+  recentInsertKinds,
   type SlashItem,
   type SlashSection,
   slashEmptyNote,
@@ -44,8 +41,6 @@ import {
   stepIndex,
 } from "@/lib/slash-menu/slash-keys";
 import { cn } from "@/lib/utils";
-
-import { clearPlusSlash, typedByPlus } from "./empty-line-plus";
 
 /*
  * The "/" block menu (lazy chunk, loaded on idle and on the first "/").
@@ -100,9 +95,9 @@ const isRtl = (block: HTMLElement | null) =>
  * Esc and Close: the menu closes and "/query" stays as typed text, except
  * a bare "/" the `+` typed, which goes as it came, outside the history.
  */
-function dismiss(editor: Editor, fromPlus: boolean): void {
+function dismiss(editor: Editor): void {
   const state = getSlashState(editor);
-  if (fromPlus && state.open && !state.query) {
+  if (state.open && !state.query && isPlusSlash(editor)) {
     // Without its "/" the trigger closes.
     editor.view.dispatch(
       editor.state.tr
@@ -315,7 +310,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const listbox = `slash-menu-${useId().replace(/[^\w-]/g, "")}`;
   // Once per open: the menu unmounts when it closes.
   const [{ items, fresh }] = useState(() => {
-    const recent = readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind);
+    const recent = recentInsertKinds();
     const built = buildSlashItems(
       computeContext(editor),
       editorActions.list(),
@@ -334,9 +329,6 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     };
   });
   const [composing, setComposing] = useState(() => editor.view.composing);
-  // Whether the `+` typed this "/" (spec §8.2), read once per open.
-  const [fromPlus] = useState(() => typedByPlus(editor, state.from));
-  useEffect(() => clearPlusSlash, []);
   const [coarse] = useState(isCoarse);
   const matches = useMemo(
     () => matchSlashItems(items, state.query),
@@ -378,14 +370,14 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       const key = slashKey(event, editor.view);
       const { matches: all, activeIndex: index, active: item } = latest.current;
       if (key === "Escape") {
-        dismiss(editor, fromPlus);
+        dismiss(editor);
         return true;
       }
       // A hidden list (its caret scrolled away) takes only Esc.
       if (!key || all.length === 0 || !shown.current) return false;
       if (key === "Enter") {
         if (!item) return false;
-        runSlashPick(editor, item, fromPlus);
+        runSlashPick(editor, item);
         return true;
       }
       const target = all[moveTarget(key, index, all.length, list.current)];
@@ -399,7 +391,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [editor, fromPlus]);
+  }, [editor]);
 
   useLayoutEffect(() => {
     const dom = editor.view.dom;
@@ -662,7 +654,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                     onMouseMove={() => {
                       if (!selected) setActiveKey(item.key);
                     }}
-                    onClick={() => runSlashPick(editor, item, fromPlus)}
+                    onClick={() => runSlashPick(editor, item)}
                   >
                     {Icon ? (
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -722,7 +714,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
               "ms-auto flex shrink-0 items-center gap-1.5 rounded-md hover:bg-accent hover:text-accent-foreground",
               coarse ? "min-h-11 px-3 text-sm" : "min-h-6 px-1.5",
             )}
-            onClick={() => dismiss(editor, fromPlus)}
+            onClick={() => dismiss(editor)}
           >
             Close
             {coarse ? null : (
@@ -737,3 +729,6 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     document.body,
   );
 }
+
+/** For the `+` on an empty line (bubble chunk), through a dynamic import. */
+export { markPlusSlash } from "@/lib/slash-menu/plus-origin";
