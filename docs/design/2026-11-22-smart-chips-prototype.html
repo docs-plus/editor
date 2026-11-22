@@ -7,17 +7,20 @@
 <!--
   Throwaway clickable prototype for §4.2a "Smart chips" in
   docs/superpowers/specs/2026-11-16-search-linking-design.md (approved 2026-11-22, C1–C9; polish round the same day:
-  one Not available state, FileMinus for In Trash, the card as the Q7 preview, an inline suffix, paint that fits the line).
+  one Not available state, FileMinus for In Trash, the card as the Q7 preview, an inline suffix, paint that fits the line;
+  then C10, the chip colour preference, and the small --radius-sm corner, both 2026-11-22).
   Not app code. The editor is a tiny document model (text units plus chip units) with its own caret,
   so caret, selection and delete behave exactly as the spec's key table says and screenshots are
   deterministic. The chip markup is the spec's node view markup, byte for byte where it matters
   (role, contenteditable, data-link-state, the aria-hidden icon wrapper holding U+2060, <bdi>, the inline
   zero-size suffix, no href, no aria-label, no title). Tokens are app/globals.css values. The only dependency is lucide 0.469.0.
   window.proto.scene(id) sets every scene the screenshots use.
+  Chip colour (C10): CHIP_PALETTE in the script is the token table of §4.2a "Chip colour (preference)"; the script
+  writes it into <style id="chip-palette"> as the [data-chip-color] mapping doc-links.css carries in the app.
 -->
 <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" integrity="sha384-hJnF5AwidE18GSWTAGHv3ByzzvfNZ1Tcx5y1UUV3WkauuMCEzBJBMSwSt/PUPXnM" crossorigin="anonymous"></script>
 <style>
-:root {
+:root, .light {
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -38,6 +41,7 @@
   --selection-fg: inherit;
   --link: oklch(0.49 0.17 258);
   --radius: 0.45rem;
+  --radius-sm: calc(var(--radius) * 0.6); /* app/globals.css: 0.27rem, about 4.3 px */
   --shadow: 0 4px 16px oklch(0 0 0 / 0.10), 0 1px 3px oklch(0 0 0 / 0.08);
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --pill-bg: oklch(0.205 0 0);
@@ -52,6 +56,9 @@
   --doc-chip-border-strong: var(--foreground);
   --doc-chip-broken-fg: var(--foreground);
   --doc-chip-broken-border: var(--muted-foreground);
+  /* C10: broken states always use the Neutral fill, whatever the chip colour (dashed, FileQuestion and the words carry the state). */
+  --doc-chip-broken-bg: var(--secondary);
+  --doc-chip-broken-hover: oklch(0.93 0.002 286);
   /* Polish round: the default scene is 15 px at leading 1.15, the tightest line the app ships. */
   --ed-size: 15px;
   --ed-lead: 1.15;
@@ -80,6 +87,10 @@
   --pill-fg: oklch(0.145 0 0);
   --doc-chip-hover: oklch(0.32 0.006 286);
   --doc-chip-active: oklch(0.36 0.006 286);
+  --doc-chip-broken-bg: oklch(0.274 0.006 286.033);
+  --doc-chip-broken-hover: oklch(0.32 0.006 286);
+  --doc-chip-broken-fg: var(--foreground);
+  --doc-chip-broken-border: var(--muted-foreground);
 }
 /* Forced colours: the real media query, and the same tokens under the "Simulated" control. */
 @media (forced-colors: active) {
@@ -89,7 +100,7 @@
     --bubble-edge: CanvasText; --focus-ring: Highlight; --page-bg: Canvas; --selection: Highlight; --selection-fg: HighlightText;
     --link: LinkText; --pill-bg: Canvas; --pill-fg: CanvasText; --shadow: none;
     --doc-chip-bg: Canvas; --doc-chip-fg: LinkText; --doc-chip-border: LinkText; --doc-chip-icon: LinkText;
-    --doc-chip-hover: Canvas; --doc-chip-active: Canvas; --doc-chip-border-strong: Highlight; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText;
+    --doc-chip-hover: Canvas; --doc-chip-active: Canvas; --doc-chip-border-strong: Highlight; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText; --doc-chip-broken-bg: Canvas; --doc-chip-broken-hover: Canvas;
   }
   .sel, .doc-chip.is-in-selection, .caret::after { forced-color-adjust: none; }
   .doc-chip.is-in-selection { background: Highlight; color: HighlightText; border-color: HighlightText; }
@@ -106,7 +117,7 @@
   --bubble-edge: CanvasText; --focus-ring: Highlight; --page-bg: Canvas; --selection: Highlight; --selection-fg: HighlightText;
   --link: LinkText; --pill-bg: Canvas; --pill-fg: CanvasText; --shadow: none;
   --doc-chip-bg: Canvas; --doc-chip-fg: LinkText; --doc-chip-border: LinkText; --doc-chip-icon: LinkText;
-  --doc-chip-hover: Canvas; --doc-chip-active: Canvas; --doc-chip-border-strong: Highlight; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText;
+  --doc-chip-hover: Canvas; --doc-chip-active: Canvas; --doc-chip-border-strong: Highlight; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText; --doc-chip-broken-bg: Canvas; --doc-chip-broken-hover: Canvas;
 }
 :root[data-fc="on"] .pill { border: 1px solid CanvasText; }
 :root[data-fc="on"] .doc-chip.is-in-selection { background: Highlight; color: HighlightText; border-color: HighlightText; }
@@ -193,9 +204,11 @@ kbd { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 
 /* §4.2a: the chip. Inline, padding-block 0, so the line box never grows. */
 .doc-chip {
   display: inline; padding-block: 0; padding-inline: .3em .45em;
-  border: max(1px, .0625em) solid var(--doc-chip-border); border-radius: 999px;
+  /* Owner, 2026-11-22: a small corner, not a pill. --radius-sm is rem, so it stays about 4.3 px at every text size. */
+  border: max(1px, .0625em) solid var(--doc-chip-border); border-radius: var(--radius-sm);
   background: var(--doc-chip-bg); color: var(--doc-chip-fg);
   /* slice, not clone: Firefox drew a full pill per fragment with clone (three pills for one chip). */
+  /* With slice only the first fragment's start corners and the last fragment's end corners are rounded. */
   -webkit-box-decoration-break: slice; box-decoration-break: slice;
   overflow-wrap: anywhere; cursor: pointer; font-weight: inherit;
   /* M7: a tap or long-press never selects the title's characters; the plugin owns chip selection. */
@@ -220,12 +233,18 @@ kbd { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 
 /* M6: the hidden suffix is inline, so it never breaks IME composition after a chip. The name is "Q4 budget, document". */
 .doc-chip-suffix { font-size: 0; line-height: 0; white-space: nowrap; }
 .doc-chip:is([data-link-state="not_available"], [data-link-state="unknown_form"]) {
-  border-style: dashed; border-color: var(--doc-chip-broken-border); color: var(--doc-chip-broken-fg);
+  border-style: dashed; border-color: var(--doc-chip-broken-border); color: var(--doc-chip-broken-fg); background: var(--doc-chip-broken-bg);
+  --doc-chip-icon: var(--doc-chip-broken-border);
 }
-.doc-chip.is-in-selection { background: var(--selection); color: var(--selection-fg); }
-.doc-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.doc-chip:is([data-link-state="not_available"], [data-link-state="unknown_form"]):is(:hover, .demo-hover) { background: var(--doc-chip-broken-hover); }
+/* C10: the selection replaces the tint: the selection fill, Neutral text and icon, and a --foreground border. Any chip
+   fill is only about 1.3:1 against the selection, so the strong border is what shows a selected chip. */
+.doc-chip.is-in-selection { background: var(--selection); color: var(--selection-fg); border-color: var(--foreground); --doc-chip-icon: var(--muted-foreground); }
+.doc-chip:is(:focus-visible, .demo-focus) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.doc-chip.demo-hover { background: var(--doc-chip-hover); } /* the colour grid's static hover */
 /* While its card is open the chip is "pressed", not focused: a stronger border and the active fill, no ring. */
 .doc-chip[data-card-open] { background: var(--doc-chip-active); border-color: var(--doc-chip-border-strong); }
+.doc-chip:is([data-link-state="not_available"], [data-link-state="unknown_form"])[data-card-open] { background: var(--doc-chip-broken-hover); }
 @media print {
   .doc-chip { border: 0; background: none; padding: 0; margin: 0; color: inherit; font-weight: inherit; text-box: normal; }
   .doc-chip-icon { display: none; }
@@ -363,6 +382,65 @@ pre.code { white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.45 ui-
 .gal mark { color: inherit; padding: 0 1px; }
 .gal .doc-chip { cursor: default; }
 .gal .cap { font-size: 12px; color: var(--muted-foreground); margin: 1.2em 0 .3em; line-height: 1.4; }
+
+/* ── C10: chip colour ───────────────────────────────────── */
+/* The 6 × 2 grid: every colour in light and dark, every state. Each block carries its own theme class. */
+.page:has(#color-grid) { max-width: none; margin: 4px; padding: 2px; border: 0; background: transparent; }
+.cgrid { display: grid; gap: 8px; }
+.cg-block { border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); padding: 8px 10px 6px; font-size: 14px; line-height: 1.15; }
+.cg-block h3 { font-size: 12px; line-height: 1.3; margin: 0 0 6px; font-weight: 600; color: var(--muted-foreground); }
+.cg-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+.cg-table th { font-size: 12px; line-height: 1.3; font-weight: 600; color: var(--muted-foreground); text-align: start; padding: 0 4px 6px; }
+.cg-table th[scope="row"] { font-weight: 500; padding: 3px 4px 3px 0; width: 84px; white-space: nowrap; }
+.cg-table td { padding: 3px 1px; white-space: nowrap; overflow: visible; }
+.cg-table .doc-chip { cursor: default; }
+.cg-sel { background: var(--selection); color: var(--selection-fg); }
+/* Swatches: a 24 px mini chip (fill, border and icon of that colour), its name under it. */
+.cc-group { display: flex; flex-wrap: wrap; gap: 4px; }
+.cc-opt { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; min-inline-size: 56px; padding: 6px 2px 4px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1.2; color: var(--muted-foreground); }
+.cc-opt:hover { background: var(--muted); }
+.cc-opt[aria-checked="true"] { color: var(--foreground); font-weight: 600; }
+.cc-sw { inline-size: 24px; block-size: 24px; border-radius: var(--radius-sm); background: var(--doc-chip-bg); border: 1px solid var(--doc-chip-border); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.cc-sw svg.lucide { width: 14px; height: 14px; color: var(--doc-chip-icon); }
+.cc-sw.sm { inline-size: 18px; block-size: 18px; }
+.cc-sw.sm svg.lucide { width: 11px; height: 11px; }
+/* Checked: a 2 px ring outside a 2 px gap, plus the bold name and aria-checked. Never colour alone. */
+.cc-opt[aria-checked="true"] .cc-sw { box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--foreground); }
+.cc-opt:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.cc-tip { position: absolute; inset-block-end: calc(100% + 4px); inset-inline-start: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 500; padding: 3px 7px; border-radius: 6px; background: var(--pill-bg); color: var(--pill-fg); pointer-events: none; opacity: 0; z-index: 5; }
+[dir="rtl"] .cc-tip { transform: translateX(50%); }
+.cc-opt:is(:hover, :focus-visible, .demo-tip) .cc-tip { opacity: 1; }
+.win:is([data-device="phone"], [data-device="w320"]) .cc-group { flex-direction: column; gap: 0; }
+.win:is([data-device="phone"], [data-device="w320"]) .cc-opt { flex-direction: row; justify-content: flex-start; gap: 12px; min-block-size: 44px; inline-size: 100%; padding: 0 8px; font-size: 15px; border-block-end: 1px solid var(--border); border-radius: 0; }
+.win:is([data-device="phone"], [data-device="w320"]) .cc-tip { display: none; }
+/* Settings mock (the W13 dialog and the P2.9b window share the pane). */
+.set-shell { display: grid; grid-template-columns: 150px minmax(0, 1fr); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 14px; line-height: 1.45; background: var(--background); }
+.set-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-block-end: 1px solid var(--border); font-weight: 600; }
+.set-nav { border-inline-end: 1px solid var(--border); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.set-nav span { padding: 5px 8px; border-radius: 6px; color: var(--muted-foreground); }
+.set-nav span[aria-current] { background: var(--accent); color: var(--foreground); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+.set-pane { padding: 6px 18px 16px; min-width: 0; }
+.set-row { padding-block: 12px; border-block-end: 1px solid var(--border); }
+.set-row.dim { color: var(--muted-foreground); }
+.set-row:last-child { border-block-end: 0; }
+.set-label { font-weight: 600; display: block; }
+.set-hint { color: var(--muted-foreground); font-size: 13px; margin: 2px 0 8px; }
+.cc-preview { margin-block-start: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; line-height: 1.15; }
+.cc-preview .cap { display: block; font-size: 12px; color: var(--muted-foreground); margin-block-end: 6px; line-height: 1.3; }
+.win:is([data-device="phone"], [data-device="w320"]) .set-shell { grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }
+.win:is([data-device="phone"], [data-device="w320"]) .set-nav { display: none; }
+.win:is([data-device="phone"], [data-device="w320"]) .set-pane { padding: 4px 0 16px; }
+/* The ⋯ menu mock (Radix DropdownMenu in the app: Appearance ▸ and Chip colour ▸ are submenus of radio items). */
+.mmenu { width: 236px; padding: 4px; font-size: 13px; }
+.mi { display: flex; align-items: center; gap: 8px; min-block-size: 32px; padding: 0 8px; border-radius: 6px; cursor: pointer; border: 0; background: transparent; width: 100%; text-align: start; }
+.mi:hover { background: var(--accent); }
+.mi:focus { outline: none; background: var(--accent); box-shadow: inset 0 0 0 2px var(--focus-ring); }
+.mi .chk { inline-size: 16px; flex: none; display: inline-flex; }
+.mi .grow { flex: 1; }
+.mi[aria-expanded="true"] { background: var(--accent); }
+.msep { height: 1px; background: var(--border); margin: 4px -4px; }
+.mlabel { font-size: 11px; color: var(--muted-foreground); padding: 6px 8px 2px; font-weight: 600; }
+.tb.more[aria-expanded="true"] { background: var(--muted); }
 
 /* Persian in Vazirmatn (if installed) for Arabic-script code points only; the default is the OS fallback, as in the app. */
 @font-face { font-family: "FaVazir"; src: local("Vazirmatn Regular"), local("Vazirmatn-Regular"), local("Vazirmatn"); font-weight: 400; unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
@@ -535,7 +613,7 @@ function makeDoc() {
 }
 
 /* ═════════ state ═════════ */
-const CFG_DEFAULTS = { theme: "light", dir: "ltr", size: "15", lead: "1.15", motion: "full", fc: "off", mode: "edit", device: "desktop", ready: "ready", viewer: "me", live: "local", faFont: "os" };
+const CFG_DEFAULTS = { theme: "light", dir: "ltr", size: "15", lead: "1.15", motion: "full", fc: "off", mode: "edit", device: "desktop", ready: "ready", viewer: "me", live: "local", faFont: "os", chipColor: "blue" };
 const CFG = { ...CFG_DEFAULTS };
 let LIB, S;
 function freshState() {
@@ -545,7 +623,7 @@ function freshState() {
     slash: null, picker: null, card: null, consent: false, consented: false,
     nav: [], view: "editor", tabs: [{ title: "Project plan", on: true }],
     hintShown: false, pasteHintShown: false, usedKinds: [], renaming: null,
-    log: [], spies: { navigate: 0, windowOpen: 0, openExternal: 0 }, lastCopy: null, plainNext: false, pendingFollow: null,
+    log: [], spies: { navigate: 0, windowOpen: 0, openExternal: 0 }, lastCopy: null, plainNext: false, pendingFollow: null, moreOpen: false,
   };
 }
 const ed = $("#ed"), win = $("#win"), ov = $("#ov"), scroller = $("#scroller");
@@ -730,18 +808,21 @@ function renderEditor() {
 function renderTabs() {
   $("#tabs").replaceChildren(...S.tabs.map((t) => h("div", { class: "tab" + (t.on ? " on" : "") }, ic("FileText"), h("bdi", { dir: "auto" }, t.title), t.on && CFG.live === "live" ? h("span", { class: "badge" }, "Live") : null)));
 }
-function currentTitle() { return S.view === "editor" ? blockText(S.doc[0]) : S.view.gallery ? "Chip contexts" : (LIB.docs.find((d) => d.id === S.view.docId) || {}).title; }
+function currentTitle() { return S.view === "editor" ? blockText(S.doc[0]) : S.view.gallery ? "Chip contexts" : S.view.grid ? "Chip colours" : S.view.prefs ? "Settings" : (LIB.docs.find((d) => d.id === S.view.docId) || {}).title; }
 function renderTopbar() {
   S.tabs.find((t) => t.on).title = currentTitle();
   const back = S.nav.length ? h("button", { class: "tb", type: "button", id: "back", "aria-keyshortcuts": "Meta+BracketLeft", onclick: back_ }, ic("ArrowLeft", "flip-rtl"), "Back") : null;
   const d = S.view === "editor" ? LIB.docs.find((x) => x.id === "plan") : LIB.docs.find((x) => x.id === S.view.docId);
   $("#topbar").replaceChildren(...[back, h("span", { class: "crumb" }, ["Library", ...(d ? d.path : [])].join(" › ")), h("span", { class: "grow" }),
-    h("span", { class: "crumb" }, CFG.mode === "read" ? "Reading" : "Editing")].filter(Boolean));
+    h("span", { class: "crumb" }, CFG.mode === "read" ? "Reading" : "Editing"),
+    S.moreOpen ? h("button", { class: "tb more", type: "button", id: "more-btn", "aria-label": "More", "aria-haspopup": "menu", "aria-expanded": "true" }, ic("Ellipsis")) : null].filter(Boolean));
 }
 
 /* ═════════ target view (stand-in for the opened document) ═════════ */
 function renderTarget() {
   if (S.view.gallery) { renderGallery(); return; }
+  if (S.view.grid) { renderColorGrid(); return; }
+  if (S.view.prefs) { renderChipSettings(); return; }
   const d = LIB.docs.find((x) => x.id === S.view.docId);
   const t = $("#target");
   if (!d) { t.replaceChildren(h("p", {}, "This document is no longer in your library.")); return; }
@@ -1584,7 +1665,7 @@ $("#panel-keys").append(h("table", { class: "keys" }, h("tbody", {}, [
 ].map(([k, d]) => h("tr", {}, h("td", {}, h("kbd", {}, k)), h("td", {}, d))))));
 
 /* ═════════ accessibility panel (computed from the DOM on every change) ═════════ */
-const NAME_FROM_CONTENT = new Set(["link", "button", "option", "radio", "tab", "heading"]);
+const NAME_FROM_CONTENT = new Set(["link", "button", "option", "radio", "menuitemradio", "tab", "heading"]);
 const isA11yHidden = (c) => c.getAttribute("aria-hidden") === "true" || c.hidden;
 function roleOf(el) { const r = el.getAttribute("role"); if (r) return r; const t = el.tagName; return t === "BUTTON" ? "button" : t === "INPUT" ? "textbox" : /^H[1-6]$/.test(t) ? "heading" : t.toLowerCase(); }
 function textOf(n) {
@@ -1628,7 +1709,7 @@ function statesOf(el) {
 }
 function a11yTargets() {
   const sel = ["#back", "#ed", "#ed .doc-chip", "#ed a.doc-link", "#ed .doc-link-icon[role=img]", "#slash-menu", "#slash-menu [aria-selected=true]", "#picker", "#pk-input", "#pk-list [aria-selected=true]", "#ias", "#ias [role=radio]", "#pk-status",
-    "#card", "#card button", "#consent", "#consent button", "#pills .pill", "#pills button", "#target", "#target .doc-chip"].join(",");
+    "#card", "#card button", "#consent", "#consent button", "#pills .pill", "#pills button", "#target", "#target .doc-chip", "#target [role=radiogroup]", "#target [role=radio]", "#cc-menu", "#cc-menu [role=menuitemradio]"].join(",");
   const seen = new Set();
   return $$(sel).filter((el) => {
     if (el.matches("#ed a.doc-link")) { const k = el.dataset.href + el.dataset.b; if (seen.has(k)) return false; seen.add(k); }
@@ -1671,6 +1752,135 @@ sideTabs.forEach((t, i) => {
   t.addEventListener("keydown", (e) => { const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key] * (document.documentElement.dir === "rtl" ? -1 : 1); if (d) { const n = sideTabs[(i + d + sideTabs.length) % sideTabs.length]; n.focus(); selectTab(n.id.slice(4)); } });
 });
 
+/* ═════════ C10: chip colour (a per-device preference, never Yjs) ═════════ */
+// §4.2a "Chip colour (preference)": the token table. The border keeps Neutral's lightness (L 0.556 light, 0.708 dark)
+// and the fill stays near --secondary; the text is lighter than Neutral's (L 0.4 light, 0.92 dark) so it can carry the
+// tint, at 6.45:1 or more. No purple or indigo. Blue is the default.
+const CHIP_COLORS = ["neutral", "blue", "green", "amber", "rose", "teal"];
+const CHIP_COLOR_NAMES = { neutral: "Neutral", blue: "Blue", green: "Green", amber: "Amber", rose: "Rose", teal: "Teal" };
+const CHIP_COLOR_TIPS = { neutral: "Neutral: no tint", blue: "Blue (default)" };
+const CHIP_PALETTE = {
+  neutral: { light: ["0.967 0.001 286.375", "0.145 0 0", "0.556 0 0", "0.556 0 0", "0.93 0.002 286", "0.9 0.003 286"], dark: ["0.274 0.006 286.033", "0.985 0 0", "0.708 0 0", "0.708 0 0", "0.32 0.006 286", "0.36 0.006 286"] },
+  blue: { light: ["0.958 0.03 255", "0.4 0.13 255", "0.556 0.12 255", "0.5 0.12 255", "0.93 0.042 255", "0.9 0.05 255"], dark: ["0.29 0.045 255", "0.92 0.05 255", "0.708 0.1 255", "0.76 0.1 255", "0.33 0.053 255", "0.37 0.057 255"] },
+  green: { light: ["0.958 0.035 152", "0.4 0.1 152", "0.556 0.1 152", "0.5 0.1 152", "0.93 0.047 152", "0.9 0.055 152"], dark: ["0.29 0.04 152", "0.92 0.06 152", "0.708 0.1 152", "0.76 0.1 152", "0.33 0.048 152", "0.37 0.052 152"] },
+  amber: { light: ["0.958 0.045 70", "0.4 0.09 70", "0.556 0.11 70", "0.5 0.11 70", "0.93 0.057 70", "0.9 0.065 70"], dark: ["0.29 0.04 70", "0.92 0.06 70", "0.708 0.1 70", "0.76 0.1 70", "0.33 0.048 70", "0.37 0.052 70"] },
+  rose: { light: ["0.958 0.025 12", "0.4 0.12 12", "0.556 0.11 12", "0.5 0.11 12", "0.93 0.037 12", "0.9 0.045 12"], dark: ["0.29 0.04 12", "0.92 0.05 12", "0.708 0.09 12", "0.76 0.09 12", "0.33 0.048 12", "0.37 0.052 12"] },
+  teal: { light: ["0.958 0.03 192", "0.4 0.09 192", "0.556 0.09 192", "0.5 0.09 192", "0.93 0.042 192", "0.9 0.05 192"], dark: ["0.29 0.04 192", "0.92 0.05 192", "0.708 0.08 192", "0.76 0.08 192", "0.33 0.048 192", "0.37 0.052 192"] },
+};
+const CHIP_TOKENS = ["bg", "fg", "border", "icon", "hover", "active"];
+(function writeChipPalette() {
+  // As doc-links.css in the app: the mapping sits inside (forced-colors: none), so system colours always win, and the
+  // prototype's simulated forced colours (data-fc="on") skip it too. [data-chip-color] works on any element, so the
+  // swatches and the grid's light and dark blocks resolve their own colour; on <html> it is the user's choice.
+  const R = ':root:not([data-fc="on"])';
+  const decl = (c, theme) => CHIP_TOKENS.map((t, i) => `--doc-chip-${t}: oklch(${CHIP_PALETTE[c][theme][i]});`).join(" ") + " --doc-chip-border-strong: var(--foreground);";
+  const rules = [];
+  for (const c of CHIP_COLORS) rules.push(`${R}[data-chip-color="${c}"], ${R} [data-chip-color="${c}"] { ${decl(c, "light")} }`);
+  for (const c of CHIP_COLORS) rules.push(`${R}.dark[data-chip-color="${c}"], ${R}.dark [data-chip-color="${c}"], ${R} .dark[data-chip-color="${c}"], ${R} .dark [data-chip-color="${c}"] { ${decl(c, "dark")} }`);
+  for (const c of CHIP_COLORS) rules.push(`${R} .light[data-chip-color="${c}"], ${R} .light [data-chip-color="${c}"] { ${decl(c, "light")} }`);
+  document.head.append(h("style", { id: "chip-palette" }, `@media (forced-colors: none) {\n${rules.join("\n")}\n}`));
+})();
+function setChipColor(c) {
+  if (!CHIP_COLORS.includes(c) || CFG.chipColor === c) return;
+  CFG.chipColor = c; applyCfg();
+  $$('[role="radio"][data-cc], [role="menuitemradio"][data-cc]').forEach((el) => { const on = el.dataset.cc === c; el.setAttribute("aria-checked", on); if (el.getAttribute("role") === "radio") el.tabIndex = on ? 0 : -1; });
+  $$(".mi[data-cc] .chk").forEach((el) => el.replaceChildren(...(el.closest(".mi").dataset.cc === c ? [ic("Check")] : [])));
+}
+const swatch = (c, sm = false) => h("span", { class: "cc-sw" + (sm ? " sm" : ""), "data-chip-color": c, "aria-hidden": "true" }, ic("FileText"));
+/* The Settings radiogroup (APG radio group: one Tab stop, arrows move and apply the choice, which repaints every chip live). */
+function chipColorGroup() {
+  const group = h("div", { class: "cc-group", role: "radiogroup", "aria-labelledby": "cc-label", "aria-describedby": "cc-hint" },
+    CHIP_COLORS.map((c) => h("button", { type: "button", class: "cc-opt", role: "radio", "data-cc": c, "aria-checked": CFG.chipColor === c ? "true" : "false", tabindex: CFG.chipColor === c ? "0" : "-1", onclick: () => setChipColor(c) },
+      swatch(c), h("span", {}, CHIP_COLOR_NAMES[c]), h("span", { class: "cc-tip", "aria-hidden": "true" }, CHIP_COLOR_TIPS[c] || CHIP_COLOR_NAMES[c]))));
+  group.addEventListener("keydown", (e) => {
+    const rtl = document.documentElement.dir === "rtl";
+    const step = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 }[e.key];
+    let i = CHIP_COLORS.indexOf(CFG.chipColor);
+    if (step) i = (i + step + CHIP_COLORS.length) % CHIP_COLORS.length; else if (e.key === "Home") i = 0; else if (e.key === "End") i = CHIP_COLORS.length - 1; else return;
+    e.preventDefault(); setChipColor(CHIP_COLORS[i]); $(`[role="radio"][data-cc="${CHIP_COLORS[i]}"]`, group).focus();
+  });
+  return group;
+}
+function chipColorPreview() {
+  let n = 900;
+  const chip = (href, label) => chipEl({ t: "chip", href, label }, -1, n++, false);
+  return h("div", { class: "cc-preview", "aria-hidden": "true" }, h("span", { class: "cap" }, "Preview"),
+    "Budget numbers live in ", chip(`tinydocy:doc/${K.q4}`, "Q4 budget"), " and the old plan in ", chip(`tinydocy:doc/${K.gone}`, "Vendor contracts"), ".");
+}
+function renderChipSettings() {
+  registry.clear();
+  const hadFocus = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest(".cc-group"));
+  const row = (label, hint) => h("div", { class: "set-row dim" }, h("span", { class: "set-label" }, label), h("p", { class: "set-hint" }, hint));
+  $("#target").replaceChildren(h("div", { class: "set-shell", role: "dialog", "aria-label": "Settings" },
+    h("div", { class: "set-head" }, "Settings"),
+    h("nav", { class: "set-nav", "aria-label": "Settings panes" }, h("span", {}, "General"), h("span", { "aria-current": "page" }, "Page"), h("span", {}, "Writing"), h("span", {}, "Storage")),
+    h("div", { class: "set-pane" },
+      row("Style", "Default · Comfortable reading · Compact · High legibility (P2.9c-2)"),
+      row("Text size", "A− 16 px A+"),
+      h("div", { class: "set-row" },
+        h("span", { class: "set-label", id: "cc-label" }, "Chip colour"),
+        h("p", { class: "set-hint", id: "cc-hint" }, "The colour of links shown as chips. Only you see it, on this device."),
+        chipColorGroup(), chipColorPreview()),
+      row("Show the outline", "On"))),
+    h("p", { class: "proto-note" }, "Settings › Page: the control's home once W13 (web) and P2.9b (desktop) ship. ← → ↑ ↓ move the choice and repaint every chip at once; Tab leaves the group. Shown only where chips exist (desktop and the web library), never in the sandbox."));
+  if (hadFocus) $('#target [role="radio"][aria-checked="true"]').focus(); // a re-render keeps the roving focus
+}
+/* The ⋯ menu, until Settings ships: Chip colour ▸ beside Appearance ▸, radio items with a swatch and the name. */
+function openChipColorMenu(focusColor = true) {
+  ov.replaceChildren();
+  const mi = (label, extra = {}, ...kids) => h("button", { type: "button", class: "mi", role: "menuitem", tabindex: "-1", ...extra }, h("span", { class: "chk" }), h("span", { class: "grow" }, label), ...kids);
+  const main = h("div", { class: "pop mmenu", role: "menu", id: "more-menu", "aria-label": "More" },
+    mi("Superscript"), mi("Subscript"), h("div", { class: "msep", role: "separator" }), mi("Clear formatting"),
+    h("div", { class: "msep", role: "separator" }), mi("Simplified toolbar", { role: "menuitemcheckbox", "aria-checked": "false" }),
+    mi("Appearance", { "aria-haspopup": "menu", "aria-expanded": "false" }, ic("ChevronRight", "flip-rtl")),
+    mi("Chip colour", { id: "cc-trigger", "aria-haspopup": "menu", "aria-expanded": "true", "aria-controls": "cc-menu" }, ic("ChevronRight", "flip-rtl")));
+  const sub = h("div", { class: "pop mmenu", role: "menu", id: "cc-menu", "aria-labelledby": "cc-trigger" },
+    h("div", { role: "group", "aria-label": "Chip colour" }, CHIP_COLORS.map((c) => h("button", { type: "button", class: "mi", role: "menuitemradio", "data-cc": c, "aria-checked": CFG.chipColor === c ? "true" : "false", tabindex: "-1", onclick: () => setChipColor(c) },
+      h("span", { class: "chk" }, CFG.chipColor === c ? ic("Check") : null), swatch(c, true), h("span", { class: "grow" }, CHIP_COLOR_NAMES[c] + (c === "blue" ? " (default)" : ""))))),
+    h("div", { class: "msep", role: "separator" }), h("div", { class: "mlabel", "aria-hidden": "true" }, "Only you see it, on this device."));
+  ov.append(main, sub);
+  const wr = win.getBoundingClientRect(), more = $("#more-btn");
+  const mr = more ? more.getBoundingClientRect() : { bottom: wr.top + 80, right: wr.right - 10 };
+  const rtl = document.documentElement.dir === "rtl";
+  main.style.top = (mr.bottom - wr.top + 4) + "px";
+  if (rtl) main.style.left = (mr.left - wr.left) + "px"; else main.style.left = (mr.right - wr.left - main.offsetWidth) + "px";
+  const tr = $("#cc-trigger").getBoundingClientRect();
+  sub.style.top = (tr.top - wr.top - 4) + "px";
+  sub.style.left = rtl ? (main.offsetLeft + main.offsetWidth + 4) + "px" : (main.offsetLeft - sub.offsetWidth - 4) + "px";
+  sub.addEventListener("keydown", (e) => {
+    const items = $$('[role="menuitemradio"]', sub), i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); document.activeElement.click(); }
+    else if (e.key === "Escape" || e.key === (rtl ? "ArrowRight" : "ArrowLeft")) { e.preventDefault(); $("#cc-trigger").focus(); }
+  });
+  if (focusColor) $(`#cc-menu [data-cc="${CFG.chipColor}"]`).focus();
+}
+/* The 6 × 2 grid: rows are states, columns colours, one block per theme. Hover, open, focus and selection are static demo classes. */
+const GRID_STATES = [
+  ["Document", `doc/${"q4"}`, "Q4 budget"], ["Section", "here", "Risks"], ["In Trash", "doc/launch", "Launch checklist"], ["Index loading", "pending", "Q4 budget"],
+  ["Not available", "doc/gone", "Vendors"], ["Newer version", "board", "Board"], ["Hover", "doc/q4", "Q4 budget", "demo-hover"],
+  ["Card open", "doc/q4", "Q4 budget", "open"], ["Focus", "doc/q4", "Q4 budget", "demo-focus"], ["Selected", "doc/q4", "Q4 budget", "sel"],
+];
+function gridHref(k) { return k === "here" ? `tinydocy:here#${TOC.risks}` : k === "board" ? "tinydocy:board/7f3a9c" : k === "pending" ? `tinydocy:doc/${K.q4}` : `tinydocy:doc/${K[k.slice(4)]}`; }
+function renderColorGrid() {
+  registry.clear();
+  let n = 0;
+  const cell = (st, c, theme) => {
+    const [, k, label, demo] = st;
+    let el;
+    if (k === "pending") { const ready = CFG.ready; CFG.ready = "loading"; el = chipEl({ t: "chip", href: gridHref(k), label }, -1, n++, false); CFG.ready = ready; }
+    else el = chipEl({ t: "chip", href: gridHref(k), label }, -1, n++, demo === "sel");
+    if (demo === "open") el.setAttribute("data-card-open", "");
+    else if (demo && demo !== "sel") el.classList.add(demo);
+    const td = h("td", { "data-chip-color": c }, demo === "sel" ? [h("span", { class: "cg-sel" }, "a "), el, h("span", { class: "cg-sel" }, " b")] : el);
+    return td;
+  };
+  const block = (theme) => h("section", { class: "cg-block " + theme, "aria-label": theme === "dark" ? "Dark" : "Light" }, h("h3", {}, theme === "dark" ? "Dark" : "Light"),
+    h("table", { class: "cg-table" }, h("thead", {}, h("tr", {}, h("th", {}, "State"), CHIP_COLORS.map((c) => h("th", { scope: "col" }, CHIP_COLOR_NAMES[c] + (c === "blue" ? " · default" : ""))))),
+      h("tbody", {}, GRID_STATES.map((st) => h("tr", {}, h("th", { scope: "row" }, st[0]), CHIP_COLORS.map((c) => cell(st, c, theme)))))));
+  $("#target").replaceChildren(h("div", { class: "cgrid", id: "color-grid" }, block("light"), block("dark")));
+}
+
 /* ═════════ controls ═════════ */
 const CONTROLS = [
   ["theme", "Theme", [["light", "Light"], ["dark", "Dark"]]], ["dir", "Interface", [["ltr", "LTR"], ["rtl", "RTL"]]],
@@ -1679,14 +1889,16 @@ const CONTROLS = [
   ["mode", "Mode", [["edit", "Editing"], ["read", "Reading"]]], ["device", "Device", [["desktop", "Desktop"], ["phone", "Phone"], ["w320", "320 px"]]],
   ["ready", "Index", [["ready", "Ready"], ["loading", "Loading"]]], ["viewer", "View as", [["me", "Me"], ["collab", "Collaborator"]]],
   ["live", "Document", [["local", "Local"], ["live", "Live"]]], ["faFont", "Persian font", [["os", "OS fallback"], ["vazirmatn", "Vazirmatn"]]],
+  ["chipColor", "Chip colour", CHIP_COLORS.map((c) => [c, CHIP_COLOR_NAMES[c]])],
 ];
 $("#controls").append(...CONTROLS.map(([k, label, opts]) => h("span", { class: "ctl", role: "group", "aria-label": label }, h("span", { "aria-hidden": "true" }, label),
-  h("span", { class: "seg" }, opts.map(([v, l]) => h("button", { type: "button", "data-k": k, "data-v": v, "aria-pressed": "false", onclick: () => setCfg({ [k]: v }) }, l))))));
+  h("span", { class: "seg" }, opts.map(([v, l]) => h("button", { type: "button", "data-k": k, "data-v": v, "aria-pressed": "false", onclick: () => (k === "chipColor" ? setChipColor(v) : setCfg({ [k]: v })) }, l))))));
 function applyCfg() {
   const root = document.documentElement;
   root.classList.toggle("dark", CFG.theme === "dark");
   root.dir = CFG.dir; root.lang = CFG.dir === "rtl" ? "fa" : "en";
   root.dataset.motion = CFG.motion; root.dataset.fc = CFG.fc; root.dataset.faFont = CFG.faFont;
+  root.dataset.chipColor = CFG.chipColor; // in the app the boot script sets it before first paint (absent = Blue)
   root.style.setProperty("--ed-size", CFG.size + "px"); root.style.setProperty("--ed-lead", CFG.lead);
   win.dataset.device = CFG.device;
   $$("#controls [data-k]").forEach((b) => b.setAttribute("aria-pressed", CFG[b.dataset.k] === b.dataset.v ? "true" : "false"));
@@ -1751,6 +1963,9 @@ const SCENES = {
   gallery: ["Chip contexts", "Chips in a level-1 and level-2 heading, a paragraph (a wrapping title), a list, a table and a quote, and next to every highlight colour.", () => { S.view = { gallery: true }; render(); }],
   "fc-selection": ["Forced colours × selection", "A selection across two chips with forced colours simulated: Highlight fill, HighlightText text and icon.", () => { setCfg({ fc: "on" }); const b = 1; S.sel = { a: { b, o: textIdx(b, "live in") }, h: { b, o: chipIdx(b, "Hiring plan") + 1 } }; ed.focus(); render(); }],
   "pill-f6": ["Pills in the F6 cycle", "After a paste, F6 moves focus from the editor to the pill; Esc dismisses it and returns to the editor.", () => { caretAt(9, endOf(9)); doPaste(`tinydocy:doc/${K.q4}`); press("F6"); }],
+  "chip-colors": ["Chip colours (C10)", "Every colour in light and dark, every state. Broken states keep the Neutral fill and a dashed border in every colour; the selection replaces the tint. Use the Chip colour control above to change the page's own chips.", () => { S.view = { grid: true }; render(); }],
+  "chip-color-settings": ["Chip colour setting", "Settings › Page, once W13 and P2.9b ship: a radio group of six 24 px swatches with names and tooltips; arrows move the choice and every chip repaints at once. The preview shows a live and a Not available chip.", () => { S.view = { prefs: true }; render(); const r = $('[role="radio"][aria-checked="true"]'); r.focus(); }],
+  "chip-color-menu": ["Chip colour in ⋯ (until Settings)", "#161 has no settings surface yet, so the control starts in ⋯ beside Appearance: Chip colour ▸ with six radio items (swatch, name, check). ↑ ↓ move, ↵ picks, ← or Esc returns. The chips behind repaint on pick.", () => { S.moreOpen = true; caretAt(1, chipIdx(1, "Q4 budget") + 1); openChipColorMenu(); }],
   hostile: ["Hostile paste", "Pasted HTML chips whose href fails parseDocLink (javascript: in mixed case, a control-character prefix, data:) become plain text. Bidi controls are stripped from labels.", () => { caretAt(9, endOf(9)); doPaste("", { html: HOSTILE }); selectTab("log"); }],
 };
 const sceneSel = $("#scene");
@@ -1759,7 +1974,7 @@ sceneSel.addEventListener("change", () => scene(sceneSel.value, { keep: true }))
 $("#reset").addEventListener("click", () => scene(sceneSel.value, { keep: true }));
 function scene(id, opts = {}) {
   const sc = SCENES[id]; if (!sc) throw new Error("no scene " + id);
-  const keep = opts.keep ? { theme: CFG.theme, size: CFG.size, lead: CFG.lead, motion: CFG.motion, fc: CFG.fc } : {};
+  const keep = opts.keep ? { theme: CFG.theme, size: CFG.size, lead: CFG.lead, motion: CFG.motion, fc: CFG.fc, chipColor: CFG.chipColor } : {};
   const { keep: _k, side, ...cfg } = opts;
   reset({ ...keep, ...cfg });
   sceneSel.value = id;
@@ -1791,7 +2006,7 @@ function measureFragments() {
 }
 /* A collaborator's change that removes a chip (for the "chip disappears while its card is open" check). */
 function remoteDeleteChip(b, i) { if (!S.doc[b] || !S.doc[b].units[i] || S.doc[b].units[i].t !== "chip") return false; S.doc[b].units.splice(i, 1); S.writes.remote++; validateSel(); log("quiet", "Remote change removed a chip. No announcement."); render(); if (S.card) renderCard(false); return true; }
-window.proto = { scene, setCfg, press, type, measureLineBoxes, measureFragments, remoteDeleteChip, missingIcons: () => [...MISSING_ICONS], get state() { return S; }, ready: false };
+window.proto = { scene, setCfg, setChipColor, press, type, measureLineBoxes, measureFragments, remoteDeleteChip, missingIcons: () => [...MISSING_ICONS], get state() { return S; }, ready: false };
 
 reset();
 scene("overview");

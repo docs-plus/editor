@@ -39,6 +39,7 @@ changes.
   reading-mode preview keys, undo-step and announcement rules, and the tests
   that go with them. The screenshots are re-taken (57 numbered, Chromium,
   Firefox and WebKit) with 11 before/after pairs.
+- **Chip colour and corner (2026-11-22):** a per-device Chip colour preference (C10, pending the owner's sign-off: six colours, Blue by default, set as `data-chip-color` before first paint, +0 B to the editor chunk) and the smaller `--radius-sm` corner, with a colour grid scene and screenshots 58–67 and `p12`.
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
