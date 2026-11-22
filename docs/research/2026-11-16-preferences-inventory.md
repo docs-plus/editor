@@ -22,7 +22,7 @@
 
 ## 1. What exists today
 
-**Storage keys in use** (all `localStorage`, per browser origin, unless noted): `tinydocy-theme`, `tinydocy-ui`, `tinydocy-choices`, `tinydocy-formats`, `tinydocy-user`, `tinydocy-analytics-consent`, `tinydocy-continue`, `tinydocy-folds-<docId>`, `tinydocy-tabs`, and since P4.9 `tinydocy-author` (the comment author id, minted on the first comment write); IndexedDB `tinydocy-offline`; GA cookies only after consent.
+**Storage keys in use** (all `localStorage`, per browser origin, unless noted): `tinydocy-theme`, `tinydocy-ui`, `tinydocy-choices`, `tinydocy-formats`, `tinydocy-user`, `tinydocy-analytics-consent`, `tinydocy-continue`, `tinydocy-folds-<docId>`, `tinydocy-tabs`, and since P4.9 `tinydocy-author` (the comment device secret, minted on first use; comments store a per-document id derived from it); IndexedDB `tinydocy-offline`; GA cookies only after consent.
 
 "Forget my choices" (`memory.forget`, `lib/editor-actions/surface-actions.ts:606-617`, shown in ⋯ and the phone Aa sheet) calls `forgetChoices()` (`lib/remembered-choice.ts:198-205`), which removes **only** `tinydocy-choices`. The kill switch `NEXT_PUBLIC_REMEMBER_CHOICES=0` (`lib/remembered-choice.ts:58-59`) makes `readChoice` return fallbacks and `rememberChoice` write nothing for the `choices` and `ui` keys; other modules decide for themselves (column "REMEMBER=0").
 

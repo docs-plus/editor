@@ -134,6 +134,13 @@ function onlyLiveHere(
  * Whether any of a thread's anchors resolves only on this client (see
  * `onlyLiveHere`): the client that undid must write anchors everyone else
  * can resolve, or the thread stays Detached (or short) for them.
+ *
+ * A Yjs limit no code here can lift: a client that undoes without the
+ * comments controller (an older build, or an editor where comments aren't
+ * mounted, as on the whole web today) restores the text but never runs
+ * this check, so for everyone the thread stays Detached, keeping its
+ * quote and discussion, until someone re-attaches it (comments design
+ * §13).
  */
 export const anchorsOnlyLiveHere = (
   deps: CommentsDeps,
