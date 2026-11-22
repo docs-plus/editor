@@ -9,6 +9,22 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Hover-preview pixel test no longer races the swatch's leave timer
+
+`action-preview.spec.ts`'s "previews exactly what applying renders" cases
+(the table header ones most often) failed about 40% of runs locally and on
+both attempts of some CI runs. Moving the pointer off the swatch schedules the
+preview's clear after the 80 ms dwell; applying had already removed the
+preview, so the test drew its own "applied" render before that clear ran,
+and the clear erased it mid-capture (the blurred selection's tint then showed,
+about 900 pixels). Test only; no app or Deploy change.
+
+#### Fixed
+
+- **Tests:** before drawing the applied render, the test waits for a page
+  timer of the same dwell (`PREVIEW_DWELL_MS`), which fires after the
+  pending clear. 40 repeats: no pixel failures (11 of 24 before).
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
