@@ -1491,3 +1491,205 @@ test.describe("selection cells at 375px (design pass §6)", () => {
     await expect(selectionBar(page).locator(".st-face-bar")).toHaveCount(2);
   });
 });
+
+test.describe("the Insert sheet (spec §8.3, O6)", () => {
+  const insertSheet = (page: Page) =>
+    page.getByRole("dialog", { name: "Insert" });
+  /** The sheet's section titles, top to bottom. */
+  const sectionTitles = (page: Page) =>
+    insertSheet(page).locator("section > h3").allTextContents();
+
+  /** Appends a paragraph (empty unless `text`) with the caret at its end. */
+  async function caretInNewParagraph(page: Page, text = "") {
+    await page.evaluate((value) => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      const end = editor.state.doc.content.size;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(end, {
+          type: "paragraph",
+          content: value ? [{ type: "text", text: value }] : undefined,
+        })
+        .run();
+      editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    }, text);
+  }
+
+  async function openInsertSheet(page: Page) {
+    await bar(page).getByRole("button", { name: "Insert" }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await insertSheet(page).getByRole("button", { name: "Divider" }).waitFor();
+    await insertSheet(page).evaluate((el) =>
+      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
+  }
+
+  /** The type and level of the block holding the caret. */
+  const caretBlock = (page: Page) =>
+    page.evaluate(() => {
+      const { $from } = window.__tiptap_editor?.state.selection ?? {};
+      const node = $from?.parent;
+      return {
+        type: node?.type.name ?? null,
+        level: (node?.attrs.level as number | undefined) ?? null,
+        text: node?.textContent ?? null,
+        grand: $from
+          ? $from.node(Math.max($from.depth - 1, 0)).type.name
+          : null,
+      };
+    });
+
+  test("an empty block opens Blocks; a block with text opens Turn into", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    const cell = bar(page).getByRole("button", { name: "Insert" });
+    await expect(cell).toHaveAttribute("aria-haspopup", "dialog");
+    await openInsertSheet(page);
+    // Nothing inserted yet: no Suggested section.
+    expect(await sectionTitles(page)).toEqual(["Blocks", "Insert"]);
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Heading 1" }),
+    ).toBeVisible();
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(cell).toBeFocused();
+
+    await caretInNewParagraph(page, "some words");
+    await openInsertSheet(page);
+    expect(await sectionTitles(page)).toEqual(["Turn into", "Insert"]);
+  });
+
+  test("a pick closes the sheet and the caret lands in the new block", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page, "turn me");
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Heading 2" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.type("!");
+    expect(await caretBlock(page)).toMatchObject({
+      type: "heading",
+      level: 2,
+      text: "turn me!",
+    });
+
+    // Insert kinds go after the caret's block; the kind is then Suggested.
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Code block" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.type("x");
+    expect(await caretBlock(page)).toMatchObject({
+      type: "codeBlock",
+      text: "x",
+    });
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    expect(await sectionTitles(page)).toEqual([
+      "Suggested",
+      "Blocks",
+      "Insert",
+    ]);
+    await expect(
+      insertSheet(page)
+        .getByRole("region", { name: "Suggested" })
+        .getByRole("button", { name: "Code block" }),
+    ).toBeVisible();
+  });
+
+  test("Table opens its grid inside the sheet; a pick puts the caret in the table", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Table" }).tap();
+    const cell = insertSheet(page).getByRole("button", {
+      name: "2 by 2 table",
+    });
+    await expect(cell).toBeVisible();
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Back" }),
+    ).toBeVisible();
+    await cell.tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    expect(await caretBlock(page)).toMatchObject({ grand: "tableHeader" });
+  });
+
+  test("“/embed” on a phone opens the sheet at the embed step", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await page.keyboard.type("/embed");
+    await page.getByRole("option", { name: /^Embed/ }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await expect(
+      insertSheet(page).getByRole("textbox", { name: "Media URL" }),
+    ).toBeVisible();
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`axe: the Insert sheet (${theme})`, async ({ page }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await caretInNewParagraph(page);
+      await openInsertSheet(page);
+      await expectNoSeriousA11yViolations(page, ["[data-insert-sheet]"]);
+      expect(await smallTargets(page, "[data-insert-sheet] button")).toEqual(
+        [],
+      );
+    });
+  }
+
+  test.describe("at 320px", () => {
+    test.use({ viewport: { width: 320, height: 568 } });
+
+    test("two columns of 44px cells, no horizontal scroll", async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await caretInNewParagraph(page);
+      await openInsertSheet(page);
+      expect(await smallTargets(page, "[data-insert-sheet] button")).toEqual(
+        [],
+      );
+      const columns = await insertSheet(page)
+        .getByRole("button", { name: "Heading 1" })
+        .evaluate(
+          (el) =>
+            getComputedStyle(
+              el.parentElement as Element,
+            ).gridTemplateColumns.split(" ").length,
+        );
+      expect(columns).toBe(2);
+      const overflow = await insertSheet(page).evaluate((el) => {
+        const body = el.querySelector(".st-sheet-body");
+        return {
+          sheet: el.scrollWidth - el.clientWidth,
+          body: body ? body.scrollWidth - body.clientWidth : 0,
+          page: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+      expect(overflow).toEqual({ sheet: 0, body: 0, page: 0 });
+      // The table grid fits too.
+      await insertSheet(page).getByRole("button", { name: "Table" }).tap();
+      await insertSheet(page)
+        .getByRole("button", { name: "2 by 2 table" })
+        .waitFor();
+      expect(
+        await insertSheet(page).evaluate(
+          (el) => el.scrollWidth - el.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+    });
+  });
+});

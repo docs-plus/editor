@@ -83,7 +83,8 @@ const LANGUAGE_ACTION: Partial<
   Record<ContextKind, "code.language" | "mermaid.language">
 > = { code: "code.language", mermaid: "mermaid.language" };
 
-function Section({
+/** A titled sheet section (a region named by its heading). */
+export function Section({
   title,
   children,
   className = "st-sheet-section",
