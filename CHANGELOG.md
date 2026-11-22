@@ -82,6 +82,128 @@ the CI session's Q7 job (spec §2.2, "Still open for W2").
 - **Spec:** the image store's web `doc_blobs` and `blobs` rows are
   snake_case, as on desktop.
 
+### Desktop P2.8a: headless schema, Markdown export and safe file names
+
+The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
+
+#### Added
+
+- **Headless schema** (`lib/headless/`): the editor's ProseMirror schema built from its schema extensions, with no view, DOM, React or collaboration plugins.
+  - It converts a Y.Doc to ProseMirror and back through `@tiptap/y-tiptap`. Reading never writes to the Y.Doc, and an unknown node or mark name throws instead of being dropped.
+  - It runs in Bun, in a `worker_thread` and in a browser bundle.
+  - Tests compare it with the editor's schema (names, content, groups, attribute defaults, mark order) and keep it free of `components/`, React, Hocuspocus, DOMPurify, lowlight and Mermaid.
+  - Markdown export, the import engine (IM1) and the web library's export (W7) share it.
+- **Markdown export:** `exportMarkdown(ydoc, { tags, createdAt, modifiedAt })` writes front matter (title, tags, ISO dates), then the body.
+  - The front matter is JSON-quoted, so a hostile title stays one YAML scalar.
+  - The body escapes literal Markdown syntax: line starts, `==`, code fences and inline code that hold backticks.
+  - The node and mark mapping and every degradation are in `docs/design/2026-11-22-markdown-mapping.md`. Colours, font sizes, paragraph and heading alignment, link titles and embed options are dropped. Line breaks in headings become spaces. Letter and roman list numbers become digits. Merged table cells are unmerged in place.
+  - Only the document fragment and the metadata passed in reach the file: comments and secrets never do.
+- **Markdown import (first piece of IM1):** `importMarkdown(text)` reads the title (front matter, then a leading H1, then the file name), tags (capped at 40 characters and 20 per document), and dates.
+  - A restricted front matter reader accepts string scalars and flat lists only. It refuses anchors, aliases, tags, block scalars and nested maps, and caps the block at 64 KiB.
+  - Round-trip tests export then import every editor fixture plus an all-nodes document, and expect exactly the documented losses.
+- **Safe file names** (`lib/filenames.ts`): titles become names that work on macOS, Windows and Linux.
+  - Separators, `<>:"|?*`, control, bidi and zero-width characters are removed. So are leading dots, trailing dots and spaces, and `..`.
+  - Windows device names (`CON`, `nul.tar.gz`, `COM¹`) get a `_`.
+  - Names are cut at a grapheme boundary to 255 UTF-8 bytes, and relative paths are kept to 240 characters.
+  - Collisions get ` (2)`, compared without regard to case or Unicode normalisation.
+  - A property test runs 1,000 hostile titles.
+
+### Typing-latency check judges paired rounds
+
+`performance.spec.ts` failed on clean runs about once in twenty: across 63 CI
+results the toolbar-on/off ratio of the two arms' median p95s had an sd of
+0.051 around 1.02, so the 10% budget sat about 2 sd out. It failed before
+P2.2 as well (1.26 and 1.20 on branches without it); P2.2 did not shift it
+(median ratio 1.00 with it). Test only; no Deploy note.
+
+#### Changed
+
+- **Tests:** the verdict is the median of the per-round on/off ratios (each
+  round types both arms back to back, which cancels the runner's drift: sd
+  0.037 on the same 63 runs). The 10% budget is unchanged.
+- **Tests:** a run over budget after `PERF_ROUNDS` (7) runs
+  `PERF_EXTRA_ROUNDS` more (default 7, `0` disables) and is judged on all of
+  them, so a noisy draw gets a second look and a real regression still fails.
+
+### The editor no longer imports the sandbox status chip
+
+`components/document-editor/` no longer reaches `collab-session` through the
+status chip, so the desktop graph won't load it from there (desktop
+architecture §3.3). The web looks and loads the same: the chip still paints in
+the same commit as the editor (12 cold loads on a production build, median
+0.0 ms apart, as on `main`) and no new chunk is made. No schema or protocol
+change; no Deploy note.
+
+#### Changed
+
+- **Editor:** `DocumentEditor` takes the connection and identity chip as a
+  `statusChip` prop, still shown only with a provider. The web sandbox's root,
+  `components/editor-app/sandbox-document-editor.tsx`, wraps the editor in the
+  sandbox `DocSession` and passes `CollabStatusGroup`; `EditorApp` lazy-loads
+  it in place of the editor, so the chip stays in the editor's chunk group.
+- **Tests:** the editor import-boundary test has no exceptions left (the
+  `user-identity-button.tsx` entry P2.1c listed is gone).
+- **Bytes:** the editor chunk group grows by 198 B gz on `main` after P2.1c
+  (about 100 B of code; the rest is the minifier re-ranking names in the
+  editor's hoisted module); the app shell grows by 1 B. The D23 ledger
+  (details §1 rule 5) gains a 198 B line for it, and the fence rises by
+  exactly that, to `main` + 2,053 B.
+
+### Desktop P2.4b: the dev bridge, the desktop root and the `local` project
+
+The desktop renderer now opens a document from storage. Under a
+desktop-target `next dev` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`, storage is a
+dev storage host on `MemoryDocLibrary` reached over a loopback socket, with no
+Hocus. The web build is unchanged: its route table, client chunks, pages and
+`sw.js` match the P2.1c baseline apart from Next's build id.
+
+#### Added
+
+- `components/desktop/desktop-root.tsx`, the desktop composition root. It
+  puts `local-session` over `createRpcDocStore` into `DocSessionProvider` and
+  opens one document (`?doc=`, until the library UI). It saves on blur, hide
+  and pagehide. `app/page.desktop.tsx` loads it with `ssr: false`.
+- The dev bridge. `lib/platform/desktop/dev-bridge.ts` is the renderer's
+  `call`, typed against P2.6's `DocStoreCalls`. `desktop/dev/storage-host.ts`
+  is the host.
+  - The host listens on 127.0.0.1 only, with a random token and an origin
+    check, and never runs in production.
+  - Each connection is one window: one holder per document, released when it
+    closes. Requests run in order.
+  - `lib/platform/desktop/dev-bridge-wire.ts` is the binary codec.
+  - Errors cross as `{ code, retryable }`, like the real IPC: no exception
+    message reaches the renderer, and unknown failures are `internal`.
+  - `DesktopRoot` retries `already_open` for about 500 ms, because a reload's
+    new connection can beat the old one's release.
+  - `next.config.ts` refuses a desktop production build with
+    `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`.
+  - P2.1's `DocStore` contract passes through the whole path.
+  - Architecture §11 lists how the bridge differs from the IPC path, so a
+    green `local` run is not read as proof of it.
+- The `local` Playwright project: one storage host per worker. An edit survives
+  a reload, the only sockets are the dev server's and the host's, and an X post
+  renders as the link card.
+- A `desktop` CI job builds the export on Linux and runs the `desktop` and
+  `local` projects, with no retries for `local`. The nightly copy is
+  removed.
+
+#### Changed
+
+- **Desktop routes are an allowlist.** The desktop target's `pageExtensions`
+  are `["desktop.tsx", "desktop.ts"]`. Its routes are the root page plus
+  re-exports of the layout, the error page and `/about`.
+  - This retires P2.4a's move-aside: nothing is parked for the export, and
+    `next.config.ts` no longer guards against parked files.
+  - The alternatives were measured and rejected. A `page.desktop.tsx` beside
+    `page.tsx` loses to it silently. Branching `page.tsx` on the flag pulls
+    desktop chunks into the web build.
+- The export check also fails on the dev bridge's marker string
+  (architecture §11 release check).
+- `next.config.ts` always defines `NEXT_PUBLIC_DESKTOP_BRIDGE`, so release
+  builds drop the bridge's branch.
+- The `desktop` project no longer needs Hocus. The X link card test moved to
+  `local`, because a release export has no storage until P2.5.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

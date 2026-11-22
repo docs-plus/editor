@@ -63,7 +63,7 @@ tests/
 │   ├── editor-actions/                   # Action contract and core actions; shortcut-bindings.test.ts: every advertised key bound once, tab-bar keys kept out of the editor keymap, Subscript by build target; playground-regenerate.test.ts: Regenerate Playground offered in the Playground only
 │   ├── components/                       # React components in happy-dom (toolbar button, menus, insert menu, ThemeToggle's phone cycle in `theme-toggle.test.tsx`); the identity dialog's inline name errors and the normalised broadcast (`user-identity-dialog.test.tsx`)
 │   ├── extensions/                       # Render-once, CaretBlockVisible, fast TOC, incremental code highlighting, media controls kept across plugin view rebuilds, remote caret names and colours clamped at render (`safe-caret-render.test.ts`)
-│   ├── desktop/                          # Desktop shared modules: the static export's path rules (`export-paths.test.ts`)
+│   ├── desktop/                          # The static export's path rules (`export-paths.test.ts`); the dev bridge and its contract run; `storage/` the engine
 │   ├── ci/                               # Workflow rules: read-only tokens, no persisted credentials, SHA-pinned actions
 │   ├── fuzz/                             # Chaos fuzz (5000 ops) + structured schema fuzz (5000 ops)
 │   └── stress/                           # Headless stress probe (binary search for heading ceiling)
@@ -91,7 +91,8 @@ tests/
 │   ├── offline-copies.spec.ts            # IndexedDB copies: repeat visit, reload, deletion, clearing
 │   ├── tab-close-undo.spec.ts            # Undo pill after closing, Recently closed, purge after the closed window
 │   ├── continue-chip.spec.ts             # "Continue where you left off" chip (reopen, Go, dismissal, phone, leaks, axe)
-│   ├── desktop-seams.spec.ts             # Desktop static export: every request answers, no web-only route or /privacy request, X post as a link card (desktop project)
+│   ├── desktop-seams.spec.ts             # Desktop static export: every request answers, no web-only route or /privacy request (desktop project)
+│   ├── local/                            # Desktop renderer over the dev bridge, no Hocus (local project): storage round trip, sockets, X link card
 │   ├── toc-sidebar.spec.ts               # TOC rendering + scroll-to-heading
 │   ├── toc-drag.spec.ts                  # TOC drag-and-drop reorder + level change
 │   ├── tabs.spec.ts                      # Tab bar: regenerate, Mod+Shift+R on the Playground aligns right, Alt+/ › Regenerate Playground (Playground only), new tab, close-all
@@ -267,9 +268,10 @@ it again after typing, before requiring all 220 keystroke samples.
 |----------|---------|-------------|
 | `PERF_HEADINGS` | `10,50` | Comma-separated heading counts to test |
 | `PERF_SHAPE` | `flat` | Document hierarchy: `flat` (all H2), `deep` (cycling H2–H6), `mixed` (random H2–H6) |
-| `PERF_ROUNDS` | `7` | A/B rounds per heading count (toolbar off vs on, alternating order); the median p95 of each arm is compared |
+| `PERF_ROUNDS` | `7` | A/B rounds per heading count (toolbar off vs on, alternating order). The verdict is the median of the per-round on/off p95 ratios: pairing within a round cancels the runner's drift across rounds |
+| `PERF_EXTRA_ROUNDS` | `PERF_ROUNDS` | Rounds added when the first `PERF_ROUNDS` exceed the budget; the verdict then uses all rounds, so a noisy draw gets a second look and a real regression still fails. `0` disables. The report records `roundsRun` per heading count |
 | `PERF_CPU_THROTTLE` | `4` | CDP `Emulation.setCPUThrottlingRate` applied before typing |
-| `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run |
+| `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run. This bounds **total** on-arm typing latency: the toolbar's own cost is about 2% (median paired ratio 1.02 over 63 CI runs), so the check catches the whole on-arm path getting 15–20% slower (replayed on those runs: 1.15× fails about 98%, 1.20× about 100%), not a 15–20% rise in the toolbar's own small cost. Clean runs still trip the first 7 rounds about 5% of the time |
 | `TOOLBAR_PERF_CPU_THROTTLE` | `1` | CDP CPU throttle for both arms of the arrow p95 in `toolbar-perf.spec.ts` (local reproduction of a slow runner; informational, the ceilings are absolute) |
 
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
@@ -330,22 +332,30 @@ PWA_BASE_URL=http://localhost:3847 CI= bun run test:pwa
 
 Offline is simulated with `context.setOffline(true)`, which also cuts the worker's own fetches in Chromium. Unit tests for the routing rules live in `tests/unit/lib/pwa-sw-routing.test.ts`.
 
-### Desktop renderer (static export)
+### Desktop renderer (static export and dev bridge)
 
 | Test | Project | Validates |
 |------|---------|-----------|
-| `desktop-seams.spec.ts` | `desktop` (the desktop static export, `bun run build:desktop`, served with the `app://` protocol handler's path rules) | Every same-origin request the renderer makes on `/about`, a client navigation to `/` and a synced editor answers (pages as `.html`, RSC `.txt` payloads and segment prefetches, `/icon` as `image/png`), and none goes to a web-only route (manifest, Open Graph image, Apple icon, sitemap, robots, `/api`, `/privacy`, `/offline`); `/about` and the editor never request `/privacy` (the Privacy links go to the website's page in a new window); a pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts or loads `widgets.js` |
+| `desktop-seams.spec.ts` | `desktop` (the desktop static export, `bun run build:desktop`, served with the `app://` protocol handler's path rules) | Every same-origin request the renderer makes on `/about` and a client navigation to `/` answers (pages as `.html`, RSC `.txt` payloads and segment prefetches, `favicon.ico`), and none goes to a web-only route (manifest, Open Graph image, Apple icon, `/icon`, sitemap, robots, `/api`, `/privacy`, `/offline`); `/` shows the desktop root (no storage in a release build until P2.5); `/about` never requests `/privacy` (its Privacy link goes to the website's page in a new window) |
+| `local/local-library.spec.ts` | `local` (desktop-target `next dev` with `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`, no Hocus; one dev storage host per worker) | A document opens from storage and an edit survives a reload (negative control: a library per connection fails it); the only sockets are `next dev`'s and the storage host's, and nothing requests a web-only route |
+| `local/editor-seams.spec.ts` | `local` | A pasted X post renders as the static link card, its button opens the post in a new window, and nothing is requested from X's hosts, loads `widgets.js` or requests `/privacy` |
 
-Prefetch runs only in production builds, so this runs on the export. Nightly runs it on Linux (`desktop-renderer` in `nightly.yml`), where releases build the renderer (#103). Use free ports and localhost only:
+Prefetch runs only in production builds, so `desktop` runs on the export. CI's `desktop` job runs both projects on Linux, where releases build the renderer (#103). Use free ports and localhost only. A desktop-target `next dev` shares `.next/dev` with `make dev`, so run it on its own:
 
 ```bash
-NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1296 bun run build:desktop
+bun run build:desktop
 PORT=3849 bun scripts/serve-desktop-export.ts
-HOCUS_PORT=1296 HOCUS_THROTTLE=0 HOCUS_ALLOW_ISOLATED_TABS_DOCS=1 bun run hocus
 DESKTOP_BASE_URL=http://127.0.0.1:3849 CI= bun playwright test --project=desktop
 ```
 
-`bun run build:desktop` parks the web-only metadata files and pages for the build, puts them back, and fails if a web-only route, a web metadata tag or the Windows segment layout reaches `out/`. Its parking rules are unit tested in `tests/unit/scripts/desktop-export.test.ts`, the path rules in `tests/unit/desktop/export-paths.test.ts`, and the desktop build never registering the service worker in `tests/unit/components/service-worker-registration.test.ts`.
+```bash
+NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_DESKTOP_BRIDGE=dev bun next dev -p 3926
+LOCAL_BASE_URL=http://localhost:3926 CI= bun playwright test --project=local
+```
+
+The `local` fixture (`tests/e2e/local/fixtures.ts`) spawns `bun desktop/dev/storage-host.ts` per worker (`tests/helpers/spawn-storage-host.ts`) and hands each page its URL and token through `window.__TINYDOCY_DEV_BRIDGE`; `window.__TINYDOCY_FLUSH` saves every open document (dev bridge only). By hand, start the host with `DESKTOP_BRIDGE_ORIGIN=http://localhost:3926 bun desktop/dev/storage-host.ts` and build with `NEXT_PUBLIC_DESKTOP_BRIDGE_URL` and `NEXT_PUBLIC_DESKTOP_BRIDGE_TOKEN` from its first line.
+
+Unit tests: the desktop route allowlist and the output check (web-only routes, metadata tags, the dev bridge's marker, the Windows segment layout) in `tests/unit/scripts/desktop-export.test.ts`; the protocol path rules in `tests/unit/desktop/export-paths.test.ts`; the dev bridge's wire, host (token, origin, production refusal, holds, order, closed sockets) and spawned CLI in `tests/unit/desktop/dev-bridge.test.ts`; P2.1's `DocStore` contract through the whole bridge in `tests/unit/desktop/dev-bridge-contract.test.ts`; the desktop build never registering the service worker in `tests/unit/components/service-worker-registration.test.ts`.
 
 The web behaviour with the flag off, and the flag-on branches, are unit tested in `tests/unit/extensions/x-link-card.test.ts`, `tests/unit/helpers/media-embed.test.ts` and `tests/unit/components/privacy-link.test.tsx`.
 
