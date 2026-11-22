@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { consentLinksLine, countLinkedDocuments } from "@/lib/links/consent";
 import type { LinkRow } from "@/lib/links/extract-links";
+import { LINK_COPY } from "@/lib/links/link-copy";
 
 const KEY_A = "0123456789abcdef0123456789abcdef";
 const KEY_B = "fedcba9876543210fedcba9876543210";
@@ -34,15 +35,25 @@ describe("consentLinksLine", () => {
     expect(consentLinksLine(-1)).toBeNull();
   });
 
-  it("names one document", () => {
-    expect(consentLinksLine(1)).toBe(
-      "This document links to 1 of your documents. People you share with will see the link text but can't open them.",
-    );
+  it("uses the central §8 copy", () => {
+    expect(consentLinksLine(1)).toBe(LINK_COPY.consent(1));
+    expect(consentLinksLine(3)).toBe(LINK_COPY.consent(3));
   });
 
-  it("names several documents (spec §8 copy)", () => {
+  it("names the count (spec §8 copy)", () => {
     expect(consentLinksLine(3)).toBe(
       "This document links to 3 of your documents. People you share with will see the link text but can't open them.",
     );
+  });
+
+  it("follows the copy when it changes", () => {
+    const copy = LINK_COPY as { consent: (count: number) => string };
+    const original = copy.consent;
+    copy.consent = (count) => `links:${count}`;
+    try {
+      expect(consentLinksLine(2)).toBe("links:2");
+    } finally {
+      copy.consent = original;
+    }
   });
 });

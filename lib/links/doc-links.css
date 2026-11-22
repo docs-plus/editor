@@ -1,25 +1,34 @@
 /*
- * Document links that don't open (search-linking §4.6): deleted, not in
- * this library, or a form from a newer version. Their underline is dashed,
- * so the state never rests on the icon or colour alone. The icon is the
- * `.doc-link-icon` that `linkIcon` puts inside the link. A host that passes
- * a link host imports this file; the web sandbox doesn't.
+ * Document links (search-linking §4.6). The icon is the `.doc-link-icon`
+ * that `linkIcon` puts first inside the link; the extension also gives it
+ * `.hyperlink-icon`, whose rule in `@docs.plus/extension-hyperlink/styles.css`
+ * sets the 1em box, the 0.25em gap and the alignment, so this file only
+ * colours it: `currentColor`, the link's own colour, in every state.
+ *
+ * Links that don't open (not available, deleted, or a form from a newer
+ * version, `DASHED_LINK_STATES`) get a dashed underline, so the state never
+ * rests on the icon or colour alone. The rule reaches the link's inner spans
+ * too, since coloured or resized text inside the link draws its own
+ * underline. A host that passes a link host imports this file; the web
+ * sandbox doesn't.
  */
+.ProseMirror .doc-link-icon {
+  color: currentColor;
+}
+
+.ProseMirror a:has(> .doc-link-icon[data-link-state="not_available"]),
 .ProseMirror a:has(> .doc-link-icon[data-link-state="deleted"]),
-.ProseMirror a:has(> .doc-link-icon[data-link-state="not_in_library"]),
-.ProseMirror a:has(> .doc-link-icon[data-link-state="unknown_form"]) {
+.ProseMirror a:has(> .doc-link-icon[data-link-state="unknown_form"]),
+.ProseMirror
+  a:has(> .doc-link-icon[data-link-state="not_available"])
+  span:not(.doc-link-icon),
+.ProseMirror
+  a:has(> .doc-link-icon[data-link-state="deleted"])
+  span:not(.doc-link-icon),
+.ProseMirror
+  a:has(> .doc-link-icon[data-link-state="unknown_form"])
+  span:not(.doc-link-icon) {
   text-decoration-line: underline;
   text-decoration-style: dashed;
-}
-
-.ProseMirror .doc-link-icon {
-  display: inline-flex;
-  vertical-align: -0.125em;
-  margin-inline-end: 0.15em;
-  color: var(--muted-foreground);
-}
-
-.ProseMirror .doc-link-icon > svg {
-  width: 1em;
-  height: 1em;
+  text-decoration-thickness: max(1px, 0.07em);
 }

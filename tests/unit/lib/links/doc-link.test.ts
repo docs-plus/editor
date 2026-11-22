@@ -79,4 +79,46 @@ describe("isOurScheme", () => {
       expect(isOurScheme(href)).toBe(false);
     },
   );
+
+  /**
+   * Scheme parity (linking review, code review 3): every character the
+   * Hyperlink extension's gate, a browser's URL parser or a bidi-aware
+   * renderer drops or hides must not turn a `tinydocy:` href into "not
+   * ours", or `navigate` would hand it to `openExternal`. One case per
+   * class, leading and inside the scheme; the strict parser refuses each.
+   */
+  it.each([
+    ["0001", "C0 control"],
+    ["001F", "C0 control (unit separator)"],
+    ["0009", "tab"],
+    ["000A", "line feed"],
+    ["0020", "space"],
+    ["007F", "delete"],
+    ["00A0", "no-break space"],
+    ["2028", "line separator"],
+    ["2029", "paragraph separator"],
+    ["2007", "figure space"],
+    ["3000", "ideographic space"],
+    ["200B", "zero-width space"],
+    ["200C", "zero-width non-joiner"],
+    ["200D", "zero-width joiner"],
+    ["200E", "left-to-right mark"],
+    ["200F", "right-to-left mark"],
+    ["202A", "left-to-right embedding"],
+    ["202E", "right-to-left override"],
+    ["2066", "left-to-right isolate"],
+    ["2069", "pop directional isolate"],
+    ["FEFF", "byte order mark"],
+  ])("claims a tinydocy: href hiding U+%s (%s)", (hex) => {
+    const char = String.fromCharCode(Number.parseInt(hex, 16));
+    for (const href of [
+      `${char}tinydocy:doc/${KEY}`,
+      `tiny${char}docy:doc/${KEY}`,
+      `TinyDocy${char}:doc/${KEY}`,
+      `${char}${char}TINYDOCY${char}:here#${TOC}`,
+    ]) {
+      expect(isOurScheme(href)).toBe(true);
+      expect(parseDocLink(href)).toBeNull();
+    }
+  });
 });

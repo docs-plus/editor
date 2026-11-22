@@ -5,13 +5,14 @@
  * document links to any of your documents.
  */
 import type { LinkRow } from "@/lib/links/extract-links";
+import { LINK_COPY } from "@/lib/links/link-copy";
 
 /** Distinct documents linked, so links to two headings of one count once. */
 export function countLinkedDocuments(rows: readonly LinkRow[]): number {
   return new Set(rows.map((row) => row.key)).size;
 }
 
+/** The line itself is §8 copy (`LINK_COPY.consent`); null at 0. */
 export function consentLinksLine(count: number): string | null {
-  if (count <= 0) return null;
-  return `This document links to ${count} of your documents. People you share with will see the link text but can't open them.`;
+  return count > 0 ? LINK_COPY.consent(count) : null;
 }

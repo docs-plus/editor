@@ -38,15 +38,40 @@ export function hereHref(tocId: string): string {
   return `${DOC_LINK_SCHEME}:here#${tocId}`;
 }
 
+/** Unicode white space (`\s`): NBSP, U+2028/U+2029, ideographic space, BOM. */
+const WHITE_SPACE = /\s/;
+
 /**
- * True for any href with our scheme, read the way a browser would: case
- * folded, with whitespace and control characters dropped (as the
- * Hyperlink extension's own safety gate does).
+ * Characters an href can hide in its scheme: C0 controls, space and DEL;
+ * Unicode white space; zero-width characters and marks (U+200B–U+200F);
+ * bidi embeddings and overrides (U+202A–U+202E) and isolates
+ * (U+2066–U+2069). Code points, not a regex: control characters in a regex
+ * literal fail Biome.
+ */
+function isIgnorable(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (
+    code <= 0x20 ||
+    code === 0x7f ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069) ||
+    WHITE_SPACE.test(char)
+  );
+}
+
+/**
+ * True for any href with our scheme, read loosely: case folded, with the
+ * characters above dropped anywhere in it. That is a superset of what the
+ * Hyperlink extension's own gate strips (C0 controls and space) and of
+ * what a browser's URL parser drops (leading C0 controls and space, tabs
+ * and newlines anywhere), so a `tinydocy:` href a person or a renderer
+ * would read as ours can never be routed outward.
  */
 export function isOurScheme(href: string): boolean {
   let folded = "";
   for (const char of href) {
-    if (char.charCodeAt(0) > 0x20) folded += char.toLowerCase();
+    if (!isIgnorable(char)) folded += char.toLowerCase();
     if (folded.length > DOC_LINK_SCHEME.length) break;
   }
   return folded === `${DOC_LINK_SCHEME}:`;
