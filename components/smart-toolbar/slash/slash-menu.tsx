@@ -671,16 +671,17 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                     ) : null}
                     {item.hint ? (
                       // Typed syntax, as a key cap (sans notes stay plain);
-                      // left to right, so "1." never reads ".1" (spec §8.5).
+                      // left to right inside, so "1." never reads ".1" (spec
+                      // §8.5), while the cap itself keeps the row's direction
+                      // so `ms-auto` puts it at the inline end in RTL too.
                       <span
                         aria-hidden="true"
-                        dir="ltr"
                         className={cn(
                           "shrink-0 rounded-sm border px-1 font-mono text-xs leading-4 text-muted-foreground in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]",
                           item.note ? "ms-2" : "ms-auto",
                         )}
                       >
-                        {item.hint}
+                        <span dir="ltr">{item.hint}</span>
                       </span>
                     ) : null}
                   </div>

@@ -1593,6 +1593,38 @@ test.describe("slash menu design-review screenshots on touch", () => {
   }
 });
 
+test.describe("RTL rows", () => {
+  test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
+
+  test("RTL: a row's Markdown hint sits at its inline end, away from the label", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await typeAtEnd(page, "/");
+    await expect(menu(page)).toBeVisible();
+    const row = options(page).filter({ hasText: "Heading 2" }).first();
+    const boxes = await row.evaluate((el) => {
+      // The key cap around the left-to-right hint text.
+      const hint = el.querySelector("[dir=ltr]")?.parentElement as HTMLElement;
+      const label = el.querySelector(".truncate") as HTMLElement;
+      const r = el.getBoundingClientRect();
+      return {
+        row: { left: r.left, right: r.right },
+        hint: hint.getBoundingClientRect().left,
+        label: label.getBoundingClientRect().left,
+        text: hint.textContent,
+      };
+    });
+    expect(boxes.text).toBe("##");
+    // The inline end of an RTL row is its left edge (8px padding).
+    expect(boxes.hint - boxes.row.left).toBeLessThan(12);
+    expect(boxes.label - boxes.hint).toBeGreaterThan(40);
+  });
+});
+
 test.describe("slash budget", () => {
   test.skip(process.env.SLASH_BUDGET !== "1", "production build only");
 
