@@ -1642,6 +1642,44 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
       };
     });
 
+  test("Aa sheet Style: every label starts at one x, Text with its icon", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDoc(page);
+    await caretInNewParagraph(page, "words");
+    await bar(page).getByRole("button", { name: "Text format" }).tap();
+    const sheet = page.locator("[data-format-sheet]");
+    await expect(
+      sheet.getByRole("button", { name: "Heading 1" }),
+    ).toBeVisible();
+    const style = sheet.locator("section", { hasText: "Style" }).first();
+    const geometry = await style.evaluate((el) => {
+      const labels: Record<string, number> = {};
+      for (const button of el.querySelectorAll("button")) {
+        const span = [...button.querySelectorAll("span")].find((node) =>
+          /^(Text|Heading \d|More headings|Bullet list|Numbered list|Task list|Quote)$/.test(
+            node.textContent ?? "",
+          ),
+        );
+        if (!span) continue;
+        const left = span.getBoundingClientRect().left;
+        const cell = button.getBoundingClientRect().left;
+        labels[span.textContent ?? ""] = Math.round(left - cell);
+      }
+      const text = [...el.querySelectorAll("button")].find(
+        (button) => button.textContent === "Text",
+      );
+      return { labels, textIcon: Boolean(text?.querySelector("svg")) };
+    });
+    expect(geometry.textIcon).toBe(true);
+    // Each label at the same offset in its cell (icon slot and gap alike).
+    expect(
+      new Set(Object.values(geometry.labels)).size,
+      JSON.stringify(geometry.labels),
+    ).toBe(1);
+  });
+
   test("RTL at 390: Table's size note stays with its label, inside its cell", async ({
     page,
   }) => {
@@ -1678,6 +1716,8 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     expect(boxes.note.right).toBeLessThanOrEqual(boxes.label.left);
     expect(boxes.label.left - boxes.note.right).toBeLessThan(16);
     expect(boxes.chevron.left).toBeLessThan(boxes.cell.left + 24);
+    // Inside the cell, by the cell's own inline-end padding.
+    expect(boxes.chevron.left).toBeGreaterThanOrEqual(boxes.cell.left + 11);
     expect(boxes.note.left).toBeGreaterThan(boxes.chevron.right);
   });
 

@@ -134,6 +134,17 @@ function PhoneActions({
  * of them, so the pressed row is in view; once toggled, it stays as the
  * writer left it.
  */
+/**
+ * More headings wears Heading 4's registry icon, in the same slot as the
+ * rows' icons, so its label starts where theirs do.
+ */
+function MoreHeadingsIcon() {
+  const Icon = editorActions.get(MORE_HEADING_IDS[0])?.icon;
+  return Icon ? (
+    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+  ) : null;
+}
+
 function StyleSection({ editor }: { editor: Editor }) {
   const h4 = useActionView("style.heading4", editor);
   const h5 = useActionView("style.heading5", editor);
@@ -154,6 +165,7 @@ function StyleSection({ editor }: { editor: Editor }) {
           aria-controls={moreId}
           onClick={() => setMore(!open)}
         >
+          <MoreHeadingsIcon />
           <span>More headings</span>
           <ChevronRightIcon
             aria-hidden="true"
