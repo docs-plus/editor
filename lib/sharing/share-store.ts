@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import { type Database, SQLiteError } from "bun:sqlite";
 
 import { shareDocumentName } from "@/lib/sharing/share-name";
 
@@ -75,7 +75,21 @@ export function bootstrapSharesTable(db: Database): void {
     CREATE INDEX IF NOT EXISTS shares_status_last_edit
       ON shares (status, last_edit_at);
     CREATE INDEX IF NOT EXISTS shares_created_at ON shares (created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS shares_edit_hash ON shares (edit_hash);
+    CREATE UNIQUE INDEX IF NOT EXISTS shares_view_hash ON shares (view_hash);
+    CREATE UNIQUE INDEX IF NOT EXISTS shares_owner_hash ON shares (owner_hash);
   `);
+}
+
+/**
+ * True for an insert refused because a hash is already in use: every hash
+ * is unique across shares, ended ones included, so a reset can never bring
+ * back the old link's tokens.
+ */
+export function isHashInUseError(error: unknown): boolean {
+  return (
+    error instanceof SQLiteError && error.code === "SQLITE_CONSTRAINT_UNIQUE"
+  );
 }
 
 export function getShare(db: Database, shareId: string): ShareRow | null {

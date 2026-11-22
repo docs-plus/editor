@@ -521,6 +521,35 @@ describe("owner endpoints", () => {
     expect(closed).toEqual([shareDocumentName(shareId)]);
   });
 
+  it("reset and create refuse hashes another share already has (L2)", async () => {
+    const http = createHttp();
+    const { shareId, secrets } = await createShare(http);
+    const reused = await http.handle(
+      post(
+        `/api/shares/${shareId}/reset`,
+        { ...secrets.hashes, schema: 3 },
+        bearer(secrets.ownerToken),
+      ),
+      IP,
+    );
+    expect(reused.status).toBe(409);
+    expect(await reused.json()).toEqual({ error: "hash_in_use" });
+    // Nothing changed: the old link still works.
+    expect(getShare(db, shareId)?.status).toBe("pending");
+    expect(closed).toEqual([]);
+
+    // One reused hash among fresh ones is refused too.
+    const fresh = makeShareSecrets();
+    const mixed = await http.handle(
+      post(
+        "/api/shares",
+        createBody(fresh, { view_hash: secrets.hashes.view_hash }),
+      ),
+      IP,
+    );
+    expect(mixed.status).toBe(409);
+  });
+
   it("status: any token of the share, reasons only for token holders", async () => {
     const http = createHttp();
     const { shareId, secrets } = await createShare(http);

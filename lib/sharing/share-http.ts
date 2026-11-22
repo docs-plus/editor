@@ -26,6 +26,7 @@ import {
   countActiveShares,
   createShareRow,
   endShare,
+  isHashInUseError,
   resetShare,
   SHARE_END_REASONS,
   type ShareEndReason,
@@ -250,6 +251,22 @@ function checkAddress(
   return limiter.check(own);
 }
 
+const HASH_IN_USE = "hash_in_use";
+
+/**
+ * Runs a share insert, or returns `HASH_IN_USE` when one of its hashes
+ * already belongs to a share. A refused insert changes nothing: a reset
+ * ends the old share in the same transaction, which rolls back.
+ */
+function insertOrConflict<T>(run: () => T): T | typeof HASH_IN_USE {
+  try {
+    return withBusyRetry(run);
+  } catch (err) {
+    if (isHashInUseError(err)) return HASH_IN_USE;
+    throw err;
+  }
+}
+
 export function createShareHttp(options: ShareHttpOptions): ShareHttp {
   const now = options.now ?? Date.now;
   const { db, limits } = options;
@@ -383,7 +400,7 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     if (refused) return refused;
     const shareId = mintShareId();
     const at = now();
-    withBusyRetry(() => {
+    const created = insertOrConflict(() => {
       createShareRow(
         db,
         {
@@ -395,7 +412,9 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
         at,
       );
       clearOldCreatorIpHashes(db, at - limits.ipHashRetentionMs);
+      return true;
     });
+    if (created === HASH_IN_USE) return error(request, 409, HASH_IN_USE);
     console.info(
       JSON.stringify({
         type: "share",
@@ -486,7 +505,7 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     const limited = creationRefused(request, ip);
     if (limited) return limited;
     const nextId = mintShareId();
-    const reset = withBusyRetry(() =>
+    const reset = insertOrConflict(() =>
       resetShare(
         db,
         shareId,
@@ -494,6 +513,7 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
         now(),
       ),
     );
+    if (reset === HASH_IN_USE) return error(request, 409, HASH_IN_USE);
     if (!reset) return error(request, 410, "sharing_stopped");
     closeShare(shareId);
     console.info(
