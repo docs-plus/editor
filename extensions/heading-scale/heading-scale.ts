@@ -96,11 +96,12 @@ function buildDecorations(doc: PMNode): DecorationSet {
           ? MAX_SIZE
           : MAX_SIZE - (rank * (MAX_SIZE - MIN_SIZE)) / (totalRanks - 1);
 
-      // In em of the host's text size, on a 16 px base (12 pt), so headings
-      // follow the page's text size and match the old pt sizes at 16 px.
+      // Twelfths of `--hd-unit` (default 1em: the host's text size), so
+      // headings follow the page's text size; a host that sets it to 16px
+      // gets the old pt sizes exactly (TinyDocy's `classic`).
       decorations.push(
         Decoration.node(h.pos, h.pos + h.nodeSize, {
-          style: `--hd-size: calc(${Number(size.toFixed(2))}em / 12)`,
+          style: `--hd-size: calc(${Number(size.toFixed(2))} * var(--hd-unit, 1em) / 12)`,
         }),
       );
     }

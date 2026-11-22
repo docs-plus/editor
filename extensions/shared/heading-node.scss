@@ -29,7 +29,7 @@
   }
 
   h1 {
-    font-size: var(--hd-size, calc(20em / 12));
+    font-size: var(--hd-size, calc(20 * var(--hd-unit, 1em) / 12));
     margin-top: 1.33em;
   }
 
@@ -60,27 +60,27 @@
   }
 
   h2 {
-    font-size: var(--hd-size, calc(16em / 12));
+    font-size: var(--hd-size, calc(16 * var(--hd-unit, 1em) / 12));
     margin-top: 1.15em;
   }
 
   h3 {
-    font-size: var(--hd-size, calc(14em / 12));
+    font-size: var(--hd-size, calc(14 * var(--hd-unit, 1em) / 12));
     margin-top: 1em;
   }
 
   h4 {
-    font-size: var(--hd-size, calc(12em / 12));
+    font-size: var(--hd-size, calc(12 * var(--hd-unit, 1em) / 12));
     margin-top: 1em;
   }
 
   h5 {
-    font-size: var(--hd-size, calc(11em / 12));
+    font-size: var(--hd-size, calc(11 * var(--hd-unit, 1em) / 12));
     margin-top: 1em;
   }
 
   h6 {
-    font-size: var(--hd-size, calc(10em / 12));
+    font-size: var(--hd-size, calc(10 * var(--hd-unit, 1em) / 12));
     margin-top: 1em;
   }
 }

@@ -42,7 +42,7 @@ describe("HeadingScale plugin decorations", () => {
     editor.destroy();
   });
 
-  it("sizes in em of the page text, the old pt sizes on a 16 px base", () => {
+  it("sizes in twelfths of --hd-unit (the page text, or 16 px for pt)", () => {
     const heading = (level: number) => ({
       type: "heading",
       attrs: { level },
@@ -59,9 +59,9 @@ describe("HeadingScale plugin decorations", () => {
             .style,
       );
     expect(styles).toEqual([
-      "--hd-size: calc(20em / 12)",
-      "--hd-size: calc(16em / 12)",
-      "--hd-size: calc(12em / 12)",
+      "--hd-size: calc(20 * var(--hd-unit, 1em) / 12)",
+      "--hd-size: calc(16 * var(--hd-unit, 1em) / 12)",
+      "--hd-size: calc(12 * var(--hd-unit, 1em) / 12)",
     ]);
     editor.destroy();
   });
