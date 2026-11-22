@@ -375,6 +375,58 @@ the other coordinator decisions of 2026-11-22. Nothing in the web app
 imports the library, so the web build is unchanged.
 
 **Deploy:** none.
+
+### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
+
+Printing (and Save as PDF) now prints only the document. The block move and
+duplicate commands, the word count engine and the Markdown paste rule are
+built and tested but not yet wired to a menu or to paste, so P2.12 stays open
+(details spec §5, "P2.12 status"). The paste hook waits on a 152 B gz ledger
+line. The editor chunk group is unchanged: 393,820 B gz, 0 B against `main`
+at `1548d5e` (every editor JS and CSS chunk identical; `1548d5e` changed no
+web code since `903b5c8`). An import-boundary test keeps these modules out
+of it.
+
+#### Added
+
+- **Print:** a print stylesheet (`styles/_print.scss`, loaded by the root
+  layout). It hides the tab bar, toolbar, outline, bubbles, notices and status
+  chips. It prints folded sections open, keeps headings with the text after
+  them and lets the document run across pages. Pages without the editor print
+  as before.
+- **Print:** the dark theme prints light. `ThemeRuntime` removes the `dark`
+  class for the print and restores it afterwards (`lib/print-theme.ts`),
+  also when `beforeprint` fires twice first (Chromium rebuilds the preview
+  when a setting changes). The saved theme is not changed.
+- **Block move and duplicate** (`extensions/block-move/`, E4): `moveBlock`
+  and `duplicateBlock` work on the top-level blocks of the selection.
+  - Each run is one Yjs undo step on the live document.
+  - The title never moves and is never duplicated.
+  - A folded section moves as one unit.
+  - A duplicated heading gets new ids.
+  - On a concurrent edit, the larger side of a move keeps a collaborator's
+    typing. The smaller side is re-created whole, so typing anywhere in
+    it, a list item or table cell included, is lost.
+- **Markdown paste rule** (`lib/markdown/parse.ts`, E2, shared with IM1):
+  `markdownPasteSlice` returns formatted content only for plain text with
+  explicit Markdown syntax that parses to formatting. Bare URLs are left to
+  the link and embed rules. `parseMarkdownFragment` gives IM1 schema-checked
+  blocks from any parser, with no DOM or editor.
+  - It gives nothing an HTML paste of the same content would not: a
+    Markdown image is the image node an `<img>` paste makes, iframes are
+    dropped, and a link whose href the link extension empties
+    (`javascript:`, `data:`) keeps its text without the link.
+  - Markdown with a raw HTML block (`<div>`, `<img>` on its own line) and
+    text over 256 KiB paste as plain text. The parser turned an HTML block
+    into a level-1 heading against the title-first schema.
+  - The syntax check stays linear on long lines (a 200 KB line of `[`).
+  - The caller passes `Fragment` and `Slice` (`MarkdownModel`), so the
+    rule can load as a lazy chunk of the editor without splitting the
+    editor's chunk group (+1,092 B gz when it imported them itself).
+- **Word count** (`lib/word-count.ts`, E3): `countWords` counts words,
+  characters and characters without spaces in the document, or in the
+  selection when given one, using `Intl.Segmenter` (a ZWNJ stays inside a
+  Persian word; an emoji sequence is one character).
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`

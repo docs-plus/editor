@@ -1,0 +1,89 @@
+/* =====================
+     PRINT AND SAVE AS PDF (details spec E6, P2.12)
+     The OS print dialog prints the open document only: no tab bar,
+     toolbar, outline, bubbles, notices or status chips. Folded sections
+     print open, headings stay with the text after them, and nothing
+     clips the page to one screen. Loaded by the root layout, outside the
+     editor chunk; off-screen blocks already render in print (the
+     `content-visibility` rule is screen-only, document-editor.scss).
+     The editor's own styles load after this sheet, so overrides of them
+     start with `html` to outrank them.
+     ===================== */
+@media print {
+  /* Paper is light: `watchPrintTheme` (lib/print-theme.ts) takes the dark
+     class off for the print, so every token prints its light value. */
+
+  /* Chrome: everything but the document itself. Overlays the editor
+     portals to the body (popovers, menus, tooltips) go with it. Pages
+     without the editor (About, Privacy) print as they are. */
+  body:has(> .app-shell) > :not(.app-shell),
+  .app-shell > :not(.document-editor-wrapper),
+  .document-editor-wrapper > :not(.editor-with-toc),
+  .editor-with-toc > :not(.document-editor-content) {
+    display: none !important;
+  }
+
+  /* Let the document flow across pages instead of one clipped screen. */
+  html :is(.app-shell, .document-editor-wrapper, .editor-with-toc) {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    background: none;
+  }
+
+  html .document-editor-content {
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: none;
+  }
+
+  html .document-editor-content .tiptap.ProseMirror.document-editor {
+    padding: 0;
+  }
+
+  /* Folded sections print open; the fold widget does not print. `revert`
+     is the user-agent display. It matches the block's own display because
+     every top-level node view's outer element is `block`: measured for
+     paragraphs, lists, tables, images (a captioned one too) and Mermaid,
+     and the media kit's layout presets all set `display: block`. The e2e
+     pins print against screen. A screen-only fold rule would add 12 B gz
+     to the editor CSS chunk (details spec §1 rule 5). */
+  html .tiptap.ProseMirror .heading-fold-hidden {
+    display: revert !important;
+  }
+
+  .heading-fold-crinkle,
+  .heading-drag-wrapper,
+  .heading-drop-indicator,
+  .tiptap.ProseMirror .collaboration-carets__caret,
+  .tiptap.ProseMirror .collaboration-carets__label {
+    display: none !important;
+  }
+
+  /* Placeholders ("Type something…") are hints, not text. */
+  html .tiptap.ProseMirror .is-empty[data-placeholder]::before {
+    content: none !important;
+  }
+
+  /* Keep a heading with what follows it, and short blocks whole. */
+  html .tiptap.ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  html
+    .tiptap.ProseMirror
+    :is(pre, blockquote, tr, img, figure, .mermaid-diagram) {
+    break-inside: avoid;
+  }
+
+  html .tiptap.ProseMirror :is(p, li) {
+    orphans: 3;
+    widows: 3;
+  }
+}

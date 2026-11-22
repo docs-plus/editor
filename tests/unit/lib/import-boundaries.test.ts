@@ -349,6 +349,34 @@ describe("image store import boundaries", () => {
   }
 });
 
+// P2.12 has no line in the editor-chunk ledger (details spec §1 rule 5), so
+// block move, the Markdown parser and word count stay out of the editor's
+// static graph: whatever wires them in must load them lazily.
+const EDITOR_ENTRY = "components/document-editor/document-editor.tsx";
+
+describe("editor chunk boundary (P2.12)", () => {
+  it(`${EDITOR_ENTRY} statically loads no P2.12 engine`, () => {
+    const { files } = staticImports(EDITOR_ENTRY);
+    // The walk reaches the editor's extensions (it is not vacuous).
+    expect(files).toContain(
+      "components/document-editor/document-editor-config.ts",
+    );
+    expect(files).toContain("extensions/title-document/title-document.ts");
+    for (const file of files) {
+      expect(file.startsWith("extensions/block-move/")).toBe(false);
+      expect(file.startsWith("lib/markdown/")).toBe(false);
+      expect(file).not.toBe("lib/word-count.ts");
+    }
+  });
+
+  it("lib/markdown/parse.ts loads no DOM, React or editor code (IM1's worker)", () => {
+    const { files, packages } = staticImports("lib/markdown/parse.ts");
+    expect([...files]).toEqual(["lib/markdown/parse.ts"]);
+    // Type-only: the model classes are passed in (`MarkdownModel`).
+    expect([...packages]).toEqual([]);
+  });
+});
+
 // The web library lands dark (web library §2.8): nothing the web app builds
 // may import it, statically or through `import()` (a lazy chunk still
 // ships), from any folder, by alias or relative path. W4 removes this when
