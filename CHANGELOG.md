@@ -19,8 +19,9 @@ A design proposal, pending owner approval. Nothing in the app changes, so there 
   - It covers the anatomy, tokens, type, spacing, states, copy, motion, keyboard and timing (WCAG 1.4.13), ARIA, phone and right to left.
   - Its acceptance criteria include 16 anti-slop design rules: no gradients, blur, emoji, pills, decorative icons or shimmer; one elevation token; the app's popover radius; type does the hierarchy.
   - It lists the §4.5, §4.6, §8 and §4.2a lines to update on approval, and six owner decisions (L1–L6).
-- **Prototype** `docs/design/2026-11-22-link-card-prototype.html`. It is fully self-contained (Inter and five lucide icons are inlined) and has every state in light and dark, right to left, phone and reduced motion. It also has a working "Try it" paragraph and computed Anti-slop checklist and Accessibility panels.
+- **Prototype** `docs/design/2026-11-22-link-card-prototype.html`. It is fully self-contained (Inter and its lucide icons are inlined) and has every state in light and dark, right to left, phone and reduced motion. It also has a working "Try it" paragraph and computed Anti-slop checklist and Accessibility panels.
 - **Screenshots** in `docs/design/2026-11-22-link-card/`, including side by sides of the #163 and #167 cards and the new one.
+- **Revised after the owner's review (2026-11-22):** the state icon leads the title row and actions carry icons again; the hover card and the dialog show only Open, Copy Link and ⋯, with every other action in ⋯ and listed on the phone sheet (decision L2, superseding §4.2a's visible edit group).
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 

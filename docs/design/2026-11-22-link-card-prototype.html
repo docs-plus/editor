@@ -6,11 +6,13 @@
 <title>Link Card Prototype</title>
 <!--
   Link card (hover and preview) for document links and smart chips: spec §4.5a in
-  docs/superpowers/specs/2026-11-16-search-linking-design.md, proposed, pending owner approval (2026-11-22).
+  docs/superpowers/specs/2026-11-16-search-linking-design.md, proposed, pending owner approval (2026-11-22),
+  revised the same day after the owner's review (icons back, secondary actions in ⋯).
   Throwaway design prototype, not app code. Fully self-contained: Inter (latin woff2, the app's own font)
-  is inlined, and the five lucide 0.469.0 icons it uses (ISC licence) are inlined as SVG paths.
+  is inlined, and the twelve lucide icons it uses (lucide-react 1.72.0, the app's version, ISC licence)
+  are inlined as SVG paths.
   Values are the app's tokens: app/globals.css, Tailwind's shadow-md and shadow-lg, paragraph-node.scss
-  (--link-text-color) and the approved §4.2a chip tokens (--doc-chip-*).
+  (--link-text-color), the approved §4.2a chip tokens (--doc-chip-*) and components/ui (DropdownMenu, Tooltip).
   Hooks for screenshots: window.__ready, window.__audit (anti-slop results), window.__a11y (role and name rows).
 -->
 <style>
@@ -65,7 +67,7 @@
 }
 :root {
   --radius: 0.45rem;                           /* 7.2px: PopoverContent rounded-lg and --hl-radius */
-  --radius-md: calc(var(--radius) * 0.8);      /* 5.76px: buttons and menu rows */
+  --radius-md: calc(var(--radius) * 0.8);      /* 5.76px: buttons, menu rows, tooltip */
   --radius-xl: calc(var(--radius) * 1.4);      /* 10.08px: sheet top corners only */
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -77,6 +79,8 @@
 html, body { margin: 0; }
 body { background: var(--page); color: var(--foreground); font: 14px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Directional icons (the arrows) mirror in a right-to-left card; document, hash, copy, unlink and ⋯ do not. */
+svg.i[data-flip]:dir(rtl) { transform: scaleX(-1); }
 .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ── Review chrome (not part of the design) ───────────────────────────── */
@@ -94,8 +98,9 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .board > h3 { font-size: 12px; line-height: 16px; font-weight: 500; margin: 0 0 12px; color: var(--muted-foreground); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 8px 24px; }
 .tile { position: relative; height: 264px; }
-.tile.t2 { height: 300px; }
+.tile.t2 { height: 280px; }
 .tile.t3 { height: 360px; }
+.tile.t4 { height: 470px; }
 .cap { font-size: 12px; line-height: 16px; color: var(--muted-foreground); margin: 0 0 6px; }
 .note { font-size: 12px; line-height: 16px; color: var(--muted-foreground); margin: 8px 0 0; }
 
@@ -123,7 +128,8 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 
 /* ── THE CARD ─────────────────────────────────────────────────────────── */
 .lc {
-  position: absolute; z-index: 2; width: var(--card-w); max-width: calc(100vw - 16px);
+  /* 100cqw is the viewport outside a container, so this is the app's calc(100vw - 16px); the narrow frames below are containers. */
+  position: absolute; z-index: 2; width: var(--card-w); max-width: calc(100cqw - 16px);
   background: var(--popover); color: var(--popover-foreground);
   border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md);
   font: 14px/20px var(--font-sans); text-align: start;
@@ -137,8 +143,12 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 .lc[data-mode="hover"]::before { content: ""; position: absolute; inset-inline: 0; bottom: 100%; height: 8px; }
 
 .lc-body { padding: 10px 12px 12px; }
+/* Title row: the anchor's state icon on the 12px inset, then one text column at 34px (12 + 16 + 6). */
+.lc-head { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 6px; align-items: start; }
+.lc-head > .lc-ico { margin-top: 2px; color: var(--muted-foreground); }
+.lc-htext { min-width: 0; }
 /* Text blocks take their own direction (dir=auto) but align to the card's start edge. */
-.lc-body > p[dir="auto"] { text-align: match-parent; }
+.lc-htext > p[dir="auto"], .lc-body > p[dir="auto"] { text-align: match-parent; }
 .lc-title { margin: 0; font-size: 14px; line-height: 20px; font-weight: 500; }
 .lc-title.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .lc-title.crumb { display: flex; min-width: 0; }
@@ -157,28 +167,37 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 .lc-sub { margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
 .lc-skel { display: block; height: 8px; width: 132px; margin: 6px 0 2px; border-radius: 4px; background: var(--border); }
 
+/* Footer: one row, the same three controls on the hover card and the dialog. */
 .lc-foot { border-top: 1px solid var(--border); padding: 6px; }
 .lc-row { display: flex; align-items: center; gap: 6px; }
-.lc-row + .lc-row { margin: 6px -6px 0; padding: 6px 6px 0; border-top: 1px solid var(--border); }
 .lc-btn {
-  display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 6px;
   border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground);
   font: 500 12px/16px var(--font-sans); cursor: pointer; white-space: nowrap;
 }
+.lc-btn.label { padding-inline: 6px 8px; }       /* icon on the 12px inset, label on the 34px column */
 .lc-btn.primary { color: var(--popover-foreground); }
-.lc-btn:hover, .lc-btn[aria-expanded="true"] { background: var(--accent); color: var(--accent-foreground); }
+.lc-btn.icon { width: 28px; padding: 0; }
+.lc-row > .lc-btn.label + .lc-btn.icon, .lc-row > .lc-btn.icon:first-child { margin-inline-start: auto; }
+.lc-btn:hover, .lc-btn[data-hover], .lc-btn[aria-expanded="true"] { background: var(--accent); color: var(--accent-foreground); }
 .lc-btn:focus-visible, .lc-btn[data-focus] { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.lc-btn.more { width: 28px; padding: 0; margin-inline-start: auto; }
 
-/* ⋯ menu: shadcn DropdownMenu geometry (p-1, rows min-h-8 px-2 text-sm, rounded-md rows). */
+/* ⋯ menu: shadcn DropdownMenu geometry (p-1, 32px rows, rounded-md rows, muted 16px icons). Default variant only: never red. */
 .lc-menu {
-  position: absolute; z-index: 3; min-width: 11rem; padding: 4px;
+  position: absolute; z-index: 3; top: calc(100% + 4px); inset-inline-end: 6px; min-width: 12rem; padding: 4px;
   background: var(--popover); color: var(--popover-foreground);
   border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md);
+  font: 14px/20px var(--font-sans); text-align: start; white-space: nowrap;
 }
-.lc-mi { display: flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: var(--radius-md); font-size: 14px; line-height: 20px; }
-.lc-mi[data-hl] { background: var(--accent); color: var(--accent-foreground); }
+.lc-menu:focus { outline: none; }
+.lc-mi { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: var(--radius-md); cursor: default; }
+.lc-mi > svg { color: var(--muted-foreground); }
+.lc-mi[data-hl], .lc-mi:hover, .lc-mi:focus { background: var(--accent); color: var(--accent-foreground); outline: none; }
 .lc-sep { height: 1px; margin: 4px -4px; background: var(--border); }
+
+/* Tooltip for the two icon-only buttons: components/ui/tooltip (bg-foreground, text-background, text-xs, px-3 py-1.5, rounded-md). */
+.lc-tip { position: absolute; z-index: 4; padding: 6px 12px; border-radius: var(--radius-md); background: var(--foreground); color: var(--background);
+  font: 12px/16px var(--font-sans); white-space: nowrap; pointer-events: none; }
 
 /* Live consent (approved §4.2a copy), drawn with the app's Dialog geometry. */
 .cdlg { position: absolute; z-index: 3; width: 20rem; background: var(--background); color: var(--foreground);
@@ -192,7 +211,7 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 
 /* ── Phone: long-press opens the same body as a modal bottom sheet ─────── */
 .phones { display: flex; flex-wrap: wrap; gap: 24px; }
-.phone { position: relative; width: min(360px, 100%); height: 700px; overflow: hidden; background: var(--background); border: 1px solid var(--border); border-radius: 8px; }
+.phone { position: relative; width: min(390px, 100%); height: 780px; overflow: hidden; background: var(--background); border: 1px solid var(--border); border-radius: 8px; }
 .phone .ed { padding: 20px 16px; font-size: 17px; line-height: 1.6; }
 .phone h1 { font: 700 26px/1.2 var(--font-sans); margin: 0 0 14px; color: var(--foreground); }
 .phone .scrim { position: absolute; inset: 0; background: var(--scrim); }
@@ -204,6 +223,9 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 }
 .sheet:focus { outline: none; }
 .sheet .lc-body { padding: 16px 16px 12px; }
+/* Sheet icons are 18px with a 12px gap: the title text and every row label share one 46px column. */
+.sheet .lc-head { grid-template-columns: 18px minmax(0, 1fr); column-gap: 12px; }
+.sheet .lc-head > .lc-ico { width: 18px; height: 18px; margin-top: 3px; }
 .sheet .lc-title { font-size: 16px; line-height: 24px; }
 .sheet .lc-meta { font-size: 13px; line-height: 18px; }
 .sheet .lc-snip { font-size: 15px; line-height: 21px; }
@@ -211,14 +233,22 @@ a.doc-link[aria-expanded="true"] { text-decoration-thickness: 2px; }
 .sheet .lc-sub { font-size: 14px; line-height: 20px; }
 .sheet-acts { border-top: 1px solid var(--border); padding: 4px 8px 0; }
 .sheet-acts .gsep { height: 1px; margin: 4px 8px; background: var(--border); }
-.sheet-act { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 8px; border: 0; border-radius: var(--radius-md);
+.sheet-act { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 8px; border: 0; border-radius: var(--radius-md);
   background: transparent; color: var(--popover-foreground); font: 400 16px/24px var(--font-sans); text-align: start; }
+.sheet-act > svg { width: 18px; height: 18px; color: var(--muted-foreground); }
 .sheet-act:active { background: var(--accent); }
 .sheet-act:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
+/* ── Narrow screen: a 320px container stands in for a 320px viewport ──── */
+.narrows { display: flex; flex-wrap: wrap; gap: 24px; }
+.narrows > div { min-width: 0; max-width: 100%; }
+.narrow { position: relative; width: 320px; max-width: 100%; height: 480px; overflow: hidden; container-type: inline-size;
+  background: var(--background); outline: 1px solid var(--border); border-radius: 8px; }  /* outline, so the container is exactly 320px */
+.narrow .ed { padding: 16px 12px; }
+
 /* ── Motion frames ─────────────────────────────────────────────────────── */
 .frames { display: grid; grid-template-columns: minmax(0, 120px) repeat(4, minmax(0, 1fr)); gap: 8px 16px; align-items: center; }
-.frame { position: relative; height: 104px; overflow: hidden; }
+.frame { position: relative; height: 112px; overflow: hidden; }
 .frame .lc { animation: none; transform-origin: top left; }
 .frame .lc { transform: scale(0.62) translateY(var(--fy, 0px)); opacity: var(--fo, 1); top: 8px; left: 0; }
 
@@ -232,7 +262,7 @@ table.t code { font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .panel-scroll { overflow-x: auto; }
 
 /* ── Try it ────────────────────────────────────────────────────────────── */
-#try { position: relative; min-height: 340px; }
+#try { position: relative; min-height: 500px; }
 #try .ed { max-width: 760px; }
 #try-log { font-size: 12px; line-height: 16px; color: var(--muted-foreground); margin-top: 12px; min-height: 16px; }
 </style>
@@ -241,7 +271,7 @@ table.t code { font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
 <div class="wrap" id="root">
   <header class="head">
     <h1>Link card</h1>
-    <p>The card that opens on a document link or a smart chip: a hover card for the pointer, a preview dialog for click, Mod-K and Alt+Enter, and a sheet for a long-press on phones. All three share one body. Spec §4.5a, proposed, pending owner approval (2026-11-22).</p>
+    <p>The card that opens on a document link or a smart chip: a hover card for the pointer, a preview dialog for click, Mod-K and Alt+Enter, and a sheet for a long-press on phones. All three share one body. The hover card and the dialog show the same three controls: Open, Copy Link and ⋯. Spec §4.5a, proposed, pending owner approval (2026-11-22), revised after the owner's review the same day.</p>
     <div class="ctl" role="group" aria-label="Prototype controls">
       <button type="button" id="b-theme" aria-pressed="false">Dark theme for Try it</button>
       <button type="button" id="b-motion" aria-pressed="false">Simulate reduced motion</button>
@@ -250,18 +280,29 @@ table.t code { font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
 </div>
 
 <script>
-/* ── Icons: lucide 0.469.0 (ISC), inlined ─────────────────────────────── */
+/* ── Icons: lucide-react 1.72.0 (ISC), inlined ────────────────────────── */
 const ICONS = {
-  "file-text": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  // State and type markers: the same icon the anchor shows.
+  "file-text": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  "file-minus": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M9 15h6"/>',
+  "file-question": '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M9 9.5a3 2.5 0 016 0c0 2-2 2-3 3.5"/><path d="M12 17h.01"/>',
   "hash": '<line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/>',
-  "file-minus": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/>',
-  "file-question": '<path d="M12 17h.01"/><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/>',
+  // Action labels: one per control.
+  "arrow-up-right": '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+  "copy": '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   "ellipsis": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  "square-arrow-out-up-right": '<path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/><path d="m21 3-9 9"/><path d="M15 3h6v6"/>',
+  "undo-2": '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  "arrow-right-left": '<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>',
+  "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  "unlink": '<path d="m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71"/><line x1="8" x2="8" y1="2" y2="5"/><line x1="2" x2="5" y1="8" y2="8"/><line x1="16" x2="16" y1="19" y2="22"/><line x1="19" x2="22" y1="16" y2="16"/>',
 };
 const NS = "http://www.w3.org/2000/svg";
-function icon(name) {
+function icon(name, { flip = false, cls = "" } = {}) {
   const s = document.createElementNS(NS, "svg");
-  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "i"); s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", `i ${cls}`.trim()); s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false");
+  s.setAttribute("data-icon", name);
+  if (flip) s.setAttribute("data-flip", "");
   s.innerHTML = ICONS[name];
   return s;
 }
@@ -275,6 +316,41 @@ const $ = (t, a = {}, ...kids) => {
   return e;
 };
 let uid = 0;
+
+/* ── Actions: label, icon (lucide name), mirrored in RTL ──────────────── */
+const A = {
+  open:    { label: "Open", icon: "arrow-up-right", flip: true },
+  section: { label: "Go to Section", icon: "arrow-up-right", flip: true },
+  copy:    { label: "Copy Link", icon: "copy" },
+  newTab:  { label: "Open in New Tab", icon: "square-arrow-out-up-right", flip: true },
+  restore: { label: "Restore", icon: "undo-2" },
+  toChip:  { label: "Turn into Chip", icon: "arrow-right-left" },
+  toLink:  { label: "Turn into Link", icon: "arrow-right-left" },
+  title:   { label: "Use Current Title", icon: "refresh-cw" },
+  remove:  { label: "Remove Link", icon: "unlink" },
+};
+
+/**
+ * The one action model for every surface.
+ *   primary: Open (Go to Section for here#), shown with its label.  copy: Copy Link, icon only.
+ *   groups:  what ⋯ holds, in order: [Open in New Tab, Restore] | [Turn into …, Use Current Title] | [Remove Link].
+ * The sheet lists primary, Copy Link and the groups as rows.
+ */
+function actionsFor(m, kind, ctx = {}, label = null) {
+  const editable = ctx.editable !== false && !ctx.shared;
+  const doc = m.target === "doc", here = m.target === "here";
+  const titleNow = m.sect || m.title;
+  const open = [doc && A.newTab, doc && m.trash && editable && A.restore];
+  const edit = editable && (doc || here)
+    ? [kind === "chip" ? A.toLink : A.toChip, kind === "link" && !m.loading && label && label !== titleNow && A.title]
+    : [];
+  const remove = editable && m.target !== "newer" ? [A.remove] : [];
+  return {
+    primary: doc ? A.open : here ? A.section : null,
+    copy: doc || here,
+    groups: [open, edit, remove].map((g) => g.filter(Boolean)).filter((g) => g.length),
+  };
+}
 
 /* ── Content rules ─────────────────────────────────────────────────────── */
 const TODAY = new Date(2026, 10, 22);
@@ -293,70 +369,66 @@ const DOC = {
   snippet: "Spend for October to December across the four teams: travel, hiring and tools, with the approval limits for each team.",
 };
 const LONG = "Quarterly operating budget and hiring plan for the platform and growth teams, revision 3 with finance comments";
+const docCard = (extra = {}) => ({ icon: "file-text", target: "doc", title: DOC.title, path: DOC.path, date: DOC.date, snippet: DOC.snippet, ...extra });
 
-/* Each state: anchor (icon, label, sentence) and the card model.
-   view: first group (ways to open). edit: the editable-only second group exists. ctx: document context. */
+/* Each state: anchor (icon, label, sentence) and the card model. The card's icon is always the anchor's. */
 const STATES = [
   { id: "resolved", cap: "Resolves", icon: "file-text", label: "Q4 budget", sfx: ", document",
-    before: "Spending is capped in ", after: " until the review.",
-    card: { title: DOC.title, path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true } },
+    before: "Spending is capped in ", after: " until the review.", card: docCard() },
   { id: "heading", cap: "Heading link", icon: "file-text", label: "travel rules", sfx: ", document",
-    before: "Book trips under the ", after: " this quarter.",
-    card: { title: DOC.title, sect: "Travel", path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true } },
+    before: "Book trips under the ", after: " this quarter.", card: docCard({ sect: "Travel" }) },
   { id: "here", cap: "here# (a section of this document)", icon: "hash", label: "Rollout", sfx: ", section",
     before: "Dates are set in ", after: " below.",
-    card: { title: "Rollout", here: true, view: ["Go to Section", "Copy Link"], edit: true } },
-  { id: "trash", cap: "In Trash", icon: "file-minus", label: "Launch checklist", sfx: ", document, in Trash",
+    card: { icon: "hash", target: "here", title: "Rollout", here: true } },
+  { id: "trash", cap: "In Trash: Restore is in ⋯", icon: "file-minus", label: "Launch checklist", sfx: ", document, in Trash",
     before: "Follow the ", after: " before Friday.",
-    card: { title: "Launch checklist", state: "In Trash", path: ["Product"], date: new Date(2026, 10, 3),
-      snippet: "Sign-off order for the launch: legal, support, then marketing. Each owner ticks their row.", view: ["Open", "Restore"], edit: true } },
-  { id: "na", cap: "Not available", icon: "file-question", label: "Vendor contracts", sfx: ", document, not available",
+    card: { icon: "file-minus", target: "doc", trash: true, title: "Launch checklist", state: "In Trash", path: ["Product"], date: new Date(2026, 10, 3),
+      snippet: "Sign-off order for the launch: legal, support, then marketing. Each owner ticks their row." } },
+  { id: "na", cap: "Not available: Remove Link only in ⋯", icon: "file-question", label: "Vendor contracts", sfx: ", document, not available",
     before: "Terms are in ", after: " for now.",
-    card: { msg: "This document isn't on this device.", sub: "It may have been deleted.", view: [], removeOnly: true } },
+    card: { icon: "file-question", target: "na", msg: "This document isn't on this device.", sub: "It may have been deleted." } },
   { id: "loading", cap: "Loading (cold start)", icon: "file-text", label: "Q4 budget", sfx: ", document",
     before: "Spending is capped in ", after: " until the review.",
-    card: { title: "Q4 budget", loading: true, view: ["Open", "Copy Link"], edit: true } },
+    card: { icon: "file-text", target: "doc", title: "Q4 budget", loading: true } },
   { id: "long", cap: "Long title, deep folder, last year", icon: "file-text", label: "operating plan", sfx: ", document",
     before: "Headcount follows the ", after: " as agreed.",
-    card: { title: LONG, path: ["Operations", "Planning", "Archive", "Q4 reviews"], date: new Date(2025, 9, 2), snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true } },
+    card: docCard({ title: LONG, path: ["Operations", "Planning", "Archive", "Q4 reviews"], date: new Date(2025, 9, 2) }) },
   { id: "longh", cap: "Long title with a heading: the title gives way", icon: "file-text", label: "approval limits", sfx: ", document",
-    before: "Ask first above the ", after: ".",
-    card: { title: LONG, sect: "Approval limits", path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true } },
+    before: "Ask first above the ", after: ".", card: docCard({ title: LONG, sect: "Approval limits" }) },
   { id: "live", cap: "Your Live document: no snippet", icon: "file-text", label: "Q4 budget", sfx: ", document",
-    before: "Spending is capped in ", after: " until the review.",
-    card: { title: DOC.title, path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true }, ctx: { live: true } },
-  { id: "readonly", cap: "Reading mode or read-only: no edit group", icon: "file-text", label: "Q4 budget", sfx: ", document",
-    before: "Spending is capped in ", after: " until the review.",
-    card: { title: DOC.title, path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true }, ctx: { editable: false } },
+    before: "Spending is capped in ", after: " until the review.", card: docCard(), ctx: { live: true } },
+  { id: "readonly", cap: "Reading mode or read-only: ⋯ holds only Open in New Tab", icon: "file-text", label: "Q4 budget", sfx: ", document",
+    before: "Spending is capped in ", after: " until the review.", card: docCard(), ctx: { editable: false } },
   { id: "shared", cap: "Shared view (only if Q3 is reversed)", icon: "file-text", label: "Q4 budget", sfx: ", document",
-    before: "Spending is capped in ", after: " until the review.",
-    card: { title: DOC.title, path: DOC.path, date: DOC.date, snippet: DOC.snippet, view: ["Open", "Copy Link"], edit: true }, ctx: { shared: true, editable: false } },
-  { id: "newer", cap: "Link from a newer version", icon: "file-question", label: "Link", sfx: ", needs a newer version of TinyDocy",
+    before: "Spending is capped in ", after: " until the review.", card: docCard(), ctx: { shared: true, editable: false } },
+  { id: "newer", cap: "Link from a newer version: no actions", icon: "file-question", label: "Link", sfx: ", needs a newer version of TinyDocy",
     before: "See the ", after: " for details.",
-    card: { msg: "This link needs a newer version of TinyDocy.", view: [] } },
+    card: { icon: "file-question", target: "newer", msg: "This link needs a newer version of TinyDocy." } },
 ];
 const S = Object.fromEntries(STATES.map((s) => [s.id, s]));
 
 /* ── Card body: identical on every surface ─────────────────────────────── */
 function cardBody(m, ctx, tid) {
   const body = $("div", { class: "lc-body" });
+  const text = $("div", { class: "lc-htext" });
+  body.append($("div", { class: "lc-head" }, icon(m.icon || "file-text", { cls: "lc-ico" }), text));
   if (m.msg) {
-    body.append($("p", { class: "lc-msg", dir: "auto", id: tid, text: m.msg }));
-    if (m.sub) body.append($("p", { class: "lc-sub", dir: "auto", text: m.sub }));
+    text.append($("p", { class: "lc-msg", dir: "auto", id: tid, text: m.msg }));
+    if (m.sub) text.append($("p", { class: "lc-sub", dir: "auto", text: m.sub }));
     return body;
   }
   if (m.sect) {
     // Title and "› Heading" share one isolate, so the crumb can never render ahead of the title.
     // U+203A is Bidi_Mirrored: it shows as ‹ by itself when the run resolves RTL.
-    body.append($("p", { class: "lc-title crumb", id: tid },
+    text.append($("p", { class: "lc-title crumb", id: tid },
       $("bdi", { dir: "auto", class: "lc-run" },
         $("span", { class: "t", text: m.title }),
         $("span", { class: "h" }, $("span", { class: "sep", "aria-hidden": "true", text: "›" }), $("span", { class: "sr", text: ", " }), m.sect))));
   } else {
-    body.append($("p", { class: "lc-title clamp", dir: "auto", id: tid, text: m.title }));
+    text.append($("p", { class: "lc-title clamp", dir: "auto", id: tid, text: m.title }));
   }
   if (m.loading) {
-    body.append($("span", { class: "lc-skel", "aria-hidden": "true" }), $("p", { class: "sr", text: "Loading details" }));
+    text.append($("span", { class: "lc-skel", "aria-hidden": "true" }), $("p", { class: "sr", text: "Loading details" }));
     return body;
   }
   const meta = $("div", { class: "lc-meta" });
@@ -368,61 +440,59 @@ function cardBody(m, ctx, tid) {
     parts.push($("bdi", { dir: "auto", class: "date", text: edited(m.date) }));
   }
   parts.forEach((p, i) => { if (i) meta.append($("span", { class: "dot", "aria-hidden": "true", text: "·" })); meta.append(p); });
-  body.append(meta);
+  text.append(meta);
   // D24: the local snippet never shows in a Live or shared document.
   if (m.snippet && !ctx.live && !ctx.shared) body.append($("p", { class: "lc-snip", dir: "auto", text: m.snippet }));
   return body;
 }
 
-function editGroup(kind) { return [kind === "chip" ? "Turn into Link" : "Turn into Chip", "Remove Link"]; }
+/** The ⋯ menu: groups joined by separators; a DOM child of the card, so the hover card never closes while the pointer is on it. */
+function buildMenu(groups, { dir, highlight = false }) {
+  const m = $("div", { class: "lc-menu", role: "menu", id: `lc-m-${++uid}`, "aria-label": "More link actions", dir, tabindex: "-1", "data-card": "" });
+  groups.forEach((g, gi) => {
+    if (gi) m.append($("div", { class: "lc-sep", role: "separator" }));
+    g.forEach((a, i) => m.append($("div", { class: "lc-mi", role: "menuitem", tabindex: "-1", "data-hl": highlight && gi === 0 && i === 0 ? "" : null },
+      icon(a.icon, { flip: a.flip }), $("span", { text: a.label }))));
+  });
+  return m;
+}
 
 /**
- * mode: "hover" (pointer only: buttons out of the tab order, ⋯ holds the edit group)
- *       "dialog" (click, Mod-K, Alt+Enter: non-modal, edit group visible as a second row)
- * extras: the owner keeps §4.5's Open in New Tab and Use Current Title (in ⋯ on both surfaces)
+ * mode: "hover" (pointer only: buttons out of the tab order) or "dialog" (click, Mod-K, Alt+Enter: non-modal).
+ * Both show the same footer: Open (icon and label), Copy Link (icon) and ⋯.
+ * menu: false | "pointer" | "keyboard" (static boards only: draws ⋯ open).
  */
-function card(m, { mode, kind, dir = "ltr", ctx = {}, extras = false, menu = false, focus = true }) {
-  const editable = ctx.editable !== false;
+function card(m, { mode, kind, dir = "ltr", ctx = {}, label = null, menu = false, focus = true }) {
   const dialog = mode === "dialog";
   const tid = `lc-t-${++uid}`;
   const lc = $("div", {
-    class: "lc", dir, "data-mode": mode, "data-card": "",
+    class: "lc", dir, "data-mode": mode, "data-card": "", "data-icon": m.icon || "file-text",
     role: dialog ? "dialog" : "group", "aria-labelledby": tid,
     "aria-modal": dialog ? "false" : null, "aria-busy": m.loading ? "true" : null,
     tabindex: dialog ? "-1" : null,
   });
   lc.append(cardBody(m, ctx, tid));
-  const btn = (label, cls = "") => $("button", { class: `lc-btn ${cls}`.trim(), type: "button", text: label, tabindex: dialog ? null : "-1" });
-  const more = (open) => {
-    const b = $("button", { class: "lc-btn more", type: "button", "aria-label": "More link actions", "aria-haspopup": "menu", "aria-expanded": open ? "true" : "false", tabindex: dialog ? null : "-1" });
-    b.append(icon("ellipsis"));
-    return b;
-  };
-  const rows = [];
-  if (m.removeOnly) {
-    if (editable) rows.push([btn("Remove Link")]);
-  } else if (m.view.length) {
-    const r1 = m.view.map((a, i) => btn(a, i === 0 ? "primary" : ""));
-    const hasEdit = m.edit && editable;
-    const menuItems = [];
-    if (extras) menuItems.push("Open in New Tab", ...(editable && !ctx.shared ? ["Use Current Title"] : []));
-    if (!dialog && hasEdit) { if (menuItems.length) menuItems.push("-"); menuItems.push(...editGroup(kind)); }
-    if (menuItems.length) r1.push(more(menu));
-    rows.push(r1);
-    if (dialog && hasEdit) rows.push(editGroup(kind).map((a) => btn(a)));
-    lc._menuItems = menuItems;
+  const tab = dialog ? null : "-1";
+  const { primary, copy, groups } = actionsFor(m, kind, ctx, label);
+  lc._groups = groups;
+  const row = $("div", { class: "lc-row", role: "group", "aria-label": "Link actions" });
+  if (primary) row.append($("button", { class: "lc-btn label primary", type: "button", tabindex: tab }, icon(primary.icon, { flip: primary.flip }), $("span", { text: primary.label })));
+  if (copy) row.append($("button", { class: "lc-btn icon", type: "button", "aria-label": A.copy.label, tabindex: tab }, icon(A.copy.icon)));
+  if (groups.length) {
+    row.append($("button", { class: "lc-btn icon more", type: "button", "aria-label": "More link actions", "aria-haspopup": "menu", "aria-expanded": menu ? "true" : "false", tabindex: tab }, icon("ellipsis")));
   }
-  if (rows.length) {
-    const foot = $("div", { class: "lc-foot" });
-    rows.forEach((r, i) => foot.append($("div", { class: "lc-row", role: "group", "aria-label": i === 0 && !m.removeOnly ? "Open and copy" : "Edit link" }, r)));
-    lc.append(foot);
+  if (row.children.length) lc.append($("div", { class: "lc-foot" }, row));
+  if (menu && groups.length) {
+    const mm = buildMenu(groups, { dir, highlight: menu === "keyboard" });
+    lc.querySelector(".more").setAttribute("aria-controls", mm.id);
+    lc.append(mm);
   }
-  // Initial focus (dialog only): the first action, never Remove Link; the dialog itself when nothing else is offered.
+  // Initial focus (dialog only): Open (or Go to Section); the dialog itself when there is no Open. Never Remove Link.
   if (dialog) {
-    const first = lc.querySelector(".lc-row:first-child .lc-btn:not(.more)");
-    const target = first && first.textContent !== "Remove Link" ? first : lc;
+    const first = lc.querySelector(".lc-btn.primary");
+    const target = first || lc;
     target.setAttribute("data-initial-focus", "");
-    if (focus && target !== lc && !menu) target.setAttribute("data-focus", "");
+    if (focus && first && !menu) first.setAttribute("data-focus", "");
   }
   return lc;
 }
@@ -438,36 +508,37 @@ function anchor(s, kind, open = false, tab = true) {
     $("span", { class: "doc-link-icon", "aria-hidden": "true" }, icon(s.icon), "⁠"), $("bdi", { dir: "auto", text: s.label }));
 }
 
-function placeCard(c, a, box, dir) {
+function placeCard(c, a, box, dir, margin = 0) {
   const tr = box.getBoundingClientRect(), ar = a.getClientRects()[0];
   c.style.top = `${ar.bottom - tr.top + 6}px`;
   c.style.left = c.style.right = "";
-  if (dir === "rtl") c.style.right = `${Math.max(0, Math.min(tr.right - ar.right, tr.width - c.offsetWidth))}px`;
-  else c.style.left = `${Math.max(0, Math.min(ar.left - tr.left, tr.width - c.offsetWidth))}px`;
+  const lo = margin, hi = tr.width - c.offsetWidth - margin;
+  if (dir === "rtl") c.style.right = `${Math.max(lo, Math.min(tr.right - ar.right, hi))}px`;
+  else c.style.left = `${Math.max(lo, Math.min(ar.left - tr.left, hi))}px`;
 }
-function placeMenu(m, c, box, dir) {
-  const tr = box.getBoundingClientRect(), br = c.querySelector(".lc-btn.more").getBoundingClientRect();
-  m.style.top = `${br.bottom - tr.top + 4}px`;
-  if (dir === "rtl") m.style.left = `${br.left - tr.left}px`; else m.style.right = `${tr.right - br.right}px`;
+function placeTip(t, btn, box) {
+  const br = btn.getBoundingClientRect(), xr = box.getBoundingClientRect();
+  t.style.top = `${br.bottom - xr.top + 8}px`;       /* side "bottom": under the footer, never over the card's text */
+  t.style.left = `${br.left - xr.left + br.width / 2 - t.offsetWidth / 2}px`;
 }
 
 const placers = [];
-function tile(s, { kind, mode, dir = "ltr", ctx = s.ctx || {}, cap, size = "", extras = false, menu = false, model = null, sentence = null }) {
-  const t = $("div", { class: `tile ${size}`.trim(), dir, "data-spec": `${s.id}-${kind}-${mode}` });
+function tile(s, { kind, mode, dir = "ltr", ctx = s.ctx || {}, cap, size = "", menu = false, tip = false, model = null, sentence = null, spec = null }) {
+  const t = $("div", { class: `tile ${size}`.trim(), dir, "data-spec": spec || `${s.id}-${kind}-${mode}` });
   t.append($("p", { class: "cap", dir: "ltr", text: cap ?? s.cap }));
   const a = anchor(s, kind, mode === "dialog");
   const sn = sentence || s;
   t.append($("p", { class: "ed", dir }, sn.before, a, sn.after));
-  const c = card(model || s.card, { mode, kind, dir, ctx, extras, menu });
+  const c = card(model || s.card, { mode, kind, dir, ctx, label: s.label, menu });
   t.append(c);
   placers.push(() => {
     placeCard(c, a, t, dir);
-    if (menu && c._menuItems?.length) {
-      const m = $("div", { class: "lc-menu", role: "menu", "aria-label": "More link actions", dir, "data-card": "" });
-      c._menuItems.forEach((it, i) => m.append(it === "-" ? $("div", { class: "lc-sep", role: "separator" })
-        : $("div", { class: "lc-mi", role: "menuitem", tabindex: "-1", text: it, "data-hl": i === 0 ? "" : null })));
-      t.append(m);
-      placeMenu(m, c, t, dir);
+    if (tip) {
+      const b = c.querySelector('.lc-btn[aria-label="Copy Link"]');
+      const tt = $("div", { class: "lc-tip", role: "tooltip", text: "Copy Link" });
+      b.setAttribute("data-hover", "");
+      t.append(tt);
+      placeTip(tt, b, t);
     }
   });
   return t;
@@ -489,7 +560,7 @@ function board(sec, id, title, theme, kids, cls = "grid") {
 /* ── Try it ────────────────────────────────────────────────────────────── */
 {
   const sec = section("try-it", "Try it",
-    "Point at a link or chip: the hover card opens after 300 ms and stays while the pointer is on the anchor or the card, then closes 200 ms after it leaves both. Esc closes it. Click, or focus a link and press Mod-K or Alt+Enter, for the preview dialog; Esc returns focus to the anchor.");
+    "Point at a link or chip: the hover card opens after 300 ms and stays while the pointer is on the anchor, the card or its ⋯ menu, then closes 200 ms after it leaves them. Esc closes it. Click, or focus a link and press Mod-K or Alt+Enter, for the preview dialog: Tab reaches Open, Copy Link and ⋯. On ⋯, Enter, Space or ↓ opens the menu; ↑ ↓ Home End move; Esc closes the menu and returns to ⋯; Tab leaves. Esc again returns focus to the anchor.");
   const b = $("div", { class: "board", id: "try", "data-theme": "light" });
   const p1 = $("p", { class: "ed" }, "Spending is capped in ", anchor(S.resolved, "chip"), " until the review, and trips follow the ",
     anchor(S.heading, "link"), ". Dates are set in ", anchor(S.here, "chip"), ". Follow the ", anchor(S.trash, "link"),
@@ -500,20 +571,21 @@ function board(sec, id, title, theme, kids, cls = "grid") {
 
 /* ── Anatomy ───────────────────────────────────────────────────────────── */
 {
-  const sec = section("anatomy", "Anatomy", "One body, four slots, always in this order. Type does the hierarchy; the only icon in the card is ⋯.");
+  const sec = section("anatomy", "Anatomy", "One body, four slots, always in this order. The title row leads with the anchor's own state icon; every other icon names an action. Nothing is decorative.");
   const spec = $("div", { class: "tile t3", "data-spec": "anatomy" });
   const a = anchor(S.heading, "chip", true);
   spec.append($("p", { class: "cap", text: "Preview dialog, smart chip, heading link (keyboard open)" }), $("p", { class: "ed" }, S.heading.before, a, S.heading.after));
-  const c = card(S.heading.card, { mode: "dialog", kind: "chip" });
+  const c = card(S.heading.card, { mode: "dialog", kind: "chip", label: S.heading.label });
   spec.append(c);
   placers.push(() => placeCard(c, a, spec, "ltr"));
   const rows = [
     ["Frame", "20rem wide; 1px --border; --radius (7.2px); --popover; shadow-md, the only elevation"],
-    ["1 Title", "14/20, weight 500, --popover-foreground. With a heading: one line, title ellipsised first, \"› Heading\" 400 muted kept whole. Without: 2-line clamp"],
-    ["2 Meta", "12/16 muted, margin-top 2px. [In Trash 500 foreground] · folder path (first › … › last) · Edited date (tabular, year only if not this year). Separators are fixed 6px-gap items outside the ellipsis"],
-    ["3 Snippet", "13/19, --popover-foreground, margin-top 8px, 2-line clamp. Local documents only; never in Live or shared views (D24)"],
-    ["4 Actions", "Hairline, then 6px padding and gap; 28px ghost text buttons, 12/16 500, 6px side padding. First action foreground, others muted. Dialog: the edit group is a second row under its own hairline. Hover card: ⋯ (28×28) holds it"],
-    ["Body padding", "10 / 12 / 12px; text aligns on the 12px inset in every row"],
+    ["1 Title row", "16px state icon, the anchor's own (FileText, Hash, FileMinus, FileQuestion), --muted-foreground, on the 12px inset, 2px down onto the first line; 6px gap; then the title 14/20 500 on the 34px text column. With a heading: one line, title ellipsised first, \"› Heading\" 400 muted kept whole. Without: 2-line clamp"],
+    ["2 Meta", "12/16 muted, 2px above, on the 34px column under the title. [In Trash 500 foreground] · folder path (first › … › last) · Edited date (tabular, year only if not this year). Separators are fixed 6px-gap items outside the ellipsis"],
+    ["3 Snippet", "13/19, --popover-foreground, full width from the 12px inset, 8px above, 2-line clamp. Local documents only; never in Live or shared views (D24)"],
+    ["4 Actions", "Hairline, then 6px padding. Open: 28px tall, 16px arrow and a 12/16 500 label in the foreground; the arrow sits on the 12px inset and the label on the 34px column. Copy Link and ⋯: 28×28 muted icon buttons at the inline end, each with a tooltip. The same three on the hover card and the dialog"],
+    ["⋯ menu", "DropdownMenu: 4px padding, 32px rows, 16px muted icon, 8px gap, 14/20. Open in New Tab (and Restore) | Turn into Chip or Link, Use Current Title | Remove Link, last, default colour"],
+    ["Body padding", "10 / 12 / 12px"],
   ];
   const tbl = $("table", { class: "t" }, $("thead", {}, $("tr", {}, $("th", { text: "Slot" }), $("th", { text: "Rule" }))),
     $("tbody", {}, rows.map(([k, v]) => $("tr", {}, $("td", { text: k }), $("td", { text: v })))));
@@ -522,7 +594,7 @@ function board(sec, id, title, theme, kids, cls = "grid") {
 
 /* ── States ────────────────────────────────────────────────────────────── */
 {
-  const sec = section("states", "States", "Twelve states on each surface. Dialog boards show the keyboard open: focus on the first action, or on the dialog itself when only Remove Link or nothing is offered. A mouse click opens the same dialog without a visible ring.");
+  const sec = section("states", "States", "Twelve states on each surface. Dialog boards show the keyboard open: focus on Open, or on the dialog itself when there is no Open. A mouse click opens the same dialog without a visible ring.");
   for (const theme of ["light", "dark"]) {
     for (const [mode, kind] of [["hover", "link"], ["hover", "chip"], ["dialog", "chip"], ["dialog", "link"]]) {
       const what = mode === "hover" ? "Hover card (pointer only)" : "Preview dialog (click, Mod-K, Alt+Enter)";
@@ -534,8 +606,8 @@ function board(sec, id, title, theme, kids, cls = "grid") {
 
 /* ── RTL ───────────────────────────────────────────────────────────────── */
 {
-  const sec = section("rtl", "Right to left", "The card follows the document's direction and mirrors; labels stay in the interface language. The title and its heading share one isolate, so an English title in an RTL document still reads \"Q4 budget › Approval limits\".");
-  const fa = { title: "بودجه سه‌ماهه چهارم", path: ["مالی"], date: DOC.date, snippet: "هزینه‌های مهر تا آذر برای چهار تیم: سفر، استخدام و ابزارها، با سقف تأیید هر تیم.", view: ["Open", "Copy Link"], edit: true };
+  const sec = section("rtl", "Right to left", "The card follows the document's direction and mirrors: the state icon and Open sit at the right, Copy Link and ⋯ at the left, and the arrows point the other way. Labels stay in the interface language. The title and its heading share one isolate, so an English title in an RTL document still reads \"Q4 budget › Approval limits\".");
+  const fa = { icon: "file-text", target: "doc", title: "بودجه سه‌ماهه چهارم", path: ["مالی"], date: DOC.date, snippet: "هزینه‌های مهر تا آذر برای چهار تیم: سفر، استخدام و ابزارها، با سقف تأیید هر تیم." };
   const faSent = { before: "سقف هزینه‌ها در ", after: " آمده است." };
   const faS = { ...S.resolved, label: "بودجه سه‌ماهه چهارم" };
   const enS = { ...S.heading, label: "Approval limits" };
@@ -548,17 +620,18 @@ function board(sec, id, title, theme, kids, cls = "grid") {
       tile(ltrS, { kind: "link", mode: "hover", cap: "LTR document, RTL title and heading · text link · hover card", model: { ...fa, sect: "سقف تأیید" } }),
       tile(faS, { kind: "link", mode: "hover", dir: "rtl", cap: "RTL document, deep RTL folder path · hover card", model: { ...fa, path: ["عملیات", "برنامه‌ریزی", "بایگانی", "بازبینی‌های فصل چهارم"] }, sentence: faSent }),
       tile({ ...S.na }, { kind: "chip", mode: "dialog", dir: "rtl", cap: "RTL document · Not available · dialog (focus on the dialog)", sentence: faSent }),
+      tile({ ...ltrS, label: "سقف" }, { kind: "link", mode: "dialog", dir: "rtl", size: "t4", menu: "keyboard", spec: "rtl-more", cap: "RTL document · text link · dialog · ⋯ open from the keyboard", model: { ...fa, sect: "سقف تأیید" }, sentence: faSent }),
     ]);
   }
 }
 
-/* ── ⋯, extras and consent ─────────────────────────────────────────────── */
+/* ── ⋯, tooltip and consent ────────────────────────────────────────────── */
 {
-  const sec = section("more", "More actions, extras and consent", "The hover card keeps two text actions and ⋯. If the owner keeps §4.5's Open in New Tab and Use Current Title, they go in ⋯ on both surfaces. Turn into Link in your Live document asks first, with focus on Cancel (approved §4.2a copy).");
+  const sec = section("more", "⋯ menu, tooltip and consent", "Everything beyond Open and Copy Link lives in ⋯, on the hover card and the dialog alike, in three groups: ways to open, edits, then Remove Link on its own. Remove Link is last, in the default colour, and never takes focus by default. Turn into Link in your Live document asks first, with focus on Cancel (approved §4.2a copy).");
   for (const theme of ["light", "dark"]) {
-    const consent = $("div", { class: "tile t3", "data-spec": "consent" });
+    const consent = $("div", { class: "tile t4", "data-spec": "consent" });
     const a = anchor(S.live, "chip", true);
-    consent.append($("p", { class: "cap", text: "Your Live document · Turn into Link, first time" }), $("p", { class: "ed" }, S.live.before, a, S.live.after));
+    consent.append($("p", { class: "cap", text: "Your Live document · Turn into Link from ⋯, first time" }), $("p", { class: "ed" }, S.live.before, a, S.live.after));
     const tid = `lc-t-${++uid}`, did = `lc-d-${++uid}`;
     const dlg = $("div", { class: "cdlg", role: "alertdialog", "aria-modal": "true", "aria-labelledby": tid, "aria-describedby": did, "data-card": "" },
       $("h4", { id: tid, text: "Write this title into the document?" }),
@@ -566,9 +639,13 @@ function board(sec, id, title, theme, kids, cls = "grid") {
       $("div", { class: "f" }, $("button", { class: "cbtn", type: "button", "data-focus": "", "data-initial-focus": "", text: "Cancel" }), $("button", { class: "cbtn p", type: "button", text: "Turn into Link" })));
     consent.append(dlg);
     placers.push(() => { dlg.style.top = "84px"; dlg.style.left = "0px"; });
-    board(sec, `more-${theme}`, `⋯ menu, §4.5 extras and Live consent · ${theme}`, theme, [
-      tile(S.resolved, { kind: "chip", mode: "hover", size: "t3", menu: true, cap: "Hover card · chip · ⋯ open (approved action set)" }),
-      tile(S.resolved, { kind: "link", mode: "dialog", size: "t3", menu: true, extras: true, cap: "Dialog · link · if the owner keeps §4.5 extras" }),
+    board(sec, `more-${theme}`, `⋯ menu, tooltip and Live consent · ${theme}`, theme, [
+      tile(S.heading, { kind: "link", mode: "dialog", size: "t4", menu: "keyboard", spec: "more-dialog-link", cap: "Dialog · text link · ⋯ open from the keyboard (focus on the first item)" }),
+      tile(S.resolved, { kind: "chip", mode: "hover", size: "t4", menu: "pointer", spec: "more-hover-chip", cap: "Hover card · chip · ⋯ open with the pointer" }),
+      tile(S.trash, { kind: "chip", mode: "dialog", size: "t4", menu: "keyboard", spec: "more-trash-chip", cap: "Dialog · chip · In Trash · ⋯ adds Restore" }),
+      tile(S.na, { kind: "chip", mode: "dialog", size: "t3", menu: "keyboard", spec: "more-na-chip", cap: "Dialog · chip · Not available · ⋯ holds only Remove Link" }),
+      tile(S.readonly, { kind: "link", mode: "hover", size: "t3", menu: "pointer", spec: "more-readonly-link", cap: "Hover card · read-only · ⋯ holds only Open in New Tab" }),
+      tile(S.resolved, { kind: "link", mode: "hover", size: "t3", tip: true, spec: "tip-hover-link", cap: "Hover card · text link · Copy Link tooltip" }),
       consent,
     ]);
   }
@@ -576,7 +653,7 @@ function board(sec, id, title, theme, kids, cls = "grid") {
 
 /* ── Phone ─────────────────────────────────────────────────────────────── */
 {
-  const sec = section("phone", "Phone", "A long-press opens the same body as a modal bottom sheet: scrim without blur, the rest of the page inert, 44px rows, two groups, no grip, rings only on :focus-visible. Focus returns to the anchor on close.");
+  const sec = section("phone", "Phone", "A long-press opens the same body as a modal bottom sheet, 390px wide here: scrim without blur, the rest of the page inert, every action as a 44px row with its icon and label, Remove Link last after a hairline, no grip, rings only on :focus-visible. Focus returns to the anchor on close.");
   function phone(theme, s, label, kind) {
     const ph = $("div", { class: "phone", "data-theme": theme });
     const a = anchor(s, kind, true);
@@ -586,25 +663,49 @@ function board(sec, id, title, theme, kids, cls = "grid") {
     ph.append($("div", { class: "scrim", "aria-hidden": "true" }));
     const tid = `lc-t-${++uid}`;
     const m = s.card;
-    const sh = $("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": tid, tabindex: "-1", "data-card": "" });
+    const sh = $("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": tid, tabindex: "-1", "data-card": "", "data-icon": m.icon });
     sh.append(cardBody(m, {}, tid));
-    const groups = m.removeOnly ? [["Remove Link"]] : [m.view, editGroup(kind)];
-    const acts = $("div", { class: "sheet-acts" });
-    groups.forEach((g, i) => {
-      if (i) acts.append($("div", { class: "gsep", role: "separator" }));
-      g.forEach((x) => acts.append($("button", { class: "sheet-act", type: "button", text: x })));
-    });
-    sh.append(acts);
-    (m.removeOnly ? sh : acts.querySelector("button")).setAttribute("data-initial-focus", "");
+    const { primary, copy, groups } = actionsFor(m, kind, {}, s.label);
+    const openGroup = groups[0]?.includes(A.newTab) || groups[0]?.includes(A.restore) ? groups[0] : [];
+    const rows = [[primary, copy && A.copy, ...openGroup].filter(Boolean), ...groups.filter((g) => g !== openGroup)].filter((g) => g.length);
+    if (rows.length) {
+      const acts = $("div", { class: "sheet-acts", role: "group", "aria-label": "Link actions" });
+      rows.forEach((g, i) => {
+        if (i) acts.append($("div", { class: "gsep", role: "separator" }));
+        g.forEach((x) => acts.append($("button", { class: "sheet-act", type: "button" }, icon(x.icon, { flip: x.flip }), $("span", { text: x.label }))));
+      });
+      sh.append(acts);
+    }
+    (primary ? sh.querySelector(".sheet-act") : sh).setAttribute("data-initial-focus", "");
     ph.append(sh);
     return $("div", {}, $("p", { class: "cap", text: label }), ph);
   }
   for (const theme of ["light", "dark"]) {
     board(sec, `phone-${theme}`, `Phone · long-press · ${theme}`, theme, [
       phone(theme, S.resolved, "Smart chip · resolves", "chip"),
-      phone(theme, S.heading, "Text link · heading", "link"),
+      phone(theme, S.heading, "Text link · heading (its text differs from the title)", "link"),
       phone(theme, S.na, "Smart chip · Not available (focus on the sheet)", "chip"),
     ], "phones");
+  }
+}
+
+/* ── Narrow (320px) ────────────────────────────────────────────────────── */
+{
+  const sec = section("narrow", "Narrow screen (320px)", "At a 320px viewport the card is calc(100vw - 16px) = 304px wide and keeps 8px from each edge. The footer never wraps: Open, Copy Link and ⋯ need about 130px. Each frame is a 320px container, standing in for the viewport.");
+  function narrow(theme, s, kind, mode, cap, menu = false) {
+    const f = $("div", { class: "narrow", "data-theme": theme, "data-spec": `narrow-${s.id}-${mode}` });
+    const a = anchor(s, kind, mode === "dialog");
+    f.append($("p", { class: "ed" }, "The quarter closes on 19 December. ", s.before, a, s.after));
+    const c = card(s.card, { mode, kind, label: s.label, menu });
+    f.append(c);
+    placers.push(() => placeCard(c, a, f, "ltr", 8));
+    return $("div", {}, $("p", { class: "cap", text: cap }), f);
+  }
+  for (const theme of ["light", "dark"]) {
+    board(sec, `narrow-${theme}`, `Narrow screen, 320px · ${theme}`, theme, [
+      narrow(theme, S.longh, "link", "hover", "Hover card · long title with a heading"),
+      narrow(theme, S.heading, "chip", "dialog", "Dialog · chip · ⋯ open", "keyboard"),
+    ], "narrows");
   }
 }
 
@@ -619,7 +720,7 @@ function board(sec, id, title, theme, kids, cls = "grid") {
     [0, 40, 80, 120].forEach((ms) => {
       const p = reduce ? 1 : ease(ms / 120);
       const f = $("div", { class: "frame", "data-spec": "motion" });
-      const c = card(S.resolved.card, { mode: "hover", kind: "chip" });
+      const c = card(S.resolved.card, { mode: "hover", kind: "chip", label: S.resolved.label });
       c.style.setProperty("--fo", String(Math.round(p * 100) / 100));
       c.style.setProperty("--fy", `${(2 * (1 - p)).toFixed(2)}px`);
       f.append(c);
@@ -644,9 +745,25 @@ function parseColor(str) {
   let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
   return { c: d, h: (h * 60 + 360) % 360 };
 }
+/** Separator rules for a menu or sheet: no leading, trailing or doubled hairline; Remove Link last, after its own hairline unless alone. */
+function groupFaults(list, itemSel, sepSel) {
+  const kids = [...list.children].filter((k) => k.matches(`${itemSel}, ${sepSel}`));
+  const faults = [];
+  kids.forEach((k, i) => {
+    if (!k.matches(sepSel)) return;
+    if (i === 0 || i === kids.length - 1 || kids[i + 1].matches(sepSel)) faults.push("stray separator");
+  });
+  const items = kids.filter((k) => k.matches(itemSel));
+  const rm = items.findIndex((k) => k.textContent === "Remove Link");
+  if (rm >= 0) {
+    if (rm !== items.length - 1) faults.push("Remove Link not last");
+    if (items.length > 1 && !kids[kids.indexOf(items[rm]) - 1]?.matches(sepSel)) faults.push("Remove Link without its hairline");
+  }
+  return faults;
+}
 function runAudit() {
   const surfaces = [...document.querySelectorAll("[data-card]")];
-  const all = surfaces.flatMap((s) => [s, ...s.querySelectorAll("*")]);
+  const all = [...new Set(surfaces.flatMap((s) => [s, ...s.querySelectorAll("*")]))];
   const cs = (e) => getComputedStyle(e);
   const res = [];
   const add = (rule, pass, evidence) => res.push({ rule, pass, evidence });
@@ -658,47 +775,88 @@ function runAudit() {
   for (const e of all) for (const p of ["color", "backgroundColor", "borderTopColor", "outlineColor"]) {
     const c = parseColor(cs(e)[p]); if (c && c.c > 0.03 && c.h >= 240 && c.h <= 320) purple++;
   }
-  add("No purple or indigo accent; app tokens only", purple === 0, `${purple} colours with hue 240–320 inside cards; greys from tokens, the consent button uses the app's --primary`);
+  // Remove Link is never red: when not highlighted it has exactly its list's colour.
+  const removes = [...document.querySelectorAll(".lc-mi, .sheet-act")].filter((e) => e.textContent === "Remove Link" && !e.hasAttribute("data-hl"));
+  const redRemove = removes.filter((e) => cs(e).color !== cs(e.closest(".lc-menu, .sheet")).color).length;
+  add("No purple or indigo accent; app tokens only", purple === 0 && redRemove === 0, `${purple} colours with hue 240–320 inside cards; ${removes.length} Remove Link rows, ${redRemove} in a colour other than their list's (never red); the consent button uses the app's --primary`);
   const text = surfaces.map((s) => s.textContent).join(" ");
   const emoji = (text.match(/\p{Extended_Pictographic}/gu) || []).length;
   add("No emoji", emoji === 0, `${emoji} pictographic characters in card text`);
-  const cards = [...document.querySelectorAll(".lc")];
-  const maxSvg = Math.max(...cards.map((c) => c.querySelectorAll("svg").length));
-  const bodySvg = cards.reduce((n, c) => n + c.querySelectorAll(".lc-body svg").length, 0);
-  add("One icon at most per meaning; no decorative icons", maxSvg <= 1 && bodySvg === 0, `at most ${maxSvg} svg per card (⋯); ${bodySvg} icons in card bodies; the state icon lives on the anchor only`);
+  // Icons: a type or state marker (one per card, the anchor's own) or an action's label (one per control). Nothing else.
+  const svgs = [...new Set([...document.querySelectorAll("[data-card] svg")])];
+  let markers = 0, actions = 0, deco = 0;
+  for (const s of svgs) {
+    if (s.classList.contains("lc-ico") && s.closest(".lc-head")) markers++;
+    else if (s.closest("button, [role=menuitem]")) actions++;
+    else deco++;
+  }
+  const controls = [...document.querySelectorAll("[data-card] button, [data-card] [role=menuitem]")];
+  const multi = controls.filter((c) => c.querySelectorAll("svg").length > 1).length;
+  const unnamed = controls.filter((c) => !c.textContent.trim() && !c.getAttribute("aria-label")).length;
+  const bodies = [...document.querySelectorAll(".lc, .sheet")];
+  const markerFaults = bodies.filter((c) => c.querySelectorAll(".lc-ico").length !== 1).length;
+  let mismatch = 0, compared = 0;
+  for (const c of bodies) {
+    const host = c.closest(".tile, .phone, .narrow");
+    const an = host?.querySelector(".doc-chip svg, a.doc-link svg");
+    if (!an) continue;
+    compared++;
+    if (an.dataset.icon !== c.querySelector(".lc-ico").dataset.icon) mismatch++;
+  }
+  add("Icons only as type or state markers or action labels, max one per control, none decorative",
+    deco === 0 && multi === 0 && unnamed === 0 && markerFaults === 0 && mismatch === 0,
+    `${markers} state markers (one per card, ${compared - mismatch} of ${compared} matching their anchor), ${actions} action icons, ${deco} decorative; ${multi} controls with more than one icon; ${unnamed} icon-only controls without a name`);
   const shadows = new Set(surfaces.map((s) => cs(s).boxShadow));
   const innerShadow = all.filter((e) => !e.hasAttribute("data-card") && cs(e).boxShadow !== "none").length;
   add("One subtle elevation token", innerShadow === 0 && shadows.size <= 2, `${shadows.size} surface shadows (shadow-md on cards and menus, shadow-lg on the sheet and consent dialog); ${innerShadow} shadows inside surfaces`);
   const radii = new Set([...document.querySelectorAll(".lc, .lc-menu")].map((s) => cs(s).borderTopLeftRadius));
-  add("Radius matches the app's popover", radii.size === 1 && radii.has("7.2px"), `cards and menus: ${[...radii].join(", ")}; sheet and dialog top corners 10.08px (radius-xl)`);
+  add("Radius matches the app's popover", radii.size === 1 && radii.has("7.2px"), `cards and menus: ${[...radii].join(", ")}; buttons, rows and tooltip 5.76px; sheet and dialog top corners 10.08px (radius-xl)`);
   const bang = (text.match(/[!✨]/g) || []).length;
   add("No filler or marketing copy, no ✨, no exclamation marks", bang === 0, `${bang} "!" or "✨"; every string is spec copy`);
   const centred = all.filter((e) => cs(e).textAlign === "center" && !e.matches("button, button *")).length;
-  add("Not centred-everything", centred === 0, `${centred} centred text blocks; everything starts on the 12px inset`);
+  // The column: state icon and Open's arrow on the 12px inset; title and Open's label on 34px.
+  const ref = document.querySelector('[data-theme="light"] [data-spec="resolved-link-dialog"] .lc');
+  const x0 = ref.getBoundingClientRect().left + 1;
+  const at = (e) => Math.round(e.getBoundingClientRect().left - x0);
+  const lab = document.createRange(); lab.selectNodeContents(ref.querySelector(".lc-btn.primary span"));
+  const cols = { ico: at(ref.querySelector(".lc-ico")), title: at(ref.querySelector(".lc-title")), meta: at(ref.querySelector(".lc-meta")), snip: at(ref.querySelector(".lc-snip")),
+    arrow: at(ref.querySelector(".lc-btn.primary svg")), label: Math.round(lab.getBoundingClientRect().left - x0) };
+  const colsOk = cols.ico === 12 && cols.arrow === 12 && cols.snip === 12 && cols.title === 34 && cols.meta === 34 && cols.label === 34;
+  add("Not centred-everything", centred === 0 && colsOk, `${centred} centred text blocks; state icon ${cols.ico}px, Open's arrow ${cols.arrow}px and snippet ${cols.snip}px on the inset; title ${cols.title}px, meta ${cols.meta}px and Open's label ${cols.label}px on one column`);
   const pads = all.map((e) => Math.max(...["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].map((p) => parseFloat(cs(e)[p]) || 0)));
-  const hs = cards.filter((c) => !c.closest(".frame")).map((c) => c.getBoundingClientRect().height);
-  add("No giant padding or whitespace bloat", Math.max(...pads) <= 20, `largest padding ${Math.max(...pads)}px (sheet bottom safe area); cards ${Math.round(Math.min(...hs))}–${Math.round(Math.max(...hs))}px tall at 320px wide`);
-  add("No generic hero-card look", bodySvg === 0, "no header icon, banner, image well or nested boxes");
+  const hs = [...document.querySelectorAll(".tile .lc")].map((c) => c.getBoundingClientRect().height);
+  const resolvedH = Math.round(document.querySelector('[data-theme="light"] [data-spec="resolved-link-hover"] .lc').getBoundingClientRect().height);
+  add("No giant padding or whitespace bloat", Math.max(...pads) <= 20, `largest padding ${Math.max(...pads)}px (sheet bottom safe area); a resolved hover card is ${resolvedH}px tall; cards ${Math.round(Math.min(...hs))}–${Math.round(Math.max(...hs))}px at 320px wide`);
+  const bodyBoxes = [...document.querySelectorAll(".lc-body *")].filter((e) => !e.matches(".lc-skel") && (cs(e).backgroundColor !== "rgba(0, 0, 0, 0)" || cs(e).borderTopStyle !== "none")).length;
+  const bodySvg = Math.max(...bodies.map((c) => c.querySelectorAll(".lc-body svg").length));
+  const imgs = document.querySelectorAll("[data-card] img").length;
+  add("No generic hero-card look", bodyBoxes === 0 && bodySvg <= 1 && imgs === 0, `at most ${bodySvg} icon in a card body (the 16px state marker on the title line); ${imgs} images; ${bodyBoxes} filled or bordered boxes inside bodies: no banner, image well or nested boxes`);
   const pills = all.filter((e) => parseFloat(cs(e).borderTopLeftRadius) >= 999).length;
   add("No rainbow status pills", pills === 0, `${pills} pill shapes inside cards; In Trash is a word in weight 500`);
   const anim = all.filter((e) => cs(e).animationIterationCount === "infinite").length;
   add("No shimmer", anim === 0, `${anim} infinite animations; the loading bar is static`);
   const type = new Set(all.filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).map((e) => `${cs(e).fontSize}/${cs(e).lineHeight} ${cs(e).fontWeight}`));
   add("Typography does the hierarchy", true, `type scale in use: ${[...type].sort().join(", ")}`);
-  const btnH = new Set([...document.querySelectorAll(".lc .lc-btn")].filter((b) => !b.closest(".frame")).map((b) => b.getBoundingClientRect().height));
+  const live = [...document.querySelectorAll(".lc .lc-btn")].filter((b) => !b.closest(".frame"));
+  const btnH = new Set(live.map((b) => b.getBoundingClientRect().height));
+  const iconW = new Set(live.filter((b) => b.matches(".icon")).map((b) => b.getBoundingClientRect().width));
+  const perFoot = Math.max(...[...document.querySelectorAll(".lc-row")].map((r) => r.querySelectorAll(".lc-btn").length));
   const rowsH = new Set([...document.querySelectorAll(".sheet-act")].map((b) => b.getBoundingClientRect().height));
   const over = [...document.querySelectorAll(".lc-row, .lc-meta, .lc-title.crumb")].filter((r) => r.scrollWidth > r.clientWidth + 1).length;
-  add("Density matches a pro tool", btnH.size === 1 && btnH.has(28) && over === 0, `buttons ${[...btnH].join(", ")}px; sheet rows ${[...rowsH].join(", ")}px; ${over} overflowing rows`);
-  add("Every pixel justified", true, "footer padding holds the 2px + 2px focus ring; each hairline separates a group; no grip, no per-row lines, no icon on any action");
+  add("Density matches a pro tool", btnH.size === 1 && btnH.has(28) && iconW.size === 1 && iconW.has(28) && perFoot <= 3 && over === 0,
+    `buttons ${[...btnH].join(", ")}px tall, icon buttons ${[...iconW].join(", ")}px wide; at most ${perFoot} controls per footer; sheet rows ${[...rowsH].join(", ")}px; ${over} overflowing rows`);
+  const menus = [...document.querySelectorAll(".lc-menu")], sheets = [...document.querySelectorAll(".sheet-acts")];
+  const faults = [...menus.map((m) => groupFaults(m, ".lc-mi", ".lc-sep")), ...sheets.map((s) => groupFaults(s, ".sheet-act", ".gsep"))].flat();
+  add("Every pixel justified", faults.length === 0, `footer padding holds the 2px + 2px focus ring; ${menus.length} menus and ${sheets.length} sheets: each hairline separates a group, Remove Link last after its own hairline (${faults.length} faults); each icon names a type, a state or an action`);
   return res;
 }
 
 /* ── Accessibility (computed) ──────────────────────────────────────────── */
 function accName(el) {
   const lb = el.getAttribute("aria-labelledby");
-  if (lb) return lb.split(/\s+/).map((id) => textOf(document.getElementById(id))).join(" ").trim();
+  if (lb) return lb.split(/\s+/).map((id) => textOf(document.getElementById(id)).trim()).join(" ").trim();
   if (el.getAttribute("aria-label")) return el.getAttribute("aria-label");
-  return textOf(el);
+  return textOf(el).trim();
 }
 function textOf(el) {
   if (!el) return "";
@@ -707,7 +865,7 @@ function textOf(el) {
     if (n.nodeType === 3) s += n.textContent;
     else if (n.nodeType === 1 && n.getAttribute("aria-hidden") !== "true") s += textOf(n);
   }
-  return s.replace(/⁠/g, "").replace(/\s+/g, " ").trim();
+  return s.replace(/⁠/g, "").replace(/\s+/g, " ");
 }
 function roleOf(el) {
   return el.getAttribute("role") || ({ BUTTON: "button", A: "link" })[el.tagName] || el.tagName.toLowerCase();
@@ -716,23 +874,26 @@ function a11yRows() {
   const pick = (spec) => document.querySelector(`[data-theme="light"] [data-spec="${spec}"]`);
   const sets = [
     ["Hover card · chip · resolves", pick("resolved-chip-hover")],
-    ["Dialog · chip · resolves", pick("resolved-chip-dialog")],
+    ["Dialog · link · resolves", pick("resolved-link-dialog")],
     ["Dialog · link · loading", pick("loading-link-dialog")],
     ["Dialog · chip · Not available", pick("na-chip-dialog")],
     ["Dialog · link · newer version", pick("newer-link-dialog")],
-    ["Hover card · chip · ⋯ open", document.querySelector('[data-theme="light"] [data-spec="resolved-chip-hover"].t3')],
+    ["Dialog · link · ⋯ open from the keyboard", pick("more-dialog-link")],
+    ["Hover card · link · Copy Link tooltip", pick("tip-hover-link")],
     ["Live consent", pick("consent")],
     ["Phone sheet · chip · Not available", document.querySelector('#phone-light .phones > div:nth-child(3)')],
   ];
   const rows = [];
   for (const [surface, t] of sets) {
     if (!t) continue;
-    const els = [...t.querySelectorAll('.doc-chip, a.doc-link, [role="dialog"], [role="alertdialog"], [role="group"], [role="menu"], [role="menuitem"], button')];
+    const els = [...t.querySelectorAll('.doc-chip, a.doc-link, [role="dialog"], [role="alertdialog"], [role="group"], [role="menu"], [role="menuitem"], [role="tooltip"], button')];
     for (const e of els) {
       const st = [];
       for (const a of ["aria-modal", "aria-busy", "aria-haspopup", "aria-expanded"]) if (e.hasAttribute(a)) st.push(`${a}=${e.getAttribute(a)}`);
+      if (e.hasAttribute("aria-controls")) st.push("aria-controls=the menu");
       if (e.getAttribute("tabindex") === "-1" && e.tagName === "BUTTON") st.push("not in tab order");
       if (e.hasAttribute("data-initial-focus")) st.push("initial focus");
+      if (e.hasAttribute("data-hl")) st.push("focused");
       rows.push({ surface, role: roleOf(e), name: accName(e), state: st.join(", ") });
     }
   }
@@ -743,19 +904,51 @@ function a11yRows() {
 function wireTry() {
   const box = document.getElementById("try");
   const log = document.getElementById("try-log");
-  let hoverCard = null, openTimer = 0, closeTimer = 0, dlg = null, dlgAnchor = null;
+  let hoverCard = null, openTimer = 0, closeTimer = 0, dlg = null, dlgAnchor = null, menu = null, tip = null, justOpened = false, quiet = false;
   const kindOf = (a) => (a.classList.contains("doc-chip") ? "chip" : "link");
-  const closeHover = () => { clearTimeout(openTimer); clearTimeout(closeTimer); hoverCard?.remove(); hoverCard = null; };
+  const hideTip = () => { tip?.remove(); tip = null; };
+  const showTip = (btn) => {
+    hideTip();
+    if (btn.getAttribute("aria-expanded") === "true") return;
+    tip = $("div", { class: "lc-tip", role: "tooltip", text: btn.getAttribute("aria-label") });
+    box.append(tip);
+    placeTip(tip, btn, box);
+  };
+  const closeMenu = (refocus) => {
+    if (!menu) return;
+    const more = menu.parentElement.querySelector(".lc-btn.more");
+    menu.remove(); menu = null;
+    more.setAttribute("aria-expanded", "false"); more.removeAttribute("aria-controls");
+    // Focus returning from the menu never re-opens the ⋯ tooltip, so the next Esc closes the card.
+    if (refocus) { quiet = true; more.focus(); quiet = false; }
+  };
+  const openMenu = (more, where) => {
+    hideTip();
+    const lc = more.closest(".lc");
+    menu = buildMenu(lc._groups, { dir: lc.getAttribute("dir") });
+    lc.append(menu);
+    more.setAttribute("aria-expanded", "true"); more.setAttribute("aria-controls", menu.id);
+    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    (where === "first" ? items[0] : where === "last" ? items[items.length - 1] : menu).focus();
+  };
+  const closeHover = () => {
+    clearTimeout(openTimer); clearTimeout(closeTimer);
+    if (hoverCard) { if (menu && hoverCard.contains(menu)) closeMenu(false); hideTip(); hoverCard.remove(); }
+    hoverCard = null;
+  };
   const closeDialog = (restore) => {
     if (!dlg) return;
+    if (menu && dlg.contains(menu)) closeMenu(false);
+    hideTip();
     dlg.remove(); dlg = null;
     dlgAnchor.setAttribute("aria-expanded", "false");
     if (restore) dlgAnchor.focus();
     dlgAnchor = null;
   };
+  const act = (label) => { log.textContent = `${label}: the prototype stops here.`; closeHover(); closeDialog(false); };
   const show = (a, mode, viaKeyboard) => {
     const s = S[a.dataset.state];
-    const c = card(s.card, { mode, kind: kindOf(a), focus: false });
+    const c = card(s.card, { mode, kind: kindOf(a), label: s.label, focus: false });
     box.append(c);
     placeCard(c, a, box, "ltr");
     if (mode === "hover") {
@@ -764,16 +957,44 @@ function wireTry() {
       hoverCard = c;
     } else {
       dlg = c; dlgAnchor = a; a.setAttribute("aria-expanded", "true");
-      const target = c.querySelector("[data-initial-focus]") || c;
-      target.focus({ focusVisible: viaKeyboard });
-      c.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeDialog(true); } });
+      (c.querySelector("[data-initial-focus]") || c).focus({ focusVisible: viaKeyboard });
     }
     c.addEventListener("click", (e) => {
+      const mi = e.target.closest('[role="menuitem"]');
+      if (mi) return act(mi.textContent);
       const b = e.target.closest("button");
       if (!b) return;
-      log.textContent = `${b.textContent || b.getAttribute("aria-label")}: the prototype stops here.`;
-      closeHover(); closeDialog(false);
+      if (b.classList.contains("more")) {
+        if (justOpened) return;
+        if (menu) closeMenu(e.detail === 0); else openMenu(b, e.detail === 0 ? "first" : "menu");
+        return;
+      }
+      act(b.textContent || b.getAttribute("aria-label"));
     });
+    c.addEventListener("keydown", (e) => {
+      const more = e.target.closest?.(".lc-btn.more");
+      if (more && !menu && ["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) {
+        e.preventDefault();
+        openMenu(more, e.key === "ArrowUp" ? "last" : "first");
+        justOpened = true; setTimeout(() => { justOpened = false; });
+        return;
+      }
+      if (!menu || !menu.contains(e.target)) return;
+      const items = [...menu.querySelectorAll('[role="menuitem"]')];
+      const i = items.indexOf(document.activeElement);
+      const go = (j) => { e.preventDefault(); items[(j + items.length) % items.length].focus(); };
+      if (e.key === "ArrowDown") go(i + 1);
+      else if (e.key === "ArrowUp") go(i < 0 ? items.length - 1 : i - 1);
+      else if (e.key === "Home") go(0);
+      else if (e.key === "End") go(items.length - 1);
+      else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (i >= 0) act(items[i].textContent); }
+      else if (e.key === "Tab") closeMenu(true); // no preventDefault: Tab then moves on from ⋯
+    });
+    // Tooltips: icon-only buttons, on hover and on keyboard focus. Visual only: the button's aria-label is its name.
+    c.addEventListener("pointerover", (e) => { const b = e.target.closest(".lc-btn.icon"); if (b && tip?._for !== b) { showTip(b); if (tip) tip._for = b; } });
+    c.addEventListener("pointerout", (e) => { const b = e.target.closest(".lc-btn.icon"); if (b && !b.contains(e.relatedTarget)) hideTip(); });
+    c.addEventListener("focusin", (e) => { const b = e.target.closest?.(".lc-btn.icon"); if (b && !quiet && b.matches(":focus-visible")) { showTip(b); if (tip) tip._for = b; } });
+    c.addEventListener("focusout", () => hideTip());
   };
   for (const a of box.querySelectorAll(".doc-chip, a.doc-link")) {
     a.addEventListener("pointerenter", () => {
@@ -790,8 +1011,18 @@ function wireTry() {
       if (modK || altEnter) { e.preventDefault(); closeHover(); closeDialog(false); show(a, "dialog", true); }
     });
   }
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && hoverCard) closeHover(); });
-  document.addEventListener("pointerdown", (e) => { if (dlg && !dlg.contains(e.target) && e.target !== dlgAnchor && !dlgAnchor.contains(e.target)) closeDialog(false); });
+  // Esc peels one layer at a time: tooltip, then the menu (focus back to ⋯), then the card.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (tip) { hideTip(); return; }
+    if (menu) { closeMenu(!!dlg && dlg.contains(menu)); return; }
+    if (dlg) { closeDialog(true); return; }
+    if (hoverCard) closeHover();
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (menu && !menu.contains(e.target) && !e.target.closest?.(".lc-btn.more")) closeMenu(false);
+    if (dlg && !dlg.contains(e.target) && e.target !== dlgAnchor && !dlgAnchor.contains(e.target)) closeDialog(false);
+  });
 }
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
