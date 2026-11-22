@@ -16,7 +16,7 @@ The Hyperlink extension's own check is a denylist (`javascript:`, `data:`,
 link to `ms-msdt:`, `search-ms:`, `smb:`, `vscode:` or any other OS protocol
 handler stayed a live `<a href>` that Mod-click, middle-click or the
 browser's "Open link" handed to the OS. The editor now allows only
-`https:`, `http:` and `mailto:` (editor chunk group +162 B gz, CSS
+`https:`, `http:` and `mailto:` (editor chunk group +145 B gz, CSS
 unchanged).
 
 #### Security
@@ -27,6 +27,8 @@ unchanged).
   skips it: a pasted `<a href>` off the policy keeps its text and loses the
   link, and a stored one (Yjs, older documents) renders with no `href`, so
   it can't be followed at all.
+- **Editor:** the scheme is checked after leading whitespace only; a
+  scheme split by whitespace or led by a control character is refused.
 - **Editor:** pasted link titles are dropped (a tooltip a stranger chose).
   Titles already in a document still render.
 
@@ -42,9 +44,10 @@ unchanged).
 - **Docs:** search-linking spec §4.4 and §4.8 say what the sandbox now does
   with a `tinydocy:` link; `docs/upstream/extension-hyperlink-allowuri-parse.md`
   is a ready-to-file issue for the extension.
-- **Build:** the 162 B are recorded in the editor-chunk ledger comment; they
-  may count against LK1's 60 B `linkHost` line (LK1 measures +41 B, so
-  together 143 B over that line).
+- **Build:** the details spec's editor-chunk ledger (§1 rule 5) and the
+  chunk script record "#168 security allowlist: +145 B", a security
+  exemption outside LK1's line (coordinator-approved 2026-11-22). The
+  fence still passes, so it is unchanged.
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 

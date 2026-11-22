@@ -59,6 +59,7 @@ These came out of the staff feasibility review. Each one was checked against the
    | No provider, `WriteGate` and the decoration host | P2.2 | 300 B (measured 294 B) |
    | Sandbox `DocSession` adapter, context and hook: `use-yjs-document` reads `DocSession` (K14's P2.1 allowance; added 2026-11-22 by coordinator decision) | P2.1c | 275 B (measured 275 B) |
    | Status chip from the composition root: `DocumentEditor` takes `statusChip` and the web root passes `CollabStatusGroup`, so the editor folder never reaches `collab-session` (architecture §3.3, the P2.2 import boundary; about 100 B of code, the rest the minifier re-ranking names in the hoisted editor module; a lazy `import()` instead cost +1.3 KB on first load) | #134 (P2.2 follow-up) | 198 B (measured 198 B) |
+   | #168 security allowlist: +145 B. `https:`, `http:` and `mailto:` only (`isWebLink`), applied to commands, paste and rendering (`LinkPolicyHyperlink`), pasted titles dropped. Security exemption, coordinator-approved 2026-11-22: outside LK1's line and outside the total; the fence was not raised because it still passes (1,062 B left against 84a9458) | #168 | 170 B hard cap (measured 145 B) |
    | Comments hook | P4.9 | 150 B |
    | Smart-quotes gate | P2.9c-1 | 150 B |
    | i18n core (`t()`, registry labels, `lang`/`dir`; also pays L3's `matchShortcut` / `visualStep` bytes, languages §3.7.1) | L1a | 400 B |

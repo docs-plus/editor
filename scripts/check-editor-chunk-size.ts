@@ -33,6 +33,10 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * unconfirmed the total is 2,053 B (1,580 B, plus P2.1c's 275 B sandbox
  * DocSession line, K14, and #134's 198 B status-chip boundary line); if
  * spike M18 confirms it, this becomes 2,133 B with no further approval.
+ *
+ * #168 security allowlist: +145 B (84a9458 → +16,130 B; #168 → +16,275 B).
+ * A security exemption, coordinator-approved 2026-11-22, outside the
+ * total above; the fence still passes, so it was not raised.
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
