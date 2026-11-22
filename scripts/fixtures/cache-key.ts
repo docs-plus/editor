@@ -35,6 +35,8 @@ export const FIXTURE_SOURCES: readonly string[] = [
   "lib/yjs-mark-migration.ts",
   "lib/highlight-tokens.ts",
   "lib/schema-names.ts",
+  "lib/library/tag-rules.ts",
+  "lib/search/normalize.ts",
   "bun.lock",
 ];
 
