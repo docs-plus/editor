@@ -1,0 +1,257 @@
+/**
+ * The fixture sets of test strategy §3.2, by name. Each writes into its own
+ * folder and returns a manifest: per-file sha256 for byte fixtures, a
+ * logical summary for libraries (whose SQLite bytes vary run to run).
+ */
+import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+import {
+  inlineImagesDocument,
+  jsonToYState,
+  largeDocument,
+  legacyDocument,
+  nearCapDocument,
+  rtlDocument,
+} from "./documents";
+import { hostileFiles } from "./hostile";
+import { exifSamples, syntheticPhoto, syntheticPng } from "./images";
+import {
+  generateLibrary,
+  type LibrarySpec,
+  type LibrarySummary,
+} from "./libraries";
+import type { Rng } from "./rng";
+
+export type FixtureFile = { path: string; bytes: number; sha256: string };
+
+export type FixtureManifest = {
+  set: string;
+  seed: number;
+  files: FixtureFile[];
+  library?: LibrarySummary;
+};
+
+export type FixtureSet = {
+  name: string;
+  contents: string;
+  usedBy: string;
+  generate(dir: string, rng: Rng): Omit<FixtureManifest, "set" | "seed">;
+};
+
+/** Sets of §3.2 that wait on unmerged work, and what each waits on. */
+export const DEFERRED_SETS: Readonly<Record<string, string>> = {
+  "doc-comments": "the comments model (P4.9)",
+  "prefs/": "the preferences schema (lib/prefs, page engine)",
+  "web-library/": "the web library's IndexedDB format (W2)",
+  "doc-images (asset-store part)": "the asset store and blobs table (P2.6b)",
+  "library-1k (images)": "the asset store and blobs table (P2.6b)",
+  "hostile/ (bad .tinydoc header)": "the .tinydoc format (P2.8)",
+  "doc-legacy (schema 1 and 2 bundles)":
+    "DOC_SCHEMA above 0 and .tinydoc (P2.8)",
+};
+
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Writes `files` under `dir` and lists them, sorted, for the manifest. */
+export function writeFiles(
+  dir: string,
+  files: Record<string, Uint8Array | string>,
+): FixtureFile[] {
+  return Object.entries(files)
+    .map(([path, content]) => {
+      const bytes =
+        typeof content === "string"
+          ? new TextEncoder().encode(content)
+          : content;
+      const target = join(dir, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, bytes);
+      return { path, bytes: bytes.byteLength, sha256: sha256(bytes) };
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+const json = (value: unknown) => `${JSON.stringify(value)}\n`;
+
+function librarySet(
+  name: string,
+  spec: LibrarySpec,
+  contents: string,
+  usedBy: string,
+): FixtureSet {
+  return {
+    name,
+    contents,
+    usedBy,
+    generate(dir, rng) {
+      const library = generateLibrary(join(dir, "library"), spec, rng);
+      return { files: [], library };
+    },
+  };
+}
+
+export const LIBRARY_SPECS = {
+  "library-s": { docs: 20, folderFanOut: [3], tags: 5, content: "rich" },
+  "library-1k": {
+    docs: 1000,
+    folderFanOut: [4, 3, 2, 2],
+    tags: 30,
+    content: "rich",
+  },
+  "library-10k": { docs: 10_000, folderFanOut: [], tags: 0, content: "titles" },
+} as const satisfies Record<string, LibrarySpec>;
+
+/** `doc-images` counts (§3.2): 10 inline, 200 asset images, 10 photos. */
+export const DOC_IMAGES_COUNTS = { inline: 10, assets: 200, photos: 10 };
+
+export const FIXTURE_SETS: readonly FixtureSet[] = [
+  librarySet(
+    "library-s",
+    LIBRARY_SPECS["library-s"],
+    "20 documents, 3 folders, 5 tags",
+    "local and electron smoke",
+  ),
+  librarySet(
+    "library-1k",
+    LIBRARY_SPECS["library-1k"],
+    "1,000 documents in 4-level folders, 30 tags (images from P2.6b)",
+    "startup and sidebar budgets, T8",
+  ),
+  librarySet(
+    "library-10k",
+    LIBRARY_SPECS["library-10k"],
+    "10,000 documents, titles only",
+    "the P2.7b list budget",
+  ),
+  {
+    name: "doc-large",
+    contents: "1,000 and 2,000 headings, rich content",
+    usedBy: "perf, find and replace, comments open",
+    generate(dir, rng) {
+      const files: Record<string, Uint8Array | string> = {};
+      for (const headings of [1000, 2000]) {
+        const doc = largeDocument(headings, rng.fork(`json-${headings}`));
+        files[`doc-large-${headings}.json`] = json(doc);
+        files[`doc-large-${headings}.ystate`] = jsonToYState(
+          doc,
+          rng.fork(`y-${headings}`),
+        );
+      }
+      return { files: writeFiles(dir, files) };
+    },
+  },
+  {
+    name: "doc-near-cap",
+    contents: "1.9 MiB of Yjs state, under the 2 MiB production cap",
+    usedBy: "T11, size refusals",
+    generate(dir, rng) {
+      return {
+        files: writeFiles(dir, { "doc-near-cap.ystate": nearCapDocument(rng) }),
+      };
+    },
+  },
+  {
+    name: "doc-images",
+    contents: "10 inline data-URL images, 200 asset images, 10 photos of 12 MP",
+    usedBy: "P2.6c, T17, T18, the image perf case",
+    generate(dir, rng) {
+      const inline = inlineImagesDocument(
+        rng.fork("inline"),
+        DOC_IMAGES_COUNTS.inline,
+      );
+      const files: Record<string, Uint8Array | string> = {
+        "inline-images.json": json(inline),
+        "inline-images.ystate": jsonToYState(inline, rng.fork("inline-y")),
+      };
+      const assets = rng.fork("assets");
+      for (let i = 1; i <= DOC_IMAGES_COUNTS.assets; i++)
+        files[`assets/asset-${String(i).padStart(3, "0")}.png`] = syntheticPng(
+          assets,
+          assets.int(24, 64),
+          assets.int(24, 64),
+        );
+      const photos = rng.fork("photos");
+      for (let i = 1; i <= DOC_IMAGES_COUNTS.photos; i++)
+        files[`photos/photo-${String(i).padStart(2, "0")}.png`] =
+          syntheticPhoto(photos);
+      return { files: writeFiles(dir, files) };
+    },
+  },
+  {
+    name: "doc-rtl",
+    contents:
+      "Persian body with diacritics and ZWNJ, mixed RTL and LTR blocks, a Persian title",
+    usedBy: "P2.13, the spacing check on three engines",
+    generate(dir, rng) {
+      const doc = rtlDocument(rng.fork("json"));
+      return {
+        files: writeFiles(dir, {
+          "doc-rtl.json": json(doc),
+          "doc-rtl.ystate": jsonToYState(doc, rng.fork("y")),
+        }),
+      };
+    },
+  },
+  {
+    name: "doc-legacy",
+    contents: "link and code marks, an editor-root leftover",
+    usedBy: "migrations, mixed-version soak",
+    generate(dir, rng) {
+      return {
+        files: writeFiles(dir, { "doc-legacy.ystate": legacyDocument(rng) }),
+      };
+    },
+  },
+  {
+    name: "exif",
+    contents: "JPEG, PNG and WebP with synthetic GPS; an animated GIF",
+    usedBy: "GPS stripping, image sniffing",
+    generate(dir, rng) {
+      return { files: writeFiles(dir, exifSamples(rng)) };
+    },
+  },
+  {
+    name: "hostile",
+    contents:
+      "hostile titles, an SVG named .png, an HTML/PNG polyglot, a GIF bomb, unknown Yjs roots",
+    usedBy: "P2.8, the import guard, image sniffing",
+    generate(dir, rng) {
+      return { files: writeFiles(dir, hostileFiles(rng)) };
+    },
+  },
+];
+
+export function findSet(name: string): FixtureSet {
+  const set = FIXTURE_SETS.find((s) => s.name === name);
+  if (set) return set;
+  const deferred = DEFERRED_SETS[name] ?? DEFERRED_SETS[`${name}/`];
+  throw new Error(
+    deferred
+      ? `fixture set "${name}" waits on ${deferred}`
+      : `unknown fixture set "${name}"; known: ${FIXTURE_SETS.map((s) => s.name).join(", ")}`,
+  );
+}
+
+/** Generates `set` into `<outDir>/<set>/` and writes its `manifest.json`. */
+export function generateSet(
+  set: FixtureSet,
+  outDir: string,
+  rng: Rng,
+): FixtureManifest {
+  const dir = join(outDir, set.name);
+  mkdirSync(dir, { recursive: true });
+  const manifest: FixtureManifest = {
+    set: set.name,
+    seed: rng.seed,
+    ...set.generate(dir, rng.fork(set.name)),
+  };
+  writeFileSync(
+    join(dir, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  return manifest;
+}
