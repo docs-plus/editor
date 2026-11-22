@@ -212,10 +212,9 @@ const hocuspocus = new Hocuspocus({
       throw guardrailRefusal(decision.reason, { ip, documentName });
     }
   },
-  async connected({ requestHeaders, documentName }) {
-    const ip = getPinnedClientIp(requestHeaders);
-    if (isShareDocument(documentName)) shares?.onConnected(ip);
-    else guardrails.onConnected(ip);
+  async connected(payload) {
+    if (isShareDocument(payload.documentName)) shares?.onConnected(payload);
+    else guardrails.onConnected(getPinnedClientIp(payload.requestHeaders));
   },
   async onDisconnect({ requestHeaders, documentName }) {
     const ip = getPinnedClientIp(requestHeaders);

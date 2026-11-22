@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
 
+import { ResetConnection } from "@hocuspocus/common";
 import type {
   beforeHandleAwarenessPayload,
+  connectedPayload,
   Extension,
   onAuthenticatePayload,
 } from "@hocuspocus/server";
@@ -84,7 +86,13 @@ export type ShareServer = {
   /** `onLoadDocument` for `share:*`: never creates a share without its row. */
   checkLoad(documentName: string, headers: Headers): void;
   recordStored(documentName: string, sizeBytes: number): void;
-  onConnected(ip: string): void;
+  /**
+   * `connected` for `share:*`: counts the connection, then checks the row
+   * again and closes the connection if the share ended (or an editor's
+   * share went view-only) while it was joining. A stop or view-only call
+   * that ran between `onAuthenticate` and here found no connection to close.
+   */
+  onConnected(payload: connectedPayload<ShareConnectionContext>): void;
   onDisconnect(ip: string): void;
   /** Marks viewers in awareness: no cursor, `viewer: true` (details §8.2). */
   awareness: Extension;
@@ -196,8 +204,18 @@ export function createShareServer(options: ShareServerOptions): ShareServer {
       const shareId = shareIdFromDocumentName(documentName);
       if (shareId) recordShareStored(db, shareId, sizeBytes, now());
     },
-    onConnected(ip) {
+    onConnected({ requestHeaders, documentName, context, connection }) {
+      const ip = getPinnedClientIp(requestHeaders);
+      // Counted first: closing runs `onDisconnect`, which counts it down.
       activeConnections.set(ip, (activeConnections.get(ip) ?? 0) + 1);
+      const shareId = shareIdFromDocumentName(documentName);
+      const share = shareId ? getShare(db, shareId) : null;
+      const stale =
+        !share ||
+        share.status === "ended" ||
+        (share.view_only === 1 && !context?.shareReadOnly);
+      // It reconnects and is told why (`sharing_stopped`, `view_only`, …).
+      if (stale) connection.close(ResetConnection);
     },
     onDisconnect(ip) {
       const active = activeConnections.get(ip) ?? 0;
