@@ -102,6 +102,24 @@ use it: the web build is unchanged (every JS and CSS chunk identical to
   `tests/harness` out of Tailwind's sources; the library styles itself in
   plain CSS on the shadcn tokens, shipped only with the components.
 
+### Retention purge: on
+
+The daily `editor-purge` run now deletes. Four dry runs in production
+(2026-11-19 to 2026-11-22, 03:17) each listed the same 2 documents idle for
+more than 30 days (`staleTotal` 2), no closed documents past 7 days and no
+expired tombstones.
+
+#### Changed
+
+- **Ops:** `PURGE_MODE` is `on` for `editor-purge` in `ecosystem.config.cjs`.
+  Each run first backs the database up to `backups/` (`db-first.sqlite` kept
+  forever, dated copies 14 days) and deletes nothing if the backup fails.
+
+**Deploy:** nothing to do by hand. The automatic deploy registers the new env
+without purging; the next 03:17 run writes `db-first.sqlite` and does the
+first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
+pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
