@@ -28,8 +28,9 @@ const UNREACHABLE_AFTER_MS = 10_000;
  * open the WebSocket first; the chunk downloads while the tab list syncs.
  */
 const loadDocumentEditor = () =>
-  import("@/components/document-editor/document-editor").then(
-    (module) => module.DocumentEditor,
+  // The sandbox wrapper: the editor plus its DocSession, in one lazy chunk.
+  import("@/components/editor-app/sandbox-document-editor").then(
+    (module) => module.SandboxDocumentEditor,
   );
 
 const DocumentEditor = dynamic(loadDocumentEditor, {

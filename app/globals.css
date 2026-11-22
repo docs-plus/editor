@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* The library UI (desktop and the web library) styles itself in plain CSS,
+   and the library harness is test code: neither adds utilities here. */
+@source not "../components/library";
+@source not "../tests/harness";
+
 @custom-variant dark (&:is(.dark *));
 /* The OS setting, or the web's "Reduce motion: Always" (`data-motion`). */
 @custom-variant motion-reduce {

@@ -99,6 +99,16 @@
       }
     },
     {
+      "includes": ["components/library/**/*.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.svg"],
       "linter": {
         "rules": {
