@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### The editor no longer imports the sandbox status chip
+
+`components/document-editor/` no longer reaches `collab-session` through the
+status chip, so the desktop graph won't load it from there (desktop
+architecture §3.3). The web looks and loads the same: the chip still paints in
+the same commit as the editor (12 cold loads on a production build, median
+0.0 ms apart, as on `main`) and no new chunk is made. No schema or protocol
+change; no Deploy note.
+
+#### Changed
+
+- **Editor:** `DocumentEditor` takes the connection and identity chip as a
+  `statusChip` prop, still shown only with a provider. The web sandbox's root,
+  `components/editor-app/sandbox-document-editor.tsx`, passes
+  `CollabStatusGroup` and is what `EditorApp` lazy-loads in place of the
+  editor, so the chip stays in the editor's chunk group.
+- **Bytes:** the editor chunk group grows by 208 B gz (about 100 B raw; the
+  rest is the minifier renaming identifiers in the editor's hoisted module);
+  the app shell grows by 2 B.
+
 ### Desktop P2.6: the library storage worker
 
 The SQLite engine behind the desktop library, where documents, folders and

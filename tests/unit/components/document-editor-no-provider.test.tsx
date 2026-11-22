@@ -62,8 +62,10 @@ afterAll(() => {
   }));
 });
 
-const { DocumentEditor } = await import(
-  "@/components/document-editor/document-editor"
+// The web root: the editor plus the status chip it hands it (the editor
+// folder imports no chip, so nothing there reads collab-session).
+const { SandboxDocumentEditor } = await import(
+  "@/components/editor-app/sandbox-document-editor"
 );
 
 /** Counts WebSocket constructions, whatever creates them. */
@@ -124,7 +126,7 @@ const providerFor = (shared: Awareness) =>
 
 async function render() {
   await act(async () => {
-    root?.render(<DocumentEditor documentId="local-doc" />);
+    root?.render(<SandboxDocumentEditor documentId="local-doc" />);
   });
   // Tiptap creates the editor in an effect and emits `create` on a timer.
   await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
