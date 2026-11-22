@@ -6,6 +6,7 @@ import path from "node:path";
 import * as Y from "yjs";
 
 import { DOCUMENTS_SCHEMA } from "@/lib/hocus-persistence";
+import { CLIENT_SCHEMA } from "@/lib/schema-version";
 import {
   bootstrapDocumentActivityTable,
   deleteDocumentPermanently,
@@ -204,7 +205,7 @@ describe("hocus-server client schema gate", () => {
       async () => {
         const server = await start(env);
         const outcomes = await Promise.all(
-          [null, "abc", "1", "2"].map(
+          [null, "abc", "1", String(CLIENT_SCHEMA)].map(
             (schema) =>
               attach(openSocket(server, schema), crypto.randomUUID()).outcome,
           ),
