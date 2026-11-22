@@ -21,6 +21,7 @@ import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
+import "@/styles/_print.scss";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
