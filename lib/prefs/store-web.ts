@@ -1,16 +1,19 @@
 import {
+  CONTINUE_STORAGE_KEY,
+  LOOK_STORAGE_KEY,
+  PREFS_VERSION,
+  UI_STORAGE_KEY,
+} from "@/lib/prefs/keys";
+import {
   type A11yPrefs,
   type BooleanPref,
   type BootStorage,
-  LOOK_STORAGE_KEY,
   MAX_UI_PAYLOAD_CHARS,
   type PageKnob,
   type PageKnobs,
   type PageSlot,
   parsePageSlot,
   resolveBoot,
-  UI_STORAGE_KEY,
-  UI_STORAGE_VERSION,
   type WebPrefs,
   withKnob,
 } from "@/lib/prefs/schema";
@@ -22,8 +25,10 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
  * by the root layout's `PrefsRuntime` and by lazy UI; never by the editor
  * chunk, which reads the `<html>` attributes instead.
  *
- * - This tab's choices win over storage until reload, so blocked storage
- *   or the kill switch still apply a choice for the session (R=0: "ses").
+ * - A choice that storage can't keep (the kill switch, blocked or full
+ *   storage) lasts for this tab: it wins over storage until reload
+ *   (R=0: "ses"). A stored choice keeps no session copy, so another tab's
+ *   later change shows here too.
  * - Each write re-reads the key and keeps every other slot (the M6 outline
  *   and A15 density slots live in the same key), in the `{ last, recent }`
  *   entry shape `remembered-choice` reads.
@@ -33,8 +38,6 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 /** `NEXT_PUBLIC_REMEMBER_CHOICES`: 0 keeps every choice in memory only. */
 const REMEMBER = process.env.NEXT_PUBLIC_REMEMBER_CHOICES !== "0";
-/** The continue position (M15) that `rememberPlace` gates. */
-export const CONTINUE_STORAGE_KEY = "tinydocy-continue";
 
 type Slot = "page" | "a11y" | BooleanPref;
 
@@ -112,35 +115,39 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** Stores one slot, keeping every other slot of the key. */
 function writeSlot(slot: Slot, value: unknown): void {
-  session[slot] = value;
-  if (REMEMBER) {
-    try {
-      const raw = localStorage.getItem(UI_STORAGE_KEY);
-      let slots: Record<string, unknown> = {};
-      if (raw && raw.length <= MAX_UI_PAYLOAD_CHARS) {
-        const payload: unknown = JSON.parse(raw);
-        if (
-          isRecord(payload) &&
-          payload.v === UI_STORAGE_VERSION &&
-          isRecord(payload.slots)
-        ) {
-          slots = payload.slots;
-        }
-      }
-      const next: Record<string, unknown> = Object.create(null);
-      for (const [name, entry] of Object.entries(slots)) {
-        if (isRecord(entry)) next[name] = entry;
-      }
-      next[slot] = { last: value, recent: [] };
-      localStorage.setItem(
-        UI_STORAGE_KEY,
-        JSON.stringify({ v: UI_STORAGE_VERSION, slots: next }),
-      );
-    } catch {
-      // Unreadable or blocked storage: the choice lasts for this tab.
-    }
-  }
+  if (REMEMBER && storeSlot(slot, value)) delete session[slot];
+  else session[slot] = value;
   notify();
+}
+
+/** True when the slot reached storage. */
+function storeSlot(slot: Slot, value: unknown): boolean {
+  try {
+    const raw = localStorage.getItem(UI_STORAGE_KEY);
+    let slots: Record<string, unknown> = {};
+    if (raw && raw.length <= MAX_UI_PAYLOAD_CHARS) {
+      const payload: unknown = JSON.parse(raw);
+      if (
+        isRecord(payload) &&
+        payload.v === PREFS_VERSION &&
+        isRecord(payload.slots)
+      ) {
+        slots = payload.slots;
+      }
+    }
+    const next: Record<string, unknown> = Object.create(null);
+    for (const [name, entry] of Object.entries(slots)) {
+      if (isRecord(entry)) next[name] = entry;
+    }
+    next[slot] = { last: value, recent: [] };
+    localStorage.setItem(
+      UI_STORAGE_KEY,
+      JSON.stringify({ v: PREFS_VERSION, slots: next }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Replaces the page slot (a style and its overrides). */

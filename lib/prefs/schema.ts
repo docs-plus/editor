@@ -9,17 +9,22 @@
  */
 
 import {
+  LOOK_STORAGE_KEY,
+  PREFS_VERSION,
+  UI_STORAGE_KEY,
+} from "@/lib/prefs/keys";
+import {
   LEGACY_KEY_PREFIX,
   THEME_PREFERENCES,
   THEME_STORAGE_KEY,
   type ThemePreference,
 } from "@/lib/theme";
 
-/** The existing `tinydocy-ui` key; the prefs slots sit beside M6 and A15. */
-export const UI_STORAGE_KEY = "tinydocy-ui";
-export const UI_STORAGE_VERSION = 1;
-/** §5.6: which page look this browser started on, written once at boot. */
-export const LOOK_STORAGE_KEY = "tinydocy-look";
+export {
+  LOOK_STORAGE_KEY,
+  PREFS_VERSION,
+  UI_STORAGE_KEY,
+} from "@/lib/prefs/keys";
 export const LOOK_MARKERS = ["classic", "new"] as const;
 export type LookMarker = (typeof LOOK_MARKERS)[number];
 
@@ -187,7 +192,7 @@ export function parseUiSlots(raw: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
-  if (!isRecord(payload) || payload.v !== UI_STORAGE_VERSION) return {};
+  if (!isRecord(payload) || payload.v !== PREFS_VERSION) return {};
   if (!isRecord(payload.slots)) return {};
   const values: Record<string, unknown> = {};
   for (const slot of PREF_SLOTS) {
@@ -353,18 +358,11 @@ export function resolveBoot({
 }
 
 /**
- * The stored preferences payload version (offline data-model audit): the
- * web `tinydocy-ui` key carries it as `v`, and so will desktop
- * `meta('prefs')` (P2.9b). A newer `v` is read field by field, never
- * dropped, so a downgraded app keeps a newer build's values.
- */
-export const PREFS_VERSION = 1;
-
-/**
  * The one validator for stored preference values, shared by every store:
  * the web store passes the `tinydocy-ui` slots' `last` values, and desktop
  * main will pass its `meta('prefs')` JSON (the same fields at the top
- * level, beside `v`). Unknown fields are ignored; an invalid value reads
+ * level, beside `v`; a newer `v` is read field by field, `keys.ts`).
+ * Unknown fields are ignored; an invalid value reads
  * its default; a missing page falls back by the look marker (desktop and
  * the library are new installs, so `new`).
  */
@@ -384,8 +382,4 @@ export function parsePrefs(
     smartQuotes: bool("smartQuotes"),
     rememberPlace: bool("rememberPlace"),
   };
-}
-
-export function isLook(value: unknown): value is LookMarker {
-  return isLookMarker(value);
 }

@@ -53,6 +53,62 @@ describe("web prefs store", () => {
     });
   });
 
+  it("another tab's later change shows here after this tab wrote", async () => {
+    const store = await importFresh<Store>("@/lib/prefs/store-web");
+    const off = store.subscribePrefs(() => {});
+    store.setPageKnob("size", 18);
+    expect(store.getPrefs().page).toEqual({ style: "default", size: 18 });
+    // Tab B writes the same slot, then its storage event reaches tab A.
+    localStorage.setItem(
+      "tinydocy-ui",
+      JSON.stringify({
+        v: 1,
+        slots: {
+          page: { last: { style: "default", size: 24 }, recent: [] },
+        },
+      }),
+    );
+    window.dispatchEvent(new StorageEvent("storage", { key: "tinydocy-ui" }));
+    off();
+    expect(store.getPrefs().page).toEqual({ style: "default", size: 24 });
+  });
+
+  it("a write storage refuses lasts for this tab", async () => {
+    const store = await importFresh<Store>("@/lib/prefs/store-web");
+    const real = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    const backing = localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => backing.getItem(key),
+        setItem: () => {
+          throw new Error("quota");
+        },
+        removeItem: (key: string) => backing.removeItem(key),
+        key: (index: number) => backing.key(index),
+        get length() {
+          return backing.length;
+        },
+      },
+    });
+    try {
+      store.setPageKnob("width", "wide");
+      expect(store.getPrefs().page).toEqual({
+        style: "default",
+        width: "wide",
+      });
+    } finally {
+      if (real) Object.defineProperty(globalThis, "localStorage", real);
+    }
+    expect(localStorage.getItem("tinydocy-ui")).toBeNull();
+  });
+
+  it("uses the version remembered-choice owns the key with", async () => {
+    const { PREFS_VERSION } = await import("@/lib/prefs/keys");
+    const { STORAGE_VERSION } = await import("@/lib/remembered-choice");
+    expect(PREFS_VERSION).toBe(STORAGE_VERSION);
+  });
+
   it("a remembered-choice write keeps the prefs slots (CHOICE_SLOTS)", async () => {
     const store = await importFresh<Store>("@/lib/prefs/store-web");
     store.setBooleanPref("smartQuotes", false);
