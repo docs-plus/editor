@@ -42,15 +42,21 @@ const MENU_WIDTH =
 export function ToolbarMenuContent({
   finalFocus,
   label,
+  side = "bottom",
+  align = "start",
   children,
 }: {
   finalFocus: () => HTMLElement | boolean;
   label?: string;
+  /** The bubble opens its menus away from the text (spec §10.4). */
+  side?: "top" | "bottom";
+  align?: "start" | "center" | "end";
   children?: ReactNode;
 }) {
   return (
     <DropdownMenuContent
-      align="start"
+      side={side}
+      align={align}
       finalFocus={finalFocus}
       data-toolbar-popup=""
       aria-label={label}

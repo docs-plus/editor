@@ -357,7 +357,10 @@ test.describe("lazy surface chunks", () => {
     const { release, restore } = await holdMenuChunk(page);
     await openToolbarTestDoc(page);
     await typeInNewParagraphAtEnd(page, "Held keys");
-    const trigger = row(page).getByRole("button", { name: "Normal text" });
+    const trigger = row(page).getByRole("button", {
+      name: "Text",
+      exact: true,
+    });
     await trigger.focus();
     // Enter opens at the first item; two ArrowDowns reach Heading 2.
     await page.keyboard.press("Enter");
@@ -385,7 +388,10 @@ test.describe("lazy surface chunks", () => {
     const { release, restore } = await holdMenuChunk(page);
     await openToolbarTestDoc(page);
     await typeInNewParagraphAtEnd(page, "Cancel by key");
-    const trigger = row(page).getByRole("button", { name: "Normal text" });
+    const trigger = row(page).getByRole("button", {
+      name: "Text",
+      exact: true,
+    });
     await trigger.focus();
     await page.keyboard.press("Enter");
     // As on an open menu, Esc closes it and stays in the toolbar.

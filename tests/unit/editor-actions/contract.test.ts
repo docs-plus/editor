@@ -12,6 +12,10 @@ import {
   ActionButton,
   type ActionButtonProps,
 } from "@/components/smart-toolbar";
+import {
+  MORE_HEADING_IDS,
+  TURN_INTO_IDS,
+} from "@/components/smart-toolbar/row/turn-into-menu-items";
 import { editorActions } from "@/lib/editor-actions";
 import { coreActions } from "@/lib/editor-actions/core-actions";
 import {
@@ -248,6 +252,12 @@ describe("registry (PR D1)", () => {
     }
     const ids = editorActions.list().map((action) => action.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("registers every Style ▾ (Turn into) id (spec §7.4, §16)", () => {
+    for (const id of [...TURN_INTO_IDS, ...MORE_HEADING_IDS]) {
+      expect(editorActions.has(id)).toBe(true);
+    }
   });
 
   // `shortcut` is display-only; each key has one binding, so no two

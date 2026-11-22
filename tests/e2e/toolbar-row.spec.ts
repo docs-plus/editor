@@ -189,7 +189,7 @@ test.describe("sorted row", () => {
     // Names of value menus change with the value; positions never do.
     const shape = (names: string[]) =>
       names.map((name) =>
-        /^(Normal text|Heading \d|Title|Mixed|Align .*|Justify)$/.test(name)
+        /^(Text|Heading \d|Title|Mixed|Align .*|Justify)$/.test(name)
           ? "<value>"
           : name,
       );
@@ -693,10 +693,79 @@ test.describe("formatting", () => {
     );
     await expect(indent).toBeFocused();
     expect(await registryIds()).toEqual(before);
-    await expect(toolbarButton(page, "Normal text")).toHaveAttribute(
+    await expect(toolbarButton(page, "Text")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
+  });
+});
+
+test.describe("Style ▾ turn into (spec §7.4, BQ10, BQ11)", () => {
+  /** The top-level block holding `needle`, by its node type. */
+  const blockOf = (page: Page, needle: string) =>
+    page.evaluate((target) => {
+      const doc = window.__tiptap_editor?.state.doc;
+      let type = "";
+      doc?.forEach((node) => {
+        if (!type && node.textContent.startsWith(target)) {
+          type = node.type.name;
+        }
+      });
+      return type;
+    }, needle);
+
+  test("the row face reads Text in a paragraph", async ({ page }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    const face = toolbarButton(page, "Text");
+    await expect(face).toBeVisible();
+    await expect(face).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  for (const [item, type] of [
+    ["Quote", "blockquote"],
+    ["Code block", "codeBlock"],
+  ] as const) {
+    test(`${item} converts a paragraph in one undo step`, async ({ page }) => {
+      await openDoc(page);
+      await caretIn(page, "Plain");
+      await toolbarButton(page, "Text").click();
+      const menu = page.getByRole("menu", { name: "Text style" });
+      // Shared body: no Markdown chips, a trailing check cell, and Your
+      // formats below the block types in the row only.
+      await expect(
+        menu.getByRole("menuitemradio", { name: "Text" }),
+      ).toHaveAttribute("aria-checked", "true");
+      await expect(menu.getByText("Your formats")).toBeVisible();
+      await menu.getByRole("menuitemradio", { name: item }).click();
+      await expect(page.getByRole("menu")).toHaveCount(0);
+      await expect.poll(() => blockOf(page, "Plain")).toBe(type);
+      await expect(page.locator(".tiptap")).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => blockOf(page, "Plain")).toBe("paragraph");
+    });
+  }
+
+  test("More headings holds H4–H6 and the title disables every row", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Text").click();
+    const menu = page.getByRole("menu", { name: "Text style" });
+    await expect(
+      menu.getByRole("menuitemradio", { name: "Heading 4" }),
+    ).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "More headings" }).hover();
+    await page.getByRole("menuitemradio", { name: "Heading 5" }).click();
+    await expect.poll(() => blockOf(page, "Plain")).toBe("heading");
+    await caretIn(page, "Title");
+    await toolbarButton(page, "Title").click();
+    const quote = page
+      .getByRole("menu", { name: "Text style" })
+      .getByRole("menuitemradio", { name: "Quote" });
+    await expect(quote).toHaveAttribute("aria-disabled", "true");
+    await expect(quote).toHaveAccessibleDescription("Title is always H1.");
   });
 });
 

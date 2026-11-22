@@ -156,7 +156,7 @@ test.describe("text style value at T5 (M8)", () => {
 
     for (const [selector, visible, name] of [
       ["h2", "H2", "H2 Heading 2"],
-      ["p", "Text", "Text Normal text"],
+      ["p", "Text", "Text"],
       ["h1", "Title", "Title"],
     ] as const) {
       await caretIn(page, selector);

@@ -286,7 +286,7 @@ test("I5: forced colours draw mixed with a dashed border and keep the focus ring
 });
 
 async function openStyleMenu(page: Page): Promise<Locator> {
-  await row(page).getByRole("button", { name: "Normal text" }).click();
+  await row(page).getByRole("button", { name: "Text", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Text style" });
   await expect(menu).toBeVisible();
   await menu.evaluate((el) =>
