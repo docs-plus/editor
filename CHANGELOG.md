@@ -237,6 +237,40 @@ visible heading and `role="group"` with the same label, and every row keeps a
 there). Nothing is added or removed. Page width follows with the preferences
 work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
 
+### CI: four shards, two perf jobs and parallel unit tests
+
+The suite has grown to 627 browser tests (about 3,500 s), so three packed
+shards still took about 8 minutes, perf took 7 and the checks job 5 (half
+of it the serial unit tests and the informational stress probe).
+
+#### Changed
+
+- **CI:** the browser suites run in four duration-packed shards
+  (`Playwright shard 1/4` … `4/4`).
+- **CI:** perf runs in two jobs, each on its own runner with one worker:
+  `Playwright perf (typing budget)` (`performance.spec.ts`,
+  `toolbar-perf.spec.ts`) and `Playwright perf (features)` (every other perf
+  spec, so a new one lands there). `Playwright (Chromium)` needs both.
+- **CI:** unit tests run with `bun test --parallel` through
+  `scripts/unit-tests.ts`; the files that assert a wall-clock budget run
+  serially after them. The repository variable `UNIT_SERIAL=1` runs every
+  file serially. A parallel shadow run matched the serial one file by file
+  on 6 of 6 runs (#155, folded in here).
+- **CI:** the stress probe moved from the checks job to the nightly
+  `unit-runs` job, which also runs the unit tests fully serially and as CI
+  runs them and compares the two file by file (`scripts/compare-unit-runs.ts`).
+- **CI:** `Changed files` logs how many shard timings it found instead of
+  the whole JSON.
+- **Tests:** `tests/unit/ci/unit-tests.test.ts` fails when a unit test with
+  a wall-clock budget is missing from the serial list;
+  `compare-unit-runs.test.ts`; `ci-workflow.test.ts` pins the four shards,
+  the perf split and the unit-test step; the nightly streak classifies the
+  new nightly steps as test steps.
+
+**Deploy:** none. **Owner:** each merge queue entry now runs about 17 jobs
+(CI and the desktop shell), so the runbook recommends build concurrency
+**1** instead of 2.
+
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision

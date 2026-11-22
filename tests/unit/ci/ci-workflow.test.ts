@@ -22,7 +22,13 @@ interface Job {
   permissions?: Record<string, string>;
   if?: string;
   needs?: string | string[];
-  strategy?: { "fail-fast"?: boolean; matrix?: { shard?: number[] } };
+  strategy?: {
+    "fail-fast"?: boolean;
+    matrix?: {
+      shard?: number[];
+      include?: { suite: string; select: string; key: string }[];
+    };
+  };
   steps?: Step[];
 }
 
@@ -90,7 +96,7 @@ describe("CI workflow", () => {
 
   it("shards the chromium project and reports every shard", () => {
     const e2e = jobs.e2e;
-    expect(e2e.strategy?.matrix?.shard).toEqual([1, 2, 3]);
+    expect(e2e.strategy?.matrix?.shard).toEqual([1, 2, 3, 4]);
     expect(e2e.strategy?.["fail-fast"]).toBe(false);
     const run = runOf(e2e, "Run Playwright");
     expect(run).toContain("--project=chromium");
@@ -103,7 +109,7 @@ describe("CI workflow", () => {
   it("packs every shard from the one set of timings the changes job read", () => {
     const plan = jobs.e2e.steps?.find((step) => step.name === "Plan shard");
     expect(plan?.run).toContain("scripts/e2e-shards.ts plan");
-    expect(plan?.run).toContain('"$SHARD/3"');
+    expect(plan?.run).toContain('"$SHARD/4"');
     expect(plan?.env?.TIMINGS).toBe(`\${{ needs.changes.outputs.timings }}`);
     expect(plan?.env?.SHARD).toBe(`\${{ matrix.shard }}`);
     const shardArgs = jobs.e2e.steps?.find(
@@ -146,6 +152,31 @@ describe("CI workflow", () => {
     expect(run).toContain("--project=perf");
     expect(run).toContain("--no-deps");
     expect(run).not.toContain("--project=chromium");
+  });
+
+  it("splits perf into the typing budget and everything else", () => {
+    expect(jobs.perf.name).toBe(`Playwright perf (\${{ matrix.suite }})`);
+    expect(jobs.perf.strategy?.["fail-fast"]).toBe(false);
+    const legs = jobs.perf.strategy?.matrix?.include ?? [];
+    expect(legs.map((leg) => [leg.suite, leg.select])).toEqual([
+      ["typing budget", "--test-list"],
+      ["features", "--test-list-invert"],
+    ]);
+    // One list: the typing-budget job runs it, the features job the rest,
+    // so a new perf spec can never fall between them.
+    const run = runOf(jobs.perf, "Run Playwright");
+    expect(run).toContain("performance.spec.ts toolbar-perf.spec.ts");
+    expect(run).toContain('"$SELECT=$RUNNER_TEMP/typing-budget.txt"');
+    expect(new Set(legs.map((leg) => leg.key)).size).toBe(2);
+  });
+
+  it("runs the unit tests in parallel, with a serial fallback", () => {
+    const unit = jobs.checks.steps?.find((step) => step.name === "Unit tests");
+    expect(unit?.run).toBe("bun scripts/unit-tests.ts");
+    expect(unit?.env?.UNIT_SERIAL).toBe(`\${{ vars.UNIT_SERIAL }}`);
+    // The stress probe runs nightly, not on every pull request.
+    const runs = (jobs.checks.steps ?? []).map((step) => step.run ?? "");
+    expect(runs.some((run) => run.includes("test:stress"))).toBe(false);
   });
 
   it("gates on every shard and perf, even when they fail or skip", () => {
