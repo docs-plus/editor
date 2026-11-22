@@ -6,6 +6,8 @@ import type { AppendRecord } from "@/lib/platform/doc-store";
 import { IdbDocStore } from "@/lib/platform/web/library/idb-doc-store";
 import { createLibraryDoc } from "@/lib/platform/web/library/library-docs";
 import {
+  META_KEYS,
+  type MetaRow,
   STORES,
   type UpdateRow,
 } from "@/lib/platform/web/library/library-schema";
@@ -110,6 +112,38 @@ describe("IdbDocStore: several writers (W-D3)", () => {
     await library.dispose();
   });
 
+  it("keeps another tab's content when a compact's foreign was never applied", async () => {
+    const library = await createFakeLibrary();
+    await library.createDoc("doc", 1);
+    const a = library.connect();
+    const b = library.connect();
+    const docA = new Y.Doc();
+    const docB = new Y.Doc();
+    await a.load("doc");
+    await b.load("doc");
+
+    const seqB = await b.append("doc", local(edit(docB, "from B")));
+    await b.compact("doc", Y.encodeStateAsUpdate(docB), seqB);
+    let seqA = await a.append("doc", local(edit(docA, "from A")));
+    const first = await a.compact("doc", Y.encodeStateAsUpdate(docA), seqA);
+    expect(first.foreign).not.toBeNull();
+    // The caller drops `foreign` (its apply threw, say): B's rows are gone,
+    // so the next compact must still merge the stored snapshot.
+    seqA = await a.append("doc", local(edit(docA, " again")));
+    const second = await a.compact("doc", Y.encodeStateAsUpdate(docA), seqA);
+    expect(second.foreign).not.toBeNull();
+    const text = await storedText(library);
+    expect(text).toContain("from B");
+    expect(text).toContain("again");
+
+    // Once the caller applies it, compaction stops merging.
+    Y.applyUpdate(docA, second.foreign as Uint8Array);
+    const third = await a.compact("doc", Y.encodeStateAsUpdate(docA), seqA);
+    expect(third.foreign).toBeNull();
+    expect(await storedText(library)).toContain("from B");
+    await library.dispose();
+  });
+
   it("loads rows below the snapshot's seq that another tab left", async () => {
     const library = await createFakeLibrary();
     await library.createDoc("doc", 1);
@@ -161,7 +195,7 @@ describe("IdbDocStore: writes", () => {
     await library.createDoc("doc", 1);
     const store = new IdbDocStore({
       library: library.browser.open(),
-      writer: "tab-1",
+      writer: "test writer",
       now: () => 42,
     });
     await store.load("doc");
@@ -187,7 +221,7 @@ describe("IdbDocStore: writes", () => {
     expect(rows[0]).toMatchObject({
       doc_id: "doc",
       origin: "migration",
-      writer: "tab-1",
+      writer: "test writer",
       created_at: 42,
     });
     await library.dispose();
@@ -256,6 +290,72 @@ describe("IdbDocStore: writes", () => {
       createLibraryDoc(library.admin, { id: "doc" }),
     ).rejects.toMatchObject({ code: "invalid_argument" });
     await library.dispose();
+  });
+});
+
+describe("IdbDocStore: the index rev (§4.1)", () => {
+  /** `meta.rev`, the index change counter. */
+  const readRev = (library: Awaited<ReturnType<typeof createFakeLibrary>>) =>
+    library.admin.run<unknown>(
+      [STORES.meta],
+      "readonly",
+      null,
+      (tx, { done }) => {
+        const request = tx.objectStore(STORES.meta).get(META_KEYS.rev);
+        request.onsuccess = () =>
+          done((request.result as MetaRow | undefined)?.value);
+      },
+    );
+
+  it("leaves meta.rev alone on append and compact; only index writes bump it", async () => {
+    const library = await createFakeLibrary();
+    await library.createDoc("doc", 1);
+    const afterCreate = await readRev(library);
+    expect(afterCreate).toBe(1);
+    const store = library.connect();
+    const doc = new Y.Doc();
+    await store.load("doc");
+    const seq = await store.append("doc", {
+      ...local(edit(doc, "x")),
+      title: "A new title",
+      snippet: "and a snippet",
+    });
+    await store.compact("doc", Y.encodeStateAsUpdate(doc), seq);
+    expect(await readRev(library)).toBe(afterCreate);
+    await library.dispose();
+  });
+});
+
+describe("IdbDocStore: lifetime", () => {
+  it("forgets a document on close and everything on dispose", async () => {
+    const library = await createFakeLibrary();
+    await library.createDoc("one", 1);
+    await library.createDoc("two", 1);
+    const connection = await library.browser.open();
+    const hooksBefore = connection.closeHookCount;
+    const store = new IdbDocStore({ library: connection });
+    await store.load("one");
+    await store.load("two");
+    expect(store.openDocCount).toBe(2);
+    expect(connection.closeHookCount).toBe(hooksBefore + 1);
+    await store.close("one");
+    expect(store.openDocCount).toBe(1);
+    await store.dispose();
+    expect(store.openDocCount).toBe(0);
+    expect(connection.closeHookCount).toBe(hooksBefore);
+    connection.close();
+    await library.dispose();
+  });
+
+  it("disposes cleanly when the library never opened", async () => {
+    const { openLibraryDb } = await import(
+      "@/lib/platform/web/library/library-db"
+    );
+    const store = new IdbDocStore({
+      library: openLibraryDb({ factory: null }),
+    });
+    await store.dispose();
+    expect(store.openDocCount).toBe(0);
   });
 });
 

@@ -15,6 +15,11 @@
  *   `local-session` applies with `STORAGE_ORIGIN` and never appends.
  * - Rows another tab appended are never deleted here; the next `load`
  *   returns them, whatever their seq.
+ * - `foreign` is apply-then-ack: until a later `compact`'s state covers the
+ *   foreign snapshot's state vector (the caller applied it), every compact
+ *   merges the stored snapshot again and returns it again. A caller that
+ *   drops `foreign` (a destroyed doc, an apply that throws) therefore never
+ *   loses the other tab's content, whose rows that tab already deleted.
  *
  * Content writes are `durability: "strict"` and settle on `complete`; an
  * aborted write (quota, I/O) rejects with a retryable `DocStoreError` and
@@ -49,7 +54,24 @@ type SessionState = {
   applied: Set<number>;
   /** The rev of the snapshot this session last loaded or wrote. */
   snapRev: string | null;
+  /**
+   * The state vector of the last `foreign` this session returned, until a
+   * compact's state covers it (the caller applied it). Null when none.
+   */
+  foreignSv: Map<number, number> | null;
 };
+
+/** Whether state vector `sv` has every insert `target` has. */
+function covers(sv: Map<number, number>, target: Map<number, number>): boolean {
+  for (const [client, clock] of target) {
+    if ((sv.get(client) ?? 0) < clock) return false;
+  }
+  return true;
+}
+
+function stateVector(update: Uint8Array): Map<number, number> {
+  return Y.decodeStateVector(Y.encodeStateVectorFromUpdate(update));
+}
 
 type Loaded = {
   doc: DocRow;
@@ -91,13 +113,19 @@ export class IdbDocStore implements DocStore {
   private readonly writer: string;
   private readonly sessions = new Map<string, SessionState>();
   private readonly writes = new Set<Promise<unknown>>();
+  private unregisterCloseHook: (() => void) | null = null;
+  private disposed = false;
 
   constructor(options: IdbDocStoreOptions) {
     this.now = options.now ?? Date.now;
     this.writer = options.writer ?? crypto.randomUUID();
     this.library = Promise.resolve(options.library).then((library) => {
-      // An upgrade in another tab waits for this tab's issued writes.
-      library.addCloseHook(() => this.flush());
+      // An upgrade in another tab waits for the transactions this store
+      // already issued. Batches still queued in the batcher are the
+      // session's: the composition root registers its flush too (§2.2).
+      if (!this.disposed) {
+        this.unregisterCloseHook = library.addCloseHook(() => this.flush());
+      }
       return library;
     });
     // `load` and writes report a failed open; this only keeps it from
@@ -141,6 +169,7 @@ export class IdbDocStore implements DocStore {
     this.sessions.set(docId, {
       applied: new Set(rows.map((row) => row.seq)),
       snapRev: snapshot?.rev ?? null,
+      foreignSv: null,
     });
     return {
       snapshot: snapshot ? snapshot.data : null,
@@ -207,6 +236,12 @@ export class IdbDocStore implements DocStore {
    * session applied up to `upToSeq` (§2.5). The caller guarantees, in one
    * task with no append in flight, that `state` is the Y.Doc's whole state
    * and `upToSeq` the highest seq loaded into or acked from it.
+   *
+   * A non-null `foreign` must be applied to the caller's Y.Doc. Until it is
+   * (until a later `state` covers it), each compact merges and returns it
+   * again, so a dropped `foreign` costs a repeat merge, never content. One
+   * gap remains: a foreign snapshot that only deletes adds no inserts, so it
+   * counts as covered at once, and dropping it brings that text back.
    */
   compact(
     docId: string,
@@ -222,13 +257,18 @@ export class IdbDocStore implements DocStore {
       if (!(state instanceof Uint8Array) || state.byteLength === 0) {
         throw new DocStoreError("invalid_argument", "empty state");
       }
-      const session = this.sessions.get(docId) ?? {
+      const session: SessionState = this.sessions.get(docId) ?? {
         applied: new Set<number>(),
         snapRev: null,
+        foreignSv: null,
       };
       const keys = [...session.applied].filter((key) => key <= upToSeq);
       const own = state.slice();
       const rev = crypto.randomUUID();
+      // The last foreign snapshot isn't in `state` yet: merge again.
+      const foreignPending =
+        session.foreignSv !== null &&
+        !covers(stateVector(own), session.foreignSv);
       const foreign = await library.run<Uint8Array | null>(
         [STORES.snapshots, STORES.updates, STORES.docs],
         "readwrite",
@@ -249,7 +289,8 @@ export class IdbDocStore implements DocStore {
             // Another tab compacted since this session last saw the
             // snapshot: keep its content by merging, synchronously, here.
             const merge =
-              stored !== undefined && stored.rev !== session.snapRev;
+              stored !== undefined &&
+              (stored.rev !== session.snapRev || foreignPending);
             const data = merge ? Y.mergeUpdates([stored.data, own]) : own;
             snapshots.put({
               doc_id: docId,
@@ -278,6 +319,7 @@ export class IdbDocStore implements DocStore {
       );
       if (this.sessions.get(docId) === session) {
         session.snapRev = rev;
+        session.foreignSv = foreign ? stateVector(foreign) : null;
         for (const key of keys) session.applied.delete(key);
       }
       return { foreign };
@@ -287,6 +329,23 @@ export class IdbDocStore implements DocStore {
   /** Forgets this session's state; the web has no open-document registry. */
   async close(docId: string): Promise<void> {
     this.sessions.delete(docId);
+  }
+
+  /** Documents this store holds session state for (diagnostics, tests). */
+  get openDocCount(): number {
+    return this.sessions.size;
+  }
+
+  /**
+   * Ends this store: forgets every document and unregisters its close hook,
+   * so the connection keeps no reference to it. Issued writes still settle.
+   */
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    this.sessions.clear();
+    await this.library.catch(() => null);
+    this.unregisterCloseHook?.();
+    this.unregisterCloseHook = null;
   }
 
   async flush(): Promise<void> {

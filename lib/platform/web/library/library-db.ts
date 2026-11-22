@@ -7,10 +7,15 @@
  * - `onupgradeneeded` creates the stores (`library-schema.ts`).
  * - `onblocked`: another tab holds an older version open. The open waits,
  *   and `library_upgrade_blocked` tells the person to close other tabs.
+ *   Once that tab lets go and the open succeeds, `library_upgrade_unblocked`
+ *   clears it.
  * - `onversionchange`: a newer bundle in another tab wants to upgrade. The
- *   close hooks flush every queued write, then the connection closes and
- *   `library_reload` asks for a reload. Writes after that reject with
- *   `library_unavailable`, which is retryable, so the batcher keeps them.
+ *   close hooks run first: `IdbDocStore`'s waits only for the transactions
+ *   it already issued, so batches still queued in the batcher are covered
+ *   only when the composition root (W4) registers the session's flush as a
+ *   hook too. Then the connection closes for good and `library_reload` asks
+ *   for a reload. Writes after that reject with `library_unavailable`,
+ *   which is retryable, so the batcher keeps them until the reload.
  * - A database or `format_version` newer than this bundle knows opens
  *   read-only (`library_too_new`): reads work, writes reject.
  * - No IndexedDB, or an `open()` that fails: `library_unavailable`. There
@@ -36,6 +41,7 @@ import {
 /** Library-wide states the app health shows (web library §9). */
 export type LibraryEvent =
   | "library_upgrade_blocked"
+  | "library_upgrade_unblocked"
   | "library_reload"
   | "library_too_new";
 
@@ -95,6 +101,7 @@ export class LibraryDb {
     private readonly keyRange: typeof IDBKeyRange,
     private readonly onEvent: (event: LibraryEvent) => void,
   ) {
+    // Never rejects: hooks are settled and a throwing listener is caught.
     db.onversionchange = () => void this.handleVersionChange();
     // The browser closed it (site data cleared, say): writes now reject.
     db.onclose = () => {
@@ -113,6 +120,11 @@ export class LibraryDb {
   addCloseHook(hook: () => Promise<void>): () => void {
     this.closeHooks.add(hook);
     return () => this.closeHooks.delete(hook);
+  }
+
+  /** Registered close hooks (diagnostics, tests). */
+  get closeHookCount(): number {
+    return this.closeHooks.size;
   }
 
   close(): void {
@@ -204,12 +216,19 @@ export class LibraryDb {
     });
   }
 
-  /** @internal Flushes, closes and asks for a reload (another tab upgrades). */
+  /**
+   * @internal Runs the close hooks, closes and asks for a reload (another
+   * tab upgrades). Never rejects, so callers may leave it floating.
+   */
   async handleVersionChange(): Promise<void> {
     if (this.closedFlag) return;
     await Promise.allSettled([...this.closeHooks].map((hook) => hook()));
     this.close();
-    this.onEvent("library_reload");
+    try {
+      this.onEvent("library_reload");
+    } catch {
+      // The listener's failure is its own; the connection is closed anyway.
+    }
   }
 }
 
@@ -253,8 +272,16 @@ function openRequest(
         reject(error);
       }
     };
-    request.onblocked = () => onEvent("library_upgrade_blocked");
-    request.onsuccess = () => resolve(request.result);
+    let blocked = false;
+    request.onblocked = () => {
+      blocked = true;
+      onEvent("library_upgrade_blocked");
+    };
+    request.onsuccess = () => {
+      // The old tab let go: the "close other tabs" notice can go.
+      if (blocked) onEvent("library_upgrade_unblocked");
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -340,6 +367,7 @@ export async function openLibraryDb(
 
   if (tooNew) onEvent("library_too_new");
   const library = new LibraryDb(db, tooNew, keyRange, onEvent);
-  if (upgradedMeanwhile) library.handleVersionChange();
+  // Never rejects (see `handleVersionChange`).
+  if (upgradedMeanwhile) void library.handleVersionChange();
   return library;
 }

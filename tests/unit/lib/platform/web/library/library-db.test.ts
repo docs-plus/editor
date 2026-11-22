@@ -164,7 +164,31 @@ describe("openLibraryDb: versions and old tabs (§2.4)", () => {
     oldTab.close();
     const library = await opening;
     expect(library.db.version).toBe(2);
+    // The notice clears once the old tab lets go.
+    expect(events).toEqual([
+      "library_upgrade_blocked",
+      "library_upgrade_unblocked",
+    ]);
     library.close();
+  });
+
+  it("never reports unblocked when nothing blocked", async () => {
+    const browser = createFakeBrowser();
+    const events: LibraryEvent[] = [];
+    const library = await browser.open({ onEvent: (e) => events.push(e) });
+    expect(events).toEqual([]);
+    library.close();
+  });
+
+  it("still closes, and never rejects, when the reload listener throws", async () => {
+    const browser = createFakeBrowser();
+    const library = await browser.open({
+      onEvent: () => {
+        throw new Error("listener failed");
+      },
+    });
+    await expect(library.handleVersionChange()).resolves.toBeUndefined();
+    expect(library.closed).toBe(true);
   });
 
   it("flushes issued writes, closes and asks for a reload when another tab upgrades", async () => {
