@@ -191,9 +191,13 @@ jobs:
       - *install
       - *block-node
 
+      # Shared runners differ in CPU, so the model is logged: it tells a slow
+      # runner from a slow test when shard times drift.
       - &install-chromium
         name: Install Chromium
-        run: bun playwright install --with-deps chromium
+        run: |
+          echo "Runner CPU: $(nproc) x $(lscpu | sed -n 's/^Model name: *//p')"
+          bun playwright install --with-deps chromium
 
       # `make dev` runs next dev and Hocuspocus on one db.sqlite (the DELETE
       # route and Hocuspocus must read the same tombstones) with isolated
