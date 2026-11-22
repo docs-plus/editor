@@ -6,12 +6,56 @@
   z-index: 9;
 }
 
+// Spec §7.1 Shape and colour. The dark surface lifts the bubble off the
+// page (`--popover` and `--card` are both 0.205 there); the edge is chosen
+// on looks, since 1.4.11 rests on the focus ring and the pressed bar.
 .st-bubble-panel {
-  // 4px around 2px-offset 2px outlines: a focused item's ring stays inside
-  // the panel instead of drawing over its border.
+  --bubble-surface: var(--popover);
+  --bubble-edge: oklch(0.87 0 0);
   padding: 4px;
   gap: 2px;
+  border-color: var(--bubble-edge);
+  border-radius: var(--radius);
+  background: var(--bubble-surface);
+  color: var(--popover-foreground);
   animation: st-bubble-in-above 140ms ease-out both;
+
+  :is(.dark *) & {
+    --bubble-surface: oklch(0.24 0 0);
+    --bubble-edge: oklch(1 0 0 / 36%);
+  }
+
+  // Inside each 28px button, so a ring never crosses the 2px gap onto a
+  // neighbour.
+  button:focus-visible {
+    outline-offset: -2px;
+  }
+
+  // Mixed is a 2 + 2 + 2px dashed bar, never pressed's solid bar in grey.
+  button[aria-pressed="mixed"]::after {
+    background: linear-gradient(
+      90deg,
+      var(--pressed-bar) 0 2px,
+      transparent 2px 4px,
+      var(--pressed-bar) 4px 6px
+    );
+  }
+
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+  }
+}
+
+// Style ▾'s face (spec §7.1 Sizes): sized once to the longest face word
+// (`bubble-style-menu.tsx`), so it never moves the other items.
+.st-bubble-style {
+  justify-content: flex-start;
+  padding-inline: 8px 4px;
+  gap: 4px;
+}
+
+.st-bubble-style-word {
+  text-align: start;
 }
 
 .st-bubble[data-placement="bottom"] .st-bubble-panel {

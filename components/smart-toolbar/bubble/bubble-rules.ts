@@ -11,11 +11,17 @@ import {
  * rules are unit tested without a browser.
  */
 
-/** B · I · U, text colour, link. Every one is also a row control. */
+/**
+ * B · I · U · S · ‹› · Tx, text colour, link (spec §7.1). Every one is
+ * also in the row: a button, or an item of ⋯ More formatting.
+ */
 export const BUBBLE_ACTION_IDS = [
   "mark.bold",
   "mark.italic",
   "mark.underline",
+  "mark.strike",
+  "mark.inlineCode",
+  "format.clear",
   "color.text.apply",
   "mark.link",
 ] as const;

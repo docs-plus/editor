@@ -12,13 +12,15 @@ import {
 import { createPortal } from "react-dom";
 
 import { Toolbar, ToolbarSeparator } from "@/components/ui/toolbar";
+import { editorActions } from "@/lib/editor-actions";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 
 import { ActionButton } from "../action-button";
-import { ColorSplit } from "../color-controls";
 import { PaintFormatButton } from "../formats/paint-format-button";
 import { StatusPill } from "../status-pill";
+import { BubbleActionButton } from "./bubble-action-button";
 import { bubbleReferenceRect } from "./bubble-anchor";
+import { BubbleColorSplit } from "./bubble-color-split";
 import {
   type BubbleController,
   createBubbleController,
@@ -33,6 +35,7 @@ import {
   POPOVER_CONTENT,
   shouldShowBubble,
 } from "./bubble-rules";
+import { BubbleStyleMenu } from "./bubble-style-menu";
 import "./selection-bubble.scss";
 
 /** Exit fade (spec §4.3: 140 ms in / 90 ms out). */
@@ -40,6 +43,15 @@ const EXIT_MS = 90;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
+/** B I U S (spec §7.1 slots 2–5), refused inside inline code. */
+const MARK_IDS = [
+  "mark.bold",
+  "mark.italic",
+  "mark.underline",
+  "mark.strike",
+] as const;
+/** Registered by the comments PR (spec §7.6); until then, no slot. */
+const COMMENT_ID = "comment.add";
 
 /**
  * The bubble's one root (v1 contract §5.2). The controller appends it to
@@ -102,8 +114,8 @@ export function SelectionBubbleView(props: SelectionBubbleViewProps) {
 }
 
 /**
- * The desktop selection bubble (spec §4.3, design pass §1): B · I · U │
- * text colour split │ link │ Paint format. A `BubbleController` (spec
+ * The desktop selection bubble (spec §7.1): Style ▾ │ B I U S ‹› Tx │
+ * text colour split, link, Paint format │ 💬 (once registered). A `BubbleController` (spec
  * §12.1) shows, hides and positions it without a ProseMirror plugin, so
  * this lazy chunk never calls `registerPlugin`. Its items mount only while
  * it shows, so typing with no bubble runs no bubble code past the
@@ -365,15 +377,25 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         onEscape={onEscape}
         onMouseDown={keepEditorFocus}
       >
-        <ActionButton id="mark.bold" editor={editor} variant="bubble" />
-        <ActionButton id="mark.italic" editor={editor} variant="bubble" />
-        <ActionButton id="mark.underline" editor={editor} variant="bubble" />
+        <BubbleStyleMenu editor={editor} placement={placement} />
         <ToolbarSeparator />
-        <ColorSplit kind="text" editor={editor} popoverSide={placement} />
+        {MARK_IDS.map((id) => (
+          <BubbleActionButton key={id} id={id} editor={editor} />
+        ))}
+        <ActionButton id="mark.inlineCode" editor={editor} variant="bubble" />
+        <ActionButton id="format.clear" editor={editor} variant="bubble" />
         <ToolbarSeparator />
-        <ActionButton id="mark.link" editor={editor} variant="bubble" />
-        <ToolbarSeparator />
+        <BubbleColorSplit editor={editor} placement={placement} />
+        <BubbleActionButton id="mark.link" editor={editor} />
         <PaintFormatButton editor={editor} />
+        {/* Comment (spec §7.6): last, and absent until the comments PR
+            registers `comment.add`, so its group shifts nothing. */}
+        {editorActions.has(COMMENT_ID) ? (
+          <>
+            <ToolbarSeparator />
+            <ActionButton id={COMMENT_ID} editor={editor} variant="bubble" />
+          </>
+        ) : null}
       </Toolbar>
     ) : null,
     root,

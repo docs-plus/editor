@@ -57,6 +57,9 @@ const bubbleToolbar = (page: Page) =>
   page.getByRole("toolbar", { name: "Selection formatting" });
 const row = (page: Page) =>
   page.getByRole("toolbar", { name: "Formatting", exact: true });
+/** Style ▾, named by its face ("Text", "H2 Heading 2"). */
+const styleButton = (page: Page) =>
+  bubbleToolbar(page).locator("button[data-face]");
 
 /**
  * Loads `doc` outside the undo history, as the app seeds a document: an
@@ -180,7 +183,7 @@ async function expectBubbleOpen(page: Page) {
  * The focus outline (width + offset) fits inside every clipping ancestor, so
  * the 2px ring is never cut (PR A carry-over for the floating variant).
  */
-async function expectOutlineNotClipped(item: Locator) {
+async function expectOutlineNotClipped(item: Locator, minGrow = 2) {
   const clipped = await item.evaluate((el) => {
     const style = getComputedStyle(el);
     const grow =
@@ -213,12 +216,12 @@ async function expectOutlineNotClipped(item: Locator) {
     }
     return { grow, problems };
   });
-  expect(clipped.grow).toBeGreaterThanOrEqual(2);
+  expect(clipped.grow).toBeGreaterThanOrEqual(minGrow);
   expect(clipped.problems).toEqual([]);
 }
 
 test.describe("selection bubble", () => {
-  test("shows B, I, U, text colour, link and Paint format for a mouse selection", async ({
+  test("shows Style, B, I, U, S, code, clear, colour, link and Paint format for a mouse selection", async ({
     page,
   }) => {
     await openDoc(page);
@@ -227,17 +230,33 @@ test.describe("selection bubble", () => {
     const names = await bubbleToolbar(page)
       .getByRole("button")
       .evaluateAll((buttons) =>
-        buttons.map((b) => b.getAttribute("aria-label") ?? ""),
+        buttons.map(
+          (b) => b.getAttribute("aria-label") ?? b.textContent?.trim() ?? "",
+        ),
       );
+    // Spec §7.1: Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌 │ 💬 (unregistered).
     expect(names).toEqual([
+      "Text",
       "Bold",
       "Italic",
       "Underline",
+      "Strike",
+      "Inline code",
+      "Clear formatting",
       expect.stringMatching(/^Apply text colour: /),
       "More text colours",
       "Link",
       "Paint format",
     ]);
+    const style = styleButton(page);
+    await expect(style).toHaveAccessibleName("Text");
+    await expect(style).toHaveAttribute("aria-haspopup", "menu");
+    // The face is sized once to the longest face word, at least 64px.
+    const width = await style.evaluate(
+      (el) => el.getBoundingClientRect().width,
+    );
+    expect(width).toBeGreaterThanOrEqual(64);
+    expect(width).toBeLessThanOrEqual(96);
     // One Tab stop: the plugin's root is not focusable, not even by a click.
     await expect(bubble(page)).not.toHaveAttribute("tabindex");
     const box = await bubbleToolbar(page).boundingBox();
@@ -329,12 +348,11 @@ test.describe("selection bubble", () => {
     const before = await selectionRange(page);
 
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Italic", exact: true }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     // One Esc, even with the item's focus tooltip open, as in the row.
     await escapeToEditor(page);
@@ -360,7 +378,7 @@ test.describe("selection bubble", () => {
     const chevron = bubbleToolbar(page).getByRole("button", {
       name: "More text colours",
     });
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 8; i += 1) await page.keyboard.press("ArrowRight");
     await expect(chevron).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
@@ -403,8 +421,21 @@ test.describe("selection bubble", () => {
     await expect(
       row(page).locator('[data-action-id="history.undo"]'),
     ).toHaveAttribute("aria-disabled", "true");
-    // Every bubble action is also in the row at desktop width.
+    // Every bubble action is also in the row at desktop width: a button,
+    // or an item of ⋯ More formatting (inline code, clear formatting).
+    const overflow = row(page).getByRole("button", { name: "More formatting" });
+    const inOverflow = new Set(["mark.inlineCode", "format.clear"]);
     for (const id of BUBBLE_ACTION_IDS) {
+      if (inOverflow.has(id)) {
+        await overflow.click();
+        await expect(
+          page
+            .getByRole("menu", { name: "More formatting" })
+            .locator(`[data-action-id="${id}"]`),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        continue;
+      }
       const inRow =
         id === "color.text.apply"
           ? row(page).getByRole("button", { name: /^Apply text colour: / })
@@ -416,7 +447,15 @@ test.describe("selection bubble", () => {
       await selectText(page, "some words");
       await expectBubbleOpen(page);
       const toolbar = surface === "bubble" ? bubbleToolbar(page) : row(page);
-      await toolbar.getByRole("button", { name }).click();
+      if (surface === "row" && name.source === "^Inline code$") {
+        await overflow.click();
+        await page
+          .getByRole("menu", { name: "More formatting" })
+          .getByRole("menuitemcheckbox", { name })
+          .click();
+      } else {
+        await toolbar.getByRole("button", { name }).click();
+      }
       const json = await page.evaluate(() =>
         JSON.stringify(window.__tiptap_editor?.getJSON().content?.[2]),
       );
@@ -427,6 +466,8 @@ test.describe("selection bubble", () => {
       /^Bold$/,
       /^Italic$/,
       /^Underline$/,
+      /^Strike$/,
+      /^Inline code$/,
       /^Apply text colour: /,
     ]) {
       const fromBubble = await docAfter("bubble", name);
@@ -449,7 +490,9 @@ test.describe("selection bubble", () => {
     }
   });
 
-  test("bubble buttons keep their 2px outline", async ({ page }) => {
+  test("bubble buttons draw their 2px ring inside, never clipped", async ({
+    page,
+  }) => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
@@ -459,7 +502,11 @@ test.describe("selection bubble", () => {
     for (let i = 0; i < count; i += 1) {
       const item = items.nth(i);
       await expect(item).toBeFocused();
-      await expectOutlineNotClipped(item);
+      // Spec §7.1: `outline-offset: -2px`, so a ring never crosses the 2px
+      // gap onto a neighbour.
+      await expect(item).toHaveCSS("outline-width", "2px");
+      await expect(item).toHaveCSS("outline-offset", "-2px");
+      await expectOutlineNotClipped(item, 0);
       await page.keyboard.press("ArrowRight");
     }
   });
@@ -507,9 +554,8 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
 
@@ -530,9 +576,8 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     const before = await selectionRange(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("End");
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
@@ -552,7 +597,7 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 8; i += 1) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog.locator("button:focus")).toHaveCount(1);
@@ -608,6 +653,7 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
+    await page.keyboard.press("ArrowRight");
     const bold = bubbleToolbar(page).getByRole("button", {
       name: "Bold",
       exact: true,
@@ -703,10 +749,23 @@ test.describe("selection bubble", () => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    const border = await bubbleToolbar(page).evaluate(
-      (el) => getComputedStyle(el).borderTopStyle,
+    const edge = await bubbleToolbar(page).evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { style: cs.borderTopStyle, color: cs.borderTopColor };
+    });
+    expect(edge.style).not.toBe("none");
+    // The edge is CanvasText (spec §7.1), never a dropped grey.
+    const canvasText = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.color = "CanvasText";
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+    expect(await resolveRgb(page, edge.color)).toEqual(
+      await resolveRgb(page, canvasText),
     );
-    expect(border).not.toBe("none");
     await page.keyboard.press("ControlOrMeta+b");
     const bold = bubbleToolbar(page).getByRole("button", {
       name: "Bold",
@@ -814,7 +873,8 @@ test.describe("selection bubble", () => {
     await expect(
       bubbleToolbar(page).getByRole("button", { name: "Formats" }),
     ).toHaveCount(0);
-    // A separator before the brush, which is the last item.
+    // The brush ends the colour, link and paint group (spec §7.1); it is
+    // the last item until the comments PR registers 💬.
     expect(
       await brush.evaluate((el) => {
         const items = [
@@ -826,10 +886,10 @@ test.describe("selection bubble", () => {
         const at = items.indexOf(el);
         return [
           at === items.length - 1,
-          items[at - 1]?.getAttribute("data-slot"),
+          items[at - 1]?.getAttribute("data-action-id"),
         ];
       }),
-    ).toEqual([true, "toolbar-separator"]);
+    ).toEqual([true, "mark.link"]);
     const box = await brush.boundingBox();
     expect(box?.width).toBeCloseTo(28, 1);
     expect(box?.height).toBeCloseTo(28, 1);
@@ -860,7 +920,7 @@ test.describe("selection bubble", () => {
     await engine.restore();
   });
 
-  test("the brush is disabled with the reason on inline code", async ({
+  test("inside inline code, marks, colour, link and paint say why; Tx and Style stay", async ({
     page,
   }) => {
     await openDoc(page);
@@ -870,11 +930,30 @@ test.describe("selection bubble", () => {
     );
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    const brush = bubbleToolbar(page).getByRole("button", {
-      name: "Paint format",
-    });
-    await expect(brush).toHaveAttribute("aria-disabled", "true");
-    await expect(brush).toHaveAccessibleDescription("Code has no formatting.");
+    const toolbar = bubbleToolbar(page);
+    // Spec §7.2: `inlineCode` excludes every other mark.
+    for (const name of [
+      /^Bold$/,
+      /^Italic$/,
+      /^Underline$/,
+      /^Strike$/,
+      /^Apply text colour: /,
+      /^More text colours$/,
+      /^Link$/,
+      /^Paint format$/,
+    ]) {
+      const item = toolbar.getByRole("button", { name });
+      await expect(item, String(name)).toHaveAttribute("aria-disabled", "true");
+      await expect(item, String(name)).toHaveAccessibleDescription(
+        /Inline code/,
+      );
+    }
+    for (const name of [/^Inline code$/, /^Clear formatting$/, /^Text$/]) {
+      await expect(toolbar.getByRole("button", { name })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    }
   });
 
   for (const theme of ["light", "dark"] as const) {
@@ -1001,9 +1080,8 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     // Times, in the page, of `data-closing` appearing and the root leaving.
     await page.evaluate(() => {
       const root = document.querySelector("[data-smart-bubble]");
@@ -1372,9 +1450,8 @@ test.describe("selection bubble controller (spec §12.1)", () => {
       await expectBubbleOpen(pageA);
       // Focus inside the bubble: its removal must hand focus back.
       await pageA.keyboard.press("Alt+F10");
-      await expect(
-        bubbleToolbar(pageA).getByRole("button", { name: "Bold", exact: true }),
-      ).toBeFocused();
+      // Spec §14: Alt+F10 lands on Style ▾, the first item.
+      await expect(styleButton(pageA)).toBeFocused();
       await pageB.evaluate(() => {
         const editor = window.__tiptap_editor;
         if (!editor) throw new Error("editor missing");
