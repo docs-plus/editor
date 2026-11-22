@@ -187,7 +187,9 @@ jobs:
           hdiutil attach -nobrowse -noautoopen -mountpoint "$RUNNER_TEMP/dmg" "$dmg"
           cp -R "$RUNNER_TEMP/dmg/TinyDocy.app" /Applications/
           hdiutil detach "$RUNNER_TEMP/dmg"
-          codesign --verify --deep --verbose=2 /Applications/TinyDocy.app || true
+          # Unsigned (D35) but ad-hoc signed after the fuses are flipped: the
+          # seal must hold, or arm64 macOS refuses to launch the app.
+          codesign --verify --deep --verbose=2 /Applications/TinyDocy.app
           echo "RELEASE_EXECUTABLE=/Applications/TinyDocy.app/Contents/MacOS/TinyDocy" >> "$GITHUB_ENV"
           echo "RELEASE_FUSE_TARGET=/Applications/TinyDocy.app" >> "$GITHUB_ENV"
 

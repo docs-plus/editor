@@ -188,6 +188,4 @@ export function hardenSession(): void {
   app.on("web-contents-created", (_event, contents) =>
     hardenWebContents(contents),
   );
-
-  // Last, so nothing above can be skipped if a spellcheck call throws.
 }

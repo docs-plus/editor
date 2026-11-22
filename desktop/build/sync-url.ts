@@ -22,5 +22,13 @@ export function validateSyncUrl(raw: string, flavor: Flavor): string {
     throw new Error("sync URL may not carry credentials, a query or a hash");
   if (url.pathname !== "/" && url.pathname !== "")
     throw new Error("sync URL may not carry a path");
+  // N6: the URL parser accepts `*` and other non-DNS characters in a host,
+  // and `*.example.com` in connect-src is a wildcard. Only DNS names, IPv4
+  // and bracketed IPv6 literals.
+  const host = url.hostname;
+  const dnsName =
+    /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+  if (!(dnsName.test(host) || /^\[[0-9a-f:.]+\]$/i.test(host)))
+    throw new Error("sync URL host must be a DNS name or an IP literal");
   return `${url.protocol}//${url.host}`;
 }
