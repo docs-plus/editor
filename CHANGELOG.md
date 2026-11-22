@@ -56,7 +56,9 @@ lives in the phone bar's lazy chunk.
 - **Phones:** the Aa sheet no longer mounts on the keyboard and drops a
   frame later when opened while writing; it stays on the screen bottom.
 - **Phones:** the phone bar scrolls the caret on mount and unmount only when
-  the width moved, not on a StrictMode remount or an editor switch.
+  the width moved, once per frame: not twice under StrictMode, not on an
+  editor switch, and still on the first mount, so a page loaded in landscape
+  and rotated to portrait gets its caret back.
 - **Tests:** the leak spec counts `visualViewport` and `document` listeners
   against a bar-less baseline instead of matching source names, so it works
   on minified builds and also catches a leaked `focusout`.

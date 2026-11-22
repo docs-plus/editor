@@ -185,17 +185,46 @@ export function onViewportWidthChange(listener: () => void): () => void {
   };
 }
 
+export interface RotationScroll {
+  /** Runs `scroll` once, a frame from now; a second call in that frame replaces it. */
+  schedule(scroll: () => void): void;
+  /**
+   * Call on mount. Schedules `scroll` when the layout width differs from
+   * the one at the last unmount (a page loaded in landscape counts: the
+   * first mount always does). The returned cleanup schedules it when the
+   * width moved since this mount (a rotation past 768 px).
+   */
+  mount(scroll: () => void): () => void;
+}
+
 /**
- * Remembers the layout width between calls: each call records
- * `innerWidth` and says whether it moved since the previous call. The
- * first call says false, so a first mount does nothing.
+ * The phone bar's caret scroll around a rotation that mounts or unmounts
+ * it. The width is recorded only at unmount and the pending frame is not
+ * cancelled by a cleanup, so a StrictMode remount or an editor switch
+ * scrolls once at most (and only if the width moved), never zero times.
+ * The scroll itself checks that the editor has focus, so a plain load does
+ * nothing.
  */
-export function createWidthMemo(): () => boolean {
-  let seen = 0;
-  return () => {
-    const previous = seen;
-    seen = window.innerWidth;
-    return previous !== 0 && previous !== seen;
+export function createRotationScroll(): RotationScroll {
+  let unmountWidth = 0;
+  let frame = 0;
+  const schedule = (scroll: () => void) => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      scroll();
+    });
+  };
+  return {
+    schedule,
+    mount(scroll) {
+      const mountWidth = window.innerWidth;
+      if (mountWidth !== unmountWidth) schedule(scroll);
+      return () => {
+        unmountWidth = window.innerWidth;
+        if (unmountWidth !== mountWidth) schedule(scroll);
+      };
+    },
   };
 }
 

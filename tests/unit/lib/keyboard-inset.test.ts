@@ -4,7 +4,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import {
-  createWidthMemo,
+  createRotationScroll,
   getKeyboardInset,
   KEYBOARD_INSET_VAR,
   keyboardInset,
@@ -385,21 +385,49 @@ describe("the resize settle and the focusout reset share one frame", () => {
   });
 });
 
-describe("createWidthMemo (the bar's mount and unmount scroll)", () => {
-  it("says nothing moved on the first call or on a same-width remount", () => {
-    const moved = createWidthMemo();
-    expect(moved()).toBe(false); // first mount
-    expect(moved()).toBe(false); // StrictMode cleanup
-    expect(moved()).toBe(false); // StrictMode remount, or an editor switch
+describe("createRotationScroll (the bar's mount and unmount scroll)", () => {
+  it("scrolls once on a first mount, even under a StrictMode remount", async () => {
+    const rotation = createRotationScroll();
+    let scrolls = 0;
+    const scroll = () => scrolls++;
+    // First mount: a page loaded in landscape, rotated to portrait.
+    const cleanup = rotation.mount(scroll);
+    cleanup(); // StrictMode cleanup
+    const unmount = rotation.mount(scroll); // StrictMode remount
+    await nextFrame();
+    expect(scrolls).toBe(1);
+    // An editor switch at the same width scrolls nothing.
+    unmount();
+    const last = rotation.mount(scroll);
+    await nextFrame();
+    expect(scrolls).toBe(1);
+    last();
   });
 
-  it("says the width moved after a rotation across 768 px", () => {
-    const moved = createWidthMemo();
-    moved(); // the bar mounts in portrait
+  it("scrolls after a rotation across 768 px, each way", async () => {
+    const rotation = createRotationScroll();
+    let scrolls = 0;
+    const scroll = () => scrolls++;
+    const unmount = rotation.mount(scroll); // portrait
+    await nextFrame();
+    expect(scrolls).toBe(1);
     setWidth(844);
-    expect(moved()).toBe(true); // unmounts in landscape
+    unmount(); // landscape: the row toolbar takes over
+    await nextFrame();
+    expect(scrolls).toBe(2);
     setWidth(390);
-    expect(moved()).toBe(true); // mounts again in portrait
-    expect(moved()).toBe(false);
+    const again = rotation.mount(scroll); // back to portrait
+    await nextFrame();
+    expect(scrolls).toBe(3);
+    again();
+  });
+
+  it("runs one scroll per frame", async () => {
+    const rotation = createRotationScroll();
+    let scrolls = 0;
+    rotation.schedule(() => scrolls++);
+    rotation.schedule(() => scrolls++);
+    await nextFrame();
+    expect(scrolls).toBe(1);
   });
 });

@@ -291,6 +291,25 @@ test("the caret comes back into view after a rotation across 768px", async ({
   await expectCaretInView(page);
 });
 
+test("a page loaded in landscape scrolls the caret back when the bar first mounts", async ({
+  page,
+}) => {
+  // Landscape from the start: the row toolbar, so the bar has never mounted.
+  await page.setViewportSize({ width: PHONE.height, height: PHONE.width });
+  await openToolbarTestDoc(page);
+  await expect(bar(page)).toBeHidden();
+  // Safari has no scroll anchoring; without this Chromium can keep the
+  // caret in view by luck.
+  await page.addStyleTag({
+    content: "* { overflow-anchor: none !important; }",
+  });
+  await fillAndPlaceCaret(page, 40, 30);
+  await expectCaretInView(page);
+  await page.setViewportSize(PHONE);
+  await expect(bar(page)).toBeVisible();
+  await expectCaretInView(page);
+});
+
 test("scrolling the caret back adds no undo step and no Yjs update", async ({
   page,
 }) => {
