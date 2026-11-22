@@ -67,6 +67,15 @@ const highlighted = (page: Page, name: string) =>
       : null;
   }, name);
 
+/** Waits for two frames, so a scroll that follows a frame has happened. */
+const twoFrames = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+
 const docText = (page: Page) =>
   page.evaluate(() => window.__tiptap_editor?.state.doc.textContent ?? "");
 
@@ -265,50 +274,87 @@ test.describe("Find in the document", () => {
     await expect(page.locator(STATUS)).toHaveText(/of 3$/);
   });
 
-  test("1,000 headings: typing and stepping with Find open stay fast", async ({
+  test("Esc on a bar reopened with a remembered query leaves the caret alone", async ({
     page,
   }) => {
-    test.slow();
-    await open(page, sectionsDoc(1000));
-    // Median time of 40 one-character transactions in the body.
-    const typingMs = () =>
-      page.evaluate(() => {
-        const editor = window.__tiptap_editor;
-        if (!editor) throw new Error("no editor");
-        const { doc } = editor.state;
-        // Inside "Body 1 has a needle…".
-        const at = doc.child(0).nodeSize + doc.child(1).nodeSize + 4;
-        const times: number[] = [];
-        for (let i = 0; i < 40; i++) {
-          const start = performance.now();
-          editor.view.dispatch(
-            editor.state.tr.insertText(i % 2 ? "e" : "n", at),
-          );
-          times.push(performance.now() - start);
-        }
-        times.sort((a, b) => a - b);
-        return times[Math.floor(times.length / 2)];
-      });
-    const closed = await typingMs();
-
+    await open(page, sectionsDoc(3));
     await openFind(page);
     await page.keyboard.type("needle");
-    await expect(page.locator(STATUS)).toHaveText("1 of 2,000");
+    await expect(page.locator(STATUS)).toHaveText("1 of 6");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(BAR)).toHaveCount(0);
 
-    // Stepping: each Enter updates the count within a frame or two.
-    const stepStart = Date.now();
-    for (let i = 0; i < 20; i++) await page.keyboard.press("Enter");
-    await expect(page.locator(STATUS)).toHaveText("21 of 2,000");
-    const stepMs = (Date.now() - stepStart) / 20;
-
-    const opened = await typingMs();
-    test.info().annotations.push({
-      type: "perf",
-      description: `step ${stepMs.toFixed(1)} ms/Enter; transaction median ${closed.toFixed(2)} ms closed, ${opened.toFixed(2)} ms with Find open`,
+    // The writer goes back to typing near the end, then ⌘F and Esc.
+    const caret = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("no editor");
+      const pos = editor.state.doc.content.size - 3;
+      editor.commands.setTextSelection(pos);
+      editor.view.focus();
+      return pos;
     });
-    // Find rescans one block per keystroke, never the document.
-    expect(opened - closed).toBeLessThan(4);
-    expect(stepMs).toBeLessThan(250);
+    const scrollTop = () =>
+      page
+        .locator(".document-editor-wrapper")
+        .evaluate((el) => Math.round(el.scrollTop));
+    await openFind(page);
+    await expect(page.locator(FIND_INPUT)).toHaveValue("needle");
+    await expect(page.locator(STATUS)).toHaveText("1 of 6");
+    await twoFrames(page);
+    const shown = await scrollTop();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(BAR)).toHaveCount(0);
+    await twoFrames(page);
+    const after = await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) return null;
+      const { from, to } = editor.state.selection;
+      return { from, to, focused: editor.view.hasFocus() };
+    });
+    expect(after).toEqual({ from: caret, to: caret, focused: true });
+    // Closing scrolls nowhere.
+    expect(await scrollTop()).toBe(shown);
+  });
+
+  test("Find keys stay with other fields", async ({ page }) => {
+    await open(page, sectionsDoc(1));
+    // A field outside the editor (a tab rename, a dialog's search).
+    await page.evaluate(() => {
+      const input = document.createElement("input");
+      input.id = "other-field";
+      document.body.append(input);
+      input.focus();
+    });
+    await page.keyboard.press("ControlOrMeta+f");
+    await expect(page.locator(BAR)).toHaveCount(0);
+    await expect(page.locator("#other-field")).toBeFocused();
+  });
+
+  test("Replace all refuses to grow the document past its limit", async ({
+    page,
+  }) => {
+    await open(page, {
+      type: "doc",
+      content: [heading("Growth", 1), paragraph("a ".repeat(400))],
+    });
+    await openFind(page);
+    await page.keyboard.type("a");
+    await expect(page.locator(STATUS)).toHaveText(/of 400$/);
+    await page
+      .getByRole("button", { name: "Replace", exact: true })
+      .first()
+      .click();
+    // The field stops at 1,000 characters.
+    await page.locator(REPLACE_INPUT).fill("b".repeat(1_200));
+    await expect(page.locator(REPLACE_INPUT)).toHaveValue("b".repeat(1_000));
+    const before = await docText(page);
+    // 400 × 999 more characters is past the 256 KiB limit.
+    await page.getByRole("button", { name: "Replace all" }).click();
+    await expect(page.locator(STATUS)).toHaveText("Too large to replace");
+    expect(await docText(page)).toBe(before);
+    if (screenshots) {
+      await page.screenshot({ path: `${SCREENS}/too-large-light.png` });
+    }
   });
 
   test("axe and design screenshots", async ({ page }) => {

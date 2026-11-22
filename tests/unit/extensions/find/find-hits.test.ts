@@ -7,6 +7,8 @@ import {
   blockText,
   changedRanges,
   type FindHit,
+  MAX_PAINTED_PER_BLOCK,
+  paintableHits,
   scanHits,
   updateHits,
 } from "@/extensions/find/find-hits";
@@ -138,12 +140,41 @@ describe("updateHits", () => {
     const regex = pattern("cat");
     const hits = scanHits(e.state.doc, regex);
     const [title, , last] = hits;
-    const update = check(e, hits, e.state.tr.insertText("con", 6), regex);
-    // "concat one": the edited block's hit is new, the others are the same objects.
+    const update = check(e, hits, e.state.tr.insertText("dog ", 15), regex);
+    // "dog two cat": every hit, the edited block's too, is the same object.
     expect(update.hits[0]).toBe(title);
     expect(update.hits[2]).toBe(last);
-    expect(update.dropped).toHaveLength(1);
+    expect(update.dropped).toHaveLength(0);
     expect(texts(e, update.hits)).toEqual(["cat", "cat", "cat"]);
+  });
+
+  it("keeps the unchanged hits of the edited block, so their ranges live on", () => {
+    const e = create([heading("Title"), paragraph(text("pin ".repeat(5_000)))]);
+    const regex = pattern("pin");
+    const hits = scanHits(e.state.doc, regex);
+    expect(hits).toHaveLength(5_000);
+    const [first, second] = hits;
+    const middle = hits[2_500];
+    // Type into the first hit: only it changes.
+    const update = check(
+      e,
+      hits,
+      e.state.tr.insertText("x", first.from + 1),
+      regex,
+    );
+    expect(update.dropped).toEqual([first]);
+    expect(update.hits).toHaveLength(4_999);
+    expect(update.hits[0]).toBe(second);
+    expect(update.hits[2_499]).toBe(middle);
+    // Typing between hits drops none.
+    const next = check(
+      e,
+      update.hits,
+      e.state.tr.insertText(" ", second.to),
+      regex,
+    );
+    expect(next.dropped).toHaveLength(0);
+    expect(next.hits[0]).toBe(second);
   });
 
   it("drops a hit whose text is edited and finds one an edit creates", () => {
@@ -239,5 +270,40 @@ describe("updateHits", () => {
     const regex = pattern("x");
     const hits = scanHits(e.state.doc, regex);
     expect(updateHits(hits, e.state.tr.setMeta("m", 1), regex).hits).toBe(hits);
+  });
+});
+
+describe("paintableHits", () => {
+  it("is every hit while no block holds more than the per-block limit", () => {
+    const e = create([
+      heading("Title"),
+      paragraph(text("pin ".repeat(MAX_PAINTED_PER_BLOCK))),
+      paragraph(text("pin ".repeat(MAX_PAINTED_PER_BLOCK))),
+    ]);
+    const hits = scanHits(e.state.doc, pattern("pin"));
+    expect(paintableHits(e.state.doc, hits, hits[0])).toBe(hits);
+  });
+
+  it("paints a crowded block's hits around the current one, and the rest in full", () => {
+    const e = create([
+      heading("pin"),
+      paragraph(text("pin ".repeat(2_000))),
+      paragraph(text("pin pin")),
+    ]);
+    const hits = scanHits(e.state.doc, pattern("pin"));
+    expect(hits).toHaveLength(2_003);
+    const first = paintableHits(e.state.doc, hits, hits[0]);
+    // The title's hit, the crowded block's first ones, the last block's two.
+    expect(first).toHaveLength(1 + MAX_PAINTED_PER_BLOCK + 2);
+    expect(first.slice(0, 3)).toEqual(hits.slice(0, 3));
+    expect(first.slice(-2)).toEqual(hits.slice(-2));
+    const current = hits[1_000];
+    const around = paintableHits(e.state.doc, hits, current);
+    expect(around).toHaveLength(1 + MAX_PAINTED_PER_BLOCK + 2);
+    expect(around).toContain(current);
+    expect(around[1]).toBe(hits[1_000 - MAX_PAINTED_PER_BLOCK / 2]);
+    // Near the block's end the window stops at its last hit.
+    const late = paintableHits(e.state.doc, hits, hits[2_000]);
+    expect(late[MAX_PAINTED_PER_BLOCK]).toBe(hits[2_000]);
   });
 });

@@ -1,6 +1,9 @@
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { FindHit } from "./find-hits";
+import { supportsHighlights } from "./highlight-support";
+
+export { supportsHighlights };
 
 /** Highlight names; the find bar's stylesheet colours them. */
 export const FIND_HIGHLIGHT = "tinydocy-find";
@@ -25,15 +28,6 @@ export interface FindPainter {
   destroy(): void;
 }
 
-/** True where the CSS Custom Highlight API exists (Chromium 105, Safari 17.2, Firefox 140). */
-export function supportsHighlights(): boolean {
-  return (
-    typeof CSS !== "undefined" &&
-    "highlights" in CSS &&
-    typeof Highlight === "function"
-  );
-}
-
 /** The parts of the Highlight API the painter uses (injectable for tests). */
 export interface HighlightApi {
   registry: Pick<HighlightRegistry, "get" | "set" | "delete">;
@@ -45,6 +39,24 @@ export function nativeHighlightApi(): HighlightApi | null {
   return supportsHighlights()
     ? { registry: CSS.highlights, create: () => new Highlight() }
     : null;
+}
+
+/**
+ * The range still covers the hit's text (`text`, from the document): both
+ * ends in attached text nodes, around the same characters. A text node
+ * ProseMirror replaced moves the ends to its parent; one it rewrote
+ * (`nodeValue`) collapses them, or shifts them in engines that don't
+ * update live ranges for it.
+ */
+function isIntact(range: Range, text: string): boolean {
+  const { startContainer: start, endContainer: end } = range;
+  return (
+    start.nodeType === Node.TEXT_NODE &&
+    end.nodeType === Node.TEXT_NODE &&
+    start.isConnected &&
+    end.isConnected &&
+    range.toString() === text
+  );
 }
 
 /** The nearest ancestor that scrolls vertically, else the page. */
@@ -68,12 +80,13 @@ function scrollParent(node: HTMLElement): HTMLElement {
  * IME composition and remote updates are never redrawn because of it,
  * and it costs the editor chunk nothing.
  *
- * Ranges are live: unchanged text keeps them through edits elsewhere. A
- * range is built (time-sliced, current hit first) for each new hit, and
- * rebuilt for the hits in any top-level block whose DOM ProseMirror
- * redraws, which a `MutationObserver` reports (a collaborator's caret, a
- * mark change). Where the API is missing, nothing is painted; counting,
- * stepping and replacing still work.
+ * Ranges are live: the browser shifts them through text edits, typing
+ * included. A range is built (time-sliced, current hit first) for each new
+ * hit. In a top-level block whose DOM changed, which a `MutationObserver`
+ * reports, only the ranges the change broke are rebuilt: a redrawn text
+ * node (a mark change, a collaborator's edit) collapses or detaches them.
+ * Find only opens where the API exists (`findAvailable`); without it
+ * nothing is painted.
  */
 export class HighlightPainter implements FindPainter {
   private readonly ranges = new Map<FindHit, Range>();
@@ -246,7 +259,10 @@ export class HighlightPainter implements FindPainter {
       for (let i = this.firstHitAtOrAfter(from); i < this.hits.length; i++) {
         const hit = this.hits[i];
         if (hit.from >= to) break;
-        this.pending.add(hit);
+        const range = this.ranges.get(hit);
+        if (!range || !isIntact(range, doc.textBetween(hit.from, hit.to))) {
+          this.pending.add(hit);
+        }
       }
     }
     this.dirty.clear();

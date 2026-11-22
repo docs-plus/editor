@@ -1,9 +1,36 @@
+import { supportsHighlights } from "@/extensions/find/highlight-support";
+
 /**
  * Find in the document (P2.11, details spec E1). `NEXT_PUBLIC_FIND=0`
  * turns it off: ⌘F / Ctrl+F then opens the browser's own find bar again.
  * The literal comparison is inlined at build time.
  */
 export const FIND_ENABLED = process.env.NEXT_PUBLIC_FIND !== "0";
+
+/**
+ * Find takes ⌘F only where it can paint its hits (the CSS Custom
+ * Highlight API). Elsewhere (Firefox before 140, Safari before 17.2) the
+ * browser keeps its own find bar rather than a bar that steps through
+ * hits it cannot show.
+ */
+export function findAvailable(): boolean {
+  return FIND_ENABLED && supportsHighlights();
+}
+
+/** A field, list or dialog that owns its own keys. */
+const FOREIGN_KEY_TARGET =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], [aria-modal="true"]';
+
+/**
+ * Whether a Find key pressed on `target` is Find's: in the editor, the
+ * find bar or the page, but not in another text field (a tab rename, a
+ * dialog's search) or inside a dialog, which keep their own keys.
+ */
+export function isFindKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return true;
+  if (target.closest("[data-find-bar], .ProseMirror")) return true;
+  return target.closest(FOREIGN_KEY_TARGET) === null;
+}
 
 /**
  * macOS, where Find's keys use ⌘. Same test as `isMac()` in

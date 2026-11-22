@@ -8,6 +8,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { FIND_ENABLED } from "@/components/find/find-keys";
 import { FindLoader } from "@/components/find/find-loader";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
@@ -175,7 +176,7 @@ export function EditorApp({ intro }: EditorAppProps) {
         onPlaygroundRegenerate={handlePlaygroundRegenerate}
       />
       {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. */}
-      <FindLoader />
+      {FIND_ENABLED ? <FindLoader /> : null}
     </div>
   );
 }

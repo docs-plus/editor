@@ -15,8 +15,9 @@ import type {
   FindRequest,
 } from "@/components/find/find-bar";
 import {
-  FIND_ENABLED,
   type FindCommand,
+  findAvailable,
+  isFindKeyTarget,
   isMacPlatform,
   matchFindShortcut,
 } from "@/components/find/find-keys";
@@ -51,7 +52,9 @@ let seq = 0;
  * chunk, which it costs nothing: the bar's chunk is fetched when the
  * browser is first idle (so ⌘F opens it at once, and offline), or on the
  * first ⌘F. A key that a focused list has already handled
- * (`defaultPrevented`, P2.7b's scoped ⌘F) is left alone.
+ * (`defaultPrevented`, P2.7b's scoped ⌘F), or that is pressed in another
+ * field or a dialog (`isFindKeyTarget`), is left alone. Where hits can't
+ * be painted (`findAvailable`), the browser keeps its own find bar.
  */
 export function FindLoader() {
   const [session, setSession] = useState<Session | null>(null);
@@ -66,7 +69,7 @@ export function FindLoader() {
   open.current = session !== null;
 
   useEffect(() => {
-    if (!FIND_ENABLED) return;
+    if (!findAvailable()) return;
     const load = () =>
       loadFindBar().then(
         (bar) => setBar(() => bar),
@@ -79,7 +82,7 @@ export function FindLoader() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       const command: FindCommand | null = matchFindShortcut(event, context);
-      if (!command) return;
+      if (!command || !isFindKeyTarget(event.target)) return;
       const stepping = command === "next" || command === "previous";
       // ⌘G with nothing to find stays the browser's.
       if (stepping && !open.current && !memory.current.query) return;

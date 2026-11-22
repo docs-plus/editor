@@ -1,7 +1,14 @@
 import type { Editor } from "@tiptap/core";
 import type { Transaction } from "@tiptap/pm/state";
 
-import { type FindHit, MAX_FIND_HITS, scanHits, updateHits } from "./find-hits";
+import {
+  adoptHits,
+  type FindHit,
+  MAX_FIND_HITS,
+  paintableHits,
+  scanHits,
+  updateHits,
+} from "./find-hits";
 import { type FindPainter, HighlightPainter } from "./find-painter";
 import { buildFindPattern, type FindOptions } from "./find-pattern";
 
@@ -14,6 +21,49 @@ export interface FindSnapshot extends FindOptions {
   capped: boolean;
   /** Index of the current hit, or -1. */
   current: number;
+}
+
+/** The longest replacement text (the field's `maxLength`). */
+export const MAX_REPLACEMENT_LENGTH = 1_000;
+
+/**
+ * The most characters one Replace all may add to the document. Past it the
+ * bar says "Too large to replace": one click must not build an update the
+ * server refuses (`MAX_DOC_SIZE_BYTES`, 2 MiB in production), which would
+ * leave the document read-only with the change unsaved and no undo.
+ */
+export const MAX_REPLACE_ALL_GROWTH = 256 * 1024;
+
+/** What Replace all did. */
+export type ReplaceAllResult = { replaced: number } | { refused: "too-large" };
+
+/** Characters that replacing every hit with `text` adds (negative: removes). */
+export function projectedGrowth(
+  hits: readonly FindHit[],
+  text: string,
+): number {
+  let growth = 0;
+  for (const hit of hits) growth += text.length - (hit.to - hit.from);
+  return growth;
+}
+
+/**
+ * Replaces `from`-`to` with `text`, keeping the replaced text's own marks
+ * (never the stored marks of a caret toggle) and the selection, and never
+ * widening a deletion to the enclosing block (`insertText("")` would).
+ */
+function replaceRange(
+  tr: Transaction,
+  from: number,
+  to: number,
+  text: string,
+): void {
+  if (!text) {
+    tr.delete(from, to);
+    return;
+  }
+  const marks = tr.doc.nodeAt(from)?.marks ?? [];
+  tr.replaceWith(from, to, tr.doc.type.schema.text(text, marks));
 }
 
 /** Quiet time before a capped hit list is counted again after edits. */
@@ -63,6 +113,8 @@ export class FindController {
   private hits: FindHit[] = [];
   private pattern: RegExp | null = null;
   private currentHit: FindHit | null = null;
+  /** What the painter shows: `hits`, or a window of a crowded block's. */
+  private painted: readonly FindHit[] = [];
   private snapshot: FindSnapshot = EMPTY;
   private rescanTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly listeners = new Set<() => void>();
@@ -95,7 +147,7 @@ export class FindController {
       this.hits[firstAtOrAfter(this.hits, selection.from)] ??
       this.hits[0] ??
       null;
-    this.painter.paint(this.hits, dropped, this.currentHit);
+    this.paint(dropped);
     if (this.currentHit) this.painter.reveal(this.currentHit);
     this.publish(query, options);
   }
@@ -107,7 +159,7 @@ export class FindController {
     const index = this.currentIndex();
     const next = index < 0 ? 0 : (index + direction + count) % count;
     this.currentHit = this.hits[next];
-    this.painter.paint(this.hits, [], this.currentHit);
+    this.paint([]);
     this.painter.reveal(this.currentHit);
     this.publish();
   }
@@ -119,26 +171,36 @@ export class FindController {
    */
   replace(text: string): boolean {
     const hit = this.currentHit;
-    if (!hit || !this.editor.isEditable) return false;
+    if (
+      !hit ||
+      !this.editor.isEditable ||
+      text.length > MAX_REPLACEMENT_LENGTH
+    ) {
+      return false;
+    }
     const { from, to } = hit;
     const before = this.editor.state.doc;
-    this.editor.view.dispatch(this.editor.state.tr.insertText(text, from, to));
+    const tr = this.editor.state.tr;
+    replaceRange(tr, from, to, text);
+    this.editor.view.dispatch(tr);
     if (this.editor.state.doc === before) return false;
     const after = from + text.length;
     this.currentHit =
       this.hits[firstAtOrAfter(this.hits, after)] ?? this.hits[0] ?? null;
-    this.painter.paint(this.hits, [], this.currentHit);
+    this.paint([]);
     if (this.currentHit) this.painter.reveal(this.currentHit);
     this.publish();
     return true;
   }
 
   /**
-   * Replaces every hit, uncapped, in one transaction (one undo step).
-   * Returns how many were replaced.
+   * Replaces every hit, past the 10,000 shown, in one transaction (one undo
+   * step), unless that would add more than `MAX_REPLACE_ALL_GROWTH`
+   * characters or `text` is longer than `MAX_REPLACEMENT_LENGTH`.
    */
-  replaceAll(text: string): number {
-    if (!this.pattern || !this.editor.isEditable) return 0;
+  replaceAll(text: string): ReplaceAllResult {
+    if (text.length > MAX_REPLACEMENT_LENGTH) return { refused: "too-large" };
+    if (!this.pattern || !this.editor.isEditable) return { replaced: 0 };
     const { state } = this.editor;
     const all = scanHits(
       state.doc,
@@ -148,13 +210,17 @@ export class FindController {
       [],
       Number.POSITIVE_INFINITY,
     );
-    if (all.length === 0) return 0;
+    if (all.length === 0) return { replaced: 0 };
+    if (projectedGrowth(all, text) > MAX_REPLACE_ALL_GROWTH) {
+      return { refused: "too-large" };
+    }
     const tr = state.tr;
+    // Last to first, so earlier positions need no mapping.
     for (let i = all.length - 1; i >= 0; i--) {
-      tr.insertText(text, all[i].from, all[i].to);
+      replaceRange(tr, all[i].from, all[i].to, text);
     }
     this.editor.view.dispatch(tr);
-    return this.editor.state.doc === state.doc ? 0 : all.length;
+    return { replaced: this.editor.state.doc === state.doc ? 0 : all.length };
   }
 
   /**
@@ -178,7 +244,30 @@ export class FindController {
     this.painter.destroy();
     this.listeners.clear();
     this.hits = [];
+    this.painted = [];
     this.currentHit = null;
+  }
+
+  /**
+   * Hands the painter the hits to show (`paintableHits`). `dropped` are
+   * gone from the document; hits that left a crowded block's window are
+   * released with them.
+   */
+  private paint(dropped: FindHit[]): void {
+    const previous = this.painted;
+    const next = paintableHits(
+      this.editor.state.doc,
+      this.hits,
+      this.currentHit,
+    );
+    if (next !== this.hits || previous !== this.hits) {
+      const shown = new Set(next);
+      // `previous` may be `dropped` itself (a new search drops every hit).
+      const left = previous.filter((hit) => !shown.has(hit));
+      dropped.push(...left);
+    }
+    this.painted = next;
+    this.painter.paint(next, dropped, this.currentHit);
   }
 
   private currentIndex(): number {
@@ -214,7 +303,7 @@ export class FindController {
       }
     }
     if (!changed) return;
-    this.painter.paint(this.hits, dropped, this.currentHit);
+    this.paint(dropped);
     // A capped list may now miss hits past the cap: count again when idle.
     if (this.snapshot.capped) this.scheduleRescan();
     this.publish();
@@ -224,12 +313,15 @@ export class FindController {
     clearTimeout(this.rescanTimer);
     this.rescanTimer = setTimeout(() => {
       if (!this.pattern || this.editor.isDestroyed) return;
-      const dropped = this.hits;
+      const previous = new Map(this.hits.map((hit) => [hit.from, hit]));
       const anchor = this.currentHit?.from ?? 0;
       this.hits = scanHits(this.editor.state.doc, this.pattern);
+      // Unchanged hits keep their objects, so their ranges are not rebuilt.
+      adoptHits(this.hits, previous);
+      const dropped = [...previous.values()];
       this.currentHit =
         this.hits[firstAtOrAfter(this.hits, anchor)] ?? this.hits[0] ?? null;
-      this.painter.paint(this.hits, dropped, this.currentHit);
+      this.paint(dropped);
       this.publish();
     }, RESCAN_DELAY_MS);
   }

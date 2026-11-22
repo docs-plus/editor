@@ -118,6 +118,36 @@ describe("HighlightPainter", () => {
     expect(painted(FIND_CURRENT_HIGHLIGHT)).toEqual(["cat"]);
   });
 
+  it("keeps the ranges a DOM change in their block left intact", async () => {
+    const { e, p, hits } = setup(
+      [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Title" }],
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "pin ".repeat(50) }],
+        },
+      ],
+      "pin",
+    );
+    p.paint(hits, [], hits[0]);
+    await frame();
+    const before = [...(registry.get(FIND_HIGHLIGHT) ?? [])];
+    expect(before).toHaveLength(50);
+    // A text change the browser made in place (typing): live ranges shift
+    // with it, so the block's ranges need no rebuild.
+    const textNode = e.view.dom.querySelector("p")?.firstChild as Text;
+    textNode.appendData("");
+    await frame();
+    await frame();
+    const after = [...(registry.get(FIND_HIGHLIGHT) ?? [])];
+    expect(after).toHaveLength(50);
+    expect(after.every((range) => before.includes(range))).toBe(true);
+  });
+
   it("unregisters its highlights when destroyed", () => {
     const { p, hits } = setup(
       [

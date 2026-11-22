@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import {
   FindController,
   type FindSnapshot,
+  MAX_REPLACEMENT_LENGTH,
+  type ReplaceAllResult,
 } from "@/extensions/find/find-controller";
 import {
   FIND_CURRENT_HIGHLIGHT,
@@ -135,6 +137,16 @@ function barPosition(editor: Editor): CSSProperties {
 
 const formatCount = (n: number) => n.toLocaleString();
 
+/** Shown when Replace all would grow the document past its limit. */
+const TOO_LARGE_NOTICE = "Too large to replace";
+
+function replaceAllNotice(result: ReplaceAllResult): string {
+  if ("refused" in result) return TOO_LARGE_NOTICE;
+  return result.replaced === 0
+    ? ""
+    : `Replaced ${formatCount(result.replaced)}`;
+}
+
 function countLabel(snapshot: FindSnapshot): string {
   if (!snapshot.query) return "";
   if (snapshot.total === 0) return "No results";
@@ -162,6 +174,12 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
   const findRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
+  /**
+   * The writer moved to a hit (typed a query, changed an option, stepped
+   * or replaced). Only then does closing select the current hit: a bar
+   * opened on a remembered query and dismissed leaves the caret alone.
+   */
+  const navigated = useRef(false);
   const timer = useRef<number | undefined>(undefined);
   const latest = useRef({ query, caseSensitive, wholeWord });
   latest.current = { query, caseSensitive, wholeWord };
@@ -241,6 +259,7 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
       return;
     }
     flush();
+    navigated.current = true;
     // Opening already lands on the next hit after the caret.
     if (!opened || command === "previous") {
       controller.step(command === "next" ? 1 : -1);
@@ -254,13 +273,14 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
 
   const close = useCallback(() => {
     flush();
-    controller?.selectCurrent();
+    if (navigated.current) controller?.selectCurrent();
     editor.view.focus();
     onClose();
   }, [controller, editor, flush, onClose]);
 
   const step = (direction: 1 | -1) => {
     flush();
+    navigated.current = true;
     controller?.step(direction);
   };
 
@@ -274,13 +294,15 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
 
   const replaceOne = () => {
     flush();
+    navigated.current = true;
     controller?.replace(replacement);
   };
 
   const replaceAll = () => {
     flush();
-    const count = controller?.replaceAll(replacement) ?? 0;
-    setNotice(count === 0 ? "" : `Replaced ${formatCount(count)}`);
+    navigated.current = true;
+    const result = controller?.replaceAll(replacement) ?? { replaced: 0 };
+    setNotice(replaceAllNotice(result));
     // The buttons turn disabled with no hits left; keep focus in the bar.
     replaceRef.current?.focus();
   };
@@ -340,7 +362,10 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
           placeholder="Find"
           aria-label="Find in document"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            navigated.current = true;
+            setQuery(event.target.value);
+          }}
           onCompositionStart={() => {
             composing.current = true;
           }}
@@ -356,7 +381,8 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
           role="status"
           className={cn(
             "min-w-[4.5rem] shrink-0 px-1 text-right text-[0.6875rem] tabular-nums whitespace-nowrap",
-            snapshot.query && snapshot.total === 0 && !notice
+            notice === TOO_LARGE_NOTICE ||
+              (snapshot.query && snapshot.total === 0 && !notice)
               ? "text-destructive"
               : "text-muted-foreground",
           )}
@@ -369,7 +395,10 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
           aria-label="Match case"
           aria-pressed={caseSensitive}
           title="Match case"
-          onClick={() => setCaseSensitive((on) => !on)}
+          onClick={() => {
+            navigated.current = true;
+            setCaseSensitive((on) => !on);
+          }}
         >
           <CaseSensitiveIcon />
         </Button>
@@ -379,7 +408,10 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
           aria-label="Whole word"
           aria-pressed={wholeWord}
           title="Whole word"
-          onClick={() => setWholeWord((on) => !on)}
+          onClick={() => {
+            navigated.current = true;
+            setWholeWord((on) => !on);
+          }}
         >
           <WholeWordIcon />
         </Button>
@@ -424,6 +456,7 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
             className="h-7 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-[0.8125rem] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             placeholder="Replace with"
             aria-label="Replace with"
+            maxLength={MAX_REPLACEMENT_LENGTH}
             value={replacement}
             onChange={(event) => setReplacement(event.target.value)}
             onKeyDown={onReplaceKeyDown}

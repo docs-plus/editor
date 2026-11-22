@@ -14,6 +14,18 @@ export interface FindHit {
 export const MAX_FIND_HITS = 10_000;
 
 /**
+ * Most hits painted in one textblock. Chromium's cost for highlight ranges
+ * grows with the square of the ranges in one text node (measured,
+ * `find-perf.spec.ts`): 2,000 ranges in one paragraph add about 35 ms to
+ * every keystroke anywhere in the document and 5,000 about 250 ms; typing
+ * inside a paragraph with 500 still adds about 14 ms, with 200 under one
+ * frame. Many blocks are fine (20 paragraphs of 500 add nothing
+ * measurable). A crowded block paints the 200 around the current hit,
+ * which move with it.
+ */
+export const MAX_PAINTED_PER_BLOCK = 200;
+
+/**
  * A transaction with more steps than this (Replace all, a pasted document)
  * is rescanned whole rather than step by step.
  */
@@ -120,6 +132,25 @@ function touchedBlocks(
   return blocks;
 }
 
+/**
+ * Puts the `previous` hit object in place of each `fresh` one at the same
+ * positions, and takes it out of `previous` (what is left there was not
+ * found again). A kept object keeps its painted range, which the browser
+ * has moved with the text.
+ */
+export function adoptHits(
+  fresh: FindHit[],
+  previous: Map<number, FindHit>,
+): void {
+  for (let k = 0; k < fresh.length; k++) {
+    const same = previous.get(fresh[k].from);
+    if (same && same.to === fresh[k].to) {
+      fresh[k] = same;
+      previous.delete(same.from);
+    }
+  }
+}
+
 /** Result of `updateHits`: the new hits and the ones that were dropped. */
 export interface HitUpdate {
   hits: FindHit[];
@@ -129,9 +160,11 @@ export interface HitUpdate {
 
 /**
  * Brings `hits` (sorted, for `tr.before`) up to date with `tr.doc`
- * without a full scan: hits outside the changed textblocks are mapped in
- * place (same objects, new positions), and only the changed textblocks are
- * scanned again. A remote Yjs update replaces only the top-level blocks it
+ * without a full scan: hits are mapped in place (same objects, new
+ * positions), and only the changed textblocks are scanned again. A hit the
+ * rescan finds where a mapped one now sits stays the same object, so typing
+ * into a block with thousands of hits drops (and the painter rebuilds) only
+ * the hits whose text changed. A remote Yjs update replaces only the top-level blocks it
  * changed (`replaceChangedChildren`), so it is as cheap as a keystroke.
  * At `limit` the list is cut, so hits past the cap may be missing until
  * the next full scan (the caller rescans a capped list when idle).
@@ -152,6 +185,8 @@ export function updateHits(
   const blocks = touchedBlocks(tr.doc, changedRanges(tr));
   const kept: FindHit[] = [];
   const dropped: FindHit[] = [];
+  /** Mapped hits inside the rescanned blocks, by start position. */
+  const reusable = new Map<number, FindHit>();
   let block = 0;
   for (const hit of hits) {
     const from = tr.mapping.mapResult(hit.from, 1);
@@ -164,7 +199,7 @@ export function updateHits(
     hit.to = to.pos;
     while (block < blocks.length && blocks[block][1] <= hit.from) block++;
     if (block < blocks.length && blocks[block][0] < hit.to) {
-      dropped.push(hit);
+      reusable.set(hit.from, hit);
       continue;
     }
     kept.push(hit);
@@ -173,6 +208,8 @@ export function updateHits(
   for (const [from, to] of blocks) {
     scanHits(tr.doc, pattern, from, to, fresh, Number.POSITIVE_INFINITY);
   }
+  adoptHits(fresh, reusable);
+  for (const hit of reusable.values()) dropped.push(hit);
   // Mapping keeps document order, so two sorted lists merge.
   const merged: FindHit[] = [];
   let i = 0;
@@ -187,4 +224,46 @@ export function updateHits(
   }
   while (i < kept.length) dropped.push(kept[i++]);
   return { hits: merged, dropped };
+}
+
+/**
+ * The hits to paint: all of them, unless a textblock holds more than
+ * `perBlock`, where only the `perBlock` around `current` (or its first
+ * ones) are painted. Returns `hits` itself when nothing is left out.
+ */
+export function paintableHits(
+  doc: PMNode,
+  hits: readonly FindHit[],
+  current: FindHit | null,
+  perBlock = MAX_PAINTED_PER_BLOCK,
+): readonly FindHit[] {
+  if (hits.length <= perBlock) return hits;
+  const out: FindHit[] = [];
+  let crowded = false;
+  let i = 0;
+  doc.nodesBetween(hits[0].from, hits[hits.length - 1].to, (node, pos) => {
+    if (i >= hits.length) return false;
+    if (!node.isTextblock) return true;
+    const end = pos + node.nodeSize;
+    let j = i;
+    let at = -1;
+    while (j < hits.length && hits[j].from < end) {
+      if (hits[j] === current) at = j;
+      j++;
+    }
+    let start = i;
+    let stop = j;
+    if (j - i > perBlock) {
+      crowded = true;
+      const centre = at < 0 ? i : at - perBlock / 2;
+      start = Math.max(i, Math.min(centre, j - perBlock));
+      stop = start + perBlock;
+    }
+    for (let k = start; k < stop; k++) out.push(hits[k]);
+    i = j;
+    return false;
+  });
+  // Hits outside any textblock can't exist; keep any left over all the same.
+  for (; i < hits.length; i++) out.push(hits[i]);
+  return crowded ? out : hits;
 }

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type * as FindKeys from "@/components/find/find-keys";
-import { matchFindShortcut } from "@/components/find/find-keys";
+import {
+  isFindKeyTarget,
+  matchFindShortcut,
+} from "@/components/find/find-keys";
 
 import { importFresh, resetModules } from "../../../helpers/import-fresh";
 
@@ -26,9 +29,24 @@ const press = (
   ...mods,
 });
 
+const cssDescriptor = Object.getOwnPropertyDescriptor(globalThis, "CSS");
+
+/** Gives happy-dom the CSS Custom Highlight API until the test ends. */
+function withHighlightApi() {
+  Object.defineProperty(globalThis, "CSS", {
+    configurable: true,
+    value: { highlights: new Map() },
+  });
+  Object.assign(globalThis, { Highlight: class {} });
+}
+
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_FIND;
   resetModules();
+  document.body.replaceChildren();
+  if (cssDescriptor) Object.defineProperty(globalThis, "CSS", cssDescriptor);
+  else Reflect.deleteProperty(globalThis, "CSS");
+  Reflect.deleteProperty(globalThis, "Highlight");
 });
 
 describe("matchFindShortcut", () => {
@@ -108,5 +126,67 @@ describe("FIND_ENABLED", () => {
       "@/components/find/find-keys",
     );
     expect(FIND_ENABLED).toBe(false);
+  });
+});
+
+describe("findAvailable", () => {
+  it("is off where the CSS Custom Highlight API is missing (the browser's find bar stays)", async () => {
+    const { findAvailable } = await importFresh<typeof FindKeys>(
+      "@/components/find/find-keys",
+    );
+    // happy-dom, like Firefox before 140 and Safari before 17.2.
+    expect(findAvailable()).toBe(false);
+    withHighlightApi();
+    expect(findAvailable()).toBe(true);
+  });
+
+  it("is off under NEXT_PUBLIC_FIND=0 even with the API", async () => {
+    process.env.NEXT_PUBLIC_FIND = "0";
+    withHighlightApi();
+    const { findAvailable } = await importFresh<typeof FindKeys>(
+      "@/components/find/find-keys",
+    );
+    expect(findAvailable()).toBe(false);
+  });
+});
+
+describe("isFindKeyTarget", () => {
+  function mount(html: string) {
+    document.body.innerHTML = html;
+    return (selector: string) => document.querySelector(selector);
+  }
+
+  it("takes keys from the editor, the page and the find bar", () => {
+    const $ = mount(`
+      <div class="ProseMirror" contenteditable="true"><p id="text">x</p></div>
+      <div data-find-bar><input id="find"></div>
+      <button id="button">b</button>`);
+    expect(isFindKeyTarget($("#text"))).toBe(true);
+    expect(isFindKeyTarget($(".ProseMirror"))).toBe(true);
+    expect(isFindKeyTarget($("#find"))).toBe(true);
+    expect(isFindKeyTarget($("#button"))).toBe(true);
+    expect(isFindKeyTarget(document.body)).toBe(true);
+    expect(isFindKeyTarget(null)).toBe(true);
+  });
+
+  it("leaves keys to other fields and to dialogs", () => {
+    const $ = mount(`
+      <input id="rename">
+      <textarea id="notes"></textarea>
+      <select id="pick"></select>
+      <div id="rich" contenteditable="true"><span id="inner">x</span></div>
+      <div role="dialog"><button id="dialog-button">ok</button></div>
+      <div aria-modal="true"><p id="modal-text">x</p></div>`);
+    for (const id of [
+      "rename",
+      "notes",
+      "pick",
+      "rich",
+      "inner",
+      "dialog-button",
+      "modal-text",
+    ]) {
+      expect(isFindKeyTarget($(`#${id}`)), id).toBe(false);
+    }
   });
 });

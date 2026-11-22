@@ -2,8 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
 
-import { FindController } from "@/extensions/find/find-controller";
-import type { FindHit } from "@/extensions/find/find-hits";
+import {
+  FindController,
+  MAX_REPLACE_ALL_GROWTH,
+  MAX_REPLACEMENT_LENGTH,
+  projectedGrowth,
+} from "@/extensions/find/find-controller";
+import {
+  type FindHit,
+  MAX_PAINTED_PER_BLOCK,
+} from "@/extensions/find/find-hits";
 import type { FindPainter } from "@/extensions/find/find-painter";
 
 import { createTestEditor } from "../../../helpers/create-test-editor";
@@ -142,6 +150,39 @@ describe("FindController", () => {
     );
   }, 20_000);
 
+  it("recounts a capped list when idle, keeping the hits it finds again", async () => {
+    const {
+      editor: e,
+      painter,
+      controller: c,
+    } = setup([heading("Title"), paragraph("pin ".repeat(10_050))]);
+    c.search("pin", loose);
+    expect(c.getSnapshot()).toMatchObject({ total: 10_000, capped: true });
+    const kept = painter.hits[5_000];
+    e.commands.insertContentAt(1, "x");
+    painter.released.length = 0;
+    // The recount runs 400 ms after the last edit.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(painter.hits[5_000]).toBe(kept);
+    expect(painter.released).toHaveLength(0);
+  });
+
+  it("paints a crowded block's hits around the current one, releasing those it leaves", () => {
+    const { painter, controller: c } = setup([
+      heading("Title"),
+      paragraph("pin ".repeat(2_000)),
+    ]);
+    c.search("pin", loose);
+    expect(c.getSnapshot().total).toBe(2_000);
+    expect(painter.hits).toHaveLength(MAX_PAINTED_PER_BLOCK);
+    const firstWindow = painter.hits;
+    for (let i = 0; i < 600; i++) c.step(-1);
+    expect(painter.hits).toContain(painter.current as FindHit);
+    expect(painter.hits).toHaveLength(MAX_PAINTED_PER_BLOCK);
+    // The first window's hits left it, and their ranges are released.
+    expect(painter.released).toEqual(expect.arrayContaining([...firstWindow]));
+  });
+
   it("moves to the next hit when the current one's text is edited away", () => {
     const {
       editor: e,
@@ -172,7 +213,7 @@ describe("FindController", () => {
       paragraph("colour and COLOUR"),
     ]);
     c.search("colour", loose);
-    expect(c.replaceAll("color")).toBe(3);
+    expect(c.replaceAll("color")).toEqual({ replaced: 3 });
     expect(e.state.doc.textContent).toBe("colorcolor and color");
     expect(c.getSnapshot().total).toBe(0);
     e.commands.undo();
@@ -180,12 +221,97 @@ describe("FindController", () => {
     expect(c.getSnapshot().total).toBe(3);
   });
 
+  it("refuses a Replace all that would grow the document too much", () => {
+    const { editor: e, controller: c } = setup([
+      heading("Title"),
+      paragraph("a ".repeat(2_000)),
+    ]);
+    c.search("a", loose);
+    const before = e.state.doc;
+    // 2,000 hits × 999 more characters each: about 2 MB from one click.
+    const long = "b".repeat(MAX_REPLACEMENT_LENGTH);
+    expect(c.replaceAll(long)).toEqual({ refused: "too-large" });
+    expect(e.state.doc).toBe(before);
+    // A replacement that shrinks the text is always allowed, however many hits.
+    expect(c.replaceAll("")).toEqual({ replaced: 2_000 });
+  });
+
+  it("refuses a replacement longer than the field allows", () => {
+    const { editor: e, controller: c } = setup([heading("abc")]);
+    c.search("b", loose);
+    const tooLong = "x".repeat(MAX_REPLACEMENT_LENGTH + 1);
+    expect(c.replace(tooLong)).toBe(false);
+    expect(c.replaceAll(tooLong)).toEqual({ refused: "too-large" });
+    expect(e.state.doc.textContent).toBe("abc");
+  });
+
+  it("projects the growth of a Replace all", () => {
+    const hits = [
+      { from: 1, to: 2 },
+      { from: 5, to: 8 },
+    ];
+    expect(projectedGrowth(hits, "abcd")).toBe(3 + 1);
+    expect(projectedGrowth(hits, "")).toBe(-4);
+    expect(MAX_REPLACE_ALL_GROWTH).toBe(256 * 1024);
+  });
+
+  it("keeps the replaced text's marks, not the stored ones", () => {
+    const { editor: e, controller: c } = setup([
+      heading("Title"),
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "plain " },
+          { type: "text", text: "bold", marks: [{ type: "bold" }] },
+        ],
+      },
+    ]);
+    // Italic toggled at a collapsed caret is a stored mark.
+    e.commands.setTextSelection(9);
+    e.commands.toggleItalic();
+    expect(e.state.storedMarks?.length).toBe(1);
+    c.search("plain", loose);
+    expect(c.replace("PLAIN")).toBe(true);
+    const para = e.state.doc.child(1);
+    expect(para.child(0).text).toBe("PLAIN ");
+    expect(para.child(0).marks).toEqual([]);
+    c.search("bold", loose);
+    expect(c.replaceAll("BOLD")).toEqual({ replaced: 1 });
+    const last = e.state.doc.child(1).lastChild;
+    expect(last?.text).toBe("BOLD");
+    expect(last?.marks.map((mark) => mark.type.name)).toEqual(["bold"]);
+  });
+
+  it("replacing a block's whole text with nothing keeps the block", () => {
+    const { editor: e, controller: c } = setup([
+      heading("Title"),
+      paragraph("gone"),
+      paragraph("stay"),
+      paragraph("gone"),
+    ]);
+    c.search("gone", loose);
+    expect(c.replace("")).toBe(true);
+    expect(e.state.doc.childCount).toBe(4);
+    expect(c.replaceAll("")).toEqual({ replaced: 1 });
+    expect(e.state.doc.childCount).toBe(4);
+    expect(e.state.doc.textContent).toBe("Titlestay");
+  });
+
+  it("replaces with the selection left where it was", () => {
+    const { editor: e, controller: c } = setup([heading("one two one")]);
+    e.commands.setTextSelection({ from: 5, to: 8 });
+    c.search("one", loose);
+    c.replace("1");
+    const { from, to } = e.state.selection;
+    expect(e.state.doc.textBetween(from, to)).toBe("two");
+  });
+
   it("replaces nothing in a read-only document", () => {
     const { editor: e, controller: c } = setup([heading("abc")]);
     c.search("b", loose);
     e.setEditable(false);
     expect(c.replace("x")).toBe(false);
-    expect(c.replaceAll("x")).toBe(0);
+    expect(c.replaceAll("x")).toEqual({ replaced: 0 });
     expect(e.state.doc.textContent).toBe("abc");
   });
 
