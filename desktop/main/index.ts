@@ -39,6 +39,7 @@ import { QuitCoordinator } from "./quit-coordinator";
 import { FixedWindowLimiter } from "./rate-limit";
 import { OpenDocRegistry } from "./registry";
 import { hardenSession } from "./session-hardening";
+import { installSpellcheckGuard } from "./spellcheck";
 import { StorageSupervisor } from "./storage-supervisor";
 import { testHooks } from "./test-hooks";
 import { hidden, WindowManager } from "./windows";
@@ -87,6 +88,8 @@ if (!isPrimary) {
 function start(): void {
   diagnostics.log("main_start");
   registerAppScheme();
+  // Before any session exists: Linux spellcheck must never fetch (#100).
+  installSpellcheckGuard();
   if (hidden && process.platform === "darwin") {
     app.setActivationPolicy("accessory");
     app.dock?.hide();
