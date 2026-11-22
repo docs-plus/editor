@@ -51,6 +51,8 @@ production behaves as before. The only visible difference is that
     limit its edit and view tokens are refused too, never its owner
     secret). Both tables evict their least recently used key when full,
     so neither stops counting nor refuses an address it has not seen.
+    Clients must retry `share_unavailable` with backoff, never treat it as
+    terminal.
   - A connection that joins while its share is stopped or made view-only
     is closed once connected.
   - A share ends 30 days after its last stored edit.
@@ -71,7 +73,8 @@ production behaves as before. The only visible difference is that
   of the share. CORS is limited to `HOCUS_SHARE_ORIGINS`. A mutation from
   any other `Origin` is refused. Bodies are JSON only, small, and unknown
   keys are refused. The endpoints are rate-limited per address and per
-  IPv6 /48 (owner calls only per address), before the origin check.
+  IPv6 /48 (owner calls only per address, once the address is under its
+  failed-token limit), before the origin check.
   `lineage` is a dashed UUID or 32 hex digits.
 - **Sharing (P4.2d):** `GET /api/info` returns `apiVersion` 1,
   `serverVersion`, the schemas, `maxDocBytes`, `maxFrameBytes`, `yjsFormat`
