@@ -4,13 +4,17 @@ import { join } from "node:path";
 
 import { Mermaid } from "@docs.plus/extension-mermaid";
 import type { Editor, Extension, JSONContent } from "@tiptap/core";
+import { Typography } from "@tiptap/extension-typography";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 
+import { SafeCodeBlock } from "@/components/document-editor/safe-code-block";
 import { slashAlias } from "@/components/smart-toolbar/insert/insert-menu-body";
 import { editorActions } from "@/lib/editor-actions";
+import { formatKeyCombo } from "@/lib/editor-actions/key-combo";
 import { runAction } from "@/lib/editor-actions/registry";
 import { computeContext } from "@/lib/editor-context/snapshot";
+import { lowlight } from "@/lib/lowlight";
 import {
   buildSlashItems,
   hintNeedsSpace,
@@ -45,11 +49,23 @@ const TITLE: JSONContent = {
   content: [{ type: "text", text: "Title" }],
 };
 
+/**
+ * The test editor with the app's own input-rule extensions in place of
+ * the helper's: `SafeCodeBlock` for the stock code block, and `Typography`,
+ * which turns "--" into "—" before the divider's rule sees the third dash
+ * (`buildDocumentEditorExtensions`).
+ */
+const APP_INPUT_RULES = [
+  ...DEFAULT_EXTENSIONS.filter((ext) => ext.name !== "codeBlock"),
+  SafeCodeBlock.configure({ lowlight }),
+  Typography,
+] as Extension[];
+
 /** A title and one empty paragraph, the caret in it. */
 function emptyLineEditor(withMermaid = false): Editor {
   const editor = createTestEditor({
     extensions: [
-      ...DEFAULT_EXTENSIONS,
+      ...APP_INPUT_RULES,
       ...(withMermaid ? [Mermaid] : []),
     ] as Extension[],
     content: { type: "doc", content: [TITLE, { type: "paragraph" }] },
@@ -143,19 +159,29 @@ describe("surface ids and labels come from the registry", () => {
       expect(missing).toEqual([]);
     });
 
-    it(`${surface.name}: no hard-coded registry label`, () => {
-      const labels = [
-        ...new Set(
-          surface.ids().flatMap((id) => editorActions.get(id)?.label ?? []),
-        ),
-      ];
+    it(`${surface.name}: no hard-coded registry label or shortcut`, () => {
+      const actions = surface
+        .ids()
+        .flatMap((id) => editorActions.get(id) ?? []);
+      const strings = new Set<string>();
+      for (const action of actions) {
+        strings.add(action.label);
+        if (action.shortcut) {
+          strings.add(action.shortcut);
+          strings.add(formatKeyCombo(action.shortcut, true));
+          strings.add(formatKeyCombo(action.shortcut, false));
+        }
+      }
       const found: string[] = [];
       for (const file of surface.files) {
         const text = source(file);
-        for (const label of labels) {
-          if (new RegExp(`(["'\`])${escapeRegExp(label)}\\1`).test(text)) {
-            found.push(`"${label}" in ${file}`);
-          }
+        for (const value of strings) {
+          const literal = escapeRegExp(value);
+          // A quoted string, or JSX text (">Heading 2<").
+          const pattern = new RegExp(
+            `(["'\`])${literal}\\1|>\\s*${literal}\\s*<`,
+          );
+          if (pattern.test(text)) found.push(`"${value}" in ${file}`);
         }
       }
       expect(found).toEqual([]);
