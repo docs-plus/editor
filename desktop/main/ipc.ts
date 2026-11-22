@@ -9,8 +9,14 @@ import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 
 import { fail } from "../shared/errors";
 import { CALL_CHANNELS, type CallChannel } from "../shared/ipc-contract";
+import {
+  CSP_REPORT_WINDOW_MS,
+  CSP_REPORTS_PER_WINDOW,
+  reportToken,
+} from "./csp-reports";
 import { diagnostics } from "./diagnostics";
 import type { DocHandlers } from "./doc-handlers";
+import { FixedWindowLimiter } from "./rate-limit";
 import { isAppUrl } from "./session-hardening";
 import type { WindowManager } from "./windows";
 
@@ -46,13 +52,23 @@ export function installIpc(
       return handlers.dispatch(channel as CallChannel, windowId, raw);
     });
   }
+  // SEC-010: a page can't flush the diagnostics ring with reports.
+  const cspReports = new FixedWindowLimiter(
+    CSP_REPORTS_PER_WINDOW,
+    CSP_REPORT_WINDOW_MS,
+  );
   ipcMain.on(
     CSP_REPORT_CHANNEL,
     (event, directive: unknown, scheme: unknown) => {
-      if (trustedWindowId(event, windows) === null) return;
+      const windowId = trustedWindowId(event, windows);
+      if (windowId === null) return;
+      const verdict = cspReports.take(windowId);
+      if (verdict === "first_drop")
+        diagnostics.log("csp_reports_dropped", { window: windowId });
+      if (verdict !== "ok") return;
       diagnostics.log("csp_violation", {
-        directive: typeof directive === "string" ? directive : "?",
-        scheme: typeof scheme === "string" ? scheme : "?",
+        directive: reportToken(directive),
+        scheme: reportToken(scheme),
       });
     },
   );

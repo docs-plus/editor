@@ -244,9 +244,23 @@ test("the typed bridge round-trips a document and enforces the contract", async 
 test("opening a document already open in another window focuses that window", async () => {
   current = await launch();
   const { app, userData } = current;
-  await firstPage(app);
-  const docA = randomUUID();
-  const docB = randomUUID();
+  const first = await firstPage(app);
+  // A link opens only a document the library has (SEC-005).
+  const [docA, docB] = await first.evaluate(async () => {
+    const ids: string[] = [];
+    for (const title of ["A", "B"]) {
+      const created = await window.tinydocy.invoke("index.create", { title });
+      ids.push((created.value as { id: string }).id);
+    }
+    return ids;
+  });
+
+  // A link to a document that doesn't exist opens nothing.
+  expect(
+    await secondInstance(userData, [`tinydocy://local/${randomUUID()}`]),
+  ).toBe(0);
+  await waitForEvent(app, "deep_link_unknown_doc");
+  expect(await windowIds(current)).toHaveLength(1);
 
   expect(await secondInstance(userData, [`tinydocy://local/${docA}`])).toBe(0);
   const createdA = await waitForEvent(
@@ -318,11 +332,14 @@ test("Windows: Electron refuses any argument after a URL before the app runs", a
   expect(run.events.some((e) => e.event === "main_start")).toBe(false);
 });
 
-test("a deep link on the first launch opens that document's window only", async () => {
+test("a first-launch link to a document the library lacks opens one plain window", async () => {
   const run = await runOnce([`tinydocy://local/${randomUUID()}`]);
   expect(run.code).toBe(0);
+  expect(run.events.some((e) => e.event === "deep_link_unknown_doc")).toBe(
+    true,
+  );
   const created = run.events.filter((e) => e.event === "window_created");
-  expect(created.map((e) => e.forDoc)).toEqual([true]);
+  expect(created.map((e) => e.forDoc)).toEqual([false]);
 });
 
 test("navigation, window.open and bad argv from a second instance are refused", async () => {

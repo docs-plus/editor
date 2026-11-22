@@ -24,12 +24,19 @@ import { app, type BrowserWindow } from "electron";
 import { DEEP_LINK_SCHEME } from "../shared/app-identity";
 import { StorageClient } from "../storage/client";
 import { installAppProtocol, registerAppScheme } from "./app-protocol";
+import {
+  DEEP_LINK_WINDOW_MS,
+  DEEP_LINK_WINDOWS,
+  type DocExists,
+  openDocFromLink,
+} from "./deep-link-open";
 import { diagnostics } from "./diagnostics";
-import { createDocHandlers, ownerOf } from "./doc-handlers";
+import { createDocHandlers, errorCodeOf, ownerOf } from "./doc-handlers";
 import { installIpc } from "./ipc";
 import { type LaunchIntent, parseLaunchArgs, userArgs } from "./launch-args";
 import { installMenu } from "./menu";
 import { QuitCoordinator } from "./quit-coordinator";
+import { FixedWindowLimiter } from "./rate-limit";
 import { OpenDocRegistry } from "./registry";
 import { hardenSession } from "./session-hardening";
 import { StorageSupervisor } from "./storage-supervisor";
@@ -51,6 +58,9 @@ function libraryDir(): string {
     return join(process.env.LOCALAPPDATA, "TinyDocy", "library");
   return join(app.getPath("userData"), "library");
 }
+
+/** The storage owner that checks a deep link's document exists. */
+const PROBE_OWNER = "deep-link-probe";
 
 /** Set by the build (`desktop/build/build.ts`) from the renderer's build env. */
 const SYNC_URL = process.env.TINYDOCY_SYNC_URL ?? "ws://127.0.0.1:1234";
@@ -184,26 +194,55 @@ function start(): void {
       quit.confirmFlushed(windowId, requestId),
   });
 
-  const openDoc = (docId: string) => {
-    const holder = registry.holder(docId);
-    if (holder !== undefined && windows.isOurs(holder)) {
-      diagnostics.log("open_focused_existing", { window: holder });
-      windows.focus(holder);
-      return;
-    }
-    const window = windows.create(docId);
-    registry.claim(docId, window.id);
-  };
-
   const focusOrCreate = () => {
     const window = windows.latest();
     if (window) windows.focus(window.id);
     else windows.create(null);
   };
 
-  const route = (intents: LaunchIntent[]) => {
+  /**
+   * Does the library have this document? A probe owner claims and releases
+   * it (no new worker op). `already_open` means it exists; any other
+   * failure means storage can't tell.
+   */
+  const docExists = async (docId: string): Promise<DocExists> => {
+    try {
+      await storage.call("claim", { docId, owner: PROBE_OWNER });
+      await storage
+        .call("close", { docId, owner: PROBE_OWNER })
+        .catch(() => undefined);
+      return "yes";
+    } catch (error) {
+      const code = errorCodeOf(error);
+      if (code === "not_found") return "no";
+      if (code === "already_open") return "yes";
+      return "unknown";
+    }
+  };
+
+  const deepLinkLimiter = new FixedWindowLimiter(
+    DEEP_LINK_WINDOWS,
+    DEEP_LINK_WINDOW_MS,
+  );
+
+  const openDoc = async (docId: string): Promise<void> => {
+    const outcome = await openDocFromLink(docId, {
+      registry,
+      isOurs: (windowId) => windows.isOurs(windowId),
+      focus: (windowId) => windows.focus(windowId),
+      create: (id) => windows.create(id),
+      discard: (windowId) => windows.get(windowId)?.destroy(),
+      docExists,
+      limiter: deepLinkLimiter,
+      log: (event, fields) => diagnostics.log(event, fields),
+    });
+    // A link that opened nothing still brings the app forward.
+    if (outcome !== "opened" && outcome !== "focused") focusOrCreate();
+  };
+
+  const route = async (intents: LaunchIntent[]): Promise<void> => {
     for (const intent of intents) {
-      if (intent.kind === "openDoc") openDoc(intent.docId);
+      if (intent.kind === "openDoc") await openDoc(intent.docId);
       else if (intent.kind === "openFile") {
         // Import is P2.8: the file is accepted, nothing reads it yet.
         diagnostics.log("open_file_accepted", { type: intent.type });
@@ -220,17 +259,27 @@ function start(): void {
     }
   };
 
-  /** Filters and routes one set of arguments; returns how many were accepted. */
-  const handleArgs = (args: string[], cwd: string): number => {
+  /**
+   * Filters and routes one set of arguments. `accepted` is how many passed
+   * the filter; `routed` settles once each has been opened or refused.
+   */
+  const handleArgs = (
+    args: string[],
+    cwd: string,
+  ): { accepted: number; routed: Promise<void> } => {
     if (!ready) {
       pending.push({ args, cwd });
-      return 0;
+      return { accepted: 0, routed: Promise.resolve() };
     }
     const { intents, refused } = parseLaunchArgs(args, { cwd, isFile });
     if (refused > 0) diagnostics.log("argv_refused", { count: refused });
     diagnostics.log("argv_accepted", { count: intents.length });
-    route(intents);
-    return intents.length;
+    return {
+      accepted: intents.length,
+      routed: route(intents).catch(() => {
+        diagnostics.log("route_failed");
+      }),
+    };
   };
 
   app.on("will-finish-launching", () => {
@@ -246,7 +295,7 @@ function start(): void {
 
   app.on("second-instance", (_event, argv, workingDirectory) => {
     diagnostics.log("second_instance");
-    const accepted = handleArgs(
+    const { accepted } = handleArgs(
       userArgs(argv, Boolean(process.defaultApp)),
       workingDirectory,
     );
@@ -270,7 +319,7 @@ function start(): void {
     if (ready && windows.ids().length === 0) windows.create(null);
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     diagnostics.log("app_ready");
     installAppProtocol({
       rendererDir: join(appPath, "renderer"),
@@ -286,13 +335,18 @@ function start(): void {
 
     // The first launch's own arguments, plus any macOS open-file /
     // open-url that arrived before ready, decide the first window(s); a
-    // window with no document opens only if none of them made one.
+    // window with no document opens only if none of them made one. A plain
+    // launch opens its window at once; a deep link waits for storage to
+    // confirm the document exists (SEC-005).
     ready = true;
-    handleArgs(
-      userArgs(process.argv, Boolean(process.defaultApp)),
-      process.cwd(),
-    );
-    for (const { args, cwd } of pending.splice(0)) handleArgs(args, cwd);
+    const routed = [
+      handleArgs(
+        userArgs(process.argv, Boolean(process.defaultApp)),
+        process.cwd(),
+      ).routed,
+      ...pending.splice(0).map(({ args, cwd }) => handleArgs(args, cwd).routed),
+    ];
+    await Promise.all(routed);
     if (windows.ids().length === 0) windows.create(null);
 
     // Installer smoke (CI): start, show the first window, open the library,
