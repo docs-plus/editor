@@ -101,12 +101,5 @@ export function isOurScheme(href: string): boolean {
   return folded === `${DOC_LINK_SCHEME}:`;
 }
 
-/**
- * Web links the app may open or write: `https:`, `http:` and `mailto:`
- * only (an allowlist; the extension's own gate is a denylist that lets
- * `ms-msdt:`, `search-ms:`, `smb:` and the like through to the OS).
- * Whitespace is dropped first, as browsers drop it from a URL.
- */
-export function isWebLink(href: string): boolean {
-  return /^(?:https?|mailto):/i.test(href.replace(/\s/g, ""));
-}
+/** Web links the app may open or write (`lib/web-link.ts`). */
+export { isWebLink } from "@/lib/web-link";

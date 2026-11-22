@@ -172,13 +172,17 @@ describe("isOurScheme", () => {
 });
 
 describe("isWebLink", () => {
-  it.each([
-    "https://a.b",
-    "http://a.b",
-    "mailto:a@b.c",
-    " HTTPS://a.b",
-    "ht\ttps://a.b",
-  ])("allows %p", (href) => expect(isWebLink(href)).toBe(true));
+  it("is the editor's own policy, not a copy", async () => {
+    const config = await import(
+      "@/components/document-editor/document-editor-config"
+    );
+    expect(isWebLink).toBe(config.isWebLink);
+  });
+
+  it.each(["https://a.b", "http://a.b", "mailto:a@b.c", " HTTPS://a.b"])(
+    "allows %p",
+    (href) => expect(isWebLink(href)).toBe(true),
+  );
   it.each([
     "ms-msdt:x",
     "search-ms:x",
@@ -188,6 +192,8 @@ describe("isWebLink", () => {
     "ftp://a",
     "javascript:alert(1)",
     "\u0001https://a.b",
+    // A browser would read this as https; refusing it is the safe side.
+    "ht\ttps://a.b",
     "/relative",
     "#top",
     "",

@@ -73,6 +73,7 @@ import { WriteGate } from "@/extensions/write-gate/write-gate";
 import { SUBSCRIPT_SHORTCUT } from "@/lib/app-shortcuts";
 import type { LinkHost } from "@/lib/links/link-host-types";
 import { lowlight } from "@/lib/lowlight";
+import { isWebLink } from "@/lib/web-link";
 
 import { SafeCodeBlock } from "./safe-code-block";
 
@@ -96,18 +97,15 @@ const SubscriptByTarget = Subscript.extend({
 });
 
 /**
- * The web editor's link policy: `https:`, `http:` and `mailto:` only, after
- * leading whitespace. A scheme a browser would still read through inner
- * whitespace or a leading control (`ht\ttps:`) is refused: the safe side.
- * The extension's own check is a denylist, so an `ms-msdt:` or `search-ms:`
- * link would otherwise reach the OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
- * rules; `LinkPolicyHyperlink` applies the same option to HTML paste and to
- * rendering, so a host that passes its own `isAllowedUri` replaces it at all
- * three. Parse and render call it with one string and no context (a missing
- * href arrives as "undefined" or "null"), so a host policy must not need one.
+ * The editor's link policy is `isWebLink` (`lib/web-link.ts`). It is
+ * `isAllowedUri`, the one policy for commands, autolink and paste rules;
+ * `LinkPolicyHyperlink` applies the same option to HTML paste and to
+ * rendering, so a host that passes its own `isAllowedUri` replaces it at
+ * all three. Parse and render call it with one string and no context (a
+ * missing href arrives as "undefined" or "null"), so a host policy must not
+ * need one.
  */
-export const isWebLink = (href: string): boolean =>
-  /^\s*(https?|mailto):/i.test(href);
+export { isWebLink };
 
 /** The one protocol check for parse and render: the policy on any value. */
 const allows = (options: HyperlinkOptions, href: unknown) =>
