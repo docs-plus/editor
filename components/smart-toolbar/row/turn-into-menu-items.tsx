@@ -20,9 +20,8 @@ import {
   ariaKeyShortcuts,
   formatKeyCombo,
 } from "@/lib/editor-actions/key-combo";
-import { canRun, runAction } from "@/lib/editor-actions/registry";
-import type { AnyAction, IconComponent } from "@/lib/editor-actions/types";
-import { computeContext } from "@/lib/editor-context/snapshot";
+import { runAction } from "@/lib/editor-actions/registry";
+import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { HeadingIcon, TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
@@ -122,41 +121,6 @@ function useTurnIntoValue(editor: Editor): [StyleFace, string] {
   return [face as StyleFace, id];
 }
 
-/** Lists and quotes a text style turns out of (ruling a: Turn into unwraps). */
-const WRAPPERS = new Set([
-  "bulletList",
-  "orderedList",
-  "taskList",
-  "blockquote",
-]);
-
-function inWrapper(state: EditorState): boolean {
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if (WRAPPERS.has($from.node(depth).type.name)) return true;
-  }
-  return false;
-}
-
-/**
- * Runs a pick. Text and the headings turn a list item or a quote into
- * that block, unwrapped, in one undo step (the registry's `setTextStyle`
- * only restyles a textblock in place); everything else is the registry's
- * own run. The registry's checks still decide (`canRun`: the title,
- * read-only, code).
- */
-function turnInto(editor: Editor, action: AnyAction): boolean {
-  if (!action.id.startsWith("style.") || !inWrapper(editor.state)) {
-    return runAction(editor, action);
-  }
-  if (!canRun(action, computeContext(editor))) return false;
-  const level = Number(action.id.slice("style.heading".length)) || 0;
-  const chain = editor.chain().focus().clearNodes();
-  return (
-    level ? chain.setNode("heading", { level }) : chain.setNode("paragraph")
-  ).run();
-}
-
 /**
  * The row's grid: icon, label, shortcut, then the ✓ as the trailing cell
  * (`16px 1fr auto 16px`, spec §7.4); the reason line spans under the label.
@@ -176,7 +140,8 @@ interface TurnIntoItemProps {
 
 /**
  * One block type as a radio row. No Markdown chips (spec §7.4): they teach
- * in the "/" menu. A pick is one undo step (`turnInto`).
+ * in the "/" menu. A pick is one undo step through `runAction` (the
+ * registry's text styles unwrap a list item or quote, ruling a).
  */
 function TurnIntoItem({
   id,
@@ -208,7 +173,7 @@ function TurnIntoItem({
       onClick={() => {
         if (disabled) return;
         onPicked();
-        turnInto(editor, action);
+        runAction(editor, action);
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : <span aria-hidden="true" />}

@@ -7,13 +7,16 @@ import {
   getListValue,
   setListType,
 } from "@/components/tiptap-ui/list-dropdown-menu/use-list-dropdown-menu";
+import { editorActions } from "@/lib/editor-actions";
 import {
   getTextStyleValue,
   setTextStyle,
 } from "@/lib/editor-actions/core/blocks";
+import { computeContext } from "@/lib/editor-context/snapshot";
 
 import { createTestEditor } from "../../helpers/create-test-editor";
 import {
+  blockquote,
   bulletList,
   doc,
   h1,
@@ -56,6 +59,41 @@ describe("text style", () => {
     expect(getTextStyleValue(editor)).toBe("paragraph");
     expect(setTextStyle(editor, "heading-3")).toBe(true);
     expect(getTextStyleValue(editor)).toBe("heading-3");
+  });
+
+  it("turns a list item or a quote into Text, unwrapped, in one step", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(listItem(p("Listed"))),
+        blockquote(p("Quoted")),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Listed"));
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(editor.state.doc.child(1).type.name).toBe("paragraph");
+    editor.commands.setTextSelection(posInside(editor, "Quoted"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(editor.state.doc.child(2).type.name).toBe("heading");
+    // Plain text stays a no-op.
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(setTextStyle(editor, "paragraph")).toBe(false);
+  });
+
+  it("names a list item List and a quote Quote (the row's face)", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(listItem(p("Listed"))),
+        blockquote(p("Quoted")),
+      ).toJSON(),
+    });
+    const value = () =>
+      editorActions.get("style.paragraph")?.value?.(computeContext(editor));
+    editor.commands.setTextSelection(posInside(editor, "Listed"));
+    expect(value()).toBe("List");
+    editor.commands.setTextSelection(posInside(editor, "Quoted"));
+    expect(value()).toBe("Quote");
   });
 
   it("leaves the title alone", () => {

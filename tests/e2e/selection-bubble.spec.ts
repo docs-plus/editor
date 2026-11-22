@@ -1234,6 +1234,10 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
     // Shift+Arrow keeps the bubble; the selection grows into the list.
     await selectText(page, "Listed words");
     await expect(styleButton(page)).toHaveAttribute("data-face", "List");
+    // The row's Text style ▾ agrees (ruling a: the registry's value).
+    await expect(
+      row(page).locator('[data-toolbar-group="style"] button'),
+    ).toHaveAccessibleName("List");
     await selectText(page, "Heading words");
     await expect(styleButton(page)).toHaveAccessibleName(
       "Turn into H2 Heading 2",

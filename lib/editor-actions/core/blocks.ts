@@ -121,7 +121,8 @@ function startsInTitle(selection: Selection): boolean {
 /**
  * Sets the text style of the selected blocks. Unlike `toggleHeading`,
  * picking the style every selected block already has does nothing; a mixed
- * range is converted. A range that starts in the title is refused.
+ * range is converted, and a list item or quote is unwrapped (Turn into,
+ * spec §7.4). A range that starts in the title is refused.
  */
 export function setTextStyle(
   editor: Editor | null,
@@ -130,7 +131,11 @@ export function setTextStyle(
   if (!editor?.isEditable) return false;
   const { selection } = editor.state;
   if (startsInTitle(selection)) return false;
-  if (textStyleOf(computeContext(editor)) === value) return false;
+  const ctx = computeContext(editor);
+  // A list item or quote of that style still turns into it, unwrapped.
+  if (!ctx.inList && !ctx.inBlockquote && textStyleOf(ctx) === value) {
+    return false;
+  }
   const level =
     value === "paragraph"
       ? undefined
@@ -189,7 +194,12 @@ function styleAction(
         : { reason: "Text styles can't go here." };
     },
     isActive: (ctx) => textStyleOf(ctx) === value,
-    value: (ctx) => TEXT_STYLE_LABELS[textStyleOf(ctx)],
+    value: (ctx) =>
+      ctx.inList
+        ? "List"
+        : ctx.inBlockquote
+          ? "Quote"
+          : TEXT_STYLE_LABELS[textStyleOf(ctx)],
     run: (editor) => setTextStyle(editor, value),
   };
 }
