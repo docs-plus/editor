@@ -252,7 +252,7 @@
   }
 }
 
-.st-color-row,
+.st-color-named,
 .st-color-more {
   width: 100%;
 }
@@ -281,7 +281,8 @@
   border-block-end: 1.5px solid currentColor;
   rotate: -45deg;
 
-  &:dir(rtl) {
+  // Not `:dir()`: the CSS pipeline lowers it to `:lang()`.
+  :where([dir="rtl"]) & {
     rotate: 45deg;
   }
 }

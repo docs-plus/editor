@@ -205,6 +205,8 @@ function Pick({
 
 interface MoreProps {
   kind: Kind;
+  /** The menu's direction: the submenu opens on its inline-end side. */
+  rtl: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   state: ColorState;
@@ -219,6 +221,7 @@ interface MoreProps {
 /** "More colours ▸": a side submenu with the rest, in token order. */
 function MoreRow({
   kind,
+  rtl,
   open,
   onOpenChange,
   state,
@@ -285,7 +288,9 @@ function MoreRow({
         ref={popupRef}
         role="menu"
         aria-label={COPY[kind].more}
-        side="inline-end"
+        // Physical, not "inline-end": Base UI reads its own direction
+        // provider, which the app does not set, not the document's `dir`.
+        side={rtl ? "left" : "right"}
         align="start"
         className="st-color-more-popup"
         initialFocus={() =>
@@ -303,7 +308,7 @@ function MoreRow({
             container={() => popupRef.current}
             onPick={onPick}
             role="menuitemradio"
-            className="st-color-row"
+            className="st-color-named"
             tabIndex={at === Math.max(checked, 0) ? 0 : -1}
             data={{ section: `more-${kind}`, index: at }}
           >
@@ -346,6 +351,7 @@ export function ColorRows({
   );
   const [active, setActive] = useState(() => initialPos(focusKind, state));
   const [openMore, setOpenMore] = useState<Kind | null>(null);
+  const [rtl, setRtl] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const idPrefix = useId();
   const preview = useSwatchPreview(editor);
@@ -373,6 +379,10 @@ export function ColorRows({
   useLayoutEffect(() => {
     if (focusInitially.current) focusAt(initial.current);
   }, [focusAt]);
+  // The interface direction, read once: it does not change while open.
+  useLayoutEffect(() => {
+    if (panelRef.current) setRtl(isRtl(panelRef.current));
+  }, []);
 
   /** A picked row's position in the panel (More rows keep the More stop). */
   const findPos = (swatch: Swatch): RowsPos | null => {
@@ -500,7 +510,7 @@ export function ColorRows({
                 {...common}
                 swatch={swatch}
                 role="menuitemradio"
-                className="st-color-row"
+                className="st-color-named"
                 tabIndex={stop({ section: kind, index })}
                 data={{ section: kind, index }}
                 onFocus={() => setActive({ section: kind, index })}
@@ -510,6 +520,7 @@ export function ColorRows({
             ))}
             <MoreRow
               kind={kind}
+              rtl={rtl}
               open={openMore === kind}
               onOpenChange={(open) => setOpenMore(open ? kind : null)}
               state={state}
