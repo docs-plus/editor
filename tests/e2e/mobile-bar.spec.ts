@@ -1617,7 +1617,10 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
   async function openInsertSheet(page: Page) {
     await bar(page).getByRole("button", { name: "Insert" }).tap();
     await expect(insertSheet(page)).toBeVisible();
-    await insertSheet(page).getByRole("button", { name: "Divider" }).waitFor();
+    await insertSheet(page)
+      .getByRole("button", { name: "Divider" })
+      .first()
+      .waitFor();
     await insertSheet(page).evaluate((el) =>
       Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
     );

@@ -55,9 +55,11 @@ function whenIdle(run: () => void): () => void {
  * keyboard, its top inside the visual viewport, which iOS can pan down the
  * layout viewport (`offsetTop`) while the keyboard is up.
  */
-function keyboardStyle(inset: number): CSSProperties | undefined {
+function keyboardStyle(
+  inset: number,
+  visible: number,
+): CSSProperties | undefined {
   if (!inset) return undefined;
-  const visible = window.visualViewport?.height ?? window.innerHeight - inset;
   return {
     "--keyboard-inset": `${inset}px`,
     "--visible-height": `${visible}px`,
@@ -127,8 +129,25 @@ export function InsertSheet({
     };
   }, [editor, onOpenChange]);
 
+  // The visual viewport's height while the keyboard is up: iOS can pan it
+  // (`offsetTop`) without the keyboard's height changing.
+  const [visible, setVisible] = useState(0);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!open || !keyboardInset || !viewport) return;
+    const read = () => setVisible(viewport.height);
+    read();
+    viewport.addEventListener("resize", read);
+    viewport.addEventListener("scroll", read);
+    return () => {
+      viewport.removeEventListener("resize", read);
+      viewport.removeEventListener("scroll", read);
+    };
+  }, [open, keyboardInset]);
+
   // The keyboard came up (or moved): keep the focused field in view in
   // the shortened sheet.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: again when the visible band changes
   useEffect(() => {
     if (!open || !keyboardInset) return;
     const active = document.activeElement;
@@ -138,7 +157,7 @@ export function InsertSheet({
     ) {
       active.scrollIntoView({ block: "nearest" });
     }
-  }, [open, keyboardInset]);
+  }, [open, keyboardInset, visible]);
 
   /**
    * After a pick: closes (which lifts the page's `inert`) and focuses the
@@ -212,7 +231,10 @@ export function InsertSheet({
         initialFocus={initialFocus}
         finalFocus={finalFocus}
         className="st-insert-sheet max-h-[75dvh]"
-        style={keyboardStyle(keyboardInset)}
+        style={keyboardStyle(
+          keyboardInset,
+          visible || window.innerHeight - keyboardInset,
+        )}
       >
         <SheetHeader>
           <SheetTitle className="flex-1">Insert</SheetTitle>
