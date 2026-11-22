@@ -202,6 +202,12 @@ pull requests ahead of it, and merges only what passed. CI already runs on
 3. Save, then merge pull requests with **Merge when ready** (or
    `gh pr merge <n> --auto --merge`) instead of the merge button.
 
+Draft pull requests run the checks job only: `Playwright (Chromium)` passes
+on a draft with a notice, and marking it ready for review starts the full
+run. Agent sessions open their pull requests as drafts and mark them ready
+when they are; a draft cannot enter the merge queue. The merge queue and
+`main` always run every suite, and the gate fails if one was skipped there.
+
 Or with the API (the PUT replaces the ruleset, so this adds the rule to the
 current one):
 
