@@ -23,9 +23,12 @@ function urlOf(raw: unknown): string {
 /**
  * The link a click should send to the browser, or null: an anchor outside
  * the editor that opens in a new window (`target="_blank"`, a middle click
- * or a modifier click). Trust is checked by the caller.
+ * or a modifier click). A right or back/forward button's `auxclick` never
+ * counts, even on a `_blank` link. Trust is checked by the caller.
  */
 export function leavingLinkOf(event: MouseEvent): string | null {
+  // auxclick also fires for the right button: only a middle click opens.
+  if (event.type === "auxclick" && event.button !== 1) return null;
   const target = event.target as Element | null;
   const anchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
   if (!anchor || anchor.closest(".ProseMirror")) return null;

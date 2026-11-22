@@ -61,8 +61,6 @@ function libraryDir(): string {
   return join(app.getPath("userData"), "library");
 }
 
-/** The storage owner that checks a deep link's document exists. */
-
 /** Set by the build (`desktop/build/build.ts`) from the renderer's build env. */
 const SYNC_URL = process.env.TINYDOCY_SYNC_URL ?? "ws://127.0.0.1:1234";
 const RUNTIME_STYLE_HASHES: string[] = JSON.parse(
@@ -209,12 +207,10 @@ function start(): void {
   };
 
   /**
-   * Does the library have this document? A probe owner claims and releases
-   * it (no new worker op). `already_open` means it exists; any other
-   * failure means storage can't tell.
+   * Does the library have this document? A read-only storage check: nothing
+   * is claimed, so it can never make a window's own doc.open fail with
+   * already_open (N3). A failure means storage can't tell.
    */
-  // A read-only check: nothing is claimed, so it can never make a
-  // window's own doc.open fail with already_open (N3).
   const docExists = async (docId: string): Promise<DocExists> => {
     try {
       return (await storage.call("exists", { docId })) ? "yes" : "no";

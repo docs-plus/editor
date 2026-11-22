@@ -36,7 +36,11 @@ export type DocHandlerDeps = {
   windowDoc: (windowId: number) => string | null;
   /** The build this main was made from (tests pass their own). */
   build?: string;
-  /** Opens a link in the system browser (`shell.openLink`); true if it did. */
+  /**
+   * Opens a link in the system browser (`shell.openLink`); true if it did.
+   * Passing `fromTopAppFrame: true` is safe only because `ipc.ts`'s sender
+   * check lets nothing but the app's top frame reach these handlers.
+   */
   openLink?: (windowId: number, url: string) => boolean;
   /** Answers `app.flushed` (the quit coordinator). */
   onFlushed?: (windowId: number, requestId: number) => void;

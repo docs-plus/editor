@@ -367,10 +367,6 @@ export class Library {
   }
 
   /**
-   * Re-registers a hold without loading: after a worker restart, main
-   * replays its registry so the windows' resent batches are accepted.
-   */
-  /**
    * Whether a document exists, without claiming it: main checks a deep
    * link with this, so a probe never holds a document a window is opening.
    */
@@ -380,6 +376,10 @@ export class Library {
     );
   }
 
+  /**
+   * Re-registers a hold without loading: after a worker restart, main
+   * replays its registry so the windows' resent batches are accepted.
+   */
   claim(docId: string, owner: string): void {
     const holder = this.holders.get(docId);
     if (holder !== undefined && holder !== owner)
