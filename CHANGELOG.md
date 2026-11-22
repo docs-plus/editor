@@ -14,7 +14,8 @@ since the previous tag.
 The selection bubble no longer registers a ProseMirror plugin from its lazy
 chunk, and it anchors to the line it belongs to (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §12.1, v1 contract A18). The
-editor chunk group is unchanged (393,171 B gz, −1 B against `main`), and the
+editor chunk group is unchanged (393,465 B gz, −1 B against `main` at
+`29f6faf`, 1,287 B under the P2.2 fence), and the
 bubble chunk shrinks from 12,238 B to 9,798 B gz (−2,440 B).
 
 #### Changed
