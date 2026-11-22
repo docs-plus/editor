@@ -9,6 +9,37 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phones M20: one keyboard measurement, sheets ride the keyboard
+
+The on-screen keyboard is measured once for the whole page (phones and
+tablets design §4.6, §6.4, §6.5, PR M20). Phones only: desktop subscribes to
+nothing and renders the same. The editor chunk group is unchanged
+(393,465 B gz, 0 B against `main` at `ed2a7cd`, 1,287 B under the P2.2 fence); everything lives in the phone bar's lazy chunk.
+
+#### Added
+
+- **Phones:** `lib/keyboard-inset.ts`, one `visualViewport` listener set
+  shared by every subscriber and removed with the last one. While anything
+  subscribes, `<html>` carries `--keyboard-inset` and
+  `--visual-viewport-height`, written at most once per frame.
+- **Phones:** bottom sheets ride the keyboard: they sit on
+  `--keyboard-inset` and never grow past the visual viewport, so a field in
+  a sheet stays above the keyboard (iOS Safari and Android Chrome).
+- **Phones:** after a rotation (or an iPad window resize below 768 px) the
+  caret is scrolled back into view once, if you were writing. No
+  transaction steps, so no Yjs traffic or undo entry.
+- **Tests:** the hidden-page flush starts in the `visibilitychange` task
+  (sandbox device copy) and a library `flush()` appends at once and never
+  compacts; a leak spec checks the listener set leaves with the bar.
+
+#### Changed
+
+- **Phones:** `hooks/use-keyboard-inset.ts` moved into
+  `lib/keyboard-inset.ts`; the phone bar reads the shared store.
+- **Docs:** the awareness rate check (§6.5): carets are sent on every
+  selection change, not at most every 100 ms; the throttle is an open owner
+  decision.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

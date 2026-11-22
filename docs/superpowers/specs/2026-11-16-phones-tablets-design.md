@@ -259,10 +259,13 @@ All phone surfaces use the shadcn `Sheet` (`components/ui/sheet.tsx`), as the Aa
 ### 4.6 The virtual keyboard
 
 - **One measurement for the whole page.** M20 moves `useKeyboardInset`'s computation into a small store (`lib/keyboard-inset.ts`, `useSyncExternalStore`) that writes `--keyboard-inset` on `<html>` once per frame. The phone bar keeps its clearance logic; sheets with a text field (comment reply, Quick Open, rename, tag name, share name) set `bottom: var(--keyboard-inset)` and a `max-height` of the visual viewport. One listener set, removed when nothing subscribes.
+  - **As built (M20):** `lib/keyboard-inset.ts` holds one `visualViewport` `resize`/`scroll` pair and one `document` `focusout`, reference-counted across `useKeyboardInset()` (the phone bar), `useKeyboardInsetVars()` (CSS-only consumers) and `onViewportWidthChange()`; the last release removes them and both variables. While subscribed, `<html>` carries `--keyboard-inset` and `--visual-viewport-height` (px), each written only when it changes, at most once per frame. `hooks/use-keyboard-inset.ts` is gone.
+  - **Every bottom sheet rides it** (`components/ui/sheet.tsx`): the popup is `bottom: var(--keyboard-inset, 0px)` and `max-height: min(85dvh, var(--visual-viewport-height, 85dvh))`, subscribed only while open. Sheets without a field (the Aa sheet) are unaffected in practice: opening one moves focus out of the editor, so the keyboard closes and the inset returns to 0 a frame later. A sheet that sets its own `max-h-*` (the Aa sheet's `60dvh`) must write it as `min(…, var(--visual-viewport-height, …))` if it holds a field.
 - **No VirtualKeyboard API.** `navigator.virtualKeyboard.overlaysContent` and `interactive-widget=overlays-content` are Chromium-only; Safari has neither. The `visualViewport` path already works on both, and two code paths would double the test matrix.
 - **Keep Chrome's default `interactive-widget=resizes-visual`.** It matches iOS (the keyboard shrinks the visual viewport, not the layout viewport), so the existing inset math holds on both.
 - **Hardware keyboard on iPad:** the inset is 0, except for the floating shortcuts bar iPadOS shows above a hardware keyboard **[device: does it shrink the visual viewport?]**. If it does, the formula already accounts for it.
 - **Orientation change:** on `visualViewport` `resize` while the editor has focus, the caret is scrolled back into view once, after the frame settles (`requestAnimationFrame`, then `editor.commands.scrollIntoView()`). No transaction with steps, so no Yjs traffic.
+  - **As built (M20):** the store reports a changed layout width (`innerWidth`) once the frame settles; keyboard and pinch-zoom resizes change only the visual viewport and are ignored. The phone bar's lazy chunk scrolls the caret back when the width changes under it, when it mounts (a rotation to portrait) and when it unmounts (a rotation past 768 px, where the row toolbar takes over), each only while the editor has focus. **Not covered yet:** a tablet rotating while staying at or above 768 px (iPad 820 ↔ 1180): no lazy chunk loads there and the editor chunk takes 0 B; it lands with the first tablet chunk (M21/M22).
 - **Typing near the bottom:** ProseMirror's `scrollMargin` already includes the bar and keyboard clearance (`SCROLL_CLEARANCE`).
 
 ### 4.7 Safe areas and notches
@@ -416,7 +419,7 @@ Keep today's behaviour: opens on a typed "/", taps keep the keyboard up, 44 px r
   - Library: batched appends (250 ms after the last edit, 1 s at most) and a flush on `visibilitychange` → hidden (W-D2).
   - Sandbox: the device copy flushes on hidden and `pagehide` (`collab-session.ts:322-323`); unsynced edits upload on the next visit.
 - **What this design adds (M20):**
-  - A test hook asserts that switching apps (hidden) starts the flush **in the same task**, not after a timer.
+  - A test hook asserts that switching apps (hidden) starts the flush **in the same task**, not after a timer. **As built (M20):** `tests/unit/lib/collab-session-offline.test.ts` ("flush when the page is hidden") shows the sandbox's device-copy write starts in the `visibilitychange` task, before a `setTimeout(0)` queued ahead of it (microtasks only). `tests/unit/lib/platform/local-session-hidden-flush.test.ts` pins the library's `DocHandle.flush()`: the append is issued synchronously and nothing compacts, even with compaction due. The library's own `visibilitychange` wiring is W-D2's; it must call `flush()`, never `compact`.
   - **The hidden flush never compacts** (v8): it writes the pending batch only; compaction waits for idle or close while visible.
   - **M18 tests "switch app within 100 ms, then kill"** on the owner's iPhone and the Android: type, switch apps within 100 ms, kill the browser from the app switcher, reopen; at most the batch window is missing.
   - "Continue where you left off" already records on hidden; nothing to add.
@@ -427,7 +430,7 @@ Keep today's behaviour: opens on a typed "/", taps keep the keyboard up, 44 px r
 ### 6.5 Battery
 
 - No timers while hidden: the toolbar settle timer, the outline rebuild and the awareness heartbeat pause on hidden (the heartbeat is Hocuspocus's; the socket is suspended by iOS anyway).
-- Remote carets: awareness updates are already coalesced; a phone sends its caret at most every 100 ms **[check the current rate in M20]**.
+- Remote carets: ~~awareness updates are already coalesced; a phone sends its caret at most every 100 ms~~ **Checked in M20 (2026-11-22): not true today.** `@tiptap/y-tiptap`'s cursor plugin publishes on every view update whose relative selection changed, which is every typed character and caret move. The sandbox's `HocuspocusProvider` (`lib/collab-session.ts`) leaves `flushDelay` at its default `false`, so each awareness change goes out as its own frame at once: the rate is the typing rate (about 5–15 frames a second, faster in IME bursts), with no 100 ms floor. Library documents have no provider, so nothing is sent. M20 changes nothing; **[decision: owner]** whether to add a 100 ms awareness throttle. Setting the provider's `flushDelay` would also batch document updates, so a throttle would wrap only the awareness send, ship dark behind a flag, and move the caret-latency check into the collaboration perf A/B.
 - No animations loop; sheet motion is CSS transitions only.
 
 ---
