@@ -511,3 +511,17 @@ test("a compaction that leaves the file mostly free pages gives them back (T23)"
   const free = db.prepare("PRAGMA freelist_count").get().freelist_count ?? 0;
   expect(free / pages).toBeLessThanOrEqual(0.25);
 });
+
+test("a tag keeps the id its caller minted, unless the name is taken", () => {
+  const id = crypto.randomUUID();
+  expect(library.createTag("Mint", null, id)).toMatchObject({
+    id,
+    created: true,
+  });
+  expect(library.createTag("mint", null, crypto.randomUUID())).toMatchObject({
+    id,
+    created: false,
+  });
+  expect(library.createFolder({ name: "f" })).not.toBeNull();
+  expect(library.sidebar().folders[0]?.createdAt).toBe(clock.now);
+});

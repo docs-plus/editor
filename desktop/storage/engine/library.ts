@@ -463,6 +463,7 @@ export class Library {
   // Folders (folders.ts)
 
   createFolder(input: {
+    id?: string;
     name: string;
     parentId?: string | null;
     sortKey?: string;
@@ -600,9 +601,9 @@ export class Library {
 
   // Tags (tags.ts)
 
-  createTag(name: string, color: string | null = null) {
+  createTag(name: string, color: string | null = null, id?: string) {
     this.assertWritable();
-    const created = tags.createTag(this.conn, name, this.host.now(), color);
+    const created = tags.createTag(this.conn, name, this.host.now(), color, id);
     if (created) this.changed("tag", created.id);
     return created;
   }
