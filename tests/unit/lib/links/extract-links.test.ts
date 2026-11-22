@@ -113,7 +113,8 @@ describe("extractLinks", () => {
       heading(TOC_2, [text("Has id")], 2),
       paragraph(text("y", [link(`tinydocy:doc/${KEY_A}`)])),
       heading(null, [text("No id")], 2),
-      paragraph(text("z", [link(`tinydocy:doc/${KEY_B}`)])),
+      // Not KEY_B again: rows are distinct per (key, heading, section).
+      paragraph(text("z", [link(`tinydocy:doc/${KEY_B}#${TOC_1}`)])),
     );
     expect(
       extractLinks(fragment).map((row) => [row.srcTocId, row.text]),
@@ -357,7 +358,8 @@ describe("extractLinks", () => {
       paragraph(
         text("up", [link(href)]),
         { type: "hardBreak" },
-        text("down", [link(href)]),
+        // Another target: rows are distinct per (key, heading, section).
+        text("down", [link(`tinydocy:doc/${KEY_B}`)]),
       ),
     );
     expect(

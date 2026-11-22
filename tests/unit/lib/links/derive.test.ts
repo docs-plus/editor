@@ -9,6 +9,8 @@ import {
   deriveDocument,
   extractHeadings,
   extractLinks,
+  LINK_ROWS_MAX,
+  TEXT_MAX,
   toHeadingRows,
   toLinkRows,
 } from "@/lib/links/extract-links";
@@ -193,5 +195,56 @@ describe("toHeadingRows", () => {
 
   it("maps nothing to nothing", () => {
     expect(toHeadingRows(SRC, [])).toEqual([]);
+  });
+});
+
+describe("link row limits (linking re-review)", () => {
+  it("keeps one row per (key, heading, section), the first one", () => {
+    const fragment = fragmentOf(
+      heading(T1, 1, text("Title")),
+      paragraph(
+        text("first", `tinydocy:doc/${KEY}`),
+        text(" and "),
+        text("again", `tinydocy:doc/${KEY}`),
+      ),
+      paragraph(text("to a heading", `tinydocy:doc/${KEY}#${T2}`)),
+      heading(T3, 2, text("Other section")),
+      paragraph(text("same key, new section", `tinydocy:doc/${KEY}`)),
+    );
+    expect(
+      extractLinks(fragment).map((row) => [row.text, row.srcTocId]),
+    ).toEqual([
+      ["first", T1],
+      ["to a heading", T1],
+      ["same key, new section", T3],
+    ]);
+  });
+
+  it(`caps a document at ${LINK_ROWS_MAX} rows, fast, at 10,000 links`, () => {
+    const keys = Array.from({ length: 10_000 }, (_, i) =>
+      i.toString(16).padStart(32, "0"),
+    );
+    const fragment = fragmentOf(
+      heading(T1, 1, text("Title")),
+      ...keys.map((key) => paragraph(text("x", `tinydocy:doc/${key}`))),
+    );
+    deriveDocument(fragment); // warm-up
+    const runs = [0, 1, 2].map(() => {
+      const started = performance.now();
+      extractLinks(fragment);
+      return performance.now() - started;
+    });
+    const median = runs.sort((a, b) => a - b)[1];
+    const rows = extractLinks(fragment);
+    expect(rows).toHaveLength(LINK_ROWS_MAX);
+    expect(rows[0].key).toBe(keys[0]);
+    // About 4–5 ms on an M-series Mac; LINKS_PERF_BUDGET_MS for slow CI.
+    expect(median).toBeLessThan(Number(process.env.LINKS_PERF_BUDGET_MS ?? 8));
+  });
+
+  it("caps heading text like link text", () => {
+    const long = "h".repeat(5_000);
+    const [row] = extractHeadings(fragmentOf(heading(T1, 1, text(long))));
+    expect(row.text.length).toBeLessThanOrEqual(TEXT_MAX);
   });
 });

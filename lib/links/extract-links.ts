@@ -38,6 +38,12 @@ const CONTEXT_MAX = 160;
  * in the row (and in the hash input) on every pass.
  */
 export const TEXT_MAX = 200;
+/**
+ * Rows kept per source document, after de-duplicating on (key, heading,
+ * section): enough for any real document, and a pasted or generated wall
+ * of links can't flood the `links` table.
+ */
+export const LINK_ROWS_MAX = 2_000;
 /** How far a cut may move back to the previous word boundary. */
 const WORD_TRIM_MAX = 20;
 const ELLIPSIS = "…";
@@ -95,13 +101,27 @@ export function deriveDocument(fragment: Y.XmlFragment): DerivedDocument {
           ord: headings.length,
           tocId: srcTocId,
           level: levelOf(child),
-          text: blockText(child),
+          text: capText(blockText(child)),
         });
       }
     }
     collectBlock(child, srcTocId, links);
   }
-  return { links, headings };
+  return { links: distinctRows(links), headings };
+}
+
+/** The first row per (key, heading, section), at most `LINK_ROWS_MAX`. */
+function distinctRows(rows: LinkRow[]): LinkRow[] {
+  const seen = new Set<string>();
+  const kept: LinkRow[] = [];
+  for (const row of rows) {
+    const id = `${row.key}#${row.tocId ?? ""}@${row.srcTocId ?? ""}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    kept.push(row);
+    if (kept.length === LINK_ROWS_MAX) break;
+  }
+  return kept;
 }
 
 export function extractLinks(fragment: Y.XmlFragment): LinkRow[] {
