@@ -52,12 +52,14 @@ interface OutlinePanelProps {
 
 /**
  * The outline's frame (spec §4.6, D2 Decision 5). Docked, it is today's
- * sidebar. As an overlay (768–949px) it slides over the page below the
+ * sidebar. As an overlay (from 768px up to the docking threshold `PageFrame`
+ * computes: 950px in `classic`) it slides over the page below the
  * sticky toolbar, with a scrim named "Close outline"; it focuses the active
  * item (else the first, else itself) when it opens. Esc anywhere or the
  * scrim close it and return focus to the outline trigger; focus moving
  * to anything else closes it too. The outline stays at one tree
- * position in both modes, so crossing 950px keeps a focused item mounted.
+ * position in both modes, so crossing the threshold keeps a focused item
+ * mounted.
  */
 export function OutlinePanel({ mode, onClose, children }: OutlinePanelProps) {
   const ref = useRef<HTMLDivElement>(null);

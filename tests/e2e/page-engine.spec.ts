@@ -213,6 +213,7 @@ test.describe("page engine", () => {
         "data-mode",
         "docked",
       );
+      await expect(fresh.locator(".toc-sidebar")).toBeVisible();
       await fresh.setViewportSize({ width: threshold - 1, height: 800 });
       // The overlay starts closed.
       await expect(fresh.locator(".outline-panel")).toHaveCount(0);
@@ -224,6 +225,30 @@ test.describe("page engine", () => {
       await fresh.close();
     }
   });
+
+  for (const width of [930, 945]) {
+    test(`at ${width} px the Default page shows its docked outline beside the card`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await open(page, "new");
+      await expect(page.locator(".outline-panel")).toHaveAttribute(
+        "data-mode",
+        "docked",
+      );
+      // Visible, beside the card, not hidden by a stale breakpoint.
+      await expect(page.locator(".toc-sidebar")).toBeVisible();
+      const [outlineRight, cardLeft] = await page.evaluate(() => [
+        (
+          document.querySelector(".toc-sidebar") as Element
+        ).getBoundingClientRect().right,
+        (
+          document.querySelector(".document-editor-content") as Element
+        ).getBoundingClientRect().left,
+      ]);
+      expect(outlineRight).toBeLessThanOrEqual(cardLeft);
+    });
+  }
 
   test("a text size change re-docks without reload", async ({ page }) => {
     await page.setViewportSize({ width: 1000, height: 800 });

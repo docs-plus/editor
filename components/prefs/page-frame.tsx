@@ -2,7 +2,7 @@
 
 import {
   type ReactNode,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -61,7 +61,8 @@ export function PageFrame({
   );
   const [outlineOverlay, setOutlineOverlay] = useState(false);
 
-  useEffect(() => {
+  // Before paint, so a narrow frame never shows a docked outline first.
+  useLayoutEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
     let width = frame.getBoundingClientRect().width;
