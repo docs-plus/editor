@@ -342,6 +342,12 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       if (event.key !== "F10" || !event.altKey) return;
       const controller = controllerRef.current;
       if (!controller || controller.visible) return;
+      // A Shift+Arrow just before may be only in the DOM yet: Chromium fires
+      // its `selectionchange` later, and ProseMirror drops it once focus
+      // has left the editor. Read it into the state first.
+      (
+        editor.view as unknown as { domObserver?: { flush(): void } }
+      ).domObserver?.flush();
       controller.update();
       if (!controller.visible) return;
       event.preventDefault();
