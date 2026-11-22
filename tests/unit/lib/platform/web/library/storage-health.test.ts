@@ -31,6 +31,15 @@ const UA = {
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/133.0 Mobile/15E148 Safari/605.1.15",
   ipadChrome:
     "Mozilla/5.0 (iPad; CPU OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1",
+  // iPadOS asks for desktop sites: "Macintosh", no iPad, the brand token left.
+  ipadDesktopChrome:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Safari/604.1",
+  ipadDesktopFirefox:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/133.0 Safari/605.1.15",
+  ipadDesktopEdge:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 EdgiOS/131.2903.68 Safari/605.1.15",
+  androidGoogleApp:
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.81 Mobile Safari/537.36 GSA/15.46.30.29.arm64",
 };
 
 describe("detectEngine", () => {
@@ -47,6 +56,14 @@ describe("detectEngine", () => {
     expect(detectEngine(UA.iosEdge)).toBe("webkit");
     expect(detectEngine(UA.iosFirefox)).toBe("webkit");
     expect(detectEngine(UA.ipadChrome)).toBe("webkit");
+  });
+
+  it("names iPadOS desktop-mode browsers WebKit from their brand token alone", () => {
+    expect(detectEngine(UA.ipadDesktopChrome)).toBe("webkit");
+    expect(detectEngine(UA.ipadDesktopFirefox)).toBe("webkit");
+    expect(detectEngine(UA.ipadDesktopEdge)).toBe("webkit");
+    // Tokens shared with Android don't count.
+    expect(detectEngine(UA.androidGoogleApp)).toBe("chromium");
   });
 });
 

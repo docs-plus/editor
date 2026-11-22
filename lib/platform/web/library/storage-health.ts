@@ -37,10 +37,12 @@ export const ESTIMATE_GROWTH_BYTES = 5 * 1024 * 1024;
 export const ESTIMATE_MIN_INTERVAL_MS = 60_000;
 
 export function detectEngine(userAgent: string): BrowserEngine {
-  // Every iOS and iPadOS browser runs WebKit, whatever brand it shows
-  // (CriOS, EdgiOS, FxiOS). iPadOS in desktop mode says "Macintosh" and
-  // "Safari" only, so it lands on webkit below.
+  // Every iOS and iPadOS browser runs WebKit, whatever brand it shows.
+  // iPadOS in desktop mode says "Macintosh", so the iOS-only brand tokens
+  // (Chrome, Firefox, Edge, Opera) count on their own. `GSA/` and `OPT/`
+  // also appear on Android, so they don't.
   if (/\b(iPhone|iPad|iPod)\b/.test(userAgent)) return "webkit";
+  if (/\b(CriOS|FxiOS|EdgiOS|OPiOS)\//.test(userAgent)) return "webkit";
   if (/Firefox\//.test(userAgent)) return "firefox";
   // Chromium browsers also say "Safari"; check them first.
   if (/(Chrome|Chromium|Edg)\//.test(userAgent)) return "chromium";
