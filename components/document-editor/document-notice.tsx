@@ -3,15 +3,9 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  CLIENT_OUTDATED_REASON,
-  DOCUMENT_DELETED_REASON,
-  DOCUMENT_TOO_LARGE_REASON,
-  flushAllLocalCopies,
-  OFFLINE_BUDGET_REASON,
-  SCHEMA_REJECTED_REASON,
-} from "@/lib/collab-session";
 import { RefreshCwIcon } from "@/lib/icons";
+import type { ReadOnlyReason } from "@/lib/platform/doc-session";
+import { useDocSession } from "@/lib/platform/doc-session-context";
 import type { SchemaGuardState } from "@/lib/schema-guard";
 
 const OUTDATED_NOTICE =
@@ -20,21 +14,25 @@ const OUTDATED_NOTICE =
 const GUARD_OUTDATED: SchemaGuardState = "outdated";
 const GUARD_UNREPAIRABLE: SchemaGuardState = "unrepairable";
 
+// The sandbox's refusals, as `DocSession` reports them (`ReadOnlyReason`).
+// Literals, not collab-session's constants: the editor must not import it.
+const CLIENT_OUTDATED: ReadOnlyReason = "client_outdated";
+
 const NOTICES: Record<string, string> = {
-  [DOCUMENT_TOO_LARGE_REASON]:
+  ["document_too_large" satisfies ReadOnlyReason]:
     "This document is over the size limit, so new changes can't be saved. Copy what you need into a new tab.",
-  [DOCUMENT_DELETED_REASON]:
+  ["document_deleted" satisfies ReadOnlyReason]:
     "This document was deleted. You're seeing your device's last copy; copy what you need into a new tab.",
-  [OFFLINE_BUDGET_REASON]:
+  ["offline_budget" satisfies ReadOnlyReason]:
     "You've made a lot of changes offline. Editing resumes when you're back online; nothing is lost.",
-  [SCHEMA_REJECTED_REASON]:
+  ["schema_rejected" satisfies ReadOnlyReason]:
     "The server didn't accept this document's latest changes. Your changes on this device are kept.",
-  [CLIENT_OUTDATED_REASON]: OUTDATED_NOTICE,
+  [CLIENT_OUTDATED]: OUTDATED_NOTICE,
   [GUARD_OUTDATED]: OUTDATED_NOTICE,
   [GUARD_UNREPAIRABLE]: "This document can't be edited in this version.",
 };
 
-const RELOAD_REASONS = new Set([CLIENT_OUTDATED_REASON, GUARD_OUTDATED]);
+const RELOAD_REASONS = new Set<string>([CLIENT_OUTDATED, GUARD_OUTDATED]);
 
 /** How long Reload waits for device copies before reloading anyway. */
 const RELOAD_FLUSH_TIMEOUT_MS = 2000;
@@ -63,12 +61,19 @@ export async function reloadAfterFlush(
   reload();
 }
 
-/** Saves pending device copies, then loads the newer bundle. */
+/**
+ * Saves pending edits through the open `DocSession` (the sandbox's device
+ * copies on the web), then loads the newer bundle.
+ */
 function ReloadButton() {
+  const docSession = useDocSession();
   const [reloading, setReloading] = useState(false);
   const reload = () => {
     setReloading(true);
-    return reloadAfterFlush(flushAllLocalCopies, () => location.reload());
+    return reloadAfterFlush(
+      () => docSession.flush(),
+      () => location.reload(),
+    );
   };
   return (
     <Button
