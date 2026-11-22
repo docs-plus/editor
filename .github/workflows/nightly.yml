@@ -11,6 +11,9 @@ name: Nightly
 #                  from 3 clients against Hocuspocus (spec §7 abuse soak)
 #   mixed-version  N+1, release N and pre-N clients on one document with
 #                  the gate env at its default (spec §3.1 N+1 ship gate)
+#   unit-runs  the unit tests fully serial and as CI runs them (parallel,
+#                  clock-budget files serial), compared file by file, then
+#                  the stress probe (informational)
 #   library-property  the web library's multi-writer compaction property
 #                  test (web library §2.5, W-D3) at 50,000 runs, seeded
 #                  from the run id; a failure prints the seed to replay
@@ -363,6 +366,49 @@ jobs:
             ${{ runner.temp }}/hocus.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # CI runs the unit tests with --parallel (scripts/unit-tests.ts). Here a
+  # fully serial run checks it: a file whose counts differ fails the night.
+  unit-runs:
+    name: Unit tests, serial vs parallel; stress probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Unit tests (serial)
+        run: |
+          mkdir -p "$RUNNER_TEMP/unit"
+          bun run test --reporter=junit --reporter-outfile="$RUNNER_TEMP/unit/all-serial.xml"
+
+      - name: Unit tests (as CI runs them)
+        if: ${{ !cancelled() }}
+        run: bun scripts/unit-tests.ts --junit "$RUNNER_TEMP/unit"
+
+      - name: Compare serial and parallel
+        if: ${{ !cancelled() }}
+        run: >-
+          bun scripts/compare-unit-runs.ts "$RUNNER_TEMP/unit/all-serial.xml"
+          "$RUNNER_TEMP/unit/parallel.xml" "$RUNNER_TEMP/unit/serial.xml"
+
+      # Shared runners vary in speed, so a miss here is reported, not fatal.
+      - name: Stress benchmark (informational)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: bun run test:stress
 
   library-property:
     name: Web library compaction property (50,000 runs)

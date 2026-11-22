@@ -609,11 +609,11 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 | Job | Runs |
 |---|---|
 | Changed files | Pull requests: decides whether the browser suites run (not on a draft; not when only docs or Markdown changed, from `gh api .../pulls/N/files`). Every run: reads the shard timings from the latest green push run on `main` |
-| Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
-| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `bun scripts/e2e-shards.ts plan N/3` and `CI= bun playwright test --project=chromium --project=library --test-list=<shard files> --retries=1` with a blob report |
-| Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
+| Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun scripts/unit-tests.ts` (unit tests in parallel, then the clock-budget files serially), `bun run build`, editor chunk size |
+| Playwright shard 1/4 … 4/4 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `bun scripts/e2e-shards.ts plan N/4` and `CI= bun playwright test --project=chromium --project=library --test-list=<shard files> --retries=1` with a blob report |
+| Playwright perf (typing budget), Playwright perf (features) | the same servers, each on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker): `performance.spec.ts` and `toolbar-perf.spec.ts` with `--test-list`, and every other perf spec with `--test-list-invert` of the same list, so a new perf spec lands in features |
 | Desktop renderer (export and local) | not required: `bun run build:desktop`, the `desktop` project on the served export, then the `local` project over the dev bridge (`next dev` on port 3926, no retries) |
-| Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
+| Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and both perf jobs passed, or they were skipped for a draft or docs-only pull request |
 
 - **Required checks:** the `main` ruleset requires `Lint, typecheck, unit
   tests, build` and `Playwright (Chromium)`; keep both names, and every
@@ -633,16 +633,18 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   those two reasons. In the merge queue, on `main` and in manual runs every
   suite always runs, and `Playwright (Chromium)` fails if any was skipped.
 - **Shards:** `scripts/e2e-shards.ts` packs the `chromium` and `library`
-  spec files into three shards by duration (longest first, into the
+  spec files into four shards by duration (longest first, into the
   least-loaded shard; a new spec counts as the median), from per-file
   seconds that `Playwright (Chromium)` publishes as the `e2e-timings`
-  artifact on green pushes to `main` only. The `Changed files` job reads them
+  artifact on green pushes to `main` only, each file averaged half and half
+  with the timings that run packed by (one run's noise, such as a spec
+  taking twice as long on a slow runner, moves the plan only halfway). The `Changed files` job reads them
   once, so every shard packs the same plan; without usable timings (none
   yet, expired after 30 days, or invalid) every shard uses Playwright's own
-  `--shard=N/3`. Each browser job logs its runner's CPU before the suites.
+  `--shard=N/4`. Each browser job logs its runner's CPU before the suites.
   To run one shard locally: `CI= bun playwright test --project=chromium
-  --project=library --shard=2/3`, or plan it from a timings file with
-  `bun scripts/e2e-shards.ts plan 2/3 e2e-timings.json list.txt`.
+  --project=library --shard=2/4`, or plan it from a timings file with
+  `bun scripts/e2e-shards.ts plan 2/4 e2e-timings.json list.txt`.
 - **Shard balance:** Playwright's own `--shard` gives each shard a
   contiguous range of spec files sized by test *count*, so the specs with
   slow tests (palette, selection-bubble, paint-format, slash-menu,
@@ -652,7 +654,22 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   `PWTEST_SHARD_WEIGHTS` drift or may vanish, so the shards are packed by
   measured time instead. The runner's CPU still varies shard times by
   about 40% (Intel Xeon 6975P vs AMD EPYC 7763).
-- **Stress probe:** `bun run test:stress` runs as a separate step with
+- **Unit tests in parallel:** `bun scripts/unit-tests.ts` runs every unit
+  file with `bun test --parallel` (about 26 s on CI against about 110 s
+  serially), then the files that read the clock and assert a budget
+  (`SERIAL_FILES`) serially, so no other file competes for the CPU.
+  `tests/unit/ci/unit-tests.test.ts` fails when a unit test with a
+  wall-clock budget is missing from that list. If the parallel runner
+  misbehaves, set the repository variable `UNIT_SERIAL=1`
+  (`gh variable set UNIT_SERIAL --body 1`) and CI runs every file serially,
+  as `bun run test` does locally; delete the variable to go back. Before
+  this ran in CI, a parallel shadow run matched the serial one file by file
+  on 6 of 6 runs.
+- **Nightly checks of the parallel run:** the nightly `unit-runs` job runs
+  the unit tests fully serially and as CI runs them, and
+  `scripts/compare-unit-runs.ts` compares the JUnit reports file by file; a
+  file whose passed, failed or skipped count differs fails the night.
+- **Stress probe:** `bun run test:stress` runs nightly (`unit-runs`), with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
 - **Retries:** a test that passes on retry is listed as "flaky" in the

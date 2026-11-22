@@ -7,8 +7,10 @@
 //     Prints the Playwright arguments for this shard: `--test-list=<list.txt>`
 //     after writing the shard's files there, or `--shard=<current>/<total>`
 //     (Playwright's own split) when the timings are missing or invalid.
-//   bun scripts/e2e-shards.ts timings <report.json> <timings.json>
-//     Writes per-file seconds from a merged Playwright JSON report.
+//   bun scripts/e2e-shards.ts timings <report.json> <timings.json> [previous.json]
+//     Writes per-file seconds from a merged Playwright JSON report, averaged
+//     with the previous timings (when given and valid) so one slow or noisy
+//     run moves the plan only halfway.
 //
 // Every shard computes the same plan from the same inputs, so together
 // they run each spec file exactly once.
@@ -107,6 +109,30 @@ export const timingsFromReport = (report: { suites?: ReportSuite[] }) => {
   return timings;
 };
 
+/** Weight of the newest run in {@link smoothTimings}. */
+export const SMOOTHING = 0.5;
+
+/**
+ * An exponential moving average per file: `weight` of the newest run plus
+ * the rest of the previous average. A file the newest run didn't time (a
+ * deleted spec) is dropped; a file with no previous time keeps its new one.
+ */
+export const smoothTimings = (
+  current: Timings,
+  previous: Timings,
+  weight = SMOOTHING,
+): Timings =>
+  Object.fromEntries(
+    Object.entries(current).map(([file, seconds]) => {
+      const before = previous[file];
+      const blended =
+        before === undefined
+          ? seconds
+          : weight * seconds + (1 - weight) * before;
+      return [file, Math.round(blended * 10) / 10];
+    }),
+  );
+
 /** Spec files Playwright would run, relative to its rootDir. */
 const listSpecFiles = (projects: string[]) => {
   const result = Bun.spawnSync(
@@ -161,16 +187,30 @@ if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2);
   if (command === "plan" && args.length === 3) {
     plan(args[0], args[1], args[2]);
-  } else if (command === "timings" && args.length === 2) {
+  } else if (
+    command === "timings" &&
+    (args.length === 2 || args.length === 3)
+  ) {
     const report = JSON.parse(readFileSync(args[0], "utf8"));
-    writeFileSync(
-      args[1],
-      `${JSON.stringify(timingsFromReport(report), null, 2)}\n`,
-    );
+    let timings = timingsFromReport(report);
+    if (args[2]) {
+      try {
+        timings = smoothTimings(
+          timings,
+          parseTimings(readFileSync(args[2], "utf8")),
+        );
+        console.error("e2e-shards: averaged with the previous timings");
+      } catch (error) {
+        console.error(
+          `e2e-shards: no usable previous timings (${(error as Error).message}); writing this run's`,
+        );
+      }
+    }
+    writeFileSync(args[1], `${JSON.stringify(timings, null, 2)}\n`);
   } else {
     console.error(
       "usage: e2e-shards.ts plan <n>/<total> <timings.json> <list.txt>\n" +
-        "       e2e-shards.ts timings <report.json> <timings.json>",
+        "       e2e-shards.ts timings <report.json> <timings.json> [previous.json]",
     );
     process.exit(2);
   }

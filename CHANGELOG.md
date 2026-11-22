@@ -237,6 +237,71 @@ visible heading and `role="group"` with the same label, and every row keeps a
 there). Nothing is added or removed. Page width follows with the preferences
 work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
 
+### CI: shard timings averaged across runs
+
+One run's per-file times are noisy (`mobile-bar.spec.ts` took 116 s in one
+run and 263 s in the next), and a plan packed from a single run inherits
+that noise, so a shard could carry 16% more than planned.
+
+#### Changed
+
+- **CI:** when a green push to `main` publishes `e2e-timings`, each file's
+  time is averaged with the timings that run packed by (an exponential
+  moving average, half weight to the newest run). A new spec keeps its own
+  time and a deleted one is dropped; without usable previous timings the
+  run's own are written, as before.
+- **Tests:** `e2e-shards.test.ts` covers the average; `ci-workflow.test.ts`
+  pins that the publish step reads the timings the run packed by.
+
+**Deploy:** none.
+### CI: four shards, two perf jobs and parallel unit tests
+
+The suite has grown to 627 browser tests (about 3,500 s), so three packed
+shards still took about 8 minutes, perf took 7 and the checks job 5 (half
+of it the serial unit tests and the informational stress probe).
+
+#### Changed
+
+- **CI:** the browser suites run in four duration-packed shards
+  (`Playwright shard 1/4` … `4/4`).
+- **CI:** perf runs in two jobs, each on its own runner with one worker:
+  `Playwright perf (typing budget)` (`performance.spec.ts`,
+  `toolbar-perf.spec.ts`) and `Playwright perf (features)` (every other perf
+  spec, so a new one lands there). `Playwright (Chromium)` needs both.
+- **CI:** unit tests run with `bun test --parallel` through
+  `scripts/unit-tests.ts`; the files that assert a wall-clock budget run
+  serially after them. The repository variable `UNIT_SERIAL=1` runs every
+  file serially. A parallel shadow run matched the serial one file by file
+  on 6 of 6 runs (#155, folded in here).
+- **CI:** the stress probe moved from the checks job to the nightly
+  `unit-runs` job, which also runs the unit tests fully serially and as CI
+  runs them and compares the two file by file (`scripts/compare-unit-runs.ts`).
+- **CI:** `Changed files` logs how many shard timings it found instead of
+  the whole JSON.
+- **Tests:** `tests/unit/ci/unit-tests.test.ts` fails when a unit test with
+  a wall-clock budget is missing from the serial list;
+  `compare-unit-runs.test.ts`; `ci-workflow.test.ts` pins the four shards,
+  the perf split and the unit-test step; the nightly streak classifies the
+  new nightly steps as test steps.
+
+**Deploy:** none. **Owner:** each merge queue entry now runs about 17 jobs
+(CI and the desktop shell), so the runbook recommends build concurrency
+**1** instead of 2.
+
+### Desktop storage: a power cut loses only derived rows
+
+The condition on D-A6's amendment (derived rows commit at
+`synchronous=NORMAL`).
+
+- **Tests:** `derive-crash-loss.test.ts` simulates a power cut after a
+  FULL append and a NORMAL derive, as a dropped last commit and as a torn
+  WAL tail. The append survives, the derived rows and `derived_seq` are
+  lost together, the document reads as stale, and the next derive
+  restores the rows. A control keeps the whole WAL and the derive.
+- **Docs:** the architecture spec's D-A6 amendment records the approval
+  and points to the test.
+
+**Deploy:** none.
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision
