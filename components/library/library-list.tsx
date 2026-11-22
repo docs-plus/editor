@@ -357,7 +357,8 @@ function PlaceList(props: LibraryListProps) {
     if (!wantFocus.current || renaming) return;
     const key = activeKey;
     if (key === undefined) {
-      wantFocus.current = false;
+      // Rows may still be on their way: the filter is deferred.
+      if (filterText === deferredText) wantFocus.current = false;
       return;
     }
     const element = body.current?.querySelector<HTMLElement>(
@@ -868,7 +869,12 @@ function PlaceList(props: LibraryListProps) {
                 else focusRow(activeKey);
               } else if (event.key === "ArrowDown" || event.key === "Enter") {
                 event.preventDefault();
-                focusRow(activeKey ?? focusable[0]);
+                if (activeKey !== undefined && filterText === deferredText) {
+                  focusRow(activeKey);
+                } else {
+                  // The rows for this text haven't rendered yet.
+                  wantFocus.current = true;
+                }
               }
             }}
           />
