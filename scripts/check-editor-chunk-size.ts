@@ -46,8 +46,8 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * total above; the fence still passes, so it was not raised.
  *
  * Spent so far, as measured in each PR (gzipped, against `main` then):
- * - LK1 `linkHost` pass-through and the no-host `tinydocy:` deny: +32 B of
- *   its 60 B line (84a9458 → +16,130 B; LK1 → +16,162 B).
+ * - LK1 `linkHost` pass-through: −3 B of its 60 B line (1e535b4 →
+ *   +16,527 B; LK1 → +16,524 B; `DocumentEditor` spreads its props).
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
