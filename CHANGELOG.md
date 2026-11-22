@@ -88,6 +88,69 @@ group +152 B gz on its D23 line (measured +152 B on `main` at `1548d5e`,
 - **Editor budget:** the D23 ledger gains P2.12's 152 B line (2,205 B, or
   2,285 B with M19's conditional line), owner-approved 2026-11-22.
 
+### Bun 1.4.5 (security release)
+
+TinyDocy moves from Bun 1.4.4 to 1.4.5, released 2026-11-19. 1.4.5 is a
+security release covering HTTP/3, TLS, DNS, zlib and BoringSSL, and it moves
+`bun:sqlite` from SQLite 3.53.4 to 3.54.1 (on macOS, Bun 1.4.5 uses the
+system SQLite, 3.54.0 on the machine this was tested on). `bun.lock` is
+unchanged. Deploys now refuse to run on a host whose Bun is not the one the
+commit pins.
+
+#### Changed
+
+- **Runtime:** `.tool-versions`, `packageManager` and `engines` pin Bun
+  1.4.5. CI, the nightly and the desktop workflows read `.tool-versions`.
+- **Deploy:** `scripts/deploy.sh` compares the host's `bun --version` with
+  the Bun the commit's `.tool-versions` pins. If they differ, it exits 11
+  before it creates the build checkout, installs anything or restarts Hocus.
+  The deploy runbook has a new
+  [Upgrading Bun](docs/operations/deploy-runbook.md#upgrading-bun) section.
+
+#### Added
+
+- **Tooling:** `bun run test:fast` (`bun test --parallel`, which also
+  isolates each file) and `bun run typecheck:fast` (`bun check --no-script`
+  over the same four projects as `bun run typecheck`). They
+  are for local speed only. CI still gates on `bun run test` (serial) and
+  `bun run typecheck` (`tsc`), because `bun check` follows TypeScript 7
+  semantics.
+- **Tests:** `tests/unit/ci/deploy-bun-version.test.ts` runs the real
+  `deploy.sh` against a throwaway repository and checks that a version
+  mismatch or a missing pin stops it before the build.
+
+#### Security
+
+- Bun 1.4.5's fixes to HTTP/3, TLS, DNS, zlib and BoringSSL reach the Next.js
+  server, Hocus and the purge on the next deploy.
+- SQLite 3.54 refuses `ALTER TABLE` on columns named `rowid`, `oid` or
+  `_rowid_`. No code does that: `desktop/storage`, `lib` and `scripts` only
+  read `rowid` in `SELECT`s (`copy-library.ts`), and the only
+  `ALTER TABLE` (a test migration) adds a column named `extra`.
+- The desktop storage and `scripts/` tests (193), including the purge's
+  `VACUUM INTO` backups, which the test reopens and compares, pass on the
+  macOS system SQLite. CI covers Linux on SQLite 3.54.1.
+- Bun 1.4.5 validates custom root CAs more strictly. TinyDocy passes no
+  custom CA (`ca`, `NODE_EXTRA_CA_CERTS`, `rejectUnauthorized`) anywhere.
+
+#### Deploy
+
+- **Done 2026-11-22:** the owner installed Bun 1.4.5 on the host with the
+  pinned installer, before this merged:
+  ```bash
+  ssh <user>@<host> 'curl -fsSL https://bun.com/install | bash -s "bun-v1.4.5"'
+  ssh <user>@<host> '~/.bun/bin/bun --version'   # prints 1.4.5
+  ```
+  The running apps switch to 1.4.5 when a deploy next restarts them. Any
+  deploy does that, including this one. No other step is needed: the
+  automatic deploy of this merge is enough, or run `gh workflow run deploy.yml`.
+- The deploy that ships this change still runs the host's previous
+  `deploy.sh`, which has no version check. The check applies from the
+  deploy after it. From then on, a deploy on a host that is not on 1.4.5
+  fails with exit 11 and changes nothing on the host.
+- Every later Bun upgrade follows the runbook: merge the `.tool-versions`
+  change with automatic deploys off, upgrade the host, then deploy.
+
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and
