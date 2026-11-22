@@ -1,6 +1,28 @@
 import type { JSONContent } from "@tiptap/core";
 
-import { pick, randomInt, shuffle } from "@/lib/random";
+/**
+ * A source of numbers in [0, 1). `Math.random` by default; the fixture
+ * generators (`scripts/fixtures/`) pass a seeded one so a seed replays the
+ * same document.
+ */
+export type Random = () => number;
+
+function pick<T>(random: Random, arr: readonly T[]): T {
+  return arr[Math.floor(random() * arr.length)];
+}
+
+function randomInt(random: Random, min: number, max: number): number {
+  return Math.floor(random() * (max - min + 1)) + min;
+}
+
+function shuffle<T>(random: Random, arr: readonly T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 export interface GenerateRandomDocumentOptions {
   minSections?: number;
@@ -8,6 +30,7 @@ export interface GenerateRandomDocumentOptions {
   maxDepth?: number;
   includeContent?: boolean;
   contentTypes?: string[];
+  random?: Random;
 }
 
 const DEFAULT_CONTENT_TYPES = [
@@ -77,11 +100,11 @@ const LIST_ITEMS = [
   "Monitor error rates after deployment",
 ];
 
-function createParagraph(): ContentBlock {
-  const count = randomInt(2, 4);
+function createParagraph(r: Random): ContentBlock {
+  const count = randomInt(r, 2, 4);
   const sentences: string[] = [];
   for (let i = 0; i < count; i++) {
-    sentences.push(pick(PROSE_SENTENCES));
+    sentences.push(pick(r, PROSE_SENTENCES));
   }
   return {
     type: "paragraph",
@@ -89,16 +112,16 @@ function createParagraph(): ContentBlock {
   };
 }
 
-function createBlockquote(): ContentBlock {
+function createBlockquote(r: Random): ContentBlock {
   return {
     type: "blockquote",
-    content: [createParagraph(), createParagraph()],
+    content: [createParagraph(r), createParagraph(r)],
   };
 }
 
-function createBulletList(): ContentBlock {
-  const items = randomInt(3, 6);
-  const pool = shuffle([...LIST_ITEMS]);
+function createBulletList(r: Random): ContentBlock {
+  const items = randomInt(r, 3, 6);
+  const pool = shuffle(r, [...LIST_ITEMS]);
   return {
     type: "bulletList",
     content: Array.from({ length: items }, (_, i) => ({
@@ -113,9 +136,9 @@ function createBulletList(): ContentBlock {
   };
 }
 
-function createOrderedList(): ContentBlock {
-  const items = randomInt(3, 5);
-  const pool = shuffle([...LIST_ITEMS]);
+function createOrderedList(r: Random): ContentBlock {
+  const items = randomInt(r, 3, 5);
+  const pool = shuffle(r, [...LIST_ITEMS]);
   return {
     type: "orderedList",
     content: Array.from({ length: items }, (_, i) => ({
@@ -132,14 +155,14 @@ function createOrderedList(): ContentBlock {
   };
 }
 
-function createTaskList(): ContentBlock {
-  const items = randomInt(3, 5);
-  const pool = shuffle([...TASK_LABELS]);
+function createTaskList(r: Random): ContentBlock {
+  const items = randomInt(r, 3, 5);
+  const pool = shuffle(r, [...TASK_LABELS]);
   return {
     type: "taskList",
     content: Array.from({ length: items }, (_, i) => ({
       type: "taskItem",
-      attrs: { checked: Math.random() < 0.4 },
+      attrs: { checked: r() < 0.4 },
       content: [
         {
           type: "paragraph",
@@ -150,50 +173,50 @@ function createTaskList(): ContentBlock {
   };
 }
 
-function createCodeBlock(): ContentBlock {
+function createCodeBlock(r: Random): ContentBlock {
   return {
     type: "codeBlock",
-    content: [{ type: "text", text: pick(CODE_SAMPLES) }],
+    content: [{ type: "text", text: pick(r, CODE_SAMPLES) }],
   };
 }
 
-function createContentBlock(contentType: string): ContentBlock {
+function createContentBlock(r: Random, contentType: string): ContentBlock {
   switch (contentType) {
     case "paragraph":
-      return createParagraph();
+      return createParagraph(r);
     case "blockquote":
-      return createBlockquote();
+      return createBlockquote(r);
     case "bulletList":
-      return createBulletList();
+      return createBulletList(r);
     case "orderedList":
-      return createOrderedList();
+      return createOrderedList(r);
     case "taskList":
-      return createTaskList();
+      return createTaskList(r);
     case "codeBlock":
-      return createCodeBlock();
+      return createCodeBlock(r);
     default:
-      return createParagraph();
+      return createParagraph(r);
   }
 }
 
-function createSectionBody(contentTypes: string[]): ContentBlock[] {
+function createSectionBody(r: Random, contentTypes: string[]): ContentBlock[] {
   const blocks: ContentBlock[] = [];
 
-  const paraCount = randomInt(3, 5);
+  const paraCount = randomInt(r, 3, 5);
   for (let i = 0; i < paraCount; i++) {
-    blocks.push(createParagraph());
+    blocks.push(createParagraph(r));
   }
 
   const structuredTypes = contentTypes.filter((t) => t !== "paragraph");
-  const structuredCount = randomInt(1, 3);
+  const structuredCount = randomInt(r, 1, 3);
   for (let i = 0; i < structuredCount; i++) {
-    const insertAt = randomInt(1, blocks.length);
-    blocks.splice(insertAt, 0, createContentBlock(pick(structuredTypes)));
+    const insertAt = randomInt(r, 1, blocks.length);
+    blocks.splice(insertAt, 0, createContentBlock(r, pick(r, structuredTypes)));
   }
 
-  if (Math.random() < 0.4) {
-    const insertAt = randomInt(1, blocks.length);
-    blocks.splice(insertAt, 0, createParagraph());
+  if (r() < 0.4) {
+    const insertAt = randomInt(r, 1, blocks.length);
+    blocks.splice(insertAt, 0, createParagraph(r));
   }
 
   return blocks;
@@ -226,6 +249,7 @@ export interface GenerateLargeDocumentOptions {
   shape?: "flat" | "deep" | "mixed";
   richContent?: boolean;
   contentTypes?: string[];
+  random?: Random;
 }
 
 export function generateLargeDocument(
@@ -243,6 +267,7 @@ export function generateLargeDocument(
   const shape = opts.shape ?? "mixed";
   const richContent = opts.richContent ?? true;
   const contentTypes = opts.contentTypes ?? DEFAULT_CONTENT_TYPES;
+  const r = opts.random ?? Math.random;
 
   const content: JSONContent[] = [
     {
@@ -262,7 +287,7 @@ export function generateLargeDocument(
         level = ((i - 1) % 5) + 2;
         break;
       case "mixed":
-        level = randomInt(2, 6);
+        level = randomInt(r, 2, 6);
         break;
     }
 
@@ -274,7 +299,7 @@ export function generateLargeDocument(
     });
 
     if (richContent) {
-      content.push(...createSectionBody(contentTypes));
+      content.push(...createSectionBody(r, contentTypes));
     } else {
       content.push({
         type: "paragraph",
@@ -299,9 +324,10 @@ export function generateRandomDocument(
     maxDepth = 3,
     includeContent = true,
     contentTypes = DEFAULT_CONTENT_TYPES,
+    random: r = Math.random,
   } = options;
 
-  const sectionCount = randomInt(minSections, maxSections);
+  const sectionCount = randomInt(r, minSections, maxSections);
   const content: JSONContent[] = [
     {
       type: "heading",
@@ -311,7 +337,7 @@ export function generateRandomDocument(
   ];
 
   for (let s = 0; s < sectionCount - 1; s++) {
-    const level = randomInt(1, Math.min(maxDepth, 6));
+    const level = randomInt(r, 1, Math.min(maxDepth, 6));
     const headingText = `Section ${s + 2} Level ${level}`;
     content.push({
       type: "heading",
@@ -320,10 +346,10 @@ export function generateRandomDocument(
     });
 
     if (includeContent) {
-      const blockCount = randomInt(0, 3);
+      const blockCount = randomInt(r, 0, 3);
       for (let b = 0; b < blockCount; b++) {
-        const contentType = pick(contentTypes);
-        content.push(createContentBlock(contentType));
+        const contentType = pick(r, contentTypes);
+        content.push(createContentBlock(r, contentType));
       }
     }
   }
