@@ -8,13 +8,15 @@
  * - a message isn't valid in the ICU subset (`selectordinal`, nested
  *   plurals and `offset:` included);
  * - a `core` message uses more than `{name}` (the editor chunk has no
- *   formatter);
+ *   formatter), or an ICU apostrophe escape (`''`, `'{`, `'}`), which
+ *   `t-core` prints as written instead of unescaping;
  * - a catalog contains ⌘ ⌥ ⇧ ⌃, `Ctrl+` or straight double quotes
  *   (shortcuts are placeholders, prose uses curly quotes);
  * - a plural leaves out a CLDR category its locale needs;
  * - a translation's placeholders or tags differ from the English, its
- *   entry isn't `{ text, src }`, its key no longer exists in English, or its
- *   file names no namespace;
+ *   entry isn't `{ text, src }`, its key no longer exists in English, its
+ *   file names no namespace, or it sits in another namespace's file (the
+ *   chunk that renders it loads only its own namespace);
  * - a registry shortcut is reserved (Shift+Space types ZWNJ on the Persian
  *   layout).
  *
@@ -64,6 +66,13 @@ const BANNED: [RegExp, string][] = [
   [/\bCtrl\+/i, "Ctrl+ (use a {shortcut} placeholder)"],
   [/"/, "a straight double quote (use “ ”)"],
 ];
+
+/**
+ * ICU apostrophe escapes. `parseMessage` unescapes them but `t-core` (the
+ * editor chunk's `t`) does not, so a `core` message must not need them. A
+ * lone apostrophe (“Don't”, “l’élément”) is plain text and passes.
+ */
+const CORE_ESCAPE = /'['{}]/;
 
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a, Object.keys(a ?? {}).sort()) ===
@@ -132,10 +141,17 @@ export function checkCatalogs(
     for (const [pattern, what] of BANNED) {
       if (pattern.test(text)) errors.push(`${at}: banned ${what}`);
     }
-    if (namespaceOf(key) === "core" && !isSimpleMessage(text)) {
-      errors.push(
-        `${at}: core messages use only {name} (no plural, select, number, date or tags)`,
-      );
+    if (namespaceOf(key) === "core") {
+      if (!isSimpleMessage(text)) {
+        errors.push(
+          `${at}: core messages use only {name} (no plural, select, number, date or tags)`,
+        );
+      }
+      if (CORE_ESCAPE.test(text)) {
+        errors.push(
+          `${at}: core messages can't use ICU apostrophe escapes ('' '{ '}): t-core prints them as written`,
+        );
+      }
     }
     const needed = new Intl.PluralRules(locale).resolvedOptions()
       .pluralCategories;
@@ -166,6 +182,15 @@ export function checkCatalogs(
       }
       for (const [key, value] of Object.entries(catalog)) {
         const at = `${file}: "${key}"`;
+        const owner = namespaceOf(key);
+        if (owner !== ns) {
+          errors.push(
+            owner
+              ? `${at} belongs in ${owner}.json`
+              : `${at} names no namespace`,
+          );
+          continue;
+        }
         const source = sourceText.get(key);
         if (source === undefined) {
           errors.push(`${at} is not in the English source (remove it)`);

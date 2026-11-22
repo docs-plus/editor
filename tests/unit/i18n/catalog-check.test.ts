@@ -94,6 +94,23 @@ describe("checkCatalogs: the English source", () => {
     expect(errors.join("\n")).toContain("core");
   });
 
+  it("keeps ICU apostrophe escapes out of core (t-core prints them raw)", () => {
+    for (const bad of ["l''élément", "Type '{'name'}'"]) {
+      const errors = check({
+        "components/a.tsx": `${IMPORT}t("core.x", ${JSON.stringify(bad)});\n`,
+        "locales/en/actions.json": EN_ACTIONS,
+        "locales/en/core.json": { "core.x": bad },
+      }).errors;
+      expect(errors.join("\n")).toContain("apostrophe");
+    }
+    const plain = check({
+      "components/a.tsx": `${IMPORT}t("core.x", "Don't save");\n`,
+      "locales/en/actions.json": EN_ACTIONS,
+      "locales/en/core.json": { "core.x": "Don't save" },
+    });
+    expect(plain.errors).toEqual([]);
+  });
+
   it("refuses reserved combos in the registry (Shift+Space types ZWNJ)", () => {
     const errors = check({ "locales/en/actions.json": EN_ACTIONS }, [
       { id: "mark.bold", label: "Bold", shortcut: "Shift-Space" },
@@ -155,6 +172,43 @@ describe("checkCatalogs: translations", () => {
     expect(text).toContain("zero");
     expect(text).toContain("placeholders");
     expect(text).toContain("library.gone");
+  });
+
+  it("fails a translation filed under another namespace", () => {
+    const result = check({
+      ...base,
+      "locales/fa/menus.json": {
+        "library.moved": entry("{title} منتقل شد", "Moved {title}"),
+      },
+    });
+    expect(result.errors.join("\n")).toContain(
+      `locales/fa/menus.json: "library.moved" belongs in library.json`,
+    );
+  });
+
+  it("fails ICU apostrophe escapes in a core translation", () => {
+    const core = {
+      "components/a.tsx": `${IMPORT}t("core.item", "the item");\nt("core.type", "Type {name}");\n`,
+      "locales/en/actions.json": EN_ACTIONS,
+      "locales/en/core.json": {
+        "core.item": "the item",
+        "core.type": "Type {name}",
+      },
+    };
+    const result = check({
+      ...core,
+      "locales/fr/core.json": {
+        "core.item": entry("l''élément", "the item"),
+        "core.type": entry("Tapez '{'{name}", "Type {name}"),
+      },
+    });
+    const text = result.errors.join("\n");
+    expect(text).toContain(
+      `"core.item": core messages can't use ICU apostrophe`,
+    );
+    expect(text).toContain(
+      `"core.type": core messages can't use ICU apostrophe`,
+    );
   });
 
   it("fails invalid ICU, bad entries and unknown namespaces", () => {
