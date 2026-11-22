@@ -14,10 +14,10 @@ since the previous tag.
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A20):
 Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌. The editor chunk group does not grow
-(393,820 → 393,795 B gz, −25 B against `main` at `903b5c8`); the bubble
-chunk grows from 9,798 to 12,317 B gz and the menu chunk that holds Turn
-into from 3,173 to 4,646 B gz. The colour rows (Task 1.4) and the keyboard
-settle in the controller land from their own branches.
+(393,820 → 393,818 B gz, −2 B against `main` at `903b5c8`); the bubble
+chunk grows from 9,798 to 12,583 B gz and the menu chunk that holds Turn
+into from 3,173 to 4,474 B gz. The colour rows (Task 1.4) land from their
+own branch.
 
 #### Added
 
@@ -29,8 +29,13 @@ settle in the controller land from their own branches.
 - **Turn into:** one menu body for the bubble and the row's Text style ▾:
   Text, Heading 1–3, More headings ▸ (4–6), the three lists, Quote and Code
   block, with icons, shortcuts and a trailing ✓, and no Markdown chips.
-  Text and the headings turn a list item or a quote into that block,
-  unwrapped, in one undo step. The row keeps Your formats below them.
+  The row keeps Your formats below them.
+- **Text styles:** Text and the headings turn a list item or a quote into
+  that block, unwrapped, in one undo step, wherever they run: Turn into,
+  the palette, the "/" menu and the phone's Style rows.
+- **Bubble:** a keyboard selection (Shift+arrows, ⌘A) shows the bubble
+  300 ms after Shift is released and the selection is still, never while
+  Shift is held or a key repeats.
 - **Bubble:** Alt+F10 shows a bubble that is still waiting (its delay) at
   once, with focus on Style ▾.
 - **Bubble:** applying inline code over linked or coloured text says "Link
@@ -39,7 +44,8 @@ settle in the controller land from their own branches.
 
 #### Changed
 
-- **Row:** the Text style ▾ face reads "Text" instead of "Normal text".
+- **Row:** the Text style ▾ face reads "Text" instead of "Normal text",
+  and "List" or "Quote" inside a list or quote, as the bubble's does.
 - **Bubble:** inside inline code, B, I, U, S, colour and link say "Inline
   code can't take other formatting." instead of the generic refusal; the
   Paint format brush says the same on inline code on every surface
