@@ -22,6 +22,7 @@ export default defineConfig({
         "**/pwa-offline.spec.ts",
         "**/desktop-seams.spec.ts",
         "**/library-sidebar.spec.ts",
+        "**/library-lists*.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
       ],
@@ -94,7 +95,7 @@ export default defineConfig({
       // The shared library UI (components/library) on its Bun harness, with
       // no Next.js or Hocus: `bun tests/harness/library/serve.ts` first.
       name: "library",
-      testMatch: ["**/library-sidebar.spec.ts"],
+      testMatch: ["**/library-sidebar.spec.ts", "**/library-lists*.spec.ts"],
       use: {
         browserName: "chromium",
         viewport: { width: 1280, height: 800 },
