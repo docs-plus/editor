@@ -7,6 +7,9 @@ const snapshot: LibraryIndexSnapshot = {
   rev: 1,
   ready: true,
   trashCount: 0,
+  tags: [],
+  listViews: {},
+  trash: [],
   folders: [
     { id: "work", name: "Work", parentId: null, createdAt: 0 },
     { id: "q4", name: "Q4", parentId: "work", createdAt: 0 },

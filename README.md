@@ -165,6 +165,7 @@ building; setting them at runtime has no effect.
 | `NEXT_PUBLIC_PRIVACY_CONTROLLER`, `NEXT_PUBLIC_PRIVACY_EMAIL` | unset | Data controller and contact on `/privacy`. Set both before enabling analytics. |
 | `NEXT_PUBLIC_SERVICE_WORKER` | on | `0` unregisters the worker and deletes its caches. See the [service worker runbook](docs/operations/service-worker-runbook.md). |
 | `NEXT_PUBLIC_OFFLINE_CACHE` | on | `0` turns off offline document copies and deletes stored ones. |
+| `NEXT_PUBLIC_LIBRARY` | off | `1` turns on My documents, the personal library stored in this browser (in development: nothing uses it yet). `0` later hides it again and never deletes what is stored. See the web library design, §2.8. |
 | `NEXT_PUBLIC_ACTION_PREVIEW` | on | `0` turns off colour previews: pointing at or arrowing to a swatch no longer shows it on the selection. |
 | `NEXT_PUBLIC_FIND` | off on the web, on in the desktop app and under `make dev` | `1` turns on Find and replace (⌘F / Ctrl+F opens the document's find bar); `0` turns it off everywhere, leaving ⌘F to the browser. |
 | `NEXT_PUBLIC_REMEMBER_CHOICES` | on | `0` stops the toolbar remembering choices (last colours, recent colours, list type, table size, Simplified toolbar) and the "Continue where you left off" place: it shows the defaults and writes nothing, and the Simplified toolbar item is disabled with the reason. Choices stay in this browser (`tinydocy-choices`, `tinydocy-ui`, `tinydocy-continue`) and never reach the document, the server, URLs or analytics. |
