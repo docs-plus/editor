@@ -9,6 +9,43 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Security: the web editor links only to https, http and mailto
+
+The Hyperlink extension's own check is a denylist (`javascript:`, `data:`,
+`vbscript:`, `file:`, `blob:`), so a pasted or collaborator-delivered (Yjs)
+link to `ms-msdt:`, `search-ms:`, `smb:`, `vscode:` or any other OS protocol
+handler stayed a live `<a href>` that Mod-click, middle-click or the
+browser's "Open link" handed to the OS. The editor now allows only
+`https:`, `http:` and `mailto:` (editor chunk group +162 B gz, CSS
+unchanged).
+
+#### Security
+
+- **Editor:** `isWebLink` is the editor's `isAllowedUri`, so commands,
+  autolink, paste rules and every open the extension makes refuse any other
+  scheme. `LinkPolicyHyperlink` applies the same option where the extension
+  skips it: a pasted `<a href>` off the policy keeps its text and loses the
+  link, and a stored one (Yjs, older documents) renders with no `href`, so
+  it can't be followed at all.
+- **Editor:** pasted link titles are dropped (a tooltip a stranger chose).
+  Titles already in a document still render.
+
+#### Changed
+
+- **Editor:** links that worked before and are now refused (none is used by
+  the app itself): `tel:` (including bare E.164 numbers, which no longer
+  autolink), `sms:`, `ftp:`/`ftps:`, the extension's app-scheme catalog
+  (`whatsapp:`, `tg:`, `zoommtg:`, `msteams:`, `slack:`, `spotify:`,
+  `vscode:`…), relative links (`#anchor`, `/path`, `./x`, `?q`) and
+  protocol-relative `//host` links. The link form shows its error for them;
+  existing ones stay as text that looks like a link but does not open.
+- **Docs:** search-linking spec §4.4 and §4.8 say what the sandbox now does
+  with a `tinydocy:` link; `docs/upstream/extension-hyperlink-allowuri-parse.md`
+  is a ready-to-file issue for the extension.
+- **Build:** the 162 B are recorded in the editor-chunk ledger comment; they
+  may count against LK1's 60 B `linkHost` line (LK1 measures +41 B, so
+  together 143 B over that line).
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
