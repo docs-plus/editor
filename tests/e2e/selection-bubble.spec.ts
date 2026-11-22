@@ -1034,6 +1034,14 @@ test.describe("selection bubble", () => {
         ];
       }),
     ).toEqual([true, "mark.link"]);
+    // After the 120 ms scale-in (O10), which starts at 0.98.
+    await bubble(page).evaluate((el) =>
+      Promise.all(
+        el
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished),
+      ),
+    );
     const box = await brush.boundingBox();
     expect(box?.width).toBeCloseTo(28, 1);
     expect(box?.height).toBeCloseTo(28, 1);
@@ -1374,8 +1382,11 @@ test.describe("bubble link handoff and pills (spec §7.2, §7.5)", () => {
     // the link's own card, not the bubble.
     await selectText(page, "some");
     await page.evaluate(() =>
+      // Outside the undo history, so Undo reverts only the inline code
+      // (Yjs would otherwise merge both edits into one step).
       window.__tiptap_editor
         ?.chain()
+        .setMeta("addToHistory", false)
         .setTextColor("red")
         .setHyperlink({ href: "https://example.com" })
         .run(),
