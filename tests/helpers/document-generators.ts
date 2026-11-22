@@ -7,6 +7,12 @@ import type { JSONContent } from "@tiptap/core";
  */
 export type Random = () => number;
 
+// `pick`, `randomInt` and `shuffle` mirror `lib/random.ts` with an
+// injected `random` (same draw order, so `Math.random` callers see no
+// change). They are copied, not shared, because `lib/random.ts` ships in
+// the app (the playground scenarios): giving it a parameter would change
+// app code and its chunk sizes for a test-only need, and this PR adds 0 B.
+// A fix to one belongs in both.
 function pick<T>(random: Random, arr: readonly T[]): T {
   return arr[Math.floor(random() * arr.length)];
 }

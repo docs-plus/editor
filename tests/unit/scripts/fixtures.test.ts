@@ -1,24 +1,33 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { inflateSync } from "node:zlib";
 
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 
+import { SAFE_ID } from "@/desktop/storage/engine/library-index";
 import { sweepEditorRoot } from "@/lib/security/editor-root-sweep";
 import {
   EDITOR_FRAGMENT_NAME,
   migrateLegacyMarks,
 } from "@/lib/yjs-mark-migration";
-import { fixtureCacheKey } from "@/scripts/fixtures/cache-key";
+import {
+  FIXTURE_IMPORT_BOUNDARY,
+  FIXTURE_SOURCES,
+  fixtureCacheKey,
+} from "@/scripts/fixtures/cache-key";
 import {
   inlineImagesDocument,
   jsonToYState,
@@ -47,11 +56,14 @@ import { generateLibrary } from "@/scripts/fixtures/libraries";
 import { createRng, parseSeed } from "@/scripts/fixtures/rng";
 import {
   DEFERRED_SETS,
-  DOC_IMAGES_COUNTS,
+  docImagesSet,
+  docLargeSet,
+  docNearCapSet,
   FIXTURE_SETS,
+  type FixtureManifest,
+  type FixtureSet,
   findSet,
   generateSet,
-  LIBRARY_SPECS,
 } from "@/scripts/fixtures/sets";
 import { generateLargeDocument } from "@/tests/helpers/document-generators";
 
@@ -66,6 +78,33 @@ afterEach(() => {
   for (const dir of temps.splice(0))
     rmSync(dir, { recursive: true, force: true });
 });
+
+/** Off by default: `FIXTURES_FULL_SIZE=1` runs the full-size sets too. */
+const FULL_SIZE = process.env.FIXTURES_FULL_SIZE === "1";
+
+/**
+ * Generates `set` twice into fresh folders with the same seed. Returns the
+ * first manifest after checking both match and that every listed sha256 is
+ * the file's bytes on disk.
+ */
+function generateTwice(set: FixtureSet): FixtureManifest {
+  const runs = [tempDir(), tempDir()].map((out) => {
+    const manifest = generateSet(set, out, createRng(DEFAULT_SEED));
+    for (const file of manifest.files) {
+      const bytes = readFileSync(join(out, set.name, file.path));
+      expect(bytes.byteLength).toBe(file.bytes);
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+        file.sha256,
+      );
+    }
+    return manifest;
+  });
+  expect(runs[1]).toEqual(runs[0]);
+  return runs[0];
+}
+
+const countUnder = (manifest: FixtureManifest, prefix: string) =>
+  manifest.files.filter((f) => f.path.startsWith(prefix)).length;
 
 function decodeState(state: Uint8Array): Y.Doc {
   const doc = new Y.Doc();
@@ -107,12 +146,17 @@ describe("seeded rng", () => {
     for (const n of first) expect(n >= 0 && n < 1).toBe(true);
   });
 
-  it("mints UUIDs the engine's guards accept", () => {
+  it("mints version-4 UUIDs that are also safe ids", () => {
+    // The engine's own UUID check runs on every createDoc in the library
+    // tests below; its SAFE_ID guard is exported, so check that here too.
     const rng = createRng(1);
-    for (let i = 0; i < 50; i++)
-      expect(rng.uuid()).toMatch(
+    for (let i = 0; i < 50; i++) {
+      const id = rng.uuid();
+      expect(id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
+      expect(id).toMatch(SAFE_ID);
+    }
     expect(rng.hex(16)).toMatch(/^[0-9a-f]{32}$/);
   });
 
@@ -157,7 +201,7 @@ describe("document generators", () => {
   it("doc-near-cap grows to its target and stays under the cap", () => {
     expect(NEAR_CAP_TARGET_BYTES).toBe(Math.floor(1.9 * 1024 * 1024));
     expect(PRODUCTION_DOC_CAP_BYTES).toBe(2_097_152);
-    // The real target takes a few seconds; the same loop at 1/40 scale.
+    // A tight window at small scale: the loop lands between target and cap.
     const state = nearCapDocument(createRng(2), 50_000, 52_429);
     expect(state.byteLength).toBeGreaterThanOrEqual(50_000);
     expect(state.byteLength).toBeLessThan(52_429);
@@ -198,7 +242,6 @@ describe("document generators", () => {
     expect(images).toHaveLength(4);
     for (const image of images)
       expect(image.attrs?.src).toMatch(/^data:image\/png;base64,iVBORw0KGgo/);
-    expect(DOC_IMAGES_COUNTS).toEqual({ inline: 10, assets: 200, photos: 10 });
   });
 });
 
@@ -237,6 +280,20 @@ describe("hostile set", () => {
     for (const title of ["..", "CON", "aux", "trailing dots...", "a/b"])
       expect(HOSTILE_TITLES).toContain(title);
     expect(HOSTILE_TITLES.some((t) => t.length === 300)).toBe(true);
+  });
+
+  it("keeps the invisible-character titles, written as escapes", () => {
+    expect(HOSTILE_TITLES).toContain("\u202Egnp.exe");
+    expect(HOSTILE_TITLES).toContain("zero\u200Bwidth");
+    const decomposed = HOSTILE_TITLES.find((t) => t.endsWith(" decomposed"));
+    expect(decomposed).toBe("e\u0301 decomposed");
+    expect(decomposed).not.toBe(decomposed?.normalize("NFC"));
+    // No raw bidi controls or zero-width characters in the source itself.
+    const source = readFileSync(
+      join(process.cwd(), "scripts/fixtures/hostile.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/[\u202A-\u202E\u2066-\u2069\u200B]|\u0301/);
   });
 
   it("builds the polyglot, the GIF bomb and a state with unknown roots", () => {
@@ -278,19 +335,43 @@ describe("libraries", () => {
     expect(c.contentSha256).not.toBe(a.contentSha256);
   });
 
-  it("defines the §3.2 sizes", () => {
-    expect(LIBRARY_SPECS["library-s"]).toMatchObject({
+  it("refuses a folder that already holds a library", () => {
+    const dir = join(tempDir(), "lib");
+    generateLibrary(dir, small, createRng(11));
+    expect(() => generateLibrary(dir, small, createRng(12))).toThrow(
+      /not empty/,
+    );
+  });
+
+  it("generates library-s and library-1k at their §3.2 sizes", () => {
+    const sizes = (name: string) =>
+      generateSet(findSet(name), tempDir(), createRng(DEFAULT_SEED)).library;
+    expect(sizes("library-s")).toMatchObject({
       docs: 20,
-      folderFanOut: [3],
+      folders: 3,
+      maxFolderDepth: 1,
       tags: 5,
     });
-    expect(LIBRARY_SPECS["library-1k"]).toMatchObject({ docs: 1000, tags: 30 });
-    expect(LIBRARY_SPECS["library-1k"].folderFanOut).toHaveLength(4);
-    expect(LIBRARY_SPECS["library-10k"]).toMatchObject({
-      docs: 10_000,
-      content: "titles",
+    expect(sizes("library-1k")).toMatchObject({
+      docs: 1000,
+      folders: 4 + 4 * 3 + 4 * 3 * 2 + 4 * 3 * 2 * 2,
+      maxFolderDepth: 4,
+      tags: 30,
     });
   });
+
+  it.skipIf(!FULL_SIZE)(
+    "replays library-1k and library-10k at full size (FIXTURES_FULL_SIZE=1)",
+    () => {
+      expect(generateTwice(findSet("library-1k")).library?.docs).toBe(1000);
+      expect(generateTwice(findSet("library-10k")).library).toMatchObject({
+        docs: 10_000,
+        folders: 0,
+        tags: 0,
+      });
+    },
+    60_000,
+  );
 });
 
 describe("fixture sets", () => {
@@ -330,6 +411,88 @@ describe("fixture sets", () => {
     expect(hostile?.files.map((f) => f.path)).toContain("titles.json");
     expect(first.find((m) => m.set === "library-s")?.library?.docs).toBe(20);
   });
+
+  it("replays doc-large, with small heading counts", () => {
+    const manifest = generateTwice(docLargeSet([12, 20]));
+    expect(manifest.files.map((f) => f.path)).toEqual([
+      "doc-large-12.json",
+      "doc-large-12.ystate",
+      "doc-large-20.json",
+      "doc-large-20.ystate",
+    ]);
+  });
+
+  it("replays doc-large at full size", () => {
+    const manifest = generateTwice(findSet("doc-large"));
+    expect(manifest.files).toHaveLength(4);
+  });
+
+  it("replays doc-near-cap at full size, between 1.9 MiB and the cap", () => {
+    const [state] = generateTwice(findSet("doc-near-cap")).files;
+    expect(state.path).toBe("doc-near-cap.ystate");
+    expect(state.bytes).toBeGreaterThanOrEqual(NEAR_CAP_TARGET_BYTES);
+    expect(state.bytes).toBeLessThan(PRODUCTION_DOC_CAP_BYTES);
+  });
+
+  it("replays doc-near-cap at a reduced target", () => {
+    const [state] = generateTwice(docNearCapSet(30_000)).files;
+    expect(state.bytes).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("replays doc-images, with small counts and photos", () => {
+    const manifest = generateTwice(
+      docImagesSet({
+        counts: { inline: 2, assets: 3, photos: 2 },
+        photoWidth: 16,
+        photoHeight: 12,
+      }),
+    );
+    expect(countUnder(manifest, "assets/")).toBe(3);
+    expect(countUnder(manifest, "photos/")).toBe(2);
+    expect(manifest.files).toHaveLength(2 + 3 + 2);
+  });
+
+  it("writes doc-images with the §3.2 counts: 10 inline, 200 assets, 10 photos", () => {
+    const out = tempDir();
+    const manifest = generateSet(
+      docImagesSet({ photoWidth: 4, photoHeight: 4 }),
+      out,
+      createRng(DEFAULT_SEED),
+    );
+    expect(countUnder(manifest, "assets/")).toBe(200);
+    expect(countUnder(manifest, "photos/")).toBe(10);
+    expect(manifest.files).toHaveLength(2 + 200 + 10);
+    const inline = JSON.parse(
+      readFileSync(join(out, "doc-images", "inline-images.json"), "utf8"),
+    ) as { content: { type: string }[] };
+    expect(inline.content.filter((n) => n.type === "image")).toHaveLength(10);
+  });
+
+  it.skipIf(!FULL_SIZE)(
+    "replays doc-images with 12 MP photos (FIXTURES_FULL_SIZE=1)",
+    () => {
+      const manifest = generateTwice(findSet("doc-images"));
+      expect(countUnder(manifest, "photos/")).toBe(10);
+      for (const photo of manifest.files.filter((f) =>
+        f.path.startsWith("photos/"),
+      ))
+        expect(photo.bytes).toBeGreaterThan(1_000_000);
+    },
+    120_000,
+  );
+
+  it("refuses a set folder with files in it, and --force replaces it", () => {
+    const out = tempDir();
+    const set = findSet("doc-legacy");
+    generateSet(set, out, createRng(1));
+    writeFileSync(join(out, "doc-legacy", "stale.txt"), "left over");
+    expect(() => generateSet(set, out, createRng(1))).toThrow(/not empty/);
+    generateSet(set, out, createRng(1), { force: true });
+    expect(readdirSync(join(out, "doc-legacy")).sort()).toEqual([
+      "doc-legacy.ystate",
+      "manifest.json",
+    ]);
+  });
 });
 
 describe("cache key", () => {
@@ -349,7 +512,62 @@ describe("cache key", () => {
   it("covers the repo's real sources", () => {
     expect(fixtureCacheKey(process.cwd())).toMatch(/^fixtures-[0-9a-f]{16}$/);
   });
+
+  it("lists every module the generators import", () => {
+    const root = process.cwd();
+    const missing = fixtureImportClosure(root).filter(
+      (file) =>
+        !FIXTURE_SOURCES.some(
+          (source) => file === source || file.startsWith(`${source}/`),
+        ),
+    );
+    expect(missing).toEqual([]);
+  });
 });
+
+/**
+ * Repo files reachable through `@/` and relative imports from the
+ * generators, stopping at {@link FIXTURE_IMPORT_BOUNDARY}.
+ */
+function fixtureImportClosure(root: string): string[] {
+  const transpiler = new Bun.Transpiler({ loader: "tsx" });
+  const resolveImport = (from: string, spec: string): string | null => {
+    let base: string;
+    if (spec.startsWith("@/")) base = join(root, spec.slice(2));
+    else if (spec.startsWith(".")) base = resolve(dirname(from), spec);
+    else return null; // a package: bun.lock covers it
+    for (const candidate of [
+      base,
+      `${base}.ts`,
+      `${base}.tsx`,
+      join(base, "index.ts"),
+      join(base, "index.tsx"),
+    ])
+      if (existsSync(candidate) && statSync(candidate).isFile())
+        return candidate;
+    throw new Error(`can't resolve ${spec} from ${from}`);
+  };
+  const seen = new Set<string>();
+  const stack = [
+    ...readdirSync(join(root, "scripts/fixtures")).map((f) =>
+      join(root, "scripts/fixtures", f),
+    ),
+    join(root, "tests/helpers/storage-library.ts"),
+  ];
+  while (stack.length > 0) {
+    const file = stack.pop() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const rel = relative(root, file).split("\\").join("/");
+    if (!/\.tsx?$/.test(file) || FIXTURE_IMPORT_BOUNDARY.includes(rel))
+      continue;
+    for (const { path } of transpiler.scanImports(readFileSync(file, "utf8"))) {
+      const next = resolveImport(file, path);
+      if (next) stack.push(next);
+    }
+  }
+  return [...seen].map((f) => relative(root, f).split("\\").join("/")).sort();
+}
 
 describe("generate.ts CLI", () => {
   it("prints the seed and writes the manifest", () => {
@@ -376,6 +594,33 @@ describe("generate.ts CLI", () => {
       expect(main(["--out", tempDir()], {})).toBe(2);
     } finally {
       error.mockRestore();
+    }
+  });
+
+  it("prints one line and exits 2 on bad input, never a stack trace", () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const out = tempDir();
+      const cases: [string[], Record<string, string>, RegExp][] = [
+        [["--set", "doc-comments", "--out", out], {}, /waits on/],
+        [["--set", "nope", "--out", out], {}, /unknown fixture set/],
+        [["--set", "doc-rtl", "--out", out], { SEED: "abc" }, /seed/i],
+        [["--bogus"], {}, /bogus/],
+      ];
+      for (const [argv, env, message] of cases) {
+        error.mockClear();
+        expect(main(argv, env)).toBe(2);
+        expect(String(error.mock.calls[0]?.[0])).toMatch(message);
+      }
+      expect(main(["--set", "doc-rtl", "--out", out], {})).toBe(0);
+      error.mockClear();
+      expect(main(["--set", "doc-rtl", "--out", out], {})).toBe(2);
+      expect(String(error.mock.calls[0]?.[0])).toMatch(/--force/);
+      expect(main(["--set", "doc-rtl", "--out", out, "--force"], {})).toBe(0);
+    } finally {
+      error.mockRestore();
+      log.mockRestore();
     }
   });
 });

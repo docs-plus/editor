@@ -7,7 +7,7 @@
  * Images wait for the asset store (P2.6b), which adds them to `library-1k`.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 
 import type { Library } from "@/desktop/storage/engine/library";
 import { DOC_SCHEMA } from "@/lib/doc-migrations";
@@ -111,6 +111,9 @@ export function generateLibrary(
   spec: LibrarySpec,
   rng: Rng,
 ): LibrarySummary {
+  // A second library in the same folder would mix two seeds' documents.
+  if (existsSync(dir) && readdirSync(dir).length > 0)
+    throw new Error(`library folder ${dir} is not empty`);
   mkdirSync(dir, { recursive: true });
   const clock = createClock();
   const library = openTestLibrary(dir, createTestHost(clock));

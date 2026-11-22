@@ -4,7 +4,13 @@
  * logical summary for libraries (whose SQLite bytes vary run to run).
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
@@ -12,11 +18,18 @@ import {
   jsonToYState,
   largeDocument,
   legacyDocument,
+  NEAR_CAP_TARGET_BYTES,
   nearCapDocument,
   rtlDocument,
 } from "./documents";
 import { hostileFiles } from "./hostile";
-import { exifSamples, syntheticPhoto, syntheticPng } from "./images";
+import {
+  exifSamples,
+  PHOTO_HEIGHT,
+  PHOTO_WIDTH,
+  syntheticPhoto,
+  syntheticPng,
+} from "./images";
 import {
   generateLibrary,
   type LibrarySpec,
@@ -56,23 +69,28 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** Writes `files` under `dir` and lists them, sorted, for the manifest. */
+type FileContent = Uint8Array | string;
+
+/**
+ * Writes `files` under `dir` and lists them, sorted, for the manifest. An
+ * iterable is consumed one file at a time, so a generator can hand over
+ * large files (the 12 MP photos) without holding them all in memory.
+ */
 export function writeFiles(
   dir: string,
-  files: Record<string, Uint8Array | string>,
+  files: Record<string, FileContent> | Iterable<[string, FileContent]>,
 ): FixtureFile[] {
-  return Object.entries(files)
-    .map(([path, content]) => {
-      const bytes =
-        typeof content === "string"
-          ? new TextEncoder().encode(content)
-          : content;
-      const target = join(dir, path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, bytes);
-      return { path, bytes: bytes.byteLength, sha256: sha256(bytes) };
-    })
-    .sort((a, b) => a.path.localeCompare(b.path));
+  const entries = Symbol.iterator in files ? files : Object.entries(files);
+  const listed: FixtureFile[] = [];
+  for (const [path, content] of entries) {
+    const bytes =
+      typeof content === "string" ? new TextEncoder().encode(content) : content;
+    const target = join(dir, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
+    listed.push({ path, bytes: bytes.byteLength, sha256: sha256(bytes) });
+  }
+  return listed.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 const json = (value: unknown) => `${JSON.stringify(value)}\n`;
@@ -108,6 +126,94 @@ export const LIBRARY_SPECS = {
 /** `doc-images` counts (§3.2): 10 inline, 200 asset images, 10 photos. */
 export const DOC_IMAGES_COUNTS = { inline: 10, assets: 200, photos: 10 };
 
+/** `doc-large`: one document per heading count. Tests pass small counts. */
+export function docLargeSet(headingCounts: readonly number[] = [1000, 2000]) {
+  return {
+    name: "doc-large",
+    contents: "1,000 and 2,000 headings, rich content",
+    usedBy: "perf, find and replace, comments open",
+    generate(dir, rng) {
+      const files: Record<string, FileContent> = {};
+      for (const headings of headingCounts) {
+        const doc = largeDocument(headings, rng.fork(`json-${headings}`));
+        files[`doc-large-${headings}.json`] = json(doc);
+        files[`doc-large-${headings}.ystate`] = jsonToYState(
+          doc,
+          rng.fork(`y-${headings}`),
+        );
+      }
+      return { files: writeFiles(dir, files) };
+    },
+  } satisfies FixtureSet;
+}
+
+/** `doc-near-cap`: Yjs state of `target` bytes, under the production cap. */
+export function docNearCapSet(target = NEAR_CAP_TARGET_BYTES) {
+  return {
+    name: "doc-near-cap",
+    contents: "1.9 MiB of Yjs state, under the 2 MiB production cap",
+    usedBy: "T11, size refusals",
+    generate(dir, rng) {
+      return {
+        files: writeFiles(dir, {
+          "doc-near-cap.ystate": nearCapDocument(rng, target),
+        }),
+      };
+    },
+  } satisfies FixtureSet;
+}
+
+export type DocImagesOptions = {
+  counts?: { inline: number; assets: number; photos: number };
+  photoWidth?: number;
+  photoHeight?: number;
+};
+
+function* docImagesFiles(
+  rng: Rng,
+  { counts, photoWidth, photoHeight }: Required<DocImagesOptions>,
+): Generator<[string, FileContent]> {
+  const inline = inlineImagesDocument(rng.fork("inline"), counts.inline);
+  yield ["inline-images.json", json(inline)];
+  yield ["inline-images.ystate", jsonToYState(inline, rng.fork("inline-y"))];
+  const assets = rng.fork("assets");
+  for (let i = 1; i <= counts.assets; i++)
+    yield [
+      `assets/asset-${String(i).padStart(3, "0")}.png`,
+      syntheticPng(assets, assets.int(24, 64), assets.int(24, 64)),
+    ];
+  // One photo at a time: each is ~10 MB compressed from a 36 MB raw buffer.
+  const photos = rng.fork("photos");
+  for (let i = 1; i <= counts.photos; i++)
+    yield [
+      `photos/photo-${String(i).padStart(2, "0")}.png`,
+      syntheticPhoto(photos, photoWidth, photoHeight),
+    ];
+}
+
+/**
+ * `doc-images`. The photos are PNGs with an `eXIf` block: no JPEG encoder
+ * is in the tree, so a JPEG-only EXIF or orientation path is covered only
+ * by the structural JPEG in `exif`. P2.6b adds a size-controlled
+ * structural 12 MP JPEG when it needs one.
+ */
+export function docImagesSet(options: DocImagesOptions = {}) {
+  const resolved = {
+    counts: options.counts ?? DOC_IMAGES_COUNTS,
+    photoWidth: options.photoWidth ?? PHOTO_WIDTH,
+    photoHeight: options.photoHeight ?? PHOTO_HEIGHT,
+  };
+  return {
+    name: "doc-images",
+    contents:
+      "10 inline data-URL images, 200 asset images, 10 photos of 12 MP (PNG with eXIf, not JPEG)",
+    usedBy: "P2.6c, T17, T18, the image perf case",
+    generate(dir, rng) {
+      return { files: writeFiles(dir, docImagesFiles(rng, resolved)) };
+    },
+  } satisfies FixtureSet;
+}
+
 export const FIXTURE_SETS: readonly FixtureSet[] = [
   librarySet(
     "library-s",
@@ -127,60 +233,9 @@ export const FIXTURE_SETS: readonly FixtureSet[] = [
     "10,000 documents, titles only",
     "the P2.7b list budget",
   ),
-  {
-    name: "doc-large",
-    contents: "1,000 and 2,000 headings, rich content",
-    usedBy: "perf, find and replace, comments open",
-    generate(dir, rng) {
-      const files: Record<string, Uint8Array | string> = {};
-      for (const headings of [1000, 2000]) {
-        const doc = largeDocument(headings, rng.fork(`json-${headings}`));
-        files[`doc-large-${headings}.json`] = json(doc);
-        files[`doc-large-${headings}.ystate`] = jsonToYState(
-          doc,
-          rng.fork(`y-${headings}`),
-        );
-      }
-      return { files: writeFiles(dir, files) };
-    },
-  },
-  {
-    name: "doc-near-cap",
-    contents: "1.9 MiB of Yjs state, under the 2 MiB production cap",
-    usedBy: "T11, size refusals",
-    generate(dir, rng) {
-      return {
-        files: writeFiles(dir, { "doc-near-cap.ystate": nearCapDocument(rng) }),
-      };
-    },
-  },
-  {
-    name: "doc-images",
-    contents: "10 inline data-URL images, 200 asset images, 10 photos of 12 MP",
-    usedBy: "P2.6c, T17, T18, the image perf case",
-    generate(dir, rng) {
-      const inline = inlineImagesDocument(
-        rng.fork("inline"),
-        DOC_IMAGES_COUNTS.inline,
-      );
-      const files: Record<string, Uint8Array | string> = {
-        "inline-images.json": json(inline),
-        "inline-images.ystate": jsonToYState(inline, rng.fork("inline-y")),
-      };
-      const assets = rng.fork("assets");
-      for (let i = 1; i <= DOC_IMAGES_COUNTS.assets; i++)
-        files[`assets/asset-${String(i).padStart(3, "0")}.png`] = syntheticPng(
-          assets,
-          assets.int(24, 64),
-          assets.int(24, 64),
-        );
-      const photos = rng.fork("photos");
-      for (let i = 1; i <= DOC_IMAGES_COUNTS.photos; i++)
-        files[`photos/photo-${String(i).padStart(2, "0")}.png`] =
-          syntheticPhoto(photos);
-      return { files: writeFiles(dir, files) };
-    },
-  },
+  docLargeSet(),
+  docNearCapSet(),
+  docImagesSet(),
   {
     name: "doc-rtl",
     contents:
@@ -236,13 +291,26 @@ export function findSet(name: string): FixtureSet {
   );
 }
 
-/** Generates `set` into `<outDir>/<set>/` and writes its `manifest.json`. */
+/**
+ * Generates `set` into `<outDir>/<set>/` and writes its `manifest.json`.
+ * Refuses a folder that already holds files (a second run would mix two
+ * libraries or leave stale files outside the manifest) unless `force`,
+ * which empties it first.
+ */
 export function generateSet(
   set: FixtureSet,
   outDir: string,
   rng: Rng,
+  options: { force?: boolean } = {},
 ): FixtureManifest {
   const dir = join(outDir, set.name);
+  if (existsSync(dir) && readdirSync(dir).length > 0) {
+    if (!options.force)
+      throw new Error(
+        `${dir} is not empty; pass --force to replace it, or pick another --out`,
+      );
+    rmSync(dir, { recursive: true, force: true });
+  }
   mkdirSync(dir, { recursive: true });
   const manifest: FixtureManifest = {
     set: set.name,

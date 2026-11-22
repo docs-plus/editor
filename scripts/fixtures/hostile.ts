@@ -14,7 +14,12 @@ import { ascii, buildPng, concat, pngChunk } from "@/tests/helpers/image-bytes";
 import { seededYDoc } from "./documents";
 import type { Rng } from "./rng";
 
-/** Titles that break naive file naming (P2.8 filename cleaning). */
+/**
+ * Titles that break naive file naming (P2.8 filename cleaning). Invisible
+ * characters are written as escapes, never raw: an editor or formatter
+ * could strip them unseen (and raw bidi controls are the Trojan Source
+ * pattern).
+ */
 export const HOSTILE_TITLES: readonly string[] = [
   "a/b",
   "a\\b",
@@ -44,9 +49,9 @@ export const HOSTILE_TITLES: readonly string[] = [
   "tab\tand\nnewline",
   "nul\u0000byte",
   "bell\u0007",
-  "‮gnp.exe",
-  "zero​width",
-  "é decomposed",
+  "\u202Egnp.exe", // right-to-left override: shows as "exe.png"
+  "zero\u200Bwidth", // zero-width space
+  "e\u0301 decomposed", // e + combining acute, not the precomposed é
   "x".repeat(300),
   "ک".repeat(300),
 ];

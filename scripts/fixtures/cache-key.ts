@@ -12,6 +12,14 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
+/**
+ * Every module the generators import, directly or not, plus the lockfile.
+ * `tests/unit/scripts/fixtures.test.ts` walks the imports from
+ * `scripts/fixtures/` and `tests/helpers/storage-library.ts` and fails when
+ * one is missing here. The walk stops at the editor config: what it shapes
+ * in the stored bytes is the schema, which `schema-snapshot.json` pins (the
+ * schema snapshot test fails on drift).
+ */
 export const FIXTURE_SOURCES: readonly string[] = [
   "scripts/fixtures",
   "tests/helpers/document-generators.ts",
@@ -19,9 +27,20 @@ export const FIXTURE_SOURCES: readonly string[] = [
   "tests/helpers/editor-schema.ts",
   "tests/helpers/storage-library.ts",
   "tests/fixtures/schema-snapshot.json",
+  "components/document-editor/document-editor-config.ts",
   "desktop/storage/engine",
-  "lib/doc-migrations/index.ts",
+  "desktop/storage/node-host.ts",
+  "desktop/dev/bun-sqlite-driver.ts",
+  "lib/doc-migrations",
+  "lib/yjs-mark-migration.ts",
+  "lib/highlight-tokens.ts",
+  "lib/schema-names.ts",
   "bun.lock",
+];
+
+/** Where the import walk stops (see {@link FIXTURE_SOURCES}). */
+export const FIXTURE_IMPORT_BOUNDARY: readonly string[] = [
+  "components/document-editor/document-editor-config.ts",
 ];
 
 function listFiles(root: string, path: string): string[] {

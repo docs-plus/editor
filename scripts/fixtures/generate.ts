@@ -9,8 +9,10 @@
  *
  * The seed comes from `--seed`, then `SEED`, then 42, and is printed first:
  * `SEED=<n>` replays a run. Each set lands in `<out>/<set>/` with a
- * `manifest.json`. Large sets are generated at test time into temp folders,
- * never committed (§3.1).
+ * `manifest.json`; a set folder that already holds files is refused unless
+ * `--force` empties it first. Large sets are generated at test time into
+ * temp folders, never committed (§3.1). Bad input (an unknown or deferred
+ * set, a bad seed, a non-empty folder) prints one line and exits 2.
  */
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -25,7 +27,7 @@ const REPO_ROOT = resolve(import.meta.dir, "../..");
 
 function usage(): string {
   return [
-    "usage: bun scripts/fixtures/generate.ts (--set <a,b> | --all) --out <dir> [--seed <n>]",
+    "usage: bun scripts/fixtures/generate.ts (--set <a,b> | --all) --out <dir> [--seed <n>] [--force]",
     "       bun scripts/fixtures/generate.ts --list | --cache-key",
   ].join("\n");
 }
@@ -34,6 +36,15 @@ export function main(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
 ): number {
+  try {
+    return run(argv, env);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
+}
+
+function run(argv: string[], env: Record<string, string | undefined>): number {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -41,6 +52,7 @@ export function main(
       all: { type: "boolean" },
       seed: { type: "string" },
       out: { type: "string" },
+      force: { type: "boolean" },
       list: { type: "boolean" },
       "cache-key": { type: "boolean" },
     },
@@ -75,7 +87,9 @@ export function main(
   const rng = createRng(seed);
   for (const set of sets) {
     const started = performance.now();
-    const manifest = generateSet(set, resolve(values.out), rng);
+    const manifest = generateSet(set, resolve(values.out), rng, {
+      force: values.force,
+    });
     const ms = Math.round(performance.now() - started);
     const what = manifest.library
       ? `${manifest.library.docs} documents`
