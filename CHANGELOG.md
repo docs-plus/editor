@@ -9,6 +9,30 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop storage: lock waits, and derived rows without the fsync
+
+Two Windows soak failures on #170 and #171, fixed in the engine.
+
+- **Desktop:** every SQLite connection waits up to 3 s for a lock
+  (`busy_timeout`) instead of failing at once. On Windows a scanner or a
+  process still letting go of a new file held it for a moment, and the
+  next write failed with "database is locked" (T4-copy). TRUNCATE
+  checkpoints still never wait, so a running daily copy can't stretch a
+  quit.
+- **Desktop:** derived rows (`derive.put`) commit at `synchronous=NORMAL`.
+  They are a cache: a power cut loses them and their `derived_seq`
+  together, and the document is derived again. Backlinks queued behind a
+  derive no longer wait for F_FULLFSYNC or FlushFileBuffers (T21: 4.9 ms →
+  0.9 ms median on an Apple silicon Mac). Everything else stays FULL; the
+  architecture spec's D-A6 records the amendment.
+- **Tests:** contention tests hold a lock from a second process (a write
+  and the daily copy wait it out; a reader never slows shutdown), and the
+  derive commit's `synchronous` trace is checked. T21 runs its harness 5
+  times on one seeded library and gates on the median of the runs, with
+  p95 over every round and the derive's SQL time reported.
+
+**Deploy:** none.
+
 
 
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
