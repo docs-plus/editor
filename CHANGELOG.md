@@ -9,6 +9,30 @@ since the previous tag.
 
 ## [Unreleased]
 
+### P2.12 part 2: plain-text Markdown pastes as formatting
+
+Pasting plain text that is Markdown (a README, a notes app, a chat
+assistant's answer) now gives headings, lists, quotes, code blocks, rules,
+tables, links and images, through the same paste pipeline as an HTML paste
+(details spec E2). ⌘⇧V still pastes plain text. Inline bold, italic, strike
+and code already converted through Tiptap's own paste rules. Editor chunk
+group +152 B gz on its D23 line (measured +152 B on `main` at `1548d5e`,
++129 B at `84a9458`).
+
+#### Added
+
+- **Markdown paste** (`extensions/markdown-paste/`): the editor's
+  `clipboardTextParser` prop (`EDITOR_PROPS`) hands plain text to the rule
+  in `lib/markdown`, which loads as a lazy chunk in the editor's post-sync
+  idle callback (also on desktop, where a hydrated local document counts as
+  synced). Until it has loaded, and always for ⌘⇧V, text pastes as plain
+  text, as before.
+
+#### Changed
+
+- **Editor budget:** the D23 ledger gains P2.12's 152 B line (2,205 B, or
+  2,285 B with M19's conditional line), pending owner approval.
+
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and
