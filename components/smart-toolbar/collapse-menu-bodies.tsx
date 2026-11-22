@@ -16,6 +16,7 @@ import { FONT_SIZE_LADDER } from "@/lib/text-style-tokens";
 
 import { ActionMenuItem, ActionRadioItem } from "./row/menu-items";
 import { AlignMenuItems } from "./row/row-menu-bodies";
+import "./standin-words.scss";
 
 /*
  * The ladder stand-ins' items (menu chunk, `menu-bodies.ts`); their

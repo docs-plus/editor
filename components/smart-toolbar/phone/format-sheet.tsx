@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { ThemeToggle } from "@/components/document-editor/theme-toggle";
 import { ActionButton } from "@/components/smart-toolbar/action-button";
@@ -14,18 +14,26 @@ import { CODE_LANGUAGES } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import type { ContextKind } from "@/lib/editor-actions/types";
+import { ChevronRightIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
 
-/** Style rows (the title's own reason, "Title is always H1.", locks them). */
+/**
+ * Style (spec §13.1): Text and H1–H3, More headings ▸ (H4–H6), then the
+ * lists and Quote. The title's own reason ("Title is always H1.") locks
+ * them.
+ */
 const STYLE_IDS = [
   "style.paragraph",
   "style.heading1",
   "style.heading2",
   "style.heading3",
+] as const;
+const MORE_HEADING_IDS = [
   "style.heading4",
   "style.heading5",
   "style.heading6",
 ] as const;
+const BLOCK_IDS = ["list.bullet", "list.ordered", "list.task", "insert.quote"];
 const ALIGN_IDS = [
   "align.left",
   "align.center",
@@ -101,6 +109,61 @@ export function Section({
       </h3>
       {children}
     </section>
+  );
+}
+
+/** A row of `variant="phone"` action buttons with their labels. */
+function PhoneActions({
+  ids,
+  editor,
+}: {
+  ids: readonly string[];
+  editor: Editor;
+}) {
+  return ids.map((id) => (
+    <ActionButton key={id} id={id} editor={editor} variant="phone" showLabel />
+  ));
+}
+
+/**
+ * Style first (spec §13.1, F16): the current style is pressed
+ * (`aria-pressed`, the registry's `isActive`). H4–H6 sit behind More
+ * headings, a disclosure that starts open when the current style is one
+ * of them, so the pressed row is always in view.
+ */
+function StyleSection({ editor }: { editor: Editor }) {
+  const h4 = useActionView("style.heading4", editor);
+  const h5 = useActionView("style.heading5", editor);
+  const h6 = useActionView("style.heading6", editor);
+  const deep = Boolean(h4?.active || h5?.active || h6?.active);
+  const [more, setMore] = useState(deep);
+  const open = more || deep;
+  const moreId = useId();
+  return (
+    <Section title="Style">
+      <div className="st-sheet-list">
+        <PhoneActions ids={STYLE_IDS} editor={editor} />
+        <button
+          type="button"
+          className="st-sheet-disclosure"
+          aria-expanded={open}
+          aria-controls={moreId}
+          onClick={() => setMore(!open)}
+        >
+          <span>More headings</span>
+          <ChevronRightIcon
+            aria-hidden="true"
+            className="st-sheet-disclosure-chevron rtl:-scale-x-100"
+          />
+        </button>
+        <div id={moreId} className="contents" hidden={!open}>
+          {open ? (
+            <PhoneActions ids={MORE_HEADING_IDS} editor={editor} />
+          ) : null}
+        </div>
+        <PhoneActions ids={BLOCK_IDS} editor={editor} />
+      </div>
+    </Section>
   );
 }
 
@@ -194,9 +257,9 @@ function SlotSection({
 }
 
 /**
- * Body of the phone "Text format" sheet (spec §4.7, design pass §6):
- * Colours first, so the swatches show without scrolling, then the slot's
- * tools (below 360px), Style, Your formats, Size, Align and More (Redo
+ * Body of the phone "Text format" sheet (spec §4.7, design pass §6, §13.1):
+ * Style first (used more than colour, F16), then Colours, the slot's
+ * tools (below 360px), Your formats, Size, Align and More (Redo
  * below 404px, Outdent, underline, strikethrough, clear formatting,
  * Link). Every control is a registry action (`ActionButton`,
  * `FontSizeStepper` over `size.*`, `ColorPanel` over `color.*`), so the
@@ -219,6 +282,7 @@ export function FormatSheetBody({
 }) {
   return (
     <div className="st-sheet-body">
+      <StyleSection editor={editor} />
       {/* A pick keeps the sheet open: writers try colours (O4). */}
       <Section title="Colours">
         <ColorPanel
@@ -229,19 +293,6 @@ export function FormatSheetBody({
         />
       </Section>
       <SlotSection editor={editor} onClose={onClose} />
-      <Section title="Style">
-        <div className="st-sheet-list">
-          {STYLE_IDS.map((id) => (
-            <ActionButton
-              key={id}
-              id={id}
-              editor={editor}
-              variant="phone"
-              showLabel
-            />
-          ))}
-        </div>
-      </Section>
       <Section title="Your formats">
         <SheetFormats editor={editor} onClose={onClose} removing={removing} />
       </Section>

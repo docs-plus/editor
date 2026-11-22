@@ -1,0 +1,53 @@
+// Touch tablets (O8 a, spec §13.2): the stand-ins whose icons don't explain
+// themselves get one fixed word, never a value (the fixed-faces rule: one
+// icon plus at most one word): "Format", "Layout", "Block", drawn between
+// the icon and the chevron. The alt text "" keeps each name (`aria-label`)
+// as it is. Phones (< 768px) have the docked bar.
+//
+// CSS only, in the menu chunk (`collapse-menu-bodies.tsx` imports it): the
+// editor chunk group, CSS included, carries no bytes for it. That chunk is
+// fetched when the browser is idle after the first sync, or on a stand-in's
+// hover or focus, so the words appear then.
+//
+// The words add 120px; the row fits them from a 832px row (an 848px
+// window) in every context, so below that they stay off rather than make
+// the row scroll (`toolbar-ladder.spec.ts`).
+$standin-words-min: 832px;
+
+@media (min-width: 768px) and (pointer: coarse) {
+  @container smart-toolbar (width >= #{$standin-words-min}) {
+    [data-toolbar-group="marks"],
+    [data-toolbar-group="paragraph"],
+    [data-toolbar-group="slot"] {
+      > [data-collapse-standin] [data-toolbar-item] {
+        &::after {
+          order: 1;
+          font-size: 0.8125rem;
+          font-weight: 500;
+        }
+
+        > svg:last-child {
+          order: 2;
+        }
+      }
+    }
+
+    [data-toolbar-group="marks"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Format" / "";
+    }
+
+    [data-toolbar-group="paragraph"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Layout" / "";
+    }
+
+    [data-toolbar-group="slot"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Block" / "";
+    }
+  }
+}

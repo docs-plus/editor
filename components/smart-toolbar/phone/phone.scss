@@ -264,6 +264,58 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
   }
 }
 
+// Style's More headings ▸ (`format-sheet.tsx`): a full-width disclosure
+// row between H1–H3 and the lists; its chevron turns down while open.
+.st-sheet-list .st-sheet-disclosure {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md, 0.375rem);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+
+  &:hover {
+    background-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+
+  > span {
+    flex: 1 1 auto;
+    text-align: start;
+  }
+
+  .st-sheet-disclosure-chevron {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.6;
+    transition: rotate 150ms ease;
+  }
+
+  &[aria-expanded="true"] .st-sheet-disclosure-chevron {
+    rotate: 90deg;
+  }
+
+  // Mirrored in RTL (it points left), so it turns the other way to point down.
+  &[aria-expanded="true"]:dir(rtl) .st-sheet-disclosure-chevron {
+    rotate: -90deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-sheet-list .st-sheet-disclosure .st-sheet-disclosure-chevron {
+    transition: none;
+  }
+}
+
 // Your formats (`formats/sheet-formats.tsx`): Save, the Remove toggle,
 // the Remove list and Restore take the full width, under the formats,
 // never between them; the list is a grid of its own (`ps-3` insets it).

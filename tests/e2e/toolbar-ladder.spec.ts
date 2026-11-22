@@ -62,6 +62,28 @@ async function caretIn(page: Page, type: (typeof CONTEXTS)[number]) {
   );
 }
 
+/**
+ * The fixed word each visible stand-in draws (`::after`, CSS only), by
+ * its accessible name; "" when it draws none.
+ */
+const standInWords = (page: Page) =>
+  row(page).evaluate((el) =>
+    Object.fromEntries(
+      Array.from(
+        el.querySelectorAll<HTMLElement>(
+          "[data-collapse-standin] [data-toolbar-item]",
+        ),
+      )
+        .filter((item) => item.checkVisibility())
+        .map((item) => {
+          const content = getComputedStyle(item, "::after").content;
+          const word = /^"([^"]*)"/.exec(content)?.[1] ?? "";
+          return [item.getAttribute("aria-label") ?? "", word];
+        })
+        .filter(([, word]) => word),
+    ),
+  );
+
 async function expectRowFits(page: Page, label: string) {
   const fit = await row(page).evaluate((el) => {
     const items = Array.from(
@@ -168,6 +190,42 @@ test.describe("touch", () => {
     await sweep(page, [1600, 1560, ...TOUCH_WIDTHS], "touch+face");
   });
 
+  test("tablet: the stand-ins show one fixed word each where the row has room (O8 a)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 1180 });
+    await openToolbarTestDoc(page);
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    await seedContexts(page);
+    await caretIn(page, "heading");
+    // Drawn by the menu chunk's CSS, fetched when the browser is idle.
+    await expect
+      .poll(() => standInWords(page))
+      .toEqual({
+        "More text formatting": "Format",
+        Paragraph: "Layout",
+        "Section tools": "Block",
+      });
+    // Words never change the names: one icon plus one fixed word.
+    await expectRowFits(page, "touch words @900");
+    await caretIn(page, "table");
+    expect((await standInWords(page))["Table tools"]).toBe("Block");
+    await expectRowFits(page, "touch words @900 table");
+    // The widest context fits them from an 848px window; below, no words.
+    for (const width of [848, 1100]) {
+      await page.setViewportSize({ width, height: 1180 });
+      expect(await standInWords(page)).not.toEqual({});
+      await expectRowFits(page, `touch words @${width}`);
+    }
+    for (const width of [846, 820, 768]) {
+      await page.setViewportSize({ width, height: 1180 });
+      expect(await standInWords(page)).toEqual({});
+      await expectRowFits(page, `touch @${width}`);
+    }
+  });
+
   test("phone: the docked bar replaces the row, 44px cells, Aa on screen", async ({
     page,
   }) => {
@@ -223,6 +281,9 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole("menuitem", { name: /^Indent/ })).toBeVisible();
   await page.keyboard.press("Escape");
+  // A fine pointer gets no words on the stand-ins (tablet touch only),
+  // even with the menu chunk that draws them in.
+  expect(await standInWords(page)).toEqual({});
 
   await toolbar.getByRole("button", { name: "Section tools" }).click();
   await expect(page.getByRole("menuitem", { name: /fold|Fold/ })).toBeVisible();

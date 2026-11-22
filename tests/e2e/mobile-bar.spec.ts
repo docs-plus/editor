@@ -320,6 +320,95 @@ test("the sheet applies style, size, colours, align and more, then returns focus
   ).toBeFocused();
 });
 
+test("the sheet leads with Style: the current one pressed, More headings, lists and quote", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await openSheet(page);
+  const dialog = sheet(page);
+  // Style first, then Colours (spec §13.1, F16).
+  const titles = await dialog.locator("section > h3").allTextContents();
+  expect(titles.slice(0, 2)).toEqual(["Style", "Colours"]);
+  const style = dialog.getByRole("region", { name: "Style" });
+  const names = await style
+    .getByRole("button")
+    .evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => el.getAttribute("aria-label") ?? el.textContent),
+    );
+  expect(names).toEqual([
+    "Normal text",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+    "More headings",
+    "Bullet list",
+    "Numbered list",
+    "Task list",
+    "Quote",
+  ]);
+  await expect(
+    style.getByRole("button", { name: "Normal text" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // More headings discloses H4–H6 in place.
+  const more = style.getByRole("button", { name: "More headings" });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await more.tap();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  await style.getByRole("button", { name: "Heading 5" }).tap();
+  await expect.poll(async () => (await lastBlock(page)).level).toBe(5);
+  await expect(
+    style.getByRole("button", { name: "Heading 5" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // Reopened on an H5, the pressed row is in view: open at once.
+  await dialog.getByRole("button", { name: "Done" }).tap();
+  await openSheet(page);
+  await expect(
+    sheet(page).getByRole("button", { name: "More headings" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    sheet(page).getByRole("button", { name: "Heading 5" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // Lists from Style.
+  await sheet(page).getByRole("button", { name: "Normal text" }).tap();
+  await sheet(page).getByRole("button", { name: "Bullet list" }).tap();
+  await expect
+    .poll(async () => (await lastBlock(page)).type)
+    .toBe("bulletList");
+  expect(
+    await smallTargets(page, "[data-format-sheet] section button"),
+  ).toEqual([]);
+});
+
+test("the sheet's bottom: 16px plus the safe area, a fade while it scrolls; the scrim closes it", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await openSheet(page);
+  const body = sheet(page).locator(".st-sheet-body");
+  const fade = await body.evaluate((el) => {
+    const after = getComputedStyle(el, "::after");
+    return {
+      height: after.height,
+      position: after.position,
+      bottom: after.bottom,
+      scrolls: el.scrollHeight > el.clientHeight,
+    };
+  });
+  expect(fade).toEqual({
+    height: "16px",
+    position: "sticky",
+    bottom: "0px",
+    scrolls: true,
+  });
+  // The scrim (a tap above the sheet) closes it.
+  await page.touchscreen.tap(195, 40);
+  await expect(sheet(page)).toBeHidden();
+});
+
 test("the title locks the style rows with a reason", async ({ page }) => {
   await openDoc(page);
   await page.evaluate(() =>
