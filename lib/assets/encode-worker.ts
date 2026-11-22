@@ -40,6 +40,10 @@ const deps: EncodeDeps | null =
 
 let queue: Promise<void> = Promise.resolve();
 
+// Tells the client the module loaded: a later `error` is a crash, not a
+// chunk that failed to load.
+scope.postMessage({ ready: true });
+
 scope.addEventListener("message", (event) => {
   const { id, blob, maxBytes, maxSide } = event.data;
   queue = queue.then(async () => {

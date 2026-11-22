@@ -255,6 +255,46 @@ describe("prepareImageAsset", () => {
     ).rejects.toThrow("This image has too many pixels to process.");
   });
 
+  it("refuses a stored type whose header size can't be read, before decoding", async () => {
+    // A JPEG cut off before its frame header: the size is unknown.
+    const truncated = jpegWithGps().subarray(0, 60);
+    await expect(
+      prepareImageAsset(file(truncated, "image/jpeg"), { encode: neverEncode }),
+    ).rejects.toThrow(
+      "This image format can't be read here. Try PNG, JPEG, WebP or GIF.",
+    );
+  });
+
+  it("sends a type it can't size (AVIF, HEIC, BMP) to the worker only", async () => {
+    const options: unknown[] = [];
+    const encode: ImageEncodeFn = async (_blob, _request, _signal, opts) => {
+      options.push(opts);
+      return {
+        ok: true,
+        blob: new Blob([buildPng([])], { type: "image/png" }),
+        width: 2,
+        height: 1,
+      };
+    };
+    const avif = concat(
+      new Uint8Array([0, 0, 0, 0x1c]),
+      ascii("ftypavif"),
+      new Uint8Array(20),
+    );
+    await prepareImageAsset(file(avif, "image/avif"), { encode });
+    await prepareImageAsset(file(jpegWithGps(), "image/jpeg"), { encode });
+    expect(options).toEqual([{ mainThread: false }, { mainThread: true }]);
+  });
+
+  it("reports a worker crash on an image as unreadable", async () => {
+    const crashed: ImageEncodeFn = async () => ({ ok: false, error: "decode" });
+    await expect(
+      prepareImageAsset(file(jpegWithGps(), "image/jpeg"), { encode: crashed }),
+    ).rejects.toThrow(
+      "This image format can't be read here. Try PNG, JPEG, WebP or GIF.",
+    );
+  });
+
   it("refuses encoder output that is not a stored type", async () => {
     const { encode } = fakeEncoder(ascii("<html>"), "image/webp");
     await expect(
@@ -287,7 +327,14 @@ describe("putImageAsset", () => {
       width: 2,
       height: 1,
     });
-    expect(store.rows("doc-1").get(prepared.hex)?.kind).toBe("provisional");
+    expect(store.rows("doc-1")).toEqual([
+      {
+        doc_id: "doc-1",
+        hash: prepared.hex,
+        kind: "provisional",
+        dropped_at: null,
+      },
+    ]);
   });
 
   it("propagates a store failure, so nothing is inserted", async () => {

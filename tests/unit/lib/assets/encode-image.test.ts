@@ -138,6 +138,18 @@ describe("encodeImageUnderCap", () => {
     expect(deps.closed()).toBe(true);
   });
 
+  it("probes WebP support once per worker, not per image", async () => {
+    const deps = fakeDeps({ width: 10, height: 10 });
+    const request = { maxBytes: 2048 * KB, maxSide: 2560 };
+    await encodeImageUnderCap(source, request, deps);
+    await encodeImageUnderCap(source, request, deps);
+    const probes = deps.calls.filter(
+      (call) =>
+        call.op === "encode" && call.args[1] === 1 && call.args[2] === 1,
+    );
+    expect(probes).toHaveLength(1);
+  });
+
   it("reports an undecodable file", async () => {
     const deps = fakeDeps({ width: 1, height: 1, decodeFails: true });
     expect(

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import {
   createWorkerEncoder,
+  ENCODE_TIMEOUT_MS,
   type EncodeWorkerReply,
   type EncodeWorkerRequest,
   type ImageEncodeFn,
@@ -21,6 +22,7 @@ const okResult: EncodeResult = {
 class FakeWorker {
   static created = 0;
   terminated = false;
+  throwOnPost = false;
   sent: EncodeWorkerRequest[] = [];
   private listeners: Record<string, ((event: unknown) => void)[]> = {};
 
@@ -28,8 +30,13 @@ class FakeWorker {
     private readonly reply?: (
       request: EncodeWorkerRequest,
     ) => EncodeWorkerReply,
+    { ready = true }: { ready?: boolean } = {},
   ) {
     FakeWorker.created += 1;
+    // The worker module announces itself once it has loaded.
+    if (ready) {
+      queueMicrotask(() => this.emit("message", { data: { ready: true } }));
+    }
   }
 
   addEventListener(type: string, listener: (event: unknown) => void) {
@@ -37,6 +44,7 @@ class FakeWorker {
   }
 
   postMessage(request: EncodeWorkerRequest) {
+    if (this.throwOnPost) throw new DOMException("no clone", "DataCloneError");
     this.sent.push(request);
     const reply = this.reply;
     if (reply) {
@@ -50,6 +58,23 @@ class FakeWorker {
 
   terminate() {
     this.terminated = true;
+  }
+}
+
+/** Timers that fire only when told, by delay. */
+class FakeTimers {
+  private timers: { fn: () => void; ms: number }[] = [];
+  set = (fn: () => void, ms = 0) => {
+    const timer = { fn, ms };
+    this.timers.push(timer);
+    return () => {
+      this.timers = this.timers.filter((t) => t !== timer);
+    };
+  };
+  fire(ms: number) {
+    const due = this.timers.filter((timer) => timer.ms === ms);
+    this.timers = this.timers.filter((timer) => timer.ms !== ms);
+    for (const timer of due) timer.fn();
   }
 }
 
@@ -126,7 +151,7 @@ describe("createWorkerEncoder", () => {
     let worker: FakeWorker | undefined;
     const encode = createWorkerEncoder({
       createWorker: () => {
-        worker = new FakeWorker();
+        worker = new FakeWorker(undefined, { ready: false });
         return worker as unknown as Worker;
       },
       fallback,
@@ -169,7 +194,7 @@ describe("createWorkerEncoder", () => {
   });
 
   it("ends an idle worker, and starts a new one for the next image", async () => {
-    let timer: (() => void) | undefined;
+    const timers = new FakeTimers();
     const workers: FakeWorker[] = [];
     const encode = createWorkerEncoder({
       createWorker: () => {
@@ -181,19 +206,103 @@ describe("createWorkerEncoder", () => {
         return worker as unknown as Worker;
       },
       fallback,
-      setTimer: (fn) => {
-        timer = fn;
-        return () => {
-          timer = undefined;
-        };
-      },
+      setTimer: timers.set,
     });
     await encode(blob, REQUEST);
     expect(workers[0]?.terminated).toBe(false);
-    timer?.();
+    timers.fire(30_000);
     expect(workers[0]?.terminated).toBe(true);
     await encode(blob, REQUEST);
     expect(workers).toHaveLength(2);
+  });
+
+  it("fails, without a main-thread retry, when the worker crashes on an image", async () => {
+    let worker: FakeWorker | undefined;
+    const encode = createWorkerEncoder({
+      createWorker: () => {
+        worker = new FakeWorker();
+        return worker as unknown as Worker;
+      },
+      fallback,
+    });
+    const pending = encode(blob, REQUEST);
+    await Promise.resolve(); // the worker has said it is ready
+    worker?.emit("error", new Event("error"));
+    expect(await pending).toEqual({ ok: false, error: "decode" });
+    expect(fallbackCalls).toEqual([]);
+    expect(worker?.terminated).toBe(true);
+  });
+
+  it("fails without a retry when a reply cannot be read (messageerror)", async () => {
+    let worker: FakeWorker | undefined;
+    const encode = createWorkerEncoder({
+      createWorker: () => {
+        worker = new FakeWorker();
+        return worker as unknown as Worker;
+      },
+      fallback,
+    });
+    const pending = encode(blob, REQUEST);
+    worker?.emit("messageerror", new Event("messageerror"));
+    expect(await pending).toEqual({ ok: false, error: "decode" });
+    expect(fallbackCalls).toEqual([]);
+  });
+
+  it("falls back after 60 s without a reply, and replaces the stuck worker", async () => {
+    const timers = new FakeTimers();
+    const workers: FakeWorker[] = [];
+    const encode = createWorkerEncoder({
+      createWorker: () => {
+        const worker = new FakeWorker();
+        workers.push(worker);
+        return worker as unknown as Worker;
+      },
+      fallback,
+      setTimer: timers.set,
+    });
+    const pending = encode(blob, REQUEST);
+    timers.fire(ENCODE_TIMEOUT_MS);
+    expect(await pending).toEqual(okResult);
+    expect(fallbackCalls).toHaveLength(1);
+    expect(workers[0]?.terminated).toBe(true);
+  });
+
+  it("falls back when the request cannot be cloned to the worker", async () => {
+    const encode = createWorkerEncoder({
+      createWorker: () => {
+        const worker = new FakeWorker();
+        worker.throwOnPost = true;
+        return worker as unknown as Worker;
+      },
+      fallback,
+    });
+    expect(await encode(blob, REQUEST)).toEqual(okResult);
+    expect(fallbackCalls).toHaveLength(1);
+  });
+
+  it("never decodes on the main thread when mainThread is false", async () => {
+    const unsupported = createWorkerEncoder({
+      createWorker: () =>
+        new FakeWorker((request) => ({
+          id: request.id,
+          ok: false,
+          error: "unsupported",
+        })) as unknown as Worker,
+      fallback,
+    });
+    expect(
+      await unsupported(blob, REQUEST, undefined, { mainThread: false }),
+    ).toEqual({ ok: false, error: "decode" });
+    const timers = new FakeTimers();
+    const stuck = createWorkerEncoder({
+      createWorker: () => new FakeWorker() as unknown as Worker,
+      fallback,
+      setTimer: timers.set,
+    });
+    const pending = stuck(blob, REQUEST, undefined, { mainThread: false });
+    timers.fire(ENCODE_TIMEOUT_MS);
+    expect(await pending).toEqual({ ok: false, error: "decode" });
+    expect(fallbackCalls).toEqual([]);
   });
 });
 
@@ -204,11 +313,16 @@ describe("encode worker in Bun (no OffscreenCanvas)", () => {
       { type: "module" },
     );
     try {
+      const replies: EncodeWorkerReply[] = [];
       const reply = await new Promise<EncodeWorkerReply>((resolve, reject) => {
-        worker.addEventListener("message", (event) => resolve(event.data));
+        worker.addEventListener("message", (event) => {
+          replies.push(event.data);
+          if (!("ready" in event.data)) resolve(event.data);
+        });
         worker.addEventListener("error", reject);
         worker.postMessage({ id: 7, blob, ...REQUEST });
       });
+      expect(replies[0]).toEqual({ ready: true });
       expect(reply).toEqual({ id: 7, ok: false, error: "unsupported" });
     } finally {
       worker.terminate();

@@ -83,8 +83,19 @@ export async function encodeUnderByteCap<T extends EncodedImage>(
   return null;
 }
 
-/** True when this canvas really writes WebP (Safari silently writes PNG). */
-async function encodesWebp(deps: EncodeDeps): Promise<boolean> {
+const webpProbes = new WeakMap<EncodeDeps, Promise<boolean>>();
+
+/** True when this canvas writes WebP (Safari silently writes PNG); probed once per worker. */
+function encodesWebp(deps: EncodeDeps): Promise<boolean> {
+  let probe = webpProbes.get(deps);
+  if (!probe) {
+    probe = probeWebp(deps);
+    webpProbes.set(deps, probe);
+  }
+  return probe;
+}
+
+async function probeWebp(deps: EncodeDeps): Promise<boolean> {
   const probe = deps.createCanvas(1, 1);
   // `OffscreenCanvas.convertToBlob` throws until the canvas has a context.
   probe.getContext("2d");

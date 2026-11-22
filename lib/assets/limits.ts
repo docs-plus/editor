@@ -29,3 +29,11 @@ export const ASSET_UPLOAD_LIMIT = 10;
 export const MAX_ASSET_PIXELS = 40_000_000;
 /** Longest side any header may declare. */
 export const MAX_ASSET_DIMENSION = 16_384;
+/**
+ * Animated GIFs pass through undecoded, so their decoders' work is bounded
+ * here instead: at most this many frames, and this many pixels summed over
+ * every frame: 4 × the still-image ceiling, about 1,500 frames at
+ * 320 × 320 or 24 at 2560 × 2560.
+ */
+export const MAX_GIF_FRAMES = 1000;
+export const MAX_GIF_FRAME_PIXELS = 4 * MAX_ASSET_PIXELS;

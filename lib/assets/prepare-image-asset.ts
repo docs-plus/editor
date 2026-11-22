@@ -4,7 +4,8 @@
  *
  *   plan(file):
  *     SVG or not an image          → reject
- *     GIF                          → passthrough if ≤ 2 MB and ≤ 40 MP, else reject
+ *     GIF                          → passthrough if ≤ 2 MB, ≤ 2560 px and within the frame
+ *                                    limits, minus comments and XMP; else reject
  *     JPEG                         → always re-encode (drops Exif and GPS, bakes the rotation in)
  *     PNG, WebP ≤ 2 MB and ≤ 2560 px → strip metadata chunks, keep the pixels
  *     anything else                → re-encode (WebP, else JPEG), in the encode worker
@@ -28,10 +29,12 @@ import {
   type AssetMime,
   MAX_ASSET_BYTES,
   MAX_ASSET_INPUT_BYTES,
-  MAX_ASSET_PIXELS,
+  MAX_GIF_FRAME_PIXELS,
+  MAX_GIF_FRAMES,
 } from "@/lib/assets/limits";
-import { checkImageBytes, readImageSize } from "@/lib/assets/sniff";
+import { checkImageBytes, sniffImageType } from "@/lib/assets/sniff";
 import {
+  stripGifMetadata,
   stripImageMetadata,
   stripJpegMetadata,
 } from "@/lib/assets/strip-metadata";
@@ -43,6 +46,9 @@ export const ASSET_COPY = {
   svg: "SVG images aren't supported. Export it as PNG or JPEG first.",
   tooLarge: "This image is larger than 20 MB. Choose a smaller file.",
   gifTooLarge: "GIFs must be under 2 MB (animations aren't resized).",
+  gifTooWide:
+    "GIFs must be at most 2560 pixels on each side (animations aren't resized).",
+  gifTooLong: "This GIF has too many frames. Try a shorter animation.",
   cantShrink:
     "This image can't be made smaller than 2 MB. Try a smaller or simpler image.",
   unreadable:
@@ -99,9 +105,23 @@ function looksLikeMarkup(bytes: Uint8Array): boolean {
   return head.replace(/^﻿/, "").startsWith("<");
 }
 
-function isOverPixelCeiling(bytes: Uint8Array): boolean {
-  const size = readImageSize(bytes);
-  return !!size && size.width * size.height > MAX_ASSET_PIXELS;
+/**
+ * Checks what the header says before anything decodes. A stored type must
+ * have a readable size within the limits; a type the store converts (AVIF,
+ * HEIC, BMP) has no size we read, so only the worker may decode it.
+ */
+function decodeGuard(bytes: Uint8Array): { mainThread: boolean } {
+  const type = sniffImageType(bytes);
+  if (!type) return { mainThread: false };
+  const check = checkImageBytes(bytes, type);
+  if (!check.ok) {
+    throw new Error(
+      check.reason === "too_many_pixels"
+        ? ASSET_COPY.tooManyPixels
+        : ASSET_COPY.unreadable,
+    );
+  }
+  return { mainThread: true };
 }
 
 /** Bytes that need no decode: a real GIF, or a PNG/WebP that strips. */
@@ -111,11 +131,22 @@ function withoutReencode(
 ): Uint8Array<ArrayBuffer> | null {
   if (plan.kind === "passthrough") {
     const check = checkImageBytes(bytes, "image/gif");
-    if (check.ok) return bytes as Uint8Array<ArrayBuffer>;
-    if (check.reason === "too_many_pixels") {
-      throw new Error(ASSET_COPY.tooManyPixels);
+    if (!check.ok) {
+      if (check.reason === "too_many_pixels") {
+        throw new Error(ASSET_COPY.tooManyPixels);
+      }
+      return null; // not a GIF after all: re-encode it
     }
-    return null;
+    if (Math.max(check.width, check.height) > ASSET_MAX_SIDE) {
+      throw new Error(ASSET_COPY.gifTooWide);
+    }
+    // Comments and XMP drop; the frames and loop count stay byte for byte.
+    const gif = stripGifMetadata(bytes);
+    if (!gif) throw new Error(ASSET_COPY.unreadable);
+    if (gif.frames > MAX_GIF_FRAMES || gif.framePixels > MAX_GIF_FRAME_PIXELS) {
+      throw new Error(ASSET_COPY.gifTooLong);
+    }
+    return gif.bytes;
   }
   if (plan.kind === "strip") {
     const check = checkImageBytes(bytes, plan.type);
@@ -133,11 +164,11 @@ async function reencode(
   encode: ImageEncodeFn,
   signal?: AbortSignal,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  if (isOverPixelCeiling(bytes)) throw new Error(ASSET_COPY.tooManyPixels);
   const result = await encode(
     file,
     { maxBytes: MAX_ASSET_BYTES, maxSide: ASSET_MAX_SIDE },
     signal,
+    decodeGuard(bytes),
   );
   if (!result.ok) {
     throw new Error(
