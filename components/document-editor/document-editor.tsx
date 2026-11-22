@@ -70,6 +70,7 @@ import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
+import type { LinkHost } from "@/lib/links/link-host-types";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { stylesApplied } from "@/lib/styles-applied";
 import { setTheme } from "@/lib/theme";
@@ -99,6 +100,11 @@ interface DocumentEditorProps {
    * guard's Yjs repair is not gated yet. The web sandbox never sets it.
    */
   readOnly?: boolean;
+  /**
+   * Document links (search-linking §4.1), from `createLinkHost`. Keep one
+   * object for the editor's life: a new one rebuilds the extensions.
+   */
+  linkHost?: LinkHost;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -164,6 +170,7 @@ function DocumentEditorContent({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  linkHost,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -228,8 +235,9 @@ function DocumentEditorContent({
         onFilterChange: setFilterState,
         onTocUpdate: tocStore.set,
         onInvalidContent: schemaGuard.onInvalidContent,
+        linkHost,
       }),
-    [documentId, ydoc, awareness, tocStore, schemaGuard],
+    [documentId, ydoc, awareness, tocStore, schemaGuard, linkHost],
   );
 
   const editor = useEditor({
@@ -468,6 +476,7 @@ export function DocumentEditor({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  linkHost,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
@@ -496,6 +505,7 @@ export function DocumentEditor({
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
       onPlaygroundRegenerate={onPlaygroundRegenerate}
       readOnly={readOnly}
+      linkHost={linkHost}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />

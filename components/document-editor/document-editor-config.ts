@@ -69,6 +69,7 @@ import { TitleDocument } from "@/extensions/title-document";
 import { TokenHighlight } from "@/extensions/token-highlight";
 import { WriteGate } from "@/extensions/write-gate/write-gate";
 import { SUBSCRIPT_SHORTCUT } from "@/lib/app-shortcuts";
+import type { LinkHost } from "@/lib/links/link-host-types";
 import { lowlight } from "@/lib/lowlight";
 
 import { SafeCodeBlock } from "./safe-code-block";
@@ -163,6 +164,12 @@ interface BuildDocumentEditorExtensionsOptions {
    * freezes). Runs inside the sync binding: record only, never write.
    */
   onInvalidContent?: (error: Error) => void;
+  /**
+   * Document links (search-linking §4.1): the host's Hyperlink options for
+   * `tinydocy:` (protocols, isAllowedUri, navigate, linkIcon). Passed
+   * through as they are; the web sandbox passes none.
+   */
+  linkHost?: LinkHost;
 }
 
 function createHeadingFilterFoldAdapter() {
@@ -194,6 +201,7 @@ export function buildDocumentEditorExtensions({
   onFilterChange,
   onTocUpdate,
   onInvalidContent,
+  linkHost,
 }: BuildDocumentEditorExtensionsOptions) {
   return [
     StarterKit.configure({
@@ -223,6 +231,7 @@ export function buildDocumentEditorExtensions({
         rel: "noopener noreferrer nofollow ugc",
         class: null,
       },
+      ...linkHost,
     }),
     InlineCode,
     SafeCodeBlock.configure({ lowlight }),
