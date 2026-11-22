@@ -24,7 +24,7 @@ const PILL_MS = 2500;
 const ACTION_PILL_MS = 5000;
 const STICKY_ROW = '.document-editor-wrapper > [data-slot="toolbar"]';
 const PAGE_COLUMN = ".document-editor-content";
-/** The bubble's scroll container: the plugin appends its root here. */
+/** The bubble's scroll container: the controller appends its root here. */
 const SCROLL_CONTAINER = ".document-editor-wrapper";
 const BUBBLE_ROOT = ":scope > [data-smart-bubble]";
 
@@ -100,7 +100,7 @@ function desktopPosition(pill: HTMLElement): CSSProperties {
 
 /**
  * Calls `measure` (at most once a frame) whenever the bubble appears,
- * moves or closes while the pill shows: the plugin appends and removes
+ * moves or closes while the pill shows: the controller appends and removes
  * its root and moves it by its inline style, the view flips `data-state`,
  * and it scrolls with the text under the fixed pill. Returns the cleanup.
  */
