@@ -9,6 +9,16 @@
 > - **Plan v8 (D40, D41):** `link_key` is minted when the document is inserted, never lazily (S16), so two synced devices can't mint different keys later. Only a backup-zip or `library.json` restore keeps it (S8c). The editor-chunk ledger gains D41's conditional phone line (≈1,580–1,660 B in all); LK1 and LK3 keep their lines.
 > - **Q3: call (v8):** (a), links never resolve for collaborators in v1. The owner can reverse this.
 
+> **Approved by the owner, 2026-11-22 ("Approve Q4–Q10"): Q4–Q10 are decided as their first, recommended options, with two updates from the UX and security re-review: Q4's "Not available" copy leads with "This document isn't on this device." and never puts default focus on [Remove Link]; Q10 is superseded by format 2's `doc_headings` (offline data-model revision), so closed documents' headings come from the derived table with no document load. The "Proposed (2026-11-22)" blocks below are the approved text where they differ from the original.** LK1 linking-UX review. Head of Engineering, senior staff, UI and accessibility review of LK1 (`claude/feat-lk1-doc-links`), with a clickable prototype: [`docs/design/2026-11-22-document-links-prototype.html`](../../design/2026-11-22-document-links-prototype.html), screenshots in `docs/design/2026-11-22-document-links/`. The sections it touches keep their current text, with the proposal beside it marked **Proposed (2026-11-22)**. Owner questions **Q4–Q10** (§11) carry the decisions; the first option is the recommendation.
+> - **Q4: Deleted vs Not in your library.** After a purge the resolver can't tell them apart. Recommended **(b)**: one **Not available** state, `FileQuestion`, "This links to a document that isn't in your library. It may have been deleted." [Remove Link]. No schema; leaks nothing. (a) adds a `deleted_keys` table to P2.6, trimmed after 90 days.
+> - **Q5: In Trash glyph.** Recommended `FileMinus` (keeps the file shape for every state; `Trash2` mid-sentence reads as a delete button). Confirm on the screenshots.
+> - **Q6: `here#` links use `Hash`**, not `FileText`.
+> - **Q7: a document-link preview** for a plain click or Mod-K while editing: title, "› Heading", the folder path, [Open] [Copy Link] [Remove Link]. It never shows the href or key and has no Edit. The alternative, the stock popover, shows `tinydocy:doc/<key>`.
+> - **Q8: the production link host is wired in LK2** (no PR row owns it today). Back, focus-after-follow and the arrival announcement become LK2 exit criteria.
+> - **Q9: the `links` table is created in the P2.6 amendment**, not an LK4 migration. `context` (160 characters) stays as an explicit local-only exception to D24.
+> - **Q10: headings of closed documents (§4.2, §4.5).** v1 links to whole closed documents and to headings of the open one; ⇥ on a closed document loads its outline lazily (`loadOutline(docId)`, 150 ms budget, a "Loading headings…" row). The alternative is whole-document links only.
+> - **Not a decision, a finding (prototype probe):** a line can break between the link icon and the first word when the icon is `display: inline-block` (the package default): 18–28% of widths in headless Chromium, LTR and RTL. An inline, `white-space: nowrap` icon span with a word joiner (U+2060) after the svg, and the gap on the svg, never split in 402 widths (§4.6).
+
 - **Status:** revised for plan v7, 2026-11-16 (was a proposal for owner review). Nothing here is built.
 - **Amends:** architecture **D-A8** and UX spec §4.3, both updated in plan v7 to D24's metadata scope.
 - **Builds on:**
@@ -225,6 +235,13 @@ The first version of this document designed full-text search: a renderer text ex
 - **⇥ on a document** lists its headings:
   - from the live outline store, for this document
   - **for closed documents: source not decided (v7).** The search index that held them is removed by D24. The options are to load that one document on ⇥ and read its outline (no stored index, a measured cost per ⇥), or to offer only whole-document links to closed documents in v1. LK2 measures the first and the owner or LK2's reviewer picks.
+
+  > **Proposed (2026-11-22), pending owner approval (Q10):**
+  > - Headings appear only after **⇥** (or → in a left-to-right interface, ← in a right-to-left one) on a document row, never automatically under the top match. Shift+⇥ or the opposite arrow goes back.
+  > - For a closed document, ⇥ calls a lazy `loadOutline(docId)` with a **150 ms budget**. Until it answers, the list shows one row, "Loading headings…" (`role=status`). The first row of the heading step is **Whole document**.
+  > - If Q10 goes the other way (whole documents only), document rows show no chevron, the footer drops "⇥ Headings", and ⇥ on a closed document shows "Headings are listed only for this document."
+  > - Rows reuse Quick Open's row: the title with the match in bold, then the folder path collapsed from the start ("… › Finance", the full path in the tooltip). The input is a `combobox` with `aria-activedescendant`; rows are `option`s.
+
 - **With a selection,** the selection becomes the link text. **Without one,** it inserts:
   - the document's title
   - "Title › Heading" for a heading in another document
@@ -261,6 +278,20 @@ The first version of this document designed full-text search: a renderer text ex
 **Implementation note.** The extension calls `navigate(href, { newTab })` with `newTab: true` when Mod is held.
 - Our `navigate` therefore maps the gestures itself: Mod alone → this tab; Mod+Shift or the middle button → a new tab. It reads the modifier state from the triggering event, which the host tracks.
 - For `https` links, it passes `newTab` through unchanged.
+
+> **Proposed (2026-11-22), pending owner approval (Q7, Q8):**
+>
+> | Gesture | Action |
+> |---|---|
+> | A plain click while editing *(replaces the row above)* | Places the caret. The **preview popover** shows the target's title, "› Heading" and folder path (or the §4.6 state) with **[Open] [Copy Link] [Remove Link]**. It never shows the href or key, and it has no Edit for document links. Mod-K with the caret in a link opens the same popover. Web links keep the stock popover. |
+> | Keyboard *(new row)* | Enter on a focused link (reading mode or read-only): this tab. ⌘⇧Enter: a new tab. Alt+Enter while editing: follow. Every path goes through `navigate`. |
+>
+> - **A broken link never navigates** (deleted, not in your library, newer version): every follow gesture shows its preview instead.
+> - **`onFollow` payload:** the source document id and the link's position as a Yjs relative position, so Back can put the caret back in the link. It fires once for resolved, In Trash and `here#` links, never for broken ones.
+> - **Arrival:** `openAtHeading` finds the heading in the live document (`findTocAnchor`). If it is missing, it retries once after the first server sync before showing "The section this link pointed to was removed.", then scrolls again on a second `requestAnimationFrame`. The heading lands at the top, below the toolbar (`block: "start"`, never hidden under it, WCAG 2.4.11). In reading mode and read-only documents the heading takes focus (`tabindex=-1`); while editing, the caret goes to the end of the heading. Focus never lands on `body`.
+> - **One announcement per follow,** polite: "Opened Q4 budget, at Travel." (§8).
+> - *Prototype additions, not from the review (confirm at the design review):* the same text also shows as a status pill for 3 s; `here#` follows announce "At Budget assumptions."
+> - **Back** puts the caret back in the link (editing) or focuses it (reading). The Back, focus-after-follow and announcement end-to-end tests belong to the PR that wires the production host (LK2 under Q8); LK1 carries the payload and unit tests.
 
 ### 4.4 What happens when the target changes
 
@@ -299,6 +330,14 @@ The first version of this document designed full-text search: a renderer text ex
   - actions: **Open**, **Open in New Tab**, **Copy Link**, and **Use Current Title** (only when it differs and the document is editable)
 - **Hovercard CSS** loads with the library chunk, not the editor chunk.
 
+> **Proposed (2026-11-22), pending owner approval:**
+> - **The hovercard is pointer-only.** Its keyboard equivalent is the Q7 preview popover (Mod-K on a focused link or with the caret in one), with the same actions as buttons. This replaces "from the keyboard: the existing focus-preview path" above.
+> - **Card layout (prototype):** 20rem (`--hl-hovercard-width`); title with "› Heading"; the 2-line snippet; "… › Finance · Edited 12 Nov"; a footer with **Use Current Title** on the start side and Open, Open in New Tab and Copy Link as icon buttons on the end side. The card is a custom `render` with no native `tinydocy:` anchor inside it.
+> - **State cards:** In Trash shows "“Q4 budget” is in Trash." with [Open] [Restore]; broken states show their §4.6 copy with [Remove Link] when editable; the newer-version state shows its copy only.
+> - **Motion:** the package's 0.96 scale, 120 ms in and 80 ms out; none under reduced motion. Icon state swaps (for example after Restore) are instant.
+> - **Heading source for a closed document** follows Q10: until the card can read the target's outline, it shows the title and `docs.snippet`.
+> - **WCAG 1.4.13** tests (hoverable, persistent, dismissible) are LK4 exit criteria.
+
 ### 4.6 Broken and unresolved states
 
 The `linkIcon` resolver (sync) decides the link's icon from the renderer's index snapshot, which Quick Open already holds:
@@ -311,6 +350,24 @@ The `linkIcon` resolver (sync) decides the link's icon from the renderer's index
 | Deleted | `FileX` | dashed underline (never colour alone) | "This document was deleted." [Remove Link] |
 | Not in this library (a collaborator, or a target not imported) | `FileQuestion` | dashed underline | "This links to a document that isn't in your library." No title, no key shown, no action except [Remove Link] when editable. |
 | Unknown future form (`tinydocy:` that doesn't parse) | `FileQuestion` | dashed | "This link needs a newer version of TinyDocy." The node is never modified. |
+
+> **Proposed (2026-11-22), pending owner approval (Q4, Q5, Q6):**
+>
+> | State | Icon | Style | Preview / hovercard copy | Icon accessible name |
+> |---|---|---|---|---|
+> | Resolves | `FileText` | normal | the card in §4.5; the Q7 preview | hidden (`aria-hidden`) |
+> | Section of this document (`here#`) *(new row)* | `Hash` (Q6) | normal | the heading name, "In this document" | hidden |
+> | Heading gone | `FileText` | normal | opens at the top with the pill | hidden |
+> | In Trash | `FileMinus` (Q5) | normal | "“Q4 budget” is in Trash." [Open] [Restore] | "In Trash" |
+> | **Not available** *(replaces Deleted and Not in this library, Q4 (b))* | `FileQuestion` | dashed underline | "This links to a document that isn't in your library. It may have been deleted." No title, no key. [Remove Link] when editable. | "Not in your library" |
+> | Unknown future form | `FileQuestion` | dashed | "This link needs a newer version of TinyDocy." | "Needs a newer version" |
+>
+> - **Icons are `currentColor`;** the state is never shown by colour alone. Size and gap match the package (a 1em icon, a 0.25em gap; `doc-links.css` sets no size or margin of its own), so the icon follows coloured and resized link text and sits inside a highlight. The one exception is the glue below: if it survives the WebKit and caret checks, it overrides the package's `display` and moves the gap onto the svg; otherwise the package box stays as it is.
+> - **The dashed rule covers inner spans** (coloured or resized text inside the link), with `text-decoration-thickness: max(1px, 0.07em)` for broken states.
+> - **The icon never wraps away from the first word.** Prototype probe (headless Chromium, 201 widths, LTR and RTL): with the package's `display: inline-block` icon, a line broke between the icon and the link's first word at 18–28% of widths; a word joiner alone or `nowrap` alone did not help. An **inline** icon span with `white-space: nowrap`, a **word joiner (U+2060) after the svg**, and the 0.25em gap on the svg (so it stays between icon and text when bidi reorders an English title inside right-to-left text) split at 0 of 402 widths. **LK1 must check before adopting it:** WebKit; the caret-movement test; and the real DOM. The probe tested one span level. If the extension wraps the resolver's node in its own inline-block `.hyperlink-icon`, that outer box is the atomic one and is the element that has to become inline.
+> - **RTL:** test first. If the icon drifts, add `unicode-bidi: isolate` on the anchor (never `plaintext`), only if the caret-movement test still passes. The prototype has a switch for it.
+> - **The resolver refreshes icons** from a debounced snapshot listener, only when a key is added or removed or `trashed` or `kind` changes. `refreshLinkIcons` sets and clears `role`, `aria-label` and `aria-hidden` with `data-link-state`.
+> - If Q4 goes to (a), the two states keep their rows above (`FileX` "Deleted" and `FileQuestion` "Not in your library"), and P2.6 gains a `deleted_keys` table trimmed after 90 days.
 
 ### 4.7 Export
 
@@ -359,6 +416,14 @@ The `linkIcon` resolver (sync) decides the link's icon from the renderer's index
 - **A derived `links` table** (desktop) or `links` store (web, indexed `by_target`), **outside any search index**. It is replaced per source document on each put. `here#` links are not stored. On desktop it is written through a `links.put` IPC on the worker's low lane.
 - **Not decided in v7:** where the table is created. It isn't in the P2.6/W2 amendment (`link_key`, `kind`, `import_sources`), so LK4 adds it through the migration hook unless the owner folds it into P2.6.
 - **No background backfill.** A link only comes into being in an open document (typed, pasted or added by LK5, which writes rows as it links). **Known gap:** documents that arrive with links already inside them (a `.tinydoc` import, a backup restore) have no rows until they are next opened, so Linked from can miss them until then.
+
+> **Proposed (2026-11-22), pending owner approval (Q9):**
+> - **Rows:** `{srcDocId, ordinal, srcTocId, key, tocId, text ≤ 200, context ≤ 160}`. `text` is capped at about 200 characters with an ellipsis. Links with the same href in one run merge (pinned by a test). `docs.links_hash` NULL means never scanned.
+> - **`context` is a local-only exception to D24:** it never leaves the device and is never searched.
+> - **Where the table lives:** created in the **P2.6 amendment** with `link_key`, `kind` and `import_sources` (cheaper there than an LK4 migration).
+> - **The pass is skipped** when no Y.Doc transaction since the last run touched a `hyperlink` attribute (a dirty flag), and its budget is under 8 ms blocking at 500 headings / 2 MiB.
+> - **Layout (LK4, prototype):** the section after the last block, inside the page card; the toggle is `button[aria-expanded]` inside the `h2`, in the normal Tab order; expanded rows are links: the source title in bold, "› Heading", then up to two lines of `context` with the link text bold. Expanding is instant (no animation).
+> - **Freshness across windows:** `BroadcastChannel('tinydocy-links')`. Duplicate copies the source's `links` rows.
 
 **Query:**
 ```sql
@@ -420,6 +485,25 @@ Grouped by source document. The `here#` count is excluded.
 - **`[[` picker:** the same combobox pattern as the "/" menu: `aria-activedescendant` on `view.dom`, never `aria-expanded` on the textbox (AGENTS.md).
 - **Reduced motion:** no animation on result insertion. Hovercard fades follow the extension's existing reduced-motion handling.
 
+> **Proposed (2026-11-22), pending owner approval:**
+> - **Document links in the editor** *(replaces the icon bullet above)*: broken and In Trash icons are `role=img` with an `aria-label` ("In Trash", "Not in your library", "Needs a newer version"), so the state prefixes the link's accessible name ("In Trash Hiring plan"). Resolved and `here#` icons stay `aria-hidden`. The `aria-describedby` decorator is dropped.
+> - **Hovercard** *(replaces the hovercard bullet)*: pointer-only. The keyboard equivalent is the preview dialog (Mod-K), with the same actions as buttons. Esc returns the caret to the link (editing) or focus to it (reading).
+> - **Linked from** *(amends its bullet)*: an F6 region whenever it is rendered (collapsed or expanded), and its toggle is in the normal Tab order.
+> - **Roles:**
+>
+> | Element | Role |
+> |---|---|
+> | A document link | `a[href]` (with the state icon's `role=img` inside when not resolving) |
+> | Preview popover | `dialog`, labelled "Link to Q4 budget"; its actions are `button`s |
+> | Hovercard actions | `button` |
+> | Linked from section | `region` labelled by its `h2` |
+> | Linked from toggle | `button[aria-expanded]` |
+> | Linked from row | link |
+> | ⌘K picker | `combobox` input with `aria-activedescendant`; rows `option` in a `listbox` |
+> | After a follow | one polite live-region message |
+>
+> - **Contrast:** the icon and link text reach at least 4.5:1 on every highlight colour in light and dark; LK1's visual matrix asserts it.
+
 ---
 
 ## 8. States and copy
@@ -444,6 +528,16 @@ Grouped by source document. The `here#` count is excluded.
 | Linked from, expanded | End of document | **Board notes** › Decisions: …see the **Q4 budget** for travel… | Enter opens at that section |
 | Import, links kept as text | Import report (onboarding §5.2, shared string) | 52 links between notes were kept as text, like [[Project]]. | [Link Imported Notes] |
 | After Link Imported Notes | Sheet (onboarding §5.2, shared strings) | **Linked 40 of 52 links between notes.** 12 point to notes that weren't imported. They stay as text. *(if any)* 4 links to blocks now point to their notes. *(if any)* Embedded notes became links. | [OK] |
+
+> **Proposed (2026-11-22), pending owner approval (Q4, Q7, Q10):** the "Target deleted" and "Not in your library" rows merge into one, and four rows are added. All strings live in the one central copy table that `consent.ts` and the link chunk read.
+>
+> | State | Where | Copy | Actions |
+> |---|---|---|---|
+> | Not available *(replaces Target deleted and Not in your library)* | Preview, hovercard | This links to a document that isn't in your library. It may have been deleted. | [Remove Link] (editable only) |
+> | Resolving link, preview | Preview popover (click while editing, Mod-K) | **Q4 budget** › Travel · … › Finance · Edited 12 Nov | [Open] [Copy Link] [Remove Link] |
+> | After a follow | Live region | Opened Q4 budget, at Travel. | — |
+> | After a `here#` follow *(prototype addition, not from the review)* | Live region | At Budget assumptions. | — |
+> | Closed document, heading step | ⌘K picker | Loading headings… | — |
 
 ---
 
@@ -516,6 +610,11 @@ Numbering avoids P*, W*, A*, U*, S-A*, F*: **SR** for search and **LK** for link
 - **Seam, already in the plan (v7 schema amendment):** `docs.link_key` in **P2.6** and the W2 `docs` store, next to `lineage`. It stays even if links are cut.
 - **Cut order:** the plan's D30 order: **LK3** first, then (after IM3 and the L2 sweep) **LK4's hover preview**, then (after TM1) **backlinks** (LK4's Linked from), then **links** (LK1, LK2, LK5), keeping the `link_key` seam.
 
+> **Proposed (2026-11-22), pending owner approval (Q8):**
+> - **LK1** adds to its exit criteria: the editor-chunk delta measured before and after on the same base and recorded in `scripts/check-editor-chunk-size.ts` and the commit; a `tinydocy:` mark from Yjs, paste or with no host present is never opened (`window.open` spy); `tinydocy` registers once across two editors and a remount, and typing `tinydocy:…` never autolinks; the gesture table (click, ⌘-click, ⌘⇧-click, middle click, Enter, Alt+Enter, ⌘⇧Enter, read-only and editing) makes no `tinydocy:` request or frame navigation; two create/dispose cycles leave no window listeners; the visual matrix (states × paragraph, heading, list, table, styled text × light and dark, plus Persian in a left-to-right document and English in a right-to-left one) with screenshots for the design review.
+> - **LK2 owns the production host** (web library and desktop shell). Its exit criteria gain: Back restores the caret or focuses the link; focus after a follow is never `body` and never under the sticky toolbar; one arrival announcement; Copy Link to Heading is disabled on empty headings and reads the id from Yjs (two-client id-stability test); `here#` links become `doc/<key>#` when copied out of their document.
+> - **Byte plan:** inside LK1's 60 B line, only the `linkHost` prop and the `...linkHost` spread. `popovers` in the host and LK4's `hovercard` ride the same spread (0 B in the editor chunk) — but the spread is shallow, so the host passes all three popovers. If importing the package popovers into the host chunk splits the editor group (about +1.6 KB), the fallback is `previewHyperlink: linkHost?.wrapPreview?.(previewHyperlinkPopover) ?? previewHyperlinkPopover` (about 20 B) inside the 60 B line. If neither fits, LK2's host wiring is blocked; LK1 still merges, since it has no production host.
+
 ---
 
 ## 11. Owner questions
@@ -525,6 +624,13 @@ Numbering avoids P*, W*, A*, U*, S-A*, F*: **SR** for search and **LK** for link
 | **Q1** | **Full-text search in v1** (amends D-A8) | (a) v1, landing after Gate 3, cuttable per §10. (b) Keep titles only for v1. | *(Recommended (a).)* **Answered by D24:** neither as written. v1 searches titles, tags, folder names and document properties, never body text. Full-text search is later, not planned. | — |
 | **Q2** | **Links between documents in v1** | (a) v1: LK1, LK2, LK4, LK5, with LK3 only if within budget. (b) Later: ship only the `link_key` seam. | *(Recommended (a).)* **Answered by D25: (a)**, LK1–LK5 as designed, LK3 first to cut. | — |
 | **Q3** | **Should links resolve for collaborators who hold the same document?** | (a) Never in v1: an opaque per-library `link_key`. (b) By `lineage`, so a collaborator who also joined the target sees it resolve. | **(a).** (b) puts an id the server already stores (`shares.lineage`) into shared content, letting the server join "A links to B". It also resolves differently for each reader, which is hard to explain. (a) can grow into (b) later through an explicit "link target" record attached at share time. **Still Call (v7): (a), as recommended; the owner can reverse it. | LK1 (key format) |
+| **Q4** *(proposed 2026-11-22)* | **Deleted vs Not in your library** after a purge | (a) A `deleted_keys` table in the P2.6 amendment, trimmed after 90 days; two states. (b) One **Not available** state, `FileQuestion`, merged copy. | **(b).** Both states offer the same action, (b) needs no schema and leaks nothing. | LK1 (§4.6, §8) |
+| **Q5** *(proposed)* | **In Trash glyph in running text** | (a) `FileMinus`. (b) `Trash2`. | **(a).** Keeps the file shape for every state; `Trash2` mid-sentence reads as a delete button. Confirm on the screenshots. | LK1 |
+| **Q6** *(proposed)* | **`here#` icon** | (a) `Hash`. (b) `FileText`, shared with links to other documents. | **(a).** | LK1 |
+| **Q7** *(proposed)* | **Preview for a document link** (plain click or Mod-K while editing) | (a) A document preview: title, "› Heading", path, [Open] [Copy Link] [Remove Link]; never the href or key; no Edit. (b) The stock popover, which shows `tinydocy:doc/<key>`. | **(a).** | LK1 (host `popovers`; bytes per §10) |
+| **Q8** *(proposed)* | **Which PR wires the production link host** | (a) LK2 (web library and desktop shell), with Back, focus and announcement end-to-end tests as its exit criteria. (b) A separate PR. | **(a).** | LK2 |
+| **Q9** *(proposed)* | **Where the `links` table is created** | (a) The P2.6 amendment. (b) An LK4 migration. | **(a).** Cheaper there. `context` stays a local-only exception to D24. | P2.6, LK4 |
+| **Q10** *(proposed)* | **Headings of closed documents** (§4.2, §4.5) | (a) Lazy `loadOutline(docId)` on ⇥, 150 ms budget, "Loading headings…" row. (b) Whole-document links only for closed documents in v1. | **(a).** | LK2, LK4 |
 
 ---
 
@@ -536,6 +642,8 @@ Numbering avoids P*, W*, A*, U*, S-A*, F*: **SR** for search and **LK** for link
 - **`Intl.Segmenter` is not used** until titles need it.
 - **Backlinks keep a links-only pass and a `links` table**, outside any search index, with no background backfill.
 - **Headings of closed documents** in the ⌘K picker and the hovercard: **not decided** (§4.2, §4.5).
+  - *Proposed (2026-11-22), Q10:* lazy `loadOutline` on ⇥ with a "Loading headings…" row.
+- *Proposed (2026-11-22):* a document link's click preview never shows its href or key (Q7); the hovercard is pointer-only and Mod-K is its keyboard path.
 - A plain click on a document link while **editing places the caret**, like web links. ⌘-click opens.
 - The hovercard is **document links only**. External links never get one.
 - Single-document export **drops document-link URLs**, keeping the text.
