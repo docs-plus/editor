@@ -88,6 +88,8 @@ async function expectMenuAxeClean(page: Page) {
   await expectNoSeriousA11yViolations(page, [".tiptap"]);
 }
 const editorDom = (page: Page) => page.locator(".tiptap").first();
+const ghost = (page: Page) => page.locator("[data-slash-ghost]");
+const footerTip = (page: Page) => page.locator(`${MENU} [data-slash-tip]`);
 const options = (page: Page) => page.locator(`${MENU} [role="option"]`);
 
 /** The caret's block: type, heading level, text and caret offset. */
@@ -438,6 +440,38 @@ test.describe("slash menu", () => {
     expect(await caretBlock(page)).toMatchObject({ text: "" });
   });
 
+  test("Suggested shows the last insert kinds after use, until Forget", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    const groups = menu(page).locator('[role="group"]');
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Text");
+    await page.keyboard.type("div");
+    await page.keyboard.press("Enter");
+    await expect(menu(page)).toHaveCount(0);
+    await typeAtEnd(page, "/quo");
+    await page.keyboard.press("Enter");
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Suggested");
+    await expect(groups.first().getByRole("option")).toHaveText([
+      /Quote/,
+      /Divider/,
+    ]);
+    // A query lists each kind once, in its own section.
+    await page.keyboard.type("quo");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+
+    await page
+      .getByRole("toolbar", { name: "Formatting" })
+      .getByRole("button", { name: "More formatting" })
+      .click();
+    await page.getByRole("menuitem", { name: "Forget my choices" }).click();
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Text");
+  });
+
   test("'and/or', a URL, a heading and the title never open it", async ({
     page,
   }) => {
@@ -482,6 +516,169 @@ test.describe("slash menu", () => {
     });
     // A text style lifts the block out of the quote, as the row's does.
     expect(await html()).toMatch(/<h3[^>]*>quoted <\/h3>/);
+  });
+
+  test("the ghost hint shows at an empty line's end, not mid-line", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toHaveText("Type to search");
+    await expect(ghost(page)).toBeVisible();
+    // Just after the "/", on its line, in the muted colour.
+    const geometry = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const el = document.querySelector<HTMLElement>("[data-slash-ghost]");
+      if (!view || !el) return null;
+      const caret = view.coordsAtPos(view.state.selection.from);
+      const box = el.getBoundingClientRect();
+      return {
+        dx: box.left - caret.left,
+        dy: box.top - caret.top,
+        hidden: el.getAttribute("aria-hidden"),
+      };
+    });
+    expect(geometry?.hidden).toBe("true");
+    expect(Math.abs(geometry?.dx ?? 99)).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry?.dy ?? 99)).toBeLessThanOrEqual(2);
+    await page.keyboard.type("h");
+    await expect(ghost(page)).toBeHidden();
+    await page.keyboard.press("Backspace");
+    await expect(ghost(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(ghost(page)).toHaveCount(0);
+
+    // Mid-line: the footer says it instead.
+    await typeAtEnd(page, "one two");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft");
+    await page.keyboard.type("/");
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeHidden();
+    await expect(footerTip(page)).toHaveText("Type to filter");
+  });
+
+  test("the ghost hides as IME composition starts and when text follows the caret", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toBeVisible();
+    await editorDom(page).dispatchEvent("compositionstart", { data: "" });
+    await expect(ghost(page)).toBeHidden();
+    await editorDom(page).dispatchEvent("compositionend", { data: "" });
+    await page.keyboard.press("Escape");
+    // Text arriving after the caret (a collaborator typing there), the
+    // caret and the empty query unchanged: the ghost goes.
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toBeVisible();
+    await page.evaluate(() => {
+      type Sel = { from: number; constructor: unknown };
+      const ed = (
+        window as unknown as {
+          __tiptap_editor: {
+            state: {
+              selection: Sel;
+              tr: {
+                doc: unknown;
+                insertText(t: string, at: number): unknown;
+              };
+            };
+            view: { dispatch(tr: unknown): void };
+          };
+        }
+      ).__tiptap_editor;
+      const { from } = ed.state.selection;
+      const Selection = ed.state.selection.constructor as {
+        create(doc: unknown, pos: number): unknown;
+      };
+      const tr = ed.state.tr.insertText(" after", from) as {
+        doc: unknown;
+        setSelection(sel: unknown): unknown;
+      };
+      ed.view.dispatch(tr.setSelection(Selection.create(tr.doc, from)));
+    });
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeHidden();
+  });
+
+  test("the footer tip follows the active row, and Close leaves '/' as text", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(menu(page)).toBeVisible();
+    expect((await menu(page).boundingBox())?.width).toBe(320);
+    await expect(footerTip(page)).toHaveText("↑ ↓ to move · ↵ to insert");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText("↑ ↓ to move · ↵ to insert");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText("Type # then space for Heading 1");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText(
+      "Type ## then space for Heading 2",
+    );
+    await page.keyboard.press("End");
+    await page.keyboard.type("div");
+    await expect(footerTip(page)).toHaveText("Type --- for Divider");
+
+    await menu(page).getByRole("button", { name: /Close/ }).click();
+    await expect(menu(page)).toHaveCount(0);
+    expect(await editorFocused(page)).toBe(true);
+    expect(await caretBlock(page)).toEqual({
+      type: "paragraph",
+      level: null,
+      text: "/div",
+      offset: 4,
+    });
+  });
+
+  test("a New badge shows before its date and not after first use", async ({
+    page,
+  }) => {
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    const until = [
+      tomorrow.getFullYear(),
+      String(tomorrow.getMonth() + 1).padStart(2, "0"),
+      String(tomorrow.getDate()).padStart(2, "0"),
+    ].join("-");
+    // Dev-only override of the (empty) shipped table.
+    await page.addInitScript((date) => {
+      (window as { __SLASH_NEW_UNTIL?: unknown }).__SLASH_NEW_UNTIL = {
+        "insert.divider": date,
+      };
+    }, until);
+    await openDoc(page);
+    await typeAtEnd(page, "/div");
+    const divider = options(page).filter({ hasText: "Divider" });
+    await expect(divider).toHaveAccessibleName(/^Divider, new/);
+    await expect(divider.locator("[data-slash-new]")).toHaveText("New");
+    await page.keyboard.press("Enter");
+    await typeAtEnd(page, "/div");
+    await expect(divider.first()).toHaveAccessibleName(/^Divider/);
+    await expect(menu(page).locator("[data-slash-new]")).toHaveCount(0);
+  });
+
+  test("in an RTL paragraph the list's right edge is at the '/'", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await typeAtEnd(page, "/");
+    await expect(menu(page)).toBeVisible();
+    const caretX = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      return view ? view.coordsAtPos(view.state.selection.from - 1).left : null;
+    });
+    const box = await menu(page).boundingBox();
+    if (caretX === null || !box) throw new Error("no geometry");
+    expect(Math.abs(box.x + box.width - caretX)).toBeLessThanOrEqual(2);
+    // The ghost extends toward the inline end (left) from the "/".
+    const ghostBox = await ghost(page).boundingBox();
+    expect(ghostBox && ghostBox.x + ghostBox.width).toBeLessThanOrEqual(
+      caretX + 2,
+    );
   });
 
   test("'/' then Enter is a line break until the writer types or arrows", async ({
@@ -776,6 +973,378 @@ test.describe("slash menu", () => {
       .nth(1)
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(fill).not.toBe(other);
+  });
+});
+
+test.describe("the + on an empty line", () => {
+  test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
+
+  const plus = (page: Page) => page.locator("[data-empty-line-plus]");
+
+  /** Entries on the collaborative undo stack (Yjs UndoManager). */
+  const undoDepth = (page: Page) =>
+    page.evaluate(() => {
+      const editor = (
+        window as unknown as {
+          __tiptap_editor: {
+            state: {
+              plugins: {
+                key: string;
+                getState(state: unknown): {
+                  undoManager?: { undoStack: unknown[] };
+                } | null;
+              }[];
+            };
+          };
+        }
+      ).__tiptap_editor;
+      const plugin = editor.state.plugins.find((p) =>
+        p.key.startsWith("y-undo"),
+      );
+      return (
+        plugin?.getState(editor.state)?.undoManager?.undoStack.length ?? -1
+      );
+    });
+
+  /** A new empty paragraph at the end, with the caret in it. */
+  async function emptyLine(page: Page) {
+    await page.locator(".tiptap").click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+  }
+
+  test("shows beside an empty paragraph, in the grip column, and not by the title", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    await expect(plus(page)).toHaveAttribute("aria-label", "Insert block");
+    await expect(plus(page)).toHaveAttribute("aria-haspopup", "listbox");
+    await expect(plus(page)).toHaveAttribute("tabindex", "-1");
+    const geometry = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const button = document.querySelector("[data-empty-line-plus]");
+      if (!view || !button) return null;
+      const { $head } = view.state.selection;
+      const block = (
+        view.nodeDOM($head.before()) as HTMLElement
+      ).getBoundingClientRect();
+      const line = view.coordsAtPos($head.pos);
+      const box = button.getBoundingClientRect();
+      return {
+        gap: block.left - box.right,
+        width: box.width,
+        middle: box.top + box.height / 2 - (line.top + line.bottom) / 2,
+      };
+    });
+    expect(geometry?.width).toBe(28);
+    expect(Math.abs(geometry?.gap ?? 99)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry?.middle ?? 99)).toBeLessThanOrEqual(1);
+
+    // Typing hides it; the title, a list item and a quote never get one.
+    await page.keyboard.type("x");
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Backspace");
+    await expect(plus(page)).toBeVisible();
+    await page.keyboard.press("ControlOrMeta+Home");
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type("- ");
+    await page.waitForTimeout(400);
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("> ");
+    await page.waitForTimeout(400);
+    await expect(plus(page)).toBeHidden();
+  });
+
+  test("a click opens the '/' menu with its ghost; Esc leaves the line empty and no undo step", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeVisible();
+    expect(await editorFocused(page)).toBe(true);
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toEqual({
+      type: "paragraph",
+      level: null,
+      text: "",
+      offset: 0,
+    });
+    expect(await undoDepth(page)).toBe(depth);
+
+    // Typed after a click, a query filters as after a typed "/"; Esc then
+    // leaves "/query" as text.
+    await plus(page).click();
+    await page.keyboard.type("quo");
+    await expect(options(page).first()).toHaveText(/Quote/);
+    await page.keyboard.press("Escape");
+    expect(await caretBlock(page)).toMatchObject({ text: "/quo" });
+  });
+
+  test("a pick from a + menu is one undo step", async ({ page }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText(/Heading 2/);
+    await page.keyboard.press("Enter");
+    expect(await caretBlock(page)).toEqual({
+      type: "heading",
+      level: 2,
+      text: "",
+      offset: 0,
+    });
+    expect(await undoDepth(page)).toBe(depth + 1);
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ type: "paragraph", text: "" });
+  });
+
+  test("shows on hover over an empty line after a dwell", async ({ page }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("text");
+    // The caret is in a line with text: no + until the pointer rests on
+    // the empty line above.
+    await expect(plus(page)).toBeHidden();
+    // Mounted (hidden) once the bubble chunk has loaded on idle.
+    await expect(plus(page)).toBeAttached();
+    const empty = page.locator(".tiptap > p").filter({ hasText: /^$/ }).last();
+    await empty.hover();
+    await expect(plus(page)).toBeVisible();
+    const [line, box] = await Promise.all([
+      empty.boundingBox(),
+      plus(page).boundingBox(),
+    ]);
+    expect(
+      Math.abs((line?.x ?? 0) - ((box?.x ?? 0) + (box?.width ?? 0))),
+    ).toBeLessThanOrEqual(1);
+    // Onto the + itself: it stays, and a click opens the menu there.
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+  });
+
+  test("a + menu closed before it mounts leaves a later typed '/' alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    // Close it inside the "/" transaction itself: before any React render.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          type Tr = { docChanged: boolean };
+          const ed = (
+            window as unknown as {
+              __tiptap_editor: {
+                on(e: string, f: (p: { transaction: Tr }) => void): void;
+                off(e: string, f: (p: { transaction: Tr }) => void): void;
+                state: { tr: { setMeta(k: string, v: unknown): unknown } };
+                view: { dispatch(tr: unknown): void };
+              };
+            }
+          ).__tiptap_editor;
+          const close = ({ transaction }: { transaction: Tr }) => {
+            if (!transaction.docChanged) return;
+            ed.off("transaction", close);
+            ed.view.dispatch(ed.state.tr.setMeta("blur", true));
+            resolve();
+          };
+          ed.on("transaction", close);
+          document
+            .querySelector<HTMLElement>("[data-empty-line-plus]")
+            ?.click();
+        }),
+    );
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await page.keyboard.press("Backspace");
+    // Past the undo manager's capture window, so the "/" is its own step.
+    await page.waitForTimeout(600);
+    const depth = await undoDepth(page);
+    await page.keyboard.type("/");
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect.poll(() => undoDepth(page)).toBe(depth);
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
+  });
+
+  test("a collaborator's edit above a + menu: Esc still removes its '/'", async ({
+    browser,
+  }) => {
+    const docId = `test-plus-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    try {
+      const pageA = await contextA.newPage();
+      const pageB = await contextB.newPage();
+      await openDoc(pageA, docId);
+      await openDoc(pageB, docId);
+      await emptyLine(pageA);
+      await expect(plus(pageA)).toBeVisible();
+      const depth = await undoDepth(pageA);
+      await plus(pageA).click();
+      await expect(menu(pageA)).toBeVisible();
+      await expect(editorDom(pageB)).toContainText("/");
+      // B adds a paragraph right after the title, above A's line.
+      await pageB.evaluate(() => {
+        const ed = (
+          window as unknown as {
+            __tiptap_editor: {
+              state: { doc: { child(i: number): { nodeSize: number } } };
+              commands: {
+                insertContentAt(pos: number, content: unknown): boolean;
+              };
+            };
+          }
+        ).__tiptap_editor;
+        ed.commands.insertContentAt(ed.state.doc.child(0).nodeSize, {
+          type: "paragraph",
+          content: [{ type: "text", text: "remote line" }],
+        });
+      });
+      await expect(editorDom(pageA)).toContainText("remote line");
+      await expect(menu(pageA)).toBeVisible();
+      await pageA.keyboard.press("Escape");
+      await expect(menu(pageA)).toHaveCount(0);
+      expect(await caretBlock(pageA)).toMatchObject({
+        type: "paragraph",
+        text: "",
+      });
+      await expect(editorDom(pageB)).not.toContainText("/");
+      expect(await undoDepth(pageA)).toBe(depth);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+
+  test("sits in the right margin of an RTL line", async ({ page }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const gap = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const button = document.querySelector("[data-empty-line-plus]");
+      if (!view || !button) return null;
+      const { $head } = view.state.selection;
+      const block = (
+        view.nodeDOM($head.before()) as HTMLElement
+      ).getBoundingClientRect();
+      return button.getBoundingClientRect().left - block.right;
+    });
+    expect(Math.abs(gap ?? 99)).toBeLessThanOrEqual(1);
+  });
+
+  test("hides as IME composition starts, before any text lands", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    // compositionstart alone: the line is still empty, so only the
+    // composition can hide it.
+    await editorDom(page).dispatchEvent("compositionstart", { data: "" });
+    await expect(plus(page)).toBeHidden();
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
+    // Then a real composition (CDP) commits text: still hidden.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.imeSetComposition", {
+      text: "に",
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    await expect(plus(page)).toBeHidden();
+    await cdp.send("Input.insertText", { text: "に" });
+    await cdp.detach();
+    await page.keyboard.press("Backspace");
+    await expect(plus(page)).toBeVisible();
+  });
+
+  test("after a typed query it is an ordinary '/': a pick undoes to '/h2'", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.type("h2");
+    await expect(options(page).first()).toHaveText(/Heading 2/);
+    await page.keyboard.press("Enter");
+    expect(await caretBlock(page)).toMatchObject({ type: "heading", level: 2 });
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ type: "paragraph", text: "/h2" });
+  });
+
+  test("after a typed query Esc leaves '/quo', and undo takes it all back", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.type("quo");
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toMatchObject({ text: "/quo" });
+    // Every step of it is undoable, the "/" too.
+    for (let i = 0; i < 3 && (await undoDepth(page)) > depth; i++) {
+      await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    }
+    await expect.poll(() => undoDepth(page)).toBe(depth);
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
+  });
+});
+
+test.describe("the + on a coarse pointer", () => {
+  test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 375, height: 812 },
+  });
+
+  test("never shows", async ({ page }) => {
+    await openDoc(page);
+    await page.locator(".tiptap").tap();
+    await page.evaluate(() =>
+      (
+        window as unknown as {
+          __tiptap_editor: { commands: { focus(at: string): boolean } };
+        }
+      ).__tiptap_editor.commands.focus("end"),
+    );
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(600);
+    await expect(page.locator("[data-empty-line-plus]")).toHaveCount(0);
   });
 });
 

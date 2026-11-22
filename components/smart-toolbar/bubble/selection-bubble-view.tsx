@@ -17,6 +17,7 @@ import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
 import { ActionButton } from "../action-button";
 import { ColorSplit } from "../color-controls";
 import { PaintFormatButton } from "../formats/paint-format-button";
+import { EmptyLinePlus } from "../slash/empty-line-plus";
 import { StatusPill } from "../status-pill";
 import { bubbleReferenceRect } from "./bubble-anchor";
 import {
@@ -97,6 +98,7 @@ export function SelectionBubbleView(props: SelectionBubbleViewProps) {
     <>
       {fine ? <BubbleView {...props} /> : null}
       <StatusPill placement="desktop" />
+      <EmptyLinePlus {...props} />
     </>
   );
 }

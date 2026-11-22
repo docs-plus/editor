@@ -49,6 +49,55 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
 The editor chunk group gets 38 B smaller; its CSS is unchanged. The phone
 bar chunk grows 930 B gz, and the sheet body is a 3.6 KB gz chunk of its own.
 
+### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
+
+The "/" menu gains what the second reference set showed it lacked, and a
+pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
+§8.2, §8.5; v1 contract A19). The editor chunk group is unchanged
+(393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
+from 5,772 B to 7,041 B gz (over its 6 KB test budget, `SLASH_BUDGET=1`;
+the budget is the owner's call) and the bubble chunk, which now mounts the
+`+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
+rather than its own `slash-footer.tsx` (the plan's file list): it shares
+the menu's state and placement, and a separate module would only add
+bytes.
+
+#### Added
+
+- **"/" menu:** a Suggested section leads with your last 3 inserted kinds
+  (table, image, divider…) that can go at the caret; each stays in its own
+  section too. A new writer sees no Suggested section; "Forget my choices"
+  clears it. A query hides it and puts a recent kind first among equal
+  matches.
+- **"/" menu:** "Type to search" sits after the "/" while the query is
+  empty and nothing follows the caret (never during IME composition); a
+  pinned footer teaches the active row's Markdown shortcut ("Type ## then
+  space for Heading 2") and has a Close button (Esc still works). On touch
+  the footer is only a 44 px Close. Hints stay left to right in RTL ("1.",
+  never ".1").
+- **"/" menu:** rows can carry a "New" badge until a date, hidden once you
+  have used that kind; none are declared yet.
+- **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
+  margin of an empty paragraph (in line with the heading grips; the right
+  margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
+  shows beside the caret 300 ms after you stop typing, or under the
+  pointer after a 150 ms rest, never in the title, a list, a quote or a
+  table cell, and never on touch. The "/" it types is an ordinary one: a
+  query, a pick, Esc and undo work as after a typed "/". Only with the
+  query still empty, Esc removes it without an undo step and a pick
+  undoes to the empty line. It is mounted by
+  the lazy bubble chunk's desktop wrapper, so it appears once that chunk
+  has loaded (a deviation from the spec's §15 file split, which put it in
+  `SlashMenuHost`: that would have grown the editor chunk).
+- **Insert menu:** each row shows its "/" alias ("/table", "/code").
+
+#### Changed
+
+- **"/" menu:** 320 px wide (was 288); in an RTL paragraph its right edge
+  is at the "/".
+- **Placeholder:** an empty paragraph reads "Type / for blocks" (was
+  "Type something...").
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
