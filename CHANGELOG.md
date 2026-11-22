@@ -9,6 +9,27 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop: no partial daily copy left after a quit on Windows
+
+On Windows, a quit during a daily copy could leave
+`daily/library-<date>.sqlite.partial` behind. The copy thread was stopped
+with `terminate()`, which skips its cleanup, so its SQLite handle could still
+hold the file when shutdown tried to delete it. Windows won't delete an open
+file, and nothing retried.
+
+#### Fixed
+
+- **Desktop:** quit now asks the copy thread to stop. At its next batch the
+  thread rolls back, closes its connection and the read-only attach, and only
+  then exits; `terminate()` is the fallback after 500 ms. The partial file is
+  then deleted with retries for about 420 ms, inside the 2 s shutdown budget.
+  The previous copies are never touched.
+- **Desktop:** the storage host's deletes retry briefly on `EBUSY`. Opening a
+  library still succeeds when a partial can't be deleted yet; the next open
+  removes it.
+- **Tests:** T4-copy runs 30 times on `windows-latest`. Every quit must land
+  during a copy, and every copy must be stopped with its partial deleted.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
