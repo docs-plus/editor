@@ -8,7 +8,11 @@
  */
 import { existsSync } from "node:fs";
 
-import { FuseState, FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
+import { FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
+
+/** The wire's bytes: ASCII "1" and "0" (`FuseState`, not exported by the package's entry). */
+const ENABLE = 0x31;
+const DISABLE = 0x30;
 
 export const EXPECTED_FUSES: Record<keyof typeof FuseV1Options, boolean> = {
   RunAsNode: false,
@@ -32,13 +36,8 @@ const wire = await getCurrentFuseWire(target);
 const failures: string[] = [];
 for (const [name, expected] of Object.entries(EXPECTED_FUSES)) {
   const index = FuseV1Options[name as keyof typeof FuseV1Options];
-  const state = (wire as unknown as Record<number, FuseState>)[index];
-  const actual =
-    state === FuseState.ENABLE
-      ? true
-      : state === FuseState.DISABLE
-        ? false
-        : null;
+  const state = (wire as unknown as Record<number, number>)[index];
+  const actual = state === ENABLE ? true : state === DISABLE ? false : null;
   const line = `${name}: ${actual === null ? `state ${String(state)}` : actual ? "on" : "off"}`;
   console.log(
     `[fuses] ${line}${actual === expected ? "" : `  (expected ${expected ? "on" : "off"})`}`,
