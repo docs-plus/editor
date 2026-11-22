@@ -1,0 +1,271 @@
+name: Desktop shell
+
+# P2.5: the unsigned internal build matrix and the `electron` Playwright
+# project (plan §8.4 P2.5; architecture §3.1, §11).
+#
+# 1. `renderer` exports `out/` once, on Linux (#103: Windows writes the
+#    wrong segment-prefetch layout), and hands the same bytes to each OS.
+# 2. `package` (macOS, Windows, Linux) bundles main, preload and the storage
+#    worker, stages them with the renderer, builds the installers with the
+#    Node stub on PATH, installs them, reads the fuses back out of the
+#    installed binary, starts the installed app once and quits it, then runs
+#    the `electron` specs against it. The quit timings land in the job
+#    summary and the artifacts.
+#
+# Runs on pull requests that touch the shell, nightly through `nightly.yml`
+# (workflow_call), and on demand. Not a required check yet. Read-only
+# token and no secrets, like CI.
+
+on:
+  pull_request:
+    paths:
+      - desktop/**
+      - lib/platform/desktop/**
+      - lib/security/content-security-policy.ts
+      - scripts/build-desktop.ts
+      - scripts/desktop-export.ts
+      - next.config.ts
+      - tests/electron/**
+      - playwright.electron.config.ts
+      - package.json
+      - bun.lock
+      - .github/workflows/desktop-shell.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-shell-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  # The renderer and main's connect-src agree on the sync server. CI runs a
+  # loopback Hocus; nothing reaches production.
+  NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1234
+
+jobs:
+  renderer:
+    name: Renderer export (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+
+      - name: Export the desktop renderer
+        run: bun run build:desktop
+
+      - name: Upload out/
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-renderer
+          path: out/
+          include-hidden-files: true
+          retention-days: 3
+          if-no-files-found: error
+
+  package:
+    name: Package, install and test (${{ matrix.os }})
+    needs: renderer
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-latest, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      # The root install brings Electron's types and Playwright; the build
+      # folder has its own lockfile for electron-builder.
+      - name: Install
+        run: |
+          bun install --frozen-lockfile
+          (cd desktop/build && bun install --frozen-lockfile)
+
+      - name: Audit the packaging dependencies
+        working-directory: desktop/build
+        run: bun audit --audit-level=high
+
+      - name: Download out/
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-renderer
+          path: out
+
+      # Everything after install runs on Bun. Windows spawns look for
+      # node.exe, so a compiled stub sits beside the sh one (spike S3).
+      - name: Block Node.js
+        run: |
+          mkdir -p "$RUNNER_TEMP/no-node"
+          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
+          #!/bin/sh
+          echo "::error::node was called: $*" >&2
+          exit 1
+          EOF
+          chmod +x "$RUNNER_TEMP/no-node/node"
+          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = Windows ]; then
+            cat > "$RUNNER_TEMP/node-stub.ts" <<'EOF'
+          console.error(`::error::node was called: ${process.argv.slice(2).join(" ")}`);
+          process.exit(1);
+          EOF
+            bun build --compile "$RUNNER_TEMP/node-stub.ts" --outfile "$RUNNER_TEMP/no-node/node.exe"
+          fi
+
+      - name: Bundle and stage
+        run: bun desktop/build/build.ts
+
+      - name: Build the installers
+        working-directory: desktop/build
+        run: |
+          case "$RUNNER_OS" in
+            macOS) targets="--mac dmg --arm64" ;;
+            Windows) targets="--win nsis --x64" ;;
+            Linux) targets="--linux deb AppImage --x64" ;;
+          esac
+          bun electron-builder --config electron-builder.yml $targets --publish never 2>&1 | tee "$RUNNER_TEMP/builder.log"
+          if grep -q "node was called" "$RUNNER_TEMP/builder.log"; then
+            echo "::error::electron-builder called node"
+            exit 1
+          fi
+          ls -la ../../dist/desktop-release
+
+      - name: Install (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dmg=$(ls dist/desktop-release/*.dmg | head -1)
+          hdiutil attach -nobrowse -noautoopen -mountpoint "$RUNNER_TEMP/dmg" "$dmg"
+          cp -R "$RUNNER_TEMP/dmg/TinyDocy.app" /Applications/
+          hdiutil detach "$RUNNER_TEMP/dmg"
+          codesign --verify --deep --verbose=2 /Applications/TinyDocy.app || true
+          echo "TINYDOCY_EXECUTABLE=/Applications/TinyDocy.app/Contents/MacOS/TinyDocy" >> "$GITHUB_ENV"
+          echo "FUSE_TARGET=/Applications/TinyDocy.app" >> "$GITHUB_ENV"
+
+      - name: Install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/desktop-release/*-setup.exe | Select-Object -First 1
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA/Programs" -Recurse -Filter TinyDocy.exe | Select-Object -First 1
+          if (-not $exe) { throw "TinyDocy.exe is not installed" }
+          Write-Output "installed at $($exe.FullName)"
+          "TINYDOCY_EXECUTABLE=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "FUSE_TARGET=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          $key = Get-ItemProperty 'HKCU:\Software\Classes\tinydocy\shell\open\command' -ErrorAction SilentlyContinue
+          Write-Output "tinydocy:// handler: $($key.'(default)')"
+
+      - name: Install (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./dist/desktop-release/*.deb
+          bin=$(dpkg -L tinydocy | grep -E '/tinydocy$' | head -1)
+          test -x "$bin"
+          echo "TINYDOCY_EXECUTABLE=$bin" >> "$GITHUB_ENV"
+          echo "FUSE_TARGET=$bin" >> "$GITHUB_ENV"
+          grep -E '^(MimeType|StartupWMClass)=' /usr/share/applications/tinydocy.desktop
+          # Chromium's sandbox needs unprivileged user namespaces
+          # (electron/electron#42510); the .deb's AppArmor profile covers
+          # real desktops.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Check the fuses in the installed binary
+        run: bun desktop/build/check-fuses.ts "$FUSE_TARGET"
+
+      - name: Start the installed app once and quit
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+          else
+            bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+          fi
+
+      # No FUSE on the runner: the AppImage runtime extracts and runs.
+      - name: Start the AppImage once and quit (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          image=$(ls "$PWD"/dist/desktop-release/*.AppImage | head -1)
+          chmod +x "$image"
+          xvfb-run -a bun desktop/build/self-test.ts "$image" APPIMAGE_EXTRACT_AND_RUN=1
+
+      - name: Electron specs (installed app)
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun playwright test -c playwright.electron.config.ts
+          else
+            bun playwright test -c playwright.electron.config.ts
+          fi
+
+      - name: Quit timings
+        if: always()
+        run: |
+          for f in test-results-electron/quit-timings-*.json; do
+            [ -f "$f" ] || continue
+            { echo "### Quit timings ($RUNNER_OS)"; echo '```json'; cat "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-shell-results-${{ matrix.os }}
+          path: |
+            test-results-electron/
+            playwright-report-electron/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload the installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tinydocy-internal-${{ matrix.os }}
+          path: |
+            dist/desktop-release/*.dmg
+            dist/desktop-release/*.exe
+            dist/desktop-release/*.deb
+            dist/desktop-release/*.AppImage
+          retention-days: 14
+          if-no-files-found: error
