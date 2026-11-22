@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import {
@@ -394,7 +395,8 @@ describe("createBubbleController", () => {
 });
 
 describe("keyboard selection settle (O7 b)", () => {
-  const SETTLE = 300;
+  // Larger than the 250 ms show delay: "hidden at 300-500 ms" tells them apart.
+  const SETTLE = 600;
   const dom = () => editor.view.dom;
   const key = (
     type: "keydown" | "keyup",
@@ -406,55 +408,74 @@ describe("keyboard selection settle (O7 b)", () => {
     key("keydown", { key: "ArrowRight", shiftKey: true, repeat });
     select(1, 4);
   };
+  /** Stands in for ProseMirror's keydown handler: selects inside the event. */
+  const selectAllLikePm = (event: Event) => {
+    const e = event as KeyboardEvent;
+    if (e.key === "a" && e.ctrlKey) select(1, 4);
+  };
 
   beforeEach(() => {
     controller.destroy();
+    // Window capture only sees events from an attached editor.
+    scrollTarget.appendChild(dom().parentElement ?? dom());
+    // Registered before the controller, like PM's handler at view creation.
+    dom().addEventListener("keydown", selectAllLikePm);
     host = { ...host, keyboardSettleMs: SETTLE };
     controller = createBubbleController(editor, scrollTarget, host);
   });
 
-  test("hidden while Shift is held, shown 300-450 ms after Shift keyup", async () => {
+  afterEach(() => dom().removeEventListener("keydown", selectAllLikePm));
+
+  test("hidden while Shift is held and 300-500 ms after keyup, shown at the settle", async () => {
     key("keydown", { key: "Shift", shiftKey: true });
     shiftArrow();
-    await Bun.sleep(SETTLE_MS + 100);
+    await Bun.sleep(BUBBLE_SHOW_DELAY_MS + 100);
     expect(controller.visible).toBe(false);
-    const released = performance.now();
     key("keyup", { key: "Shift" });
+    await Bun.sleep(400);
+    expect(controller.visible).toBe(false);
     await until(() => controller.visible);
-    const waited = performance.now() - released;
-    expect(waited).toBeGreaterThanOrEqual(SETTLE - 10);
-    expect(waited).toBeLessThan(450);
   });
 
   test("a Shift released outside the editor still counts", async () => {
     shiftArrow();
     key("keyup", { key: "Shift" }, window);
+    await Bun.sleep(400);
+    expect(controller.visible).toBe(false);
     await until(() => controller.visible);
   });
 
   test("a further selection change restarts the settle", async () => {
     shiftArrow();
     key("keyup", { key: "Shift" });
-    await Bun.sleep(SETTLE - 100);
+    await Bun.sleep(400);
     select(1, 5);
-    await Bun.sleep(SETTLE - 100);
+    await Bun.sleep(400);
     expect(controller.visible).toBe(false);
     await until(() => controller.visible);
   });
 
   test("auto-repeat never shows while held", async () => {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       shiftArrow(true);
-      await Bun.sleep(150);
+      await Bun.sleep(200);
     }
-    await Bun.sleep(SETTLE_MS);
     expect(controller.visible).toBe(false);
   });
 
-  test("Ctrl+A settles without a Shift keyup", async () => {
+  test("an arrow keyup with Shift still held does not start the settle", async () => {
+    key("keydown", { key: "Shift", shiftKey: true });
+    shiftArrow();
+    key("keyup", { key: "ArrowRight", shiftKey: true });
+    await Bun.sleep(SETTLE + 150);
+    expect(controller.visible).toBe(false);
+    key("keyup", { key: "Shift" });
+    await until(() => controller.visible);
+  });
+
+  test("Ctrl+A selected inside PM's keydown handler still settles", async () => {
     key("keydown", { key: "a", ctrlKey: true });
-    select(1, 4);
-    await Bun.sleep(SETTLE - 100);
+    await Bun.sleep(400);
     expect(controller.visible).toBe(false);
     await until(() => controller.visible);
   });
@@ -465,15 +486,73 @@ describe("keyboard selection settle (O7 b)", () => {
     expect(controller.visible).toBe(true);
   });
 
-  test("a pointer selection keeps the normal delay", async () => {
-    key("keydown", { key: "ArrowRight", shiftKey: true });
-    key("keyup", { key: "ArrowRight" });
+  test("a shown bubble repositions on Shift+Arrow without the settle", async () => {
+    await showBubble();
+    const before = getReferenceRect.mock.calls.length;
+    key("keydown", { key: "Shift", shiftKey: true });
+    shiftArrow();
+    await until(() => getReferenceRect.mock.calls.length > before);
+    expect(controller.visible).toBe(true);
+  });
+
+  test("a pointer selection inside the settle window keeps the normal delay", async () => {
+    shiftArrow();
+    key("keyup", { key: "Shift" });
+    await Bun.sleep(SETTLE - 150);
     dom().dispatchEvent(new Event("pointerdown", { bubbles: true }));
     window.dispatchEvent(new Event("pointerup"));
     const at = performance.now();
+    select(1, 5);
+    // The leftover settle would have fired by now.
+    await Bun.sleep(200);
+    expect(controller.visible).toBe(false);
+    await until(() => controller.visible);
+    expect(performance.now() - at).toBeGreaterThanOrEqual(
+      BUBBLE_SHOW_DELAY_MS - 10,
+    );
+  });
+
+  test("a remote transaction during the settle does not restart it", async () => {
+    shiftArrow();
+    key("keyup", { key: "Shift" });
+    await Bun.sleep(300);
+    const { tr } = editor.state;
+    editor.view.dispatch(
+      tr
+        .setSelection(TextSelection.create(tr.doc, 1, 5))
+        .setMeta("y-sync$", {}),
+    );
+    editor.view.dispatch(editor.state.tr.insertText("x", 8));
+    await Bun.sleep(SETTLE - 300 + 150);
+    expect(controller.visible).toBe(true);
+  });
+
+  test("a no-op Shift+Arrow leaves no flag for a later programmatic selection", async () => {
+    key("keydown", { key: "ArrowRight", shiftKey: true });
+    key("keyup", { key: "Shift" });
+    const at = performance.now();
     select();
     await until(() => controller.visible);
-    expect(performance.now() - at).toBeLessThan(SETTLE - 10);
+    expect(performance.now() - at).toBeLessThan(SETTLE - 100);
+  });
+
+  test("a window blur counts as releasing Shift", async () => {
+    key("keydown", { key: "Shift", shiftKey: true });
+    shiftArrow();
+    window.dispatchEvent(new Event("blur"));
+    await until(() => controller.visible);
+  });
+
+  test("a replaced controller leaks no key listeners and the new one settles", async () => {
+    const first = controller;
+    controller = createBubbleController(editor, scrollTarget, host);
+    expect(first).not.toBe(controller);
+    shiftArrow();
+    key("keyup", { key: "Shift" });
+    await Bun.sleep(400);
+    expect(controller.visible).toBe(false);
+    await until(() => controller.visible);
+    expect(onShow).toHaveBeenCalledTimes(1);
   });
 
   test("destroy removes the listeners and timers", async () => {

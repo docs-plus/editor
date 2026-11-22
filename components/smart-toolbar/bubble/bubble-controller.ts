@@ -94,6 +94,19 @@ function changesSelectionOrDoc(
   return changes(transaction) || appended.some(changes);
 }
 
+/** `ySyncPluginKey`'s meta key (y-tiptap): marks remote Yjs transactions. */
+const Y_SYNC_META = "y-sync$";
+
+/** A selection change made here, not applied from a collaborator. */
+function isLocalSelectionChange(
+  transaction: Transaction,
+  appended: readonly Transaction[],
+): boolean {
+  const local = (tr: Transaction) =>
+    tr.selectionSet && !tr.getMeta(Y_SYNC_META);
+  return local(transaction) || appended.some(local);
+}
+
 /**
  * Creates the bubble controller for `editor`, replacing any earlier one.
  * The root is appended to `scrollTarget` (`.document-editor-wrapper`) on
@@ -120,6 +133,8 @@ export function createBubbleController(
   let settleTimer: Timer;
   /** The selection being changed came from a keydown (O7 b). */
   let keyboardSelecting = false;
+  /** A keyboard selection is waiting for its settle (set by `evaluate`). */
+  let settling = false;
   let shiftHeld = false;
   /** A key is auto-repeating: it never shows the bubble. */
   let repeating = false;
@@ -196,6 +211,7 @@ export function createBubbleController(
     showTimer = undefined;
     settleTimer = undefined;
     keyboardSelecting = false;
+    settling = false;
     if (!visible) return;
     visible = false;
     positionRun += 1;
@@ -214,6 +230,7 @@ export function createBubbleController(
     showTimer = undefined;
     settleTimer = undefined;
     keyboardSelecting = false;
+    settling = false;
     if (destroyed || editor.isDestroyed || view.composing) return;
     if (editor.state.selection.empty || !host.shouldShow()) {
       hide();
@@ -236,7 +253,9 @@ export function createBubbleController(
     if (dragging) return;
     clearTimeout(showTimer);
     showTimer = undefined;
-    if (keyboardSelecting && (host.keyboardSettleMs ?? 0) > 0) {
+    // Only a hidden bubble settles; a shown one repositions as before.
+    if (!visible && keyboardSelecting && (host.keyboardSettleMs ?? 0) > 0) {
+      settling = true;
       armSettle();
       return;
     }
@@ -260,18 +279,31 @@ export function createBubbleController(
     }, host.keyboardSettleMs);
   }
 
+  // Capture, on the window: ProseMirror's own keydown handler (Tiptap's
+  // Mod-a runs `selectAll` synchronously in it) must find the flag set.
   const onKeyDown = (event: KeyboardEvent) => {
+    if (!(event.target instanceof Node && dom.contains(event.target))) return;
     shiftHeld = event.shiftKey;
     repeating = event.repeat;
     if (MODIFIER_KEYS.has(event.key)) return;
     keyboardSelecting = isKeyboardSelection(event);
   };
 
-  // On the window too: Shift may be released outside the editor.
+  // On the window: Shift may be released outside the editor. A key with no
+  // pending settle (a no-op Shift+Arrow) leaves nothing to settle.
   const onKeyUp = (event: KeyboardEvent) => {
     repeating = false;
     if (event.key === "Shift" || !event.shiftKey) shiftHeld = false;
-    if (keyboardSelecting && (host.keyboardSettleMs ?? 0) > 0) armSettle();
+    if (settling) armSettle();
+    else keyboardSelecting = false;
+  };
+
+  // Keys released while the window was away never report their keyup.
+  const onWindowBlur = () => {
+    shiftHeld = false;
+    repeating = false;
+    if (settling) armSettle();
+    else keyboardSelecting = false;
   };
 
   /** Evaluates once the selection has settled (focus :459-462, IME :431-442). */
@@ -291,6 +323,13 @@ export function createBubbleController(
     if (!visible && editor.state.selection.empty) return;
     if (view.composing) return;
     if (!changesSelectionOrDoc(transaction, appendedTransactions)) return;
+    // A remote change or a doc-only one must not restart the settle.
+    if (
+      settling &&
+      !isLocalSelectionChange(transaction, appendedTransactions)
+    ) {
+      return;
+    }
     evaluate();
   };
 
@@ -333,6 +372,9 @@ export function createBubbleController(
 
   const onPointerDown = () => {
     keyboardSelecting = false;
+    settling = false;
+    clearTimeout(settleTimer);
+    settleTimer = undefined;
     dragging = true;
   };
 
@@ -370,9 +412,9 @@ export function createBubbleController(
     window.removeEventListener("pointercancel", onPointerUp);
     window.removeEventListener("resize", onReposition);
     scrollTarget.removeEventListener("scroll", onReposition);
-    dom.removeEventListener("keydown", onKeyDown);
-    dom.removeEventListener("keyup", onKeyUp);
-    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("keydown", onKeyDown, { capture: true });
+    window.removeEventListener("keyup", onKeyUp, { capture: true });
+    window.removeEventListener("blur", onWindowBlur);
     clearTimeout(deferTimer);
     clearTimeout(resizeTimer);
     deferTimer = undefined;
@@ -391,9 +433,9 @@ export function createBubbleController(
   dom.addEventListener("contextmenu", onHideEvent);
   dom.addEventListener("compositionend", evaluateLater);
   dom.addEventListener("pointerdown", onPointerDown);
-  dom.addEventListener("keydown", onKeyDown);
-  dom.addEventListener("keyup", onKeyUp);
-  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("keydown", onKeyDown, { capture: true });
+  window.addEventListener("keyup", onKeyUp, { capture: true });
+  window.addEventListener("blur", onWindowBlur);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   window.addEventListener("resize", onReposition);
