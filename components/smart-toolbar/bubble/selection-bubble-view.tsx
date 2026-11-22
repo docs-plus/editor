@@ -38,8 +38,13 @@ import {
 import { BubbleStyleMenu } from "./bubble-style-menu";
 import "./selection-bubble.scss";
 
-/** Exit fade (spec §4.3: 140 ms in / 90 ms out). */
-const EXIT_MS = 90;
+/** Exit fade (spec §11.1, O10: 120 ms in / 80 ms out). */
+const EXIT_MS = 80;
+
+/** No motion: from the OS, or the app's own `data-motion="reduce"`. */
+const reducedMotion = () =>
+  document.documentElement.dataset.motion === "reduce" ||
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const CARET_LABEL = ".collaboration-carets__label";
 const STICKY_TOOLBAR = ':scope > [data-slot="toolbar"]';
 const FOCUS_GUARD = "[data-base-ui-focus-guard]";
@@ -138,8 +143,12 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
   const closeTimerRef = useRef<number | undefined>(undefined);
   const focusInsideRef = useRef(false);
   const restoreFocusRef = useRef(false);
+  const pendingFocusRef = useRef(false);
 
-  /** Esc: fade out for 90 ms, then hide; stays hidden until a new selection. */
+  /**
+   * Esc: fade out for 80 ms (at once with reduced motion), then hide; stays
+   * hidden until a new selection.
+   */
   const startClose = useCallback(() => {
     if (!root.isConnected) return;
     suppressedRef.current = true;
@@ -148,7 +157,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(
       () => controllerRef.current?.hide(),
-      EXIT_MS,
+      reducedMotion() ? 0 : EXIT_MS,
     );
   }, [root]);
 
@@ -172,6 +181,20 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       editor.view.focus();
     }
   }, [editor, root, scrollTarget]);
+
+  /**
+   * Hands focus to the first item once the bubble shown by Alt+F10 is laid
+   * out and visible (an item in a hidden root cannot take focus).
+   */
+  const focusPending = useCallback(() => {
+    if (!pendingFocusRef.current || root.style.visibility === "hidden") return;
+    const first = root.querySelector<HTMLElement>(
+      '[role="toolbar"] [data-toolbar-item]',
+    );
+    if (!first) return;
+    pendingFocusRef.current = false;
+    first.focus();
+  }, [root]);
 
   // One controller per editor for this view's lifetime (StrictMode's second
   // effect replaces the first).
@@ -225,6 +248,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         window.clearTimeout(closeTimerRef.current);
         root.dataset.state = "closed";
         delete root.dataset.closing;
+        pendingFocusRef.current = false;
         restoreFocusRef.current = focusInsideRef.current;
         focusInsideRef.current = false;
         setShown(false);
@@ -232,6 +256,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       onPosition: () => {
         syncVisibility();
         place();
+        focusPending();
       },
     });
     controller.setPlacement(placementRef.current);
@@ -242,7 +267,33 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       controller.destroy();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [editor, scrollTarget, root, syncVisibility]);
+  }, [editor, scrollTarget, root, syncVisibility, focusPending]);
+
+  /**
+   * Alt+F10 with a selection the bubble has not shown yet (its delay, or a
+   * keyboard selection still settling): show it at once and put focus on
+   * its first item (Style ▾, spec §14) once it is laid out, instead of the
+   * row. A capture listener on the editor, so it runs before ProseMirror's
+   * keymap (`editor-action-shortcuts`), which would send focus to the row:
+   * a just-shown bubble has no items to focus yet.
+   */
+  useEffect(() => {
+    if (editor.isDestroyed) return;
+    const dom = editor.view.dom;
+    const onAltF10 = (event: KeyboardEvent) => {
+      if (event.key !== "F10" || !event.altKey) return;
+      const controller = controllerRef.current;
+      if (!controller || controller.visible) return;
+      controller.update();
+      if (!controller.visible) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pendingFocusRef.current = true;
+    };
+    dom.addEventListener("keydown", onAltF10, { capture: true });
+    return () =>
+      dom.removeEventListener("keydown", onAltF10, { capture: true });
+  }, [editor]);
 
   // One keydown and one mousedown listener on the editor, for the editor's
   // lifetime. They do nothing unless the bubble is in the DOM, so typing

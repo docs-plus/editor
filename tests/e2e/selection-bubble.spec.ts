@@ -791,15 +791,93 @@ test.describe("selection bubble", () => {
     );
   });
 
-  test("reduced motion fades in without the rise", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
+  test("motion: 120 ms scale-in from the anchor side, none with reduced motion", async ({
+    page,
+  }) => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    await expect(bubbleToolbar(page)).toHaveCSS(
-      "animation-name",
-      "st-bubble-fade-in",
-    );
+    const panel = bubbleToolbar(page);
+    await expect(panel).toHaveCSS("animation-name", "st-bubble-in");
+    await expect(panel).toHaveCSS("animation-duration", "0.12s");
+    await expect(panel).toHaveCSS("transform-origin", /% |px /);
+  });
+
+  for (const reduce of ["media", "attribute"] as const) {
+    test(`reduced motion (${reduce}): no animation in or out`, async ({
+      page,
+    }) => {
+      if (reduce === "media") {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+      }
+      await openDoc(page);
+      if (reduce === "attribute") {
+        await page.evaluate(() => {
+          document.documentElement.dataset.motion = "reduce";
+        });
+      }
+      await selectText(page, "some words");
+      await expectBubbleOpen(page);
+      // Spec §11.1: none, and Esc removes it at once.
+      expect(
+        await bubble(page).evaluate(
+          (el) => el.getAnimations({ subtree: true }).length,
+        ),
+      ).toBe(0);
+      await page.keyboard.press("Alt+F10");
+      await escapeToEditor(page);
+      await expect(bubble(page)).toHaveCount(0, { timeout: 50 });
+    });
+  }
+
+  test("Alt+F10 shows a pending bubble at once, focus on Style ▾", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // A caret before "Select", then a keyboard selection: the bubble is
+    // still waiting when Alt+F10 comes.
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press("Shift+ArrowRight");
+    }
+    await expect(bubble(page)).toHaveCount(0);
+    // Times, in the page, of the Alt+F10 keydown and focus entering it.
+    await page.evaluate(() => {
+      const times = { key: 0, focus: 0 };
+      (window as unknown as { __times: typeof times }).__times = times;
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "F10") times.key = performance.now();
+        },
+        { capture: true },
+      );
+      document.addEventListener("focusin", (event) => {
+        const target = event.target as Element;
+        if (!times.focus && target.closest("[data-smart-bubble]")) {
+          times.focus = performance.now();
+        }
+      });
+    });
+    await page.keyboard.press("Alt+F10");
+    await expect(styleButton(page)).toBeFocused();
+    const elapsed = await page.evaluate(() => {
+      const { key, focus } = (
+        window as unknown as { __times: { key: number; focus: number } }
+      ).__times;
+      return focus - key;
+    });
+    // Well inside the 250 ms show delay.
+    expect(elapsed).toBeLessThan(200);
+    await expect(styleButton(page)).toBeFocused();
+    await expect(bubble(page)).toHaveAttribute("data-state", "open");
   });
 
   test("read-only while the bubble popover is open", async ({ page }) => {
