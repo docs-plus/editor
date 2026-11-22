@@ -80,6 +80,123 @@ describe("text style", () => {
     expect(setTextStyle(editor, "paragraph")).toBe(false);
   });
 
+  /** Top-level blocks as `type:text`, lists and quotes with their children. */
+  const shape = () => {
+    const out: string[] = [];
+    editor.state.doc.forEach((node) => {
+      const kind =
+        node.type.name === "heading" ? `h${node.attrs.level}` : node.type.name;
+      const texts: string[] = [];
+      node.descendants((child) => {
+        if (child.isTextblock) texts.push(child.textContent);
+        return !child.isTextblock;
+      });
+      out.push(
+        node.isTextblock
+          ? `${kind}:${node.textContent}`
+          : `${kind}[${texts.join(",")}]`,
+      );
+    });
+    // The trailing-node plugin's empty paragraph is not part of the shape.
+    if (out.at(-1) === "paragraph:") out.pop();
+    return out;
+  };
+
+  /** A `TextSelection` from inside `from` to inside `to`. */
+  const selectBetween = (from: string, to: string) =>
+    editor.commands.setTextSelection({
+      from: posInside(editor, from),
+      to: posInside(editor, to) + 2,
+    });
+
+  it("turns only the selected item of a list into Text; its siblings stay", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(p("One")),
+          listItem(p("Two")),
+          listItem(p("Three")),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Two"));
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(shape()).toEqual([
+      "h1:Title",
+      "bulletList[One]",
+      "paragraph:Two",
+      "bulletList[Three]",
+    ]);
+    // One undo step.
+    editor.commands.undo();
+    expect(shape()).toEqual(["h1:Title", "bulletList[One,Two,Three]"]);
+  });
+
+  it("turns a word's item into Heading 2, never the whole list", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(p("One")),
+          listItem(p("Two words")),
+          listItem(p("Three")),
+        ),
+      ).toJSON(),
+    });
+    const at = posInside(editor, "words");
+    editor.commands.setTextSelection({ from: at, to: at + 5 });
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    expect(shape()).toEqual([
+      "h1:Title",
+      "bulletList[One]",
+      "h2:Two words",
+      "bulletList[Three]",
+    ]);
+  });
+
+  it("lifts only the selected paragraph of a two-paragraph quote", () => {
+    editor = createTestEditor({
+      content: doc(h1("Title"), blockquote(p("First"), p("Second"))).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Second"));
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(shape()).toEqual([
+      "h1:Title",
+      "blockquote[First]",
+      "paragraph:Second",
+    ]);
+  });
+
+  for (const [label, from, to] of [
+    ["head in the list", "Lead", "One"],
+    ["head in the paragraph", "One", "Tail"],
+  ] as const) {
+    it(`converts every selected block across a paragraph and a list (${label})`, () => {
+      editor = createTestEditor({
+        content: doc(
+          h1("Title"),
+          p("Lead"),
+          bulletList(listItem(p("One")), listItem(p("Two"))),
+          p("Tail"),
+        ).toJSON(),
+      });
+      selectBetween(from, to);
+      expect(setTextStyle(editor, "heading-3")).toBe(true);
+      expect(shape()).toEqual(
+        from === "Lead"
+          ? [
+              "h1:Title",
+              "h3:Lead",
+              "h3:One",
+              "bulletList[Two]",
+              "paragraph:Tail",
+            ]
+          : ["h1:Title", "paragraph:Lead", "h3:One", "h3:Two", "h3:Tail"],
+      );
+    });
+  }
+
   it("names a list item List and a quote Quote (the row's face)", () => {
     editor = createTestEditor({
       content: doc(

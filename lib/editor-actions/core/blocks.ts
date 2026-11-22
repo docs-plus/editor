@@ -1,11 +1,12 @@
 import type { Editor } from "@tiptap/core";
-import type { Selection } from "@tiptap/pm/state";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Selection, Transaction } from "@tiptap/pm/state";
+import { liftTarget } from "@tiptap/pm/transform";
 
 import type { AnyAction, Ctx, IconComponent } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import {
   BLOCK_CONVERTIBLE_TYPES,
-  prepareBlockToggle,
   selectionWithinConvertibleTypes,
 } from "@/lib/editor-utils";
 import {
@@ -118,11 +119,59 @@ function startsInTitle(selection: Selection): boolean {
   return selection.$from.index(0) === 0;
 }
 
+const WRAPS = new Set(["listItem", "taskItem", "blockquote"]);
+const CELLS = new Set(["tableCell", "tableHeader"]);
+
+/** Whether the textblock at `pos` is in a list or quote (a table cell's never is). */
+function isWrapped(doc: PMNode, pos: number): boolean {
+  const $pos = doc.resolve(pos);
+  let wrapped = false;
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    const name = $pos.node(depth).type.name;
+    if (CELLS.has(name)) return false;
+    if (WRAPS.has(name)) wrapped = true;
+  }
+  return wrapped;
+}
+
+/** The selected textblocks in a list or quote, last first. */
+function wrappedBlocks(tr: Transaction): number[] {
+  const found: number[] = [];
+  tr.doc.nodesBetween(tr.selection.from, tr.selection.to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    if (isWrapped(tr.doc, pos)) found.unshift(pos);
+    return false;
+  });
+  return found;
+}
+
+/**
+ * Lifts each selected textblock out of its lists and quotes to the top
+ * level, one block at a time and last first, so unselected siblings (and
+ * their children) stay where they are (spec §7.2).
+ */
+function liftWrapped(tr: Transaction): boolean {
+  for (const start of wrappedBlocks(tr)) {
+    let pos = start;
+    while (isWrapped(tr.doc, pos)) {
+      const $from = tr.doc.resolve(pos + 1);
+      const range = $from.blockRange(tr.doc.resolve($from.end()));
+      const target = range && liftTarget(range);
+      if (!range || target === null) break;
+      const steps = tr.steps.length;
+      tr.lift(range, target);
+      pos = tr.mapping.slice(steps).map(pos + 1) - 1;
+    }
+  }
+  return true;
+}
+
 /**
  * Sets the text style of the selected blocks. Unlike `toggleHeading`,
  * picking the style every selected block already has does nothing; a mixed
- * range is converted, and a list item or quote is unwrapped (Turn into,
- * spec §7.4). A range that starts in the title is refused.
+ * range is converted, and the selected items of a list or quote are lifted
+ * out first, in the same step (Turn into, spec §7.2, §7.4). A range that
+ * starts in the title is refused.
  */
 export function setTextStyle(
   editor: Editor | null,
@@ -131,9 +180,11 @@ export function setTextStyle(
   if (!editor?.isEditable) return false;
   const { selection } = editor.state;
   if (startsInTitle(selection)) return false;
-  const ctx = computeContext(editor);
   // A list item or quote of that style still turns into it, unwrapped.
-  if (!ctx.inList && !ctx.inBlockquote && textStyleOf(ctx) === value) {
+  if (
+    wrappedBlocks(editor.state.tr).length === 0 &&
+    textStyleOf(computeContext(editor)) === value
+  ) {
     return false;
   }
   const level =
@@ -142,7 +193,10 @@ export function setTextStyle(
       : (Number(value.slice(8)) as HeadingLevel);
   if (!canSetTextStyle(editor, level)) return false;
   try {
-    const chain = prepareBlockToggle(editor);
+    const chain = editor
+      .chain()
+      .focus()
+      .command(({ tr }) => liftWrapped(tr));
     (level
       ? chain.setNode("heading", { level })
       : chain.setNode("paragraph")

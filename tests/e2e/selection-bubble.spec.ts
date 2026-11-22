@@ -1198,10 +1198,18 @@ const TURN_DOC = {
     {
       type: "bulletList",
       content: [
+        { type: "listItem", content: [paragraph(text("Listed one"))] },
         { type: "listItem", content: [paragraph(text("Listed words"))] },
+        { type: "listItem", content: [paragraph(text("Listed three"))] },
       ],
     },
-    { type: "blockquote", content: [paragraph(text("Quoted words"))] },
+    {
+      type: "blockquote",
+      content: [
+        paragraph(text("Quoted words")),
+        paragraph(text("Quoted second")),
+      ],
+    },
     { type: "heading", attrs: { level: 2 }, content: [text("Heading words")] },
     paragraph(text("Tail paragraph")),
   ],
@@ -1253,10 +1261,16 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
     );
   });
 
-  for (const [needle, item, before, after] of [
-    ["Listed words", "Text", "bulletList", "paragraph"],
-    ["Quoted words", "Heading 2", "blockquote", "heading2"],
-    ["Heading words", "Bullet list", "heading2", "bulletList"],
+  for (const [needle, item, before, after, siblings] of [
+    [
+      "Listed words",
+      "Text",
+      "bulletList",
+      "paragraph",
+      ["Listed one", "Listed three"],
+    ],
+    ["Quoted words", "Heading 2", "blockquote", "heading2", ["Quoted second"]],
+    ["Heading words", "Bullet list", "heading2", "bulletList", []],
   ] as const) {
     test(`turn into ${item} from ${before} is one undo step`, async ({
       page,
@@ -1265,6 +1279,10 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
       expect(await blockOf(page, needle)).toBe(before);
       await turnInto(page, needle, item);
       await expect.poll(() => blockOf(page, needle)).toBe(after);
+      // Only the selected item turns: its siblings stay in the list or quote.
+      for (const sibling of siblings) {
+        expect(await blockOf(page, sibling)).toBe(before);
+      }
       await expect(page.locator(".tiptap")).toBeFocused();
       await page.keyboard.press("ControlOrMeta+z");
       await expect.poll(() => blockOf(page, needle)).toBe(before);
