@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bubble &amp; quick insert — design review</title>
+<style>
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --primary: oklch(0.555 0.163 48.998);
+  --primary-foreground: oklch(0.987 0.022 95.277);
+  --radius: 0.45rem;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --primary: oklch(0.473 0.137 46.201);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 56px; }
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 0 16px 64px; }
+header { padding: 32px 0 8px; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0 0 8px; font-weight: 650; }
+h2 { font-size: 21px; margin: 48px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); font-weight: 650; }
+h3 { font-size: 16px; margin: 32px 0 12px; font-weight: 600; }
+h3.sub { font-size: 17px; margin-top: 40px; }
+h2, h3 { scroll-margin-top: 64px; }
+.scope, .summary { color: var(--muted-foreground); max-width: 78ch; margin: 0 0 12px; }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+nav {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px;
+  padding: 10px 16px;
+}
+nav a { color: var(--foreground); text-decoration: none; font-weight: 550; padding: 2px 0; }
+nav a:hover { text-decoration: underline; }
+nav .filter { margin-inline-start: auto; display: flex; gap: 12px; color: var(--muted-foreground); font-size: 14px; }
+nav .filter label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.decisions { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin: 16px 0 0; background: var(--card); }
+.decisions h2 { border: 0; margin: 0 0 4px; padding: 0; font-size: 18px; }
+figure.pair { margin: 0 0 28px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.col { min-width: 0; }
+figure.wide .cols { grid-template-columns: 1fr; }
+.label { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted-foreground); }
+.col img { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); }
+.slot { border: 1px dashed var(--border); border-radius: var(--radius); background: var(--muted); color: var(--muted-foreground); padding: 32px 12px; text-align: center; font-size: 14px; }
+figcaption { margin-top: 8px; max-width: 90ch; }
+figcaption .what { font-weight: 600; }
+figcaption .variant { font-weight: 400; color: var(--muted-foreground); margin-inline-start: 4px; }
+figcaption .variant::after { content: " —"; }
+body:has(#show-light:checked) figure.pair[data-theme="dark"] { display: none; }
+body:has(#show-dark:checked) figure.pair[data-theme="light"] { display: none; }
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; }
+  h1 { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<nav aria-label="Phases">
+  <a href="#p1">P1</a><a href="#p2">P2</a><a href="#p3">P3</a><a href="#p4">P4</a>
+  <span class="filter" role="radiogroup" aria-label="Theme filter">
+    <label><input type="radio" name="theme" id="show-all" checked> Both</label>
+    <label><input type="radio" name="theme" id="show-light"> Light</label>
+    <label><input type="radio" name="theme" id="show-dark"> Dark</label>
+  </span>
+</nav>
+<main>
+<header>
+<h1>Bubble &amp; quick insert — design review</h1>
+<p class="scope">Before is <code>main</code> at <code>7b9fdc7</code>. After is <code>feat/bubble-v2</code> at <code>4f48944</code> for all phases (P1 to P4 and the polish round, with that <code>main</code> merged in). The later commits up to <code>266a57a</code> change only the list lift behind Turn into, tests and docs, nothing on screen. Headless Chromium: desktop at 1280 px, phones at 320 and 390 px (touch, 2× DPR), tablets at 768, 820 and 900 px (touch). Each pair is the same document and state on both builds, with the same crop.</p>
+<section class="decisions" id="decisions">
+<h2>Decisions for the owner</h2>
+<p>Each item has a recommendation. Reply with the item number and a yes, no or other choice.</p>
+<ol>
+<li><strong>Approve P1–P4 for one integrate PR.</strong> They go to <code>main</code> together, through the merge queue. The comments core (P4.9) is now on <code>main</code>. In this batch the bubble shows Comment, last and after a separator, only where comments are switched on, which is not the case on the web sandbox, so nothing changes there. P5, the bubble's comment icon, is a small follow-up after this batch, alongside the comments track's draft card (P4.10). <em>Recommended: approve.</em></li>
+<li><strong>A colour pick closes the colour menu.</strong> Enter, Space or a click on a colour row applies it, closes the menu, returns focus to the text with the selection kept, and announces the pick ("Red text"). The approved spec (O4) kept the menu open. <em>Recommended: keep closing. It is one step shorter, and a second colour is one more click.</em></li>
+<li><strong>The row's colour menu shows both columns, text and highlight.</strong> §7.3 asked for the column of the half you pressed. The bubble's menu does follow §7.3. <em>Recommended: accept for v1, and revisit if writers pick the wrong column.</em></li>
+<li><strong>The first seconds of a session.</strong> Until the first lazy menu chunk loads (the bubble's loads when the browser is idle), the style shortcuts in a list item or quote (⌘⌥0, ⌘⌥1–6) behave as on <code>main</code> today and do not unwrap the item. After that, every surface lifts only the selected items. This keeps the editor chunk at 0 B growth. <em>Recommended: accept.</em></li>
+<li><strong>Esc before the bubble's code has ever loaded.</strong> It does not cancel a bubble that is still waiting out its 250 ms delay. Fixing this needs eager code. <em>Recommended: accept.</em></li>
+<li><strong>Tablet stand-in words, option (b).</strong> Already chosen on 2026-11-22, shown in P4 as built. Touch tablets show “Format”, “Layout” and “Block” at every width from 768 px. Below 848 px, Redo moves to the top of ⋯ and the list button keeps only List ▾. <em>No action unless the built version changes your mind.</em></li>
+<li><strong>A known detail that is not a blocker.</strong> When ⋯ sits near the window edge, the Appearance submenu opens inward while its chevron points outward. <code>main</code> does this too. <em>Recommended: a follow-up.</em></li>
+</ol>
+
+</section>
+</header>
+<section id="p1">
+<h2>P1 · Selection bubble v2</h2>
+<p class="summary">The bubble gains the rest of its row: Style ▾ names the block in one word and opens Turn into; strike, inline code and clear formatting join B, I and U; colour opens named rows (Recent, then Text and Highlight side by side) instead of the swatch grid; and the link field takes focus in the click, so a pasted URL never lands on the selected words. The row's Text style ▾ shares the Turn into body, and the row's colour menus use the same named rows. On phones the Aa sheet keeps the swatch grid and names the current colour under it.</p>
+<h3 id="p1-desktop">Desktop 1280</h3>
+<figure class="pair" data-theme="light" id="p1-bubble-paragraph-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-paragraph-desktop-light-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on a paragraph selection, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-paragraph-desktop-light-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on a paragraph selection, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Bubble on a paragraph selection <span class="variant">Light</span></span> Style ▾ leads the bubble with the block's type in one word (Text), and strike, inline code and clear formatting join B, I and U.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-bubble-paragraph-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-paragraph-desktop-dark-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on a paragraph selection, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-paragraph-desktop-dark-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on a paragraph selection, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Bubble on a paragraph selection <span class="variant">Dark</span></span> Style ▾ leads the bubble with the block's type in one word (Text), and strike, inline code and clear formatting join B, I and U.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-bubble-paragraph-desktop-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-paragraph-desktop-light-rtl-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on a paragraph selection, Desktop 1280, light · rtl"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-paragraph-desktop-light-rtl-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on a paragraph selection, Desktop 1280, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">Bubble on a paragraph selection <span class="variant">Light · RTL</span></span> Style ▾ leads the bubble with the block's type in one word (Text), and strike, inline code and clear formatting join B, I and U.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-style-menu-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><div class="slot">Before: not on main</div></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/style-menu-desktop-light-after.jpg" width="882" height="850" loading="lazy" alt="After: Style ▾ (Turn into) open, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Style ▾ (Turn into) open <span class="variant">Light</span></span> Style ▾ opens Turn into below the selection: icons, shortcuts and a ✓ on the current type, with H4–H6 under More headings.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-style-menu-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><div class="slot">Before: not on main</div></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/style-menu-desktop-dark-after.jpg" width="882" height="850" loading="lazy" alt="After: Style ▾ (Turn into) open, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Style ▾ (Turn into) open <span class="variant">Dark</span></span> Style ▾ opens Turn into below the selection: icons, shortcuts and a ✓ on the current type, with H4–H6 under More headings.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-style-menu-desktop-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><div class="slot">Before: not on main</div></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/style-menu-desktop-light-rtl-after.jpg" width="882" height="850" loading="lazy" alt="After: Style ▾ (Turn into) open, Desktop 1280, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">Style ▾ (Turn into) open <span class="variant">Light · RTL</span></span> Style ▾ opens Turn into below the selection: icons, shortcuts and a ✓ on the current type, with H4–H6 under More headings.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-bubble-colour-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-colour-desktop-light-before.jpg" width="1058" height="962" loading="lazy" alt="Before (main): Bubble colour menu, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-colour-desktop-light-after.jpg" width="1058" height="962" loading="lazy" alt="After: Bubble colour menu, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Bubble colour menu <span class="variant">Light</span></span> Colour opens named rows, Text and Highlight side by side with a ✓ on the current value, instead of the swatch grid. Recent leads once colours have been used.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-bubble-colour-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-colour-desktop-dark-before.jpg" width="1058" height="962" loading="lazy" alt="Before (main): Bubble colour menu, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-colour-desktop-dark-after.jpg" width="1058" height="962" loading="lazy" alt="After: Bubble colour menu, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Bubble colour menu <span class="variant">Dark</span></span> Colour opens named rows, Text and Highlight side by side with a ✓ on the current value, instead of the swatch grid. Recent leads once colours have been used.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-link-field-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/link-field-desktop-light-before.jpg" width="840" height="200" loading="lazy" alt="Before (main): Link field from 🔗, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/link-field-desktop-light-after.jpg" width="840" height="200" loading="lazy" alt="After: Link field from 🔗, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Link field from 🔗 <span class="variant">Light</span></span> 🔗 takes focus in the click, so the URL goes into the field; on main it was typed over the selected words.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-link-field-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/link-field-desktop-dark-before.jpg" width="840" height="200" loading="lazy" alt="Before (main): Link field from 🔗, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/link-field-desktop-dark-after.jpg" width="840" height="200" loading="lazy" alt="After: Link field from 🔗, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Link field from 🔗 <span class="variant">Dark</span></span> 🔗 takes focus in the click, so the URL goes into the field; on main it was typed over the selected words.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-bubble-list-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-list-desktop-light-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on a list item, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-list-desktop-light-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on a list item, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Bubble on a list item <span class="variant">Light</span></span> On a list item Style ▾ reads List.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-bubble-list-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-list-desktop-dark-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on a list item, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-list-desktop-dark-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on a list item, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Bubble on a list item <span class="variant">Dark</span></span> On a list item Style ▾ reads List.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-bubble-inline-code-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-inline-code-desktop-light-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on inline code, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-inline-code-desktop-light-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on inline code, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Bubble on inline code <span class="variant">Light</span></span> Inside inline code the marks, colour and link are off, and the tooltip says why: “Inline code can't take other formatting.”</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-bubble-inline-code-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/bubble-inline-code-desktop-dark-before.jpg" width="882" height="222" loading="lazy" alt="Before (main): Bubble on inline code, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/bubble-inline-code-desktop-dark-after.jpg" width="882" height="222" loading="lazy" alt="After: Bubble on inline code, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Bubble on inline code <span class="variant">Dark</span></span> Inside inline code the marks, colour and link are off, and the tooltip says why: “Inline code can't take other formatting.”</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-row-text-style-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/row-text-style-desktop-light-before.jpg" width="896" height="926" loading="lazy" alt="Before (main): Row Text style ▾, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/row-text-style-desktop-light-after.jpg" width="896" height="926" loading="lazy" alt="After: Row Text style ▾, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Row Text style ▾ <span class="variant">Light</span></span> The row's Text style ▾ reads Text and opens the bubble's Turn into body, with icons and shortcuts; Your formats stays below.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-row-text-style-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/row-text-style-desktop-dark-before.jpg" width="896" height="926" loading="lazy" alt="Before (main): Row Text style ▾, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/row-text-style-desktop-dark-after.jpg" width="896" height="926" loading="lazy" alt="After: Row Text style ▾, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Row Text style ▾ <span class="variant">Dark</span></span> The row's Text style ▾ reads Text and opens the bubble's Turn into body, with icons and shortcuts; Your formats stays below.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p1-row-colour-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/row-colour-desktop-light-before.jpg" width="840" height="648" loading="lazy" alt="Before (main): Row colour menu, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/row-colour-desktop-light-after.jpg" width="840" height="648" loading="lazy" alt="After: Row colour menu, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Row colour menu <span class="variant">Light</span></span> The row's colour menu uses the bubble's named rows, Text and Highlight side by side, instead of the grid.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-row-colour-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/row-colour-desktop-dark-before.jpg" width="840" height="648" loading="lazy" alt="Before (main): Row colour menu, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/row-colour-desktop-dark-after.jpg" width="840" height="648" loading="lazy" alt="After: Row colour menu, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Row colour menu <span class="variant">Dark</span></span> The row's colour menu uses the bubble's named rows, Text and Highlight side by side, instead of the grid.</figcaption>
+</figure>
+<h3 id="p1-phone390">Phone 390</h3>
+<figure class="pair" data-theme="light" id="p1-aa-colour-grid-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/aa-colour-grid-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Aa sheet colour grid, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/aa-colour-grid-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: Aa sheet colour grid, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet colour grid <span class="variant">Light</span></span> The phone keeps the swatch grid, now six to a line, and names the current colours under it (“Current: Default text, No highlight”).</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p1-aa-colour-grid-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p1/aa-colour-grid-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Aa sheet colour grid, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p1/aa-colour-grid-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: Aa sheet colour grid, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet colour grid <span class="variant">Dark</span></span> The phone keeps the swatch grid, now six to a line, and names the current colours under it (“Current: Default text, No highlight”).</figcaption>
+</figure>
+</section>
+
+<section id="p2">
+<h2>P2 · Quick insert</h2>
+<p class="summary">The “/” menu gets a Suggested section for your last three inserted kinds, a “Type to search” hint after the “/”, and a pinned footer that teaches the active row's Markdown shortcut and has a Close button. On a mouse or trackpad an empty line shows a + in the start margin that types the “/” for you. The empty-line placeholder becomes “Type / for blocks”. The menu is 320 px wide (was 288).</p>
+<h3 id="p2-desktop">Desktop 1280</h3>
+<figure class="pair" data-theme="light" id="p2-slash-empty-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-empty-desktop-light-before.jpg" width="840" height="912" loading="lazy" alt="Before (main): “/” on an empty line, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-empty-desktop-light-after.jpg" width="840" height="912" loading="lazy" alt="After: “/” on an empty line, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">“/” on an empty line <span class="variant">Light</span></span> “Type to search” follows the “/”, and a pinned footer adds the keys and a Close button.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-slash-empty-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-empty-desktop-dark-before.jpg" width="840" height="912" loading="lazy" alt="Before (main): “/” on an empty line, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-empty-desktop-dark-after.jpg" width="840" height="912" loading="lazy" alt="After: “/” on an empty line, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">“/” on an empty line <span class="variant">Dark</span></span> “Type to search” follows the “/”, and a pinned footer adds the keys and a Close button.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p2-slash-empty-desktop-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-empty-desktop-light-rtl-before.jpg" width="656" height="456" loading="lazy" alt="Before (main): “/” on an empty line, Desktop 1280, light · rtl"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-empty-desktop-light-rtl-after.jpg" width="656" height="456" loading="lazy" alt="After: “/” on an empty line, Desktop 1280, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">“/” on an empty line <span class="variant">Light · RTL</span></span> In RTL the list's right edge sits at the “/”, the footer mirrors, and the hints sit at the row's end and read left to right (“1.”, not “.1”).</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p2-slash-suggested-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-suggested-desktop-light-before.jpg" width="840" height="912" loading="lazy" alt="Before (main): “/” with Suggested, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-suggested-desktop-light-after.jpg" width="840" height="912" loading="lazy" alt="After: “/” with Suggested, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">“/” with Suggested <span class="variant">Light</span></span> After a table and a divider, Suggested leads the list, most recent first; each kind stays in its own section too.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-slash-suggested-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-suggested-desktop-dark-before.jpg" width="840" height="912" loading="lazy" alt="Before (main): “/” with Suggested, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-suggested-desktop-dark-after.jpg" width="840" height="912" loading="lazy" alt="After: “/” with Suggested, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">“/” with Suggested <span class="variant">Dark</span></span> After a table and a divider, Suggested leads the list, most recent first; each kind stays in its own section too.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p2-slash-query-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-query-desktop-light-before.jpg" width="840" height="700" loading="lazy" alt="Before (main): “/” with a query, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-query-desktop-light-after.jpg" width="840" height="700" loading="lazy" alt="After: “/” with a query, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">“/” with a query <span class="variant">Light</span></span> A query ranks as before; the footer teaches the active row's shortcut (“Type # then space for Heading 1”).</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-slash-query-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-query-desktop-dark-before.jpg" width="840" height="700" loading="lazy" alt="Before (main): “/” with a query, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-query-desktop-dark-after.jpg" width="840" height="700" loading="lazy" alt="After: “/” with a query, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">“/” with a query <span class="variant">Dark</span></span> A query ranks as before; the footer teaches the active row's shortcut (“Type # then space for Heading 1”).</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p2-plus-hover-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/plus-hover-desktop-light-before.jpg" width="840" height="216" loading="lazy" alt="Before (main): + in the margin of an empty line (hover), Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/plus-hover-desktop-light-after.jpg" width="840" height="216" loading="lazy" alt="After: + in the margin of an empty line (hover), Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">+ in the margin of an empty line (hover) <span class="variant">Light</span></span> Resting the pointer on an empty line shows a + in the start margin that types the “/” for you.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-plus-hover-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/plus-hover-desktop-dark-before.jpg" width="840" height="216" loading="lazy" alt="Before (main): + in the margin of an empty line (hover), Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/plus-hover-desktop-dark-after.jpg" width="840" height="216" loading="lazy" alt="After: + in the margin of an empty line (hover), Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">+ in the margin of an empty line (hover) <span class="variant">Dark</span></span> Resting the pointer on an empty line shows a + in the start margin that types the “/” for you.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p2-placeholder-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/placeholder-desktop-light-before.jpg" width="840" height="158" loading="lazy" alt="Before (main): Empty-line placeholder, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/placeholder-desktop-light-after.jpg" width="840" height="158" loading="lazy" alt="After: Empty-line placeholder, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">Empty-line placeholder <span class="variant">Light</span></span> An empty line reads “Type / for blocks” (was “Type something...”), and the + shows beside it once the caret rests.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-placeholder-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/placeholder-desktop-dark-before.jpg" width="840" height="158" loading="lazy" alt="Before (main): Empty-line placeholder, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/placeholder-desktop-dark-after.jpg" width="840" height="158" loading="lazy" alt="After: Empty-line placeholder, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">Empty-line placeholder <span class="variant">Dark</span></span> An empty line reads “Type / for blocks” (was “Type something...”), and the + shows beside it once the caret rests.</figcaption>
+</figure>
+<h3 id="p2-phone390">Phone 390</h3>
+<figure class="pair" data-theme="light" id="p2-slash-phone-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-phone-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): “/” menu on a phone, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-phone-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: “/” menu on a phone, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">“/” menu on a phone <span class="variant">Light</span></span> On touch the footer is a single 44 px Close, and the hint follows the “/”.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p2-slash-phone-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p2/slash-phone-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): “/” menu on a phone, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p2/slash-phone-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: “/” menu on a phone, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">“/” menu on a phone <span class="variant">Dark</span></span> On touch the footer is a single 44 px Close, and the hint follows the “/”.</figcaption>
+</figure>
+</section>
+
+<section id="p3">
+<h2>P3 · Row ⋯ in groups</h2>
+<p class="summary">The row's ⋯ menu is regrouped under visible headings: Text, View and Help, with “Forget my choices…” alone at the end. Every row keeps a 16 px leading slot so labels line up. Nothing is added or removed.</p>
+<h3 id="p3-desktop">Desktop 1280</h3>
+<figure class="pair" data-theme="light" id="p3-more-menu-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-menu-desktop-light-before.jpg" width="802" height="846" loading="lazy" alt="Before (main): ⋯ More formatting, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-menu-desktop-light-after.jpg" width="802" height="846" loading="lazy" alt="After: ⋯ More formatting, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">⋯ More formatting <span class="variant">Light</span></span> ⋯ groups its rows under Text, View and Help, with Forget my choices alone at the end. Nothing is added or removed.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p3-more-menu-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-menu-desktop-dark-before.jpg" width="802" height="846" loading="lazy" alt="Before (main): ⋯ More formatting, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-menu-desktop-dark-after.jpg" width="802" height="846" loading="lazy" alt="After: ⋯ More formatting, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">⋯ More formatting <span class="variant">Dark</span></span> ⋯ groups its rows under Text, View and Help, with Forget my choices alone at the end. Nothing is added or removed.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p3-more-menu-desktop-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-menu-desktop-light-rtl-before.jpg" width="840" height="846" loading="lazy" alt="Before (main): ⋯ More formatting, Desktop 1280, light · rtl"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-menu-desktop-light-rtl-after.jpg" width="840" height="846" loading="lazy" alt="After: ⋯ More formatting, Desktop 1280, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">⋯ More formatting <span class="variant">Light · RTL</span></span> In RTL the groups mirror, the rows line up, and shortcuts read ⌘E, not E⌘.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p3-more-appearance-desktop-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-appearance-desktop-light-before.jpg" width="840" height="846" loading="lazy" alt="Before (main): ⋯ View › Appearance, Desktop 1280, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-appearance-desktop-light-after.jpg" width="840" height="846" loading="lazy" alt="After: ⋯ View › Appearance, Desktop 1280, light"></div>
+  </div>
+  <figcaption><span class="what">⋯ View › Appearance <span class="variant">Light</span></span> Appearance sits in the View group beside Simplified toolbar, which now shows its checkbox in the leading slot.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p3-more-appearance-desktop-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-appearance-desktop-dark-before.jpg" width="840" height="846" loading="lazy" alt="Before (main): ⋯ View › Appearance, Desktop 1280, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-appearance-desktop-dark-after.jpg" width="840" height="846" loading="lazy" alt="After: ⋯ View › Appearance, Desktop 1280, dark"></div>
+  </div>
+  <figcaption><span class="what">⋯ View › Appearance <span class="variant">Dark</span></span> Appearance sits in the View group beside Simplified toolbar, which now shows its checkbox in the leading slot.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p3-more-appearance-desktop-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p3/more-appearance-desktop-light-rtl-before.jpg" width="840" height="846" loading="lazy" alt="Before (main): ⋯ View › Appearance, Desktop 1280, light · rtl"></div>
+    <div class="col"><p class="label">After</p><img src="review/p3/more-appearance-desktop-light-rtl-after.jpg" width="840" height="846" loading="lazy" alt="After: ⋯ View › Appearance, Desktop 1280, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">⋯ View › Appearance <span class="variant">Light · RTL</span></span> Appearance sits in the View group beside Simplified toolbar, which now shows its checkbox in the leading slot.</figcaption>
+</figure>
+</section>
+
+<section id="p4">
+<h2>P4 · Phone and tablet</h2>
+<p class="summary">On phones the bar's Insert cell opens a bottom sheet with the “/” menu's items as a two-column grid: Suggested when there are recents, then Blocks (empty line) or Turn into (line with text), then Insert. Table and Embed open their step inside the sheet. The Aa sheet starts with Style. On touch tablets the row's stand-ins carry a word (Format, Layout, Block).</p>
+<h3 id="p4-phone390">Phone 390</h3>
+<figure class="pair" data-theme="light" id="p4-insert-blocks-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-blocks-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert on an empty line, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-blocks-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert on an empty line, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">Insert on an empty line <span class="variant">Light</span></span> Insert opens a sheet with the “/” menu's items in two columns: Blocks for the empty line, then Insert.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-blocks-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-blocks-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert on an empty line, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-blocks-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert on an empty line, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert on an empty line <span class="variant">Dark</span></span> Insert opens a sheet with the “/” menu's items in two columns: Blocks for the empty line, then Insert.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-insert-blocks-phone390-light-rtl">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-blocks-phone390-light-rtl-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert on an empty line, Phone 390, light · rtl"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-blocks-phone390-light-rtl-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert on an empty line, Phone 390, light · rtl"></div>
+  </div>
+  <figcaption><span class="what">Insert on an empty line <span class="variant">Light · RTL</span></span> In RTL the sheet mirrors: labels start at the right, Table keeps its 3 × 3 beside it, and the chevrons point left.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-insert-turn-into-suggested-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-turn-into-suggested-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert on a line with text, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-turn-into-suggested-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert on a line with text, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">Insert on a line with text <span class="variant">Light</span></span> On a line with text the section is Turn into, and Suggested leads with the last inserted kind.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-turn-into-suggested-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-turn-into-suggested-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert on a line with text, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-turn-into-suggested-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert on a line with text, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert on a line with text <span class="variant">Dark</span></span> On a line with text the section is Turn into, and Suggested leads with the last inserted kind.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-insert-table-step-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-table-step-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert › Table, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-table-step-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert › Table, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">Insert › Table <span class="variant">Light</span></span> Table opens its size grid inside the sheet, with Back, instead of a popover over the bar.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-table-step-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-table-step-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Insert › Table, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-table-step-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: Insert › Table, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert › Table <span class="variant">Dark</span></span> Table opens its size grid inside the sheet, with Back, instead of a popover over the bar.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-aa-sheet-phone390-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/aa-sheet-phone390-light-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Aa sheet, Phone 390, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/aa-sheet-phone390-light-after.jpg" width="780" height="1688" loading="lazy" alt="After: Aa sheet, Phone 390, light"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet <span class="variant">Light</span></span> The Aa sheet starts with Style, with More headings for H4–H6; Colours follow.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-aa-sheet-phone390-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/aa-sheet-phone390-dark-before.jpg" width="780" height="1688" loading="lazy" alt="Before (main): Aa sheet, Phone 390, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/aa-sheet-phone390-dark-after.jpg" width="780" height="1688" loading="lazy" alt="After: Aa sheet, Phone 390, dark"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet <span class="variant">Dark</span></span> The Aa sheet starts with Style, with More headings for H4–H6; Colours follow.</figcaption>
+</figure>
+<h3 id="p4-phone320">Phone 320</h3>
+<figure class="pair" data-theme="light" id="p4-insert-blocks-phone320-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-blocks-phone320-light-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert on an empty line, Phone 320, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-blocks-phone320-light-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert on an empty line, Phone 320, light"></div>
+  </div>
+  <figcaption><span class="what">Insert on an empty line <span class="variant">Light</span></span> Insert opens a sheet with the “/” menu's items in two columns: Blocks for the empty line, then Insert.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-blocks-phone320-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-blocks-phone320-dark-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert on an empty line, Phone 320, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-blocks-phone320-dark-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert on an empty line, Phone 320, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert on an empty line <span class="variant">Dark</span></span> Insert opens a sheet with the “/” menu's items in two columns: Blocks for the empty line, then Insert.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-insert-turn-into-suggested-phone320-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-turn-into-suggested-phone320-light-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert on a line with text, Phone 320, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-turn-into-suggested-phone320-light-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert on a line with text, Phone 320, light"></div>
+  </div>
+  <figcaption><span class="what">Insert on a line with text <span class="variant">Light</span></span> On a line with text the section is Turn into, and Suggested leads with the last inserted kind.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-turn-into-suggested-phone320-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-turn-into-suggested-phone320-dark-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert on a line with text, Phone 320, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-turn-into-suggested-phone320-dark-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert on a line with text, Phone 320, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert on a line with text <span class="variant">Dark</span></span> On a line with text the section is Turn into, and Suggested leads with the last inserted kind.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-insert-table-step-phone320-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-table-step-phone320-light-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert › Table, Phone 320, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-table-step-phone320-light-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert › Table, Phone 320, light"></div>
+  </div>
+  <figcaption><span class="what">Insert › Table <span class="variant">Light</span></span> Table opens its size grid inside the sheet, with Back, instead of a popover over the bar.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-insert-table-step-phone320-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/insert-table-step-phone320-dark-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Insert › Table, Phone 320, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/insert-table-step-phone320-dark-after.jpg" width="640" height="1280" loading="lazy" alt="After: Insert › Table, Phone 320, dark"></div>
+  </div>
+  <figcaption><span class="what">Insert › Table <span class="variant">Dark</span></span> Table opens its size grid inside the sheet, with Back, instead of a popover over the bar.</figcaption>
+</figure>
+<figure class="pair" data-theme="light" id="p4-aa-sheet-phone320-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/aa-sheet-phone320-light-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Aa sheet, Phone 320, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/aa-sheet-phone320-light-after.jpg" width="640" height="1280" loading="lazy" alt="After: Aa sheet, Phone 320, light"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet <span class="variant">Light</span></span> The Aa sheet starts with Style, with More headings for H4–H6; Colours follow.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-aa-sheet-phone320-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/aa-sheet-phone320-dark-before.jpg" width="640" height="1280" loading="lazy" alt="Before (main): Aa sheet, Phone 320, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/aa-sheet-phone320-dark-after.jpg" width="640" height="1280" loading="lazy" alt="After: Aa sheet, Phone 320, dark"></div>
+  </div>
+  <figcaption><span class="what">Aa sheet <span class="variant">Dark</span></span> The Aa sheet starts with Style, with More headings for H4–H6; Colours follow.</figcaption>
+</figure>
+<h3 class="sub" id="p4-tablet">Tablet: option (b), chosen 2026-11-22</h3>
+<p class="summary">Option (b) puts the words on the row's stand-ins at every width from 768 px on a touch pointer. Under an 848 px window, Redo moves to the top of ⋯ and the list button keeps only List ▾, so the row still fits in a code block or table. The before is main's row at the same width.</p>
+<h3 id="p4-tablet768">Tablet 768</h3>
+<figure class="pair wide" data-theme="light" id="p4-row-paragraph-tablet768-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-paragraph-tablet768-light-before.jpg" width="768" height="95" loading="lazy" alt="Before (main): Row, caret in a paragraph, Tablet 768, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-paragraph-tablet768-light-after.jpg" width="768" height="95" loading="lazy" alt="After: Row, caret in a paragraph, Tablet 768, light"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a paragraph <span class="variant">Light</span></span> The stand-ins carry words (Format, Layout); Redo leaves the row and the list button keeps only List ▾.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="dark" id="p4-row-paragraph-tablet768-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-paragraph-tablet768-dark-before.jpg" width="768" height="95" loading="lazy" alt="Before (main): Row, caret in a paragraph, Tablet 768, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-paragraph-tablet768-dark-after.jpg" width="768" height="95" loading="lazy" alt="After: Row, caret in a paragraph, Tablet 768, dark"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a paragraph <span class="variant">Dark</span></span> The stand-ins carry words (Format, Layout); Redo leaves the row and the list button keeps only List ▾.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="light" id="p4-row-code-tablet768-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-code-tablet768-light-before.jpg" width="768" height="95" loading="lazy" alt="Before (main): Row, caret in a code block, Tablet 768, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-code-tablet768-light-after.jpg" width="768" height="95" loading="lazy" alt="After: Row, caret in a code block, Tablet 768, light"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a code block <span class="variant">Light</span></span> In a code block Block ▾ joins the words, and the row still fits.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="dark" id="p4-row-code-tablet768-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-code-tablet768-dark-before.jpg" width="768" height="95" loading="lazy" alt="Before (main): Row, caret in a code block, Tablet 768, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-code-tablet768-dark-after.jpg" width="768" height="95" loading="lazy" alt="After: Row, caret in a code block, Tablet 768, dark"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a code block <span class="variant">Dark</span></span> In a code block Block ▾ joins the words, and the row still fits.</figcaption>
+</figure>
+<h3 id="p4-tablet820">Tablet 820</h3>
+<figure class="pair" data-theme="light" id="p4-more-menu-tablet820-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/more-menu-tablet820-light-before.jpg" width="820" height="658" loading="lazy" alt="Before (main): ⋯ More formatting, Tablet 820, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/more-menu-tablet820-light-after.jpg" width="820" height="658" loading="lazy" alt="After: ⋯ More formatting, Tablet 820, light"></div>
+  </div>
+  <figcaption><span class="what">⋯ More formatting <span class="variant">Light</span></span> Under 848 px Redo leads ⋯ (here disabled: “Nothing to redo.”). Desktop's ⋯ is unchanged.</figcaption>
+</figure>
+<figure class="pair" data-theme="dark" id="p4-more-menu-tablet820-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/more-menu-tablet820-dark-before.jpg" width="820" height="658" loading="lazy" alt="Before (main): ⋯ More formatting, Tablet 820, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/more-menu-tablet820-dark-after.jpg" width="820" height="658" loading="lazy" alt="After: ⋯ More formatting, Tablet 820, dark"></div>
+  </div>
+  <figcaption><span class="what">⋯ More formatting <span class="variant">Dark</span></span> Under 848 px Redo leads ⋯ (here disabled: “Nothing to redo.”). Desktop's ⋯ is unchanged.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="light" id="p4-row-paragraph-tablet820-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-paragraph-tablet820-light-before.jpg" width="820" height="95" loading="lazy" alt="Before (main): Row, caret in a paragraph, Tablet 820, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-paragraph-tablet820-light-after.jpg" width="820" height="95" loading="lazy" alt="After: Row, caret in a paragraph, Tablet 820, light"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a paragraph <span class="variant">Light</span></span> The stand-ins carry words (Format, Layout); Redo leaves the row and the list button keeps only List ▾.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="dark" id="p4-row-paragraph-tablet820-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-paragraph-tablet820-dark-before.jpg" width="820" height="95" loading="lazy" alt="Before (main): Row, caret in a paragraph, Tablet 820, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-paragraph-tablet820-dark-after.jpg" width="820" height="95" loading="lazy" alt="After: Row, caret in a paragraph, Tablet 820, dark"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a paragraph <span class="variant">Dark</span></span> The stand-ins carry words (Format, Layout); Redo leaves the row and the list button keeps only List ▾.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="light" id="p4-row-code-tablet820-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-code-tablet820-light-before.jpg" width="820" height="95" loading="lazy" alt="Before (main): Row, caret in a code block, Tablet 820, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-code-tablet820-light-after.jpg" width="820" height="95" loading="lazy" alt="After: Row, caret in a code block, Tablet 820, light"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a code block <span class="variant">Light</span></span> In a code block Block ▾ joins the words, and the row still fits.</figcaption>
+</figure>
+<figure class="pair wide" data-theme="dark" id="p4-row-code-tablet820-dark">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-code-tablet820-dark-before.jpg" width="820" height="95" loading="lazy" alt="Before (main): Row, caret in a code block, Tablet 820, dark"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-code-tablet820-dark-after.jpg" width="820" height="95" loading="lazy" alt="After: Row, caret in a code block, Tablet 820, dark"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a code block <span class="variant">Dark</span></span> In a code block Block ▾ joins the words, and the row still fits.</figcaption>
+</figure>
+<h3 id="p4-tablet900">Tablet 900</h3>
+<figure class="pair wide" data-theme="light" id="p4-row-paragraph-tablet900-light">
+  <div class="cols">
+    <div class="col"><p class="label">Before (main)</p><img src="review/p4/row-paragraph-tablet900-light-before.jpg" width="900" height="95" loading="lazy" alt="Before (main): Row, caret in a paragraph, Tablet 900, light"></div>
+    <div class="col"><p class="label">After</p><img src="review/p4/row-paragraph-tablet900-light-after.jpg" width="900" height="95" loading="lazy" alt="After: Row, caret in a paragraph, Tablet 900, light"></div>
+  </div>
+  <figcaption><span class="what">Row, caret in a paragraph <span class="variant">Light</span></span> From 848 px the words fit with Redo and the list toggle still in the row.</figcaption>
+</figure>
+</section>
+
+</main>
+</body>
+</html>
