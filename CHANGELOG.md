@@ -22,12 +22,16 @@ change; no Deploy note.
 
 - **Editor:** `DocumentEditor` takes the connection and identity chip as a
   `statusChip` prop, still shown only with a provider. The web sandbox's root,
-  `components/editor-app/sandbox-document-editor.tsx`, passes
-  `CollabStatusGroup` and is what `EditorApp` lazy-loads in place of the
-  editor, so the chip stays in the editor's chunk group.
-- **Bytes:** the editor chunk group grows by 208 B gz (about 100 B raw; the
-  rest is the minifier renaming identifiers in the editor's hoisted module);
-  the app shell grows by 2 B.
+  `components/editor-app/sandbox-document-editor.tsx`, wraps the editor in the
+  sandbox `DocSession` and passes `CollabStatusGroup`; `EditorApp` lazy-loads
+  it in place of the editor, so the chip stays in the editor's chunk group.
+- **Tests:** the editor import-boundary test has no exceptions left (the
+  `user-identity-button.tsx` entry P2.1c listed is gone).
+- **Bytes:** the editor chunk group grows by 198 B gz on `main` after P2.1c
+  (about 100 B of code; the rest is the minifier re-ranking names in the
+  editor's hoisted module); the app shell grows by 1 B. The D23 ledger
+  (details §1 rule 5) gains a 198 B line for it, and the fence rises by
+  exactly that, to `main` + 2,053 B.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
