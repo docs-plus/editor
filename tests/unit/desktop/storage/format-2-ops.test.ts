@@ -485,3 +485,29 @@ describe("each index serves its query (§3.5)", () => {
       expect(plan).toContain(index);
     });
 });
+
+test("a compaction that leaves the file mostly free pages gives them back (T23)", () => {
+  const { id } = library.createDoc();
+  library.load(id, "w1");
+  const doc = new Y.Doc();
+  let last = 0;
+  for (let i = 0; i < 200; i += 1) {
+    let update: Uint8Array = new Uint8Array();
+    doc.once("update", (u: Uint8Array) => {
+      update = u;
+    });
+    doc.getText("t").insert(0, `${i}`.repeat(2000));
+    last = library.append(id, "w1", { origin: "local", update });
+  }
+  doc.getText("t").delete(0, doc.getText("t").length);
+  const db = (
+    library as unknown as {
+      db: { prepare(s: string): { get(): Record<string, number> } };
+    }
+  ).db;
+  expect(db.prepare("PRAGMA auto_vacuum").get()).toEqual({ auto_vacuum: 2 });
+  library.compact(id, "w1", library.stateOf(id), last);
+  const pages = db.prepare("PRAGMA page_count").get().page_count ?? 0;
+  const free = db.prepare("PRAGMA freelist_count").get().freelist_count ?? 0;
+  expect(free / pages).toBeLessThanOrEqual(0.25);
+});
