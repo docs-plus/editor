@@ -486,7 +486,7 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+`.github/workflows/ci.yml` runs on every pull request, in the merge queue (`merge_group`) and on pushes to `main`. A newer push to a pull request cancels its older run; a run on `main` is never cancelled once started, so each one can deploy:
 
 | Job | Runs |
 |---|---|
@@ -512,7 +512,10 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Workflow rules:** `tests/unit/ci/workflow-permissions.test.ts` checks every
   workflow file. Each workflow needs a read-only default token, explicit
   per-job permissions, `persist-credentials: false` on checkout, and actions
-  pinned to commit SHAs.
+  pinned to commit SHAs. Every job in a workflow that runs on `pull_request`
+  or `merge_group` must have explicit read-only permissions;
+  `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the no-cancel rule on
+  `main` and the two required check names.
 
 ## Key Conventions
 
