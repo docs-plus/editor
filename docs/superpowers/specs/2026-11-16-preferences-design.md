@@ -944,6 +944,15 @@ Desktop and the web library are new installs on new storage, so they get the new
 | HTML | boot script about +0.9 KB per response | — |
 | Fonts | 0 until chosen | — |
 
+**Measured in P2.9c-1 (#161, against `main` at `84a9458`, gzipped)** — the first-load targets set in review (coordinator, 2026-11-22) and the results:
+
+| | Target | Measured | Notes |
+|---|---|---|---|
+| Editor chunk group | ≤ +150 B (the D23 smart-quotes line) | **+109 B** (394,127 B) | |
+| First-load JS | ≤ +600 B | **+537 B** | `PageFrame` only. The store, schema and applier are a lazy runtime loaded on idle (2,183 B). |
+| First-load CSS | ≤ +400 B | **+475 B, approved** | Over by 75 B for the increased-contrast set (about 230 B), which stays eager. OS "Increase contrast" users must never see a frame at normal contrast, so accessibility outranks 230 B (coordinator ruling, 2026-11-22). The knobs, the text rules, reading mode and motion are in `_page-text.scss` (724 B), which loads next to the editor. |
+| HTML | — | +1,413 B | The boot script is 2,445 B (1,212 B gzipped), including the inline knob values. |
+
 ### 5.15 Tests
 
 - **Unit** (`bun test`):
