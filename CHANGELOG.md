@@ -15,9 +15,9 @@ The shared core of the image store (spec `2026-11-16-image-store-design.md`,
 D4, PR A1). Library documents will store `asset:sha256-<hex>` refs instead of
 data URLs; desktop storage (P2.6b) and the web library (W11) build on this.
 No web code path produces a ref yet: the public sandbox keeps inline images,
-as with A0. The editor chunk group grows by 476 B gz against `main` at
-`ed2a7cd`, within A1's 600 B allowance. First-load JS is unchanged.
-Everything else is in one 2.8 KB lazy chunk.
+as with A0. The editor chunk group grows by 491 B gz against `main` at
+`903b5c8`, within A1's 600 B allowance. First-load JS is unchanged (−5 B).
+Everything else is in one 3.4 KB gz lazy chunk.
 
 #### Added
 
