@@ -9,7 +9,8 @@ on a push to `main` (a merged pull request) and deploys that commit.
 
 Automatic deploys are **off** until the repository variable `AUTO_DEPLOY` is
 `on`. Turn them on only after the [one-time setup](#one-time-setup) is done,
-including the first manual deploy (its last step).
+including the first manual deploy (its last step). Production has had
+`AUTO_DEPLOY=on` since 2026-11-17.
 
 ```bash
 gh variable set AUTO_DEPLOY --body on    # turn on
@@ -144,11 +145,14 @@ says what a run may do:
 - **Restore** a document from a backup by copying its `documents` row back
   and deleting its `document_tombstones` row, with Hocus stopped. Restoring
   the whole file loses every edit made since the backup.
-- **Turning it on.** The file ships with `dry-run`. Review the
-  `retention_purge_dry_run` lines from a few daily runs:
+- **Turning it on.** The file shipped with `dry-run`. Production switched
+  to `on` on 2026-11-22 (#138), after four daily dry runs that each listed
+  the same 2 idle documents. To review runs, on the host:
   ```bash
   bunx pm2@6.0.14 logs editor-purge --lines 50 --nostream | grep retention_purge
   ```
+  Over a plain `ssh host '…'` command, use `~/.bun/bin/bunx`, because a
+  non-login shell doesn't have `~/.bun/bin` on `PATH`.
   When the listed documents are ones that should go, change `PURGE_MODE` to
   `on` in `ecosystem.config.cjs` in a pull request. The deploy after it merges
   updates the app (without purging); the next 03:17 run writes

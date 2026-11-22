@@ -41,7 +41,7 @@ tests/
 │   ├── perf-config.ts                    # PERF_* env parsing (parsePerfShape, parsePerfHeadings)
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
-│   ├── memory-document-index.ts          # MemoryDocumentIndex: the in-memory DocumentIndex fake (deferLoad, failTrash, purgeTrash)
+│   ├── memory-document-index.ts          # MemoryDocumentIndex: the in-memory DocumentIndex and LibraryIndex (folders, pins, folder trash; deferLoad, failTrash, purgeTrash)
 │   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── editor-keymap.ts                  # collectEditorKeys(): every combo the editor's extensions bind; normalizeCombo()
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
@@ -55,7 +55,7 @@ tests/
 │   ├── plugins/                          # HeadingScale, HeadingFold, HeadingDrag, HeadingFilter state
 │   ├── helpers/                          # canMapDecorations, computeSection, fold-storage, filter-url, move-section, tab-api, media-embed URL gate
 │   ├── hooks/                            # useSyncedTabs bootstrap + active-tab resolution (mocked Hocuspocus provider)
-│   ├── platform/                         # DocumentIndex contract suite (`document-index-contract.ts`) on MemoryDocumentIndex and GlobalTabsIndex, plus the sandbox's own rules (Playground, bootstrap, poisoned entries)
+│   ├── platform/                         # DocumentIndex and LibraryIndex contract suites (`document-index-contract.ts`) on MemoryDocumentIndex and GlobalTabsIndex, plus the sandbox's own rules (Playground, bootstrap, poisoned entries)
 │   ├── api/                              # Route handlers: DELETE rate limit; soft close, batch restore and Recently closed list (temp DB_PATH)
 │   ├── scripts/                          # Retention purge (stale and closed documents), operator delete-document, Hocus client gate and root sweep, desktop export parking and output check
 │   ├── lib/                              # Image embed planner and pipeline; `assets/` PNG, WebP and JPEG metadata stripper; security guardrails (incl. closed-documents store), import boundaries (server entries never reach `lib/tab-api` or `@hocuspocus/provider`), legacy Yjs mark migration (link/code → hyperlink/inlineCode), `addToHistory: false` kept with appended heading-id transactions (y-tiptap patch), design-token contrast (`token-contrast.test.ts`: `--primary-ink` ≥ 4.5:1 on every surface, no `text-primary`/`border-primary` utility in TSX and no `var(--primary)` text or border declaration in stylesheets, document link colour ≥ 4.5:1 on background and card in both themes), theme boot script and System theme (`theme.test.ts`), identity validation and blocked storage (`user-identity.test.ts`)
@@ -335,6 +335,23 @@ DESKTOP_BASE_URL=http://127.0.0.1:3849 CI= bun playwright test --project=desktop
 
 The web behaviour with the flag off, and the flag-on branches, are unit tested in `tests/unit/extensions/x-link-card.test.ts`, `tests/unit/helpers/media-embed.test.ts` and `tests/unit/components/privacy-link.test.tsx`.
 
+### Library UI (`components/library`)
+
+| Test | Project | Validates |
+|------|---------|-----------|
+| `library-sidebar.spec.ts` | `library` (Bun harness, no Next.js or Hocus) | The files sidebar keyboard checklist (plan §5.6; UX §8.3 items 1, 2, 3, 8 and 12): F6 regions, Enter opens, F2 rename (Esc cancels, empty refused), Move to Trash and ⌘Z in the tree, a folder trashed and restored whole, Quick Open (accents, Arabic→Persian letters and digits, Create, ⌘Enter new tab, Esc returns focus), Shift+F10 menus and Pin; tree keys (→ ← * Home End, Shift+↓, ⌘A, Esc, type-ahead); a folder never moves into itself or past 4 levels (Move to…, drag, New Folder); drag and drop onto folders, Pinned and Trash, spring-loaded folders; RTL arrow keys; axe in both themes |
+
+The harness (`tests/harness/library/`) serves the shared library components on
+a `MemoryDocumentIndex`, built with `Bun.build` and `app/globals.css` through
+Tailwind's PostCSS plugin, so nothing reaches the web build. `?dir=rtl`,
+`?theme=dark` and `?seed=empty` switch its state; below 720 px the sidebar is
+an overlay. The page bundle is built once at start, so restart it after edits.
+
+```bash
+bun run harness:library            # http://127.0.0.1:3871/
+CI= bun playwright test --project=library
+```
+
 Manual install checklist (localhost production build):
 
 - **Chrome desktop:** the install icon appears in the status strip and the address bar; the strip button opens the native dialog; installing opens a standalone window whose title bar follows the theme toggle, and the strip button is gone in both the window and the tab.
@@ -486,13 +503,13 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs on every pull request, in the merge queue (`merge_group`) and on pushes to `main`:
+`.github/workflows/ci.yml` runs on every pull request, in the merge queue (`merge_group`) and on pushes to `main`. A newer push to a pull request cancels its older run; a run on `main` is never cancelled once started, so each one can deploy:
 
 | Job | Runs |
 |---|---|
 | Changed files | Pull requests only: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run |
 | Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
-| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --shard=N/3 --retries=1` with a blob report |
+| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `CI= bun playwright test --project=chromium --project=library --shard=N/3 --retries=1` with a blob report |
 | Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
 | Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
 
@@ -517,8 +534,6 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   structural gap is about 50 s of wall time; larger gaps come from runner
   speed (one 2.2 min gap had every test in the shard about 33% slower, no
   retries). Balance is judged on the median of several runs.
-- **Cancelling:** a newer push to a pull request cancels its older run; a run
-  on `main` is never cancelled once started, so each one can deploy.
 - **Parallel unit tests (shadow):** after the serial `Unit tests` gate, the
   checks job runs the same files with `bun test --parallel` (`continue-on-error`)
   and `scripts/compare-unit-runs.ts` compares the two JUnit reports file by
