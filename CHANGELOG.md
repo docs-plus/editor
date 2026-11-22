@@ -33,9 +33,11 @@ use them: nothing in the web build imports `components/library` or
   Modified, Created, Opened or Manual (pin order in Pinned), List or
   Preview (title plus a 2-line snippet), group by date (Today, Yesterday,
   This week, This month, Earlier) or by folder, all kept per folder. The
-  tree keeps sorting by title. Lists are windowed (first paint 26 ms at
-  1,000 documents and 28 ms at 10,000 on a production build; targets 100
-  and 300 ms). Arrow, Home/End and Page keys, Shift to extend, Space,
+  tree keeps sorting by title. Lists are windowed (first paint of a
+  folder's list 33 ms at 1,000 documents and 45 ms at 10,000 on a
+  production build; targets 100 and 300 ms). P2.7a's sidebar tree is not
+  windowed yet: expanding a folder of 10,000 documents there takes about
+  2.6 s. Arrow, Home/End and Page keys, Shift to extend, Space,
   ⌘A, Enter (a folder opens its list), F2, ⌘⌫ / Delete, ⌘Z, Shift+F10,
   type-to-select, and ⌥⌘↑ / ⌥⌘↓ in a Manual folder.
 - **Library:** the filter bar: ⌘F while a list has focus, matching titles,
@@ -54,6 +56,50 @@ use them: nothing in the web build imports `components/library` or
   `library-lists-speed.spec.ts` on the harness, which now seeds large
   libraries (`?seed=10000`), a Trash (`?trash=1`) and builds production
   React with `LIBRARY_HARNESS_PROD=1`.
+
+### Desktop P2.1c: the editor opens documents through `DocSession`
+
+`use-yjs-document` now opens documents through the `DocSession` its
+composition root provides, instead of importing `collab-session`. The web
+provides the sandbox adapter, which wraps `collab-session` unchanged, so
+nothing changes for users. The adapter loads with the lazy editor chunk,
+not on first load (first load −32 B gz, editor chunk group +275 B gz). The
+desktop and library roots will provide `local-session`.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session-context.tsx`
+  (`DocSessionProvider`, `useDocSession`) and
+  `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
+  sandbox `DocSession` over `collab-session`).
+- **Editor:** `components/editor-app/sandbox-document-editor.tsx`, the web
+  wrapper that `EditorApp` loads lazily in place of `DocumentEditor`: the
+  editor under the sandbox `DocSession`.
+- **Tests:** an import-boundary test that neither the hook nor any module in
+  `components/document-editor/` loads `collab-session` or a platform
+  adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
+  statically and its connection status reads `collab-session`.
+
+#### Changed
+
+- **Editor:** `use-yjs-document` returns the same fields as before, now read
+  from the `DocSession` handle (`ydoc` and `awareness` are `undefined`, not
+  `null`, before the first open).
+- **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
+  (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
+  that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
+- **Tests:** the SIGKILL batcher test kills its child once at least 10
+  tokens are past the 1 s window and it is still typing, instead of at a
+  fixed time, so a slow CI runner makes the run longer rather than failing
+  its "enough typed" check.
+- **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
+  Reload button saves through `DocSession.flush()` (on the web, the same
+  device-copy flush as before) before reloading.
 
 ### Desktop P2.7a: files sidebar, Quick Open and Move to…
 
@@ -103,6 +149,24 @@ use it: the web build is unchanged (every JS and CSS chunk identical to
 - **Build:** `app/globals.css` leaves `components/library` and
   `tests/harness` out of Tailwind's sources; the library styles itself in
   plain CSS on the shadcn tokens, shipped only with the components.
+
+### Retention purge: on
+
+The daily `editor-purge` run now deletes. Four dry runs in production
+(2026-11-19 to 2026-11-22, 03:17) each listed the same 2 documents idle for
+more than 30 days (`staleTotal` 2), no closed documents past 7 days and no
+expired tombstones.
+
+#### Changed
+
+- **Ops:** `PURGE_MODE` is `on` for `editor-purge` in `ecosystem.config.cjs`.
+  Each run first backs the database up to `backups/` (`db-first.sqlite` kept
+  forever, dated copies 14 days) and deletes nothing if the backup fails.
+
+**Deploy:** nothing to do by hand. The automatic deploy registers the new env
+without purging; the next 03:17 run writes `db-first.sqlite` and does the
+first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
+pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
 
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
