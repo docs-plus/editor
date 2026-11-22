@@ -59,7 +59,7 @@ documents, so don't type anything private.
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) 1.4.4 or later. Node.js is not needed: Next.js,
+Requires [Bun](https://bun.sh) 1.4.5 or later. Node.js is not needed: Next.js,
 ESLint, Playwright and the git hooks run on the Bun runtime (`[run] bun = true`
 in `bunfig.toml`), and unit tests use `bun test`.
 
