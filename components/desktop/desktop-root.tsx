@@ -26,6 +26,8 @@ import type { DocSession } from "@/lib/platform/doc-session";
 import { DocSessionProvider } from "@/lib/platform/doc-session-context";
 import { type DocStore, isDocStoreError } from "@/lib/platform/doc-store";
 
+import { installLinkRouter } from "./link-router";
+
 type Opened = { session: DocSession; docId: string; flush(): Promise<void> };
 
 type DevBridgeConfig = { url: string; token: string };
@@ -168,6 +170,9 @@ export function DesktopRoot() {
         );
     } else if (window.tinydocy) {
       const bridge = window.tinydocy;
+      // Links leave through the bridge, never window.open (N2).
+      const unroute = installLinkRouter(bridge);
+      close = unroute;
       Promise.all([
         import("@/lib/platform/desktop/ipc-doc-store"),
         import("@/lib/platform/local-session"),
@@ -179,7 +184,11 @@ export function DesktopRoot() {
           });
           // Main asks before a quit or a window close; the preload answers
           // once this settles (3 s at most).
-          close = bridge.on("app.flushRequested", () => session.flush());
+          const off = bridge.on("app.flushRequested", () => session.flush());
+          close = () => {
+            off();
+            unroute();
+          };
           return { session, docId, flush: () => session.flush() };
         })
         .then(
