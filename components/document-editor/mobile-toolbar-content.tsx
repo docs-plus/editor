@@ -40,12 +40,18 @@ import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
-import { useKeyboardInset } from "@/lib/keyboard-inset";
+import { onViewportWidthChange, useKeyboardInset } from "@/lib/keyboard-inset";
 import {
   RECENT_COLORS_CHOICE,
   useRememberedChoice,
 } from "@/lib/remembered-choice";
 import "@/components/smart-toolbar/phone/phone.scss";
+
+/** Scrolls the caret into view while the person is writing (focus in the editor). */
+function scrollCaretIntoView(editor: Editor) {
+  if (editor.isDestroyed || !editor.view.hasFocus()) return;
+  editor.commands.scrollIntoView();
+}
 
 /** The bar's constant cell height (spec §4.7), above any safe area. */
 export const MOBILE_BAR_HEIGHT = 44;
@@ -230,6 +236,30 @@ export function MobileToolbarContent({
     },
     [],
   );
+
+  // Rotating with the keyboard up can leave the caret off screen (§4.6):
+  // once the frame has settled and the clearance above re-rendered, scroll
+  // it back into view, once. A rotation that stays below 768px changes the
+  // width under the bar; one across 768px mounts the bar (to portrait) or
+  // unmounts it (to landscape, where the row toolbar takes over). No steps,
+  // so no Yjs traffic or undo entry.
+  useEffect(() => {
+    if (!editor) return;
+    let frame = 0;
+    const keepCaretInView = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => scrollCaretIntoView(editor));
+    };
+    keepCaretInView();
+    const stop = onViewportWidthChange(keepCaretInView);
+    return () => {
+      stop();
+      cancelAnimationFrame(frame);
+      if (!editor.isDestroyed && editor.view.hasFocus()) {
+        requestAnimationFrame(() => scrollCaretIntoView(editor));
+      }
+    };
+  }, [editor]);
 
   // Set by a close that hands focus on (Link opens its popover over the
   // page): the sheet must not pull focus back to Aa after its exit.
