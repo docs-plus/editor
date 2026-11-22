@@ -23,14 +23,29 @@ import { ArrowLeftIcon, ChevronRightIcon } from "@/lib/icons";
 import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
 import type { SlashItem } from "@/lib/slash-menu/slash-items";
 
-import {
-  buildSlashItems,
-  HAS_NEW_BADGES,
-  isNewItem,
-  localDay,
-  recentInsertKinds,
-} from "../slash/slash-menu";
+import type * as SlashMenuModule from "../slash/slash-menu";
 import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
+
+/**
+ * The "/" menu's item helpers, handed over by the loader (`insert-sheet.tsx`)
+ * from the "/" chunk it fetches with this one. Never a static import: a
+ * second importer would keep them a separate module of the "/" group and
+ * push it past its 7 KB budget (A21).
+ */
+type SlashHelpers = Pick<
+  typeof SlashMenuModule,
+  | "buildSlashItems"
+  | "HAS_NEW_BADGES"
+  | "isNewItem"
+  | "localDay"
+  | "recentInsertKinds"
+>;
+let slash: SlashHelpers;
+
+/** Called by the loader before the body renders. */
+export function setSlashHelpers(helpers: SlashHelpers): void {
+  slash = helpers;
+}
 
 /*
  * The Insert sheet's body (spec §8.3): its own lazy chunk, loaded by the
@@ -86,8 +101,8 @@ function diagramItem(): SlashItem | null {
  */
 function buildModel(editor: Editor) {
   const actions = editorActions.list();
-  const recent = recentInsertKinds();
-  const items = buildSlashItems(
+  const recent = slash.recentInsertKinds();
+  const items = slash.buildSlashItems(
     computeContext(editor),
     actions,
     readChoice(TABLE_SIZE_CHOICE).last,
@@ -100,9 +115,9 @@ function buildModel(editor: Editor) {
       diagram: diagramItem(),
     }),
     fresh: new Set(
-      HAS_NEW_BADGES
+      slash.HAS_NEW_BADGES
         ? items
-            .filter((item) => isNewItem(item, localDay(), recent))
+            .filter((item) => slash.isNewItem(item, slash.localDay(), recent))
             .map((item) => item.key)
         : [],
     ),
@@ -151,7 +166,7 @@ function InsertCell({
       <span className="st-insert-cell-text">
         <span className="st-insert-cell-label">
           {item.label}
-          {HAS_NEW_BADGES && fresh ? (
+          {slash.HAS_NEW_BADGES && fresh ? (
             <span className="sr-only">, new</span>
           ) : null}
         </span>
@@ -161,7 +176,7 @@ function InsertCell({
           </span>
         ) : null}
       </span>
-      {HAS_NEW_BADGES && fresh ? (
+      {slash.HAS_NEW_BADGES && fresh ? (
         <span aria-hidden="true" data-slash-new="" className="st-insert-new">
           New
         </span>

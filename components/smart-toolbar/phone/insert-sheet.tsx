@@ -25,12 +25,20 @@ import { PlusIcon } from "@/lib/icons";
 import type { InsertSheetStep as Step } from "./insert-sheet-body";
 
 /**
- * The sheet's body (its cells and steps): its own chunk (spec §8.3).
+ * The sheet's body (its cells and steps): its own chunk (spec §8.3), with
+ * the "/" chunk, whose item helpers it hands the body.
  * Fetched when the browser is idle after the bar mounts and again on the
  * Insert cell's press, so the sheet opens with its cells in place; a
  * failed fetch says so in the sheet, with Retry.
  */
-const loadInsertSheetBody = () => import("./insert-sheet-body");
+const loadInsertSheetBody = () =>
+  Promise.all([
+    import("./insert-sheet-body"),
+    import("../slash/slash-menu"),
+  ]).then(([body, slash]) => {
+    body.setSlashHelpers(slash);
+    return body;
+  });
 const preloadInsertSheetBody = () => {
   loadInsertSheetBody().catch(() => undefined);
 };
