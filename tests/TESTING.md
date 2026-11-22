@@ -80,6 +80,8 @@ tests/
 │   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds, image resize gripper
 │   ├── filter.spec.ts                    # Heading filter open + query + highlight
 │   ├── filter-collab.spec.ts             # Filter folds follow a collaborator's heading edits
+│   ├── find.spec.ts                      # Find and replace (P2.11): steps, options, Esc, RTL, IME, collab, limits
+│   ├── find-perf.spec.ts                 # Keystroke-to-paint with Find open vs closed (perf project)
 │   ├── fold.spec.ts                      # Fold chevron + crinkle unfold
 │   ├── image-metadata.spec.ts            # Inserted images lose Exif/GPS/text metadata, keep orientation and pixels, get alt=""
 │   ├── link-underlines.spec.ts           # Document links underlined, 0.15em offset, in paragraph, heading, list, table
@@ -218,6 +220,8 @@ What WebKit does differently, and how the specs handle it:
 | `offline-copies.spec.ts` | A repeat visit opens the document from the device while the collab server is unreachable; edits made while disconnected survive a reload and sync to a second browser; a document deleted while away (operator `delete-document.ts`) disappears from the tab bar and its copy is removed; closing a tab removes its copy and "Delete offline copies" on `/privacy` clears the rest. Inspects IndexedDB without creating it. Needs `next dev` and hocus on one `DB_PATH` |
 | `toolbar.spec.ts` | Toolbar behaviour: menus named by value with radio items, indent and outdent in lists, disabled reasons, focus kept when controls hide, headings and caret clear of the sticky toolbar, catch-up within the commit budget |
 | `toolbar-row.spec.ts` | Smart toolbar row (PR D1): row order in every context, one Tab stop, Alt+F10 and Esc with the selection, context slot per kind, remote heading deletion while a slot control has focus, clear formatting keeps links, read-only keeps every control and focus, the align items in Align ▾ and T3 ¶ (icon, label, check slot before the shortcut, shortcuts ending at Outdent's and Indent's edge, Ctrl+Shift+E on one line off macOS) and Mod+Shift+L/E/R/J aligning without the browser taking them, light and dark screenshots into `.superpowers/screens-D1/` |
+| `find.spec.ts` | Find and replace (P2.11, details spec E1): ⌘F / Ctrl+F opens the bar, Enter, ⌘G and F3 step, Match case and Whole word, Esc selects the current hit only after the writer moved to one (a bar reopened on a remembered query and dismissed leaves the caret and scroll alone), Find keys stay with other fields, Replace and Replace all (one undo step; the replacement field stops at 1,000 characters and Replace all refuses past 256 KiB of growth), a collaborator's edits while open, Persian and Arabic letter forms, IME composition in the editor, axe and design screenshots (`FIND_SCREENSHOTS=1`), phone width. |
+| `find-perf.spec.ts` | Typing with Find open, in the `perf` project (one worker): real key presses timed from keydown to the first task after the next frame, Find closed and open in alternating rounds, on 1,000 headings (2,000 hits), one paragraph with 5,000 hits and one at the 10,000-hit cap. Find may add `FIND_PERF_MAX_MEDIAN_MS` (4) to the median and `FIND_PERF_MAX_P95_MS` (20) to the p95; report in `test-reports/find-perf-*.json` |
 | `toolbar-perf.spec.ts` | Toolbar timing budgets on a 500-heading doc, in the `perf` project (one worker): catch-up render per burst (`window.__toolbarRenderMs`, dev only; report in `test-reports/toolbar-catch-up-*.json`) and arrow / Shift+Arrow p95 with the toolbar on vs off (`toolbar-arrow-p95-*.json`). Both arms open the same generated document in fresh 1280×4000 contexts (tall enough that the 60-key walk never scrolls, which the test checks: a scroll frame lays out the blocks it reveals, costs several times a normal key, and at 720 px about 5% of keys were such frames, right at the p95 rank), run one discarded warm-up round each, then 3 interleaved rounds (on/off, off/on, on/off) from the same start after the main thread is idle; each press is one sample (the modifier's own keydown is skipped) and waits for the previous one to paint, and p95 is taken over all of an arm's measured presses. `TOOLBAR_PERF_CPU_THROTTLE=4` throttles both arms to mimic a slow runner; the 50 ms ceilings are absolute, so a throttled run is informational |
 | `toolbar-a11y.spec.ts` | Focus outline and pressed bar contrast in light, dark and forced colours; highlight dialog and mobile panel keyboard behaviour; axe sweep (WCAG 2.2 AA, no serious or critical violations) of the toolbar in paragraph, title, heading, list, code block, table and read-only contexts and with the style menu, list menu and highlight dialog open, in both themes; the simplified row and its ⋯ menu in both themes; in forced colours the hovered colour swatch wears the Highlight ring and focus elsewhere drops to a dashed one |
 | `toolbar-focus-guards.spec.ts` | Base UI's focus guards around an open popup's trigger stay Base UI's: with the text style or list menu open they keep `tabindex="0"` and never get `data-toolbar-item`; Tab out of an open menu closes it and lands in the document, Shift+Tab closes it with focus on its trigger; with focus back on the trigger of an open menu, ArrowRight / ArrowLeft rove to the same items as with it closed, and Tab / Shift+Tab close it and leave the toolbar forwards / backwards |
@@ -272,11 +276,13 @@ it again after typing, before requiring all 220 keystroke samples.
 | `PERF_EXTRA_ROUNDS` | `PERF_ROUNDS` | Rounds added when the first `PERF_ROUNDS` exceed the budget; the verdict then uses all rounds, so a noisy draw gets a second look and a real regression still fails. `0` disables. The report records `roundsRun` per heading count |
 | `PERF_CPU_THROTTLE` | `4` | CDP `Emulation.setCPUThrottlingRate` applied before typing |
 | `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run. This bounds **total** on-arm typing latency: the toolbar's own cost is about 2% (median paired ratio 1.02 over 63 CI runs), so the check catches the whole on-arm path getting 15–20% slower (replayed on those runs: 1.15× fails about 98%, 1.20× about 100%), not a 15–20% rise in the toolbar's own small cost. Clean runs still trip the first 7 rounds about 5% of the time |
+| `FIND_PERF_KEYS` / `FIND_PERF_ROUNDS` | `30` / `3` | Keys per round and measured rounds per arm in `find-perf.spec.ts` |
+| `FIND_PERF_MAX_MEDIAN_MS` / `FIND_PERF_MAX_P95_MS` | `4` / `20` | What Find may add to the median and p95 keystroke-to-paint in `find-perf.spec.ts` |
 | `TOOLBAR_PERF_CPU_THROTTLE` | `1` | CDP CPU throttle for both arms of the arrow p95 in `toolbar-perf.spec.ts` (local reproduction of a slow runner; informational, the ceilings are absolute) |
 
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
 
-The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as `make test-e2e` does) times typing only after the parallel suite has finished, so other workers never compete for the CPU; CI runs `perf` on a runner of its own instead. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+The spec, `toolbar-perf.spec.ts` and `find-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as `make test-e2e` does) times typing only after the parallel suite has finished, so other workers never compete for the CPU; CI runs `perf` on a runner of its own instead. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
 
 **Web library:** the `perf` project doesn't exercise the web library's IndexedDB store; no route mounts it.
 
@@ -406,12 +412,12 @@ The `electron` project (`playwright.electron.config.ts`, `tests/electron/`) driv
 | Strict CSP, spellcheck | With the editor open and text typed, the only CSP violations are remote images (`img-src https:`), and no spellcheck event (attempt, download or failed setup) is logged |
 | #106 quit | With a vetoing `beforeunload`, a flush listener and unacked edits (Hocus stopped), quitting exits 0 in under 6 s with the marks `quit_start`, `flush_done`, `storage_closed` (clean), `exit`; timings go to `test-results-electron/quit-timings-<os>.json` and the job summary |
 | Last window | With the same veto and edits, closing the last window flushes it; Windows and Linux then quit, macOS keeps running with no window |
-| Hardening (`hardening.spec.ts`) | A subframe can neither navigate the top window to `https` nor `window.open` one (no `external_open`); the top frame's links reach the browser at most 3 per 10 s; a download is refused; scripts, stylesheets, `/icon` and a 404 carry a CSP |
+| Hardening (`hardening.spec.ts`) | A subframe can neither navigate the top window to `https` nor `window.open` one (main denies every `window.open`; no `external_open`); the top frame's links reach the browser through `shell.openLink`, at most 3 per 10 s; a download is refused; scripts, stylesheets, `/icon` and a 404 carry a CSP |
 | Offline (`offline.spec.ts`) | A whole session with Chromium's net-log on: no host off the machine (exact allowlist: Chromium's IPv6 route probe `[2001:4860:4860::8888]`, which sends nothing, and Windows' `wpad` lookup), nothing unparsed, no `gvt1.com`; hosts go to `netlog-hosts-<os>.json` |
 
 **Two flavors.** `bun desktop/build/build.ts` builds the **release** flavor (no test hooks, `wss:` sync URL; the installers, with the inspect fuse off). `--flavor test` keeps the hooks (`desktop/main/test-hooks.ts`) and is packaged unpacked with the inspect fuse on; the specs and `self-test.ts` run against it. The installed release app gets `check-fuses --inspect off` and `release-smoke.ts`: it starts with its real userData, opens its library, refuses a second instance's `tinydocy://local/<uuid> --inspect=9229`, opens no inspector on 9229, and closes gracefully.
 
-It runs in `.github/workflows/desktop-shell.yml` (pull requests that touch the shell, nightly, on demand) against the unpacked **test-flavor** app on `macos-26`, `windows-latest` and `ubuntu-24.04`; that is where it is verified. Never run it locally with visible windows. On a desktop, set `TINYDOCY_HIDDEN=1` (no window, no Dock icon); the commands below are the CI steps, not yet tried that way locally:
+It runs in `.github/workflows/desktop-shell.yml` (every pull request that touches the shell and is not a draft, the merge queue, nightly, on demand; `Desktop shell (gate)` is the check the ruleset requires) against the unpacked **test-flavor** app on `macos-26`, `windows-latest` and `ubuntu-24.04`; that is where it is verified. Never run it locally with visible windows. On a desktop, set `TINYDOCY_HIDDEN=1` (no window, no Dock icon); the commands below are the CI steps, not yet tried that way locally:
 
 ```bash
 NEXT_PUBLIC_HOCUS_URL=ws://127.0.0.1:1234 bun run build:desktop
@@ -595,9 +601,9 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 | Job | Runs |
 |---|---|
-| Changed files | Pull requests only: decides whether the browser suites run (not on a draft; not when only docs or Markdown changed, from `gh api .../pulls/N/files`) |
+| Changed files | Pull requests: decides whether the browser suites run (not on a draft; not when only docs or Markdown changed, from `gh api .../pulls/N/files`). Every run: reads the shard timings from the latest green push run on `main` |
 | Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
-| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `CI= bun playwright test --project=chromium --project=library --shard=N/3 --retries=1` with a blob report |
+| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `bun scripts/e2e-shards.ts plan N/3` and `CI= bun playwright test --project=chromium --project=library --test-list=<shard files> --retries=1` with a blob report |
 | Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
 | Desktop renderer (export and local) | not required: `bun run build:desktop`, the `desktop` project on the served export, then the `local` project over the dev bridge (`next dev` on port 3926, no retries) |
 | Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
@@ -619,8 +625,26 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Fails closed:** a skip passes only on a `pull_request` run with one of
   those two reasons. In the merge queue, on `main` and in manual runs every
   suite always runs, and `Playwright (Chromium)` fails if any was skipped.
-- **Shards:** Playwright splits the `chromium` project by spec file. To run
-  one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
+- **Shards:** `scripts/e2e-shards.ts` packs the `chromium` and `library`
+  spec files into three shards by duration (longest first, into the
+  least-loaded shard; a new spec counts as the median), from per-file
+  seconds that `Playwright (Chromium)` publishes as the `e2e-timings`
+  artifact on green pushes to `main` only. The `Changed files` job reads them
+  once, so every shard packs the same plan; without usable timings (none
+  yet, expired after 30 days, or invalid) every shard uses Playwright's own
+  `--shard=N/3`. Each browser job logs its runner's CPU before the suites.
+  To run one shard locally: `CI= bun playwright test --project=chromium
+  --project=library --shard=2/3`, or plan it from a timings file with
+  `bun scripts/e2e-shards.ts plan 2/3 e2e-timings.json list.txt`.
+- **Shard balance:** Playwright's own `--shard` gives each shard a
+  contiguous range of spec files sized by test *count*, so the specs with
+  slow tests (palette, selection-bubble, paint-format, slash-menu,
+  outline-overlay) shared shard 2, which ran 1.5–2.5 min longer than the
+  others on any CPU (A/B on #155). Splitting a spec into adjacent files
+  does not help (its tests keep their positions), renamed files and
+  `PWTEST_SHARD_WEIGHTS` drift or may vanish, so the shards are packed by
+  measured time instead. The runner's CPU still varies shard times by
+  about 40% (Intel Xeon 6975P vs AMD EPYC 7763).
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
@@ -638,7 +662,13 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   merging a change it covers.
 - **Desktop:** `desktop-shell.yml` builds the unsigned internal installers on
   three OSes, installs them and runs the `electron` project (see "Desktop
-  shell" above); `desktop-smoke.yml` (D-A12) and `desktop-storage-soak.yml`
+  shell" above). It runs on every pull request, but its `Changed files` job
+  builds only when the pull request is ready for review and touches one of
+  the shell's paths (the list in its Decide step); the merge queue, nightly
+  and manual runs always build. `Desktop shell (gate)` always runs and fails
+  closed like `Playwright (Chromium)`;
+  `tests/unit/ci/desktop-shell-workflow.test.ts` runs its decision and
+  verdict scripts. `desktop-smoke.yml` (D-A12) and `desktop-storage-soak.yml`
   run on pull requests that touch them. Nightly calls all three.
 - **Extension update PRs:** the scheduled `@docs.plus` update workflow starts
   CI on its branch itself (`gh workflow run ci.yml`), because pull requests

@@ -172,6 +172,13 @@ must not change:
 | `Lint, typecheck, unit tests, build` | `checks` | audit, Biome, ESLint, typecheck, unit tests, production build, editor chunk size |
 | `Playwright (Chromium)` | `e2e-gate` | passes only when the three `Playwright shard N/3` jobs and `Playwright perf (typing budget)` passed, or when the pull request changes only `docs/**` or Markdown files (outside `desktop/**`) and they were skipped |
 
+The desktop shell workflow (`.github/workflows/desktop-shell.yml`) adds a
+third check for the ruleset:
+
+| Check | Job | What it covers |
+| --- | --- | --- |
+| `Desktop shell (gate)` | `gate` | passes only when `Renderer export (Linux)` and the three `Package, install and test` legs passed, or when a pull request is a draft or changes none of the shell's paths and they were skipped; in the merge queue it always builds |
+
 The shard, perf and `Changed files` jobs are not required on their own:
 `Playwright (Chromium)` always runs and fails if any of them failed, was
 cancelled or was skipped when it should have run. A failing test is annotated
@@ -197,8 +204,9 @@ pull requests ahead of it, and merges only what passed. CI already runs on
    - Only merge non-failing pull requests: on (**All green**).
    - Status check timeout: **60 minutes**.
 2. In the same ruleset, keep **Require status checks to pass** with exactly
-   `Lint, typecheck, unit tests, build` and `Playwright (Chromium)` (source:
-   GitHub Actions). Do not add the shard, perf or `Changed files` jobs.
+   `Lint, typecheck, unit tests, build`, `Playwright (Chromium)` and
+   `Desktop shell (gate)` (source: GitHub Actions). Do not add the shard,
+   perf, `Changed files`, renderer or package jobs.
 3. Save, then merge pull requests with **Merge when ready** (or
    `gh pr merge <n> --auto --merge`) instead of the merge button.
 
@@ -207,6 +215,23 @@ on a draft with a notice, and marking it ready for review starts the full
 run. Agent sessions open their pull requests as drafts and mark them ready
 when they are; a draft cannot enter the merge queue. The merge queue and
 `main` always run every suite, and the gate fails if one was skipped there.
+
+### Requiring the desktop shell (owner, once)
+
+`Desktop shell (gate)` runs on every pull request and in the merge queue, so
+it can be required. In **Protect main** → **Require status checks to pass**
+→ Add checks, add `Desktop shell (gate)` (source: GitHub Actions), or with the
+API:
+
+```bash
+gh api repos/docs-plus/editor/rulesets/26847251 \
+  | jq '{name, target, enforcement, conditions, bypass_actors,
+         rules: [.rules[] | if .type == "required_status_checks"
+           then .parameters.required_status_checks += [{context:
+             "Desktop shell (gate)", integration_id: 15368}]
+           else . end]}' \
+  | gh api -X PUT repos/docs-plus/editor/rulesets/26847251 --input -
+```
 
 Or with the API (the PUT replaces the ruleset, so this adds the rule to the
 current one):

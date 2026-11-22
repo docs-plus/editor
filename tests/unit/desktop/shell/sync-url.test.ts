@@ -22,6 +22,10 @@ test("refuses anything that could add a CSP directive or source", () => {
     "wss://user:pw@a.example",
     "wss://a.example/path",
     "wss://a.example?x=1",
+    "wss://*.example.com",
+    "wss://*",
+    "wss://a_b.example",
+    "wss://-a.example",
     "not a url",
     "",
   ])

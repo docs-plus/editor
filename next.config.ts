@@ -36,6 +36,8 @@ const nextConfig: NextConfig = {
     // Always defined, so the bundler inlines it and drops the other target's
     // branches; an unset NEXT_PUBLIC_* stays a runtime lookup.
     NEXT_PUBLIC_APP_TARGET: process.env.NEXT_PUBLIC_APP_TARGET ?? "web",
+    // Same for Find (P2.11): a build with `0` drops the key listener.
+    NEXT_PUBLIC_FIND: process.env.NEXT_PUBLIC_FIND ?? "",
     // "dev" only for a desktop-target `next dev` over the dev storage host
     // (the `local` project); defined so release builds drop that branch.
     NEXT_PUBLIC_DESKTOP_BRIDGE: process.env.NEXT_PUBLIC_DESKTOP_BRIDGE ?? "",

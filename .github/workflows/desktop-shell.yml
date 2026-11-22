@@ -14,24 +14,21 @@ name: Desktop shell
 #      unpacked build that the self-test and the `electron` specs drive.
 #    The quit timings land in the job summary and the artifacts.
 #
-# Runs on pull requests that touch the shell, nightly through `nightly.yml`
-# (workflow_call), and on demand. Not a required check yet. Read-only
-# token and no secrets, like CI.
+# 3. `gate` ("Desktop shell (gate)") is the check the ruleset can require.
+#    It always runs, because a skipped required check counts as passing.
+#
+# Runs on every pull request, in the merge queue, nightly through
+# `nightly.yml` (workflow_call) and on demand. On a pull request, `changes`
+# runs the build only when it touches the shell's paths (the list in its
+# Decide step) and is not a draft; the merge queue, nightly and manual runs
+# always build. Read-only token and no secrets, like CI.
 
 on:
+  # ready_for_review: a draft skips the build, so marking it ready must run
+  # it.
   pull_request:
-    paths:
-      - desktop/**
-      - lib/platform/desktop/**
-      - lib/security/content-security-policy.ts
-      - scripts/build-desktop.ts
-      - scripts/desktop-export.ts
-      - next.config.ts
-      - tests/electron/**
-      - playwright.electron.config.ts
-      - package.json
-      - bun.lock
-      - .github/workflows/desktop-shell.yml
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
   workflow_call:
   workflow_dispatch:
 
@@ -48,8 +45,63 @@ env:
   NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1234
 
 jobs:
+  changes:
+    name: Changed files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      skip-reason: ${{ steps.decide.outputs.skip-reason }}
+    steps:
+      - name: List changed files
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/$GH_REPO/pulls/$PR/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)' \
+            > "$RUNNER_TEMP/changed-files.txt"
+          cat "$RUNNER_TEMP/changed-files.txt"
+
+      # Pull requests only: skip while a draft, or when no changed path is
+      # one the shell is built from. Every other event builds.
+      # tests/unit/ci/desktop-shell-workflow.test.ts runs this script.
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          FILES: ${{ runner.temp }}/changed-files.txt
+        run: |
+          paths='^(desktop/|lib/platform/desktop/|tests/electron/)'
+          paths="$paths|^(lib/security/content-security-policy\.ts|scripts/build-desktop\.ts"
+          paths="$paths|scripts/desktop-export\.ts|next\.config\.ts|playwright\.electron\.config\.ts"
+          paths="$paths|package\.json|bun\.lock|\.github/workflows/desktop-shell\.yml)$"
+          reason=""
+          if [ "$EVENT" != pull_request ]; then
+            build=true
+          elif [ "$DRAFT" = true ]; then
+            build=false
+            reason=draft
+          elif [ ! -s "$FILES" ] || grep -qE "$paths" "$FILES"; then
+            build=true
+          else
+            build=false
+            reason=no-shell-changes
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "skip-reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Desktop shell build: $build${reason:+ ($reason)}"
+
   renderer:
     name: Renderer export (Linux)
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -187,7 +239,9 @@ jobs:
           hdiutil attach -nobrowse -noautoopen -mountpoint "$RUNNER_TEMP/dmg" "$dmg"
           cp -R "$RUNNER_TEMP/dmg/TinyDocy.app" /Applications/
           hdiutil detach "$RUNNER_TEMP/dmg"
-          codesign --verify --deep --verbose=2 /Applications/TinyDocy.app || true
+          # Unsigned (D35) but ad-hoc signed after the fuses are flipped: the
+          # seal must hold, or arm64 macOS refuses to launch the app.
+          codesign --verify --deep --verbose=2 /Applications/TinyDocy.app
           echo "RELEASE_EXECUTABLE=/Applications/TinyDocy.app/Contents/MacOS/TinyDocy" >> "$GITHUB_ENV"
           echo "RELEASE_FUSE_TARGET=/Applications/TinyDocy.app" >> "$GITHUB_ENV"
 
@@ -340,3 +394,44 @@ jobs:
             dist/desktop-release/*.AppImage
           retention-days: 14
           if-no-files-found: error
+
+  # The required check. It passes only if the renderer and every package leg
+  # passed, or if `changes` skipped them on a pull request (a draft, or no
+  # shell paths changed). In the merge queue, nightly and manual runs a skip
+  # fails it.
+  gate:
+    name: Desktop shell (gate)
+    needs: [changes, renderer, package]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Verdict
+        env:
+          EVENT: ${{ github.event_name }}
+          BUILD: ${{ needs.changes.outputs.build }}
+          REASON: ${{ needs.changes.outputs.skip-reason }}
+          CHANGES: ${{ needs.changes.result }}
+          RENDERER: ${{ needs.renderer.result }}
+          PACKAGE: ${{ needs.package.result }}
+        run: |
+          echo "event=$EVENT changes=$CHANGES build=$BUILD ($REASON) renderer=$RENDERER package=$PACKAGE"
+          if [ "$CHANGES" != success ]; then
+            echo "::error::Changed files job: $CHANGES"; exit 1
+          fi
+          if [ "$EVENT" = pull_request ] && [ "$BUILD" = false ] &&
+            [ "$RENDERER" = skipped ] && [ "$PACKAGE" = skipped ]; then
+            case "$REASON" in
+              draft)
+                echo "::notice::Draft pull request: the desktop shell builds once it is marked ready for review"
+                exit 0 ;;
+              no-shell-changes)
+                echo "::notice::No desktop shell paths changed: build skipped"
+                exit 0 ;;
+            esac
+          fi
+          if [ "$RENDERER" != success ] || [ "$PACKAGE" != success ]; then
+            echo "::error::Renderer: $RENDERER, package: $PACKAGE"; exit 1
+          fi

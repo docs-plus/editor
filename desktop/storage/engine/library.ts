@@ -445,6 +445,16 @@ export class Library {
   }
 
   /**
+   * Whether a document exists, without claiming it: main checks a deep
+   * link with this, so a probe never holds a document a window is opening.
+   */
+  exists(docId: string): boolean {
+    return (
+      scalar(this.conn, "SELECT 1 FROM docs WHERE id = ?", docId) !== undefined
+    );
+  }
+
+  /**
    * Re-registers a hold without loading: after a worker restart, main
    * replays its registry so the windows' resent batches are accepted.
    */
