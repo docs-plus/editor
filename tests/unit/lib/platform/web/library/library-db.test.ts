@@ -202,6 +202,21 @@ describe("openLibraryDb: versions and old tabs (§2.4)", () => {
   });
 });
 
+describe("openLibraryDb: an upgrade while opening (§2.4)", () => {
+  it("never blocks a newer tab that asks while this one is still opening", async () => {
+    const browser = createFakeBrowser();
+    (await browser.open()).close();
+    const events: LibraryEvent[] = [];
+    const opening = browser.open({ onEvent: (e) => events.push(e) });
+    const newer = rawOpen(browser.factory, 2);
+    const library = await opening;
+    (await newer).close();
+    await until(() => library.closed && events.includes("library_reload"));
+    expect(library.closed).toBe(true);
+    expect(events).toEqual(["library_reload"]);
+  });
+});
+
 describe("openLibraryDb: unavailable (§2.4)", () => {
   it("rejects with library_unavailable when there is no IndexedDB", async () => {
     await expect(openLibraryDb({ factory: null })).rejects.toMatchObject({

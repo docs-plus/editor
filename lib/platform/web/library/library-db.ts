@@ -95,7 +95,7 @@ export class LibraryDb {
     private readonly keyRange: typeof IDBKeyRange,
     private readonly onEvent: (event: LibraryEvent) => void,
   ) {
-    db.onversionchange = () => void this.closeForUpgrade();
+    db.onversionchange = () => void this.handleVersionChange();
     // The browser closed it (site data cleared, say): writes now reject.
     db.onclose = () => {
       this.closedFlag = true;
@@ -204,7 +204,8 @@ export class LibraryDb {
     });
   }
 
-  private async closeForUpgrade(): Promise<void> {
+  /** @internal Flushes, closes and asks for a reload (another tab upgrades). */
+  async handleVersionChange(): Promise<void> {
     if (this.closedFlag) return;
     await Promise.allSettled([...this.closeHooks].map((hook) => hook()));
     this.close();
@@ -318,6 +319,13 @@ export async function openLibraryDb(
     tooNew = true;
   }
 
+  // A newer tab may ask to upgrade while the format is read: let it in at
+  // once, and hand back a closed library that asks for a reload.
+  let upgradedMeanwhile = false;
+  db.onversionchange = () => {
+    upgradedMeanwhile = true;
+    db.close();
+  };
   try {
     const format = await readFormatVersion(db);
     if (typeof format === "number" && format > LIBRARY_FORMAT_VERSION) {
@@ -325,9 +333,13 @@ export async function openLibraryDb(
     }
   } catch (error) {
     db.close();
-    throw new DocStoreError("library_unavailable", errorName(error));
+    if (!upgradedMeanwhile) {
+      throw new DocStoreError("library_unavailable", errorName(error));
+    }
   }
 
   if (tooNew) onEvent("library_too_new");
-  return new LibraryDb(db, tooNew, keyRange, onEvent);
+  const library = new LibraryDb(db, tooNew, keyRange, onEvent);
+  if (upgradedMeanwhile) library.handleVersionChange();
+  return library;
 }
