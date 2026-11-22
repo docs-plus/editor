@@ -666,7 +666,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                       <span
                         aria-hidden="true"
                         data-slash-new=""
-                        className="shrink-0 rounded-sm bg-muted px-1 text-xs leading-4 font-medium text-foreground"
+                        className="shrink-0 rounded-sm border bg-muted px-1 text-xs leading-4 font-medium text-foreground"
                       >
                         New
                       </span>
