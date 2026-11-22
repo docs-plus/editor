@@ -96,7 +96,9 @@ const isRtl = (el: Element) => getComputedStyle(el).direction === "rtl";
  * listens on the document). The popover belongs to the eager trigger
  * (`color-controls.tsx`), so this chunk has no handle on its state. Focus
  * is already back in the editor, so Base UI does not return it to the
- * trigger.
+ * trigger. The event is untrusted: if Base UI ever checks `isTrusted`,
+ * picks stop closing the menu and the `toBeHidden` checks in
+ * `toolbar-surfaces.spec.ts` fail.
  */
 function closeMenu(menu: Element | null): void {
   menu?.dispatchEvent(
