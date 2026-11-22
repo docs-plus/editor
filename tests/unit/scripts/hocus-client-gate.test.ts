@@ -205,7 +205,9 @@ describe("hocus-server client schema gate", () => {
       async () => {
         const server = await start(env);
         const outcomes = await Promise.all(
-          [null, "abc", "1", String(CLIENT_SCHEMA)].map(
+          // "2" is the schema every sandbox bundle sent before A1: it must
+          // stay admitted (floor 2) while it counts as low.
+          [null, "abc", "1", "2", String(CLIENT_SCHEMA)].map(
             (schema) =>
               attach(openSocket(server, schema), crypto.randomUUID()).outcome,
           ),
@@ -214,6 +216,7 @@ describe("hocus-server client schema gate", () => {
           "client_outdated",
           "client_outdated",
           "client_outdated",
+          "synced",
           "synced",
         ]);
         const tabs = await attach(
@@ -236,7 +239,7 @@ describe("hocus-server client schema gate", () => {
           event: "client_schema",
           missing: 1,
           invalid: 1,
-          low: 1,
+          low: 2,
           ok: 1,
         });
         expect(counts.refused).toBeGreaterThanOrEqual(3);
