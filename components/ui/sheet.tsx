@@ -3,6 +3,7 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import * as React from "react";
 
+import { useKeyboardInsetVars } from "@/lib/keyboard-inset";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,7 +11,12 @@ import { cn } from "@/lib/utils";
  * modal (`aria-modal`), focus-trapped, Esc and backdrop close it, focus
  * returns on close. The caller makes the page behind it `inert`.
  * Only the bottom side, the one the phone format sheet uses. A downward
- * swipe on the header closes it too (`SheetHeader`).
+ * swipe on the header closes it too (`SheetHeader`). It rides the
+ * on-screen keyboard (phones and tablets design §4.6): while open it sits on
+ * `--keyboard-inset` and fits the visual viewport, so a field in it stays
+ * above the keyboard. With the keyboard down (or on desktop) both fall back
+ * to the plain bottom sheet. A caller's own `max-h-*` replaces the cap: a
+ * sheet with a field writes it as `min(…, var(--visual-viewport-height, …))`.
  */
 type SheetActions = React.RefObject<SheetPrimitive.Root.Actions | null>;
 
@@ -59,6 +65,12 @@ function wrapTab(event: React.KeyboardEvent<HTMLDivElement>) {
   (event.shiftKey ? last : first).focus();
 }
 
+/** Keeps `--keyboard-inset` live while the popup is mounted (open). */
+function KeyboardInsetVars() {
+  useKeyboardInsetVars();
+  return null;
+}
+
 function SheetContent({
   className,
   children,
@@ -75,7 +87,7 @@ function SheetContent({
         data-slot="sheet-content"
         aria-modal="true"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
+          "fixed inset-x-0 bottom-[var(--keyboard-inset,0px)] z-50 flex max-h-[min(85dvh,var(--visual-viewport-height,85dvh))] flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
           className,
         )}
         onKeyDown={(event) => {
@@ -84,6 +96,7 @@ function SheetContent({
         }}
         {...props}
       >
+        <KeyboardInsetVars />
         {children}
       </SheetPrimitive.Popup>
     </SheetPrimitive.Portal>
