@@ -365,6 +365,16 @@ storage worker uses it yet; P2.6e persists P2.7b's library port on it.
 - **Docs:** the architecture spec allows `lib/search/normalize.ts` and
   `lib/library/tag-rules.ts` into the storage code, and records how format 2
   was built.
+
+### Web library: new documents join Recent at once (dark)
+
+`createLibraryDoc` sets `opened_at` to the creation time, so a document the
+user creates, or later imports, is in Recent (`by_opened`) at once instead
+of only after it is first opened. The W2 "As built" notes record this and
+the other coordinator decisions of 2026-11-22. Nothing in the web app
+imports the library, so the web build is unchanged.
+
+**Deploy:** none.
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`
