@@ -30,8 +30,10 @@ import {
   moreStep,
   type RowsPos,
   rowsStep,
+  typeahead,
 } from "./color-order";
 import {
+  announcePick,
   applySwatch,
   type ColorState,
   LOW_CONTRAST,
@@ -88,10 +90,54 @@ const COPY = {
 const rowLabel = (swatch: Swatch) =>
   swatch.token ? colorLabel(swatch.token) : COPY[swatch.kind].none;
 
-const sameSwatch = (a: Swatch, b: Swatch) =>
-  a.kind === b.kind && a.token === b.token;
-
 const isRtl = (el: Element) => getComputedStyle(el).direction === "rtl";
+
+/**
+ * Closes a menu exactly as Esc pressed in it would (Base UI's dismiss
+ * listens on the document). The popover belongs to the eager trigger
+ * (`color-controls.tsx`), so this chunk has no handle on its state. Focus
+ * is already back in the editor, so Base UI does not return it to the
+ * trigger.
+ */
+function closeMenu(menu: Element | null): void {
+  menu?.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }),
+  );
+}
+
+/** A plain letter or digit typed into a menu: typeahead, not a shortcut. */
+const isTypeahead = (event: KeyboardEvent) =>
+  !event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1;
+
+/**
+ * Typeahead over a menu's items (spec §7.10): the next item after the
+ * focused one whose visible name starts with `key` (a Recent chip's
+ * accessible name), or null.
+ */
+function typeaheadItem(
+  container: HTMLElement | null,
+  key: string,
+): HTMLElement | null {
+  const items = [
+    ...(container?.querySelectorAll<HTMLElement>(".st-color-item") ?? []),
+  ];
+  const labels = items.map(
+    (item) =>
+      item.querySelector(".st-color-item-label")?.textContent ??
+      item.getAttribute("aria-label") ??
+      "",
+  );
+  const at = typeahead(
+    labels,
+    items.indexOf(document.activeElement as HTMLElement),
+    key,
+  );
+  return at === null ? null : items[at];
+}
 
 /** Where the roving stop starts: the asked column's checked row (or More). */
 function initialPos(kind: Kind, state: ColorState): RowsPos {
@@ -241,13 +287,13 @@ function MoreRow({
   ];
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const list = items();
+    const typed = isTypeahead(event)
+      ? typeaheadItem(popupRef.current, event.key)
+      : null;
     const at = list.indexOf(event.target as HTMLElement);
-    const next = moreStep(
-      at,
-      event.key,
-      isRtl(event.currentTarget),
-      list.length,
-    );
+    const next = typed
+      ? list.indexOf(typed)
+      : moreStep(at, event.key, rtl, list.length);
     if (next === undefined) return;
     event.preventDefault();
     event.stopPropagation();
@@ -384,26 +430,40 @@ export function ColorRows({
     if (panelRef.current) setRtl(isRtl(panelRef.current));
   }, []);
 
-  /** A picked row's position in the panel (More rows keep the More stop). */
-  const findPos = (swatch: Swatch): RowsPos | null => {
-    const shown = COLUMN[swatch.kind].findIndex((s) => sameSwatch(s, swatch));
-    return shown >= 0 ? { section: swatch.kind, index: shown } : null;
-  };
+  /** An item's place in the rows, from its `data-section`/`data-index`. */
+  const posOf = (item: HTMLElement): RowsPos => ({
+    section: item.dataset.section as RowsPos["section"],
+    index: Number(item.dataset.index),
+  });
 
+  /**
+   * A pick applies, names the colour in the live region (and the pill,
+   * with Undo), and closes every menu: focus returns to the editor with
+   * the selection, which closes the popovers (spec §7.10).
+   */
   const pick = (swatch: Swatch) => {
-    if (panelRef.current?.contains(document.activeElement)) {
-      const pos = findPos(swatch);
-      if (pos) {
-        setActive(pos);
-        focusAt(pos);
-      }
+    if (!applySwatch(editor, swatch)) return;
+    editor.commands.focus();
+    const done = () => {
+      closeMenu(panelRef.current);
+      // After closing: the Esc that closes the menu also dismisses the pill.
+      announcePick(editor, swatch);
+    };
+    if (openMore === null) {
+      done();
+    } else {
+      // An open submenu blocks the menu's Esc until it has closed.
+      setOpenMore(null);
+      requestAnimationFrame(done);
     }
-    applySwatch(editor, swatch);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Keys from a More submenu bubble here through its portal.
     if (!event.currentTarget.contains(event.target as Node)) return;
-    const next = rowsStep(active, event.key, isRtl(event.currentTarget), sizes);
+    const typed = isTypeahead(event)
+      ? typeaheadItem(panelRef.current, event.key)
+      : null;
+    const next = typed ? posOf(typed) : rowsStep(active, event.key, rtl, sizes);
     if (next === undefined) return;
     event.preventDefault();
     if (next === "open-more") {

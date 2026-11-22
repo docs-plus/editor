@@ -8,6 +8,7 @@ import {
   moreStep,
   type RowsPos,
   rowsStep,
+  typeahead,
 } from "@/components/smart-toolbar/color/color-order";
 import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
 
@@ -56,13 +57,26 @@ const at = (section: RowsPos["section"], index: number): RowsPos => ({
 });
 
 describe("rowsStep: arrow keys in the named rows", () => {
-  it("moves Up and Down within a column, without wrapping", () => {
+  it("moves Up and Down within a column, wrapping through Recent (§7.10)", () => {
     expect(rowsStep(at("text", 2), "ArrowDown", false, SIZES)).toEqual(
       at("text", 3),
     );
-    expect(rowsStep(at("text", 6), "ArrowDown", false, SIZES)).toBeNull();
     expect(rowsStep(at("highlight", 3), "ArrowUp", false, SIZES)).toEqual(
       at("highlight", 2),
+    );
+    // Past More: back to the top, Recent first.
+    expect(rowsStep(at("text", 6), "ArrowDown", false, SIZES)).toEqual(
+      at("recent", 0),
+    );
+    expect(rowsStep(at("recent", 1), "ArrowUp", false, SIZES)).toEqual(
+      at("text", 6),
+    );
+    const noRecent = { ...SIZES, recent: 0 };
+    expect(rowsStep(at("highlight", 5), "ArrowDown", false, noRecent)).toEqual(
+      at("highlight", 0),
+    );
+    expect(rowsStep(at("text", 0), "ArrowUp", false, noRecent)).toEqual(
+      at("text", 6),
     );
   });
 
@@ -73,9 +87,6 @@ describe("rowsStep: arrow keys in the named rows", () => {
     expect(rowsStep(at("recent", 2), "ArrowDown", false, SIZES)).toEqual(
       at("text", 0),
     );
-    expect(
-      rowsStep(at("text", 0), "ArrowUp", false, { ...SIZES, recent: 0 }),
-    ).toBeNull();
   });
 
   it("crosses columns with Left/Right at the same row, clamped", () => {
@@ -141,14 +152,36 @@ describe("rowsStep: arrow keys in the named rows", () => {
 });
 
 describe("moreStep: arrow keys in a More submenu", () => {
-  it("moves Up/Down, Home/End and closes with the inline-start arrow", () => {
+  it("moves Up/Down (wrapping), Home/End and closes with the inline-start arrow", () => {
     expect(moreStep(0, "ArrowDown", false, 5)).toBe(1);
-    expect(moreStep(4, "ArrowDown", false, 5)).toBeNull();
+    // Wrapping (§7.10).
+    expect(moreStep(4, "ArrowDown", false, 5)).toBe(0);
+    expect(moreStep(0, "ArrowUp", false, 5)).toBe(4);
     expect(moreStep(3, "Home", false, 5)).toBe(0);
     expect(moreStep(0, "End", false, 5)).toBe(4);
     expect(moreStep(2, "ArrowLeft", false, 5)).toBe("close");
     expect(moreStep(2, "ArrowRight", true, 5)).toBe("close");
     expect(moreStep(2, "ArrowRight", false, 5)).toBeNull();
     expect(moreStep(2, "x", false, 5)).toBeUndefined();
+  });
+});
+
+describe("typeahead: a letter moves to the next row starting with it", () => {
+  const LABELS = ["Default", "Red", "Orange", "Green", "Blue", "Purple"];
+
+  it("finds the next match after the current row, case-insensitively", () => {
+    expect(typeahead(LABELS, 0, "g")).toBe(3);
+    expect(typeahead(LABELS, 0, "B")).toBe(4);
+  });
+
+  it("wraps past the end and skips the current row", () => {
+    expect(typeahead(LABELS, 4, "r")).toBe(1);
+    expect(typeahead(["Gray", "Green"], 1, "g")).toBe(0);
+  });
+
+  it("is null without a match or for a non-letter key", () => {
+    expect(typeahead(LABELS, 0, "z")).toBeNull();
+    expect(typeahead(LABELS, 0, "Enter")).toBeNull();
+    expect(typeahead(LABELS, 0, " ")).toBeNull();
   });
 });

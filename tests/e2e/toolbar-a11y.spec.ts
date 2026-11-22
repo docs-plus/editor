@@ -272,60 +272,61 @@ test("highlight dialog: named rows, focus on open, arrows move focus only", asyn
     highlights(dialog).getByRole("menuitemradio", { name: "Green highlight" }),
   ).toBeFocused();
 
-  // Enter applies and keeps the popover open, focus on the row.
+  // Enter picks and closes; focus returns to the editor with the
+  // selection (spec §7.10; the grid kept it open, O4).
   const blue = highlights(dialog).getByRole("menuitemradio", {
     name: "Blue highlight",
   });
   await blue.focus();
   await page.keyboard.press("Enter");
-  await expect(blue).toHaveAttribute("aria-checked", "true");
-  await expect(blue.locator(".st-color-check")).toHaveCount(1);
-  await expect(dialog).toBeVisible();
-  await expect(blue).toBeFocused();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".tiptap")).toBeFocused();
   expect(
     await page.evaluate(
       () => window.__tiptap_editor?.getAttributes("highlight").color,
     ),
   ).toBe("blue");
-  await expect(none).toHaveAttribute("aria-checked", "false");
 
-  // Esc returns focus to the trigger; reopening focuses the applied row.
-  await closeWithEscape(page, dialog);
-  await expect(trigger).toBeFocused();
+  // Reopening focuses the applied row, checked with its ✓.
+  await trigger.focus();
   await page.keyboard.press("Enter");
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("aria-checked", "true");
+  await expect(blue.locator(".st-color-check")).toHaveCount(1);
+  await expect(none).toHaveAttribute("aria-checked", "false");
+  // Esc returns focus to the trigger.
   await closeWithEscape(page, dialog);
   await expect(trigger).toBeFocused();
 });
 
-test("highlight dialog: No highlight keeps focus, Esc returns it to the trigger", async ({
+test("highlight dialog: Space on No highlight removes it and returns to the editor", async ({
   page,
 }) => {
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const dialog = await openHighlightDialog(page);
+  let dialog = await openHighlightDialog(page);
   const green = highlights(dialog).getByRole("menuitemradio", {
     name: "Green highlight",
   });
   await green.focus();
   await page.keyboard.press("Enter");
-  await expect(green).toHaveAttribute("aria-checked", "true");
-  await expect(green).toBeFocused();
+  await expect(dialog).toBeHidden();
+  expect(
+    await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
+  ).toBe(true);
 
+  dialog = await openHighlightDialog(page);
+  await expect(green).toHaveAttribute("aria-checked", "true");
   const none = highlights(dialog).getByRole("menuitemradio", {
     name: "No highlight",
   });
   await none.focus();
-  await page.keyboard.press("Enter");
-  await expect(green).toHaveAttribute("aria-checked", "false");
-  await expect(none).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press(" ");
+  await expect(dialog).toBeHidden();
   expect(
     await page.evaluate(() => window.__tiptap_editor?.isActive("highlight")),
   ).toBe(false);
-  await expect(none).toBeFocused();
-  await closeWithEscape(page, dialog);
-  await expect(highlightTrigger(page)).toBeFocused();
+  await expect(page.locator(".tiptap")).toBeFocused();
 });
 
 test("highlight dialog: a Mod-Shift-H highlight shows as the checked Yellow row", async ({
@@ -372,7 +373,10 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
       const swatch = highlights(dialog).getByRole("menuitemradio", {
         name: `${name} highlight`,
       });
+      // A pick closes the menu (spec §7.10): reopen it to see the ✓.
       await swatch.click();
+      await expect(dialog).toBeHidden();
+      await openHighlightDialog(page);
       await expect(swatch).toHaveAttribute("aria-checked", "true");
       // PR A's per-swatch forced-colours check, on the row's chip: forced
       // colours keep the chip's own colour and outline it in a system
@@ -615,6 +619,8 @@ for (const mode of ["light", "dark", "forced colours"] as const) {
     // Still selectable: it applies and the popover stays open. The text
     // row stays undimmed although teal is now below AA on this highlight.
     await dimmed.click();
+    await expect(dialog).toBeHidden();
+    await openHighlightDialog(page);
     await expect(dimmed).toHaveAttribute("aria-checked", "true");
     expect(
       await page.evaluate(

@@ -148,12 +148,12 @@ test("highlight popover applies a token, remembers it and lists it as recent", a
     dialog.getByRole("menuitemradio", { name: "Yellow highlight" }),
   ).toBeFocused();
   expect(await lastHighlight(page)).toBeNull();
-  // Applying keeps the popover open (spec §4.5, O4); Esc closes it.
+  // A pick applies and closes the menu, focus back in the editor with the
+  // selection (spec §7.10; the grid kept it open, O4).
   await blue.click();
-  await expect(blue).toHaveAttribute("aria-checked", "true");
-  expect(await lastHighlight(page)).toBe("blue");
-  await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+  expect(await lastHighlight(page)).toBe("blue");
+  await expect(page.locator(".tiptap")).toBeFocused();
 
   // M2: the face now names and reapplies blue.
   const face = toolbar(page).getByRole("button", {
@@ -217,7 +217,9 @@ test("named rows: the rest of the colours wait under More, named", async ({
   const teal = more.getByRole("menuitemradio", { name: "Teal text" });
   await expect(teal.locator(".st-color-item-label")).toHaveText("Teal");
   await teal.click();
-  await expect(teal).toHaveAttribute("aria-checked", "true");
+  // A pick closes every menu (spec §7.10).
+  await expect(more).toBeHidden();
+  await expect(dialog).toBeHidden();
   await expect
     .poll(() =>
       page.evaluate(
@@ -228,11 +230,78 @@ test("named rows: the rest of the colours wait under More, named", async ({
       ),
     )
     .toBe("teal");
-  // Default is no longer checked; the More row carries the ✓.
+  // Reopened: Default is no longer checked; the More row carries the ✓,
+  // and the roving stop starts on it.
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
   await expect(
     text.getByRole("menuitemradio", { name: "Default text" }),
   ).toHaveAttribute("aria-checked", "false");
   await expect(moreRow.locator(".st-color-check")).toBeVisible();
+  await expect(moreRow).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(teal).toBeFocused();
+  await expect(teal).toHaveAttribute("aria-checked", "true");
+});
+
+test("named rows: Up/Down wrap and a letter jumps to the next row with it", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const focused = page.locator(":focus");
+  await expect(focused).toHaveAccessibleName("Default text");
+  // No Recent yet: ↑ from the top wraps to More.
+  await page.keyboard.press("ArrowUp");
+  await expect(focused).toHaveAccessibleName("More colours");
+  await page.keyboard.press("ArrowDown");
+  await expect(focused).toHaveAccessibleName("Default text");
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green text");
+  // The next G is in Highlight; then it wraps back to Text.
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green highlight");
+  await page.keyboard.press("g");
+  await expect(focused).toHaveAccessibleName("Green text");
+  expect(await lastHighlight(page)).toBeNull();
+});
+
+test("named rows: Enter picks, closes and announces it; Undo on the pill takes it back", async ({
+  page,
+}) => {
+  await openRow(page);
+  await toolbar(page)
+    .getByRole("button", { name: "More text colours" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Text colours" });
+  await expect(page.locator(":focus")).toHaveAccessibleName("Default text");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".tiptap")).toBeFocused();
+  const colour = () =>
+    page.evaluate(
+      () =>
+        window.__tiptap_editor?.state.doc.lastChild?.firstChild?.marks.find(
+          (m) => m.type.name === "textColor",
+        )?.attrs.color ?? null,
+    );
+  await expect.poll(colour).toBe("red");
+  // The selection is kept: the next key styles the same words.
+  expect(
+    await page.evaluate(() => window.__tiptap_editor?.state.selection.empty),
+  ).toBe(false);
+  // Polite live region and pill (§14, WCAG 4.1.3).
+  await expect(page.locator('body > div[role="status"]')).toHaveText(
+    "Red text",
+  );
+  const pill = page.locator('[data-status-pill="desktop"]');
+  await expect(pill).toContainText("Red text");
+  await pill.getByRole("button", { name: "Undo: Red text" }).click();
+  await expect.poll(colour).toBeNull();
 });
 
 test("named rows: ←/→ cross columns, → opens More and ← or Esc closes it", async ({
@@ -370,6 +439,9 @@ test("colour chips keep their colours in forced colours", async ({
   await more.click();
   const dialog = page.getByRole("dialog", { name: "Highlight colours" });
   await dialog.getByRole("menuitemradio", { name: "Blue highlight" }).click();
+  // A pick closes the menu: reopen it to see the checked row.
+  await expect(dialog).toBeHidden();
+  await more.click();
   const highlights = dialog.getByRole("group", { name: "Highlight" });
   const blue = highlights.getByRole("menuitemradio", {
     name: "Blue highlight",

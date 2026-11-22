@@ -435,19 +435,23 @@ async function settledWidth(dialog: Locator) {
   return (await dialog.boundingBox())?.width ?? 0;
 }
 
-test("M2: a mouse pick moves the roving stop and focus to the row", async ({
+test("M2: a mouse pick closes the menu; reopening starts on the picked row", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const { highlights } = await openHighlightDialog(page);
+  const { dialog, highlights } = await openHighlightDialog(page);
   const none = highlights.getByRole("menuitemradio", { name: "No highlight" });
   await expect(none).toBeFocused();
   const blue = highlights.getByRole("menuitemradio", {
     name: "Blue highlight",
   });
   await blue.click();
+  // Spec §7.10: a pick closes every menu, focus back in the editor.
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".tiptap")).toBeFocused();
+  await openHighlightDialog(page);
   await expect(blue).toHaveAttribute("aria-checked", "true");
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("tabindex", "0");

@@ -59,12 +59,13 @@ const clamp = (index: number, size: number) =>
   Math.max(0, Math.min(index, size - 1));
 
 /**
- * Where an arrow key moves in the named rows: Up/Down within a column
- * (from a column's top up to Recent, from Recent down to Text); Left/Right
- * across to the same row of the other column, in visual order, so RTL
- * swaps them; the inline-end arrow on a "More" row opens its submenu.
- * Home/End reach the section's ends. Null: handled, nowhere to go.
- * Undefined: not a key the rows handle.
+ * Where an arrow key moves in the named rows (spec §7.10): Up/Down move
+ * within a column and wrap, through Recent (one stop above both columns;
+ * Up from it lands on the Text column's last row); Left/Right cross to
+ * the same row of the other column, in visual order, so RTL swaps them;
+ * the inline-end arrow on a "More" row opens its submenu. Home/End reach
+ * the section's ends. Null: handled, nowhere to go. Undefined: not a key
+ * the rows handle.
  */
 export function rowsStep(
   pos: RowsPos,
@@ -76,22 +77,23 @@ export function rowsStep(
   const size = sizes[section];
   const move = (next: RowsPos | null) =>
     next && next.index >= 0 && next.index < sizes[next.section] ? next : null;
+  const recent: RowsPos | null =
+    sizes.recent > 0 ? { section: "recent", index: 0 } : null;
   switch (key) {
     case "Home":
       return { section, index: 0 };
     case "End":
       return { section, index: size - 1 };
     case "ArrowDown":
-      return move(
-        section === "recent"
-          ? { section: "text", index: 0 }
-          : { section, index: index + 1 },
-      );
+      if (section === "recent") return move({ section: "text", index: 0 });
+      if (index < size - 1) return { section, index: index + 1 };
+      return recent ?? { section, index: 0 };
     case "ArrowUp":
-      if (section !== "recent" && index === 0) {
-        return move({ section: "recent", index: 0 });
+      if (section === "recent") {
+        return move({ section: "text", index: sizes.text - 1 });
       }
-      return move({ section, index: index - 1 });
+      if (index > 0) return { section, index: index - 1 };
+      return recent ?? { section, index: size - 1 };
     case "ArrowLeft":
     case "ArrowRight": {
       const forward = towardEnd(key, rtl);
@@ -109,9 +111,9 @@ export function rowsStep(
 }
 
 /**
- * Arrow keys in a "More" submenu: Up/Down/Home/End move; the inline-start
- * arrow closes it (back to its "More" row). Same null/undefined meaning
- * as `rowsStep`.
+ * Arrow keys in a "More" submenu: Up/Down move and wrap, Home/End reach
+ * its ends; the inline-start arrow closes it (back to its "More" row).
+ * Same null/undefined meaning as `rowsStep`.
  */
 export function moreStep(
   index: number,
@@ -119,20 +121,38 @@ export function moreStep(
   rtl: boolean,
   size: number,
 ): number | "close" | null | undefined {
-  const within = (next: number) => (next >= 0 && next < size ? next : null);
   switch (key) {
     case "Home":
       return 0;
     case "End":
       return size - 1;
     case "ArrowDown":
-      return within(index + 1);
+      return (index + 1) % size;
     case "ArrowUp":
-      return within(index - 1);
+      return (index - 1 + size) % size;
     case "ArrowLeft":
     case "ArrowRight":
       return towardEnd(key, rtl) ? null : "close";
     default:
       return undefined;
   }
+}
+
+/**
+ * Typeahead (spec §7.10, APG menu): the next row after `current` whose
+ * label starts with the typed letter, wrapping; null when none does or
+ * the key is not a single letter or digit.
+ */
+export function typeahead(
+  labels: readonly string[],
+  current: number,
+  key: string,
+): number | null {
+  if (!/^[\p{L}\p{N}]$/u.test(key)) return null;
+  const letter = key.toLocaleLowerCase();
+  for (let step = 1; step <= labels.length; step += 1) {
+    const at = (current + step) % labels.length;
+    if (labels[at].toLocaleLowerCase().startsWith(letter)) return at;
+  }
+  return null;
 }

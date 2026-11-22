@@ -143,6 +143,8 @@ describe("ColorPanel rows layout (spec §7.3, the default)", () => {
     await settle();
     expect(red?.getAttribute("aria-checked")).toBe("true");
     expect(editor?.getHTML()).toContain('data-text-color="red"');
+    // Named in the polite live region, as on the phone (§14, 4.1.3).
+    expect(getNotice()?.text).toBe("Red text");
   });
 
   it("puts Recent first, up to five chips", () => {

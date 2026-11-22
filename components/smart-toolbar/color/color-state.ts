@@ -3,6 +3,7 @@
 import type { Editor } from "@tiptap/react";
 
 import { useActionView } from "@/hooks/use-editor-context";
+import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import { type ColorTheme, isLowContrastPair } from "@/lib/text-style-contrast";
@@ -86,6 +87,23 @@ export function applySwatch(editor: Editor, swatch: Swatch): boolean {
         : "color.highlight.unset";
   const action = editorActions.get(id);
   return action ? runAction(editor, action, swatch.token ?? undefined) : false;
+}
+
+/**
+ * Names a pick in the polite live region and on the pill, with Undo
+ * (WCAG 4.1.3, spec §7.3 and §14): "Teal text".
+ */
+export function announcePick(editor: Editor, swatch: Swatch): void {
+  announce(swatchName(swatch), {
+    done: true,
+    action: {
+      label: "Undo",
+      run: () => {
+        const undo = editorActions.get("history.undo");
+        if (undo) runAction(editor, undo);
+      },
+    },
+  });
 }
 
 export interface ColorState {

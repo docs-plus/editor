@@ -11,9 +11,6 @@ import {
   useState,
 } from "react";
 
-import { announce } from "@/lib/announce";
-import { editorActions } from "@/lib/editor-actions";
-import { runAction } from "@/lib/editor-actions/registry";
 import { BanIcon, CheckIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
 import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
@@ -22,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { isCoarsePointer } from "../coarse-pointer";
 import { ColorRows } from "./color-rows";
 import {
+  announcePick,
   applySwatch,
   type ColorState,
   LOW_CONTRAST,
@@ -103,9 +101,8 @@ interface Line {
 }
 
 /**
- * Swatches per visual line as rendered, so ↑/↓ follow what the user sees:
- * the Aa sheet's grid fills its width (`auto-fill`, design pass §6) and
- * ignores `--swatch-cols`. Falls back to `columns` when the layout is
+ * Swatches per visual line as rendered, so ↑/↓ follow what the user sees
+ * (six on touch, spec §7.3). Falls back to `columns` when the layout is
  * not resolved to pixel tracks.
  */
 function renderedColumns(grid: HTMLElement | null, columns: number): number {
@@ -147,31 +144,18 @@ const HIGHLIGHT_ROW: Swatch[] = [
   ...HIGHLIGHT_TOKENS.map((token) => ({ kind: "highlight" as const, token })),
 ];
 
-/** "Current: Red text, No highlight" (mixed: "mixed text colours"). */
-function currentCaption({ current }: ColorState): string {
-  const text = current.text;
-  const highlight = current.highlight;
-  const name = (kind: Swatch["kind"], token: string | null | undefined) =>
-    token === undefined
-      ? kind === "text"
-        ? "mixed text colours"
-        : "mixed highlights"
-      : swatchName({ kind, token } as Swatch);
-  return `Current: ${name("text", text)}, ${name("highlight", highlight)}`;
+/** The caption's words for one kind; undefined is a mixed selection. */
+const MIXED = { text: "mixed text colours", highlight: "mixed highlights" };
+
+function captionName(kind: Swatch["kind"], token: string | null | undefined) {
+  if (token === undefined) return MIXED[kind];
+  return swatchName({ kind, token } as Swatch);
 }
 
-/** Each pick names what it applied, with Undo (phone, §7.3). */
-function announcePick(editor: Editor, swatch: Swatch) {
-  announce(swatchName(swatch), {
-    done: true,
-    action: {
-      label: "Undo",
-      run: () => {
-        const undo = editorActions.get("history.undo");
-        if (undo) runAction(editor, undo);
-      },
-    },
-  });
+/** "Current: Red text, No highlight" (phone, spec §7.3). */
+function currentCaption({ current }: ColorState): string {
+  const text = captionName("text", current.text);
+  return `Current: ${text}, ${captionName("highlight", current.highlight)}`;
 }
 
 function SwatchGrid({
