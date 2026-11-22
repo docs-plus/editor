@@ -19,7 +19,7 @@
 > - **Q10: headings of closed documents (§4.2, §4.5).** v1 links to whole closed documents and to headings of the open one; ⇥ on a closed document loads its outline lazily (`loadOutline(docId)`, 150 ms budget, a "Loading headings…" row). The alternative is whole-document links only.
 > - **Not a decision, a finding (prototype probe):** a line can break between the link icon and the first word when the icon is `display: inline-block` (the package default): 18–28% of widths in headless Chromium, LTR and RTL. An inline, `white-space: nowrap` icon span with a word joiner (U+2060) after the svg, and the gap on the svg, never split in 402 widths (§4.6).
 
-- **Status:** revised for plan v7, 2026-11-16 (was a proposal for owner review). Nothing here is built.
+- **Status:** revised for plan v7, 2026-11-16 (was a proposal for owner review). Nothing here is built. **§4.2a Smart chips was approved by the owner on 2026-11-22 (C1–C9 as recommended).**
 - **Amends:** architecture **D-A8** and UX spec §4.3, both updated in plan v7 to D24's metadata scope.
 - **Builds on:**
   - [plan v7](2026-11-15-desktop-local-first-design.md) (D0–D32)
@@ -205,6 +205,7 @@ The first version of this document designed full-text search: a renderer text ex
 - The label update is a write into every linking document, which the worker can't make.
 - In a shared document, that write would publish the new title to collaborators.
 - A mark keeps the text editable, copy-pasteable and undoable like any link. It needs no schema bump.
+- *(Approved 2026-11-22, C1: §4.2a adds a smart chip node next to the mark. It keeps both reasons above, because the chip's title is resolved only when it renders and never written.)*
 
 **Parsing:**
 - A strict regex in `lib/links/doc-link.ts`: `^tinydocy:(doc/[0-9a-f]{32}|here)(#[0-9a-f-]{36})?$`. Anything else is not a document link.
@@ -264,6 +265,488 @@ The first version of this document designed full-text search: a renderer text ex
 - Document ⋯ and the file tree's context menu **Copy Link to Document**, which copies `tinydocy:doc/<key>` for pasting into another document
 - **Pasting** a `tinydocy:` href autolinks it like any URL
 - Dragging a document from the sidebar into the text is **later**
+
+### 4.2a Smart chips
+
+> **Status: approved by the owner, 2026-11-22 ("I approve those smart-chips"): C1–C9 as recommended.** Nothing here is built yet; LK2 builds it after LK1 (#154) merges. The decisions are in the table at the end of this section.
+> - **Polish round (2026-11-22):** one refinement pass on the approved design, accessibility first. C1–C9 are unchanged. It reconciles the states with the approved linking decisions Q4–Q7 (#163): one **Not available** state, `FileMinus` for In Trash, `Hash` for `here#`, and a card that is the Q7 preview. §4.6, §7 and §8 on this branch still show the text from before Q4; #163 owns those hunks, and this section follows its approved text.
+> - **Chip colour and corner (2026-11-22):** the owner asked for chip colour as an app preference the user can change, and for a less round corner. The corner is `--radius-sm` (owner, 2026-11-22). The colour preference is **C10**, approved by the owner on 2026-11-22 ("approve"): see [Chip colour (preference)](#chip-colour-preference).
+> - **Prototype:** [`docs/design/2026-11-22-smart-chips-prototype.html`](../../design/2026-11-22-smart-chips-prototype.html). It is self-contained (lucide 0.469.0 is its only dependency) and has an Accessibility panel that shows each element's role, name and state. Its default scene is 15 px at leading 1.15, the tightest line the app ships. A Chip colour control in its toolbar switches every scene live.
+> - **Screenshots:** [`docs/design/2026-11-22-smart-chips/`](../../design/2026-11-22-smart-chips/): 67 numbered headless captures (01–53 and 58–67 in Chromium, 54–57 in Firefox and WebKit) and 12 before/after pairs (`p01`–`p11` from the polish round, `p12` for the corner).
+>   - 01–57 and `p01`–`p11` predate C10: they show the pill corner and the Neutral fill.
+>   - 58–67 and `p12-radius-after` show the `--radius-sm` corner, with Blue (the default) unless the caption names another colour.
+> - **Facts checked on `main` (903b5c8) and LK1's branch:**
+>   - `CLIENT_SCHEMA = 2`, `SCHEMA_FLOOR = 2`, and `DOC_MIGRATIONS` is empty, so `DOC_SCHEMA` is 0.
+>   - `createSchemaGuard` sits in `document-editor.tsx`, so it covers every session type.
+>   - The hyperlink extension binds `Alt-Enter` and exports `openPreviewPopover` and `focusPreviewFromKeyboard`.
+>   - LK1's `LinkHost` has no `extensions` field yet, and `lib/links/` exists only on `claude/feat-lk1-doc-links` (#154).
+>   - The desktop spec (its "Schema floor for shares" row and P4.2 (d)) already requires `CLIENT_SCHEMA` 3 for share documents from day one.
+
+**What it is.** A smart chip is an inline pill, as in Google Docs. It shows a document's icon and its **current** title, and updates when the document is renamed. Broken or missing targets get their own state. You can insert one from the "/" menu, from the ⌘K picker, by pasting a `tinydocy:` link, or by converting an existing link.
+
+**Model: an inline atom node, `docChip { href, label }`, supplied by the host chunk.**
+- The title is resolved when the chip renders, from LK1's `resolve.ts` snapshot. **No code path ever writes a title into Yjs.**
+- `label` is the title at insert time. It is the fallback for collaborators, unresolved chips and exports.
+- **Rejected: a mark with CSS or a decoration showing the live title.** Showing a live title over stored text hides real characters. The caret, IME, Find and the accessible name would then disagree with the screen, which fails the accessibility priority.
+- **Amends §4.1, SL-6 and SL-7** (decision C1) and keeps both of their reasons: renames write nothing, and nothing new is published.
+
+**Where chips exist: library documents only** (desktop, the web library, and later `share:*`).
+- The sandbox editor has no host, so it never knows `docChip`.
+- The sandbox Hocus never allowlists `docChip` for sandbox names, and `SCHEMA_NODE_NAMES` stays unchanged. A hostile update therefore can't freeze `playground`: ingress refuses it with `schema_rejected`.
+- Shares get `docChip` through the share schema floor at `CLIENT_SCHEMA` 3, which is already planned (desktop spec, P4.2 (d)): share documents accept only the nodes and marks that `minDesktopSchema` knows. P4.2f-1's per-kind root allowlist is unaffected, because a chip lives in the `default` root.
+- **Rollout order** follows the schema rollout runbook (`textColor`, `fontSize`): clients learn the name first, and the server allows it later, here in P4.2.
+
+**v1 scope**
+
+| v1 | Later |
+|---|---|
+| Chips for whole documents and `here#` headings | Chips for headings in other documents, which wait for the open question in §4.2 |
+| Inserting from ⌘K, "/" (through the picker), paste, and conversion both ways | `[[` (LK3, still first to cut), an `@` trigger, documents listed inline in "/" |
+| Every §4.6 state, offline | Dragging from the sidebar |
+| Library only; the sandbox renders nothing new | Web-address chips (host only, never fetched automatically), people and date chips, Find matching chip titles |
+
+#### Node
+
+- `docChip`: `inline`, `group: "inline"`, `atom: true`, `selectable: false`, `draggable: false`, `marks: ""` (C9).
+- **Attributes:**
+  - `href` must pass `parseDocLink` and is at most 256 B.
+  - `label` is clamped to 200 code points at a grapheme boundary (`Intl.Segmenter`), so an emoji or a letter and its ZWNJ (U+200C) are never split. Bidi control characters are stripped; ZWNJ is kept.
+- **Never allowed** in the title (blocked in `can()`, on insertion and on paste), in code blocks or in inline code.
+- **`renderText` and `leafText` give the label.** Test this: the outline, the snippet and the tab title all read it.
+- **Selection model: `selectable: false`.**
+  - One arrow press passes the chip.
+  - Typing can never replace a chip that only looked focused.
+  - So there is no NodeSelection ring, no "Enter on a selected chip" rule and no Enter guard.
+- **Click, tap and selection (polish M7):**
+  - `.doc-chip { user-select: none; -webkit-touch-callout: none }`, so a tap or a drag never selects the title's characters.
+  - A `handleClickOn` collapses the selection to the nearer side of the chip (RTL-aware), then opens the card.
+  - Selection endpoints that fall inside a chip resolve to include it.
+  - A long-press only selects. It never opens the card or navigates.
+  - The chip plugin adds a `Decoration.node` with the class `is-in-selection` to every chip inside the selection: the selection fill, and under forced colours Highlight with HighlightText (the icon too).
+
+#### What is displayed
+
+- The text is `resolveDocLink(href, snapshot).title`, set with `textContent`. It falls back to `label`, then to "Document".
+  - A resolved title that is empty shows the existing "Untitled". An unknown target still shows "Document".
+- For `here#` chips, the text is the live heading text from the outline store. If that heading is gone, the chip shows its `label` (polish M13).
+- **Renames repaint the chip's DOM only.** Never dispatch a transaction for one.
+- **One registry and one index subscription per host,** coalesced with rAF.
+  - Write to the DOM only when the state or the title changes.
+  - Remove the chip from the registry in `destroy()`.
+- Use vanilla DOM node views, never `ReactNodeViewRenderer`.
+
+#### DOM
+
+```html
+<span class="doc-chip" role="link" contenteditable="false" data-link-state="resolves">
+  <span class="doc-chip-icon" aria-hidden="true"><svg focusable="false">…</svg>&#x2060;</span><bdi dir="auto">Q4 budget</bdi><span class="doc-chip-suffix" lang="en">, document</span>
+</span>
+```
+
+- **No `href` in the editor DOM,** so `tinydocy:` never reaches the browser or an OS handler.
+- **The name comes from the DOM text.** There is no `aria-label` and no `title` attribute.
+- **The suffix carries `lang`,** the interface language, because it is interface copy; the title keeps its own direction in `<bdi dir="auto">`.
+- **Tab stops:** no `tabindex` while editing; `tabindex="0"` when not editable (reading mode or read-only).
+- **Re-run `parseDocLink` on every render.** Anything that fails renders in the `unknown_form` state and never navigates.
+- **Prototype findings (Chromium, headless, 2026-11-22). They change the package's markup in three places:**
+  1. **The icon and U+2060 share one `aria-hidden` wrapper.** With U+2060 as a bare child of the chip, Chromium kept it in the accessible name, as a leading invisible character.
+  2. **The icon is out of flow.** An in-flow `<svg>` is an atomic inline, and Chromium allows a line break after it even before U+2060. The icon was then stranded at the end of a line with its title on the next.
+     - `.doc-chip-icon` is a `position: relative` inline that reserves the icon's width with `padding-inline-end: 1.25em`.
+     - The `<svg>` is `position: absolute` at `inset-inline-start: 0`.
+     - Measured: no stranded icon at 14, 16, 20, 24 or 32 px, in LTR or RTL, across 56 widths (Chromium, Firefox and WebKit).
+  3. **The suffix is inline** (polish M6): `.doc-chip-suffix { font-size: 0; line-height: 0; white-space: nowrap }`. The name is "Q4 budget, document".
+     - The polish review found that the earlier out-of-flow `.sr-only` suffix breaks IME composition after a chip in Chromium and Electron. It also made Chromium compute "Q4 budget , document".
+     - Measured in the prototype: the exact name in Chromium's native accessibility tree (CDP `Accessibility.getFullAXTree`), and Playwright's computed name (`ariaSnapshot`) in all three engines. WebKit's native tree is not checked yet: if WebKit in the real editor drops a zero-size suffix from the name, fall back to an inline-block 1 px `clip-path` suffix.
+
+#### States
+
+LK1's `DASHED_LINK_STATES` drives both links and chips.
+
+| State | Icon | Border | Text | Hidden suffix (the name is "Text" + suffix) |
+|---|---|---|---|---|
+| resolves | FileText | solid | title, or `label` | ", document" ("Q4 budget, document") |
+| pending (`!snapshot.ready`) | FileText | solid | `label` | ", document" |
+| `here` | Hash | solid | heading, or `label` when the heading is gone | ", section" |
+| in_trash | FileMinus | solid | title | ", document, in Trash" |
+| not_available (**Not available**; replaces deleted and not_in_library) | FileQuestion, `currentColor` | dashed | `label`, or "Document" | ", document, not in your library" |
+| unknown_form | FileQuestion | dashed | `label` or "Link" | ", needs a newer version of TinyDocy" |
+
+- **Not available card:** heading "Not available"; copy "This document isn't on this device. It may have been deleted."; no title, no key; [Remove Link] when editable.
+- The not_available suffix matches the approved link-icon name ("Not in your library"), so a link and a chip pointing at the same target read the same.
+- **A `here#` chip whose heading is gone** uses the approved "Heading gone" semantics: Hash, solid border, its `label`. A follow goes to the top of the document with the existing pill ("The section this link pointed to was removed."), announced. It is never a silent no-op, and there is no dashed state for it.
+- **Pending:** a follow queues until the snapshot is ready, then opens. The pending card shows only [Copy Link] in its first group.
+- None of these ever shows a `link_key`, and no state icon is red: state is never shown by colour alone.
+- The pending state never flashes a dashed border, and a cold start announces nothing.
+- Card copy and actions follow §8 as amended by Q4 and Q7 (#163). On a chip, **Remove Link** leaves the `label` as plain text.
+- **Cascade to LK1 (outside this document):** drop `deleted` and `purgedKeys`, rename the state key to `not_available`, use `FileMinus` for `in_trash` and `Hash` for `here`.
+
+#### Visual
+
+- **The line box never grows.** The chip is `display: inline`.
+  - The prototype measured a line with a chip, and a line with a dashed chip, against a plain line at 14, 15, 16, 20, 24 and 32 px and at leading 1.15, 1.6 and 1.8.
+  - In all 18 combinations, all three lines had the same height, in Chromium, Firefox and WebKit.
+- **Paint fits the line** (polish M11). Without it, at 15/1.15 a chip fragment painted 20 px on a 17.25 px line and overlapped the lines above and below.
+  ```css
+  @supports (text-box: trim-both cap alphabetic) {
+    .doc-chip { text-box: trim-both cap alphabetic; padding-block: .06em .22em }
+    .doc-chip:dir(rtl) { padding-block-end: .30em }
+  }
+  ```
+  - Outside `@supports`, `padding-block` stays 0. Under `@media print` the trim and the padding are reset.
+  - Measured: every fragment's `getClientRects()` height is at most the line height + 0.5 px at 15/1.15 in a paragraph, an h1 and a list item (16.75 px on 17.25 px), and also at 14/1.15, 24/1.15 and 16/1.6, in headings, lists, tables and quotes, in Chromium, Firefox and WebKit.
+- **Sizes are in em.**
+  - The icon is 1em.
+  - `padding-inline` is 0.3em at the start and 0.45em at the end.
+  - The border is `max(1px, .0625em)`.
+- **Shape:** `border-radius: var(--radius-sm)`, the app's small radius (`calc(var(--radius) * 0.6)`, 0.27rem, about 4.3 px), not a pill (owner, 2026-11-22: the pill looked too round).
+  - It is in rem, so it stays about 4.3 px at every text size: subtly rounded at 15 px, nearly square at 32 px.
+  - With `box-decoration-break: slice`, a wrapped title rounds only the first fragment's start corners and the last fragment's end corners. The breaks stay square (`p12-radius-after`).
+- **Colour:** an opaque fill, a border and a tinted icon and text from the chip colour preference (C10, [below](#chip-colour-preference)). Blue is the default. Neutral is the approved look: the `--secondary` fill, `--foreground` text and a `--muted-foreground` border.
+- `font-weight: inherit`, so a chip in a heading is as bold as the heading.
+- **Hover and active:** `--doc-chip-hover` and `--doc-chip-active` fills, and `--doc-chip-border-strong` (`--foreground`) for the open state below.
+- **Wrapping:** titles wrap rather than truncate: `box-decoration-break: slice` (Firefox drew three whole pills for one chip with `clone`) and `overflow-wrap: anywhere`. `bdi { word-break: keep-all }` keeps CJK titles from breaking between every character. Only logical properties are used.
+- **Two chips side by side** get `margin-inline-start: .25em` on the second, through a plugin class (`is-after-chip`). A `.doc-chip + .doc-chip` selector would also match chips with text between them, because ProseMirror's text nodes are bare text.
+- **Tokens** are `--doc-chip-*` in the lazy `lib/links/doc-links.css`, never `--tt-*`.
+- **Focus:** a 2 px `--focus-ring` outline with `outline-offset: 2px` on `:focus-visible`. While the chip's card is open, the chip uses `--doc-chip-border-strong` and the active fill, not a ring.
+- **Selection:** `is-in-selection` (above) paints the selection fill and replaces the chip colour.
+  - The text and icon go Neutral (`--muted-foreground` icon), and the border becomes `--foreground`.
+  - A chip's fill differs from the selection fill by only about 1.3:1 in every colour (Neutral included; in dark, the Blue fill #1c2c41 against the selection #203b68 is 1.27:1). The strong border is what shows a selected chip.
+- **Forced colours:**
+  - Canvas fill, with LinkText text and border.
+  - Broken states switch to dashed CanvasText.
+  - The ring and the open state use Highlight.
+  - A chip in the selection is Highlight with HighlightText text, border and icon.
+  - Every chip colour collapses to these system colours: the colour mapping sits inside `@media (forced-colors: none)`.
+- **Reduced motion:** no transitions.
+- **Print:** the chip becomes plain title text.
+- **Reflow at 320 px (WCAG 1.4.10, polish M10):**
+  - The card is `min(22rem, 100vw - 16px)` wide, and the picker `min(460px, 100vw - 16px)`.
+  - The card becomes a bottom sheet by width (`max-width: 30rem`), not by device.
+  - The sheet has a 44 px Close button and `aria-modal="true"`, the editor behind it is `inert`, and it is positioned from `visualViewport`, so the on-screen keyboard never covers it.
+
+#### Chip colour (preference)
+
+> **C10: approved by the owner, 2026-11-22 ("approve").** The owner, 2026-11-22: "for smart chips, it would be good to come up with color (but let's control the chips color in prefrence of the app and let user to change it)".
+
+**What it is**
+- **One app setting, per device: Chip colour.** The choices are Neutral, **Blue** (the default), Green, Amber, Rose and Teal.
+  - There is no purple or indigo (house rule).
+  - Blue is the default because a soft blue tint says "this is a link to a document". Its hue (255) is the text link's (`--link`, 258), so chips and text links read as one family.
+- **Local only.**
+  - It lives in the prefs store: `tinydocy-ui` slot `chipColor` on the web, `prefs.chipColor` on desktop.
+  - It is never in Yjs, a `.tinydoc` or an export, and never shared, so every reader sees their own choice.
+  - Under `NEXT_PUBLIC_REMEMBER_CHOICES=0` it applies for the page session only, like every page setting.
+- **Only where chips exist:** desktop and the web library. The sandbox has no chips, so it never shows the setting.
+- **Out of scope: a colour per chip or per document.** One global setting keeps chips simple and writes nothing to Yjs. A per-chip colour would be a stored attribute and need marks-style contrast checks (C9).
+
+**How it applies**
+- **The boot script sets `data-chip-color` on `<html>` before first paint,** and only when the choice isn't Blue.
+  - No attribute means Blue, as for #161's other attributes (no attribute means the default). Blocked storage and the kill switch also give Blue.
+  - Nothing flashes: chips render only after the host chunk, and its CSS carries the mapping.
+- **The lazy `lib/links/doc-links.css` maps the attribute to the tokens,** in light and dark: `--doc-chip-bg`, `--doc-chip-fg`, `--doc-chip-border`, `--doc-chip-icon`, `--doc-chip-hover` and `--doc-chip-active`.
+  - Blue sits on `:root` and `.dark`. Each other colour has its own `[data-chip-color]` rule, and Blue has one too.
+  - The attribute selector works on any element, so each swatch in the control renders its own colour.
+  - The mapping sits inside `@media (forced-colors: none)`, so forced colours always get the system colours.
+- **Changing it re-applies through the prefs runtime** (`lib/prefs/runtime.ts`), in this tab and in other tabs. Chips repaint through CSS alone: no node-view work and no transaction.
+
+```css
+@media (forced-colors: none) {
+  :root, [data-chip-color="blue"] { --doc-chip-bg: oklch(0.958 0.03 255); --doc-chip-fg: oklch(0.4 0.13 255); /* … */ }
+  .dark, .dark[data-chip-color="blue"], .dark [data-chip-color="blue"] { --doc-chip-bg: oklch(0.29 0.045 255); /* … */ }
+  [data-chip-color="green"] { /* light */ }
+  .dark[data-chip-color="green"], .dark [data-chip-color="green"] { /* dark */ }
+  /* neutral, amber, rose and teal the same way */
+}
+```
+
+**Tokens**
+- **The border keeps Neutral's lightness** (L 0.556 light, 0.708 dark), so its contrast against the page and the highlights stays close to Neutral's. The fill stays near `--secondary` (about L 0.96 light, 0.29 dark).
+- **The text is lighter than Neutral's,** so it can carry the tint: L 0.4 against Neutral's 0.145 in light, and 0.92 against 0.985 in dark. The icon sits at L 0.5 and 0.76.
+  - This is the one trade-off: text contrast falls from 14.74 to 6.45–7.10 in light (10.37 to 8.19–8.23 in dark). It stays above AA (4.5) and below AAA (7) for some colours in light.
+  - Anyone who wants the strongest text picks Neutral, and increased contrast raises the border.
+- **Measured** with WCAG 2.x contrast after `oklchToHex` (`tests/helpers/css-tokens.ts`).
+  - Page is `--background`, plus `--card` where it differs: in dark, `--card` gives the lower ratio.
+  - **Hl** is the worst of the 10 `HIGHLIGHT_PALETTE` entries in that theme.
+  - **More** is increased contrast (`data-contrast="more"`, #161): the border and icon take the chip's own text colour, measured against the page.
+
+| Colour | Theme | Fill (`bg`) | Text (`fg`) | Border | Icon | Hover | Active | Text on bg / hover / active (worst) ≥4.5 | Border on page ≥3 | Border on fill ≥3 | Icon on fill ≥3 | Focus ring on fill ≥3 | Border on Hl ≥3 | More: text on page ≥4.5 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Neutral | light | `oklch(0.967 0.001 286.375)` #f4f4f5 | `oklch(0.145 0 0)` #0a0a0a | `oklch(0.556 0 0)` #737373 | `oklch(0.556 0 0)` #737373 | `oklch(0.93 0.002 286)` #e8e8e9 | `oklch(0.9 0.003 286)` #dedee0 | 14.74 | 4.74 | 4.31 | 3.53 | 7.11 | 3.28 (red) | 19.80 |
+| Neutral | dark | `oklch(0.274 0.006 286.033)` #27272a | `oklch(0.985 0 0)` #fafafa | `oklch(0.708 0 0)` #a1a1a1 | `oklch(0.708 0 0)` #a1a1a1 | `oklch(0.32 0.006 286)` #323236 | `oklch(0.36 0.006 286)` #3d3d40 | 10.37 | 6.94 | 5.76 | 4.19 | 10.05 | 3.21 (yellow) | 17.18 |
+| **Blue** | light | `oklch(0.958 0.03 255)` #e4f3ff | `oklch(0.4 0.13 255)` #02468b | `oklch(0.556 0.12 255)` #3f75b8 | `oklch(0.5 0.12 255)` #2e64a6 | `oklch(0.93 0.042 255)` #d6eaff | `oklch(0.9 0.05 255)` #c8e0ff | 6.91 | 4.72 | 4.17 | 4.46 | 6.91 | 3.26 (red) | 9.33 |
+| **Blue** | dark | `oklch(0.29 0.045 255)` #1c2c41 | `oklch(0.92 0.05 255)` #cfe7ff | `oklch(0.708 0.1 255)` #76a4de | `oklch(0.76 0.1 255)` #85b4f0 | `oklch(0.33 0.053 255)` #223650 | `oklch(0.37 0.057 255)` #2b415d | 8.19 | 6.95 | 5.47 | 4.85 | 9.53 | 3.21 (yellow) | 14.11 |
+| Green | light | `oklch(0.958 0.035 152)` #e1f8e6 | `oklch(0.4 0.1 152)` #0a562b | `oklch(0.556 0.1 152)` #418456 | `oklch(0.5 0.1 152)` #2f7346 | `oklch(0.93 0.047 152)` #d2f2d9 | `oklch(0.9 0.055 152)` #c4e9cc | 6.67 | 4.51 | 4.03 | 4.34 | 6.98 | 3.12 (red) | 8.83 |
+| Green | dark | `oklch(0.29 0.04 152)` #1b3121 | `oklch(0.92 0.06 152)` #c8f1d1 | `oklch(0.708 0.1 152)` #6fb382 | `oklch(0.76 0.1 152)` #7fc492 | `oklch(0.33 0.048 152)` #213d29 | `oklch(0.37 0.052 152)` #2a4832 | 8.19 | 7.21 | 5.60 | 4.93 | 9.40 | 3.34 (yellow) | 14.48 |
+| Amber | light | `oklch(0.958 0.045 70)` #ffedd1 | `oklch(0.4 0.09 70)` #663d00 | `oklch(0.556 0.11 70)` #9c661b | `oklch(0.5 0.11 70)` #8a5600 | `oklch(0.93 0.057 70)` #ffe2bf | `oklch(0.9 0.065 70)` #fbd7b0 | 6.92 | 4.85 | 4.22 | 4.53 | 6.80 | 3.35 (red) | 9.41 |
+| Amber | dark | `oklch(0.29 0.04 70)` #382814 | `oklch(0.92 0.06 70)` #ffdeba | `oklch(0.708 0.1 70)` #c99658 | `oklch(0.76 0.1 70)` #daa668 | `oklch(0.33 0.048 70)` #453118 | `oklch(0.37 0.052 70)` #513b20 | 8.22 | 6.82 | 5.39 | 4.83 | 9.56 | 3.15 (yellow) | 14.01 |
+| Rose | light | `oklch(0.958 0.025 12)` #ffebed | `oklch(0.4 0.12 12)` #7b2436 | `oklch(0.556 0.11 12)` #a95662 | `oklch(0.5 0.11 12)` #974552 | `oklch(0.93 0.037 12)` #ffdee1 | `oklch(0.9 0.045 12)` #fad2d6 | 7.10 | 5.01 | 4.38 | 4.64 | 6.83 | 3.46 (red) | 9.78 |
+| Rose | dark | `oklch(0.29 0.04 12)` #3d2326 | `oklch(0.92 0.05 12)` #ffd8dc | `oklch(0.708 0.09 12)` #d28992 | `oklch(0.76 0.09 12)` #e499a2 | `oklch(0.33 0.048 12)` #4b2b2f | `oklch(0.37 0.052 12)` #583438 | 8.20 | 6.60 | 5.27 | 4.78 | 9.66 | 3.05 (yellow) | 13.75 |
+| Teal | light | `oklch(0.958 0.03 192)` #dbf8f6 | `oklch(0.4 0.09 192)` #005654 | `oklch(0.556 0.09 192)` #188481 | `oklch(0.5 0.09 192)` #007370 | `oklch(0.93 0.042 192)` #c9f1ef | `oklch(0.9 0.05 192)` #b9e9e6 | 6.45 | 4.51 | 4.03 | 4.30 | 6.98 | 3.12 (red) | 8.54 |
+| Teal | dark | `oklch(0.29 0.04 192)` #0e3230 | `oklch(0.92 0.05 192)` #bff0ed | `oklch(0.708 0.08 192)` #60b1ae | `oklch(0.76 0.08 192)` #70c2be | `oklch(0.33 0.048 192)` #103d3c | `oklch(0.37 0.052 192)` #174847 | 8.23 | 7.17 | 5.53 | 4.94 | 9.34 | 3.32 (yellow) | 14.43 |
+
+- **Pairs that don't depend on the colour:**
+  - The open state's `--doc-chip-border-strong` (`--foreground`) on every active fill: at least 14.38 in light and 9.71 in dark.
+  - The selection (`--tt-selection-color` over the page: #c6dafc light, #203b68 dark):
+    - `--foreground` on it, which is the selected chip's text and border: 13.99 light, 10.66 dark;
+    - `--muted-foreground`, the selected chip's icon: 3.35 light, 4.31 dark;
+    - a chip's own fill against the selection fill: only 1.23–1.29 light and 1.24–1.34 dark, Neutral included. The fill change alone doesn't show the selection, so the selected chip also takes a `--foreground` border.
+  - The focus ring on the page: 7.81 light, 13.36 dark.
+- **The thinnest margins:**
+  - the border on highlights, 3.05–3.46 (Rose on dark yellow is the lowest);
+  - `--muted-foreground` (a selected chip's icon) on the light selection, 3.35;
+  - Neutral's icon on its fill, 3.53.
+
+  The worst text figure is 6.45 (Teal, light). LK2's test pins each pair at its floor.
+- Some hex values have a 00 or ff channel: those oklch values fall just outside sRGB and are clamped. `oklchToHex` clamps the same way, so the table and the test agree.
+
+**States in every colour** (colour is never the only state signal)
+- **Document, pending and section:** the tint, with FileText or Hash and the hidden suffix. Pending looks like Document, so nothing flashes.
+- **In Trash:** the tint, because it still opens. FileMinus and ", in Trash" carry the state.
+- **Not available and unknown_form:** always the Neutral fill, text, icon and a dashed Neutral border, whatever the colour (`--doc-chip-broken-bg`, `-fg`, `-border` and `-hover`, theme tokens only). The tint means "a link you can follow". The dash, FileQuestion and the words carry the state.
+- **Hover and open:** the colour's hover and active fills. The open chip also takes `--doc-chip-border-strong`. A broken chip uses the broken hover fill for both.
+- **Focus (reading mode):** unchanged, the 2 px `--focus-ring`, offset 2 px.
+- **Selection:** the selection fill, Neutral text and icon, and a `--foreground` border (above).
+- **Forced colours:** every colour gives the system colours already specified. The control's swatches then look alike, and their visible names carry the choice.
+- **Next to highlights:** chips take no marks (C9). Every border keeps at least 3:1 against every highlight in its theme (table), so a Blue chip beside a blue highlight still has its edge.
+- **Print:** plain title text, as before.
+
+**The control**
+- **Its home is Settings › Page** (W13 on the web, P2.9b on desktop), with palette entries "Chip colour: Neutral" … "Chip colour: Teal" in the lazy `lib/editor-actions/prefs-actions.ts`.
+- **Until then it lives in ⋯.** #161 has no settings surface: its own changelog says the Page popover, the palette entries and Settings arrive with P2.9c-2 and W13. The control starts in ⋯'s view-settings section, beside Appearance:
+  - "Chip colour ▸" opens a submenu of six `menuitemradio` items. Each has an 18 px swatch, the name and a check on the current one; Blue reads "Blue (default)". A muted line below says "Only you see it, on this device."
+  - A radiogroup can't sit inside `role="menu"`, and the menu owns the arrow keys, so ⋯ uses menu radio items, as Appearance does: ↑ ↓ move, ↵ or Space picks, ← (→ in RTL) or Esc goes back. Picking repaints every chip at once.
+  - **The item is gated in code, not by intent.** The host chunk registers a `view.chipColor` action through the action registry, as it does `insert.docLink`. `OverflowMenuItems` (the lazy ⋯ chunk) renders the submenu only when `editorActions.has("view.chipColor")`, as it already does for commands. A hostless editor never registers it, so the sandbox's ⋯ is unchanged and the editor chunk adds 0 B.
+- **The Settings form:**
+  - A `role="radiogroup"` labelled "Chip colour" and described by "The colour of links shown as chips. Only you see it, on this device."
+  - Six `role="radio"` buttons with a roving tabindex, so the group is one Tab stop. ← → ↑ ↓ move the choice and apply it at once (APG radio group, RTL-aware), and Home and End go to the first and last.
+  - **Swatch:** 24 px, a mini chip (the colour's fill and border, its FileText icon, `--radius-sm`), with the visible name under it.
+  - **Checked:** a 2 px `--foreground` ring outside a 2 px gap, plus the name in bold and `aria-checked`, never colour alone.
+  - **Tooltip on hover and focus:** the name, "Blue (default)" or "Neutral: no tint". It is `aria-hidden`, because the name is already visible.
+  - **Targets:** each option is about 56 × 48 px. At 30rem or narrower the group becomes a vertical list of 44 px rows (swatch and name) with no tooltip.
+- **Live preview:** next to the group, one sentence with a live chip and a Not available chip ("Budget numbers live in [Q4 budget] and the old plan in [Vendor contracts]."). It is decorative (`aria-hidden`), because the page's own chips change too.
+- **Prototype:** the scenes "Chip colours (C10)" (the grid), "Chip colour setting" and "Chip colour in ⋯ (until Settings)".
+
+**Bytes**
+- **Editor chunk: +0 B.**
+  - The mapping is CSS in the lazy `doc-links.css`.
+  - The schema entry is in `lib/prefs/schema.ts`. The lazy prefs runtime and the server-side boot-script generator read it; the editor chunk never imports it.
+  - The ⋯ item and the Settings row are lazy chunks.
+- **The inline boot script grows** in every HTML response: about 150 B raw (counted from the line below) and about 70 B gzipped (estimated). #161's PR states the measured total.
+- **`doc-links.css`** grows by about 4.1 KB raw and 0.6 KB gzipped, measured on the prototype's generated mapping rewritten to the app's selectors. It loads with the host chunk.
+
+**Amends on merge: #161 (the prefs schema).** Whichever of #161 and LK2 merges second applies these:
+- **`lib/prefs/schema.ts`:**
+  - Add `CHIP_COLORS = ["neutral", "blue", "green", "amber", "rose", "teal"] as const`, `type ChipColor` and `isChipColor = oneOf(CHIP_COLORS)`.
+  - Add `chipColor: ChipColor` to `WebPrefs`, and `chipColor: "blue"` to `PREF_DEFAULTS`.
+  - Add `"chipColor"` to `PREF_SLOTS`, and to `CHOICE_SLOTS` in `remembered-choice`.
+  - `parsePrefs` reads it with `isChipColor`; anything else reads `"blue"`.
+  - Add `"data-chip-color"` to `PREF_ATTRIBUTES`. `prefsAttributes` emits it only when the value isn't `"blue"`.
+- **`lib/prefs/boot-script.ts`:** interpolate `CHIP_COLORS` and add `if(C.indexOf(s.chipColor)>=0&&s.chipColor!=="blue")f("data-chip-color",s.chipColor)`.
+  - `PREFS_VERSION` stays 1: a new slot is additive, and an older build ignores it.
+- **Desktop:** `prefs.chipColor` in `meta('prefs')`, validated in main through `parsePrefs`.
+- **Tests:**
+  - The `boot-script.test.ts` parity table gains rows for no slot, each colour, an invalid value and the kill switch.
+  - `schema.test.ts` and `apply.test.ts` cover the attribute.
+- **Preferences design §2.1:** a new row 27, and the counts.
+  - Group B, `chipColor`, "Chip colour".
+  - A radio group of swatches: Neutral · **Blue** · Green · Amber · Rose · Teal.
+  - Scope D. Desktop and the web library only.
+  - Where: S Page, ⋯ (until W13), K.
+  - Storage: `prefs.chipColor` and `ui.chipColor`.
+  - Applied: boot sets `data-chip-color`. R=0: ses.
+  - PR: #161 (schema) and LK2 (CSS and control).
+
+**New `token-contrast.test.ts` pairs** (each colour × light and dark, read from `doc-links.css`):
+1. `--doc-chip-fg` on `--doc-chip-bg`, `--doc-chip-hover` and `--doc-chip-active`: at least 4.5.
+2. `--doc-chip-border` on `--background` and `--card`: at least 3.
+3. `--doc-chip-border` on `--doc-chip-bg`: at least 3.
+4. `--doc-chip-icon` on `--doc-chip-bg` and `--doc-chip-active`: at least 3.
+5. `--focus-ring` on `--doc-chip-bg`: at least 3.
+6. `--doc-chip-border` on every `HIGHLIGHT_PALETTE` entry: at least 3. This replaces the three named highlight pairs, which covered Neutral only.
+7. `--doc-chip-border-strong` on `--doc-chip-active`: at least 3.
+8. Increased contrast: `--doc-chip-fg` on `--background`, `--card` and `--doc-chip-bg`: at least 4.5. Under `more`, the border is the text colour.
+9. Once, for every colour: `--foreground` on the selection fill (at least 4.5; it is the selected chip's text and border) and `--muted-foreground` on it (at least 3).
+
+Broken states use the Neutral values, which pairs 1–5 already cover for Neutral.
+
+#### Keys and pointer
+
+| Input | Result |
+|---|---|
+| ← or → | Passes the chip in one press, in LTR and RTL paragraphs. |
+| ⇧ + arrow | Extends the selection over the whole chip. |
+| Backspace or Delete | Removes the chip in one press. One undo step, and it is announced. |
+| ⌥↵ next to the chip (the one before the caret first, then the one after), or with a selection that holds exactly one chip | Follows the link through LK1's `navigate`. On a broken chip it opens the card instead, with focus on its first action, or on the card itself (`tabindex=-1`, labelled and described) when there is no Open action. |
+| ⌘K next to the chip | Opens the card, with focus on its first action, or on the card itself (`tabindex=-1`, labelled and described) when there is no Open action. |
+| Plain click or tap while editing | Collapses the selection to the nearer side of the chip, then opens the card (a bottom sheet at 30rem or narrower). A long-press only selects. |
+| ⌘-click | Opens in this tab. |
+| ⌘⇧-click or middle click | Opens in a new tab. |
+| Reading mode or read-only | A click, or Enter on the focused chip, opens it. |
+| Reading mode or read-only: ⌘K, ⇧F10 or the ContextMenu key on a focused chip | Opens the preview (WCAG 2.1.1). Esc and Back return focus to that chip. |
+| Esc | Closes the card and returns focus to `view.dom`, with the selection unchanged (reading mode: to the chip). |
+| ⌘[ (Back) | Returns with the caret after the chip (reading mode: focus on the chip). |
+
+- **Default focus never lands on Remove Link** (approved Q4). In particular, ⌥↵ then ↵ on a Not available chip leaves the document unchanged.
+- Act on click, never on pointer-down.
+- **The card is the Q7 document preview** (a custom render): it never shows the href or key and has no Edit. Its dialog names follow §7: "Link to Q4 budget", "Link to Launch checklist, in Trash", "Link not available", "Link to section Risks".
+  - It takes the approved preview's layout: `min(22rem, 100vw - 16px)` wide, 6 px padding, 14/1.4 text, an 18 px state icon, the title (600) with "› Heading", the folder path and the 2-line snippet, then rows of borderless 30 px actions.
+  - It meets WCAG 1.4.13: it can be hovered, dismissed with Esc, and persists.
+- **Card actions:**
+  - The first group holds the ways to open: Open, Open in New Tab and Copy Link. A section chip shows Go to Section instead of the Open actions, a trashed one shows Open and Restore, and a pending one shows only Copy Link.
+  - A second group, editable only, holds Turn into Link and Remove Link.
+  - A document link's card offers **Turn into Chip** instead. The chip's `label` is the link's text, so nothing new is written.
+  - When the card re-renders (Restore, a rename), focus returns to the same action by its id, or to the first Open action if that action is gone.
+  - If the chip disappears while its card is open (undo, a collaborator), the card closes, focus goes to `view.dom` at the mapped caret, and nothing is announced.
+- **In a Live (shared) document,** Turn into Link asks for consent the first time, because it writes the current title into the document:
+  - Title: "Write this title into the document?"
+  - Body: "A text link keeps its text in the document. This document is Live, so people you share it with will see “Q4 budget”."
+  - Buttons: [Cancel] [Turn into Link], with focus on Cancel.
+
+#### Inserting
+
+- **⌘K picker:**
+  - A real `<input role="combobox" aria-expanded="true">` with `aria-activedescendant` into a listbox, grouped as Documents and In this document.
+  - The footer hint (and any Insert as reason) is the combobox's `aria-describedby`. Modifier glyphs come from `lib/shortcuts.ts`, per platform.
+  - The active row is `--accent` plus a 2 px inset `--focus-ring` ring, never colour alone, with no RTL-specific rule.
+  - The count is announced by the picker's own polite status, debounced to 400 ms.
+  - Templates and trashed documents are never listed.
+  - **Insert as** (C4): a visible footer radio group, "Insert as: Chip | Link text". Each radio is at least 28 px tall (`min-block-size: 28px`).
+    - With no selection it defaults to Chip; with a selection, to Link text.
+    - ⇧↵ inserts the other form.
+    - Chip is `aria-disabled`, with a visible reason, in three cases: in the title ("Chips can't go in the title."), for a web address ("Web addresses insert as link text."), and for a heading in another document ("Headings in other documents insert as link text.").
+  - ⇥ on a document lists its headings (§4.2). In v1, those insert as link text.
+  - **An inserted chip is followed by a space** in the same undo step, unless one is already there.
+- **"/" Link to Document** (C6):
+  - The bubble session registers `insert.docLink` through the action registry, and O12's Suggested section picks it up through `INSERT_KIND_CHOICE`.
+  - It opens the picker, prefilled with any words typed after the item's name ("/link q4" prefills "q4").
+  - Removing the trigger and inserting the chip are one undo step, which needs a keep-trigger option on `runSlashPick`.
+  - LK2 does not edit `components/smart-toolbar/slash/`.
+- **Paste** (C5):
+  - A lone `tinydocy:doc/…` link pasted with a collapsed selection becomes a chip in two transactions.
+    1. A link whose text is the resolved title, or "Document" when it doesn't resolve. The href is never written as text.
+    2. The chip, whose `label` is step 1's text.
+  - So the first ⌘Z leaves a plain link.
+  - While the library is pending, the paste waits up to 1 s for the local index, so the label is not stored empty.
+  - Pasting over a selection makes a link, and ⌘⇧V pastes raw text.
+  - The parse rule reads only `href`, and ignores pasted titles when the target resolves.
+  - The first time, a pill says "Pasted as a chip. ⌘Z keeps it as a link." and offers [Keep as Link]. The first announcement carries the same hint: "Pasted link to Q4 budget. Undo keeps it as a link."
+- **Undo granularity (polish M5):** call `undoManager.stopCapturing()` between paste steps 1 and 2, after step 2, and around every picker insert, conversion, Remove Link and Backspace on a chip. Without it, Yjs merges changes made within its capture timeout (500 ms), so ⌘Z after a paste would remove the whole paste, and ⌘Z after typing right behind a new chip would take the chip with it.
+- **No Tab prompt.** Tab indents in this editor.
+- **First-time hint:** "Chips show a document's current title on this device. People you share with see the title it had when you added it, and can't open it."
+
+#### Clipboard
+
+- The `renderHTML` output is `<a data-doc-chip href>label</a>`, so the chip degrades to an ordinary link elsewhere.
+- On copy, the HTML anchor text is the displayed title, as the plain text is: the title at copy time.
+
+#### Announcements
+
+- Use the polite region, and only for local actions (WCAG 4.1.3):
+  - "Linked to X". The first time, the first-time hint is appended once: "Linked to X. Chips show a document's current title…"
+  - "Pasted link to X"
+  - "Deleted link to X" (Backspace or Delete)
+  - "Removed link to X" (Remove Link), or "Removed link. The text is now “label”." when the label differs from the title the chip showed
+  - "Changed to chip: X" and "Changed to text link: X"
+  - "Restored X"
+  - "Link copied"
+  - the Q8 follow lines: "Opened X." or "Opened X, at Travel."; "At Risks." for a `here#` chip; and the "Heading gone" pill's text
+- **Pills join the F6 cycle,** and Esc dismisses the focused pill and returns to the editor.
+- Never announce on load, on a remote change or on a rename. The prototype's log shows each of these as "Not announced".
+
+#### Exports
+
+| Export | Chip becomes |
+|---|---|
+| Export all | `[Title](relative.md#slug)`, escaped. Targets not in the export become plain text. |
+| Single document, Copy as Markdown, HTML | the title as escaped text, never a `tinydocy:` link |
+| `.tinydoc` | the node, unchanged |
+| Markdown import | hyperlink marks only, never chips |
+
+#### Bytes and schema
+
+- **Editor chunk** (C3):
+  - Only the `...linkHost.extensions` spread is eager. Measure it with `scripts/check-editor-chunk-size.ts` on `main` and on the branch, and put both numbers in the PR.
+  - It goes inside LK1's 60 B line, or that line is amended by the measured amount.
+  - The node, node view, keymap, CSS, card, picker, paste handling and announcements are all in the host chunk.
+  - Never call `registerPlugin` from a lazy chunk.
+- **Schema:**
+  - The sandbox is untouched: no change to `SCHEMA_NODE_NAMES`, `CLIENT_SCHEMA` or the floor.
+  - Commit a second schema snapshot for the host editor.
+  - `CLIENT_SCHEMA` 3 is redefined as "knows asset refs **and** `docChip`". The first bundle that sends 3 must render chips, and P4.2 (d) adds `docChip` to the node names the share floor accepts.
+- **Offline storage:**
+  - The sandbox offline cache (`~s2:`) never holds chips, so it needs no `~s3`.
+  - Local documents get the `DOC_SCHEMA` handling in C8.
+  - `import-guard` accepts `docChip`.
+- **Headless export:** add `docChip` to `lib/headless/schema-extensions.ts` once #146 merges.
+- **Kill switch:** `NEXT_PUBLIC_DOC_CHIPS=0` hides every way to insert a chip. Chips still render.
+- **Chip colour (C10):** +0 B to the editor chunk. The cost is CSS in `doc-links.css`, one schema entry, and about 150 B raw in the boot script. See [Chip colour (preference)](#chip-colour-preference).
+
+#### Required tests
+
+- **Unit:**
+  - the name and copy function for every state
+  - parse and render for hostile `href` values: `javascript:` in mixed case, a control-character prefix, `data:`, `"><img onerror>`, and 100 KB
+  - hostile titles, and Markdown and HTML escaping
+  - the label clamp: never splits a grapheme (an emoji, a letter and its ZWNJ), keeps ZWNJ, strips bidi controls
+  - `extract-links` and consent counting a document whose only links are chips (consent must not be null)
+  - the token-contrast pairs in both themes and **every chip colour** (C10's nine pairs), against every `HIGHLIGHT_PALETTE` entry, plus these named pairs in `token-contrast.test.ts`:
+    - the focus ring against the page, the chip and the selection
+    - Neutral's border stays `--muted-foreground`. The other colours keep its lightness.
+  - prefs: `chipColor` parse, defaults and the boot-script parity rows (C10, amends #161)
+- **Playwright:**
+  - `toHaveRole`, `toHaveAccessibleName` (the exact string, for example `"Q4 budget, document"`) and an aria snapshot per state
+  - no `href` on the chip, and it is never a Tab stop while editing
+  - the key map, asserted on `editor.state.selection`, in LTR and in a Persian paragraph, in Chromium, WebKit and Firefox, including Firefox's third ⇧→ case
+  - IME: a CDP composition e2e at all 7 positions around a chip. *(Proposed reading, for LK2 to confirm: before and after a chip at the start, middle and end of a paragraph, and between two chips.)*
+  - default focus: ⌥↵ then ↵ on a Not available chip leaves the document unchanged; no card ever opens with focus on Remove Link
+  - undo (collab fixture): paste then ⌘Z leaves a hyperlink; insert a chip, type "x" within 100 ms, then ⌘Z leaves the chip
+  - spies show `navigate` only: no `window.open` and no `openExternal`
+  - the 1.4.13 hover checks, and the picker's combobox and `aria-activedescendant`
+  - the reading-mode preview keys (⌘K, ⇧F10, ContextMenu) and focus back on the chip after Esc and Back
+  - announcement text present after each action, and absent after load, a remote change or a rename
+  - axe in light and dark, forced-colours and reduced-motion emulation
+  - targets: overlay controls are at least 24×24 (sheet rows 44). The chip relies on the inline exception (WCAG 2.5.8).
+  - line-box equality and no stranded icon, as the prototype measured
+  - chip colour (C10): the attribute is on `<html>` in the first DOM snapshot, so there is no flash; a change in another tab repaints chips here with zero node-view mutations; forced colours show no tint; the ⋯ item is absent in the sandbox
+  - the Settings radiogroup: one Tab stop, the arrows move and apply the choice, and the names are exact
+  - each chip fragment's `getClientRects()` height is at most the line height + 0.5 px at 15/1.15, in a paragraph, an h1 and a list item
+  - reflow at 320 px: the card is a sheet, the picker fits, nothing scrolls sideways
+- **Privacy:** rename B, then check that the shared A's Y.Doc and `.tinydoc` hold only the key and the insert-time label.
+- **Performance:**
+  - 500 chips and 100 index ticks give zero mutations.
+  - The registry is empty after unmount.
+  - `performance.spec` typing latency is unchanged.
+- **Gate:** the sandbox Hocus refuses `docChip` with `schema_rejected`, and the hostless editor never deletes a chip.
+- **Design-review screenshots:**
+  - text at 14, 15, 16, 20 and 32 px, and leading 1.15, 1.6 and 1.8, including 15/1.15
+  - light and dark, and LTR and RTL, with Persian in the OS fallback font (the app ships no Persian font)
+  - h1 and h2, a list, a table and a blockquote, and next to every highlight colour
+  - forced colours × selection
+  - every state, a CJK title, and Not available with its card open
+  - every chip colour × light and dark × every state, and forced colours with a colour other than Neutral chosen
+  - Firefox and WebKit
+
+#### Owners
+
+- **LK1/LK2 session:** the node, node view, CSS, picker, paste, conversion, announcements, `extract-links` and consent, the host schema snapshot, and every test above.
+- **Bubble session:** `insert.docLink` through the action registry, plus a keep-trigger option on `runSlashPick` for the single undo step.
+- **P2.8a export:** the chip mapping in the headless schema, the Markdown writer and HTML.
+- **SE (P4.2):** `docChip` in the share schema floor and the definition of schema 3.
+
+#### Owner decisions
+
+| # | Decision | Options | Recommendation |
+|---|---|---|---|
+| **C1** | Amend §4.1, SL-6 and SL-7 to allow a chip node | Yes, with the title resolved only when it renders / No, links stay marks only | **Yes.** It keeps both reasons for the mark: renames write nothing, and nothing new is published. |
+| **C2** | What the node stores | (a) `href` only / (b) `href` plus the insert-time `label` | **(b).** It exposes what link text already exposes, and the existing consent copy covers it. Under (a), shared copies fail WCAG 2.4.4 because every chip reads just "document". |
+| **C3** | Where the bytes come from | (a) the node through `linkHost.extensions`, an eager spread of roughly 10–25 B (estimated, not measured) / (b) an eager node spec paid from LK3's 120 B line | **(a).** If the measured cost exceeds what is left of LK1's 60 B line, amend that line by the measured amount. It also keeps LK3's fate separate from chips. |
+| **C4** | ⌘K with no selection | Insert a chip / Insert link text | **A chip,** and link text when there is a selection. Add the visible "Insert as: Chip \| Link text" control, with ⇧↵ choosing the other form. |
+| **C5** | Pasting a lone `tinydocy:doc/…` link with a collapsed selection | A chip / A link | **A chip, in two transactions,** so the first ⌘Z leaves a plain link. Pasting over a selection gives a link, and ⌘⇧V pastes raw text. |
+| **C6** | The "/" item | Opens the ⌘K picker with the query prefilled / Lists documents inline in "/" | **The picker,** as §4.2 already approves. The inline documents mode stays a later proposal for the bubble session. |
+| **C7** | Web-address chips and fetching titles | In v1 / Later | **Not in v1, and never fetching automatically.** |
+| **C8** | `DOC_SCHEMA` | A no-op step to 1, so older builds open stamped documents as `doc_too_new` (read-only) / `docChip` joins the schema-0 baseline | **The step,** if any desktop or web-library build has reached testers before chips ship. If none has, the baseline. If in doubt, the step. |
+| **C9** | Marks on chips | `marks: ""` / allow colour marks | **`marks: ""` in v1.** Colour marks would break the contrast pairs, and the guard doesn't check marks on inline atoms. |
+| **C10** | Chip colour (owner, 2026-11-22: a colour the user changes in preferences). *Approved by the owner, 2026-11-22.* | One global, per-device preference with six colours / a colour per chip or per document / no choice | **One global, per-device preference:** Neutral, **Blue** (default), Green, Amber, Rose and Teal, with no purple or indigo. It is set by the boot script as `data-chip-color` and mapped by CSS, so it adds 0 B to the editor chunk and never writes to Yjs. Broken states stay Neutral and dashed. It lives in ⋯ until Settings › Page ships. See [Chip colour (preference)](#chip-colour-preference). |
 
 ### 4.3 Following a link
 
@@ -601,12 +1084,12 @@ Numbering avoids P*, W*, A*, U*, S-A*, F*: **SR** for search and **LK** for link
 |---|---|---|---|---|---|---|
 | **SR1** | **Metadata search:** `normalize` (§3.2), the operator compiler (§3.3), matching over titles, tags, folder names and properties in Quick Open and the list filter (⌘F in a list), `index.searchTitles` widened to tags and folders, operator chips, the §8 search states, a11y. **Design review.** | SE + UX | P2.7a, P2.7b | S: 1.5 days, 2 rounds | Every unit table passes. The property test runs 50,000 cases. The §3.5 targets hold at 1,000 and 10,000 documents. The keyboard checklist passes. | v1 |
 | **LK1** | **Document links core:** `doc-link` parser, `linkHost` pass-through (60 B gz ledger line, D23), `protocols`/`isAllowedUri`/`navigate`/`linkIcon`, resolver from the index snapshot, `goToHeading` jumps, the §4.6 states, the links-only pass (`extract-links.ts`), the consent-window line hook for P4.4 | SE + DE | P2.6 (`link_key`), P2.7a | S–M: 3.5 days, 2 rounds | Links follow, Back works, each broken state renders. The chunk script shows the editor delta within the 60 B line. `tinydocy:` never reaches `openExternal`. | v1 |
-| **LK2** | **Inserting links:** the ⌘K Documents and In this document sections, the heading step (closed-document source per §4.2, open), Copy Link to Document and Copy Link to Heading, the "/" item, the first-time hint. **Design review.** | UX + DE | LK1, SR1 (matcher) | M: 3 days, 2 rounds | Insert from ⌘K and from paste, one undo step each. Keyboard-only flow passes. Templates never listed. | v1 |
+| **LK2** | **Inserting links and smart chips:** the ⌘K Documents and In this document sections, the heading step (closed-document source per §4.2, open), Copy Link to Document and Copy Link to Heading, the "/" item, the first-time hint. *(Approved 2026-11-22, §4.2a):* the `docChip` node through `linkHost.extensions`, the node view and its registry, the card trigger, conversion both ways, chip paste, the "Insert as" control, `NEXT_PUBLIC_DOC_CHIPS`. **Design review.** | UX + DE | LK1 (#154) merged first and LK2 based on the resulting `main`, SR1 (matcher), #146 for the export mapping | M–L: about 5.5 days, 3 rounds *(was M: 3 days, 2 rounds)* | Insert from ⌘K and from paste, one undo step each. Keyboard-only flow passes. Templates never listed. Every §4.2a state has its name and aria snapshot. The editor-chunk delta is measured on `main` and the branch and fits LK1's 60 B line, or that line is amended by the measured amount. The sandbox Hocus refuses `docChip`. | v1 |
 | **LK3** | **`[[` trigger** folded into `slash-trigger`. Measures `slash-trigger` on `main` first. | DE | LK2 | S: 2 days, 2 rounds | Eager cost within the 120 B gz ledger line. Never fires in code or the title. IME-safe. **Cut first** (D23, D30). | v1 unless cut |
 | **LK4** | **Hovercard and Linked from:** the `links` table (migration hook, §5) and web store, `links.put` IPC, hovercard config and the card, Use Current Title, the Linked from section, Links to This Document, the ⋯ popover row. **Design review.** | UX + DE + SE | LK1 | M: 3.5–4.5 days, 2 rounds | The card opens with no network request (asserted). Linked from updates across windows. a11y checks pass. Hover preview is fourth and backlinks sixth in D30. | v1 unless cut |
 | **LK5** | **Export of links and "Link imported notes":** Export all relative links and slugs, single-export plain text, `link_key` in `library.json` (never NULL: minted at insert, S16; kept only by a backup-zip or `library.json` restore, S8c), `lib/links/import-links.ts`, the one-time Link Imported Notes forward edit over `import_sources` (§4.9) | DE | P2.8, W7 (web Export all), LK1, IM1 | S–M: 3 days, 2 rounds | Round trip desktop → Export all → web keeps every link resolving. The Obsidian fixture vault links with the §8 counts. | v1 unless cut |
 
-- **Totals:** about **16.5–17.5 agent-days** (was about 30; the owner's D24 estimate is about 15 less), 3 design reviews (SR1, LK2, LK4, plus LK3 if it ships), and no server work.
+- **Totals:** about **16.5–17.5 agent-days** (was about 30; the owner's D24 estimate is about 15 less), 3 design reviews (SR1, LK2, LK4, plus LK3 if it ships), and no server work. *(Proposed 2026-11-22: smart chips, §4.2a, would add about 2.5 days and a round to LK2, for about 19–20 agent-days. LK3 is unchanged.)*
 - **Placement:** SR1 with or after P2.7b; the LK PRs after P2.7a/b and P2.11, in parallel with Phase 4. Nothing here blocks Gate 2 or Gate 3. **Everything above must land before Gate 5**, unless D30 cuts it.
 - **Seam, already in the plan (v7 schema amendment):** `docs.link_key` in **P2.6** and the W2 `docs` store, next to `lineage`. It stays even if links are cut.
 - **Cut order:** the plan's D30 order: **LK3** first, then (after IM3 and the L2 sweep) **LK4's hover preview**, then (after TM1) **backlinks** (LK4's Linked from), then **links** (LK1, LK2, LK5), keeping the `link_key` seam.

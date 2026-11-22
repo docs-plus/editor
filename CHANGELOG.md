@@ -930,6 +930,38 @@ the storage worker. Nothing changes on the web.
   spellcheck languages and a closed loopback download URL; a spec fails
   on any spellcheck event. macOS and Windows use the OS spellchecker.
 
+### Docs: smart chips for document links
+
+A design, approved by the owner on 2026-11-22 (C1–C9). Nothing in the app
+changes.
+
+#### Added
+
+- **Docs:** §4.2a "Smart chips" in
+  `docs/superpowers/specs/2026-11-16-search-linking-design.md`. It specifies
+  an inline `docChip { href, label }` node whose title is resolved only when
+  it renders and never written. It covers the DOM and accessible name per
+  state, the keys, the card, inserting from ⌘K, "/" and paste, conversion
+  both ways, exports, bytes and schema, tests, and nine owner decisions
+  (C1–C9). The LK2 row grows to M–L, about 5.5 days.
+- **Docs:** a self-contained clickable prototype,
+  `docs/design/2026-11-22-smart-chips-prototype.html`, with an Accessibility
+  panel showing each element's role, name and state, and 39 headless
+  screenshots in `docs/design/2026-11-22-smart-chips/`.
+
+#### Changed
+
+- **Polish round (2026-11-22):** one accessibility-first pass, C1–C9
+  unchanged. The states follow the approved linking decisions Q4–Q7: one
+  Not available state, `FileMinus` for In Trash, and a card that is the Q7
+  preview, whose default focus never lands on Remove Link. The suffix is
+  inline (IME-safe, exact names), chip paint fits a 15/1.15 line, the card
+  and picker reflow at 320 px, and paste never writes the key. It also adds
+  reading-mode preview keys, undo-step and announcement rules, and the tests
+  that go with them. The screenshots are re-taken (57 numbered, Chromium,
+  Firefox and WebKit) with 11 before/after pairs.
+- **Chip colour and corner (2026-11-22):** a per-device Chip colour preference (C10, pending the owner's sign-off: six colours, Blue by default, set as `data-chip-color` before first paint, +0 B to the editor chunk) and the smaller `--radius-sm` corner, with a colour grid scene and screenshots 58–67 and `p12`.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
