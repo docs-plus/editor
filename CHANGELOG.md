@@ -153,6 +153,32 @@ Design only; nothing changes for users and there is no deploy step.
 #### Changed
 
 - **Specs:** the desktop local-first plan §3 points to the revision.
+
+### Design: document links UX review (LK1)
+
+A review of the linking UX for LK1 (document links core) by the Head of
+Engineering, senior staff, UI and accessibility lenses, with a clickable
+prototype for the owner's design review. Documentation only; no app or server
+change.
+
+#### Added
+
+- **Docs:**
+  - `docs/design/2026-11-22-document-links-prototype.html`: document, web and
+    broken links in text; the link states; the preview popover; following,
+    arrival and Back; the first-time hint and the consent-window line; and,
+    as LK2 and LK4 previews, the ⌘K picker with heading links, the hovercard
+    and Linked from. Switches for each owner decision, theme, direction,
+    width, mode and reduced motion.
+  - 41 headless screenshots in `docs/design/2026-11-22-document-links/`.
+  - `docs/superpowers/specs/2026-11-16-search-linking-design.md`: amendments
+    to §4.2, §4.3, §4.5, §4.6, §5, §7, §8 and §10–§12 and owner questions
+    Q4–Q10, marked
+    "Proposed, pending owner approval (2026-11-22)".
+- **Finding:** with the link icon as `display: inline-block` (the hyperlink
+  package's default), a line can break between the icon and the link's first
+  word (18–28% of widths in headless Chromium, LTR and RTL). An inline,
+  `nowrap` icon span with a word joiner after the svg never split.
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
