@@ -11,7 +11,10 @@ import * as Y from "yjs";
 import { Batcher, RETRY_MAX_MS } from "@/lib/platform/batcher";
 import type { AppendRecord, DocStore } from "@/lib/platform/doc-store";
 import { DocStoreError } from "@/lib/platform/doc-store";
-import { createLocalSession } from "@/lib/platform/local-session";
+import {
+  createLocalSession,
+  RELEASE_DELAY_MS,
+} from "@/lib/platform/local-session";
 import {
   MemoryDocLibrary,
   MemoryDocStore,
@@ -104,5 +107,57 @@ describe("an append refused at the size cap (D-O3)", () => {
     const stored = new Y.Doc();
     for (const record of store.accepted) Y.applyUpdate(stored, record.update);
     expect(stored.getText("t").toString()).toBe("kept and more");
+  });
+
+  async function capped() {
+    const clock = new FakeClock();
+    const library = new MemoryDocLibrary();
+    library.createDoc("doc");
+    const store = new CappedStore(new MemoryDocStore({ library }));
+    const session = createLocalSession({
+      store,
+      clock,
+      scheduleIdle: (fn) => clock.setTimeout(fn, 0),
+    });
+    const handle = session.open("doc");
+    await settle();
+    await clock.advance(0);
+    handle.doc.getText("t").insert(0, "stored ");
+    await handle.flush();
+    store.full = true;
+    handle.doc.getText("t").insert(7, "refused");
+    await clock.advance(2000);
+    await settle();
+    return { clock, store, session, handle };
+  }
+
+  it("rejects a flush instead of hanging it", async () => {
+    const { handle } = await capped();
+    await expect(handle.flush()).rejects.toMatchObject({
+      code: "document_too_large",
+    });
+  });
+
+  it("releases, and a re-open loads what was stored without hanging", async () => {
+    const { clock, store, session, handle } = await capped();
+    handle.release();
+    await clock.advance(RELEASE_DELAY_MS);
+    await settle();
+    await clock.advance(0);
+    store.full = false;
+    const again = session.open("doc");
+    await settle();
+    await clock.advance(0);
+    await settle();
+    expect(again.getState().ready).toBe(true);
+    expect(again.getState().readOnlyReason).toBeNull();
+    expect(again.doc.getText("t").toString()).toBe("stored ");
+  });
+
+  it("quit flushes the others and reports the refusal, never hanging", async () => {
+    const { session } = await capped();
+    await expect(session.flush()).rejects.toMatchObject({
+      code: "document_too_large",
+    });
   });
 });
