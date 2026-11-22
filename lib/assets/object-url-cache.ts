@@ -120,10 +120,13 @@ export function createObjectUrlCache({
         entry = { count: 0, url: null, loading: null, timer: null };
         entries.set(hex, entry);
         const created = entry;
-        created.loading = load().then(
-          (blob) => settleLoad(hex, created, blob),
-          () => settleLoad(hex, created, null),
-        );
+        // Through a promise, so a loader that throws synchronously is a miss.
+        created.loading = Promise.resolve()
+          .then(load)
+          .then(
+            (blob) => settleLoad(hex, created, blob),
+            () => settleLoad(hex, created, null),
+          );
       }
       hold(hex, entry, signal);
       const url = entry.url ?? (await entry.loading);

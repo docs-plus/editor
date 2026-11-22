@@ -122,6 +122,22 @@ describe("object-URL cache", () => {
     detach();
   });
 
+  it("treats a loader that throws synchronously as a miss", async () => {
+    const { cache } = setup();
+    const detach = cache.attach();
+    const signal = new AbortController().signal;
+    expect(
+      await cache.acquire(
+        HEX_A,
+        () => {
+          throw new Error("sync");
+        },
+        signal,
+      ),
+    ).toBeNull();
+    detach();
+  });
+
   it("an already aborted signal acquires nothing", async () => {
     const { cache, load, counts } = setup();
     const detach = cache.attach();
@@ -162,6 +178,7 @@ describe("object-URL cache", () => {
       () => new Promise<Blob>((resolve) => (finish = resolve)),
       new AbortController().signal,
     );
+    await Promise.resolve(); // the load starts on the next microtask
     detach();
     finish(new Blob(["x"]));
     expect(await pending).toBeNull();

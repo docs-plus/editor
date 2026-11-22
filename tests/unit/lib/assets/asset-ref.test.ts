@@ -89,8 +89,13 @@ describe("findAssetRefs and rewriteAssetRefs", () => {
     expect(findAssetRefs(md)).toEqual([HEX, OTHER]);
   });
 
-  it("does not read a longer hex run as a ref", () => {
-    expect(findAssetRefs(`asset:sha256-${HEX}f`)).toEqual([]);
+  it("does not read a longer run as a ref, as parseAssetRef wouldn't", () => {
+    for (const longer of [`${HEX}f`, `${HEX}F`, `${HEX}_`, `${HEX}-x`]) {
+      const ref = `asset:sha256-${longer}`;
+      expect(findAssetRefs(ref)).toEqual([]);
+      expect(parseAssetRef(ref)).toBeNull();
+    }
+    expect(findAssetRefs(`![x](asset:sha256-${HEX})`)).toEqual([HEX]);
   });
 
   it("rewrites mapped refs and leaves the rest alone", () => {

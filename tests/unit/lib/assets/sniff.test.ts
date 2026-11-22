@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { sha256Hex } from "@/lib/assets/hash";
+import { MAX_ASSET_PIXELS } from "@/lib/assets/limits";
 import {
   checkImageBytes,
   readImageSize,
   sniffImageType,
 } from "@/lib/assets/sniff";
+import { MAX_DECODE_PIXELS } from "@/lib/image-downscale";
 import {
   ascii,
   buildPng,
@@ -234,5 +236,13 @@ describe("sha256Hex", () => {
     expect(await sha256Hex(buffer.subarray(2, 5))).toBe(
       await sha256Hex(ascii("abc")),
     );
+  });
+});
+
+describe("one pixel ceiling", () => {
+  // The sandbox path keeps its own copy (importing limits.ts would add a
+  // module to the editor chunk); this keeps the two values one.
+  it("the sandbox's MAX_DECODE_PIXELS is the store's MAX_ASSET_PIXELS", () => {
+    expect(MAX_DECODE_PIXELS).toBe(MAX_ASSET_PIXELS);
   });
 });

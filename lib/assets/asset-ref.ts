@@ -5,8 +5,9 @@
  * node's `src`, never the bytes. The ref does not depend on origin: desktop,
  * the web library and a share each resolve it locally.
  *
- * Pure and dependency-free: the editor's eager chunk, the Hocus server and
- * the exporters all import it.
+ * Pure and dependency-free, for the asset kit's parse rules (and through
+ * them the headless schema), the storage worker, the Hocus server and the
+ * exporters. The sandbox editor never loads it.
  */
 
 export const ASSET_REF_PREFIX = "asset:";
@@ -22,8 +23,12 @@ const HEX = /^[0-9a-f]{64}$/;
 const SHA256_REF = /^asset:sha256-([0-9a-f]{64})$/;
 /** A future algorithm (`asset:blake3-…`): shown as "needs a newer version". */
 const OTHER_REF = /^asset:([a-z0-9]+)-[A-Za-z0-9_-]+$/;
-/** Every well-formed sha256 ref in a text; the lookahead stops longer runs. */
-const SHA256_REF_IN_TEXT = /asset:sha256-([0-9a-f]{64})(?![0-9a-f])/g;
+/**
+ * Every well-formed sha256 ref in a text. The lookahead refuses a ref that
+ * runs on into more ref characters (`OTHER_REF`'s set), which
+ * `parseAssetRef` would refuse too, such as a 65th digit or an uppercase one.
+ */
+const SHA256_REF_IN_TEXT = /asset:sha256-([0-9a-f]{64})(?![A-Za-z0-9_-])/g;
 
 export function isAssetHex(value: string): boolean {
   return HEX.test(value);
