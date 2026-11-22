@@ -133,9 +133,23 @@ jobs:
         run: bun run typecheck
 
       # `bun run test` skips the stress probe; it runs below as a non-gating
-      # benchmark.
+      # benchmark. The JUnit report feeds the parallel shadow run below.
       - name: Unit tests
-        run: bun run test
+        run: >-
+          bun run test --reporter=junit
+          --reporter-outfile="$RUNNER_TEMP/unit-serial.xml"
+
+      # Shadow run, not a gate: the same files with `bun test --parallel`,
+      # compared file by file with the serial run above. It is promoted only
+      # after 5 identical runs, the owner's sign-off and the timing-budget
+      # tests moving to a serial pass (tests/TESTING.md).
+      - name: Unit tests, parallel (shadow)
+        continue-on-error: true
+        run: |
+          bun test --parallel --path-ignore-patterns 'tests/unit/stress/**' \
+            --reporter=junit --reporter-outfile="$RUNNER_TEMP/unit-parallel.xml"
+          bun scripts/compare-unit-runs.ts \
+            "$RUNNER_TEMP/unit-serial.xml" "$RUNNER_TEMP/unit-parallel.xml"
 
       # Shared runners vary in speed, so a miss here is reported, not fatal.
       - name: Stress benchmark (informational)

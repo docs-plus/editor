@@ -9,6 +9,7 @@ import { parse } from "yaml";
 // Deploy workflow depend on (docs/operations/deploy-runbook.md).
 
 interface Step {
+  "continue-on-error"?: boolean;
   id?: string;
   name?: string;
   if?: string;
@@ -103,6 +104,24 @@ describe("CI workflow", () => {
     );
     const verdict = gate?.steps?.find((step) => step.name === "Verdict");
     expect(verdict?.if).toBe("always()");
+  });
+
+  it("gates on the serial unit tests; the parallel run is a shadow", () => {
+    const steps = jobs.checks.steps ?? [];
+    const serial = steps.find((step) => step.name === "Unit tests");
+    const shadow = steps.find(
+      (step) => step.name === "Unit tests, parallel (shadow)",
+    );
+    expect(serial?.run).toContain("bun run test");
+    expect(serial?.run).not.toContain("--parallel");
+    expect(serial?.["continue-on-error"]).toBeUndefined();
+    expect(shadow?.run).toContain("bun test --parallel");
+    expect(shadow?.run).toContain("tests/unit/stress/**");
+    expect(shadow?.run).toContain("scripts/compare-unit-runs.ts");
+    expect(shadow?.["continue-on-error"]).toBe(true);
+    expect(steps.indexOf(shadow as Step)).toBeGreaterThan(
+      steps.indexOf(serial as Step),
+    );
   });
 
   it("skips the browser suites only through the changes job", () => {

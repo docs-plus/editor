@@ -509,6 +509,14 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
 - **Cancelling:** a newer push to a pull request cancels its older run; a run
   on `main` is never cancelled once started, so each one can deploy.
+- **Parallel unit tests (shadow):** after the serial `Unit tests` gate, the
+  checks job runs the same files with `bun test --parallel` (`continue-on-error`)
+  and `scripts/compare-unit-runs.ts` compares the two JUnit reports file by
+  file, warning on any file whose passed, failed or skipped count differs. It
+  becomes the gate only after 5 identical runs, the owner's sign-off, and the
+  timing-budget unit tests (the ones that assert a duration, such as the
+  linear-time and durability-bound checks) moving to a serial pass, since
+  they share the CPU under `--parallel`.
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
