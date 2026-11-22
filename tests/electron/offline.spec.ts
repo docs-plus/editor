@@ -95,7 +95,11 @@ test("a session from start to quit sends nothing off the machine", async () => {
     JSON.stringify({ hosts, leaving, unparsed }),
   );
 
-  // The log recorded the session: it parses and shows the canary.
+  // The log recorded the session: Chromium closed it (a strict parse, no
+  // truncation repair), it has events, and it shows the canary. No event
+  // floor: with local storage the app itself makes no network events, which
+  // is the point.
+  expect(() => JSON.parse(text)).not.toThrow();
   expect(parseNetLog(text).events?.length ?? 0).toBeGreaterThan(0);
   expect(hosts).toContain("127.0.0.1");
   expect(leaving).toEqual([]);
