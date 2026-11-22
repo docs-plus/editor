@@ -9,6 +9,49 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
+
+The "/" menu gains what the second reference set showed it lacked, and a
+pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
+§8.2, §8.5; v1 contract A19). The editor chunk group is unchanged
+(393,463 B gz, −2 B against `main` at `ed2a7cd`); the slash chunk grows
+from 5,772 B to 7,129 B gz (over its 6 KB test budget, `SLASH_BUDGET=1`)
+and the bubble chunk, which now mounts the `+`, from 9,798 B to 11,007 B
+gz.
+
+#### Added
+
+- **"/" menu:** a Suggested section leads with your last 3 inserted kinds
+  (table, image, divider…) that can go at the caret; each stays in its own
+  section too. A new writer sees no Suggested section; "Forget my choices"
+  clears it. A query hides it and puts a recent kind first among equal
+  matches.
+- **"/" menu:** "Type to search" sits after the "/" while the query is
+  empty and nothing follows the caret (never during IME composition); a
+  pinned footer teaches the active row's Markdown shortcut ("Type ## then
+  space for Heading 2") and has a Close button (Esc still works). On touch
+  the footer is only a 44 px Close.
+- **"/" menu:** rows can carry a "New" badge until a date, hidden once you
+  have used that kind; none are declared yet.
+- **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
+  margin of an empty paragraph (in line with the heading grips; the right
+  margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
+  shows beside the caret 300 ms after you stop typing, or under the
+  pointer after a 150 ms rest, never in the title, a list, a quote or a
+  table cell, and never on touch. Esc on its empty query removes that "/"
+  again without an undo step; a pick is one undo step. It is mounted by
+  the lazy bubble chunk's desktop wrapper, so it appears once that chunk
+  has loaded (a deviation from the spec's §15 file split, which put it in
+  `SlashMenuHost`: that would have grown the editor chunk).
+- **Insert menu:** each row shows its "/" alias ("/table", "/code").
+
+#### Changed
+
+- **"/" menu:** 320 px wide (was 288); in an RTL paragraph its right edge
+  is at the "/".
+- **Placeholder:** an empty paragraph reads "Type / for blocks" (was
+  "Type something...").
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
