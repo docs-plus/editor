@@ -36,6 +36,11 @@ describe("listThreads on a bare Y.Doc", () => {
     expect(listThreads(doc)).toEqual({ threads: [], orphans: [] });
     expect(doc.share.has("comments")).toBe(false);
     expect(listThreads(new Y.Doc())).toEqual({ threads: [], orphans: [] });
+    // A damaged document whose roots have other types reads as empty.
+    const damaged = new Y.Doc();
+    damaged.getText("comments").insert(0, "x");
+    damaged.getMap("default").set("k", 1);
+    expect(listThreads(damaged)).toEqual({ threads: [], orphans: [] });
   });
 
   it("reports Detached threads and orphaned keys without writing", () => {

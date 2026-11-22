@@ -111,7 +111,13 @@ const spansText = (
 /** Every thread in `doc`, and the orphaned keys, without changing `doc`. */
 export function listThreads(doc: Y.Doc): ThreadListing {
   if (!doc.share.has(COMMENTS_ROOT)) return { threads: [], orphans: [] };
-  const map = doc.getMap(COMMENTS_ROOT);
+  let map: Y.Map<unknown>;
+  try {
+    map = doc.getMap(COMMENTS_ROOT);
+  } catch {
+    // Defined as another type (a damaged document): nothing to list.
+    return { threads: [], orphans: [] };
+  }
   let measured: Measured | null = null;
   try {
     if (doc.share.has(DOCUMENT_FRAGMENT)) {
