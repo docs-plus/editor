@@ -33,6 +33,13 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * unconfirmed the total is 2,053 B (1,580 B, plus P2.1c's 275 B sandbox
  * DocSession line, K14, and #134's 198 B status-chip boundary line); if
  * spike M18 confirms it, this becomes 2,133 B with no further approval.
+ *
+ * Lines (gz): P2.2 no-provider + `WriteGate` + decoration host 300 (294
+ * measured), P2.1c sandbox `DocSession` 275, #134 status-chip boundary
+ * 198, P4.9 comments hook 150, P2.9c-1 smart-quotes gate 150, L1a i18n
+ * core 400 (`t()`, registry labels, `lang`/`dir`; languages design
+ * §3.7.1), P2.13 `dir` + direction commands + Enter + « » 350, LK1 60,
+ * LK3 120, OB2 10, M19 phone keyboards 40 (+80 conditional).
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
