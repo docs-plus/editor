@@ -75,6 +75,8 @@ export {
   SeparatorHorizontal as DividerIcon,
   Share as ShareIcon,
   SlidersHorizontal as SlidersHorizontalIcon,
+  Square as SquareIcon,
+  SquareCheck as SquareCheckIcon,
   SquareCode as CodeBlockIcon,
   Strikethrough as StrikeIcon,
   Subscript as SubscriptIcon,

@@ -1,7 +1,13 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import {
+  type BrowserContext,
+  expect,
+  type Locator,
+  type Page,
+  test,
+} from "@playwright/test";
 
 import { setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
@@ -483,51 +489,128 @@ test.describe("menu focus", () => {
 });
 
 test.describe("more menu groups", () => {
+  const openMore = async (page: Page) => {
+    await toolbarButton(page, "More formatting").click();
+    const more = page.getByRole("menu", { name: "More formatting" });
+    await expect(more).toBeVisible();
+    return more;
+  };
+  const registered = (page: Page, id: string) =>
+    page.evaluate(
+      (target) => !!document.querySelector(`[data-action-id="${target}"]`),
+      id,
+    );
+  const idsIn = (group: Locator) =>
+    group
+      .locator('[role^="menuitem"]')
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute("data-action-id") ?? el.textContent),
+      );
+
   test("Text, View and Help groups, then Forget my choices alone", async ({
     page,
   }) => {
     await openDoc(page);
     await caretIn(page, "Plain paragraph");
-    await toolbarButton(page, "More formatting").click();
-    const more = page.getByRole("menu", { name: "More formatting" });
-    await expect(more).toBeVisible();
+    const more = await openMore(page);
     const groups = more.getByRole("group");
     await expect(groups).toHaveCount(3);
-    const names = await groups.evaluateAll((els) =>
-      els.map((el) => el.getAttribute("aria-label")),
-    );
-    expect(names).toEqual(["Text", "View", "Help"]);
-    const labelsOf = (name: string) =>
-      more
-        .getByRole("group", { name, exact: true })
-        .locator('[role^="menuitem"]')
-        .evaluateAll((els) =>
-          els.map(
-            (el) =>
-              el.querySelector("span:not([data-slot])")?.textContent?.trim() ??
-              "",
-          ),
-        );
-    expect(await labelsOf("Text")).toEqual([
-      "Superscript",
-      "Subscript",
-      "Inline code",
-      "Clear formatting",
-      "Paint format",
+    expect(
+      await groups.evaluateAll((els) =>
+        els.map((el) => el.getAttribute("aria-label")),
+      ),
+    ).toEqual(["Text", "View", "Help"]);
+    expect(await idsIn(more.getByRole("group", { name: "Text" }))).toEqual([
+      "mark.superscript",
+      "mark.subscript",
+      "mark.inlineCode",
+      "format.clear",
+      "repeat.copy",
     ]);
-    expect(await labelsOf("View")).toEqual([
+    const view = more.getByRole("group", { name: "View" });
+    expect(await idsIn(view)).toEqual(["view.simpleToolbar", "Appearance"]);
+    await expect(view.getByRole("menuitemcheckbox")).toHaveAccessibleName(
       "Simplified toolbar",
-      "Appearance",
-    ]);
-    expect(await labelsOf("Help")).toEqual(["All actions…"]);
-    // The last item is outside every group.
+    );
+    await expect(view.getByRole("menuitem")).toHaveAccessibleName("Appearance");
+    const help = more.getByRole("group", { name: "Help" });
+    expect(await idsIn(help)).toEqual(["palette.open"]);
+    await expect(help.getByRole("menuitem")).toHaveAccessibleName(
+      /All actions/,
+    );
     const last = more.locator('[role^="menuitem"]').last();
-    await expect(last).toContainText("Forget my choices");
+    await expect(last).toHaveAttribute("data-action-id", "memory.forget");
+    await expect(last).toHaveAccessibleName(/Forget my choices/);
     expect(
       await last.evaluate((el) => el.closest('[role="group"]') === null),
     ).toBe(true);
     for (const heading of ["Text", "View", "Help"]) {
       await expect(more.getByText(heading, { exact: true })).toBeVisible();
+    }
+    expect(await registered(page, "palette.open")).toBe(true);
+  });
+
+  test("ArrowDown crosses the groups and never lands on a heading", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    const more = await openMore(page);
+    const total = await more.locator('[role^="menuitem"]').count();
+    const seen: string[] = [];
+    const roles: (string | null)[] = [];
+    await page.keyboard.press("ArrowDown");
+    for (let i = 0; i < total; i++) {
+      const current = await page.evaluate(() => {
+        const el = document.activeElement;
+        return {
+          id: el?.getAttribute("data-action-id") ?? el?.textContent ?? "",
+          role: el?.getAttribute("role") ?? null,
+        };
+      });
+      seen.push(current.id);
+      roles.push(current.role);
+      await page.keyboard.press("ArrowDown");
+    }
+    expect(seen.slice(0, 5)).toEqual([
+      "mark.superscript",
+      "mark.subscript",
+      "mark.inlineCode",
+      "format.clear",
+      "repeat.copy",
+    ]);
+    expect(seen.slice(5)).toEqual([
+      "view.simpleToolbar",
+      "Appearance",
+      "palette.open",
+      "memory.forget",
+    ]);
+    expect(roles.every((role) => role?.startsWith("menuitem"))).toBe(true);
+  });
+
+  test("Simplified toolbar flips aria-checked with Enter and Space", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    const item = (menu: Locator) =>
+      menu.getByRole("menuitemcheckbox", { name: "Simplified toolbar" });
+    for (const [key, expected] of [
+      ["Enter", "true"],
+      ["Space", "false"],
+    ] as const) {
+      const more = await openMore(page);
+      await expect(item(more)).toHaveAttribute(
+        "aria-checked",
+        expected === "true" ? "false" : "true",
+      );
+      await item(more).focus();
+      await page.keyboard.press(key);
+      await expect(more).toHaveCount(0);
+      const reopened = await openMore(page);
+      await expect(item(reopened)).toHaveAttribute("aria-checked", expected);
+      await page.keyboard.press("Escape");
+      await expect(reopened).toHaveCount(0);
     }
   });
 });
