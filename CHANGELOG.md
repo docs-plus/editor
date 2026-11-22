@@ -22,8 +22,11 @@ an import-boundary test keeps both modules out of it.
 - **Print:** a print stylesheet (`styles/_print.scss`, loaded by the root
   layout). It hides the tab bar, toolbar, outline, bubbles, notices and status
   chips. It prints folded sections open, keeps headings with the text after
-  them, lets the document run across pages, and prints light in the dark
-  theme.
+  them and lets the document run across pages. Pages without the editor print
+  as before.
+- **Print:** the dark theme prints light. `ThemeRuntime` removes the `dark`
+  class for the print and restores it afterwards (`lib/print-theme.ts`). The
+  saved theme is not changed.
 - **Block move and duplicate** (`extensions/block-move/`, E4): `moveBlock`
   and `duplicateBlock` work on the top-level blocks of the selection.
   - Each run is one Yjs undo step on the live document.
