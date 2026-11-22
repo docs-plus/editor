@@ -8,7 +8,6 @@ import type { Editor } from "@tiptap/react";
 import { announceLater } from "@/lib/announce-later";
 import { suggestedCodeLanguage } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
-import { TITLE_STYLE_REASON } from "@/lib/editor-actions/core/blocks";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import {
   inCell,
@@ -27,6 +26,13 @@ import { INSERT_KIND_CHOICE, rememberChoice } from "@/lib/remembered-choice";
  * cells converts around them ("Table cells keep their type."); Code block
  * over marks says "Formatting removed". Each pill offers Undo.
  */
+
+/**
+ * The text styles' title refusal (`TITLE_STYLE_REASON` in
+ * `lib/editor-actions/core/blocks.ts`), copied: imported from this lazy
+ * chunk, the editor chunk would have to export it.
+ */
+export const TITLE_STYLE_REASON = "Title is always H1.";
 
 /** The registry's title refusals: a range past the title skips it instead. */
 const TITLE_REASONS = new Set([

@@ -26,7 +26,6 @@ import {
 import {
   INSERT_KIND_CHOICE,
   type InsertKind,
-  isInsertKind,
   readChoice,
   type TableSize,
 } from "@/lib/remembered-choice";
@@ -145,6 +144,15 @@ function templateItem(
  * converts on its last dash. The footer tip says it (spec §8.5).
  */
 export const hintNeedsSpace = (hint: string): boolean => !/^-{3}$/.test(hint);
+
+/**
+ * `isInsertKind`, read off the choice that already carries it: imported
+ * from this lazy chunk, the editor chunk would have to export it. It never
+ * accepts `null`, so the narrower guard holds.
+ */
+const isInsertKind = INSERT_KIND_CHOICE.validate as (
+  value: unknown,
+) => value is InsertKind;
 
 /** Up to this many recent insert kinds lead the empty query (A20). */
 export const MAX_SUGGESTED = 3;

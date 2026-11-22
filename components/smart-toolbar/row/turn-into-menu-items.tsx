@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useActionView } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
-import { TITLE_STYLE_REASON } from "@/lib/editor-actions/core/blocks";
 import {
   ariaKeyShortcuts,
   formatKeyCombo,
@@ -31,6 +30,7 @@ import {
   isTitleReason,
   liftsInto,
   spansPastTitle,
+  TITLE_STYLE_REASON,
   turnInto,
 } from "./turn-into-run";
 
