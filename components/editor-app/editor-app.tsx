@@ -8,6 +8,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { PageFrame } from "@/components/prefs/page-frame";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
 import { useConnectionState } from "@/hooks/use-connection-state";
@@ -165,13 +166,19 @@ export function EditorApp({ intro }: EditorAppProps) {
       {offline && !bannerDismissed && (
         <OfflineBanner onDismiss={() => setBannerDismissed(true)} />
       )}
-      <DocumentEditor
-        key={activeTabId}
-        documentId={activeTabId}
-        onTitleChange={(title) => updateTabTitle(activeTabId, title)}
-        playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-        onPlaygroundRegenerate={handlePlaygroundRegenerate}
-      />
+      <PageFrame>
+        {({ readOnly, outlineOverlay }) => (
+          <DocumentEditor
+            key={activeTabId}
+            documentId={activeTabId}
+            onTitleChange={(title) => updateTabTitle(activeTabId, title)}
+            playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+            onPlaygroundRegenerate={handlePlaygroundRegenerate}
+            readOnly={readOnly}
+            outlineOverlay={outlineOverlay}
+          />
+        )}
+      </PageFrame>
     </div>
   );
 }

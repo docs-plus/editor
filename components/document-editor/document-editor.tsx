@@ -99,6 +99,11 @@ interface DocumentEditorProps {
    * guard's Yjs repair is not gated yet. The web sandbox never sets it.
    */
   readOnly?: boolean;
+  /**
+   * The outline overlays the page instead of docking beside it. Decided
+   * by the page frame (`PageFrame`, preferences design §5.9).
+   */
+  outlineOverlay?: boolean;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -164,6 +169,7 @@ function DocumentEditorContent({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  outlineOverlay = false,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -176,8 +182,9 @@ function DocumentEditorContent({
 
   // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
   // M6: remembered locally (`tinydocy-ui`), same name and signature.
-  // Below 950px the outline is a transient overlay (A6).
-  const [outlineOpen, setOutlineOpen, outlineView] = useOutlineOpen();
+  // Too narrow to dock, the outline is a transient overlay (A6).
+  const [outlineOpen, setOutlineOpen, outlineView] =
+    useOutlineOpen(outlineOverlay);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
@@ -468,6 +475,7 @@ export function DocumentEditor({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  outlineOverlay,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
@@ -496,6 +504,7 @@ export function DocumentEditor({
       playgroundRegenerateTrigger={playgroundRegenerateTrigger}
       onPlaygroundRegenerate={onPlaygroundRegenerate}
       readOnly={readOnly}
+      outlineOverlay={outlineOverlay}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />
