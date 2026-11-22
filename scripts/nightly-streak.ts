@@ -11,37 +11,65 @@
  * The rules (§1.6), as this script reads them:
  * - **Run verdict.** `success` is green; a cancelled run is void. A failed
  *   run is red when any failed job's first failing step is a test step, and
- *   void when every failed job broke in setup ({@link SETUP_STEPS}) or lost
- *   its runner (no failing step recorded).
+ *   void when every failed job broke in a setup step ({@link isSetupStep})
+ *   or lost its runner (no failing step recorded).
  * - **Re-runs.** One manual re-run is allowed per void run: attempt 2 then
  *   decides. A re-run never rescues a red first attempt, and attempts after
- *   the second are ignored.
+ *   the second are ignored. GitHub lists every job in attempt 2, the ones
+ *   not re-run carried over with their attempt-1 result (checked on real
+ *   "Re-run failed jobs" runs, 2026-11-22), so attempt 2 alone holds the
+ *   run's jobs.
  * - **Day verdict** (UTC, by the run's creation time): red if any run is
  *   red, else void if any run is void, else green. A day with no scheduled
- *   run at all (GitHub drops crons now and then) is void, never green.
+ *   run at all (GitHub drops crons now and then) is void, never green, and
+ *   so is a day when one gating workflow has no scheduled run, from the
+ *   day of that workflow's first scheduled run on.
  * - **Streak.** Consecutive green days back from yesterday (today is still
  *   running); a red day ends it, and so does a third void day.
  * - **Gates.** A gate counts a green day only if every job set it needs
  *   ran and passed that day: a job counts towards a set when its name
- *   contains the set's label (`Desktop storage soak (T1–T8) / …` → `T1–T8`).
+ *   contains the set's label (`Desktop storage soak (T1–T8) / …` → `T1–T8`),
+ *   and the set passed only when every such job finished `success` (a
+ *   skipped job or matrix leg didn't run, so it never counts).
  *   A set that never ran in the window reports the gate as not running yet.
  */
 import { parseArgs } from "node:util";
 
 export const GATING_WORKFLOWS = ["nightly.yml", "nightly-desktop.yml"] as const;
 
-/** Steps before any test runs: a failure there voids the run (§1.6). */
+/**
+ * Infrastructure steps: a failure there voids the run (§1.6). Every other
+ * step of a gating job is a test step and reads red, builds, server starts
+ * and audits included (a broken build on `main` is a product failure, not
+ * an outage). `tests/unit/scripts/nightly-streak.test.ts` reads every step
+ * of the gating workflows and fails on one that is in neither list, so a
+ * new step needs a decision here.
+ */
 export const SETUP_STEPS: readonly string[] = [
+  // GitHub's own steps around every job.
   "Set up job",
+  "Complete job",
+  // Toolchain and dependency downloads.
   "Checkout",
   "Set up Bun",
   "Install",
   "Install Chromium",
-  "Install Playwright browsers",
   "Block Node.js",
   "Block Node.js (node.exe on Windows)",
-  "Complete job",
+  "Allow the Chromium sandbox (electron/electron#42510)",
+  // Artifact uploads: they run after the tests and carry no verdict.
+  "Upload failure artifacts",
+  "Upload results",
+  "Upload server log",
+  "Upload server log and report",
 ];
+
+/** GitHub's cleanup steps (`Post Checkout`, `Post Set up Bun`, …). */
+const POST_STEP = /^Post /;
+
+export function isSetupStep(name: string): boolean {
+  return SETUP_STEPS.includes(name) || POST_STEP.test(name);
+}
 
 export type Gate = {
   name: string;
@@ -79,23 +107,29 @@ export type GhRun = {
 
 /** One run with the jobs of its first attempt and, if re-run, its second. */
 export type RunRecord = {
+  /** The workflow file (`nightly.yml`); `run.workflowName` is its title. */
+  workflow: string;
   run: GhRun;
   attempts: GhJob[][];
 };
 
 export type Verdict = "green" | "red" | "void" | "pending";
 
+/** A job of the deciding attempt; only `success` counts for a gate. */
+export type JobOutcome = { name: string; success: boolean };
+
 export type RunVerdict = {
   verdict: Verdict;
   reason: string;
-  /** Jobs that passed in the deciding attempt, for gate coverage. */
-  passedJobs: string[];
+  /** Jobs of the deciding attempt, for gate coverage. */
+  jobs: JobOutcome[];
 };
 
-const PASSING = new Set(["success", "skipped", "neutral"]);
+/** Didn't fail: enough for a run verdict. Gates need `success` itself. */
+const NOT_FAILED = new Set(["success", "skipped", "neutral"]);
 
 function passed(conclusion: string | null): boolean {
-  return conclusion !== null && PASSING.has(conclusion);
+  return conclusion !== null && NOT_FAILED.has(conclusion);
 }
 
 /** Classifies one attempt from its jobs (only called for a failed run). */
@@ -107,7 +141,7 @@ export function classifyJobs(jobs: readonly GhJob[]): {
   const voids: string[] = [];
   for (const job of failed) {
     const step = job.steps.find((s) => !passed(s.conclusion));
-    if (step && !SETUP_STEPS.includes(step.name))
+    if (step && !isSetupStep(step.name))
       return { verdict: "red", reason: `${job.name} › ${step.name}` };
     voids.push(
       step ? `${job.name} › ${step.name}` : `${job.name} (no step ran)`,
@@ -120,43 +154,44 @@ export function classifyJobs(jobs: readonly GhJob[]): {
   };
 }
 
-function passedJobs(jobs: readonly GhJob[] | undefined): string[] {
-  return (jobs ?? [])
-    .filter((job) => passed(job.conclusion))
-    .map((j) => j.name);
+function outcomes(jobs: readonly GhJob[] | undefined): JobOutcome[] {
+  return (jobs ?? []).map((job) => ({
+    name: job.name,
+    success: job.conclusion === "success",
+  }));
 }
 
 export function classifyRun({ run, attempts }: RunRecord): RunVerdict {
   if (run.status !== "completed")
-    return { verdict: "pending", reason: run.status, passedJobs: [] };
+    return { verdict: "pending", reason: run.status, jobs: [] };
   const [first, second] = attempts;
   if (run.attempt <= 1) {
     if (run.conclusion === "success")
-      return { verdict: "green", reason: "", passedJobs: passedJobs(first) };
+      return { verdict: "green", reason: "", jobs: outcomes(first) };
     if (run.conclusion === "cancelled" || run.conclusion === "skipped")
       return {
         verdict: "void",
         reason: `run ${run.conclusion}`,
-        passedJobs: [],
+        jobs: [],
       };
-    return { ...classifyJobs(first ?? []), passedJobs: passedJobs(first) };
+    return { ...classifyJobs(first ?? []), jobs: outcomes(first) };
   }
   // Re-run: the first attempt decides unless it was void.
   if (first && first.length > 0 && first.every((job) => passed(job.conclusion)))
-    return { verdict: "green", reason: "", passedJobs: passedJobs(first) };
+    return { verdict: "green", reason: "", jobs: outcomes(first) };
   const firstVerdict = classifyJobs(first ?? []);
   if (firstVerdict.verdict === "red")
     return {
       verdict: "red",
       reason: `${firstVerdict.reason} (attempt 1; a re-run doesn't clear red)`,
-      passedJobs: [],
+      jobs: [],
     };
   const decidingIsLatest = run.attempt === 2;
   if (decidingIsLatest && run.conclusion === "success")
     return {
       verdict: "green",
       reason: "re-run after a void attempt",
-      passedJobs: passedJobs(second),
+      jobs: outcomes(second),
     };
   const secondJobs = second ?? [];
   const secondVerdict =
@@ -169,7 +204,7 @@ export function classifyRun({ run, attempts }: RunRecord): RunVerdict {
       run.attempt > 2
         ? `${secondVerdict.reason} (attempts after the 2nd ignored)`
         : secondVerdict.reason,
-    passedJobs: passedJobs(second),
+    jobs: outcomes(second),
   };
 }
 
@@ -178,7 +213,8 @@ export type DayReport = {
   verdict: Verdict;
   runs: number;
   reason: string;
-  passedJobs: string[];
+  /** Jobs of every run that day, for gate coverage. */
+  jobs: JobOutcome[];
 };
 
 export function utcDay(iso: string): string {
@@ -191,26 +227,39 @@ function addDays(day: string, delta: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** A gating workflow a day needs a run of, from its first scheduled run. */
+export type RequiredWorkflow = { file: string; since: string | null };
+
 /**
  * One report per UTC day from `from` to `to` (inclusive), newest first.
- * Days with no run are void.
+ * Days with no run are void, and so are days missing a run of a workflow in
+ * `required` (on or after its `since` day).
  */
 export function classifyDays(
   records: readonly RunRecord[],
   from: string,
   to: string,
+  required: readonly RequiredWorkflow[] = [],
 ): DayReport[] {
   const byDay = new Map<string, RunVerdict[]>();
+  const workflowsByDay = new Map<string, Set<string>>();
   for (const record of records) {
     const day = utcDay(record.run.createdAt);
     byDay.set(day, [...(byDay.get(day) ?? []), classifyRun(record)]);
+    const ran = workflowsByDay.get(day) ?? new Set<string>();
+    ran.add(record.workflow);
+    workflowsByDay.set(day, ran);
   }
   const days: DayReport[] = [];
   for (let day = to; day >= from; day = addDays(day, -1)) {
     const verdicts = byDay.get(day) ?? [];
     const pick = (v: Verdict) => verdicts.filter((r) => r.verdict === v);
-    const passed = verdicts.flatMap((v) => v.passedJobs);
-    const base = { day, runs: verdicts.length, passedJobs: passed };
+    const jobs = verdicts.flatMap((v) => v.jobs);
+    const base = { day, runs: verdicts.length, jobs };
+    const ran = workflowsByDay.get(day) ?? new Set<string>();
+    const absent = required
+      .filter((w) => w.since !== null && day >= w.since && !ran.has(w.file))
+      .map((w) => w.file);
     if (verdicts.length === 0)
       days.push({ ...base, verdict: "void", reason: "no scheduled run" });
     else if (pick("pending").length > 0)
@@ -223,6 +272,12 @@ export function classifyDays(
       days.push({ ...base, verdict: "red", reason: pick("red")[0].reason });
     else if (pick("void").length > 0)
       days.push({ ...base, verdict: "void", reason: pick("void")[0].reason });
+    else if (absent.length > 0)
+      days.push({
+        ...base,
+        verdict: "void",
+        reason: `no scheduled run of ${absent.join(", ")}`,
+      });
     else days.push({ ...base, verdict: "green", reason: "" });
   }
   return days;
@@ -257,14 +312,23 @@ export function computeStreak(days: readonly DayReport[]): Streak {
   return { days: green, voids, endedBy: "window", lastGreen };
 }
 
+const carries = (job: string, label: string) =>
+  job.toLowerCase().includes(label.toLowerCase());
+
 const covers = (jobs: readonly string[], label: string) =>
-  jobs.some((job) => job.toLowerCase().includes(label.toLowerCase()));
+  jobs.some((job) => carries(job, label));
+
+/** A set passed when it has jobs and every one of them finished `success`. */
+function setPassed(jobs: readonly JobOutcome[], label: string): boolean {
+  const labelled = jobs.filter((job) => carries(job.name, label));
+  return labelled.length > 0 && labelled.every((job) => job.success);
+}
 
 /** A gate's view of the days: green only when its job sets passed too. */
 export function gateDays(gate: Gate, days: readonly DayReport[]): DayReport[] {
   return days.map((day) => {
     if (day.verdict !== "green") return day;
-    const missing = gate.requires.filter((l) => !covers(day.passedJobs, l));
+    const missing = gate.requires.filter((l) => !setPassed(day.jobs, l));
     return missing.length === 0
       ? day
       : { ...day, verdict: "void", reason: `missing ${missing.join(", ")}` };
@@ -297,7 +361,13 @@ export function reportGates(
   });
 }
 
-export type WorkflowStatus = { file: string; runs: number; found: boolean };
+export type WorkflowStatus = {
+  file: string;
+  runs: number;
+  found: boolean;
+  /** UTC day of its first scheduled run (the window start if truncated). */
+  since: string | null;
+};
 
 export function renderMarkdown(input: {
   today: string;
@@ -344,19 +414,43 @@ export function renderMarkdown(input: {
 
 // ── gh adapter ─────────────────────────────────────────────────────────
 
-type Gh = (args: string[]) => { ok: boolean; stdout: string; stderr: string };
+type GhResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  /** Set when `gh` could not start at all (not installed, not on PATH). */
+  spawnError?: string;
+};
+type Gh = (args: string[]) => GhResult;
 
 const runGh: Gh = (args) => {
-  const result = Bun.spawnSync(["gh", ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return {
-    ok: result.exitCode === 0,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  };
+  try {
+    const result = Bun.spawnSync(["gh", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    return {
+      ok: result.exitCode === 0,
+      stdout: result.stdout.toString(),
+      stderr: result.stderr.toString(),
+    };
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      stdout: "",
+      stderr: "",
+      spawnError: `could not run gh (${why}); install the GitHub CLI and run gh auth login`,
+    };
+  }
 };
+
+/** Runs `gh`, throwing a one-line error when it could not start. */
+function callGh(gh: Gh, args: string[]): GhResult {
+  const out = gh(args);
+  if (out.spawnError) throw new Error(out.spawnError);
+  return out;
+}
 
 const RUN_FIELDS =
   "databaseId,workflowName,createdAt,status,conclusion,attempt,url";
@@ -367,7 +461,7 @@ export function fetchRuns(
   branch: string,
   limit: number,
 ): GhRun[] | null {
-  const out = gh([
+  const out = callGh(gh, [
     "run",
     "list",
     "--workflow",
@@ -389,7 +483,7 @@ export function fetchRuns(
 }
 
 export function fetchJobs(gh: Gh, runId: number, attempt: number): GhJob[] {
-  const out = gh([
+  const out = callGh(gh, [
     "run",
     "view",
     String(runId),
@@ -411,20 +505,41 @@ export function fetchJobs(gh: Gh, runId: number, attempt: number): GhJob[] {
   }));
 }
 
+/** Runs to fetch for a window of `days`: two crons a day, with room. */
+export function runLimit(days: number): number {
+  return Math.max(200, days * 4);
+}
+
 export function collect(
   gh: Gh,
-  options: { branch: string; from: string },
+  options: { branch: string; from: string; limit: number },
 ): { records: RunRecord[]; workflows: WorkflowStatus[] } {
   const records: RunRecord[] = [];
   const workflows: WorkflowStatus[] = [];
   for (const file of GATING_WORKFLOWS) {
-    const runs = fetchRuns(gh, file, options.branch, 200);
+    const runs = fetchRuns(gh, file, options.branch, options.limit);
     if (runs === null) {
-      workflows.push({ file, runs: 0, found: false });
+      workflows.push({ file, runs: 0, found: false, since: null });
       continue;
     }
     const inWindow = runs.filter((r) => utcDay(r.createdAt) >= options.from);
-    workflows.push({ file, runs: inWindow.length, found: true });
+    const earliest = runs.map((r) => utcDay(r.createdAt)).sort()[0] ?? null;
+    // A full page whose oldest run is still inside the window was cut
+    // short: older days would read "no scheduled run" when they had one.
+    const truncated =
+      runs.length >= options.limit &&
+      earliest !== null &&
+      earliest > options.from;
+    if (truncated)
+      console.error(
+        `warning: ${file} has more than ${options.limit} scheduled runs; days before ${earliest} may be missing runs`,
+      );
+    workflows.push({
+      file,
+      runs: inWindow.length,
+      found: true,
+      since: truncated ? options.from : earliest,
+    });
     for (const run of inWindow) {
       const attempts =
         run.status !== "completed"
@@ -435,7 +550,7 @@ export function collect(
                 fetchJobs(gh, run.databaseId, 2),
               ]
             : [fetchJobs(gh, run.databaseId, 1)];
-      records.push({ run, attempts });
+      records.push({ workflow: file, run, attempts });
     }
   }
   return { records, workflows };
@@ -459,9 +574,20 @@ export function main(argv: string[], gh: Gh = runGh, now = new Date()): number {
   const today = now.toISOString().slice(0, 10);
   const yesterday = addDays(today, -1);
   const from = addDays(today, -window);
-  const { records, workflows } = collect(gh, { branch: values.branch, from });
+  let collected: ReturnType<typeof collect>;
+  try {
+    collected = collect(gh, {
+      branch: values.branch,
+      from,
+      limit: runLimit(window),
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+  const { records, workflows } = collected;
   // Today is still running: shown, never counted.
-  const days = classifyDays(records, from, yesterday);
+  const days = classifyDays(records, from, yesterday, workflows);
   const gates = reportGates(days, records);
   if (values.json)
     console.log(JSON.stringify({ today, workflows, days, gates }, null, 2));

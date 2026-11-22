@@ -1,19 +1,28 @@
 import { describe, expect, it, spyOn } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { parse } from "yaml";
 
 import {
   classifyDays,
   classifyJobs,
   classifyRun,
+  collect,
   computeStreak,
   type DayReport,
   GATES,
   GATING_WORKFLOWS,
   type GhJob,
   type GhRun,
+  gateDays,
+  isSetupStep,
   main,
   type RunRecord,
   renderMarkdown,
   reportGates,
+  runLimit,
+  SETUP_STEPS,
 } from "@/scripts/nightly-streak";
 
 const SETUP = ["Set up job", "Checkout", "Set up Bun", "Install"];
@@ -51,8 +60,10 @@ function record(
   conclusion: string | null,
   attempts: GhJob[][],
   extra: Partial<GhRun> = {},
+  workflow = "nightly.yml",
 ): RunRecord {
   return {
+    workflow,
     run: {
       databaseId: nextId++,
       workflowName: "Nightly",
@@ -72,7 +83,13 @@ function day(
   verdict: DayReport["verdict"],
   passed = GATE_JOBS,
 ): DayReport {
-  return { day: d, verdict, runs: 1, reason: "", passedJobs: passed };
+  return {
+    day: d,
+    verdict,
+    runs: 1,
+    reason: "",
+    jobs: passed.map((name) => ({ name, success: true })),
+  };
 }
 
 describe("classifyJobs", () => {
@@ -101,6 +118,20 @@ describe("classifyJobs", () => {
     expect(
       classifyJobs([{ name: "mac", conclusion: "failure", steps: [] }]).verdict,
     ).toBe("void");
+  });
+
+  it("voids a cleanup or upload step that fails after green tests", () => {
+    const post = job("soak", "failure");
+    post.steps.push({ name: "Post Checkout", conclusion: "failure" });
+    expect(classifyJobs([post]).verdict).toBe("void");
+    const upload = job("soak", "failure");
+    upload.steps.push({ name: "Upload results", conclusion: "failure" });
+    expect(classifyJobs([upload]).verdict).toBe("void");
+  });
+
+  it("reads a broken build or server start as red, not setup", () => {
+    for (const step of ["Production build", "Start servers", "Typecheck"])
+      expect(classifyJobs([job("pwa", "failure", step)]).verdict).toBe("red");
   });
 
   it("lets one red job outweigh setup failures elsewhere", () => {
@@ -143,6 +174,39 @@ describe("classifyRun", () => {
     expect(rescued.reason).toContain("re-run doesn't clear red");
   });
 
+  it("reads attempt 2 of a 'Re-run failed jobs' as the whole run", () => {
+    // GitHub's shape (runs 43923051757, 44061357387): attempt 2 lists every
+    // job; the ones not re-run are carried over with their attempt-1 result.
+    const lostRunner: GhJob = {
+      name: "Desktop storage soak (T1–T8) / T1 (macos-26)",
+      conclusion: "cancelled",
+      steps: [],
+    };
+    const carried = green(GATE_JOBS.slice(1));
+    const rescued = classifyRun(
+      record("2026-11-20T04:00:00Z", "success", [
+        [lostRunner, ...carried],
+        [job(lostRunner.name, "success"), ...carried],
+      ]),
+    );
+    expect(rescued.verdict).toBe("green");
+    expect(rescued.jobs.map((j) => j.name).sort()).toEqual(
+      [lostRunner.name, ...GATE_JOBS.slice(1)].sort(),
+    );
+    // A failure that wasn't re-run is carried into attempt 2 and still counts.
+    const setupFailure = job("pwa", "failure", "Install");
+    const stillVoid = classifyRun(
+      record("2026-11-20T04:00:00Z", "failure", [
+        [lostRunner, setupFailure],
+        [job(lostRunner.name, "success"), setupFailure],
+      ]),
+    );
+    expect(stillVoid).toMatchObject({
+      verdict: "void",
+      reason: "setup: pwa › Install",
+    });
+  });
+
   it("ignores attempts after the second", () => {
     const voidFirst = [job("pwa", "failure", "Install")];
     const redSecond = [job("pwa", "failure", "Run tests")];
@@ -175,6 +239,26 @@ describe("classifyDays", () => {
       ["2026-11-18", "green", 1],
     ]);
     expect(days[1].reason).toBe("no scheduled run");
+  });
+
+  it("voids a day when a gating workflow has no run, from its first run on", () => {
+    const records = [
+      record("2026-11-20T04:00:00Z", "success", [green()]),
+      record("2026-11-19T04:00:00Z", "success", [green()]),
+      record("2026-11-19T05:00:00Z", "success", [green()], {}, "b.yml"),
+      record("2026-11-18T04:00:00Z", "success", [green()]),
+    ];
+    const days = classifyDays(records, "2026-11-18", "2026-11-20", [
+      { file: "nightly.yml", since: "2026-11-01" },
+      { file: "b.yml", since: "2026-11-19" },
+      { file: "never.yml", since: null },
+    ]);
+    expect(days.map((d) => [d.day, d.verdict, d.reason])).toEqual([
+      ["2026-11-20", "void", "no scheduled run of b.yml"],
+      ["2026-11-19", "green", ""],
+      // Before b.yml's first run: it can't be missing yet.
+      ["2026-11-18", "green", ""],
+    ]);
   });
 
   it("is void when one run is void and none is red", () => {
@@ -270,6 +354,43 @@ describe("gates", () => {
     expect(gate3.met).toBe(false);
   });
 
+  it("never counts a skipped job set as passed", () => {
+    const skippedT19 = green().map((j) =>
+      j.name.includes("T19") ? { ...j, conclusion: "skipped" } : j,
+    );
+    const records = [
+      record("2026-11-20T04:00:00Z", "success", [skippedT19]),
+      // Seen once, so Gate 5 isn't "not running yet".
+      record("2026-11-19T04:00:00Z", "success", [green()]),
+    ];
+    const days = classifyDays(records, "2026-11-20", "2026-11-20");
+    // The run itself is green: a skipped job doesn't fail it.
+    expect(days[0].verdict).toBe("green");
+    const gate5 = GATES[2];
+    expect(gateDays(gate5, days)[0]).toMatchObject({
+      verdict: "void",
+      reason: "missing T19",
+    });
+    const report = reportGates(days, records)[2];
+    expect(report.notRunning).toEqual([]);
+    expect(report.streak).toMatchObject({ days: 0, voids: 1 });
+  });
+
+  it("voids a set when one matrix leg was skipped beside passing legs", () => {
+    const legs = [
+      job("Desktop storage soak (T1–T8) / T1 (ubuntu-24.04)", "success"),
+      job("Desktop storage soak (T1–T8) / T1 (macos-26)", "skipped"),
+    ];
+    const records = [
+      record("2026-11-20T04:00:00Z", "success", [
+        [...legs, ...green(GATE_JOBS.slice(1))],
+      ]),
+    ];
+    const days = classifyDays(records, "2026-11-20", "2026-11-20");
+    const [gate2] = reportGates(days, records);
+    expect(gate2.streak).toMatchObject({ days: 0, voids: 1 });
+  });
+
   it("voids a gate's day when its jobs didn't run that day", () => {
     const records = [
       record("2026-11-20T04:00:00Z", "success", [green()]),
@@ -288,8 +409,8 @@ describe("renderMarkdown", () => {
     const md = renderMarkdown({
       today: "2026-11-21",
       workflows: [
-        { file: "nightly.yml", runs: 1, found: true },
-        { file: "nightly-desktop.yml", runs: 0, found: false },
+        { file: "nightly.yml", runs: 1, found: true, since: "2026-11-20" },
+        { file: "nightly-desktop.yml", runs: 0, found: false, since: null },
       ],
       days,
       gates: reportGates(days, records),
@@ -364,5 +485,195 @@ describe("main (gh adapter)", () => {
     expect(
       calls.every((c) => c[0] === "run" && ["list", "view"].includes(c[1])),
     ).toBe(true);
+  });
+});
+
+describe("main errors", () => {
+  it("prints one line and exits 1 when gh can't start", () => {
+    const gh = () => ({
+      ok: false,
+      stdout: "",
+      stderr: "",
+      spawnError: "could not run gh (Executable not found in $PATH: gh)",
+    });
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(main([], gh, new Date("2026-11-22T12:00:00Z"))).toBe(1);
+      expect(String(error.mock.calls[0]?.[0])).toContain("could not run gh");
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
+
+describe("collect", () => {
+  const run = (id: number, createdAt: string): GhRun => ({
+    databaseId: id,
+    workflowName: "Nightly",
+    createdAt,
+    status: "completed",
+    conclusion: "success",
+    attempt: 1,
+    url: "u",
+  });
+
+  function fakeGh(runs: GhRun[]) {
+    const calls: string[][] = [];
+    const gh = (args: string[]) => {
+      calls.push(args);
+      if (args[1] === "list")
+        return args[3] === "nightly.yml"
+          ? { ok: true, stderr: "", stdout: JSON.stringify(runs) }
+          : { ok: false, stdout: "", stderr: "HTTP 404: Not Found" };
+      return { ok: true, stderr: "", stdout: JSON.stringify({ jobs: [] }) };
+    };
+    return { gh, calls };
+  }
+
+  it("fetches enough runs for long windows", () => {
+    expect(runLimit(30)).toBe(200);
+    expect(runLimit(120)).toBe(480);
+    const { gh, calls } = fakeGh([]);
+    collect(gh, { branch: "main", from: "2026-07-01", limit: runLimit(120) });
+    expect(calls[0]).toContain("480");
+  });
+
+  it("keys records by workflow file and dates each workflow's first run", () => {
+    const { gh } = fakeGh([
+      run(2, "2026-11-21T04:00:00Z"),
+      run(1, "2026-11-10T04:00:00Z"),
+    ]);
+    const { records, workflows } = collect(gh, {
+      branch: "main",
+      from: "2026-11-15",
+      limit: 200,
+    });
+    expect(records.map((r) => r.workflow)).toEqual(["nightly.yml"]);
+    expect(workflows).toEqual([
+      { file: "nightly.yml", runs: 1, found: true, since: "2026-11-10" },
+      { file: "nightly-desktop.yml", runs: 0, found: false, since: null },
+    ]);
+  });
+
+  it("warns when the run list was cut short inside the window", () => {
+    const { gh } = fakeGh([
+      run(2, "2026-11-21T04:00:00Z"),
+      run(1, "2026-11-20T04:00:00Z"),
+    ]);
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { workflows } = collect(gh, {
+        branch: "main",
+        from: "2026-11-01",
+        limit: 2,
+      });
+      expect(String(error.mock.calls[0]?.[0])).toContain(
+        "more than 2 scheduled runs",
+      );
+      // Truncated: the workflow is required for the whole window.
+      expect(workflows[0].since).toBe("2026-11-01");
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
+
+/**
+ * Steps of the gating workflows that are tests (a failure reads red). With
+ * `SETUP_STEPS`, every step must be in exactly one list: a new step fails
+ * this test until someone decides which.
+ */
+const TEST_STEPS = [
+  "Production build",
+  "Start servers",
+  "Start dev servers",
+  "Start Hocuspocus",
+  "Desktop export",
+  "Web-only files are back in app/",
+  "Audit dependencies",
+  "Audit the harness dependencies",
+  "Typecheck",
+  "Build",
+  "Typecheck and build the harness",
+  "Run the pwa project",
+  "Run the desktop project",
+  "Palette budget",
+  "Yjs reconnection and rapid tab switch",
+  "Multi-user soak (30 s, 3 users)",
+  "Single-user soak (5 min, 50 headings)",
+  "Distributed edits (100 clients, 30 s)",
+  "Conflicting edits (100 clients, 30 s)",
+  "Alternating colour soak (50,000 toggles, 3 clients)",
+  "Mixed-version soak (300 rounds per phase)",
+  "Smoke",
+  "Soak",
+];
+
+/** GitHub adds these to every job; no workflow file names them. */
+const GITHUB_STEPS = ["Set up job", "Complete job"];
+
+type WorkflowFile = {
+  jobs: Record<
+    string,
+    { uses?: string; steps?: { name?: string; uses?: string; run?: string }[] }
+  >;
+};
+
+function gatingWorkflowSteps(): { file: string; steps: (string | null)[] }[] {
+  const dir = join(process.cwd(), ".github", "workflows");
+  const files = new Set<string>(
+    GATING_WORKFLOWS.filter((f) => existsSync(join(dir, f))),
+  );
+  const out: { file: string; steps: (string | null)[] }[] = [];
+  for (const file of files) {
+    const workflow = parse(
+      readFileSync(join(dir, file), "utf8"),
+    ) as WorkflowFile;
+    const steps: (string | null)[] = [];
+    for (const job of Object.values(workflow.jobs)) {
+      // Reusable workflows the gating ones call run under their names.
+      const local = job.uses?.match(/^\.\/\.github\/workflows\/(.+)$/)?.[1];
+      if (local) files.add(local);
+      for (const step of job.steps ?? []) steps.push(step.name ?? null);
+    }
+    out.push({ file, steps });
+  }
+  return out;
+}
+
+describe("step classification guard", () => {
+  const workflows = gatingWorkflowSteps();
+  const named = workflows.flatMap((w) => w.steps.filter((s) => s !== null));
+
+  it("reads the gating workflows and the reusable ones they call", () => {
+    expect(workflows.map((w) => w.file)).toEqual(
+      expect.arrayContaining([
+        "nightly.yml",
+        "desktop-storage-soak.yml",
+        "desktop-smoke.yml",
+      ]),
+    );
+  });
+
+  it("names every step (an unnamed step can't be classified)", () => {
+    for (const { file, steps } of workflows)
+      expect({ file, unnamed: steps.filter((s) => s === null).length }).toEqual(
+        { file, unnamed: 0 },
+      );
+  });
+
+  it("puts every step in exactly one of setup and test", () => {
+    const unclassified = [...new Set(named)].filter(
+      (name) => isSetupStep(name) === TEST_STEPS.includes(name),
+    );
+    expect(unclassified).toEqual([]);
+  });
+
+  it("lists no setup step that no workflow has", () => {
+    const stale = SETUP_STEPS.filter(
+      (name) => !GITHUB_STEPS.includes(name) && !named.includes(name),
+    );
+    expect(stale).toEqual([]);
+    expect(TEST_STEPS.filter((name) => !named.includes(name))).toEqual([]);
   });
 });
