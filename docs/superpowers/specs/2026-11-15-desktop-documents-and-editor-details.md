@@ -58,7 +58,7 @@ These came out of the staff feasibility review. Each one was checked against the
    |---|---|---|
    | No provider, `WriteGate` and the decoration host | P2.2 | 300 B (measured 294 B) |
    | Sandbox `DocSession` adapter, context and hook: `use-yjs-document` reads `DocSession` (K14's P2.1 allowance; added 2026-11-22 by coordinator decision) | P2.1c | 275 B (measured 275 B) |
-   | Comments hook | P4.9 | 150 B (measured 143 B: the `comments` layer, the `sectionMove` meta and `comment.add` without its icon) |
+   | Comments hook | P4.9 | 150 B (measured 140 B: the `comments` layer, the `sectionMove` meta and `comment.add` without its icon) |
    | Smart-quotes gate | P2.9c-1 | 150 B |
    | i18n core (`t()`, registry labels, `lang`/`dir`; also pays L3's `matchShortcut` / `visualStep` bytes, languages §3.7.1) | L1a | 400 B |
    | `dir` attribute, direction commands, Enter inherits direction, « » by script | P2.13 | 350 B |

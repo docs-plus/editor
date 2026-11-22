@@ -15,7 +15,7 @@ The data model, anchoring and re-anchoring for comments (spec
 `2026-11-16-comments-design.md` §4–§6, §8–§10), with no visible UI: the
 web sandbox and the Playground never take comments, and
 `canComment()` is off unless `NEXT_PUBLIC_COMMENTS=on`. The editor chunk
-group grows 143 B gz (P4.9's 150 B line in the D23 ledger, v1 contract
+group grows 140 B gz (P4.9's 150 B line in the D23 ledger, v1 contract
 A19); the lazy comments chunk is about 5.3 KB gz. No schema or protocol
 change; no Deploy note.
 
