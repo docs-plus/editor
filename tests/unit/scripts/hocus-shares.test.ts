@@ -64,18 +64,20 @@ function httpUrl(server: SpawnedHocus, pathname: string): string {
 }
 
 async function createShare(server: SpawnedHocus, secrets = makeShareSecrets()) {
+  const lineage = crypto.randomUUID();
   const response = await fetch(httpUrl(server, "/api/shares"), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      lineage: crypto.randomUUID(),
-      ...secrets.hashes,
-      schema: 3,
-    }),
+    body: JSON.stringify({ lineage, ...secrets.hashes, schema: 3 }),
   });
   expect(response.status).toBe(201);
   const { share_id } = (await response.json()) as { share_id: string };
-  return { shareId: share_id, name: shareDocumentName(share_id), secrets };
+  return {
+    shareId: share_id,
+    name: shareDocumentName(share_id),
+    secrets,
+    lineage,
+  };
 }
 
 type Client = {
@@ -364,7 +366,7 @@ describe("hocus-server share server (HOCUS_SHARES=on)", () => {
     async () => {
       const server = await start({ HOCUS_SHARES: "on", HOCUS_LOGGER: "1" });
       const secrets: ShareSecrets = makeShareSecrets();
-      const { name, shareId } = await createShare(server, secrets);
+      const { name, shareId, lineage } = await createShare(server, secrets);
       const editor = attach(server, name, secrets.authEdit);
       expect(await editor.outcome).toBe("synced:read-write");
       writeParagraph(editor.document, "secret-free");
@@ -398,6 +400,11 @@ describe("hocus-server share server (HOCUS_SHARES=on)", () => {
         .map((file) => readFileSync(file).toString("latin1"))
         .join("\n");
       const logs = server.logs();
+      // Positive controls: the scans read the real logs and stored bytes.
+      expect(logs).toContain(shareId);
+      expect(logs).toContain('"type":"hocus"'); // HOCUS_LOGGER output
+      expect(logs).toContain(name);
+      expect(stored).toContain(lineage);
       for (const form of [
         ...rawSecretForms(secrets),
         ...rawSecretForms(next),
