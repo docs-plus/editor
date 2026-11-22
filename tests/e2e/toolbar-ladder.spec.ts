@@ -191,7 +191,7 @@ test.describe("touch", () => {
     await sweep(page, [1600, 1560, ...TOUCH_WIDTHS], "touch+face");
   });
 
-  test("tablet: the stand-ins show one fixed word each where the row has room (O8 a)", async ({
+  test("tablet: the stand-ins show one fixed word at every tablet width (O8 a, option b)", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 900, height: 1180 });
@@ -220,18 +220,61 @@ test.describe("touch", () => {
     await caretIn(page, "table");
     expect((await standInWords(page))["Block: Table tools"]).toBe("Block");
     await expectRowFits(page, "touch words @900 table");
-    // The widest context fits them from an 848px window; below, no words.
-    for (const width of [848, 1100]) {
+    // Option b (owner, 2026-11-22): words at every tablet width. Below an
+    // 848px window Redo and the list quick-toggle leave the row so they
+    // fit in every context; from 848px both are back.
+    const redo = row(page).locator('[data-action-id="history.redo"]');
+    const listFace = row(page).locator(
+      '.st-split[data-list-face] > [data-action-id^="list."]',
+    );
+    for (const width of [1100, 900, 848, 846, 820, 768]) {
       await page.setViewportSize({ width, height: 1180 });
-      expect(await standInWords(page)).not.toEqual({});
-      await expectRowFits(page, `touch words @${width}`);
-    }
-    for (const width of [846, 820, 768]) {
-      await page.setViewportSize({ width, height: 1180 });
-      expect(await standInWords(page)).toEqual({});
-      await expectRowFits(page, `touch @${width}`);
+      const narrow = width < 848;
+      for (const context of CONTEXTS) {
+        await caretIn(page, context);
+        expect(
+          Object.values(await standInWords(page)),
+          `words @${width} ${context}`,
+        ).toContain("Layout");
+        await expectRowFits(page, `touch words @${width} ${context}`);
+      }
+      if (narrow) {
+        await expect(redo).toBeHidden();
+        await expect(listFace).toBeHidden();
+        await expect(
+          row(page).getByRole("button", { name: "List" }),
+        ).toBeVisible();
+      } else {
+        await expect(redo).toBeVisible();
+        await expect(listFace).toBeVisible();
+      }
     }
   });
+
+  for (const width of [768, 820]) {
+    test(`tablet @${width}: Redo leads ⋯ while the row hides it, and redoes`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 1180 });
+      await openToolbarTestDoc(page);
+      await seedContexts(page);
+      await caretIn(page, "paragraph");
+      await page.keyboard.type("!");
+      await page.evaluate(() => window.__tiptap_editor?.commands.undo());
+      const text = () =>
+        page.evaluate(
+          () => window.__tiptap_editor?.state.doc.textContent ?? "",
+        );
+      expect(await text()).not.toContain("!");
+      await row(page).getByRole("button", { name: "More formatting" }).tap();
+      const menu = page.getByRole("menu", { name: "More formatting" });
+      const items = menu.getByRole("menuitem");
+      await expect(items.first()).toHaveAccessibleName(/^Redo/);
+      await items.first().tap();
+      await expect(menu).toBeHidden();
+      await expect.poll(text).toContain("!");
+    });
+  }
 
   test("tablet: the words are there at first paint; the row never shifts when the menu chunk lands", async ({
     page,
@@ -303,6 +346,21 @@ test.describe("touch", () => {
         .getByRole("button", { name: "Red text" }),
     ).toBeVisible();
   });
+});
+
+test("fine pointer: Redo stays in the row and ⋯ has no Redo", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 820, height: 900 });
+  await openToolbarTestDoc(page);
+  await expect(
+    row(page).locator('[data-action-id="history.redo"]'),
+  ).toBeVisible();
+  await row(page).getByRole("button", { name: "More formatting" }).click();
+  const menu = page.getByRole("menu", { name: "More formatting" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /^Redo/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
 
 test("collapsed groups come back through their stand-ins", async ({ page }) => {

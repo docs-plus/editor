@@ -227,10 +227,24 @@ function MenuGroup({
 const hasAction = (id: string) => editorActions.has(id);
 
 /**
+ * Touch tablets whose row has no room for Redo (owner decision 2026-11-22,
+ * option b): the same query as the rule in `app/globals.css` that hides it
+ * from the row, so Redo is in exactly one place. Read when the menu opens
+ * (the body mounts then): a hidden menu item would still take ↑ ↓ focus.
+ */
+export const TOUCH_ROW_REDO_IN_MORE =
+  "(min-width: 768px) and (max-width: 847.98px) and (pointer: coarse)";
+
+const redoInMore = () =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia(TOUCH_ROW_REDO_IN_MORE).matches;
+
+/**
  * ⋯ More formatting (spec §9.2): Text (superscript, subscript, inline code,
  * clear formatting, paint format), View (Simplified toolbar, Appearance),
  * Help (All actions…), then Forget my choices on its own. Every row keeps
- * the 16 px leading slot, so the labels line up.
+ * the 16 px leading slot, so the labels line up. On a touch tablet whose
+ * row hides Redo, Redo leads, on its own (`TOUCH_ROW_REDO_IN_MORE`).
  */
 export function OverflowMenuItems({
   editor,
@@ -250,6 +264,12 @@ export function OverflowMenuItems({
   );
   return (
     <>
+      {redoInMore() ? (
+        <>
+          {plain("history.redo")}
+          <DropdownMenuSeparator />
+        </>
+      ) : null}
       <MenuGroup label="Text">
         {TOGGLES.map((id) => (
           <ActionMenuItem
