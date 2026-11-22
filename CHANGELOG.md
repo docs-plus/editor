@@ -99,6 +99,51 @@ commands apart from typing (owner's decision).
   fell in and its input delay, processing and presentation times
   (`tests/TESTING.md`, "Soak journeys").
 
+### Languages L0: translation-ready foundation (docs, glossary, i18n groundwork)
+
+PR L0 of the languages design (`2026-11-16-languages-rtl-design.md` §9),
+with the unwired groundwork of L1a. Nothing in the app imports the new
+modules, so the web app, its English copy and the editor chunk are
+unchanged (0 B).
+
+#### Added
+
+- **i18n:** `lib/i18n/` with the eager `t()` (`t-core.ts`: lookup, `{name}`,
+  interface locale and `dir`; client-side state, set once at boot), the
+  eager direction helper (`dir.ts`: `dirOf` from the locale's likely
+  script, so `ku-Arab` is right to left), the lazy ICU MessageFormat 1
+  subset (`format.ts`: plural with CLDR categories, select, number, date,
+  time, rich tags; `selectordinal` and nested plurals refused; its `t()`
+  shows English when a translation fails to parse), BCP 47 matching and
+  native names (`locale.ts`, lazy only), bidi helpers (`isolate.ts`,
+  including `stripBidiControls` for filenames) and the registry render
+  boundary (`registry-labels.ts`; keywords split on `,` `،` `、` `，`).
+  English stays in code and needs no catalog.
+- **i18n:** `bun run i18n:extract` writes `locales/en/<ns>.json` from `t()`
+  calls and the action registry's labels and keywords (88 messages today,
+  in `actions.json`), skips `t(` in comments, and fails on imports of
+  `t-core` or `format` that would hide calls (relative paths, `t as x`,
+  `import *`, re-exports, dynamic imports); `bun run i18n:check` checks
+  freshness, ICU syntax, placeholders, plural categories, banned literals
+  (⌘ ⌥ ⇧ ⌃, `Ctrl+`, straight double quotes), `core` simplicity (no ICU
+  apostrophe escapes either), translations filed under their own
+  namespace and reserved shortcuts (Shift+Space); `bun run i18n:pseudo`
+  builds `en-XA` and `ar-XB` into the git-ignored `locales/pseudo/`.
+- **i18n:** `tests/unit/i18n/catalog-check.test.ts` runs the check in
+  `bun run test`, so **changing an action's label or keywords in
+  `lib/editor-actions` now needs `bun run i18n:extract`** in the same
+  commit. `editor-chunk-imports.test.ts` keeps the formatter, `Intl`
+  helpers, `locale.ts` and catalogs out of the editor chunk, and pins
+  `t-core` and `registry-labels` to `dir.ts` alone.
+- **i18n:** `NEXT_PUBLIC_PSEUDO_LOCALES=1` lists the pseudo-locales; it is
+  off by default, never set in production, and nothing reads it yet.
+- **Docs:** `locales/glossary.md` (fixed terms per language, seeded from UX
+  §9.2) and the L0 amendments: UX §9.4 copy rules, §4.6 RTL keyboard notes,
+  §2.4 casing `select` and `.lproj`, §14 RTL checks for S1; preferences
+  §5.4 RTL letter spacing, §5.13 script fallback faces, §5.15 `firefox`;
+  details E9 Arabic-script and Hebrew folding and §14 `ar-XB` gallery;
+  comments §11.2 sides follow the interface; toolbar contract A19.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
@@ -2191,7 +2236,6 @@ its 20,480 B budget.
   a larger document only, more rounds, or another measure of the
   toolbar's per-keystroke cost) change the gate and are the owner's call.
 
-
 #### Added
 - **Diagram ▸ templates in the Insert menu (M17b, design pass §9):**
   Diagram is one standard submenu row (hover, click, Enter or →) with the
@@ -2453,7 +2497,6 @@ was added, so this fix can ship to `main` on its own.
   without a leak (it levels off near 10%), so the 5% bound in
   `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
   added about 17%, and the live-editor count stays the main check.
-
 
 ### Smart toolbar v1 integration (PR C + D1 + D2, r2 surfaces)
 

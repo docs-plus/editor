@@ -268,7 +268,7 @@ These come from the request research, filtered by the staff review. Each row nam
 | E6 | **Print and Save as PDF** through the OS print dialog, using a print stylesheet that hides the chrome, keeps headings with their content and expands folded sections. | No print styles | Local release, shared | P2.12 |
 | E7 | **Export Markdown and HTML, and Copy as Markdown.** Images in Markdown export go to a folder next to the file. | Export missing on the web | Local release, shared | P2.8, plus P2.10 on the web |
 | E8 | **Spelling suggestions** in the editor's context menu, with Add to Dictionary. | Missing on desktop | Local release | P2.9a |
-| E9 | **Quick Open ignores accents and case**, and shows the folder path. It searches metadata only (D24): titles, tags, folder names and document properties, through the shared normalizer (diacritics, Arabic→Persian letter folding, Persian/Arabic-Indic digits → ASCII). Never body text. | Missing | Local release | P2.7a |
+| E9 | **Quick Open ignores accents and case**, and shows the folder path. It searches metadata only (D24): titles, tags, folder names and document properties, through the shared normalizer (diacritics, Arabic→Persian letter folding (ي→ی, ك→ک), tatweel, Arabic harakat and Hebrew niqqud dropped, ZWNJ ignored, Persian/Arabic-Indic digits → ASCII; languages design §4.6). Never body text. | Missing | Local release | P2.7a |
 | E10 | **Make plain-text paste easier to find:** Edit › Paste as Plain Text (⌘⇧V). | Hidden | Local release | P2.9a |
 | E11 | Sticky header rows in tables | Missing | Later | — |
 | E12 | Focus mode and typewriter scrolling | Missing | Later | — |
@@ -537,3 +537,4 @@ Related answers from the plan:
 - design review with screenshots at 1440, 1100 and 820 px, in light and dark
 - the keyboard checklist
 - the `perf` project for anything in the shared editor
+- for any PR that changes chrome, once languages L7 ships the gallery (v1.1): the `ar-XB` RTL screenshot gallery at the same widths (languages design §8.2)
