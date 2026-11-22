@@ -105,7 +105,7 @@ async function openDoc(page: Page, doc: object = DOC): Promise<EditorPage> {
 
 /** Selects `needle` (the `nth` match) with a focused editor, like a drag. */
 async function selectText(page: Page, needle: string, nth = 0) {
-  await page.evaluate(
+  const editable = await page.evaluate(
     ([target, index]) => {
       const editor = window.__tiptap_editor;
       if (!editor) throw new Error("editor missing");
@@ -126,9 +126,14 @@ async function selectText(page: Page, needle: string, nth = 0) {
         .focus()
         .setTextSelection({ from, to: from + (target as string).length })
         .run();
+      return editor.isEditable;
     },
     [needle, nth] as const,
   );
+  // Tiptap's `focus()` lands a frame later: a key pressed before that
+  // goes to the body (⌘A then selects nothing in the editor). A read-only
+  // editor takes no focus.
+  if (editable) await expect(page.locator(".tiptap")).toBeFocused();
 }
 
 /** Drag-selects `needle` with the mouse (a real pointer selection). */
