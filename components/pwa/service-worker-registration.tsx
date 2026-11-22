@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { CACHE_PREFIX } from "@/lib/pwa/sw-config";
-import { CACHE_LOADED_MESSAGE } from "@/lib/pwa/sw-routing";
+import { CACHE_LOADED_MESSAGE, loadedStaticPaths } from "@/lib/pwa/sw-routing";
 
 /**
  * Build-time switch, inlined by `bun run build`: NEXT_PUBLIC_SERVICE_WORKER=0
@@ -41,24 +41,43 @@ function registerServiceWorker(): void {
     .catch(() => undefined);
 }
 
+/** Static files among `entries` that did not pass through a service worker. */
+function bypassedStaticFiles(entries: PerformanceEntryList): string[] {
+  return loadedStaticPaths(
+    entries
+      .filter((entry) => (entry as PerformanceResourceTiming).workerStart === 0)
+      .map(({ name }) => name),
+    location.origin,
+  );
+}
+
 /**
  * A first visit loads its chunks (the editor among them) before the worker
  * controls the page, so they bypass its cache and an offline reload has
  * only the browser's HTTP cache for them. When the worker takes control,
- * this hands it every file the page loaded; it stores the static ones.
+ * this hands it the static files loaded without it, then those that finish
+ * later (requested before control, such as the idle surface preload).
  */
 export function cacheLoadedFilesOnControl(
   container: ServiceWorkerContainer,
 ): () => void {
   if (container.controller) return () => undefined;
-  const post = () => {
-    container.controller?.postMessage({
-      type: CACHE_LOADED_MESSAGE,
-      urls: performance.getEntriesByType("resource").map(({ name }) => name),
-    });
+  let observer: PerformanceObserver | undefined;
+  const post = (entries: PerformanceEntryList) => {
+    const urls = bypassedStaticFiles(entries);
+    if (urls.length === 0) return;
+    container.controller?.postMessage({ type: CACHE_LOADED_MESSAGE, urls });
   };
-  container.addEventListener("controllerchange", post, { once: true });
-  return () => container.removeEventListener("controllerchange", post);
+  const onControl = () => {
+    post(performance.getEntriesByType("resource"));
+    observer = new PerformanceObserver((list) => post(list.getEntries()));
+    observer.observe({ type: "resource" });
+  };
+  container.addEventListener("controllerchange", onControl, { once: true });
+  return () => {
+    container.removeEventListener("controllerchange", onControl);
+    observer?.disconnect();
+  };
 }
 
 /**

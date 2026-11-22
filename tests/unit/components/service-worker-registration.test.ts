@@ -3,7 +3,7 @@
  * the worker precaches web-only pages (`SHELL_PATHS` has `/privacy`), and
  * the desktop export has none of them.
  */
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
@@ -57,10 +57,61 @@ describe("SERVICE_WORKER_ENABLED", () => {
 });
 
 describe("cacheLoadedFilesOnControl", () => {
+  const origin = location.origin;
+  const entry = (path: string, workerStart: number) =>
+    ({ name: `${origin}${path}`, workerStart }) as PerformanceResourceTiming;
+
+  let loaded: PerformanceResourceTiming[] = [];
+  let observers: Array<{
+    callback: PerformanceObserverCallback;
+    disconnected: boolean;
+  }> = [];
+  const realGetEntries = performance.getEntriesByType.bind(performance);
+  const RealObserver = globalThis.PerformanceObserver;
+
+  beforeEach(() => {
+    loaded = [];
+    observers = [];
+    performance.getEntriesByType = (() =>
+      loaded) as typeof performance.getEntriesByType;
+    globalThis.PerformanceObserver = class {
+      record: (typeof observers)[number];
+      constructor(callback: PerformanceObserverCallback) {
+        this.record = { callback, disconnected: false };
+        observers.push(this.record);
+      }
+      observe() {}
+      disconnect() {
+        this.record.disconnected = true;
+      }
+    } as unknown as typeof PerformanceObserver;
+  });
+
+  afterEach(() => {
+    performance.getEntriesByType = realGetEntries;
+    globalThis.PerformanceObserver = RealObserver;
+  });
+
+  /** A resource entry that finishes after the worker took control. */
+  function finishLater(...entries: PerformanceResourceTiming[]) {
+    for (const observer of observers) {
+      if (observer.disconnected) continue;
+      observer.callback(
+        {
+          getEntries: () => entries,
+        } as unknown as PerformanceObserverEntryList,
+        {} as PerformanceObserver,
+      );
+    }
+  }
+
   function fakeContainer(controlled: boolean) {
     const target = new EventTarget();
-    const posted: unknown[] = [];
-    const worker = { postMessage: (message: unknown) => posted.push(message) };
+    const posted: Array<{ type: string; urls: string[] }> = [];
+    const worker = {
+      postMessage: (message: { type: string; urls: string[] }) =>
+        posted.push(message),
+    };
     const container = Object.assign(target, {
       controller: controlled ? worker : null,
     });
@@ -81,31 +132,66 @@ describe("cacheLoadedFilesOnControl", () => {
     );
   }
 
-  it("posts the loaded files once, when the worker takes control", async () => {
+  it("posts the static files loaded without the worker once it takes control", async () => {
     const { cacheLoadedFilesOnControl } = await load();
+    loaded = [
+      entry("/_next/static/chunks/editor.js", 0),
+      entry("/_next/static/chunks/through-worker.js", 12),
+      entry("/api/documents/x", 0),
+    ];
     const { container, posted, takeControl } = fakeContainer(false);
     cacheLoadedFilesOnControl(container);
     expect(posted).toEqual([]);
     takeControl();
     takeControl(); // an update later: already cached through the worker
-    expect(posted).toHaveLength(1);
-    expect(posted[0]).toMatchObject({ type: "tinydocy:cache-loaded" });
-    expect(Array.isArray((posted[0] as { urls: unknown }).urls)).toBe(true);
+    expect(posted).toEqual([
+      {
+        type: "tinydocy:cache-loaded",
+        urls: ["/_next/static/chunks/editor.js"],
+      },
+    ]);
+  });
+
+  it("posts files requested before control that finish after it", async () => {
+    const { cacheLoadedFilesOnControl } = await load();
+    const { container, posted, takeControl } = fakeContainer(false);
+    cacheLoadedFilesOnControl(container);
+    takeControl();
+    expect(posted).toEqual([]); // nothing loaded yet: no empty message
+    finishLater(
+      entry("/_next/static/chunks/bubble.js", 0),
+      entry("/_next/static/chunks/palette.js", 8),
+    );
+    expect(posted).toEqual([
+      {
+        type: "tinydocy:cache-loaded",
+        urls: ["/_next/static/chunks/bubble.js"],
+      },
+    ]);
   });
 
   it("does nothing on a page the worker already controls", async () => {
     const { cacheLoadedFilesOnControl } = await load();
+    loaded = [entry("/_next/static/chunks/editor.js", 0)];
     const { container, posted, takeControl } = fakeContainer(true);
     cacheLoadedFilesOnControl(container);
     takeControl();
     expect(posted).toEqual([]);
+    expect(observers).toEqual([]);
   });
 
-  it("stops listening on cleanup", async () => {
+  it("stops listening and observing on cleanup", async () => {
     const { cacheLoadedFilesOnControl } = await load();
-    const { container, posted, takeControl } = fakeContainer(false);
-    cacheLoadedFilesOnControl(container)();
-    takeControl();
-    expect(posted).toEqual([]);
+    const first = fakeContainer(false);
+    cacheLoadedFilesOnControl(first.container)();
+    first.takeControl();
+    expect(first.posted).toEqual([]);
+
+    const second = fakeContainer(false);
+    const stop = cacheLoadedFilesOnControl(second.container);
+    second.takeControl();
+    stop();
+    finishLater(entry("/_next/static/chunks/late.js", 0));
+    expect(second.posted).toEqual([]);
   });
 });
