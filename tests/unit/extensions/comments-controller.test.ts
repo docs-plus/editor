@@ -111,6 +111,34 @@ describe("comments controller", () => {
     });
   });
 
+  it("anchors, re-anchors and resolves with no network (offline, §6)", () => {
+    const real = { fetch: globalThis.fetch, WebSocket: globalThis.WebSocket };
+    const calls: string[] = [];
+    globalThis.fetch = (async () => {
+      calls.push("fetch");
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+    globalThis.WebSocket = class {
+      constructor() {
+        calls.push("WebSocket");
+        throw new Error("offline");
+      }
+    } as unknown as typeof WebSocket;
+    try {
+      const { fixture: f, controller: ctl } = setup();
+      const tid = comment(ctl, f);
+      // A structural edit before the range re-anchors it.
+      f.editor.commands.setTextSelection(8);
+      f.editor.commands.splitBlock();
+      ctl.flush();
+      expect(rangeText(ctl, tid, f)).toBe("world");
+      expect(calls).toEqual([]);
+    } finally {
+      globalThis.fetch = real.fetch;
+      globalThis.WebSocket = real.WebSocket;
+    }
+  });
+
   it("comments on the word at the caret, and refuses where there is none", () => {
     const { fixture: f, controller: ctl } = setup();
     f.editor.commands.setTextSelection(16);
