@@ -255,6 +255,59 @@ chunk is unchanged (0 B).
 - **Tests:** `generateLargeDocument` and `generateRandomDocument` take an
   optional seeded `random`; callers that pass none keep `Math.random`.
 
+### Desktop P2.7b: list views, sort, filter and tags
+
+The library's list views for desktop and the web library (D3), in
+`components/library/`, on top of P2.7a's sidebar. The web sandbox doesn't
+use them: nothing in the web build imports `components/library` or
+`lib/library`.
+
+#### Added
+
+- **Platform:** `LibraryIndex` gains tags (`tags`, `addTag`, `removeTag`,
+  `createTag`, `renameTag`, `mergeTags`; unique by `tagNameKey`, the shared
+  search normalizer, so case, accents and digit shapes don't make a new
+  tag; 40 characters, 20 per document), list choices per place (`listViews`,
+  `setListView`; a folder's map to `folders.sort`, `view` and `"group"`,
+  the rest to `meta`), Manual order inside a folder (`moveInFolder`,
+  `docs.sort_key`), the Trash list (`trash`: documents and folder units,
+  newest first), one `trashGroup` per trashed folder's subtree, and list
+  metadata on entries (`modifiedAt`, `snippet`, `tagIds`, `sortKey`).
+  Modified counts content edits only (D-O5), sibling folders may share a
+  name (D-O6), and `rename` on
+  a `LibraryIndex` is documented as editing the title heading through a
+  session, never the stored title (offline data-model revision §4.2). `MemoryDocumentIndex` implements them and the
+  shared contract suite covers them for P2.6's `IpcDocumentIndex` and W2's
+  `IdbDocumentIndex`.
+- **Library:** list views for Recent, Pinned, the Library root, a folder,
+  a tag and Trash, as an ARIA grid with one tab stop: sort by Title,
+  Modified, Created, Opened or Manual (pin order in Pinned), List or
+  Preview (title plus a 2-line snippet), group by date (Today, Yesterday,
+  This week, This month, Earlier) or by folder, all kept per folder. The
+  tree keeps sorting by title. Lists are windowed (first paint of a
+  folder's list 33 ms at 1,000 documents and 45 ms at 10,000 on a
+  production build; targets 100 and 300 ms). P2.7a's sidebar tree is not
+  windowed yet: expanding a folder of 10,000 documents there takes about
+  2.6 s. Arrow, Home/End and Page keys, Shift to extend, Space,
+  ⌘A, Enter (a folder opens its list), F2, ⌘⌫ / Delete, ⌘Z, Shift+F10,
+  type-to-select, and ⌥⌘↑ / ⌥⌘↓ in a Manual folder.
+- **Library:** the filter bar: ⌘F while a list has focus, matching titles,
+  tags and folder names through the shared normalizer, never body text
+  (D24); a tag filter that combines tags with AND; and a Modified date
+  range. It is per window and not saved.
+- **Library:** the Tags section in the sidebar (collapsed, no counts),
+  each tag opening a list of its documents; F2 renames a tag everywhere,
+  and a name another tag has asks "Merge “plans” into “planning”?" with
+  Cancel focused.
+- **Library:** the Trash list with Restore (row menu, Shift+F10, or the
+  header button), "Restored “Q4 plan” to Drafts." in the pill, and the
+  UX §5.2 empty states. Delete Forever and Empty Trash come with P2.8.
+- **Tests:** `library-lists.spec.ts` (UX §8.3 item 4, list keys, filter,
+  per-folder choices, Manual order, tags, axe in both themes and RTL) and
+  `library-lists-speed.spec.ts` on the harness, which now seeds large
+  libraries (`?seed=10000`), a Trash (`?trash=1`) and builds production
+  React with `LIBRARY_HARNESS_PROD=1`.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
