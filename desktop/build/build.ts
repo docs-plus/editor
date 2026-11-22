@@ -8,7 +8,9 @@
  *    `copy-worker.cjs` once #128 adds it) with `Bun.build`: CJS, `node:*` and
  *    `electron` external. CJS because a sandboxed preload must be CJS (S1).
  * 2. Checks them: the preload requires only `electron`; main and the
- *    workers require no `bun:*` module and no React.
+ *    workers require no `bun:*` module and no React; a release bundle
+ *    carries no test-hook name (SEC-006). `out/` may hold no symbolic link
+ *    (SEC-009).
  * 3. Stages `dist/desktop-app/`: a `package.json` with only what
  *    electron-builder reads, the bundles, and `renderer/` copied from
  *    `out/`. A renderer exported on Windows (`__next.*` directories, #103)
@@ -32,6 +34,7 @@ import { join, relative } from "node:path";
 
 import { checkDesktopExport } from "../../scripts/desktop-export";
 import { sha256Source } from "../main/csp";
+import { symlinksUnder, testHookMarkersIn } from "./bundle-checks";
 import { type Flavor, validateSyncUrl } from "./sync-url";
 import { tiptapStyleText } from "./tiptap-style";
 
@@ -94,6 +97,9 @@ const requiresOf = (code: string) =>
 
 function check(name: string, code: string, preload: boolean): string[] {
   const problems: string[] = [];
+  if (FLAVOR === "release")
+    for (const marker of testHookMarkersIn(code))
+      problems.push(`${name} contains the test hook ${marker} (SEC-006)`);
   const requires = requiresOf(code);
   if (preload) {
     const foreign = [...requires].filter((r) => r !== "electron");
@@ -121,6 +127,11 @@ async function main(): Promise<number> {
   for (const problem of exportProblems)
     console.error(`[desktop-build] ${problem}`);
   if (exportProblems.length > 0) return 1;
+  // SEC-009: the protocol handler would follow a link out of renderer/.
+  const links = symlinksUnder(OUT);
+  for (const link of links)
+    console.error(`[desktop-build] out/ contains a symbolic link: ${link}`);
+  if (links.length > 0) return 1;
 
   rmSync(STAGE, { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
