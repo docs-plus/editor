@@ -1,6 +1,7 @@
-import { Hocuspocus } from "@hocuspocus/server";
+import { Hocuspocus, type onAuthenticatePayload } from "@hocuspocus/server";
 
 import { createSqlitePersistence } from "../lib/hocus-persistence";
+import { CLIENT_SCHEMA } from "../lib/schema-version";
 import { logAbuseEvent } from "../lib/security/abuse-log";
 import {
   bootstrapDocumentActivityTable,
@@ -32,18 +33,26 @@ import {
   HOCUS_HOST,
   HOCUS_MAX_PAYLOAD_BYTES,
   HOCUS_MIN_CLIENT_SCHEMA,
+  HTTP_MUTATION_RATE_LIMIT_PER_MINUTE,
   MAX_AWARENESS_STATE_BYTES,
+  MAX_DOC_SIZE_BYTES,
   MAX_WS_SOCKETS,
   WS_SOCKETS_PER_IP,
   WS_UPGRADE_RATE_LIMIT_PER_MINUTE,
 } from "../lib/security/guardrail-config";
 import { guardrailRefusal } from "../lib/security/guardrail-refusal";
+import { createHocusDeleteRoute } from "../lib/security/hocus-delete-route";
 import { DocumentGuard } from "../lib/security/hocus-document-guard";
+import { createHocusHttpRoutes } from "../lib/security/hocus-http-routes";
 import { buildHocusServerExtensions } from "../lib/security/hocus-server-extensions";
 import { createWsGuardrails } from "../lib/security/ws-guardrails";
 import { createSocketGate } from "../lib/security/ws-socket-gate";
+import { HOCUS_DELETE_ROUTE, HOCUS_SHARES } from "../lib/sharing/share-config";
+import { isShareNamespace } from "../lib/sharing/share-name";
+import { createShareServer } from "../lib/sharing/share-server";
 import { openSqlite } from "../lib/sqlite-open";
 import { migrateLegacyMarks } from "../lib/yjs-mark-migration";
+import packageJson from "../package.json";
 
 /** Upper bound for flushing and unloading open documents on SIGINT/SIGTERM. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -106,6 +115,33 @@ const socketGate = createSocketGate({
 const clientSchemaCounter = createClientSchemaCounter();
 const db = openSqlite();
 bootstrapDocumentActivityTable(db);
+/**
+ * The share server (P4.2a–d), dark by default: with `HOCUS_SHARES=off` it is
+ * never created, so no `shares` table, no `onAuthenticate` hook, `share:*`
+ * names refused as before and the share endpoints answering 404.
+ */
+const shares =
+  HOCUS_SHARES === "off"
+    ? null
+    : createShareServer({
+        db,
+        mode: HOCUS_SHARES,
+        minClientSchema: MIN_CLIENT_SCHEMA,
+        serverSchema: CLIENT_SCHEMA,
+        serverVersion: packageJson.version,
+        maxDocBytes: MAX_DOC_SIZE_BYTES,
+        maxFrameBytes: HOCUS_MAX_PAYLOAD_BYTES,
+        mutationsPerMinute: HTTP_MUTATION_RATE_LIMIT_PER_MINUTE,
+        // `hocuspocus` is assigned below, before any request can arrive.
+        closeDocument: (name) => hocuspocus.closeConnections(name),
+      });
+const isShareDocument = (name: string) =>
+  shares !== null && isShareNamespace(name);
+const routeHttp = createHocusHttpRoutes({
+  shares: shares?.http ?? null,
+  deleteDocument: HOCUS_DELETE_ROUTE ? createHocusDeleteRoute({ db }) : null,
+});
+
 const documentGuard = new DocumentGuard({
   maxDocumentBytes: guardrails.maxDocumentBytes,
   maxAwarenessStateBytes: MAX_AWARENESS_STATE_BYTES,
@@ -129,7 +165,11 @@ const persistence = createSqlitePersistence(db, {
   },
   onStored(documentName, sizeBytes) {
     documentGuard.recordStored(documentName, sizeBytes);
-    if (!isSystemDocumentId(documentName)) {
+    // Shares never get activity rows: the sandbox retention purge must not
+    // tombstone them; they expire on their own clock.
+    if (isShareDocument(documentName)) {
+      shares?.recordStored(documentName, sizeBytes);
+    } else if (!isSystemDocumentId(documentName)) {
       upsertDocumentActivity(db, documentName, sizeBytes);
     }
   },
@@ -138,10 +178,19 @@ const persistence = createSqlitePersistence(db, {
 const hocuspocus = new Hocuspocus({
   // No early flush: the root sweep must reach clients with the update it fixes.
   ...BROADCAST_FLUSH_OPTIONS,
-  extensions: buildHocusServerExtensions(persistence, documentGuard),
+  extensions: [
+    ...buildHocusServerExtensions(persistence, documentGuard),
+    ...(shares ? [shares.awareness] : []),
+  ],
   // Checks only: a connection counts once it is established (`connected`),
   // so attempts whose document load fails never leak a slot.
   async onConnect({ requestHeaders, requestParameters, documentName }) {
+    // Shares check their row and token before any state (onAuthenticate),
+    // so their tombstones never answer `document_deleted` here.
+    if (isShareDocument(documentName)) {
+      shares?.checkConnect(documentName, requestHeaders, requestParameters);
+      return;
+    }
     const ip = getPinnedClientIp(requestHeaders);
     // Also when the document is still in memory (onLoadDocument is skipped),
     // so a reconnecting offline copy cannot reach a deleted document.
@@ -163,14 +212,32 @@ const hocuspocus = new Hocuspocus({
       throw guardrailRefusal(decision.reason, { ip, documentName });
     }
   },
-  async connected({ requestHeaders }) {
-    guardrails.onConnected(getPinnedClientIp(requestHeaders));
+  async connected({ requestHeaders, documentName }) {
+    const ip = getPinnedClientIp(requestHeaders);
+    if (isShareDocument(documentName)) shares?.onConnected(ip);
+    else guardrails.onConnected(ip);
   },
-  async onDisconnect({ requestHeaders }) {
-    guardrails.onDisconnect(getPinnedClientIp(requestHeaders));
+  async onDisconnect({ requestHeaders, documentName }) {
+    const ip = getPinnedClientIp(requestHeaders);
+    if (isShareDocument(documentName)) shares?.onDisconnect(ip);
+    else guardrails.onDisconnect(ip);
   },
+  ...(shares
+    ? {
+        async onAuthenticate(payload: onAuthenticatePayload) {
+          // Other documents pass with any token, as before.
+          if (!isShareNamespace(payload.documentName)) return;
+          return shares.authenticate(payload);
+        },
+      }
+    : {}),
   // Hocuspocus runs this once per document load (concurrent joiners share it).
   async onLoadDocument({ documentName, requestHeaders }) {
+    // Never creates a share without its row; shares skip the sandbox caps.
+    if (isShareDocument(documentName)) {
+      shares?.checkLoad(documentName, requestHeaders);
+      return;
+    }
     const ip = getPinnedClientIp(requestHeaders);
     if (!isValidWsDocumentName(documentName)) {
       throw guardrailRefusal("invalid_document_name", {
@@ -238,7 +305,10 @@ const server = Bun.serve<SocketData>({
       }
     }
 
-    // Plain HTTP is only a health check: keep it out of search results.
+    const routed = routeHttp(request, ip);
+    if (routed) return routed;
+
+    // Any other plain HTTP is a health check: keep it out of search results.
     const noindex = { "X-Robots-Tag": "noindex, nofollow" };
     if (new URL(request.url).pathname === "/robots.txt") {
       return new Response("User-agent: *\nDisallow: /\n", {
