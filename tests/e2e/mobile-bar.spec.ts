@@ -775,8 +775,9 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(brush).toHaveAttribute("aria-disabled", "true");
     // Unavailable but still tappable (Playwright skips aria-disabled).
     await brush.tap({ force: true });
+    // Spec §7.2: inline code takes no other mark.
     await expect(page.locator("[data-status-pill]")).toHaveText(
-      "Code has no formatting.",
+      "Inline code can't take other formatting.",
     );
   });
 

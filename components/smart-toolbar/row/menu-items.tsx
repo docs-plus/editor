@@ -203,8 +203,10 @@ export function ActionMenuItem({
  * Outdent's and Indent's do in the T3 ¶ menu. The check, shortcut and
  * reason line are `order-1`: after the icon and label, in DOM order.
  */
+// `pr-1.5` beside `pe-1.5` until the logical `dropdown-menu.tsx` (P3)
+// lands: tailwind-merge drops the item's physical `pr-8` only for `pr-*`.
 const CHECK_BEFORE_SHORTCUT =
-  "pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
+  "pr-1.5 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
 
 /** One registry action as a radio item of a value menu. */
 export function ActionRadioItem({

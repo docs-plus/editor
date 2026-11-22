@@ -160,9 +160,11 @@ function turnInto(editor: Editor, action: AnyAction): boolean {
 /**
  * The row's grid: icon, label, shortcut, then the ✓ as the trailing cell
  * (`16px 1fr auto 16px`, spec §7.4); the reason line spans under the label.
+ * `pr-1.5` beside `pe-1.5` until the logical `dropdown-menu.tsx` (P3)
+ * lands: tailwind-merge drops the item's physical `pr-8` only for `pr-*`.
  */
 const ROW =
-  "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-2 *:data-[slot=dropdown-menu-reason]:col-start-2 *:data-[slot=dropdown-menu-reason]:col-span-3";
+  "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pr-1.5 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-2 *:data-[slot=dropdown-menu-reason]:col-start-2 *:data-[slot=dropdown-menu-reason]:col-span-3";
 
 interface TurnIntoItemProps {
   id: string;
@@ -196,6 +198,9 @@ function TurnIntoItem({
       value={id}
       closeOnClick
       className={ROW}
+      // The menu grows to fit its rows (`MENU_WIDTH`), so no label wraps
+      // under its shortcut.
+      data-check-slot=""
       disabled={disabled}
       aria-describedby={titleReasonId ?? (own ? reasonId : undefined)}
       aria-keyshortcuts={combo ? ariaKeyShortcuts(combo, mac) : undefined}

@@ -434,6 +434,10 @@ test.describe("selection bubble", () => {
             .locator(`[data-action-id="${id}"]`),
         ).toBeVisible();
         await page.keyboard.press("Escape");
+        // Base UI hands focus back after the exit animation: wait for it,
+        // or it lands on ⋯ after the next selection focused the editor.
+        await expect(page.getByRole("menu")).toHaveCount(0);
+        await expect(overflow).toBeFocused();
         continue;
       }
       const inRow =

@@ -313,13 +313,13 @@ test.describe("hover preview", () => {
   }) => {
     await openDoc(page);
     await selectText(page, "some words");
-    // The bubble's keyboard path (Alt+F10, then B I U → A▾).
+    // The bubble's keyboard path (Alt+F10, then Style B I U S ‹› Tx → A▾).
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
     await page.keyboard.press("Alt+F10");
     const chevron = bubble(page).getByRole("button", {
       name: "More text colours",
     });
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 8; i += 1) await page.keyboard.press("ArrowRight");
     await expect(chevron).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
