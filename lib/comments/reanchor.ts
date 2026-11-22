@@ -162,21 +162,34 @@ export function reanchor(
   tracker: RangeTracker,
   tids: Iterable<Id>,
 ): Id[] {
+  const writes: AnchorWrite[] = [];
+  for (const tid of tids) {
+    const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
+    const tracked = tracker.ranges.get(tid);
+    // A mapped range can end on a block boundary (a split, a move): the
+    // anchors go on its text.
+    const mapped = tracked && textBounds(doc, tracked);
+    if (!mapped || !anchors) continue;
+    const current = resolvePair(deps, binding, anchors.s, anchors.e);
+    if (sameRange(current, mapped)) continue;
+    const pair = createAnchorPair(deps, binding, mapped);
+    if (pair) writes.push([tid, pair]);
+  }
+  return writeAnchors(store, writes);
+}
+
+type AnchorWrite = readonly [Id, Pick<Anchors, "s" | "e">];
+
+/**
+ * Writes re-anchors as one Yjs update, and opens no transaction when there
+ * is nothing to write (the check runs as often as every keystroke).
+ */
+function writeAnchors(store: CommentStore, writes: AnchorWrite[]): Id[] {
   const written: Id[] = [];
+  if (!writes.length) return written;
   store.batch(() => {
-    for (const tid of tids) {
-      const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
-      const tracked = tracker.ranges.get(tid);
-      // A mapped range can end on a block boundary (a split, a move): the
-      // anchors go on its text.
-      const mapped = tracked && textBounds(doc, tracked);
-      if (!mapped || !anchors) continue;
-      const current = resolvePair(deps, binding, anchors.s, anchors.e);
-      if (sameRange(current, mapped)) continue;
-      const pair = createAnchorPair(deps, binding, mapped);
-      if (pair && store.setAnchors(tid, pair, "reanchor").ok) {
-        written.push(tid);
-      }
+    for (const [tid, pair] of writes) {
+      if (store.setAnchors(tid, pair, "reanchor").ok) written.push(tid);
     }
   });
   return written;
@@ -201,21 +214,18 @@ export function refreshAnchors(
   store: CommentStore,
   tids: Iterable<Id>,
 ): Id[] {
-  const written: Id[] = [];
-  store.batch(() => {
-    for (const tid of tids) {
-      const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
-      const range = anchors && resolveAnchors(deps, binding, anchors);
-      const pair = range && createAnchorPair(deps, binding, range);
-      if (
-        !pair ||
-        !anchors ||
-        (sameBytes(pair.s, anchors.s) && sameBytes(pair.e, anchors.e))
-      ) {
-        continue;
-      }
-      if (store.setAnchors(tid, pair, "reanchor").ok) written.push(tid);
+  const writes: AnchorWrite[] = [];
+  for (const tid of tids) {
+    const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
+    const range = anchors && resolveAnchors(deps, binding, anchors);
+    const pair = range && createAnchorPair(deps, binding, range);
+    if (
+      pair &&
+      anchors &&
+      !(sameBytes(pair.s, anchors.s) && sameBytes(pair.e, anchors.e))
+    ) {
+      writes.push([tid, pair]);
     }
-  });
-  return written;
+  }
+  return writeAnchors(store, writes);
 }

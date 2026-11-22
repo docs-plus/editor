@@ -123,10 +123,18 @@ describe("comments controller", () => {
     const { fixture: f, controller: ctl } = setup();
     const tid = comment(ctl, f);
     const before = f.client.getMap("comments").get(anchorKey(tid));
+    // Not even an empty comment transaction per keystroke.
+    const commentTransactions: unknown[] = [];
+    f.client.on("afterTransaction", (tr) => {
+      if (tr.origin === COMMENT_ORIGIN) commentTransactions.push(tr);
+    });
     f.editor.commands.insertContentAt(8, "oh ");
+    // "oh hello world": typing right after "world" (17..22) stays outside.
+    f.editor.commands.insertContentAt(22, "!");
     ctl.flush();
     expect(highlighted(f)).toEqual(["world"]);
     expect(f.client.getMap("comments").get(anchorKey(tid))).toBe(before);
+    expect(commentTransactions).toHaveLength(0);
   });
 
   it("re-anchors after a local block type change, keeping the old pair", () => {
