@@ -5,7 +5,10 @@
  * object through. `host` keeps its identity for the life of the host (the
  * editor memoizes on it), and reads the index lazily on every call.
  */
-import type { IsAllowedUriContext } from "@docs.plus/extension-hyperlink";
+import {
+  type IsAllowedUriContext,
+  registerCustomProtocol,
+} from "@docs.plus/extension-hyperlink";
 
 import type { ScrollBlock } from "@/lib/heading-navigation";
 import { isOurScheme, parseDocLink } from "@/lib/links/doc-link";
@@ -63,6 +66,14 @@ export interface LinkHostHandle {
 }
 
 export function createLinkHost(deps: LinkHostDeps): LinkHostHandle {
+  // linkifyjs takes a custom scheme only before its first scan, and the
+  // extension registers `protocols` in `onCreate`, which Tiptap runs on a
+  // timer. Register now, so a host made before the first editor (at app
+  // start) gets typed and pasted document links autolinked.
+  registerCustomProtocol(
+    DOC_LINK_PROTOCOL.scheme,
+    DOC_LINK_PROTOCOL.optionalSlashes,
+  );
   const gestures = trackLinkGestures(window);
   const resolve = (href: string) =>
     resolveDocLink(href, {
