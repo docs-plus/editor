@@ -10,6 +10,7 @@ const result = await Bun.build({
   entrypoints: [
     path.join(root, "main.ts"),
     path.join(root, "../storage/worker.ts"),
+    path.join(root, "../storage/copy-worker.ts"),
   ],
   outdir: path.join(root, "dist"),
   target: "node",
