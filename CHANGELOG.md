@@ -23,9 +23,12 @@ lives in the phone bar's lazy chunk.
   shared by every subscriber and removed with the last one. While anything
   subscribes, `<html>` carries `--keyboard-inset` and
   `--visual-viewport-height`, written at most once per frame.
-- **Phones:** bottom sheets ride the keyboard: they sit on
+- **Phones:** bottom sheets ride the keyboard by default: they sit on
   `--keyboard-inset` and never grow past the visual viewport, so a field in
-  a sheet stays above the keyboard (iOS Safari and Android Chrome).
+  a sheet stays above the keyboard (iOS Safari and Android Chrome). A
+  caller caps the height with `[--sheet-max-h:…]`, which keeps that cap. A
+  sheet with no field passes `keyboard={false}`; the Aa sheet does, so it
+  looks and moves exactly as before.
 - **Phones:** after a rotation (or an iPad window resize below 768 px) the
   caret is scrolled back into view once, if you were writing. No
   transaction steps, so no Yjs traffic or undo entry.
@@ -39,7 +42,24 @@ lives in the phone bar's lazy chunk.
   `lib/keyboard-inset.ts`; the phone bar reads the shared store.
 - **Docs:** the awareness rate check (§6.5): carets are sent on every
   selection change, not at most every 100 ms; the throttle is an open owner
-  decision.
+  decision. Moving the slash menu's own `visualViewport` listener onto the
+  store is follow-up row M20a; the old plans now point at
+  `lib/keyboard-inset.ts`.
+
+#### Fixed (review)
+
+- **Phones:** a rotation and a blur in the same frame no longer cancel each
+  other: the viewport events and the focusout share one task, which applies
+  the reset or measures and then always checks the width, so the caret still
+  comes back into view. A viewport scroll in that frame no longer cancels
+  the iOS drift reset.
+- **Phones:** the Aa sheet no longer mounts on the keyboard and drops a
+  frame later when opened while writing; it stays on the screen bottom.
+- **Phones:** the phone bar scrolls the caret on mount and unmount only when
+  the width moved, not on a StrictMode remount or an editor switch.
+- **Tests:** the leak spec counts `visualViewport` and `document` listeners
+  against a bar-less baseline instead of matching source names, so it works
+  on minified builds and also catches a leaked `focusout`.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
