@@ -14,8 +14,9 @@ since the previous tag.
 The pieces desktop and the web library need to link one document to
 another (search-linking design §4.1–§4.7, §5, D25). Nothing in the web
 sandbox uses them: the editor gains a `linkHost` pass-through that the web
-never sets, and with no host a `tinydocy:` link is never written, pasted or
-opened. Editor chunk group +32 B gz of the D23 ledger's 60 B line; web CSS
+never sets, and with no host no command writes a `tinydocy:` link and the
+editor never opens one (pasted and stored ones still keep their mark and
+`href` until #168's parse and render checks). Editor chunk group +32 B gz of the D23 ledger's 60 B line; web CSS
 unchanged.
 
 #### Added
@@ -29,8 +30,8 @@ unchanged.
   Hyperlink options a host passes the editor, with one identity for its
   life:
   - `isAllowedUri`: document links that parse, and https, http and mailto
-    (`isWebLink`); nothing else is written, pasted, rendered live or
-    opened. No `protocols`, so typing `tinydocy:` never autolinks;
+    (`isWebLink`); no command writes anything else and the editor opens
+    nothing else (paste and render apply it once #168 lands). No `protocols`, so typing `tinydocy:` never autolinks;
   - `linkIcon`: one icon per state, in the link's own colour — FileText
     (opens), Hash (`here#`), FileMinus (In Trash) and FileQuestion (Not
     available, Not a valid link, Needs a newer version); the states that
@@ -70,7 +71,8 @@ unchanged.
   the contract suite covers both and the snapshot's identity.
 - **Editor:** `DocumentEditor` takes an optional, stable `linkHost` and
   spreads it into the Hyperlink configuration; it imports only its type
-  (import-boundary rule). With no host, `tinydocy:` hrefs are refused.
+  (import-boundary rule). With no host, commands refuse
+  `tinydocy:` hrefs and the editor never opens one.
 - **Tests:** unit tests for every module (a navigate table, a no-host
   safety test on the real editor, bare Y.Doc derive tests and a timing
   budget), and a links view in the library harness (`?view=links`, with a
