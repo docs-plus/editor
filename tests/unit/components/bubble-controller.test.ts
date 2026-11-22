@@ -393,6 +393,101 @@ describe("createBubbleController", () => {
   });
 });
 
+describe("keyboard selection settle (O7 b)", () => {
+  const SETTLE = 300;
+  const dom = () => editor.view.dom;
+  const key = (
+    type: "keydown" | "keyup",
+    init: KeyboardEventInit,
+    target: EventTarget = dom(),
+  ) =>
+    target.dispatchEvent(new KeyboardEvent(type, { bubbles: true, ...init }));
+  const shiftArrow = (repeat = false) => {
+    key("keydown", { key: "ArrowRight", shiftKey: true, repeat });
+    select(1, 4);
+  };
+
+  beforeEach(() => {
+    controller.destroy();
+    host = { ...host, keyboardSettleMs: SETTLE };
+    controller = createBubbleController(editor, scrollTarget, host);
+  });
+
+  test("hidden while Shift is held, shown 300-450 ms after Shift keyup", async () => {
+    key("keydown", { key: "Shift", shiftKey: true });
+    shiftArrow();
+    await Bun.sleep(SETTLE_MS + 100);
+    expect(controller.visible).toBe(false);
+    const released = performance.now();
+    key("keyup", { key: "Shift" });
+    await until(() => controller.visible);
+    const waited = performance.now() - released;
+    expect(waited).toBeGreaterThanOrEqual(SETTLE - 10);
+    expect(waited).toBeLessThan(450);
+  });
+
+  test("a Shift released outside the editor still counts", async () => {
+    shiftArrow();
+    key("keyup", { key: "Shift" }, window);
+    await until(() => controller.visible);
+  });
+
+  test("a further selection change restarts the settle", async () => {
+    shiftArrow();
+    key("keyup", { key: "Shift" });
+    await Bun.sleep(SETTLE - 100);
+    select(1, 5);
+    await Bun.sleep(SETTLE - 100);
+    expect(controller.visible).toBe(false);
+    await until(() => controller.visible);
+  });
+
+  test("auto-repeat never shows while held", async () => {
+    for (let i = 0; i < 3; i++) {
+      shiftArrow(true);
+      await Bun.sleep(150);
+    }
+    await Bun.sleep(SETTLE_MS);
+    expect(controller.visible).toBe(false);
+  });
+
+  test("Ctrl+A settles without a Shift keyup", async () => {
+    key("keydown", { key: "a", ctrlKey: true });
+    select(1, 4);
+    await Bun.sleep(SETTLE - 100);
+    expect(controller.visible).toBe(false);
+    await until(() => controller.visible);
+  });
+
+  test("update() shows at once, with Shift held", () => {
+    shiftArrow();
+    controller.update();
+    expect(controller.visible).toBe(true);
+  });
+
+  test("a pointer selection keeps the normal delay", async () => {
+    key("keydown", { key: "ArrowRight", shiftKey: true });
+    key("keyup", { key: "ArrowRight" });
+    dom().dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    window.dispatchEvent(new Event("pointerup"));
+    const at = performance.now();
+    select();
+    await until(() => controller.visible);
+    expect(performance.now() - at).toBeLessThan(SETTLE - 10);
+  });
+
+  test("destroy removes the listeners and timers", async () => {
+    shiftArrow();
+    key("keyup", { key: "Shift" });
+    controller.destroy();
+    key("keydown", { key: "ArrowLeft", shiftKey: true });
+    key("keyup", { key: "Shift" }, window);
+    await Bun.sleep(SETTLE + 100);
+    expect(controller.visible).toBe(false);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+});
+
 describe("bubbleReferenceRect", () => {
   test("returns a DOMRect in happy-dom (no layout) for both sides", () => {
     select();
