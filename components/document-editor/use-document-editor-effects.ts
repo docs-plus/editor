@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import type * as Y from "yjs";
 
 import { preloadSurfaces } from "@/components/smart-toolbar/lazy-surface";
+import { loadMarkdownPaste } from "@/extensions/markdown-paste";
 import { PLAYGROUND_ID } from "@/lib/constants";
 import { getUserIdentity } from "@/lib/user-identity";
 
@@ -113,7 +114,10 @@ export function useDocumentEditorEffects({
   // offline use (`preloadSurfaces`).
   useEffect(() => {
     if (!serverSynced) return;
-    (window.requestIdleCallback ?? setTimeout)(preloadSurfaces);
+    (window.requestIdleCallback ?? setTimeout)(() => {
+      preloadSurfaces();
+      void loadMarkdownPaste();
+    });
   }, [serverSynced]);
 
   useEffect(() => {
