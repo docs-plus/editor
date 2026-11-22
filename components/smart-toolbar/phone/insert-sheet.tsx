@@ -52,10 +52,11 @@ const InsertStep = lazySurface(
 /** A step inside the sheet: the insert steps, or the diagram templates. */
 type Step = InsertStepKind | "diagram";
 
-const STEP_TITLE: Record<Step, string> = {
-  table: "Table",
-  embed: "Embed",
-  diagram: "Diagram",
+/** Each step is titled by its kind's registry label. */
+const STEP_ACTION: Record<Step, string> = {
+  table: "insert.table",
+  embed: "insert.embed",
+  diagram: "insert.mermaid",
 };
 
 /** Kinds that open their step instead of running at once. */
@@ -225,7 +226,9 @@ function InsertSheetBody({
             <ArrowLeftIcon aria-hidden="true" className="rtl:-scale-x-100" />
             <span>Back</span>
           </ToolbarButton>
-          <h3 className="st-sheet-heading">{STEP_TITLE[step]}</h3>
+          <h3 className="st-sheet-heading">
+            {editorActions.get(STEP_ACTION[step])?.label}
+          </h3>
         </div>
         {step === "diagram" ? (
           <CellGrid items={diagrams} onPick={pick} />
