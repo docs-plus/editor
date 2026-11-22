@@ -189,7 +189,7 @@ describe("buildSlashItems", () => {
   });
 });
 
-describe("Suggested (recent insert kinds, A19)", () => {
+describe("Suggested (recent insert kinds, A20)", () => {
   function built(recent: readonly InsertKind[], withMermaid = true) {
     const ed = setup([{ type: "paragraph", content: [] }], withMermaid);
     caretIn(ed, "");

@@ -233,7 +233,7 @@ describe("M10: a fresh profile has no remembered Insert kind", () => {
   });
 });
 
-describe("A19: Suggested reads the last 3 insert kinds", () => {
+describe("A20: Suggested reads the last 3 insert kinds", () => {
   it("still reads an entry stored while maxRecent was 0", () => {
     setRaw(
       STORAGE_KEYS.choices,

@@ -287,6 +287,14 @@ export function moveSection(
   tr.delete(sectionFrom, sectionTo);
   const mappedTarget = tr.mapping.map(targetPos);
   tr.insert(mappedTarget, content);
+  // Comments shift the ranges inside the moved slice instead of mapping
+  // them, which collapses them (`SECTION_MOVE_META`, comments design §5.3;
+  // a literal, so the editor chunk imports nothing from comments).
+  tr.setMeta("sectionMove", {
+    from: sectionFrom,
+    to: sectionTo,
+    insertAt: mappedTarget,
+  });
   tr.setSelection(TextSelection.create(tr.doc, mappedTarget + 1));
   view.dispatch(tr.scrollIntoView());
 }

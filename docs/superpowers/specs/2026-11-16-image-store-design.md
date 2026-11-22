@@ -9,7 +9,7 @@
 > **Plan v8 (D40, 2026-11-16):** the asset endpoints take the S1 derived tokens: `PUT` and `missing` take `auth_edit`, `GET` takes either `auth_edit` or `auth_view` (§4.1). `TINYDOC2` is the only format; nothing reads `TINYDOC1` (§5.4). Asset refs stay plaintext-hash in content, while a future relay may key bytes differently (S17). The redirect seam (S6) and `assetBaseUrl` were dropped: no CDN work in v1.
 
 
-- **Status:** Draft for owner review (2026-11-16). Nothing is built yet.
+- **Status:** Draft for owner review (2026-11-16). **A1 built (2026-11-22)** with the §6.2 fallback, since U1 is not out yet. The upstream request is in [the U1 note](../../research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md). The rest is not built yet.
 - **Decision it implements:** D4, answered 2026-11-16: "an image store now" ([plan §13](2026-11-15-desktop-local-first-design.md#13-owner-decisions-answered-2026-11-16)).
 - **Parent documents:**
   - [Plan v7](2026-11-15-desktop-local-first-design.md): §2 (256 KiB data URLs, 2 MiB cap), §6 (server), §7 (security), K5 (abuse), §12 (costs)
@@ -202,8 +202,8 @@ INDEX doc_blobs(hash)
 
 | Object store | Key | Value |
 |---|---|---|
-| `blobs` | `hash` | `{ hash, mime, size, width, height, createdAt, origin, data: Blob }` |
-| `doc_blobs` | `[docId, hash, kind]` | `{ droppedAt }`, with an index on `hash` |
+| `blobs` | `hash` | `{ hash, mime, size, width, height, created_at, origin, data: Blob }` |
+| `doc_blobs` | `[doc_id, hash, kind]` | `{ dropped_at }`, with an index on `hash` (snake_case, as on desktop: offline data-model revision §3.6) |
 
 - **Write order:** put the blob and the provisional row in **one IndexedDB transaction**, then insert the node. IndexedDB transactions are atomic, so no orphan sweep is needed.
 - **Rendering:** a reference-counted object-URL cache (`lib/assets/object-url-cache.ts`):

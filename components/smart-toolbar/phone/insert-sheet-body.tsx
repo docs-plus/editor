@@ -30,7 +30,7 @@ import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
  * The "/" menu's item helpers, handed over by the loader (`insert-sheet.tsx`)
  * from the "/" chunk it fetches with this one. Never a static import: a
  * second importer would keep them a separate module of the "/" group and
- * push it past its 7 KB budget (A21).
+ * push it past its 7 KB budget (A22).
  */
 type SlashHelpers = Pick<typeof SlashMenuModule, "slashItemsFor">;
 let slash: SlashHelpers | null = null;
@@ -89,7 +89,7 @@ function diagramItem(): SlashItem | null {
 
 /**
  * The sheet's model, built once per open from the live document: the "/"
- * menu's items with its Suggested rows (the recent kinds, A19), and the
+ * menu's items with its Suggested rows (the recent kinds, A20), and the
  * keys that show "New" as they do there (none while none are declared).
  */
 function buildModel(editor: Editor) {

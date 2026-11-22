@@ -48,7 +48,7 @@ export interface SlashItem {
   name?: string;
   /** Leads its ties (the last used template, design pass §9). */
   lead?: boolean;
-  /** One of the writer's recent insert kinds: wins rank ties (A19). */
+  /** One of the writer's recent insert kinds: wins rank ties (A20). */
   recent?: boolean;
   keywords: readonly string[];
   /** The Markdown shortcut, trimmed ("##", ">"). */
@@ -146,10 +146,10 @@ function templateItem(
  */
 export const hintNeedsSpace = (hint: string): boolean => !/^-{3}$/.test(hint);
 
-/** Up to this many recent insert kinds lead the empty query (A19). */
+/** Up to this many recent insert kinds lead the empty query (A20). */
 export const MAX_SUGGESTED = 3;
 
-/** The writer's recent insert kinds, newest first (A19); local only. */
+/** The writer's recent insert kinds, newest first (A20); local only. */
 export const recentInsertKinds = (): InsertKind[] =>
   readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind);
 
@@ -165,7 +165,7 @@ export function insertKindOf(item: SlashItem): InsertKind | null {
 }
 
 /**
- * Suggested (A19): a copy of each recent kind's runnable row, newest
+ * Suggested (A20): a copy of each recent kind's runnable row, newest
  * first, under its own key. The row stays in its own section too, so
  * positions there never move. A diagram is its last used template once
  * the templates are listed (its lead), else the first.
@@ -200,7 +200,7 @@ function suggestedItems(
  * (`slashEmptyNote`). As in the Insert menu's Diagram ▸ submenu,
  * Diagram is either one row (before E's engine lists the templates) or
  * the templates, never both. With `recentKinds`, a Suggested section
- * leads (A19).
+ * leads (A20).
  */
 export function buildSlashItems(
   ctx: Ctx,

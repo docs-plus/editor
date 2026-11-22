@@ -50,6 +50,12 @@ export const CHOICE_SLOTS = {
   mermaidTemplate: "choices", // M17b (E)
   outlineOpen: "ui", // M6 (D2)
   toolbarDensity: "ui", // simplified toolbar (A15)
+  // Page and writing preferences (P2.9c-1), written by `lib/prefs/store-web`.
+  page: "ui",
+  a11y: "ui",
+  spellcheck: "ui",
+  smartQuotes: "ui",
+  rememberPlace: "ui",
 } as const satisfies Record<string, "choices" | "ui">;
 
 export type ChoiceSlot = keyof typeof CHOICE_SLOTS;
@@ -343,7 +349,7 @@ export const LIST_TYPE_CHOICE: ChoiceSpec<ListType> = {
 
 /**
  * M10: the last inserted kind (the T1 face; pre-highlighted in the menu).
- * A19: its last 3 kinds are the "/" menu's Suggested section.
+ * A20: its last 3 kinds are the "/" menu's Suggested section.
  */
 export const INSERT_KIND_CHOICE: ChoiceSpec<InsertKind | null> = {
   slot: "insertKind",

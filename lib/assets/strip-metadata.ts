@@ -258,3 +258,84 @@ export function stripJpegMetadata(
   }
   return null;
 }
+
+/** Application extensions a GIF keeps: the loop count. XMP and the rest drop. */
+const GIF_KEEP_APPLICATIONS = new Set(["NETSCAPE2.0", "ANIMEXTS1.0"]);
+
+export interface StrippedGif {
+  bytes: Uint8Array<ArrayBuffer>;
+  /** Image descriptors: one per frame. */
+  frames: number;
+  /** The sum of every frame's width × height: the decoder's work. */
+  framePixels: number;
+}
+
+/** Skips data sub-blocks from `offset`; the offset after the terminator, or -1. */
+function skipSubBlocks(bytes: Uint8Array, offset: number): number {
+  let at = offset;
+  while (at < bytes.length) {
+    const size = bytes[at];
+    if (size === 0) return at + 1;
+    at += 1 + size;
+  }
+  return -1;
+}
+
+/**
+ * Walks a GIF's blocks without decoding: drops comment extensions and every
+ * application extension but the loop count (XMP lives in one), counts the
+ * frames and their area, and drops anything after the trailer. `null` for a
+ * file that is not a complete GIF. The pixels are untouched.
+ */
+export function stripGifMetadata(bytes: Uint8Array): StrippedGif | null {
+  const signature = String.fromCharCode(...bytes.subarray(0, 6));
+  if (bytes.length < 13 || !/^GIF8[79]a$/.test(signature)) return null;
+  const data = view(bytes);
+  const globalTable = bytes[10] & 0x80 ? 3 * 2 ** ((bytes[10] & 7) + 1) : 0;
+  let offset = 13 + globalTable;
+  const kept: Uint8Array[] = [bytes.subarray(0, offset)];
+  let length = offset;
+  let frames = 0;
+  let framePixels = 0;
+
+  while (offset < bytes.length) {
+    const start = offset;
+    const block = bytes[offset];
+    if (block === 0x3b) {
+      kept.push(bytes.subarray(offset, offset + 1));
+      length += 1;
+      return frames > 0
+        ? { bytes: join(kept, length), frames, framePixels }
+        : null;
+    }
+    let keep = true;
+    if (block === 0x21) {
+      const label = bytes[offset + 1];
+      if (label === 0xfe) keep = false; // comment
+      if (label === 0xff) {
+        const id = String.fromCharCode(
+          ...bytes.subarray(offset + 3, offset + 14),
+        );
+        keep = bytes[offset + 2] === 11 && GIF_KEEP_APPLICATIONS.has(id);
+      }
+      offset = skipSubBlocks(bytes, offset + 2);
+    } else if (block === 0x2c) {
+      if (offset + 10 > bytes.length) return null;
+      frames += 1;
+      framePixels +=
+        data.getUint16(offset + 5, true) * data.getUint16(offset + 7, true);
+      const packed = bytes[offset + 9];
+      const localTable = packed & 0x80 ? 3 * 2 ** ((packed & 7) + 1) : 0;
+      // Then the LZW minimum code size, then the image data sub-blocks.
+      offset = skipSubBlocks(bytes, offset + 10 + localTable + 1);
+    } else {
+      return null;
+    }
+    if (offset < 0 || offset > bytes.length) return null;
+    if (keep) {
+      kept.push(bytes.subarray(start, offset));
+      length += offset - start;
+    }
+  }
+  return null; // no trailer
+}

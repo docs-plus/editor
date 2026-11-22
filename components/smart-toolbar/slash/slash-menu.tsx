@@ -729,7 +729,7 @@ export { typePlusSlash } from "@/lib/slash-menu/plus-origin";
 /**
  * The "/" items for the caret and the keys that show "New" (none while
  * none are declared), built once per open. The phone Insert sheet uses them
- * too (spec §8.3, A21): its loader fetches this chunk and hands this over
+ * too (spec §8.3, A22): its loader fetches this chunk and hands this over
  * (`setSlashHelpers`), so the "/" helpers keep one static importer and stay
  * inside this module. Imported by the sheet directly too, Turbopack kept
  * them a separate module of the "/" group, 264 B gz past its 7 KB budget.

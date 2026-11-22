@@ -9,7 +9,7 @@
 > **Plan v8 (2026-11-16):** **D36** phones and tablets are fully supported in v1 ([phones and tablets design](2026-11-16-phones-tablets-design.md), M18–M28). **D39** comments work in library documents, as on desktop. **D40** the seams: the page generates share secrets and derives the tokens itself (S1, §8.1), the `/join` fragment uses the S1b grammar, the export zip writes `TINYDOC2` only (S8, §6.1), `library.json` gains `link_key`, `kind`, `sort_key` and tag names (S8b), and only a backup-zip or `library.json` restore keeps ids (S8c). The phones review adds: W-D7 takes a host flag; the "deleting the Home Screen app deletes these documents" copy ships only after M18 verifies it.
 
 
-- **Status:** Draft for owner review (2026-11-16). Nothing is built yet.
+- **Status:** Draft for owner review (2026-11-16). **W2 is in progress, not done.** Its storage engine is built (2026-11-22, dark behind `NEXT_PUBLIC_LIBRARY`): `IdbDocStore`, the schema, opening and versions, the quota path, the `persist()` and `estimate()` rules and the kill switch, verified on `fake-indexeddb` only. W2 is done when the rest of its §11 row exists: `IdbDocumentIndex`, the contract suite in three browsers, and the `perf` comparison (owners in §2.2 "Still open for W2").
 - **Decision it implements:** D3 (plan §13): the web app gets a personal document library stored in the browser, as well as the public sandbox. D6 (one combined release) means it ships in v1 together with sharing.
 - **Parent documents:**
   - [Plan v7](2026-11-15-desktop-local-first-design.md): releases, PRs and gates
@@ -91,6 +91,36 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - **Ids** come from `crypto.randomUUID()`: document, folder and tag ids, `lineage` and `library_id`.
 - **No document data lives in `localStorage`.** UI preferences stay in `tinydocy-ui`.
 
+**As built (W2, 2026-11-22),** in `lib/platform/web/library/library-schema.ts`:
+- **Seams in version 1.** `docs` also has `link_key` (32 hex, unique index `by_link_key`, minted at insert, S16) and `kind`, as the desktop schema does (D-A5). `import_sources` (index `by_source_hash`), `remotes`, `blobs` and `doc_blobs` (the image store design §3.3 shapes) are created now, empty: a store added later is a version bump, and a version bump makes every older tab reload (§2.4).
+- **Index keys with no nulls.** IndexedDB leaves a record out of an index when any part of its key is null or boolean. So every nullable key part is `''` (offline data-model revision §3.6): `by_folder` indexes `list_key = [folder_id ?? '', trashed_at ?? '']`, `by_parent` indexes `parent_key = parent_id ?? ''`, and `by_stale` indexes `stale`, a number. The columns themselves keep the desktop meaning (null for the root, null for not trashed). `by_opened` keeps `opened_at` as it is: it lists only documents that were opened (Recent).
+- **Format 2 shape in version 1** (offline data-model revision §3.2, §3.6, 2026-11-22). `links` (`["src_doc_id", "ord"]`, `by_target`) and `headings` (`["doc_id", "ord"]`, `by_toc`, `by_text_key`) exist, empty until LK4a derives. `docs` has `head_seq` (raised by every append, never by compaction), `derived_seq`, `links_hash`, `headings_hash`, `title_key` (`normalizeSearchText` of the title) and `stale`. `folders` rows carry `trash_group` and `trashed_from`. `doc_blobs` is snake_case (`["doc_id", "hash", "kind"]`, `dropped_at`). The fields `library.json` never carries are in `lib/library-format/fields.ts`. `meta.eviction_sentinel` holds the `library_id`; `eviction.ts` compares it with the `localStorage` marker `tinydocy-library-id`, for W6.
+- **Versions.** `LIBRARY_DB_VERSION` bumps only when stores or indexes change, `format_version` when row shapes change. Before a step that rewrites rows, a forced copy goes to `tinydocy-library.pre-v<n>` (`preMigrationCopyName`), taken at the old version before the open at the new one, because the upgrade transaction commits at the first await that isn't IndexedDB.
+- **`snapshots.upto_seq`.** Next to `rev`, the snapshot keeps the highest seq any compaction claimed to cover, so `load()` reports `maxSeq` after every row was folded in. Unlike desktop, `load()` returns every row of the document, whatever its seq: a row another tab left below `upto_seq` is still content.
+- **`updates.writer`** records the tab session that appended a row, for diagnostics only.
+- **Compaction also writes `docs.size_bytes`** (the snapshot plus the rows left), so its scope is `snapshots`, `updates` and `docs`.
+- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`, for at most `CLOSE_HOOK_TIMEOUT_MS` (5 s) together, so a drain stuck in a retry backoff can't hold the other tab's upgrade forever. `IdbDocStore` registers its own `flush()`, which waits only for transactions it already issued. Batches still queued in the batcher are not covered by it. `idb-local-session.test.ts` pins both halves: with the session drain as a hook, a queued batch is written before the close; without it, the batch stays queued and fails with `library_unavailable`.
+  - **W4 must** register the session's batcher drain (`flush()`) as a close hook, so queued batches are written before the connection closes.
+  - **W4 and W6 must** show `library_reload` as a blocking state: the connection is closed for good, and `IdbDocStore` has no reopen path (it holds one connection promise), so a reload is the only recovery. Until the reload, edits still queued stay visible in the editor and the `beforeunload` guard stays armed; if the drain failed, the state offers **Export** for the open document.
+  - `IdbDocStore.dispose()` unregisters its hook and forgets every open document; W4 calls `close(docId)` when a tab or route lets a document go, and `dispose()` when the library root unmounts.
+- **`library_upgrade_unblocked`.** `onblocked` reports `library_upgrade_blocked`; when the old tab lets go and the open succeeds, `library_upgrade_unblocked` follows, so W6 can clear the notice.
+- **An append bumps `meta.rev` only when the title or snippet changes (third review round, 2026-11-22).** Index writes (`createLibraryDoc`, later every `IdbDocumentIndex` write) always bump it. An append bumps it, in the same strict transaction, only when its title or snippet, as truncated, differs from the stored row. `modified_at` and `size_bytes` change on every append and never bump it, and `compact` never does, so ordinary typing adds no `meta` write (the `perf` criterion, §2.3). So:
+  - The writer still publishes title, snippet and modified-time changes as `{ changes }` on BroadcastChannel `tinydocy-library`. A tab that missed them sees the rev jump for a title or snippet change.
+  - `modified_at` and `size_bytes` have no rev signal. `IdbDocumentIndex` therefore reloads `snapshot()` on `pageshow` with `persisted` true (back from bfcache) and on `visibilitychange` to visible, whatever `rev` says.
+  - A unit test pins this (`idb-doc-store.test.ts`, "the index rev").
+- **`foreign` is apply-then-ack (§2.5).** After a compaction returns `foreign`, the session keeps its state vector. Until a later compaction's `state` covers it (the caller applied it), every compaction merges the stored snapshot again and returns it again. A caller that drops `foreign` (a destroyed doc, an apply that throws) costs a repeat merge, not the other tab's content. One gap remains: a foreign snapshot that only deletes counts as covered at once.
+- **A load that settles after `close(docId)` or `dispose()`** keeps no session state.
+- **`IdbDocumentIndex`** (folders, tags, pins, Trash, the rev feed) is not in this PR. W2 writes only the document row `DocumentIndex.create` will (`createLibraryDoc`) and bumps `meta.rev` with it.
+
+**Still open for W2** (its §11 exit criteria), with owners:
+
+| Item | Owner | State |
+|---|---|---|
+| `IdbDocumentIndex` with the rev feed, on the shared `LibraryIndex` contract suite | W2b, the next library storage PR | Not started |
+| The `DocStore` contract suite in Chromium, Firefox and WebKit (real `durability: "strict"`, key ranges, `onblocked` and `onversionchange` timing, quota aborts) | The CI session's Q7 `browsers` job | Not started |
+| The property test at 50,000 runs | Nightly `library-property` job (`.github/workflows/nightly.yml`) | Wired 2026-11-22; one local pass so far (437 s) |
+| Typing latency within 5% in `perf` with strict commits | The CI session's Q7 job | Not started |
+
 ### 2.3 Transactions and durability
 
 | Write | Stores in scope | Durability |
@@ -109,6 +139,7 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - Hiding the page (`visibilitychange` to hidden), `pagehide`, `blur` and Ctrl/⌘S flush at once.
 - The `beforeunload` guard is armed while any batch is queued, in flight or failed. On the web this is correct, unlike in Electron.
 - **W2's exit criterion:** typing latency in the `perf` project stays within 5% of `main` while strict commits loop.
+  - **Perf note (W2, 2026-11-22):** W2 ships `IdbDocStore` dark, so no route types through it and `perf` is unchanged by construction. The comparison is deferred to the CI session's Q7 job: `performance.spec.ts` with the batcher committing strict transactions (at most about 4 a second), against the same spec on `main`. If it misses, risk WK4's fallback applies: `relaxed` durability with a flush on hide, behind an env flag.
 
 ### 2.4 Opening, versions and old tabs
 
@@ -118,7 +149,7 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
   |---|---|
   | `onupgradeneeded` | Creates the stores. |
   | `onblocked` | Health becomes `library_upgrade_blocked`: "TinyDocy was updated. Close other TinyDocy tabs to continue." |
-  | `db.onversionchange` | Flush, then `db.close()`. Health becomes `library_reload`: "TinyDocy was updated in another tab. Reload to keep editing." [Reload] |
+  | `db.onversionchange` | Flush (the close hooks, §2.2 As built), then `db.close()`. Health becomes `library_reload`: "TinyDocy was updated in another tab. Reload to keep editing." [Reload] |
 
 - **`format_version` guard.** If `meta.format_version` is newer than this bundle knows (an old tab, or an old service-worker copy after a deploy), the whole library is **read-only** with `library_too_new`.
   - Upgrades stay in place. `onupgradeneeded` runs each step, and IndexedDB makes it atomic.
@@ -166,7 +197,7 @@ compact(docId, state, upToSeq):            // port signature unchanged
 2. A row in `keys` was either loaded at hydrate (so it is in `doc`) or appended from `doc` (so it is in `doc`). Both happened before `state` was encoded in the same task. So **deleted rows ⊆ `state` ⊆ the new snapshot.**
 3. The old snapshot is in the new one. Either its `rev` equals `snapRev`, meaning this session loaded or wrote it and so it is in `doc`. Or it is merged explicitly. So **old snapshot ⊆ new snapshot.**
 4. Rows this session never applied are never deleted. They stay for the next `load`, whoever appended them.
-5. Applying `foreign` after commit, with `STORAGE_ORIGIN`, brings another writer's merged content into this `doc`. A later compaction with an unchanged `rev` therefore can't drop it.
+5. Applying `foreign` after commit, with `STORAGE_ORIGIN`, brings another writer's merged content into this `doc`. A later compaction with an unchanged `rev` therefore can't drop it. As built, the store doesn't trust the caller to apply it: until a later `state` covers `foreign`'s state vector, it merges again (§2.2 As built).
 6. **Hydrate sees a consistent cut.** A readonly transaction sees every row committed before it started. The key generator only increases, so a row committed later always has a larger key.
 
 This holds whether Web Locks work, fail, are stolen, or don't exist. Locks (§4) only decide who **edits**. The property test in §10 checks this rule against a reference document under random interleavings of two or three writers.
@@ -706,7 +737,7 @@ Documents/<folder path>/<clean title>-<short id>.md        (front matter: tags, 
 | **W7** | **Export all, import and reminders:** the shared archive module, lazy `fflate`, the `md` cache and headless serializer, import of files, zips and folders with the lineage dialog, reminder rules | DE + UX | W2, W5, P2.8, P2.10 | M–L: 5 days, 2 rounds | Round trip web → zip → web is identical. Desktop backup fixtures import. Reminders follow the §6.2 table (with a fake clock). |
 | **W8** | **Backup folder** (Chromium) | DE | W7 | S–M: 2–3 days | The OPFS-handle e2e passes. Reconnect works after a permission reset. **Cut first** if needed. |
 | **W9** | **Copy to My documents** from the sandbox: `postMessage` across origins, consent dialog, new lineage | SE + UX | W7, P2.10, W4 | S: 2 days | Cross-origin e2e passes. Messages from any other origin, or with no opener, are ignored. |
-| **W10** | **Web sharing:** share from the library (secrets from `getRandomValues`, tokens derived in the page, hashes only to the server; S1, v8), join into the library (the S1b `/join` grammar through `lib/sharing/link.ts`), `IdbSecretStore`, Manage sharing, every Live state from plan §5.5, the §8.3 copy, stop-sharing key (if Q2 = a) | SE + UX | P4.0, P4.2a–e (with CORS for the library origin), P4.3, P4.4, W3, **Q2** | L: 6 days, 3 rounds | Share → join on a second browser, then stop sharing. Eviction followed by re-import shows the disconnected copy. |
+| **W10** | **Web sharing:** share from the library (secrets from `getRandomValues`, tokens derived in the page, hashes only to the server; S1, v8), join into the library (the S1b `/join` grammar through `lib/sharing/link.ts`), `IdbSecretStore`, Manage sharing, every Live state from plan §5.5, the §8.3 copy, stop-sharing key (if Q2 = a). **Retry contract (plan §6, as built):** `share_unavailable` is never terminal; the library retries it with backoff, because a valid token gets it for up to a minute while its share is over the failed-token limit. Only the end reasons (`sharing_stopped`, `link_reset`, `expired`, `removed`) are terminal. `HocuspocusProvider` stops after `authenticationFailed`, so the library reconnects itself. | SE + UX | P4.0, P4.2a–e (with CORS for the library origin), P4.3, P4.4, W3, **Q2** | L: 6 days, 3 rounds | Share → join on a second browser, then stop sharing. Eviction followed by re-import shows the disconnected copy. A token refused as `share_unavailable` keeps its link and reconnects after a backoff. |
 | **W11** | **Image store, web adapter** (`blobs`) | SE | The image store design, W2 | Defined by that design | none |
 | **W12** | **Library soak and the `firefox` project** in nightly | QA | W3, W7 | S: 2 days | 7 green nights before release |
 | **P1.1b** | Sandbox merge-on-save (§11.1), next to P1.1 | SE | P1.1 | S: 1 day | A two-tab offline test loses no edits |

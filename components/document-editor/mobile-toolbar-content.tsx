@@ -36,17 +36,34 @@ import {
 import { Toolbar } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
-import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { announce } from "@/lib/announce";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
 import {
+  createRotationScroll,
+  onViewportWidthChange,
+  useKeyboardInset,
+} from "@/lib/keyboard-inset";
+import {
   RECENT_COLORS_CHOICE,
   useRememberedChoice,
 } from "@/lib/remembered-choice";
 import "@/components/smart-toolbar/phone/phone.scss";
+
+/** Scrolls the caret into view while the person is writing (focus in the editor). */
+function scrollCaretIntoView(editor: Editor) {
+  if (editor.isDestroyed || !editor.view.hasFocus()) return;
+  editor.commands.scrollIntoView();
+}
+
+/**
+ * Kept across the bar's unmount: a mount or unmount scrolls the caret only
+ * when the width moved (a rotation across 768px), once, even under a
+ * StrictMode remount, and never on an editor switch.
+ */
+const rotationScroll = createRotationScroll();
 
 /** The bar's constant cell height (spec §4.7), above any safe area. */
 export const MOBILE_BAR_HEIGHT = 44;
@@ -234,6 +251,25 @@ export function MobileToolbarContent({
     [],
   );
 
+  // Rotating with the keyboard up can leave the caret off screen (§4.6):
+  // once the frame has settled and the clearance above re-rendered, scroll
+  // it back into view, once. A rotation that stays below 768px changes the
+  // width under the bar; one across 768px mounts the bar (to portrait) or
+  // unmounts it (to landscape, where the row toolbar takes over). No steps,
+  // so no Yjs traffic or undo entry.
+  useEffect(() => {
+    if (!editor) return;
+    const keepCaretInView = () => scrollCaretIntoView(editor);
+    const unmount = rotationScroll.mount(keepCaretInView);
+    const stop = onViewportWidthChange(() =>
+      rotationScroll.schedule(keepCaretInView),
+    );
+    return () => {
+      stop();
+      unmount();
+    };
+  }, [editor]);
+
   // Set by a close that hands focus on (Link opens its popover over the
   // page): the sheet must not pull focus back to Aa after its exit.
   const keepFocusOnCloseRef = useRef(false);
@@ -340,6 +376,7 @@ export function MobileToolbarContent({
               <span aria-hidden="true">Aa</span>
             </SheetTrigger>
             <SheetContent
+              keyboard={false}
               data-format-sheet=""
               data-toolbar-popup=""
               finalFocus={finalFocus}

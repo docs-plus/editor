@@ -32,7 +32,7 @@ const types = (target: Editor) => {
   return out;
 };
 
-describe("style lift injection (spec §7.2, A20)", () => {
+describe("style lift injection (spec §7.2, A21)", () => {
   it("is absent at first (main's behaviour) and lifts once the lazy module is imported", async () => {
     const blocks = await importFresh<Blocks>(
       "@/lib/editor-actions/core/blocks",
