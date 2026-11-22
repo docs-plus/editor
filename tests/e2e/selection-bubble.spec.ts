@@ -1095,7 +1095,8 @@ test.describe("selection bubble", () => {
       bubbleToolbar(page).getByRole("button", { name: "Formats" }),
     ).toHaveCount(0);
     // The brush ends the colour, link and paint group (spec §7.1); it is
-    // the last item until the comments PR registers 💬.
+    // the last item wherever comments are off (the web sandbox sets no
+    // comment gate, so `comment.add` is registered but not offered).
     expect(
       await brush.evaluate((el) => {
         const items = [
@@ -1122,6 +1123,38 @@ test.describe("selection bubble", () => {
     const box = await brush.boundingBox();
     expect(box?.width).toBeCloseTo(28, 1);
     expect(box?.height).toBeCloseTo(28, 1);
+  });
+
+  test("Comment ends the bubble, after a separator, only where comments are on", async ({
+    page,
+  }) => {
+    // The dev hook mounts comments with `canComment: () => true`, which
+    // sets the gate that offers `comment.add` (spec §7.6).
+    await page.addInitScript(() => {
+      (window as Window & { __COMMENTS_PERF?: boolean }).__COMMENTS_PERF = true;
+    });
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const comment = bubbleToolbar(page).locator(
+      '[data-action-id="comment.add"]',
+    );
+    await expect(comment).toBeVisible();
+    expect(
+      await comment.evaluate((el) => {
+        const items = [
+          ...(el
+            .closest('[role="toolbar"]')
+            ?.querySelectorAll('button, [data-slot="toolbar-separator"]') ??
+            []),
+        ];
+        const at = items.indexOf(el);
+        return [
+          at === items.length - 1,
+          items[at - 1]?.getAttribute("data-slot"),
+        ];
+      }),
+    ).toEqual([true, "toolbar-separator"]);
   });
 
   test("the brush is pressed at once before the engine lands, never 'loading'", async ({

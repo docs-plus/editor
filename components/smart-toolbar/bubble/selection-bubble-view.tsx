@@ -16,6 +16,7 @@ import { announceLater } from "@/lib/announce-later";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import { emitUiIntent } from "@/lib/editor-actions/ui-intents";
+import { getEditorContextStore } from "@/lib/editor-context/store";
 
 import { ActionButton } from "../action-button";
 import { PaintFormatButton } from "../formats/paint-format-button";
@@ -64,6 +65,34 @@ const MARK_IDS = [
 ] as const;
 /** Registered by the comments PR (spec §7.6); until then, no slot. */
 const COMMENT_ID = "comment.add";
+
+/**
+ * Comment (spec §7.6): last, with its separator, only where `comment.add`
+ * is registered AND offered. `getView` reports a refusal, not absence, so
+ * an editor whose document takes no comments (the web sandbox: no
+ * `setCommentGate`) would otherwise show a disabled "Comment". A boolean
+ * snapshot, so the slot re-renders only when that answer flips.
+ */
+function CommentSlot({ editor }: { editor: Editor }) {
+  const store = getEditorContextStore(editor);
+  const offered = useSyncExternalStore(
+    store.subscribe,
+    () => {
+      const action = editorActions.get(COMMENT_ID);
+      return (
+        action !== undefined && action.offered?.(store.getContext()) !== false
+      );
+    },
+    () => false,
+  );
+  if (!offered) return null;
+  return (
+    <>
+      <ToolbarSeparator />
+      <ActionButton id={COMMENT_ID} editor={editor} variant="bubble" />
+    </>
+  );
+}
 
 /**
  * The bubble's one root (v1 contract §5.2). The controller appends it to
@@ -521,14 +550,7 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
           }}
         />
         <PaintFormatButton editor={editor} />
-        {/* Comment (spec §7.6): last, and absent until the comments PR
-            registers `comment.add`, so its group shifts nothing. */}
-        {editorActions.has(COMMENT_ID) ? (
-          <>
-            <ToolbarSeparator />
-            <ActionButton id={COMMENT_ID} editor={editor} variant="bubble" />
-          </>
-        ) : null}
+        <CommentSlot editor={editor} />
       </Toolbar>
     ) : null,
     root,
