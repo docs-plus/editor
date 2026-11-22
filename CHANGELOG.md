@@ -17,7 +17,7 @@ formatting, Paint format), View (Simplified toolbar, Appearance) and Help
 visible heading and `role="group"` with the same label, and every row keeps a
 16 px leading slot so the labels line up (Simplified toolbar shows its check
 there). Nothing is added or removed. Page width follows with the preferences
-work.
+work. Editor chunk +1 B from chunk-name hashes only; no eager code.
 
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
