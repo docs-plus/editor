@@ -30,10 +30,11 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * The D23 editor-chunk ledger (desktop details spec §1 rule 5): every line
  * the desktop, library and v1 feature work may add to this chunk, each
  * measured in its PR. While D41's conditional 80 B undo line is
- * unconfirmed the total is 2,205 B (1,580 B, plus P2.1c's 275 B sandbox
- * DocSession line, K14, #134's 198 B status-chip boundary line and
- * P2.12's 152 B Markdown paste hook, owner-approved 2026-11-22); if spike
- * M18 confirms it, this becomes 2,285 B with no further approval. P4.10's
+ * unconfirmed the total is 2,231 B (1,580 B, plus P2.1c's 275 B sandbox
+ * DocSession line, K14, #134's 198 B status-chip boundary line,
+ * P2.12's 152 B Markdown paste hook and the bubble and quick insert
+ * work's 26 B, owner-approved 2026-11-22); if spike M18 confirms it,
+ * this becomes 2,311 B with no further approval. P4.10's
  * 420 B line (in the details spec) is added by its own PR.
  *
  * Lines (gz): P2.2 no-provider + `WriteGate` + decoration host 300 (294
@@ -42,13 +43,16 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * comments hook 150, P2.9c-1 smart-quotes gate 150, L1a i18n core 400
  * (`t()`, registry labels, `lang`/`dir`; languages design §3.7.1), P2.13
  * `dir` + direction commands + Enter + « » 350, LK1 60, LK3 120, OB2 10,
- * M19 phone keyboards 40 (+80 conditional).
+ * M19 phone keyboards 40 (+80 conditional), bubble and quick insert
+ * P1/P4 26 (owner-approved 2026-11-22: the `setStyleLift` hook, List and
+ * Quote in the `style.*` value, the Insert sheet's nested lazy load;
+ * measured 2764fb5 394,519 → 394,545 B, #183).
  *
  * #168 security allowlist: +145 B (84a9458 → +16,130 B; #168 → +16,275 B).
  * A security exemption, coordinator-approved 2026-11-22, outside the
  * total above; the fence still passes, so it was not raised.
  */
-export const EDITOR_CHUNK_LEDGER_BYTES = 2_205;
+export const EDITOR_CHUNK_LEDGER_BYTES = 2_231;
 /**
  * The fence (D23): `main` plus the ledger, so unrelated work can't spend
  * the ledger's bytes. Raising it needs an amendment to that rule.

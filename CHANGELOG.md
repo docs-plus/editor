@@ -13,16 +13,21 @@ since the previous tag.
 
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A21):
-Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. The editor chunk
-group does not grow: 394,417 B gz against 394,415 B on `main` at `7b9fdc7`
-(+2 B of chunk-name churn, with P2–P4 merged; first measured 394,021 B against
-394,018 B at `84a9458`). The
-per-item lift behind the text styles is injected from the lazy chunks. The
-"/" chunk is back under its 7 KB budget, 7,087 B gz by its own test
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. With P2–P4, the
+editor chunk group grows 26 B: 394,545 B gz against 394,519 B on `main` at
+`2764fb5`. That is a D23 ledger line the owner approved on 2026-11-22
+(`EDITOR_CHUNK_LEDGER_BYTES` 2,205 → 2,231 B), covering the style-lift hook,
+List and Quote in the style value and the Insert sheet's nested load. The
+per-item lift behind the text styles is injected from the lazy chunks.
+Merging `main` `2764fb5` first measured +981 B: the lazy menus imported
+lucide's Type, which made Turbopack split the editor group's small modules
+into two files. The menus now draw their own copy of the icon
+(`components/smart-toolbar/type-icon.ts`). The
+"/" chunk is under its 7 KB budget, 7,099 B gz by its own test
 (`SLASH_BUDGET=1`; 7,334 B on the P4 tip): the phone Insert sheet now gets
 the "/" items at load instead of importing them. The bubble chunk is
-14,734 B gz (9,781 B on `main` at `7b9fdc7`), the menu chunk that holds
-Turn into 6,384 B gz (3,156 B) and the colour chunk 6,566 B gz (3,622 B).
+14,860 B gz (9,797 B on `main` at `2764fb5`) and the colour chunk
+6,580 B gz (3,639 B).
 
 #### Added
 
