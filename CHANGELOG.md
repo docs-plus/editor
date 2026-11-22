@@ -11,7 +11,7 @@ since the previous tag.
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
-The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged: every chunk is byte-identical to `main` at `ed2a7cd`, so first load and the editor chunk group (393,465 B gz) are +0 B.
+The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
 
 #### Added
 
