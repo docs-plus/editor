@@ -4,7 +4,9 @@
  * list to the frame after its rows paint (two animation frames). Also the
  * filter's keystroke time. The targets are asserted only on a production
  * harness build (`LIBRARY_HARNESS_PROD=1`); development React overstates
- * them, so CI's development harness only records the numbers:
+ * them, so CI's development harness only records the numbers. Opening the
+ * folder from the sidebar tree (which expands it) is recorded, not asserted:
+ * the tree isn't windowed yet.
  *   LIBRARY_HARNESS_PROD=1 bun tests/harness/library/serve.ts &
  *   bun playwright test --project=library library-lists-speed
  */
@@ -20,15 +22,17 @@ function median(values: number[]): number {
 
 /**
  * Clicks the element `selector` finds (with the text `text`, if given),
- * then waits two frames; returns the elapsed ms.
+ * waits for the list titled `title` to show a row, then two more frames;
+ * returns the elapsed ms. The previous list's rows don't count.
  */
 function timeClick(
   page: Page,
   selector: string,
+  title: string,
   text?: string,
 ): Promise<number> {
   return page.evaluate(
-    async ({ selector, text }) => {
+    async ({ selector, title, text }) => {
       const element = [
         ...document.querySelectorAll<HTMLElement>(selector),
       ].find(
@@ -36,17 +40,22 @@ function timeClick(
           text === undefined || candidate.textContent?.trim() === text,
       );
       if (!element) throw new Error(`no ${selector}`);
+      const frame = () =>
+        new Promise((resolve) => requestAnimationFrame(resolve));
+      const shown = () =>
+        document.querySelector(".lib-list-title")?.textContent?.trim() ===
+          title && !!document.querySelector('.lib-grid [role="row"][data-key]');
       const start = performance.now();
       element.click();
-      await new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      );
-      if (!document.querySelector('.lib-grid [role="row"][data-key]')) {
-        throw new Error("no rows painted");
+      for (let n = 0; !shown(); n++) {
+        if (n > 600) throw new Error(`${title} never painted`);
+        await frame();
       }
+      await frame();
+      await frame();
       return performance.now() - start;
     },
-    { selector, text },
+    { selector, title, text },
   );
 }
 
@@ -93,6 +102,7 @@ for (const size of [1000, 10000]) {
         await timeClick(
           page,
           '.lib-grid [role="row"][data-key="folder:f-big"]',
+          "Big",
         ),
       );
       await expect(page.getByRole("heading", { name: "Big" })).toBeVisible();
@@ -103,9 +113,23 @@ for (const size of [1000, 10000]) {
           page,
           'nav[aria-label="Files"] button.lib-item',
           "Recent",
+          "Recent",
         ),
       );
       await expect(page.getByRole("heading", { name: "Recent" })).toBeVisible();
+    }
+    // Recorded only: opening the folder from the sidebar tree also expands
+    // it, and P2.7a's tree renders every row (not windowed yet).
+    const tree: number[] = [];
+    for (let run = 0; run < 3; run++) {
+      await page.goto(`/?seed=${size}`);
+      tree.push(
+        await timeClick(
+          page,
+          '[role="treeitem"][data-key="folder:f-big"] .lib-row',
+          "Big",
+        ),
+      );
     }
     const result = {
       size,
@@ -113,6 +137,7 @@ for (const size of [1000, 10000]) {
       folderMs: Math.round(median(folder)),
       recentMs: Math.round(median(recent)),
       filterKeystrokeMs: Math.round(median(filter)),
+      treeExpandMs: Math.round(median(tree)),
     };
     console.log(`library list speed: ${JSON.stringify(result)}`);
     test.info().annotations.push({

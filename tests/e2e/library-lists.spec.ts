@@ -246,8 +246,12 @@ test.describe("list views (P2.7b)", () => {
     await expect(filter).toHaveValue("");
     await page.keyboard.press("ArrowDown");
     await expect.poll(() => focusedKey(page)).not.toBeNull();
-    // ⌘F outside a list is not the list's.
-    await page.getByTestId("last-open").click();
+    // ⌘F outside a list is not the list's: from the sidebar it does nothing.
+    await files(page)
+      .getByRole("button", { name: "Recent", exact: true })
+      .focus();
+    await page.keyboard.press("ControlOrMeta+f");
+    await expect(filter).not.toBeFocused();
   });
 
   test("the tag filter combines tags with AND", async ({ page }) => {
