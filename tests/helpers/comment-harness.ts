@@ -83,7 +83,13 @@ export interface HarnessClient {
   /** Resolves every thread's anchors against the current state. */
   resolve(tid: Id): CommentRange | null;
   createThread(range: CommentRange, body?: string): Id | null;
-  /** Re-resolves every tracked range from Yjs, as on open. */
+  /**
+   * Re-resolves every tracked range from Yjs, as on open. This is the
+   * controller's OPEN path, not its remote path (`tracker.remote` plus the
+   * failing threads): the suites that call it after every update measure
+   * anchoring, and `tests/unit/extensions/comments-convergence.test.ts`
+   * measures the controller's own remote path.
+   */
   refreshRanges(): void;
 }
 

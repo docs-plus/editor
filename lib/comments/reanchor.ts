@@ -12,6 +12,7 @@ import type { Transaction } from "@tiptap/pm/state";
 import {
   type CommentRange,
   createAnchorPair,
+  resolveAnchors,
   resolvePair,
   sameRange,
 } from "@/lib/comments/anchors";
@@ -146,7 +147,12 @@ export function createRangeTracker(deps: CommentsDeps): RangeTracker {
  * mapped range (the store keeps the first pair as `ps`/`pe`). An empty
  * mapped range means its text was deleted: the anchor stays, so undo
  * brings it back. Writes go through the store, so `canComment()` gates
- * them. Returns the threads re-anchored.
+ * them, and all of them leave as ONE Yjs update (`store.batch`): a paste
+ * or a section move over many threads is one message, not one per thread
+ * (Throttle bans bursts). Returns the threads re-anchored.
+ *
+ * Run it before any remote change is applied: `tracker.ranges` must still
+ * be the local transaction's mapping, which matches `binding` and `doc`.
  */
 export function reanchor(
   deps: CommentsDeps,
@@ -157,17 +163,59 @@ export function reanchor(
   tids: Iterable<Id>,
 ): Id[] {
   const written: Id[] = [];
-  for (const tid of tids) {
-    const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
-    const tracked = tracker.ranges.get(tid);
-    // A mapped range can end on a block boundary (a split, a move): the
-    // anchors go on its text.
-    const mapped = tracked && textBounds(doc, tracked);
-    if (!mapped || !anchors) continue;
-    const current = resolvePair(deps, binding, anchors.s, anchors.e);
-    if (sameRange(current, mapped)) continue;
-    const pair = createAnchorPair(deps, binding, mapped);
-    if (pair && store.setAnchors(tid, pair, "reanchor").ok) written.push(tid);
-  }
+  store.batch(() => {
+    for (const tid of tids) {
+      const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
+      const tracked = tracker.ranges.get(tid);
+      // A mapped range can end on a block boundary (a split, a move): the
+      // anchors go on its text.
+      const mapped = tracked && textBounds(doc, tracked);
+      if (!mapped || !anchors) continue;
+      const current = resolvePair(deps, binding, anchors.s, anchors.e);
+      if (sameRange(current, mapped)) continue;
+      const pair = createAnchorPair(deps, binding, mapped);
+      if (pair && store.setAnchors(tid, pair, "reanchor").ok) {
+        written.push(tid);
+      }
+    }
+  });
+  return written;
+}
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) =>
+  a.length === b.length && a.every((byte, index) => byte === b[index]);
+
+/**
+ * After an undo or redo brought a thread's text back: Yjs follows undo's
+ * re-created text (`redone`) only on the client that undid, so the thread
+ * resolves there and stays Detached (or short) for everyone else. Call it
+ * for the threads whose anchors are only live on this client
+ * (`anchorsOnlyLiveHere`): for each that resolves, a pair made from its
+ * resolved range that differs from the stored one is written (same
+ * `"reanchor"` rules, one update). The byte check ends it: the next
+ * resolution finds the stored pair equal and writes nothing.
+ */
+export function refreshAnchors(
+  deps: CommentsDeps,
+  binding: AnchorBinding,
+  store: CommentStore,
+  tids: Iterable<Id>,
+): Id[] {
+  const written: Id[] = [];
+  store.batch(() => {
+    for (const tid of tids) {
+      const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
+      const range = anchors && resolveAnchors(deps, binding, anchors);
+      const pair = range && createAnchorPair(deps, binding, range);
+      if (
+        !pair ||
+        !anchors ||
+        (sameBytes(pair.s, anchors.s) && sameBytes(pair.e, anchors.e))
+      ) {
+        continue;
+      }
+      if (store.setAnchors(tid, pair, "reanchor").ok) written.push(tid);
+    }
+  });
   return written;
 }

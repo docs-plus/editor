@@ -144,6 +144,40 @@ describe("mountComments", () => {
     }
     expect(await mounted.controller()).toBeNull();
   });
+
+  it("preloads a document's threads within a second, even on a busy thread", () => {
+    const fixture = createCollabEditor();
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(fixture.server));
+    createHarnessClient({ doc }).createThread({ from: 8, to: 13 });
+    Y.applyUpdate(fixture.client, Y.encodeStateAsUpdate(doc));
+    // happy-dom has no idle callbacks: stand both in, and put back what was.
+    const real = {
+      request: globalThis.requestIdleCallback,
+      cancel: globalThis.cancelIdleCallback,
+    };
+    const options: (IdleRequestOptions | undefined)[] = [];
+    globalThis.requestIdleCallback = ((
+      _run: IdleRequestCallback,
+      opts?: IdleRequestOptions,
+    ) => {
+      options.push(opts);
+      return 1;
+    }) as typeof requestIdleCallback;
+    globalThis.cancelIdleCallback = () => {};
+    const mounted = mountComments(fixture.editor, {
+      doc: fixture.client,
+      canComment: () => true,
+    });
+    try {
+      expect(options).toEqual([{ timeout: 1000 }]);
+    } finally {
+      mounted.unmount();
+      globalThis.requestIdleCallback = real.request;
+      globalThis.cancelIdleCallback = real.cancel;
+      fixture.destroy();
+    }
+  });
 });
 
 describe("moveSection's meta (§5.3)", () => {

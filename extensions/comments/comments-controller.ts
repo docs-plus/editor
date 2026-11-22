@@ -17,6 +17,7 @@ import type * as Y from "yjs";
 // Types only: the `setDecorationLayer` command's declaration.
 import type {} from "@/extensions/decoration-host/decoration-host";
 import {
+  anchorsOnlyLiveHere,
   type CommentRange,
   createAnchorPair,
   resolveAnchors,
@@ -40,6 +41,7 @@ import {
   createRangeTracker,
   type RangeTracker,
   reanchor,
+  refreshAnchors,
 } from "@/lib/comments/reanchor";
 import { commentRangeFor, quoteOf } from "@/lib/comments/selection";
 import {
@@ -117,9 +119,12 @@ function frame(run: () => void): () => void {
   return () => cancelAnimationFrame(id);
 }
 
+/** An idle slice runs within this long even on a busy main thread. */
+export const IDLE_TIMEOUT_MS = 500;
+
 function idleSlice(run: () => void): () => void {
   if (typeof requestIdleCallback === "function") {
-    const id = requestIdleCallback(run);
+    const id = requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
     return () => cancelIdleCallback(id);
   }
   const id = setTimeout(run, 16);
@@ -158,8 +163,18 @@ export function attachComments({
   let destroyed = false;
   /** The comments map changed since the last frame. */
   let commentsChanged = false;
+  /** A re-anchor is queued as a microtask (see `onTransaction`). */
+  let reanchorQueued = false;
+  /** Threads still to resolve on open, parked until the binding exists. */
+  let awaitingBinding: Id[] | null = null;
 
   const binding = () => deps.syncBinding(editor.state);
+
+  function queueReanchor() {
+    if (reanchorQueued) return;
+    reanchorQueued = true;
+    queueMicrotask(runReanchor);
+  }
 
   function notify() {
     snapshot = null;
@@ -214,6 +229,8 @@ export function attachComments({
     const current = binding();
     if (!current) return false;
     let changed = false;
+    /** Threads only this client can resolve, after its undo or redo. */
+    const onlyHere: Id[] = [];
     for (const tid of tids) {
       const anchors = store.map.get(anchorKey(tid)) as Anchors | undefined;
       const range = anchors ? resolveAnchors(deps, current, anchors) : null;
@@ -228,24 +245,45 @@ export function attachComments({
         tracker.ranges.set(tid, range);
         failingSince.delete(tid);
         if (detached.delete(tid)) changed = true;
+        if (anchors && anchorsOnlyLiveHere(deps, current.doc, anchors)) {
+          onlyHere.push(tid);
+        }
       } else {
         changed = tracker.ranges.delete(tid) || changed;
         if (!failingSince.has(tid)) failingSince.set(tid, now());
       }
     }
+    if (onlyHere.length && canComment()) {
+      refreshAnchors(deps, current, store, onlyHere);
+    }
     armDetachTimer();
     return changed;
+  }
+
+  /**
+   * The re-anchor after local structural edits (§5.3). It runs in a
+   * microtask, never a frame: the ranges it reads must still be the local
+   * transaction's mapping, and a collaborator's update (its own task, a
+   * WebSocket message) would map them through a whole-span replace first.
+   * A frame also never comes in a hidden tab. A thread it skips has its
+   * text deleted here; its anchor stays for undo, so nothing is retried.
+   */
+  function runReanchor() {
+    reanchorQueued = false;
+    if (destroyed || editor.isDestroyed) return;
+    const pending = tracker.takePending();
+    if (!pending.size) return;
+    const current = binding();
+    if (current && canComment()) {
+      reanchor(deps, current, editor.state.doc, store, tracker, pending);
+    }
+    for (const tid of pending) toResolve.add(tid);
+    requestFrame();
   }
 
   function runFrame() {
     cancelFrame = null;
     if (destroyed || editor.isDestroyed) return;
-    const current = binding();
-    const pending = tracker.takePending();
-    if (current && pending.size && canComment()) {
-      reanchor(deps, current, editor.state.doc, store, tracker, pending);
-    }
-    for (const tid of pending) toResolve.add(tid);
     const tids = [...toResolve];
     toResolve.clear();
     // Mapping alone moved the ranges; the layer mapped its set the same way.
@@ -261,12 +299,25 @@ export function attachComments({
   }
 
   const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+    if (awaitingBinding && binding()) {
+      const rest = awaitingBinding;
+      awaitingBinding = null;
+      resolveOnOpen(rest);
+    }
     if (!transaction.docChanged) return;
     if (deps.isChangeOrigin(transaction)) {
       // Never re-anchor from a remote change: its mapping is one replace
       // over the changed span and would invent positions (§5.3).
       for (const tid of tracker.remote(transaction)) toResolve.add(tid);
-    } else tracker.local(transaction);
+      // Undo can bring back the text of a thread that has no range, without
+      // touching the comments map. Usually there is none.
+      for (const tid of failingSince.keys()) toResolve.add(tid);
+    } else {
+      tracker.local(transaction);
+      // The sync plugin has written Yjs by now (Tiptap emits `transaction`
+      // after the view update).
+      if (tracker.ranges.size) queueReanchor();
+    }
     requestFrame();
   };
 
@@ -284,7 +335,8 @@ export function attachComments({
     cancelIdle = null;
     if (destroyed || !rest.length) return;
     if (!binding()) {
-      cancelIdle = idle(() => resolveOnOpen(rest));
+      // The sync plugin sets its binding with a transaction: wait for it.
+      awaitingBinding = rest;
       return;
     }
     if (resolve(rest.slice(0, OPEN_SLICE))) draw();
@@ -360,6 +412,7 @@ export function attachComments({
     },
 
     flush() {
+      if (reanchorQueued) runReanchor();
       if (!cancelFrame) return;
       cancelFrame();
       runFrame();

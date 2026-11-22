@@ -106,9 +106,19 @@ export interface CommentStore {
     next: Pick<Anchors, "s" | "e">,
     mode: "reanchor" | "reattach",
   ): CommentResult;
+  /**
+   * Runs `fn` as one Yjs transaction: the writes inside it (nested
+   * `transact` calls merge) leave as one update, so one re-anchor pass
+   * over many threads is one WebSocket message or one local persist.
+   */
+  batch(fn: () => void): void;
 }
 
 const refuse = (reason: CommentRefusal) => ({ ok: false, reason }) as const;
+
+/** A head written by a newer TinyDocy: read-only here. */
+const isNewer = (head: ThreadHead | undefined) =>
+  (head?.v ?? 0) > THREAD_VERSION;
 
 export function createCommentStore({
   doc,
@@ -178,7 +188,7 @@ export function createCommentStore({
     if (!canComment()) return "not-allowed";
     const thread = head(tid);
     if (!thread) return "missing";
-    return thread.v > THREAD_VERSION ? "newer" : null;
+    return isNewer(thread) ? "newer" : null;
   }
 
   function messageOf(tid: Id, mid: Id): Message | undefined {
@@ -186,9 +196,9 @@ export function createCommentStore({
   }
 
   function deleteThread(tid: Id): CommentResult<{ removed: RemovedEntries }> {
-    if (!canComment()) return refuse("not-allowed");
-    const thread = head(tid);
-    if (!thread) return refuse("missing");
+    const blocked = writable(tid);
+    if (blocked) return refuse(blocked);
+    const thread = head(tid) as ThreadHead;
     if (thread.au.id !== author().id && !canManageAll()) {
       return refuse("not-own");
     }
@@ -288,7 +298,8 @@ export function createCommentStore({
         const result = deleteThread(tid);
         return result.ok ? { ok: true } : result;
       }
-      if (!canComment()) return refuse("not-allowed");
+      const blocked = writable(tid);
+      if (blocked) return refuse(blocked);
       const message = messageOf(tid, mid);
       if (!message || isDeletedMessage(message)) return refuse("missing");
       if (message.au.id !== author().id && !canManageAll()) {
@@ -308,6 +319,12 @@ export function createCommentStore({
       if (!missing.length) return { ok: true };
       const first = parseKey(missing[0][0]);
       const tid = first?.tid ?? "";
+      // Never re-set keys of a thread this version can't read: the head
+      // there now, or the head being restored.
+      const restoredHead = removed.find(([key]) => key === threadKey(tid));
+      if (isNewer(head(tid)) || isNewer(restoredHead?.[1] as ThreadHead)) {
+        return refuse("newer");
+      }
       const capped = capRefusal(
         missing,
         missing.some(([key]) => key.startsWith("t:")),
@@ -343,5 +360,7 @@ export function createCommentStore({
       write(() => map.set(anchorKey(tid), next));
       return { ok: true };
     },
+
+    batch: write,
   };
 }

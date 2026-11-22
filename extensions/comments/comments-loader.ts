@@ -91,7 +91,8 @@ export function mountComments(
     map.observe(onFirstThread);
     observing = true;
   } else if (typeof requestIdleCallback === "function") {
-    const id = requestIdleCallback(() => void controller());
+    // Within a second even on a busy main thread (the fallback's delay).
+    const id = requestIdleCallback(() => void controller(), { timeout: 1000 });
     cancelIdle = () => cancelIdleCallback(id);
   } else {
     const id = window.setTimeout(() => void controller(), 1000);

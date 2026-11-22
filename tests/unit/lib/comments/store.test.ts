@@ -258,6 +258,37 @@ describe("comment store (§4, §6)", () => {
       reason: "newer",
     });
   });
+
+  it("refuses to delete or restore a thread from a newer version", () => {
+    const { doc, store } = setup({ manager: true });
+    const tid = create(store);
+    const reply = store.reply(tid, "a reply");
+    if (!reply.ok) throw new Error(reply.reason);
+    const removed = store.deleteThread(tid);
+    if (!removed.ok) throw new Error(removed.reason);
+    // The same thread, re-created by a newer TinyDocy with a newer head.
+    const newer = removed.removed.map(([key, value]) =>
+      key === threadKey(tid)
+        ? ([key, { v: 2, q: "beta", c: NOW, au: ANN }] as const)
+        : ([key, value] as const),
+    );
+    for (const [key, value] of newer) store.map.set(key, value);
+    const updates: Uint8Array[] = [];
+    doc.on("update", (update) => updates.push(update));
+    const refused = { ok: false, reason: "newer" } as const;
+    expect(store.deleteThread(tid)).toEqual(refused);
+    expect(store.deleteMessage(tid, reply.mid)).toEqual(refused);
+    expect(store.deleteMessage(tid, tid)).toEqual(refused);
+    store.map.delete(messageKey(tid, reply.mid));
+    updates.length = 0;
+    // Restoring a key into it would re-set part of a shape it can't read.
+    expect(store.restore(removed.removed)).toEqual(refused);
+    // And a removed newer head is never written back either.
+    for (const [key] of newer) store.map.delete(key);
+    updates.length = 0;
+    expect(store.restore(newer)).toEqual(refused);
+    expect(updates).toHaveLength(0);
+  });
 });
 
 describe("view-only (§6.2, §10)", () => {

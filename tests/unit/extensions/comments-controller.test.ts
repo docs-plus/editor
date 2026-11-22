@@ -6,16 +6,22 @@
  */
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 
 import {
   attachComments,
+  authorOf,
   type CommentsController,
   DETACHED_AFTER_MS,
+  IDLE_TIMEOUT_MS,
+  OPEN_SLICE,
 } from "@/extensions/comments/comments-controller";
 import { COMMENTS_DEPS } from "@/extensions/comments/comments-deps";
 import { DecorationHost } from "@/extensions/decoration-host/decoration-host";
+import { createAnchorPair, resolveAnchors } from "@/lib/comments/anchors";
 import { type Anchors, anchorKey, COMMENT_ORIGIN } from "@/lib/comments/model";
+import { createCommentStore } from "@/lib/comments/store";
 
 import {
   type CollabEditorFixture,
@@ -181,6 +187,247 @@ describe("comments controller", () => {
     expect(highlighted(f)).toEqual([]);
     await Bun.sleep(DETACHED_AFTER_MS + 100);
     expect(ctl.getSnapshot().detached.has(tid)).toBe(true);
+  });
+
+  it("brings a deleted thread back when local undo restores its text", async () => {
+    const { fixture: f, controller: ctl } = setup();
+    const tid = comment(ctl, f);
+    f.editor.commands.deleteRange(WORLD);
+    ctl.flush();
+    expect(ctl.getSnapshot().ranges.has(tid)).toBe(false);
+    await Bun.sleep(DETACHED_AFTER_MS + 100);
+    expect(ctl.getSnapshot().detached.has(tid)).toBe(true);
+    // Undo is a change-origin transaction, and no comment key changes.
+    f.editor.commands.undo();
+    ctl.flush();
+    expect(rangeText(ctl, tid, f)).toBe("world");
+    expect(ctl.getSnapshot().detached.has(tid)).toBe(false);
+    expect(highlighted(f)).toEqual(["world"]);
+  });
+
+  it("brings a thread back for everyone when a collaborator's undo restores its text", () => {
+    const { fixture: f, controller: ctl } = setup();
+    const tid = comment(ctl, f);
+    const other = createCollabEditor({
+      server: f.server,
+      extensions: [
+        DecorationHost.configure({ layers: [{ name: "comments", map: true }] }),
+      ],
+    });
+    const otherCtl = attachComments({
+      editor: other.editor,
+      doc: other.client,
+      deps: COMMENTS_DEPS,
+      canComment: () => true,
+      identity: () => ({ ...IDENTITY, id: "B".repeat(22) }),
+      schedule: () => () => {},
+      idle: (run) => {
+        run();
+        return () => {};
+      },
+    });
+    try {
+      other.editor.commands.deleteRange(WORLD);
+      otherCtl.flush();
+      ctl.flush();
+      expect(ctl.getSnapshot().ranges.has(tid)).toBe(false);
+      // Yjs follows undo's re-created text (`redone`) only on the client
+      // that undid, so that client writes anchors everyone can resolve.
+      other.editor.commands.undo();
+      otherCtl.flush();
+      ctl.flush();
+      expect(rangeText(otherCtl, tid, other)).toBe("world");
+      expect(rangeText(ctl, tid, f)).toBe("world");
+      expect(highlighted(f)).toEqual(["world"]);
+    } finally {
+      otherCtl.destroy();
+      other.destroy();
+    }
+  });
+
+  it("re-anchors a local split before a collaborator's edit lands in the block", async () => {
+    const { fixture: f, controller: ctl } = setup();
+    const tid = comment(ctl, f);
+    f.editor.commands.setTextSelection(10);
+    f.editor.commands.splitBlock();
+    // A collaborator's update is its own task: it lands after this one.
+    await Promise.resolve();
+    f.remote((fragment) => {
+      const text = (fragment.get(2) as Y.XmlElement).get(0) as Y.XmlText;
+      text.insert(0, "so ");
+    });
+    ctl.flush();
+    expect(f.editor.state.doc.child(2).textContent).toBe("so llo world");
+    expect(rangeText(ctl, tid, f)).toBe("world");
+    const anchors = f.client.getMap("comments").get(anchorKey(tid)) as Anchors;
+    const binding = COMMENTS_DEPS.syncBinding(f.editor.state);
+    if (!binding) throw new Error("no binding");
+    const range = resolveAnchors(COMMENTS_DEPS, binding, anchors);
+    expect(range && f.editor.state.doc.textBetween(range.from, range.to)).toBe(
+      "world",
+    );
+  });
+
+  it("re-anchors before the frame, so a hidden tab never holds it back", async () => {
+    const { fixture: f, controller: ctl } = setup();
+    const tid = comment(ctl, f);
+    const before = f.client.getMap("comments").get(anchorKey(tid));
+    f.editor.commands.setTextSelection(10);
+    f.editor.commands.setNode("heading", { level: 2 });
+    // No frame runs (the test's `schedule` never fires), only microtasks.
+    await Promise.resolve();
+    expect(f.client.getMap("comments").get(anchorKey(tid))).not.toBe(before);
+  });
+
+  it("sends one Yjs update when one edit re-anchors many threads", () => {
+    const words = Array.from({ length: 50 }, (_, index) => `w${index}`);
+    const server = prosemirrorJSONToYDoc(
+      createCollabEditor().schema,
+      {
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Title" }],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: words.join(" ") }],
+          },
+        ],
+      },
+      "default",
+    );
+    const { fixture: f, controller: ctl } = setup(true, server);
+    // Past the client rate: a second store on the same doc, without one.
+    const bulk = createCommentStore({
+      doc: f.client,
+      canComment: () => true,
+      author: () => authorOf(IDENTITY),
+      rates: { threads: 100, messages: 100 },
+    });
+    const binding = COMMENTS_DEPS.syncBinding(f.editor.state);
+    if (!binding) throw new Error("no binding");
+    let at = 8;
+    for (const word of words) {
+      const range = { from: at, to: at + word.length };
+      const anchors = createAnchorPair(COMMENTS_DEPS, binding, range);
+      if (!anchors || !bulk.create({ anchors, quote: word, body: "n" }).ok) {
+        throw new Error("refused");
+      }
+      at += word.length + 1;
+    }
+    ctl.flush();
+    expect(highlighted(f)).toEqual(words);
+    const commentUpdates: unknown[] = [];
+    f.client.on("update", (_update: Uint8Array, origin: unknown) => {
+      if (origin === COMMENT_ORIGIN) commentUpdates.push(origin);
+    });
+    f.editor.commands.setTextSelection(9);
+    f.editor.commands.setNode("heading", { level: 2 });
+    ctl.flush();
+    expect(commentUpdates).toHaveLength(1);
+    expect(highlighted(f)).toEqual(words);
+  });
+
+  it("waits for the sync binding instead of polling for it", () => {
+    let ready = false;
+    fixture = createCollabEditor({
+      extensions: [
+        DecorationHost.configure({ layers: [{ name: "comments", map: true }] }),
+      ],
+    });
+    const f = fixture;
+    const writer = attachComments({
+      editor: f.editor,
+      doc: f.client,
+      deps: COMMENTS_DEPS,
+      canComment: () => true,
+      identity: () => IDENTITY,
+      schedule: () => () => {},
+      idle: (run) => {
+        run();
+        return () => {};
+      },
+    });
+    const tid = comment(writer, f);
+    writer.destroy();
+    const slices: (() => void)[] = [];
+    controller = attachComments({
+      editor: f.editor,
+      doc: f.client,
+      deps: {
+        ...COMMENTS_DEPS,
+        syncBinding: (state) =>
+          ready ? COMMENTS_DEPS.syncBinding(state) : null,
+      },
+      canComment: () => true,
+      identity: () => IDENTITY,
+      schedule: () => () => {},
+      idle: (run) => {
+        slices.push(run);
+        return () => {};
+      },
+    });
+    for (let index = 0; index < 5 && slices.length; index++) {
+      slices.shift()?.();
+    }
+    expect(slices).toHaveLength(0);
+    expect(controller.getSnapshot().ranges.has(tid)).toBe(false);
+    ready = true;
+    // The next transaction (any) finds the binding and resolves.
+    f.editor.commands.setTextSelection(9);
+    expect(controller.getSnapshot().ranges.has(tid)).toBe(true);
+  });
+
+  it("resolves on open in idle slices that a busy thread can't starve", () => {
+    const { fixture: f, controller: ctl } = setup();
+    ctl.destroy();
+    controller = null;
+    // One slice more than runs at once.
+    const bulk = createCommentStore({
+      doc: f.client,
+      canComment: () => true,
+      author: () => authorOf(IDENTITY),
+      rates: { threads: 100, messages: 100 },
+    });
+    const binding = COMMENTS_DEPS.syncBinding(f.editor.state);
+    const anchors = binding && createAnchorPair(COMMENTS_DEPS, binding, WORLD);
+    if (!anchors) throw new Error("no anchors");
+    for (let index = 0; index <= OPEN_SLICE; index++) {
+      bulk.create({ anchors, quote: "world", body: "n" });
+    }
+    const real = {
+      request: globalThis.requestIdleCallback,
+      cancel: globalThis.cancelIdleCallback,
+    };
+    const options: (IdleRequestOptions | undefined)[] = [];
+    globalThis.requestIdleCallback = ((
+      _run: IdleRequestCallback,
+      opts?: IdleRequestOptions,
+    ) => {
+      options.push(opts);
+      return 1;
+    }) as typeof requestIdleCallback;
+    globalThis.cancelIdleCallback = () => {};
+    try {
+      controller = attachComments({
+        editor: f.editor,
+        doc: f.client,
+        deps: COMMENTS_DEPS,
+        canComment: () => true,
+        identity: () => IDENTITY,
+      });
+      // The first slice runs at once; the second waits for idle time, or
+      // for the timeout.
+      expect(options).toEqual([{ timeout: IDLE_TIMEOUT_MS }]);
+    } finally {
+      controller?.destroy();
+      controller = null;
+      globalThis.requestIdleCallback = real.request;
+      globalThis.cancelIdleCallback = real.cancel;
+    }
   });
 
   it("writes nothing from a client that may not comment", () => {

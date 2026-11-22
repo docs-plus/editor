@@ -107,6 +107,44 @@ function isLive(
   }
 }
 
+/**
+ * Whether an encoded position resolves only through THIS client's undo
+ * history: its character is deleted, and this client's undo or redo
+ * re-created it (`redone`, which Yjs never sends to other clients).
+ */
+function onlyLiveHere(
+  deps: CommentsDeps,
+  doc: AnchorBinding["doc"],
+  bytes: Uint8Array | undefined,
+) {
+  if (!bytes) return false;
+  try {
+    const { item: id, type } = deps.Y.decodeRelativePosition(bytes);
+    const item = deps.Y.getItem(
+      doc.store,
+      (id ?? type) as NonNullable<typeof id>,
+    );
+    return item.deleted && item.redone !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether any of a thread's anchors resolves only on this client (see
+ * `onlyLiveHere`): the client that undid must write anchors everyone else
+ * can resolve, or the thread stays Detached (or short) for them.
+ */
+export const anchorsOnlyLiveHere = (
+  deps: CommentsDeps,
+  doc: AnchorBinding["doc"],
+  { s, e, ps, pe }: Anchors,
+): boolean =>
+  onlyLiveHere(deps, doc, s) ||
+  onlyLiveHere(deps, doc, e) ||
+  onlyLiveHere(deps, doc, ps) ||
+  onlyLiveHere(deps, doc, pe);
+
 const isLivePair = (
   deps: CommentsDeps,
   doc: AnchorBinding["doc"],
