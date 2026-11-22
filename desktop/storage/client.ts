@@ -8,6 +8,7 @@
  * pending call rejects with `worker_restarting`, which the renderer's
  * batcher retries (resending an append is harmless).
  */
+import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
 
 import type { StorageErrorEnvelope } from "./engine/errors";
@@ -86,7 +87,12 @@ export class StorageClient {
     events: StorageClientEvents = {},
   ): Promise<StorageClient> {
     const started = performance.now();
-    const worker = new Worker(workerPath, { workerData: options });
+    const worker = new Worker(workerPath, {
+      workerData: {
+        copyWorkerPath: join(dirname(workerPath), "copy-worker.cjs"),
+        ...options,
+      },
+    });
     return new Promise((resolve, reject) => {
       const onError = (error: Error) => reject(error);
       worker.once("error", onError);

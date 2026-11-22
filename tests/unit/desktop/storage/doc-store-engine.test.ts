@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("dispatch", () => {
-  test("a failure comes back as an envelope, never a throw", () => {
+  test("a failure comes back as an envelope, never a throw", async () => {
     expect(
       dispatch(library, {
         id: 2,
@@ -40,7 +40,7 @@ describe("dispatch", () => {
 });
 
 describe("the index change feed", () => {
-  test("an append that changes the title moves rev and names the document", () => {
+  test("an append that changes the title moves rev and names the document", async () => {
     const { id } = library.createDoc();
     library.load(id, "w1");
     library.takeIndexChanges();
@@ -59,7 +59,7 @@ describe("the index change feed", () => {
     expect(library.takeIndexChanges()).toBeNull();
   });
 
-  test("index writes report each changed row once", () => {
+  test("index writes report each changed row once", async () => {
     const folder = library.createFolder({ name: "A" });
     const { id } = library.createDoc({ folderId: folder.id });
     library.renameDoc(id, "x");
@@ -72,7 +72,7 @@ describe("the index change feed", () => {
     ]);
   });
 
-  test("the idle Trash purge is announced", () => {
+  test("the idle Trash purge is announced", async () => {
     const clock = createClock();
     library.shutdown();
     library = openTestLibrary(temp.dir, createTestHost(clock));
@@ -80,7 +80,7 @@ describe("the index change feed", () => {
     library.trashDoc(id);
     library.takeIndexChanges();
     clock.advance(TRASH_RETENTION_MS + IDLE_MS);
-    expect(library.runIdleJobs().purged).toBe(1);
+    expect((await library.runIdleJobs()).purged).toBe(1);
     expect(library.takeIndexChanges()?.changes).toEqual([{ kind: "doc", id }]);
   });
 });

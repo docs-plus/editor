@@ -58,10 +58,6 @@ export type StorageOps = {
   setDocTags: { args: { docId: string; tagIds: string[] }; result: number };
   listDailyCopies: { args: Record<string, never>; result: string[] };
   readDailyCopy: { args: { date: string; docId: string }; result: Uint8Array };
-  runIdleJobs: {
-    args: Record<string, never>;
-    result: ReturnType<Library["runIdleJobs"]>;
-  };
   stats: { args: Record<string, never>; result: ReturnType<Library["stats"]> };
   /** The quit flush's last step: checkpoint, clear `unclean_exit`, close. */
   shutdown: { args: Record<string, never>; result: null };
@@ -95,6 +91,13 @@ export type StorageWorkerOptions = {
   trace?: boolean;
   /** How often the worker looks for idle work, in ms (default 5000). */
   idlePollMs?: number;
+  /** Soak only: how long without a write counts as idle (default 30 s). */
+  idleMs?: number;
+  /**
+   * The daily-copy thread's bundle (`copy-worker.cjs`). `StorageClient`
+   * defaults it to the worker's sibling. Without it, no daily copy runs.
+   */
+  copyWorkerPath?: string;
 };
 
 function run(library: Library, request: StorageRequest): unknown {
@@ -155,8 +158,6 @@ function run(library: Library, request: StorageRequest): unknown {
       return library.listDailyCopies();
     case "readDailyCopy":
       return library.readDailyCopy(request.args.date, request.args.docId);
-    case "runIdleJobs":
-      return library.runIdleJobs();
     case "stats":
       return library.stats();
     case "shutdown":
