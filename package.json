@@ -37,7 +37,10 @@
     "test:soak:quick": "SOAK_DURATION=300000 SOAK_HEADINGS=50 playwright test --project=soak soak.spec.ts",
     "test:soak:collab": "playwright test --project=soak soak-collab.spec.ts",
     "test:soak:collab:quick": "SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 playwright test --project=soak soak-collab.spec.ts",
-    "test:yjs-soak": "playwright test --project=yjs-soak"
+    "test:yjs-soak": "playwright test --project=yjs-soak",
+    "i18n:extract": "bun scripts/i18n/extract.ts",
+    "i18n:check": "bun scripts/i18n/check.ts",
+    "i18n:pseudo": "bun scripts/i18n/pseudo.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css}": [
