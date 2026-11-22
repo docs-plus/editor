@@ -54,8 +54,8 @@ grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
   continue position and forgets stored places when turned off.
 - **Accessibility:** Increase contrast and Reduce motion overrides for the
   web (owner Q4, `data-contrast`, `data-motion`). The high-contrast token
-  set also follows the OS setting (`prefers-contrast: more`), and the
-  `motion-reduce:` variant covers both.
+  set also follows the OS setting (`prefers-contrast: more`) outside
+  `classic`, and the `motion-reduce:` variant covers both.
 
 #### Changed
 

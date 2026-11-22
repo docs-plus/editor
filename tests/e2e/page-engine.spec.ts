@@ -332,6 +332,10 @@ test.describe("page engine", () => {
     const system = await context.newPage();
     await open(system, "new");
     expect(await foreground(system)).toEqual([0, 0, 0]);
+    // A returning browser keeps today's look, OS setting or not (§5.6).
+    const returning = await context.newPage();
+    await open(returning, "classic");
+    expect(await foreground(returning)).not.toEqual([0, 0, 0]);
     await context.close();
   });
 

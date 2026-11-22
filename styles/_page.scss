@@ -239,16 +239,18 @@ $outline-dock-extra: 302px;
   @include contrast-rules;
 }
 
+// The OS setting applies outside `classic`, which promises returning
+// sandbox browsers today's exact look until they choose (§5.6).
 @media (prefers-contrast: more) and (forced-colors: none) {
-  :root {
+  :root:not([data-page-style="classic"]) {
     @include contrast-tokens(light);
   }
 
-  :root.dark {
+  :root.dark:not([data-page-style="classic"]) {
     @include contrast-tokens(dark);
   }
 
-  :root {
+  :root:not([data-page-style="classic"]) {
     @include contrast-rules;
   }
 }
