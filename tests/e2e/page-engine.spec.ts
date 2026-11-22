@@ -1,5 +1,14 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import {
+  outlineDockMinPx,
+  PAGE_WIDTHS,
+  type PageState,
+  parsePrefs,
+  prefsAttributes,
+  TEXT_SIZES,
+} from "@/lib/prefs/schema";
+
 import { resolveRgb } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
 
@@ -36,11 +45,16 @@ async function seed(page: Page, look: "new" | "classic", slots: Slots = {}) {
   );
 }
 
+/** The preferences runtime (and its dev hook) loads once the page idles. */
+const runtimeLoaded = (page: Page) =>
+  page.waitForFunction(() => window.__tinydocyPrefs !== undefined);
+
 async function open(page: Page, look: "new" | "classic", slots?: Slots) {
   await seed(page, look, slots);
   const editor = new EditorPage(page);
   await editor.goto();
   await editor.waitForSync();
+  await runtimeLoaded(page);
   return editor;
 }
 
@@ -250,6 +264,46 @@ test.describe("page engine", () => {
     });
   }
 
+  test("the CSS docking threshold matches the schema's table for every size and width", async ({
+    page,
+  }) => {
+    await open(page, "new");
+    const pages: PageState[] = [{ style: "classic" }, { style: "default" }];
+    for (const size of TEXT_SIZES) {
+      for (const width of PAGE_WIDTHS) {
+        pages.push({ style: "default", size, width });
+      }
+    }
+    for (const state of pages) {
+      const attributes = prefsAttributes(
+        parsePrefs({ page: state }, "classic"),
+      );
+      const css = await page.evaluate((attrs) => {
+        const root = document.documentElement;
+        for (const name of [
+          "data-page-style",
+          "data-text-size",
+          "data-page-width",
+        ]) {
+          root.removeAttribute(name);
+        }
+        for (const [name, value] of Object.entries(attrs)) {
+          if (name !== "data-prefs") root.setAttribute(name, value as string);
+        }
+        const frame = document.querySelector(".page-frame") as Element;
+        return Number.parseFloat(
+          getComputedStyle(frame).getPropertyValue("--page-dock-min"),
+        );
+      }, attributes);
+      const expected = outlineDockMinPx(state);
+      if (expected === Number.POSITIVE_INFINITY) {
+        expect(css).toBeGreaterThan(100_000);
+      } else {
+        expect({ state, css }).toEqual({ state, css: expected });
+      }
+    }
+  });
+
   test("a text size change re-docks without reload", async ({ page }) => {
     await page.setViewportSize({ width: 1000, height: 800 });
     await open(page, "new");
@@ -312,10 +366,7 @@ test.describe("page engine", () => {
       });
       window.__tinydocyPrefs?.setReadingMode(true);
     });
-    await expect(page.locator(".page-frame")).toHaveAttribute(
-      "data-reading",
-      "true",
-    );
+    await expect(page.locator("html")).toHaveAttribute("data-reading", "");
     await expect(page.locator('[data-slot="toolbar"]')).toBeHidden();
     await expect(page.locator(".tiptap.ProseMirror")).toHaveAttribute(
       "contenteditable",
@@ -373,6 +424,7 @@ test.describe("page engine", () => {
     const second = new EditorPage(other);
     await second.goto();
     await second.waitForSync();
+    await runtimeLoaded(other);
     await page.evaluate(() =>
       window.__tinydocyPrefs?.setPageKnob("spacing", "compact"),
     );

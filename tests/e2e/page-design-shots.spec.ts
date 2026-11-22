@@ -144,6 +144,7 @@ async function capture(browser: Browser, baseURL: string, shot: Shot) {
     });
   }
   if (shot.reading) {
+    await page.waitForFunction(() => window.__tinydocyPrefs !== undefined);
     await page.evaluate(() => window.__tinydocyPrefs?.setReadingMode(true));
   }
   await freezePage(page);

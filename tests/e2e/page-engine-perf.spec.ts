@@ -34,6 +34,8 @@ async function openLarge(page: Page, look: "new" | "classic") {
   await editor.waitForSync();
   await editor.setContent(generateLargeDocument(500));
   await editor.expectSavedToServer();
+  // The preferences runtime (and its dev hook) loads once the page idles.
+  await page.waitForFunction(() => window.__tinydocyPrefs !== undefined);
   return editor;
 }
 
