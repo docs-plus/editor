@@ -220,7 +220,8 @@ jobs:
 
       # The desktop renderer under next dev over the dev bridge, no Hocus
       # (architecture §11). Each Playwright worker starts its own storage
-      # host, so each has its own library.
+      # host, so each has its own library. No retries: a race between a
+      # reload's new connection and the old one's release must fail here.
       - name: Local project (dev bridge)
         run: |
           NEXT_PUBLIC_APP_TARGET=desktop NEXT_PUBLIC_DESKTOP_BRIDGE=dev \
@@ -230,7 +231,7 @@ jobs:
             sleep 1
           done
           curl -sf -o /dev/null --max-time 120 http://localhost:3926/
-          LOCAL_BASE_URL=http://localhost:3926 CI= bun playwright test --project=local --retries=1 --trace retain-on-failure
+          LOCAL_BASE_URL=http://localhost:3926 CI= bun playwright test --project=local --retries=0 --trace retain-on-failure
 
       - name: Upload failure artifacts
         if: failure()

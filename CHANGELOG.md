@@ -31,12 +31,21 @@ Hocus. The web build is unchanged: its route table, client chunks, pages and
   - Each connection is one window: one holder per document, released when it
     closes. Requests run in order.
   - `lib/platform/desktop/dev-bridge-wire.ts` is the binary codec.
+  - Errors cross as `{ code, retryable }`, like the real IPC: no exception
+    message reaches the renderer, and unknown failures are `internal`.
+  - `DesktopRoot` retries `already_open` for about 500 ms, because a reload's
+    new connection can beat the old one's release.
+  - `next.config.ts` refuses a desktop production build with
+    `NEXT_PUBLIC_DESKTOP_BRIDGE=dev`.
   - P2.1's `DocStore` contract passes through the whole path.
+  - Architecture §11 lists how the bridge differs from the IPC path, so a
+    green `local` run is not read as proof of it.
 - The `local` Playwright project: one storage host per worker. An edit survives
   a reload, the only sockets are the dev server's and the host's, and an X post
   renders as the link card.
 - A `desktop` CI job builds the export on Linux and runs the `desktop` and
-  `local` projects. The nightly copy is removed.
+  `local` projects, with no retries for `local`. The nightly copy is
+  removed.
 
 #### Changed
 
