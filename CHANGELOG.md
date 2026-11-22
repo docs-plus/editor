@@ -18,9 +18,9 @@ and the web build is unchanged: every JS and CSS file under
 `.next/static` matches a build of `main` at `903b5c8` (apart from the
 build's version string), the editor chunk group measures 393,820 B gz on
 both (+0 B, 1,207 B under the fence), and no built file contains the
-library. W2 is not done: `IdbDocumentIndex`, the contract suite in three
-browsers and the `perf` comparison are still open (spec §2.2, "Still open
-for W2").
+library. W2 is not done: `IdbDocumentIndex` is still open, and the
+contract suite in three browsers and the `perf` comparison are deferred to
+the CI session's Q7 job (spec §2.2, "Still open for W2").
 
 #### Added
 
@@ -30,6 +30,14 @@ for W2").
   is one `durability: "strict"` transaction that settles on commit; a full
   disk or any other abort rejects with a retryable error and writes
   nothing, so the batcher keeps the batch and retries it in order.
+- **Web library:** version 1 takes the desktop's format 2 data model
+  (offline data-model revision §3.6): the derived `links` and `headings`
+  stores, `head_seq`, `derived_seq`, `links_hash`, `headings_hash`,
+  `title_key` and a numeric `stale` sentinel (`by_stale`) on documents,
+  folder trash groups, snake_case `doc_blobs`, `''` for every nullable
+  index key part, the `pre-v<n>` copy name, an eviction sentinel with its
+  `localStorage` marker, and the `library.json` field lists
+  (`lib/library-format/fields.ts`).
 - **Web library:** compaction that stays safe with any number of tabs
   writing the same document (W-D3): it merges into the stored snapshot and
   deletes only the rows its own session applied, and returns another tab's
@@ -41,30 +49,38 @@ for W2").
   close, "Reload"), a blocked upgrade and its clearing
   (`library_upgrade_unblocked`), a newer database or `format_version`
   (read-only), and a browser that won't store anything (never a silent
-  fallback to memory). `IdbDocStore.dispose()` unregisters its close hook
-  and forgets every open document.
+  fallback to memory). Close hooks get 5 s together and may throw without
+  an unhandled rejection. `IdbDocStore.dispose()` unregisters its close
+  hook and forgets every open document, also one still loading. After an
+  upgrade in another tab, a reload is the only recovery; the contract W4
+  must wire up (register the session drain as a close hook) is tested.
 - **Web library:** `persist()`, `persisted()` and `estimate()` helpers with
   the §2.6–§2.7 rules (silent requests on Chromium and Safari only, every
-  iOS browser counted as Safari, the 10 GiB Chromium quota report
+  iOS browser counted as Safari, also in iPadOS desktop mode, the 10 GiB
+  Chromium quota report
   ignored), and the `NEXT_PUBLIC_LIBRARY` switch, which never deletes the
   library.
 - **Tests:** the shared `DocStore` contract suite on `IdbDocStore` under
   `fake-indexeddb` (new dev dependency), a seeded multi-writer compaction
   property test (2,000 runs from seed 1 on every PR, about 21 s;
   `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_BASE_SEED`,
-  `LIBRARY_PROPERTY_SEED`), quota fault injection through `local-session`,
-  web library import boundaries, and a check that nothing in `app/`,
-  `components/`, `hooks/`, `extensions/`, `lib/` or `scripts/` imports the
+  `LIBRARY_PROPERTY_SEED`, Yjs client ids from the seed), quota fault
+  injection through `local-session`, the exact version 1 schema and an
+  upgrade of a populated library, web library import boundaries, and a
+  check that no import, static or dynamic, from `app/`, `components/`,
+  `hooks/`, `extensions/`, `lib/`, `scripts/` or `types/` resolves into the
   library.
 - **CI:** the nightly `library-property` job runs the property test at
   50,000 runs, seeded from the run id.
 
 #### Changed
 
-- **Spec:** web library appends and compactions never bump `meta.rev`; only
-  index writes do. Title and snippet changes reach other tabs through
-  BroadcastChannel, and `IdbDocumentIndex` reloads its snapshot on
+- **Spec:** a web library append bumps `meta.rev` only when it changes the
+  title or snippet; `modified_at` and `size_bytes` never do, and neither
+  does compaction. `IdbDocumentIndex` also reloads its snapshot on
   `pageshow` from bfcache and when the tab becomes visible (spec §2.2).
+- **Spec:** the image store's web `doc_blobs` and `blobs` rows are
+  snake_case, as on desktop.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 

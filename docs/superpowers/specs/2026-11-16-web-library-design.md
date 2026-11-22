@@ -93,20 +93,23 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 
 **As built (W2, 2026-11-22),** in `lib/platform/web/library/library-schema.ts`:
 - **Seams in version 1.** `docs` also has `link_key` (32 hex, unique index `by_link_key`, minted at insert, S16) and `kind`, as the desktop schema does (D-A5). `import_sources` (index `by_source_hash`), `remotes`, `blobs` and `doc_blobs` (the image store design §3.3 shapes) are created now, empty: a store added later is a version bump, and a version bump makes every older tab reload (§2.4).
-- **Index keys with no nulls.** IndexedDB leaves a record out of an index when any part of its key is null. So `by_folder` indexes `list_key = [folder_id ?? "", trashed_at ?? 0]` and `by_parent` indexes `parent_key = parent_id ?? ""`. The columns themselves keep the desktop meaning (null for the root, null for not trashed).
+- **Index keys with no nulls.** IndexedDB leaves a record out of an index when any part of its key is null or boolean. So every nullable key part is `''` (offline data-model revision §3.6): `by_folder` indexes `list_key = [folder_id ?? '', trashed_at ?? '']`, `by_parent` indexes `parent_key = parent_id ?? ''`, and `by_stale` indexes `stale`, a number. The columns themselves keep the desktop meaning (null for the root, null for not trashed). `by_opened` keeps `opened_at` as it is: it lists only documents that were opened (Recent).
+- **Format 2 shape in version 1** (offline data-model revision §3.2, §3.6, 2026-11-22). `links` (`["src_doc_id", "ord"]`, `by_target`) and `headings` (`["doc_id", "ord"]`, `by_toc`, `by_text_key`) exist, empty until LK4a derives. `docs` has `head_seq` (raised by every append, never by compaction), `derived_seq`, `links_hash`, `headings_hash`, `title_key` (`normalizeSearchText` of the title) and `stale`. `folders` rows carry `trash_group` and `trashed_from`. `doc_blobs` is snake_case (`["doc_id", "hash", "kind"]`, `dropped_at`). The fields `library.json` never carries are in `lib/library-format/fields.ts`. `meta.eviction_sentinel` holds the `library_id`; `eviction.ts` compares it with the `localStorage` marker `tinydocy-library-id`, for W6.
+- **Versions.** `LIBRARY_DB_VERSION` bumps only when stores or indexes change, `format_version` when row shapes change. Before a step that rewrites rows, a forced copy goes to `tinydocy-library.pre-v<n>` (`preMigrationCopyName`), taken at the old version before the open at the new one, because the upgrade transaction commits at the first await that isn't IndexedDB.
 - **`snapshots.upto_seq`.** Next to `rev`, the snapshot keeps the highest seq any compaction claimed to cover, so `load()` reports `maxSeq` after every row was folded in. Unlike desktop, `load()` returns every row of the document, whatever its seq: a row another tab left below `upto_seq` is still content.
 - **`updates.writer`** records the tab session that appended a row, for diagnostics only.
 - **Compaction also writes `docs.size_bytes`** (the snapshot plus the rows left), so its scope is `snapshots`, `updates` and `docs`.
-- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`. `IdbDocStore` registers its own `flush()`, which waits only for transactions it already issued. Batches still queued in the batcher are not covered by it.
+- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`, for at most `CLOSE_HOOK_TIMEOUT_MS` (5 s) together, so a drain stuck in a retry backoff can't hold the other tab's upgrade forever. `IdbDocStore` registers its own `flush()`, which waits only for transactions it already issued. Batches still queued in the batcher are not covered by it. `idb-local-session.test.ts` pins both halves: with the session drain as a hook, a queued batch is written before the close; without it, the batch stays queued and fails with `library_unavailable`.
   - **W4 must** register the session's batcher drain (`flush()`) as a close hook, so queued batches are written before the connection closes.
   - **W4 and W6 must** show `library_reload` as a blocking state: the connection is closed for good, and `IdbDocStore` has no reopen path (it holds one connection promise), so a reload is the only recovery. Until the reload, edits still queued stay visible in the editor and the `beforeunload` guard stays armed; if the drain failed, the state offers **Export** for the open document.
   - `IdbDocStore.dispose()` unregisters its hook and forgets every open document; W4 calls `close(docId)` when a tab or route lets a document go, and `dispose()` when the library root unmounts.
 - **`library_upgrade_unblocked`.** `onblocked` reports `library_upgrade_blocked`; when the old tab lets go and the open succeeds, `library_upgrade_unblocked` follows, so W6 can clear the notice.
-- **Appends don't bump `meta.rev` (decided 2026-11-22).** `append` and `compact` rewrite list columns of the `docs` row (`title`, `snippet`, `modified_at`, `size_bytes`), but only index writes (`createLibraryDoc`, later every `IdbDocumentIndex` write) bump `meta.rev`. Bumping in every append would put a `meta` read-modify-write inside every strict content transaction, against the `perf` criterion (§2.3). So:
-  - The writer publishes title, snippet and modified-time changes only as `{ changes }` on BroadcastChannel `tinydocy-library`, with no rev bump.
-  - A tab that may have missed messages can't rely on a rev jump for these. `IdbDocumentIndex` therefore reloads `snapshot()` on `pageshow` with `persisted` true (back from bfcache) and on `visibilitychange` to visible, whatever `rev` says.
+- **An append bumps `meta.rev` only when the title or snippet changes (third review round, 2026-11-22).** Index writes (`createLibraryDoc`, later every `IdbDocumentIndex` write) always bump it. An append bumps it, in the same strict transaction, only when its title or snippet, as truncated, differs from the stored row. `modified_at` and `size_bytes` change on every append and never bump it, and `compact` never does, so ordinary typing adds no `meta` write (the `perf` criterion, §2.3). So:
+  - The writer still publishes title, snippet and modified-time changes as `{ changes }` on BroadcastChannel `tinydocy-library`. A tab that missed them sees the rev jump for a title or snippet change.
+  - `modified_at` and `size_bytes` have no rev signal. `IdbDocumentIndex` therefore reloads `snapshot()` on `pageshow` with `persisted` true (back from bfcache) and on `visibilitychange` to visible, whatever `rev` says.
   - A unit test pins this (`idb-doc-store.test.ts`, "the index rev").
 - **`foreign` is apply-then-ack (§2.5).** After a compaction returns `foreign`, the session keeps its state vector. Until a later compaction's `state` covers it (the caller applied it), every compaction merges the stored snapshot again and returns it again. A caller that drops `foreign` (a destroyed doc, an apply that throws) costs a repeat merge, not the other tab's content. One gap remains: a foreign snapshot that only deletes counts as covered at once.
+- **A load that settles after `close(docId)` or `dispose()`** keeps no session state.
 - **`IdbDocumentIndex`** (folders, tags, pins, Trash, the rev feed) is not in this PR. W2 writes only the document row `DocumentIndex.create` will (`createLibraryDoc`) and bumps `meta.rev` with it.
 
 **Still open for W2** (its §11 exit criteria), with owners:
@@ -114,9 +117,9 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 | Item | Owner | State |
 |---|---|---|
 | `IdbDocumentIndex` with the rev feed, on the shared `LibraryIndex` contract suite | W2b, the next library storage PR | Not started |
-| The `DocStore` contract suite in Chromium, Firefox and WebKit (real `durability: "strict"`, key ranges, `onblocked` and `onversionchange` timing, quota aborts) | W2b, in the `firefox` and `webkit` Playwright projects | Not started |
+| The `DocStore` contract suite in Chromium, Firefox and WebKit (real `durability: "strict"`, key ranges, `onblocked` and `onversionchange` timing, quota aborts) | The CI session's Q7 `browsers` job | Not started |
 | The property test at 50,000 runs | Nightly `library-property` job (`.github/workflows/nightly.yml`) | Wired 2026-11-22; one local pass so far (437 s) |
-| Typing latency within 5% in `perf` with strict commits | W4, the first PR that mounts `IdbDocStore` | Waits for W4 |
+| Typing latency within 5% in `perf` with strict commits | The CI session's Q7 job | Not started |
 
 ### 2.3 Transactions and durability
 
@@ -136,7 +139,7 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - Hiding the page (`visibilitychange` to hidden), `pagehide`, `blur` and Ctrl/⌘S flush at once.
 - The `beforeunload` guard is armed while any batch is queued, in flight or failed. On the web this is correct, unlike in Electron.
 - **W2's exit criterion:** typing latency in the `perf` project stays within 5% of `main` while strict commits loop.
-  - **Perf note (W2, 2026-11-22):** W2 ships `IdbDocStore` dark, so no route types through it and `perf` is unchanged by construction. The comparison runs in W4, the first PR that mounts the store behind `NEXT_PUBLIC_LIBRARY` (see `tests/TESTING.md`, Performance Tests). If it misses, risk WK4's fallback applies.
+  - **Perf note (W2, 2026-11-22):** W2 ships `IdbDocStore` dark, so no route types through it and `perf` is unchanged by construction. The comparison is deferred to the CI session's Q7 job: `performance.spec.ts` with the batcher committing strict transactions (at most about 4 a second), against the same spec on `main`. If it misses, risk WK4's fallback applies: `relaxed` durability with a flush on hide, behind an env flag.
 
 ### 2.4 Opening, versions and old tabs
 
