@@ -105,6 +105,16 @@ bytes.
 - **Placeholder:** an empty paragraph reads "Type / for blocks" (was
   "Type something...").
 
+### Row ⋯ menu in three labelled groups (BQ4)
+
+The row's ⋯ menu is now Text (Superscript, Subscript, Inline code, Clear
+formatting, Paint format), View (Simplified toolbar, Appearance) and Help
+(All actions…), with "Forget my choices…" alone at the end. Each group has a
+visible heading and `role="group"` with the same label, and every row keeps a
+16 px leading slot so the labels line up (Simplified toolbar shows its check
+there). Nothing is added or removed. Page width follows with the preferences
+work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
+
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 

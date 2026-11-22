@@ -1,10 +1,12 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import {
   DropdownMenuCheckboxItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuReason,
@@ -17,6 +19,7 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
+import { SquareCheckIcon, SquareIcon } from "@/lib/icons";
 import {
   readThemePreference,
   setTheme,
@@ -110,19 +113,9 @@ export function AlignMenuItems({
   );
 }
 
-/** Toggles shown as checkbox items, then plain commands (spec §4.1 ⋯). */
+/** Text group: toggles as checkbox items, then plain commands (spec §9.2). */
 const TOGGLES = ["mark.superscript", "mark.subscript", "mark.inlineCode"];
-/**
- * Later tracks' ids are listed here and skipped until they land
- * (contract §3.2): Paint format and All actions… (E), Forget my choices
- * (D2).
- */
-const COMMANDS = [
-  "format.clear",
-  "repeat.copy",
-  "memory.forget",
-  "palette.open",
-];
+const TEXT_COMMANDS = ["format.clear", "repeat.copy"];
 
 const THEME_LABELS: Record<ThemePreference, string> = {
   system: "System",
@@ -172,13 +165,15 @@ function AppearanceMenu() {
   );
 }
 
+/** Hides the base check: Simplified toolbar draws its own box in the icon slot. */
+const OWN_BOX = "*:data-[slot=dropdown-menu-checkbox-item-indicator]:hidden";
+
 const SIMPLE_TOOLBAR = "view.simpleToolbar";
 
 /**
  * Simplified toolbar (A15). Checked from the remembered density, which an
- * action's `isActive` may not read (contract §3.1). No icon (the only
- * fitting one is Fold section's), so it is inset like `ActionMenuItem`'s
- * icon-less items. Like Theme, it leaves focus on ⋯ (no `onPicked`), and
+ * action's `isActive` may not read (contract §3.1). Its box (☐ or ☑) sits
+ * in the 16 px icon slot, in place of the base check. Like Theme, it leaves focus on ⋯ (no `onPicked`), and
  * closes first so the row never collapses under an open menu.
  */
 function DensityMenuItem({ editor }: { editor: Editor }) {
@@ -190,7 +185,7 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
   const reason = view.enabled === true ? undefined : view.enabled.reason;
   return (
     <DropdownMenuCheckboxItem
-      inset
+      className={OWN_BOX}
       checked={density === "simple"}
       closeOnClick
       disabled={reason !== undefined}
@@ -198,18 +193,44 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
       data-action-id={SIMPLE_TOOLBAR}
       onClick={() => runAction(editor, action)}
     >
+      {density === "simple" ? (
+        <SquareCheckIcon aria-hidden="true" />
+      ) : (
+        <SquareIcon aria-hidden="true" />
+      )}
       <span>{action.label}</span>
       {reason ? (
-        <DropdownMenuReason id={reasonId}>{reason}</DropdownMenuReason>
+        <DropdownMenuReason id={reasonId} className="ps-5.5">
+          {reason}
+        </DropdownMenuReason>
       ) : null}
     </DropdownMenuCheckboxItem>
   );
 }
 
+/** A labelled group (spec §9.2): `role="group"` with a visible heading. */
+function MenuGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>{label}</DropdownMenuLabel>
+      {children}
+    </DropdownMenuGroup>
+  );
+}
+
+const hasAction = (id: string) => editorActions.has(id);
+
 /**
- * ⋯ More formatting: superscript, subscript, inline code, clear
- * formatting, then D2's and E's entries once registered, then the view
- * settings: Simplified toolbar and Appearance.
+ * ⋯ More formatting (spec §9.2): Text (superscript, subscript, inline code,
+ * clear formatting, paint format), View (Simplified toolbar, Appearance),
+ * Help (All actions…), then Forget my choices on its own. Every row keeps
+ * the 16 px leading slot, so the labels line up.
  */
 export function OverflowMenuItems({
   editor,
@@ -218,31 +239,47 @@ export function OverflowMenuItems({
   editor: Editor;
   onPicked: () => void;
 }) {
-  const commands = COMMANDS.filter((id) => editorActions.has(id));
+  const plain = (id: string) => (
+    <ActionMenuItem
+      key={id}
+      id={id}
+      editor={editor}
+      checkColumn
+      onPicked={onPicked}
+    />
+  );
   return (
     <>
-      {TOGGLES.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkbox
-          onPicked={onPicked}
-        />
-      ))}
+      <MenuGroup label="Text">
+        {TOGGLES.map((id) => (
+          <ActionMenuItem
+            key={id}
+            id={id}
+            editor={editor}
+            checkbox
+            onPicked={onPicked}
+          />
+        ))}
+        {TEXT_COMMANDS.filter(hasAction).map(plain)}
+      </MenuGroup>
       <DropdownMenuSeparator />
-      {commands.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkColumn
-          onPicked={onPicked}
-        />
-      ))}
-      <DropdownMenuSeparator />
-      <DensityMenuItem editor={editor} />
-      <AppearanceMenu />
+      <MenuGroup label="View">
+        {/* P2.9c-2 adds "Page width ▸" here, as the first item of View. */}
+        <DensityMenuItem editor={editor} />
+        <AppearanceMenu />
+      </MenuGroup>
+      {hasAction("palette.open") ? (
+        <>
+          <DropdownMenuSeparator />
+          <MenuGroup label="Help">{plain("palette.open")}</MenuGroup>
+        </>
+      ) : null}
+      {hasAction("memory.forget") ? (
+        <>
+          <DropdownMenuSeparator />
+          {plain("memory.forget")}
+        </>
+      ) : null}
     </>
   );
 }
