@@ -34,6 +34,8 @@ function staticImports(
       if (kind !== "import-statement") continue;
       if (spec.startsWith("@/") || spec.startsWith(".")) {
         const resolved = Bun.resolveSync(spec, path.dirname(file));
+        // Stylesheets import nothing the rules care about.
+        if (/\.s?css$/.test(resolved)) continue;
         if (!resolved.includes("/node_modules/")) visit(resolved);
       } else {
         packages.add(spec);
@@ -65,6 +67,55 @@ const PLATFORM_ENTRIES = [
   "lib/platform/local-session.ts",
   "lib/platform/memory-doc-store.ts",
 ];
+
+// The library UI (desktop architecture §3.3, web library §7.1, D3): the
+// desktop shell and the web library both import it, so it must not load
+// the sandbox's collaboration stack or tab list, offline copies,
+// analytics, desktop-only code, test helpers, or the editor.
+const LIBRARY_ENTRIES = [
+  "components/library/library-context.tsx",
+  "components/library/library-sidebar.tsx",
+  "components/library/library-tree.tsx",
+  "components/library/quick-open.tsx",
+  "components/library/move-to-dialog.tsx",
+  "components/library/item-menu.tsx",
+];
+
+const LIBRARY_FORBIDDEN_FILES = [
+  "lib/collab-session.ts",
+  "hooks/use-synced-tabs.ts",
+  "hooks/use-connection-state.ts",
+];
+const LIBRARY_FORBIDDEN_PREFIXES = [
+  "lib/offline/",
+  "lib/analytics",
+  "lib/platform/desktop/",
+  "lib/platform/web/",
+  "components/desktop/",
+  "components/document-editor/",
+  "desktop/",
+  "tests/",
+];
+
+describe("library UI import boundaries", () => {
+  for (const entry of LIBRARY_ENTRIES) {
+    it(`${entry} loads no sandbox, desktop, editor or test code`, () => {
+      const { files, packages } = staticImports(entry);
+      for (const file of files) {
+        expect(LIBRARY_FORBIDDEN_FILES).not.toContain(file);
+        for (const prefix of LIBRARY_FORBIDDEN_PREFIXES) {
+          expect(file.startsWith(prefix)).toBe(false);
+        }
+      }
+      for (const name of packages) {
+        expect(name.startsWith("@tiptap/")).toBe(false);
+        expect(name.startsWith("@hocuspocus/")).toBe(false);
+        expect(name).not.toBe("yjs");
+        expect(name).not.toBe("electron");
+      }
+    });
+  }
+});
 
 describe("platform import boundaries", () => {
   for (const entry of PLATFORM_ENTRIES) {
