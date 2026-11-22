@@ -1054,6 +1054,7 @@ test.describe("the + on an empty line", () => {
     await expect(plus(page)).toBeVisible();
     const depth = await undoDepth(page);
     await plus(page).click();
+    await expect(menu(page)).toBeVisible();
     for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
     await expect(footerTip(page)).toHaveText(/Heading 2/);
     await page.keyboard.press("Enter");
@@ -1078,6 +1079,8 @@ test.describe("the + on an empty line", () => {
     // The caret is in a line with text: no + until the pointer rests on
     // the empty line above.
     await expect(plus(page)).toBeHidden();
+    // Mounted (hidden) once the bubble chunk has loaded on idle.
+    await expect(plus(page)).toBeAttached();
     const empty = page.locator(".tiptap > p").filter({ hasText: /^$/ }).last();
     await empty.hover();
     await expect(plus(page)).toBeVisible();

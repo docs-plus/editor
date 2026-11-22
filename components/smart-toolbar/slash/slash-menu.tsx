@@ -674,7 +674,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                       <span
                         aria-hidden="true"
                         data-slash-new=""
-                        className="shrink-0 rounded-sm bg-primary/10 px-1 text-xs leading-4 font-medium text-primary in-data-[selected=true]:text-accent-foreground"
+                        className="shrink-0 rounded-sm bg-muted px-1 text-xs leading-4 font-medium text-foreground"
                       >
                         New
                       </span>
@@ -737,5 +737,3 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     document.body,
   );
 }
-
-export { EmptyLinePlus } from "./empty-line-plus";

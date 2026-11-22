@@ -1,17 +1,17 @@
 "use client";
 
-import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getSlashState } from "@/extensions/slash-trigger/slash-trigger";
 import { PlusIcon } from "@/lib/icons";
 
-import type { SurfaceProps } from "../types";
-
 /*
- * The `+` on an empty line (spec §8.2, O5 a), in the slash chunk. A click
+ * The `+` on an empty line (spec §8.2, O5 a). It lives in the slash folder
+ * and mounts from the lazy bubble chunk's desktop wrapper, so the editor
+ * chunk carries none of it (head-of-engineering ruling: 0 B). A click
  * types the "/" for the writer, outside the undo history, so the ordinary
  * "/" menu opens: one code path. No plugin: it follows the editor's
  * events and the pointer, positions itself with `coordsAtPos`, and
@@ -81,7 +81,14 @@ function useFinePointer(): boolean {
  * is open and in a read-only editor. Not in the Tab order: keys have "/"
  * and Alt+/.
  */
-export function EmptyLinePlus({ editor = null }: SurfaceProps) {
+export function EmptyLinePlus({
+  editor,
+  scrollTarget,
+}: {
+  editor: Editor;
+  /** `.document-editor-wrapper`: hovering anywhere in it is watched. */
+  scrollTarget: HTMLElement;
+}) {
   const fine = useFinePointer();
   const [host, setHost] = useState<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -89,7 +96,7 @@ export function EmptyLinePlus({ editor = null }: SurfaceProps) {
   const shown = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!editor || !fine || editor.isDestroyed) return;
+    if (!fine || editor.isDestroyed) return;
     // Heading drag makes it `position: relative`; the `+` scrolls with it.
     setHost(editor.view.dom.parentElement);
     return () => setHost(null);
@@ -97,7 +104,7 @@ export function EmptyLinePlus({ editor = null }: SurfaceProps) {
 
   useEffect(() => {
     const el = button.current;
-    if (!editor || !host || !el) return;
+    if (!host || !el) return;
     const view = editor.view;
     let settled = true;
     let composing = view.composing;
@@ -206,8 +213,8 @@ export function EmptyLinePlus({ editor = null }: SurfaceProps) {
     dom.addEventListener("keydown", onKey);
     dom.addEventListener("compositionstart", onCompositionStart);
     dom.addEventListener("compositionend", onCompositionEnd);
-    host.addEventListener("mousemove", onPointerMove);
-    host.addEventListener("mouseleave", onPointerLeave);
+    scrollTarget.addEventListener("mousemove", onPointerMove);
+    scrollTarget.addEventListener("mouseleave", onPointerLeave);
     window.addEventListener("resize", schedule);
     editor.on("transaction", schedule);
     editor.on("focus", schedule);
@@ -222,19 +229,18 @@ export function EmptyLinePlus({ editor = null }: SurfaceProps) {
       dom.removeEventListener("keydown", onKey);
       dom.removeEventListener("compositionstart", onCompositionStart);
       dom.removeEventListener("compositionend", onCompositionEnd);
-      host.removeEventListener("mousemove", onPointerMove);
-      host.removeEventListener("mouseleave", onPointerLeave);
+      scrollTarget.removeEventListener("mousemove", onPointerMove);
+      scrollTarget.removeEventListener("mouseleave", onPointerLeave);
       window.removeEventListener("resize", schedule);
       editor.off("transaction", schedule);
       editor.off("focus", schedule);
       editor.off("blur", schedule);
       editor.off("update", schedule);
     };
-  }, [editor, host]);
+  }, [editor, host, scrollTarget]);
 
   /** Types the "/" into the line, outside the history: the menu opens. */
   const insert = () => {
-    if (!editor) return;
     const view = editor.view;
     const line = emptyLine(editor, shown.current);
     if (line === null) return;
@@ -251,7 +257,7 @@ export function EmptyLinePlus({ editor = null }: SurfaceProps) {
     if (!getSlashState(editor).open) plusSlash = null;
   };
 
-  if (!editor || !fine || !host) return null;
+  if (!fine || !host) return null;
   return createPortal(
     <button
       ref={button}
