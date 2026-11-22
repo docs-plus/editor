@@ -218,10 +218,11 @@ function attempt<T>(read: () => T): { ok: true; value: T } | { ok: false } {
 }
 
 /**
- * Opens the damaged file read-only. A WAL library with no `-shm` can't be
- * opened read-only, so with no `-wal` either it is opened immutable: there
- * is no WAL to miss. With a `-wal`, immutable would skip committed rows, so
- * the open fails instead.
+ * Opens the damaged file read-only without ever writing beside it. With no
+ * `-wal` or `-journal` next to it, everything committed is in the file, so
+ * it is opened immutable: a plain read-only open of a WAL file with no
+ * `-shm` creates one on Linux and fails on macOS. With a `-wal`, immutable
+ * would skip committed rows, so it is opened read-only and reads the WAL.
  */
 function openSource(
   openSqlite: OpenSqlite,
@@ -230,24 +231,16 @@ function openSource(
 ): SqliteDriver {
   if (!host.exists(source))
     throw new StorageError("not_found", "no library at that path");
-  const probe = (db: SqliteDriver) =>
-    db.prepare("SELECT COUNT(*) FROM sqlite_master").get();
-  const db = openSqlite(source, { readOnly: true });
+  const lone =
+    !host.exists(`${source}-wal`) && !host.exists(`${source}-journal`);
+  const db = lone
+    ? openSqlite(`${readOnlyUri(source)}&immutable=1`, { readOnly: true })
+    : openSqlite(source, { readOnly: true });
   try {
-    probe(db);
+    db.prepare("SELECT COUNT(*) FROM sqlite_master").get();
     return db;
   } catch (error) {
     db.close();
-    if (host.exists(`${source}-wal`)) throw storageErrorFrom(error);
-  }
-  const immutable = openSqlite(`${readOnlyUri(source)}&immutable=1`, {
-    readOnly: true,
-  });
-  try {
-    probe(immutable);
-    return immutable;
-  } catch (error) {
-    immutable.close();
     throw storageErrorFrom(error);
   }
 }
