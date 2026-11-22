@@ -135,6 +135,9 @@ const source = (file: string) => readFileSync(join(ROOT, file), "utf8");
 const escapeRegExp = (text: string) =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** Section headings that a block's one-word label may share (BQ11). */
+const SECTION_HEADINGS = new Set(["Text"]);
+
 describe("surface ids and labels come from the registry", () => {
   const prefixes = [
     ...new Set(editorActions.list().map(({ id }) => id.split(".")[0])),
@@ -165,7 +168,9 @@ describe("surface ids and labels come from the registry", () => {
         .flatMap((id) => editorActions.get(id) ?? []);
       const strings = new Set<string>();
       for (const action of actions) {
-        strings.add(action.label);
+        // The "/" menu's "Text" section heading (spec §8.5) is not the
+        // `style.paragraph` label, though both read "Text" (BQ11).
+        if (!SECTION_HEADINGS.has(action.label)) strings.add(action.label);
         if (action.shortcut) {
           strings.add(action.shortcut);
           strings.add(formatKeyCombo(action.shortcut, true));

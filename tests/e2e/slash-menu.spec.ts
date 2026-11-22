@@ -258,7 +258,7 @@ test.describe("slash menu", () => {
     await openDoc(page);
     await typeAtEnd(page, "/");
     await expect(menu(page)).toBeVisible();
-    await expect(options(page).first()).toHaveText(/Normal text/);
+    await expect(options(page).first()).toHaveText(/^Text/);
     // Under the "/", left-aligned with it. ProseMirror's coordinates: a
     // collapsed DOM range measures 0×0 at the origin in WebKit.
     const caret = await page.evaluate(() => {
@@ -699,7 +699,7 @@ test.describe("slash menu", () => {
       text: "",
     });
     await expect(editorDom(page)).toContainText("and /");
-    // Arrowed: Enter picks (↓ Normal text, ↓ Heading 1).
+    // Arrowed: Enter picks (↓ Text, ↓ Heading 1).
     await page.keyboard.type("/");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
@@ -768,7 +768,7 @@ test.describe("slash menu", () => {
     // The first message says a menu opened.
     await expect(status).toHaveText(/^Block menu, \d+ options\.$/);
     await page.keyboard.press("ArrowDown");
-    await expect(status).toHaveText(/^Normal text, 1 of \d+$/);
+    await expect(status).toHaveText(/^Text, 1 of \d+$/);
     await page.keyboard.press("ArrowDown");
     await expect(status).toHaveText(/^Heading 1, 2 of \d+$/);
     // A visible note is spoken too ("×" reads badly).

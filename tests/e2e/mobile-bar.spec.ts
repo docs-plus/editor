@@ -340,7 +340,7 @@ test("the sheet leads with Style: the current one pressed, More headings, lists 
         .map((el) => el.getAttribute("aria-label") ?? el.textContent),
     );
   expect(names).toEqual([
-    "Normal text",
+    "Text",
     "Heading 1",
     "Heading 2",
     "Heading 3",
@@ -351,7 +351,7 @@ test("the sheet leads with Style: the current one pressed, More headings, lists 
     "Quote",
   ]);
   await expect(
-    style.getByRole("button", { name: "Normal text" }),
+    style.getByRole("button", { name: "Text", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   // More headings discloses H4–H6 in place.
   const more = style.getByRole("button", { name: "More headings" });
@@ -381,7 +381,7 @@ test("the sheet leads with Style: the current one pressed, More headings, lists 
     sheet(page).getByRole("button", { name: "Heading 5" }),
   ).toBeHidden();
   // Lists from Style.
-  await sheet(page).getByRole("button", { name: "Normal text" }).tap();
+  await sheet(page).getByRole("button", { name: "Text", exact: true }).tap();
   await sheet(page).getByRole("button", { name: "Bullet list" }).tap();
   await expect
     .poll(async () => (await lastBlock(page)).type)
@@ -1803,7 +1803,7 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     await caretInNewParagraph(page);
     await openInsertSheet(page);
     await expect(
-      insertSheet(page).getByRole("button", { name: "Normal text" }),
+      insertSheet(page).getByRole("button", { name: "Text", exact: true }),
     ).toBeFocused();
     // The Diagram cell keeps insert.mermaid's place, before Divider.
     const order = await insertSheet(page)

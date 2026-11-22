@@ -60,8 +60,6 @@ const HEADING_IDS = TURN_INTO_IDS.slice(0, 4);
 const LIST_IDS = TURN_INTO_IDS.slice(4, 7);
 const BLOCK_IDS = TURN_INTO_IDS.slice(7);
 
-/** One word per block type (BQ11): "Text", never "Normal text". */
-const LABELS: Partial<Record<string, string>> = { "style.paragraph": "Text" };
 /** Text has no icon in the registry; kept here, in the lazy menu chunk. */
 const ICONS: Partial<Record<string, IconComponent>> = {
   "style.paragraph": TypeIcon,
@@ -175,7 +173,7 @@ function TurnIntoItem({
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : <span aria-hidden="true" />}
-      <span>{LABELS[id] ?? action.label}</span>
+      <span>{action.label}</span>
       {/* The item announces its keys (`aria-keyshortcuts`), not the glyphs. */}
       <span aria-hidden="true">
         <kbd

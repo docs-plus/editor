@@ -3,6 +3,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { useSyncExternalStore } from "react";
 
+import { TEXT_STYLE_LABELS } from "@/lib/editor-actions/core/blocks";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 
 /**
@@ -39,20 +40,23 @@ export const STYLE_FACES: readonly StyleFace[] = [
   "Mixed",
 ];
 
-/** The face's accessible name, where the word alone is short ("H2"). */
+/**
+ * The face's accessible name, where the word alone is short ("H2"): the
+ * registry's own labels (BQ11, one source), plus "Code block".
+ */
 export const STYLE_FACE_NAMES: Readonly<Record<StyleFace, string>> = {
-  Text: "Text",
-  H1: "Heading 1",
-  H2: "Heading 2",
-  H3: "Heading 3",
-  H4: "Heading 4",
-  H5: "Heading 5",
-  H6: "Heading 6",
-  Title: "Title",
+  Text: TEXT_STYLE_LABELS.paragraph,
+  H1: TEXT_STYLE_LABELS["heading-1"],
+  H2: TEXT_STYLE_LABELS["heading-2"],
+  H3: TEXT_STYLE_LABELS["heading-3"],
+  H4: TEXT_STYLE_LABELS["heading-4"],
+  H5: TEXT_STYLE_LABELS["heading-5"],
+  H6: TEXT_STYLE_LABELS["heading-6"],
+  Title: TEXT_STYLE_LABELS.title,
   List: "List",
   Quote: "Quote",
   Code: "Code block",
-  Mixed: "Mixed",
+  Mixed: TEXT_STYLE_LABELS.mixed,
 };
 
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);

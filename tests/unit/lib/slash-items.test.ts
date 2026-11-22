@@ -184,7 +184,7 @@ describe("buildSlashItems", () => {
     expect(h2?.hint).toBe("##");
     expect(h2?.icon).toBeDefined();
     expect(list.find((item) => item.key === "insert.quote")?.hint).toBe(">");
-    // Every row has an icon (Normal text has none in the registry).
+    // Every row has an icon (Text has none in the registry).
     expect(list.every((item) => item.icon !== undefined)).toBe(true);
   });
 });
@@ -272,16 +272,15 @@ describe("Suggested (recent insert kinds, A19)", () => {
         ),
       ).toBe(false);
     }
-    // "/t": Task list and Table tie on a label prefix; registry order
-    // puts Task list first until Table is a recent kind.
-    expect(keys(matchSlashItems(fresh, "t")).slice(0, 2)).toEqual([
-      "list.task",
-      "insert.table",
-    ]);
-    expect(keys(matchSlashItems(built(["table"]), "t")).slice(0, 2)).toEqual([
-      "insert.table",
-      "list.task",
-    ]);
+    // "/t": Task list and Table tie on a label prefix (as does Text, which
+    // leads by registry order); Task list comes first until Table is a
+    // recent kind.
+    const tie = (list: SlashItem[]) =>
+      keys(matchSlashItems(list, "t")).filter(
+        (key) => key === "list.task" || key === "insert.table",
+      );
+    expect(tie(fresh)).toEqual(["list.task", "insert.table"]);
+    expect(tie(built(["table"]))).toEqual(["insert.table", "list.task"]);
   });
 });
 

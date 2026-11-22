@@ -13,10 +13,6 @@ import { ToolbarMenu, useMenuFocus, useSurfaceEditor } from "./action-menu";
 
 const TurnIntoMenuItems = menuBody((bodies) => bodies.TurnIntoMenuItems);
 
-/** One word per block type (BQ11): the registry's "Normal text" is "Text". */
-const faceLabel = (label: string) =>
-  label === TEXT_STYLE_LABELS.paragraph ? "Text" : label;
-
 /** The T5 value: "H2", "Text", "Title", "Mixed". */
 const shortStyle = (label: string) => label.replace("Heading ", "H");
 
@@ -58,7 +54,7 @@ export function StyleMenu({ editor: provided }: { editor?: Editor | null }) {
     [editor, openRemoving],
   );
   if (!editor || !view) return null;
-  const label = faceLabel(view.value ?? TEXT_STYLE_LABELS.paragraph);
+  const label = view.value ?? TEXT_STYLE_LABELS.paragraph;
   const readOnly =
     view.enabled !== true && view.enabled.reason === READ_ONLY_REASON;
   return (

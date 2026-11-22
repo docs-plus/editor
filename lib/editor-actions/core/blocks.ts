@@ -40,7 +40,7 @@ export type TextStyleValue = "title" | "paragraph" | `heading-${HeadingLevel}`;
 
 export const TEXT_STYLE_LABELS: Record<TextStyleValue | "mixed", string> = {
   title: "Title",
-  paragraph: "Normal text",
+  paragraph: "Text",
   "heading-1": "Heading 1",
   "heading-2": "Heading 2",
   "heading-3": "Heading 3",
