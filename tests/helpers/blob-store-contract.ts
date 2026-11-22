@@ -21,14 +21,24 @@ const DAY = 24 * 60 * 60 * 1000;
 const START = Date.UTC(2026, 10, 22);
 
 export type BlobStoreHarness = {
+  /** The store can add `version` rows (`addVersionRef`). */
+  versions?: boolean;
   /** A new empty store that reads time from `now`. */
-  createStore(
-    now: () => number,
-  ): Promise<{ store: BlobStore; dispose(): Promise<void> }>;
+  createStore(now: () => number): Promise<{
+    store: BlobStore;
+    /**
+     * Adds a `doc_blobs` row of kind `version`, as a Live version save
+     * (P4.8) will. Omit it until the store can; the `versions` cases skip.
+     */
+    addVersionRef?: (docId: string, hex: string) => Promise<void> | void;
+    dispose(): Promise<void>;
+  }>;
 };
 
 export type BlobStoreContractCase = {
   name: string;
+  /** Skips the case when the store lacks this capability. */
+  requires?: "versions";
   run(harness: BlobStoreHarness): Promise<void>;
 };
 
@@ -39,9 +49,13 @@ export function contractImage(n: number): Uint8Array<ArrayBuffer> {
 
 type Clock = { now: number; advance(ms: number): void };
 
+type Extras = {
+  addVersionRef?: (docId: string, hex: string) => Promise<void> | void;
+};
+
 async function withStore(
   harness: BlobStoreHarness,
-  body: (store: BlobStore, clock: Clock) => Promise<void>,
+  body: (store: BlobStore, clock: Clock, extras: Extras) => Promise<void>,
 ): Promise<void> {
   const clock: Clock = {
     now: START,
@@ -49,9 +63,11 @@ async function withStore(
       this.now += ms;
     },
   };
-  const { store, dispose } = await harness.createStore(() => clock.now);
+  const { store, dispose, ...extras } = await harness.createStore(
+    () => clock.now,
+  );
   try {
-    await body(store, clock);
+    await body(store, clock, extras);
   } finally {
     await dispose();
   }
@@ -407,6 +423,82 @@ export const BLOB_STORE_CONTRACT: readonly BlobStoreContractCase[] = [
         assert.deepEqual(await store.has([a, b]), []);
       }),
   },
+  {
+    name: "put snapshots the bytes before it hashes them",
+    run: (harness) =>
+      withStore(harness, async (store) => {
+        const bytes = contractImage(1);
+        const original = bytes.slice();
+        const pending = store.put("d", bytes, "image/png");
+        // The caller reuses its buffer while the store is still working.
+        bytes.fill(0);
+        const { hex } = await pending;
+        assert.equal(hex, await sha256(original));
+        assert.deepEqual(await bytesOf(store, hex), original);
+      }),
+  },
+  {
+    name: "a recount naming a hash with no stored bytes records nothing for it",
+    run: (harness) =>
+      withStore(harness, async (store, clock) => {
+        const { hex } = await store.put("d", contractImage(1), "image/png");
+        const unknown = "e".repeat(64);
+        await store.recount("d", [hex, unknown]);
+        assert.deepEqual(await store.has([hex, unknown]), [hex]);
+        // The known hash is current: it survives any GC.
+        clock.advance(ASSET_GC_GRACE_MS * 2);
+        await store.gc(clock.now);
+        assert.deepEqual(await store.has([hex]), [hex]);
+        // Bytes that arrive later get their row then.
+        await store.put("d", contractImage(2), "image/png");
+      }),
+  },
+  {
+    name: "a recount never drops a version reference",
+    requires: "versions",
+    run: (harness) =>
+      withStore(harness, async (store, clock, { addVersionRef }) => {
+        const { hex } = await store.put("d", contractImage(1), "image/png");
+        await addVersionRef?.("d", hex);
+        await store.recount("d", []);
+        clock.advance(ASSET_GC_GRACE_MS * 2);
+        await store.gc(clock.now);
+        assert.deepEqual(await store.has([hex]), [hex]);
+      }),
+  },
+  {
+    name: "concurrent puts of the same bytes store one blob for both documents",
+    run: (harness) =>
+      withStore(harness, async (store, clock) => {
+        const [a, b] = await Promise.all([
+          store.put("a", contractImage(1), "image/png"),
+          store.put("b", contractImage(1), "image/png"),
+        ]);
+        assert.equal(a.hex, b.hex);
+        await store.recount("a", []);
+        clock.advance(ASSET_GC_GRACE_MS * 2);
+        assert.equal((await store.gc(clock.now)).deleted, 0);
+        assert.deepEqual(await store.has([a.hex]), [a.hex]);
+      }),
+  },
+  {
+    name: "a put racing a gc of the same blob leaves its bytes stored",
+    run: (harness) =>
+      withStore(harness, async (store, clock) => {
+        const { hex } = await store.put("d", contractImage(1), "image/png");
+        await store.recount("d", []);
+        clock.advance(ASSET_GC_GRACE_MS * 2);
+        // Collectable now; a paste puts the same bytes while GC runs.
+        await Promise.all([
+          store.put("e", contractImage(1), "image/png"),
+          store.gc(clock.now),
+        ]);
+        assert.deepEqual(await store.has([hex]), [hex]);
+        clock.advance(ASSET_GC_GRACE_MS * 2);
+        await store.gc(clock.now);
+        assert.deepEqual(await store.has([hex]), [hex]);
+      }),
+  },
   ...[1, 2, 3, 4, 5, 6].map(
     (seed): BlobStoreContractCase => ({
       name: `GC never deletes a referenced or restorable blob (seed ${seed})`,
@@ -428,6 +520,7 @@ export function defineBlobStoreContract(
 ): void {
   runner.describe(title, () => {
     for (const testCase of BLOB_STORE_CONTRACT) {
+      if (testCase.requires === "versions" && !harness.versions) continue;
       runner.it(testCase.name, () => testCase.run(harness));
     }
   });

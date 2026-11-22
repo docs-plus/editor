@@ -11,8 +11,14 @@ defineBlobStoreContract(
   { describe, it },
   "BlobStore contract: MemoryBlobStore",
   {
+    versions: true,
     async createStore(now) {
-      return { store: new MemoryBlobStore({ now }), dispose: async () => {} };
+      const store = new MemoryBlobStore({ now });
+      return {
+        store,
+        addVersionRef: (docId, hex) => store.addVersionRef(docId, hex),
+        dispose: async () => {},
+      };
     },
   },
 );
@@ -40,7 +46,7 @@ describe("MemoryBlobStore switches", () => {
     await expect(
       store.put("d", contractImage(1), "image/png"),
     ).rejects.toMatchObject({ code: "quota_exceeded" });
-    expect(store.rows("d").size).toBe(0);
+    expect(store.rows("d")).toEqual([]);
     await expect(
       store.put("d", contractImage(1), "image/png"),
     ).resolves.toEqual({
@@ -55,22 +61,29 @@ describe("MemoryBlobStore switches", () => {
     expect(await store.get(hex)).toBeNull();
     expect(await store.has([hex])).toEqual([]);
     expect(store.url(hex)).toBeNull();
-    expect(store.rows("d").get(hex)).toEqual({
-      kind: "provisional",
-      dropped_at: null,
-    });
+    expect(store.rows("d")).toEqual([
+      { doc_id: "d", hash: hex, kind: "provisional", dropped_at: null },
+    ]);
     // Fetching the bytes again (a share) repairs it.
     await store.put("d", contractImage(1), "image/png", "fetched");
     expect(await store.has([hex])).toEqual([hex]);
   });
 
-  it("marks rows current on recount", async () => {
+  it("keys rows by (doc_id, hash, kind), as format 2's doc_blobs", async () => {
     const store = new MemoryBlobStore({ now: () => 5 });
     const { hex } = await store.put("d", contractImage(1), "image/png");
     await store.recount("d", [hex]);
-    expect(store.rows("d").get(hex)).toEqual({
-      kind: "current",
-      dropped_at: null,
-    });
+    expect(store.rows("d")).toEqual([
+      // The provisional row is superseded by the current one, not deleted.
+      { doc_id: "d", hash: hex, kind: "provisional", dropped_at: 5 },
+      { doc_id: "d", hash: hex, kind: "current", dropped_at: null },
+    ]);
+  });
+
+  it("never adds a row for a hash it has no bytes for (RESTRICT)", async () => {
+    const store = new MemoryBlobStore();
+    await store.recount("d", ["e".repeat(64)]);
+    expect(store.rows("d")).toEqual([]);
+    expect(() => store.addVersionRef("d", "e".repeat(64))).toThrow();
   });
 });

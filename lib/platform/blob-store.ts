@@ -11,9 +11,13 @@
  * Every one passes `tests/helpers/blob-store-contract.ts`.
  *
  * Rules every store keeps:
- * - `put` never trusts the caller: it re-checks the size and magic bytes
- *   against the declared type and recomputes the hash. It resolves only once
- *   the bytes are durable, so a document never references missing bytes.
+ * - `put` never trusts the caller: it snapshots the bytes first (the caller
+ *   may reuse its buffer), then re-checks the size and magic bytes against
+ *   the declared type and recomputes the hash over that snapshot. It
+ *   resolves only once the bytes are durable, so a document never
+ *   references missing bytes.
+ * - `doc_blobs` rows are keyed `(doc_id, hash, kind)`; `hash` references
+ *   `blobs` ON DELETE RESTRICT.
  * - **GC never deletes a referenced blob** (I10). A blob is collectable only
  *   when every `doc_blobs` row for it was dropped at least
  *   `ASSET_GC_GRACE_MS` ago, or, with no rows at all, it was created that
@@ -65,10 +69,12 @@ export interface BlobStore {
   has(hexes: readonly AssetHex[]): Promise<AssetHex[]>;
   /**
    * `hexes` is the FULL set the document's current state references (§3.4).
-   * In one transaction: those rows become `current` with `dropped_at = NULL`;
-   * every other current or provisional row of the document gets
-   * `dropped_at = now` (if it was NULL). Permanently deleting a document is
-   * `recount(docId, [])`.
+   * In one transaction: each hash with a `blobs` row gets a `current` row
+   * with `dropped_at = NULL` (a hash with no stored bytes is skipped: there
+   * is nothing to keep, and RESTRICT forbids its row); every other current
+   * or provisional row of the document gets `dropped_at = now` if it was
+   * NULL. `version` rows are never touched. Permanently deleting a
+   * document is `recount(docId, [])`.
    */
   recount(docId: string, hexes: readonly AssetHex[]): Promise<void>;
   /** Deletes collectable blobs (see the module comment). */
