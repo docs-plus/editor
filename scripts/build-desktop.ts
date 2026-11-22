@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 
-import { BOOT_SCRIPT } from "@/lib/prefs/boot-script";
+import { buildBootScript } from "@/lib/prefs/boot-script";
 
 import {
   checkDesktopExport,
@@ -40,12 +40,18 @@ async function main(): Promise<number> {
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
 
+  // One env for the build and for the boot script it must inline (the
+  // script inlines NEXT_PUBLIC_REMEMBER_CHOICES at build time).
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    NEXT_PUBLIC_APP_TARGET: "desktop",
+  };
   let code: number;
   try {
     const build = Bun.spawn(["bun", "next", "build"], {
       cwd: root,
       stdio: ["ignore", "inherit", "inherit"],
-      env: { ...process.env, NEXT_PUBLIC_APP_TARGET: "desktop" },
+      env,
     });
     code = await build.exited;
   } finally {
@@ -56,7 +62,7 @@ async function main(): Promise<number> {
   if (code !== 0) return code;
 
   const problems = checkDesktopExport(join(root, "out"), {
-    bootScript: BOOT_SCRIPT,
+    bootScript: buildBootScript(env.NEXT_PUBLIC_REMEMBER_CHOICES !== "0"),
   });
   for (const problem of problems) console.error(`[desktop-export] ${problem}`);
   if (problems.length > 0) return 1;
