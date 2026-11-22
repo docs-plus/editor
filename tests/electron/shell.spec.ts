@@ -291,10 +291,12 @@ test("opening a document already open in another window focuses that window", as
 
 test("bad argv on the first launch is refused, and the app still starts", async () => {
   const dir = mkdtempSync(join(tmpdir(), "tinydocy-argv-"));
+  // A URL-like argument goes last: on Windows, Electron itself exits if
+  // anything follows one (next test).
   const run = await runOnce([
-    "tinydocy://evil/x",
     join(dir, "missing.md"),
-    "javascript:alert(1)",
+    join(dir, "notes.txt"),
+    "tinydocy://evil/x",
   ]);
   if (run.code !== 0) console.log(run.stderr.slice(-2000));
   expect(run.code).toBe(0);
@@ -303,6 +305,15 @@ test("bad argv on the first launch is refused, and the app still starts", async 
     1,
   );
   expect(run.events.some((e) => e.event === "exit")).toBe(true);
+});
+
+test("Windows: Electron refuses any argument after a URL before the app runs", async () => {
+  test.skip(process.platform !== "win32", "Electron's guard is Windows-only");
+  // CVE-2018-1000006: a protocol URL followed by more arguments could
+  // smuggle switches. Electron exits before main.cjs loads.
+  const run = await runOnce(["tinydocy://evil/x", "--inspect=9229"]);
+  expect(run.code).not.toBe(0);
+  expect(run.events.some((e) => e.event === "main_start")).toBe(false);
 });
 
 test("a deep link on the first launch opens that document's window only", async () => {
@@ -329,9 +340,15 @@ test("navigation, window.open and bad argv from a second instance are refused", 
     "https://example.com/",
     "file:///etc/passwd",
   ];
-  expect(await secondInstance(userData, bad)).toBe(0);
-  const refused = await waitForEvent(app, "argv_refused");
-  expect(refused.count).toBe(bad.length);
+  // One argument per launch, as the OS delivers a link or a file.
+  for (const arg of bad) expect(await secondInstance(userData, [arg])).toBe(0);
+  await expect
+    .poll(async () =>
+      (await diagnostics(app))
+        .filter((e) => e.event === "argv_refused")
+        .reduce((sum, e) => sum + Number(e.count), 0),
+    )
+    .toBe(bad.length);
   expect(await windowIds(current)).toHaveLength(1);
 
   expect(await secondInstance(userData, [goodFile])).toBe(0);
@@ -386,9 +403,13 @@ test("the editor runs under the strict CSP, and no spellcheck dictionary is down
   console.log(`[csp] ${process.platform}`, JSON.stringify(violations));
   // Remote images stay placeholders until the user loads them (D10).
   expect(violations.filter((v) => !/^img-src https?:$/.test(v))).toEqual([]);
-  expect(events.filter((e) => e.event === "spellcheck_download_begin")).toEqual(
-    [],
+  const downloads = events.filter((e) =>
+    e.event.startsWith("spellcheck_download"),
   );
+  console.log(`[spellcheck] ${process.platform}`, JSON.stringify(downloads));
+  expect(
+    downloads.filter((e) => e.event === "spellcheck_download_success"),
+  ).toEqual([]);
 });
 
 test("#106: quit with unsynced edits and a vetoing beforeunload exits within budget", async () => {

@@ -116,13 +116,33 @@ export function hardenSession(): void {
     },
   );
 
-  if (!spellcheckEnabled) ses.setSpellCheckerEnabled(false);
-  // Evidence for #100: a dictionary download would show here.
+  app.on("web-contents-created", (_event, contents) =>
+    hardenWebContents(contents),
+  );
+
+  // Last, so nothing above can be skipped if a spellcheck call throws.
+  configureSpellcheck(ses);
+}
+
+function configureSpellcheck(ses: Electron.Session): void {
+  if (!spellcheckEnabled) {
+    // #100: disabling spellcheck alone still lets Chromium fetch the
+    // locale's Hunspell dictionary from Google (measured on ubuntu-24.04).
+    // No languages means no dictionary to fetch, and the download URL is a
+    // closed loopback port, so even a request never leaves the machine.
+    try {
+      ses.setSpellCheckerEnabled(false);
+      ses.setSpellCheckerLanguages([]);
+      ses.setSpellCheckerDictionaryDownloadURL("http://127.0.0.1:9/");
+    } catch {
+      diagnostics.log("spellcheck_config_failed");
+    }
+  }
+  // Evidence for #100.
   ses.on("spellcheck-dictionary-download-begin", () =>
     diagnostics.log("spellcheck_download_begin"),
   );
-
-  app.on("web-contents-created", (_event, contents) =>
-    hardenWebContents(contents),
+  ses.on("spellcheck-dictionary-download-success", () =>
+    diagnostics.log("spellcheck_download_success"),
   );
 }
