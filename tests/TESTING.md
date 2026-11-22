@@ -532,11 +532,6 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   per-job permissions, `persist-credentials: false` on checkout, and actions
   pinned to commit SHAs. Every job in a workflow that runs on `pull_request`
   or `merge_group` must have explicit read-only permissions.
-- **`CHANGELOG.md` merges:** `.gitattributes` sets `merge=union`, so merging
-  `origin/main` into a branch keeps both sides' Unreleased entries instead of
-  conflicting. The merged text can lose the blank line between two entries
-  and keeps both copies of a line that both sides edited: read the section
-  before committing the merge.
 
 ## Key Conventions
 

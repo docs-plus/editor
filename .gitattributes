@@ -1,4 +1,0 @@
-# Parallel pull requests each add an entry under "## [Unreleased]": a merge
-# keeps both sides instead of conflicting. Applies to `git merge` (merging
-# origin/main into a branch); read the merged section before committing.
-CHANGELOG.md merge=union
