@@ -26,6 +26,36 @@ P2.2 as well (1.26 and 1.20 on branches without it); P2.2 did not shift it
   `PERF_EXTRA_ROUNDS` more (default 7, `0` disables) and is judged on all of
   them, so a noisy draw gets a second look and a real regression still fails.
 
+### Selection bubble P0: a plugin-free controller and a first-line anchor
+
+The selection bubble no longer registers a ProseMirror plugin from its lazy
+chunk, and it anchors to the line it belongs to (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §12.1, v1 contract A18). The
+editor chunk group is unchanged (393,465 B gz, −1 B against `main` at
+`29f6faf`, 1,287 B under the P2.2 fence), and the
+bubble chunk shrinks from 12,238 B to 9,798 B gz (−2,440 B).
+
+#### Changed
+
+- **Bubble:** a `BubbleController` per editor shows, hides and positions the
+  bubble instead of Tiptap's `BubbleMenu`, so the bubble chunk landing no
+  longer rebuilds all 29 plugin views. The DOM contract is unchanged: one
+  `[data-smart-bubble]` root, appended to the scroll container on show and
+  removed on hide.
+- **Bubble:** it anchors to the first selected line that shows, not to the
+  box between the selection's two ends: a selection that wraps onto the
+  next line is centred on its selected part of the first line, not the
+  middle of the column, and one that starts at the end of a paragraph
+  anchors to the next line's text, never to a whole block. Below the text,
+  it stays in view when the selection runs past the bottom of the window.
+- **Bubble:** Esc on a bubble item plays the 90 ms exit fade before the
+  bubble goes; a re-shown bubble never flashes at its old position.
+
+#### Fixed
+
+- **Bubble:** select all (⌘A / Ctrl+A) shows the bubble, under the first
+  visible line; a whitespace-only selection shows none.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
