@@ -341,7 +341,15 @@ test.describe("hover preview", () => {
     const chevron = bubble(page).getByRole("button", {
       name: "More text colours",
     });
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    // Rove to A▾, wherever the bubble's items put it.
+    for (
+      let i = 0;
+      i < 12 &&
+      !(await chevron.evaluate((el) => el === document.activeElement));
+      i += 1
+    ) {
+      await page.keyboard.press("ArrowRight");
+    }
     await expect(chevron).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
@@ -408,14 +416,14 @@ test.describe("hover preview", () => {
 
     await selectText(page, "yellow words");
     dialog = await openPopover(page, "highlight");
-    await dialog.getByRole("menuitemradio", { name: "Red highlight" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Pink highlight" }).hover();
     await expect(previews(page)).toHaveCount(1);
     expect(
       await resolveRgb(
         page,
         (await previewStyle(page, "backgroundColor")) ?? "",
       ),
-    ).toEqual(await resolveRgb(page, HIGHLIGHT_PALETTE.red.light));
+    ).toEqual(await resolveRgb(page, HIGHLIGHT_PALETTE.pink.light));
 
     await dialog.getByRole("menuitemradio", { name: "No highlight" }).hover();
     await expect(previews(page)).not.toHaveAttribute("data-highlight");
@@ -453,9 +461,11 @@ test.describe("hover preview", () => {
           await button.hover();
           await expect(previews(page).first()).toBeVisible();
           const clip = await blockClip(page, start);
-          // The popover must not cover the pixels compared.
+          // The popover must not cover the pixels compared. The named rows
+          // are too tall to fit between the row and the block, so the
+          // popover opens past the selection (`clearOfSelection`).
           const box = await dialog.boundingBox();
-          expect(box && box.y + box.height <= clip.y).toBe(true);
+          expect(box && !intersects(box, clip)).toBe(true);
           const previewed = await page.screenshot({ clip });
 
           await button.click();
@@ -559,7 +569,7 @@ test.describe("hover preview", () => {
     await page.evaluate(() => {
       window.__toolbarCommits = 0;
     });
-    for (const name of ["Red text", "Blue text", "Green text", "Pink text"]) {
+    for (const name of ["Red text", "Blue text", "Green text", "Purple text"]) {
       await dialog.getByRole("menuitemradio", { name }).hover();
       await expect(previews(page)).toHaveCount(1);
     }
@@ -856,13 +866,14 @@ test.describe("hover preview under the phone sheet on touch", () => {
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
     const dimmed = await scrimColor(page);
-    const swatch = sheet.getByRole("button", { name: "Red text" });
+    // Exact: the pick's pill adds "Undo: Red text" to the sheet.
+    const swatch = sheet.getByRole("button", { name: "Red text", exact: true });
     await swatch.hover();
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
     expect(await scrimColor(page)).toBe(dimmed);
     await swatch.tap();
-    await expect(swatch).toHaveAttribute("aria-checked", "true");
+    await expect(swatch).toHaveAttribute("aria-pressed", "true");
     expect(await scrimColor(page)).toBe(dimmed);
   });
 });
@@ -905,7 +916,11 @@ test.describe("hover preview design-review screenshots", () => {
             await openDoc(page, CONTEXT_DOC);
             await selectBlock(page, start);
             const dialog = await openSwatches(page, kind);
-            const button = dialog.getByRole("menuitemradio", { name: swatch });
+            // Named rows on desktop, the swatch grid in the phone sheet.
+            const button = dialog.getByRole(
+              width === 375 ? "button" : "menuitemradio",
+              { name: swatch, exact: true },
+            );
             await button.hover();
             await expect(previews(page).first()).toBeVisible();
             await page.screenshot({ path: `${name}.png` });

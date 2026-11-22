@@ -98,7 +98,7 @@ test.describe("lazy surface chunks", () => {
     // Back online: the next open fetches the chunk again.
     await restore();
     await chevron.click();
-    await expect(dialog.getByRole("button").first()).toBeVisible();
+    await expect(dialog.getByRole("menuitemradio").first()).toBeVisible();
     await expect(dialog.getByRole("status")).toHaveCount(0);
   });
 

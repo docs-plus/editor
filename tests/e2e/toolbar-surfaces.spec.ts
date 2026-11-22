@@ -205,14 +205,9 @@ test("named rows: the rest of the colours wait under More, named", async ({
   const dialog = page.getByRole("dialog", { name: "Text colours" });
   const text = dialog.getByRole("group", { name: "Text" });
   // Visible names; the accessible names add "text" ("Red text").
-  await expect(text.locator(".st-color-row .st-color-item-label")).toHaveText([
-    "Default",
-    "Red",
-    "Orange",
-    "Green",
-    "Blue",
-    "Purple",
-  ]);
+  await expect(text.locator(".st-color-named .st-color-item-label")).toHaveText(
+    ["Default", "Red", "Orange", "Green", "Blue", "Purple"],
+  );
   await expect(
     dialog.getByRole("menuitemradio", { name: "Teal text" }),
   ).toHaveCount(0);
@@ -256,7 +251,7 @@ test("named rows: ←/→ cross columns, → opens More and ← or Esc closes it
   await page.keyboard.press("ArrowRight");
   await expect(focused).toHaveAccessibleName("Green highlight");
   await page.keyboard.press("ArrowLeft");
-  await expect(focused).toHaveAccessibleName("Green text");
+  await expect(focused).toHaveAccessibleName("Orange text");
   await page.keyboard.press("End");
   await expect(focused).toHaveAccessibleName("More colours");
   await page.keyboard.press("ArrowRight");
@@ -294,6 +289,25 @@ test("named rows: ←/→ follow the visual order in RTL", async ({ page }) => {
   await expect(focused).toHaveAccessibleName("No highlight");
   await page.keyboard.press("ArrowRight");
   await expect(focused).toHaveAccessibleName("Default text");
+  // ← (the inline end) opens More, on the left; → closes it.
+  await page.keyboard.press("End");
+  const moreRow = page.getByRole("menuitem", { name: "More colours" });
+  await expect(moreRow).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  const more = page.getByRole("menu", { name: "More colours" });
+  await expect(more).toBeVisible();
+  await expect(focused).toHaveAccessibleName("Gray text");
+  await more.evaluate((el) =>
+    Promise.all(el.getAnimations().map((a) => a.finished)),
+  );
+  const [row, sub] = await Promise.all([
+    moreRow.boundingBox(),
+    more.boundingBox(),
+  ]);
+  expect(sub && row && sub.x + sub.width <= row.x + 1).toBe(true);
+  await page.keyboard.press("ArrowRight");
+  await expect(more).toBeHidden();
+  await expect(moreRow).toBeFocused();
 });
 
 test("size stepper is a named spinbutton, disabled with a reason in headings", async ({
