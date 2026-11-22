@@ -14,10 +14,13 @@ since the previous tag.
 The "/" menu gains what the second reference set showed it lacked, and a
 pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
 §8.2, §8.5; v1 contract A19). The editor chunk group is unchanged
-(393,463 B gz, −2 B against `main` at `ed2a7cd`); the slash chunk grows
-from 5,772 B to 7,129 B gz (over its 6 KB test budget, `SLASH_BUDGET=1`)
-and the bubble chunk, which now mounts the `+`, from 9,798 B to 11,007 B
-gz.
+(393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
+from 5,772 B to 7,041 B gz (over its 6 KB test budget, `SLASH_BUDGET=1`;
+the budget is the owner's call) and the bubble chunk, which now mounts the
+`+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
+rather than its own `slash-footer.tsx` (the plan's file list): it shares
+the menu's state and placement, and a separate module would only add
+bytes.
 
 #### Added
 
@@ -30,7 +33,8 @@ gz.
   empty and nothing follows the caret (never during IME composition); a
   pinned footer teaches the active row's Markdown shortcut ("Type ## then
   space for Heading 2") and has a Close button (Esc still works). On touch
-  the footer is only a 44 px Close.
+  the footer is only a 44 px Close. Hints stay left to right in RTL ("1.",
+  never ".1").
 - **"/" menu:** rows can carry a "New" badge until a date, hidden once you
   have used that kind; none are declared yet.
 - **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
@@ -38,8 +42,10 @@ gz.
   margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
   shows beside the caret 300 ms after you stop typing, or under the
   pointer after a 150 ms rest, never in the title, a list, a quote or a
-  table cell, and never on touch. Esc on its empty query removes that "/"
-  again without an undo step; a pick is one undo step. It is mounted by
+  table cell, and never on touch. The "/" it types is an ordinary one: a
+  query, a pick, Esc and undo work as after a typed "/". Only with the
+  query still empty, Esc removes it without an undo step and a pick
+  undoes to the empty line. It is mounted by
   the lazy bubble chunk's desktop wrapper, so it appears once that chunk
   has loaded (a deviation from the spec's §15 file split, which put it in
   `SlashMenuHost`: that would have grown the editor chunk).
