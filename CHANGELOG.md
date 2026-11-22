@@ -16,7 +16,8 @@ duplicate commands and the Markdown paste rule are built and tested but not
 yet wired to a menu or to paste, and word count (E3) is not started, so P2.12
 stays open (details spec §5, "P2.12 status"). The editor chunk group is
 unchanged: 393,820 B gz, 0 B against `main` at `1548d5e` (every editor JS and
-CSS chunk identical; `1548d5e` changed no web code since `903b5c8`). An import-boundary test keeps both modules out of it.
+CSS chunk identical; `1548d5e` changed no web code since `903b5c8`). An
+import-boundary test keeps both modules out of it.
 
 #### Added
 
