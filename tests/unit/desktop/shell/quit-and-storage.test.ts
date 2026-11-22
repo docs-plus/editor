@@ -162,6 +162,8 @@ describe("StorageSupervisor", () => {
         if (failStart) throw { code: failStart };
         exits.push((code) => events.onExit?.(code));
         const call = (async (op: string, args: unknown) => {
+          if (op === "claim" && (args as { docId: string }).docId === "gone")
+            throw { code: "not_found" };
           if (op === "claim") replayed.push(args);
           return op === "append" ? 1 : null;
         }) as StorageCall;
@@ -197,6 +199,17 @@ describe("StorageSupervisor", () => {
     await sup.call("flush", {});
     expect(starts()).toBe(2);
     expect(replayed).toEqual([{ docId: "doc-a", owner: "w4" }]);
+  });
+
+  test("a claim the restarted worker refuses is dropped, not fatal", async () => {
+    const { sup, registry, exits, replayed } = supervisor();
+    await sup.start();
+    registry.claim("gone", 1);
+    registry.claim("doc-b", 2);
+    exits[0](1);
+    expect(await sup.call("flush", {})).toBeNull();
+    expect(sup.state).toBe("ready");
+    expect(replayed).toEqual([{ docId: "doc-b", owner: "w2" }]);
   });
 
   test(`more than ${MAX_RESTARTS_PER_MINUTE} crashes a minute leaves it degraded`, async () => {

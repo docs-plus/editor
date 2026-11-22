@@ -131,7 +131,33 @@ function start(): void {
       });
     },
     onNewDocument: (windowId) => handlers.forgetWindow(windowId),
+    onRendererGone: (window: BrowserWindow) => {
+      // Architecture §6.2: the document goes to Closing. In-flight appends
+      // died with the renderer; the worker forgets this owner.
+      const id = window.id;
+      registry.releaseWindow(id);
+      handlers.forgetWindow(id);
+      quit.forgetWindow(id);
+      void storage
+        .call("releaseOwner", { owner: ownerOf(id) })
+        .catch(() => undefined);
+      if (quit.phase !== "running" || window.isDestroyed()) return;
+      const now = Date.now();
+      const last = rendererReloads.get(id) ?? 0;
+      if (now - last < 60_000) {
+        diagnostics.log("renderer_gone_closed", { window: id });
+        window.destroy();
+        return;
+      }
+      rendererReloads.set(id, now);
+      // The window keeps its document: claim it again unless another
+      // window took it meanwhile, then reload (the page says hello again).
+      const docId = windows.docOf(id);
+      if (docId) registry.claim(docId, id);
+      window.webContents.reload();
+    },
   });
+  const rendererReloads = new Map<number, number>();
 
   const handlers = createDocHandlers({
     registry,
@@ -178,21 +204,17 @@ function start(): void {
     }
   };
 
-  const handleArgs = (args: string[], cwd: string, firstLaunch = false) => {
+  /** Filters and routes one set of arguments; returns how many were accepted. */
+  const handleArgs = (args: string[], cwd: string): number => {
     if (!ready) {
       pending.push({ args, cwd });
-      return;
+      return 0;
     }
     const { intents, refused } = parseLaunchArgs(args, { cwd, isFile });
     if (refused > 0) diagnostics.log("argv_refused", { count: refused });
     diagnostics.log("argv_accepted", { count: intents.length });
     route(intents);
-    if (firstLaunch && !intents.some((i) => i.kind === "openDoc")) {
-      if (windows.ids().length === 0) windows.create(null);
-    } else if (!firstLaunch && intents.length === 0) {
-      // A second launch with nothing (or only refused things) to open.
-      focusOrCreate();
-    }
+    return intents.length;
   };
 
   app.on("will-finish-launching", () => {
@@ -208,7 +230,12 @@ function start(): void {
 
   app.on("second-instance", (_event, argv, workingDirectory) => {
     diagnostics.log("second_instance");
-    handleArgs(userArgs(argv, Boolean(process.defaultApp)), workingDirectory);
+    const accepted = handleArgs(
+      userArgs(argv, Boolean(process.defaultApp)),
+      workingDirectory,
+    );
+    // A second launch with nothing (or only refused things) to open.
+    if (accepted === 0) focusOrCreate();
   });
 
   app.on("before-quit", (event) => {
@@ -241,14 +268,16 @@ function start(): void {
     if (app.isPackaged && process.platform === "win32")
       app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
 
+    // The first launch's own arguments, plus any macOS open-file /
+    // open-url that arrived before ready, decide the first window(s); a
+    // window with no document opens only if none of them made one.
     ready = true;
-    const early = pending.splice(0);
     handleArgs(
       userArgs(process.argv, Boolean(process.defaultApp)),
       process.cwd(),
-      true,
     );
-    for (const { args, cwd } of early) handleArgs(args, cwd);
+    for (const { args, cwd } of pending.splice(0)) handleArgs(args, cwd);
+    if (windows.ids().length === 0) windows.create(null);
 
     // Installer smoke (CI): start, show the first window, open the library,
     // then quit through the normal path and exit 0.

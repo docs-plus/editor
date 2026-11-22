@@ -64,11 +64,7 @@ export class StorageSupervisor {
         onIndexChanged: this.deps.onIndexChanged,
         onExit: (code) => this.onCrash(code),
       });
-      if (replay) {
-        for (const { docId, windowId } of this.deps.registry.entries()) {
-          await client.call("claim", { docId, owner: ownerOf(windowId) });
-        }
-      }
+      if (replay) await this.replayClaims(client);
       this.client = client;
       this.state = "ready";
       this.deps.log?.("storage_ready", { replayed: replay ? 1 : 0 });
@@ -80,6 +76,24 @@ export class StorageSupervisor {
       );
       this.deps.log?.("storage_degraded", { reason: this.openError });
     }
+  }
+
+  /**
+   * Replays the registry into a restarted worker, one claim at a time. A
+   * claim the worker refuses (a deep link to a document that doesn't
+   * exist, or one purged meanwhile) is dropped from the worker's side and
+   * logged; it never takes the library down.
+   */
+  private async replayClaims(client: StorageClientLike): Promise<void> {
+    let refused = 0;
+    for (const { docId, windowId } of this.deps.registry.entries()) {
+      try {
+        await client.call("claim", { docId, owner: ownerOf(windowId) });
+      } catch {
+        refused++;
+      }
+    }
+    if (refused > 0) this.deps.log?.("storage_claims_refused", { refused });
   }
 
   private onCrash(code: number): void {
@@ -113,10 +127,14 @@ export class StorageSupervisor {
   async shutdown(timeoutMs = 2000): Promise<"clean" | "terminated" | "none"> {
     if (this.state === "closed") return "none";
     // A worker still opening is waited for, within the same budget.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       this.ready,
-      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
     ]);
+    clearTimeout(timer);
     this.state = "closed";
     const client = this.client;
     this.client = null;

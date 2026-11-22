@@ -117,6 +117,10 @@ export function hardenSession(): void {
   );
 
   if (!spellcheckEnabled) ses.setSpellCheckerEnabled(false);
+  // Evidence for #100: a dictionary download would show here.
+  ses.on("spellcheck-dictionary-download-begin", () =>
+    diagnostics.log("spellcheck_download_begin"),
+  );
 
   app.on("web-contents-created", (_event, contents) =>
     hardenWebContents(contents),

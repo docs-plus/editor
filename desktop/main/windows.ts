@@ -28,8 +28,10 @@ export type WindowEvents = {
   onClosed: (windowId: number) => void;
   /** The user closed it: flush through the bridge first, then `destroy()`. */
   onCloseRequested: (window: BrowserWindow) => void;
-  /** Its document reloaded or its renderer died: it must say hello again. */
+  /** It committed a new document (a reload): it must say hello again. */
   onNewDocument: (windowId: number) => void;
+  /** Its renderer died: release its claims, then reload or close it. */
+  onRendererGone: (window: BrowserWindow) => void;
 };
 
 export class WindowManager {
@@ -111,13 +113,12 @@ export class WindowManager {
       contents.setZoomLevel(0);
       diagnostics.log("zoom_refused");
     });
-    contents.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument)
-        this.events.onNewDocument(id);
-    });
+    // Committed main-frame loads only: a navigation main refuses never
+    // commits, and the page's preload (and its hello) survive it.
+    contents.on("did-navigate", () => this.events.onNewDocument(id));
     contents.on("render-process-gone", (_event, details) => {
       diagnostics.log("renderer_gone", { reason: details.reason });
-      this.events.onNewDocument(id);
+      this.events.onRendererGone(window);
     });
 
     window.once("ready-to-show", () => {
