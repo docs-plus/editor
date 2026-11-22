@@ -8,7 +8,7 @@
  * the two drivers read each other's files. The shape follows spike S2's
  * kill harness.
  *
- *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8
+ *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8|T21
  *     [--kills=200] [--out=soak-out] [--verbose]
  *
  * T7 (slow-hydrate overwrite) is a web-library case: it tests the session
@@ -67,6 +67,7 @@ import {
   docId as v1DocId,
   writeFormat1Library,
 } from "@/tests/helpers/format-1-library";
+import { caseT21 } from "@/tests/load/desktop-soak-t21";
 
 const ROOT = join(import.meta.dir, "../..");
 const HARNESS = join(ROOT, "desktop/storage-harness");
@@ -1340,6 +1341,7 @@ const CASES: Record<string, () => Promise<CaseResult>> = {
   T23: caseT23,
   T24: caseT24,
   T24b: caseT24b,
+  T21: () => caseT21({ runHarness, removeDir, args }),
 };
 
 const selected =
