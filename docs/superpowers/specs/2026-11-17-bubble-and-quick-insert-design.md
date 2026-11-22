@@ -1053,6 +1053,18 @@ Forget my choices…
 - **Persian decimal "/":** the trigger opens only at a block's start or after a space (unchanged), so "۳/۵" never opens it.
 - **Labels** go through `actionLabel(action)` (rtl:159). The link field is `dir="auto"`.
 
+### 13.5 Decisions at the design review (owner, 2026-11-22)
+
+The owner reviewed P1–P4 as built, on the design review page (`docs/design/2026-11-17-bubble-quick-insert/review.html`). It showed 67 before/after pairs against `main` `7b9fdc7`, with seven open decisions. The answer, verbatim: **"Approve all as recommended"**. So:
+
+1. **P1–P4 ship together** as one integration PR through the merge queue. The bubble shows Comment (last, after a separator) only where `comment.add` is offered, which the web sandbox never offers. P5, the bubble's comment icon, is a follow-up (§17).
+2. **A colour pick closes the colour menu.** Enter, Space or a click applies the colour, closes the menu, returns focus to the text with the selection kept, and announces the pick ("Red text"). This **amends O4**, which kept the menu open.
+3. **The row's colour menu shows both columns**, Text and Highlight. That is accepted for v1, as a deviation from §7.3, which asked for only the column of the half pressed. The bubble's menu follows §7.3. Revisit if writers pick the wrong column.
+4. **Before the first lazy menu chunk loads**, the style shortcuts in a list item or quote (⌘⌥0, ⌘⌥1–6) behave as on `main` and don't unwrap the item. After that, every surface lifts only the selected items. The lift is injected from the lazy chunks, so the editor chunk stays at 0 B growth (contract A21).
+5. **Esc before the bubble's code has ever loaded** does not cancel a bubble still waiting out its 250 ms delay. Accepted, because a fix needs eager code.
+6. **Tablet option (b)** (§13.2), confirmed as built.
+7. **The Appearance submenu's chevron** points outward while a flipped submenu opens inward. `main` does the same. It is a follow-up (§17), not a blocker.
+
 ---
 
 ## 14. Accessibility
@@ -1139,6 +1151,12 @@ They can each run in a worktree once P0 lands. P1 owns the bubble folder.
 - **Phones:** the presence and footer pills over the text (F18). These belong to the shell; propose a phone placement in the phones spec.
 - **Phones at 320 px:** the tab strip shows the active title as one letter ("B…") (`phone320-dark-02-selection`). Shell follow-up.
 - **The Hyperlink hover card has no "Open" action** (§7.5). Request to `@docs.plus`.
+- **Submenu chevrons follow the side they open on** (§13.5, decision 7).
+  - Today ⋯ › Appearance draws its chevron toward the inline end, even when Floating UI flips the submenu to the other side near the window edge. `main` does the same, in both directions.
+  - Fix: read the submenu's resolved side (`data-side` on the popup) and flip the chevron to match, in the lazy menu chunk.
+  - Add an e2e test at a window narrow enough to flip it, in LTR and RTL.
+- **P5: the bubble's comment icon** (§7.6, §13.5 decision 1). `comment.add` is registered on `main` with no icon, inside the comments track's 150 B ledger line. The bubble's slot already renders it where comments are offered. P5 adds the icon on its own ledger line, alongside the comments track's draft card (P4.10).
+- **The phone Aa sheet's Text row has no icon**, as on `main`, while Heading 1–3 have one. The registry icon measured +7 B gz on the editor chunk, and installing it from lazy code moved lucide's `Type` into the editor group (about +950 B). Revisit with the next ledger line that has room.
 - **Task checkboxes are invisible on `main`**, from Tiptap 3.33 TaskItem's styler span. This was found by the icons session (sibling notes), not here; listed so P2's Insert screenshots don't mistake it for a new bug.
 
 ---
