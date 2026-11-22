@@ -1239,6 +1239,54 @@ async function turnInto(page: Page, needle: string, item: string) {
   await expect(page.getByRole("menu")).toHaveCount(0);
 }
 
+test.describe("bubble Style ▾ placement (spec §10.4)", () => {
+  // A low window: Style ▾ (about 300px) has no room on either side.
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  for (const top of [180, 260, 330]) {
+    test(`Turn into never covers the selection's lines (line at ${top}px)`, async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await selectText(page, "Filler paragraph number 12");
+      await expectBubbleOpen(page);
+      await page.evaluate((target) => {
+        const wrapper = document.querySelector(".document-editor-wrapper");
+        const editor = window.__tiptap_editor;
+        if (!wrapper || !editor) throw new Error("missing");
+        const line = editor.view.coordsAtPos(editor.state.selection.from);
+        wrapper.scrollTop += line.top - target;
+      }, top);
+      await page.waitForTimeout(300);
+      await expectBubbleOpen(page);
+      await styleButton(page).click();
+      const menu = page.getByRole("menu", { name: "Turn into" });
+      await expect(menu).toBeVisible();
+      await menu.evaluate((el) =>
+        Promise.all(el.getAnimations().map((a) => a.finished)),
+      );
+      const box = await menu.boundingBox();
+      if (!box) throw new Error("no menu");
+      const band = await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        const { from, to } = editor.state.selection;
+        return {
+          top: editor.view.coordsAtPos(from).top,
+          bottom: editor.view.coordsAtPos(to, -1).bottom,
+        };
+      });
+      expect(
+        box.y + box.height <= band.top || box.y >= band.bottom,
+        `menu ${JSON.stringify(box)} vs lines ${JSON.stringify(band)}`,
+      ).toBe(true);
+      // Capped to the room: all of it on screen, scrolling inside.
+      expect(box.y + box.height).toBeLessThanOrEqual(720);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+    });
+  }
+});
+
 test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
   test("the face follows the selection while the bubble is open", async ({
     page,

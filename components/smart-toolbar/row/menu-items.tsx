@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { type ReactNode, useId } from "react";
+import { type ComponentProps, type ReactNode, useId } from "react";
 
 import {
   DropdownMenuCheckboxItem,
@@ -44,6 +44,7 @@ export function ToolbarMenuContent({
   label,
   side = "bottom",
   align = "start",
+  sideOffset = 4,
   children,
 }: {
   finalFocus: () => HTMLElement | boolean;
@@ -51,12 +52,15 @@ export function ToolbarMenuContent({
   /** The bubble opens its menus away from the text (spec §10.4). */
   side?: "top" | "bottom";
   align?: "start" | "center" | "end";
+  /** The bubble's moves the menu off the selection's lines (§10.4). */
+  sideOffset?: ComponentProps<typeof DropdownMenuContent>["sideOffset"];
   children?: ReactNode;
 }) {
   return (
     <DropdownMenuContent
       side={side}
       align={align}
+      sideOffset={sideOffset}
       finalFocus={finalFocus}
       data-toolbar-popup=""
       aria-label={label}

@@ -18,6 +18,7 @@ import {
   TypeIcon,
 } from "@/lib/icons";
 
+import { clearOfSelection } from "../color/clear-of-selection";
 import {
   focusLostOnClose,
   menuBody,
@@ -33,6 +34,8 @@ import {
 } from "./style-face";
 
 const Content = menuBody((bodies) => bodies.ToolbarMenuContent);
+/** `ToolbarMenuContent`'s gap to its trigger. */
+const MENU_GAP = 4;
 const TurnIntoMenuItems = menuBody((bodies) => bodies.TurnIntoMenuItems);
 
 /** Spec §7.1 Sizes: the face is at least 64px, and a word past 96px… */
@@ -146,6 +149,7 @@ export function BubbleStyleMenu({
     openMenu(next, details);
   };
   const wordRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const wordWidth = useFaceWordWidth(wordRef);
   const face = useStyleFace(editor);
   const name = STYLE_FACE_NAMES[face];
@@ -154,6 +158,7 @@ export function BubbleStyleMenu({
     <DirectionProvider direction={direction}>
       <DropdownMenu open={menu.open} onOpenChange={onOpenChange}>
         <DropdownMenuTrigger
+          ref={triggerRef}
           render={
             <ToolbarButton
               type="button"
@@ -187,6 +192,13 @@ export function BubbleStyleMenu({
           finalFocus={menu.finalFocus}
           label="Turn into"
           side={placement}
+          // With no room away from the text Base UI flips the menu toward
+          // it: then it goes past the selection's lines, never over them,
+          // capped to the room left (spec §10.4, as the colour menu does).
+          sideOffset={(data) =>
+            MENU_GAP +
+            clearOfSelection(editor, triggerRef.current, data, MENU_GAP)[1]
+          }
         >
           <TurnIntoMenuItems editor={editor} onPicked={menu.markPicked} />
         </Content>
