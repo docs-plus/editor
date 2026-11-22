@@ -164,9 +164,19 @@ says what a run may do:
 ## CI checks and the merge queue
 
 CI (`.github/workflows/ci.yml`) reports two checks that the `main` ruleset
-(**Protect main**) requires: `Lint, typecheck, unit tests, build` and
-`Playwright (Chromium)`. The ruleset matches them by name, so they must not
-change.
+(**Protect main**) requires. Their names are what the ruleset matches, so they
+must not change:
+
+| Check | Job | What it covers |
+| --- | --- | --- |
+| `Lint, typecheck, unit tests, build` | `checks` | audit, Biome, ESLint, typecheck, unit tests, production build, editor chunk size |
+| `Playwright (Chromium)` | `e2e-gate` | passes only when the three `Playwright shard N/3` jobs and `Playwright perf (typing budget)` passed, or when the pull request changes only `docs/**` or Markdown files (outside `desktop/**`) and they were skipped |
+
+The shard, perf and `Changed files` jobs are not required on their own:
+`Playwright (Chromium)` always runs and fails if any of them failed, was
+cancelled or was skipped when it should have run. A failing test is annotated
+at its file and line on the run, and the merged HTML report is uploaded as the
+`playwright-report` artifact.
 
 ### Turning the merge queue on (owner, once)
 
@@ -178,18 +188,25 @@ pull requests ahead of it, and merges only what passed. CI already runs on
 1. Settings → Rules → Rulesets → **Protect main** → Add rule →
    **Require merge queue**:
    - Merge method: **Merge commit** (what `main` uses today).
-   - Build concurrency: **3** (GitHub's free plan runs 20 jobs at a time
-     across the organisation, and other pull requests need runners too).
-   - Merge limits: minimum **1**, maximum **5**; wait **5 minutes** to fill
-     a group, so pull requests queued together land as one push to `main`,
-     one CI run and one deploy.
+   - Build concurrency: **2** (each entry runs about seven jobs, and GitHub's
+     free plan runs 20 jobs at a time across the organisation: three entries
+     would take about 21, leaving nothing for pull requests).
+   - Merge limits: minimum **1**, maximum **5**; wait **1 minute** to fill
+     a group, so pull requests queued together usually land as one push to
+     `main`, one CI run and one deploy, without holding a lone one back.
    - Only merge non-failing pull requests: on (**All green**).
    - Status check timeout: **60 minutes**.
 2. In the same ruleset, keep **Require status checks to pass** with exactly
    `Lint, typecheck, unit tests, build` and `Playwright (Chromium)` (source:
-   GitHub Actions).
+   GitHub Actions). Do not add the shard, perf or `Changed files` jobs.
 3. Save, then merge pull requests with **Merge when ready** (or
    `gh pr merge <n> --auto --merge`) instead of the merge button.
+
+Draft pull requests run the checks job only: `Playwright (Chromium)` passes
+on a draft with a notice, and marking it ready for review starts the full
+run. Agent sessions open their pull requests as drafts and mark them ready
+when they are; a draft cannot enter the merge queue. The merge queue and
+`main` always run every suite, and the gate fails if one was skipped there.
 
 Or with the API (the PUT replaces the ruleset, so this adds the rule to the
 current one):
@@ -199,8 +216,8 @@ gh api repos/docs-plus/editor/rulesets/26847251 \
   | jq '{name, target, enforcement, conditions, bypass_actors,
          rules: (.rules + [{type: "merge_queue", parameters: {
            merge_method: "MERGE", grouping_strategy: "ALLGREEN",
-           max_entries_to_build: 3, min_entries_to_merge: 1,
-           max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 5,
+           max_entries_to_build: 2, min_entries_to_merge: 1,
+           max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 1,
            check_response_timeout_minutes: 60}}])}' \
   | gh api -X PUT repos/docs-plus/editor/rulesets/26847251 --input -
 ```

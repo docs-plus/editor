@@ -38,6 +38,9 @@
     "test:soak:collab": "playwright test --project=soak soak-collab.spec.ts",
     "test:soak:collab:quick": "SOAK_DURATION=30000 SOAK_HEADINGS=10 SOAK_USERS=3 playwright test --project=soak soak-collab.spec.ts",
     "test:yjs-soak": "playwright test --project=yjs-soak",
+    "i18n:extract": "bun scripts/i18n/extract.ts",
+    "i18n:check": "bun scripts/i18n/check.ts",
+    "i18n:pseudo": "bun scripts/i18n/pseudo.ts",
     "build:desktop-app": "bun desktop/build/build.ts"
   },
   "lint-staged": {
@@ -123,6 +126,7 @@
     "eslint": "^10.14.0",
     "eslint-config-next": "16.4.6",
     "eslint-plugin-react": "^7.37.5",
+    "fake-indexeddb": "^6.2.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prosemirror-test-builder": "^1.1.1",

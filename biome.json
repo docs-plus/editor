@@ -110,6 +110,19 @@
       }
     },
     {
+      "includes": [
+        "components/library/library-list.tsx",
+        "components/library/list-row.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useFocusableInteractive": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.svg"],
       "linter": {
         "rules": {

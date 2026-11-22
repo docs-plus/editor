@@ -1,6 +1,7 @@
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 import { typeInNewParagraphAtEnd } from "./helpers/editor-page";
+import { storedCopies } from "./helpers/offline-store";
 
 /**
  * Service worker behaviour. Workers run only on a production build:
@@ -38,6 +39,42 @@ async function openControlled(page: Page): Promise<void> {
   await isolateTabs(page.context());
   await page.goto("/");
   await waitForControl(page);
+}
+
+/**
+ * Goes offline once the worker holds every static file the page loaded,
+ * with the browser's HTTP cache cleared, so only the worker's caches can
+ * serve the app: offline must not depend on files the browser happens to
+ * still hold.
+ */
+async function goOffline(page: Page): Promise<void> {
+  await expect
+    .poll(() => uncachedStaticFiles(page), { timeout: 15_000 })
+    .toEqual([]);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.clearBrowserCache");
+  await cdp.detach();
+  await page.context().setOffline(true);
+}
+
+/** Static files the page loaded that the worker's static cache lacks. */
+function uncachedStaticFiles(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const cache = await caches.open("tinydocy-static");
+    const cached = new Set(
+      (await cache.keys()).map((request) => new URL(request.url).pathname),
+    );
+    return performance
+      .getEntriesByType("resource")
+      .map(({ name }) => new URL(name))
+      .filter(
+        (url) =>
+          url.origin === location.origin &&
+          url.pathname.startsWith("/_next/static/") &&
+          !cached.has(url.pathname),
+      )
+      .map((url) => url.pathname);
+  });
 }
 
 function median(values: number[]): number {
@@ -123,15 +160,34 @@ test.describe("service worker", () => {
     expect((await response.body()).length).toBeLessThan(80_000);
   });
 
+  test("files loaded before the worker took control are cached", async ({
+    page,
+  }) => {
+    await openControlled(page);
+    // The editor chunk loads during the tab sync, before the worker is
+    // even registered; the page hands such files over once controlled.
+    await expect(page.locator(".tiptap")).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(() => uncachedStaticFiles(page), { timeout: 15_000 })
+      .toEqual([]);
+  });
+
   test("offline shell and fallback", async ({ page, context }) => {
     await openControlled(page);
+    // A visit that opened the editor: its tab list and document are both on
+    // the device (the document is saved at its first server sync).
+    await expect(page.locator(".tiptap")).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(() => storedCopies(page), { timeout: 10_000 })
+      .toContain("playground");
 
-    await context.setOffline(true);
+    await goOffline(page);
     try {
       await page.reload();
+      // The editor's title, not just any h1: the error page has one too.
       await expect(
-        page.getByRole("heading", { level: 1 }).first(),
-      ).toBeVisible();
+        page.locator(".tiptap").getByRole("heading", { level: 1 }).first(),
+      ).toBeVisible({ timeout: 15_000 });
 
       await page.goto("/privacy"); // never visited: no stored copy
       await expect(
@@ -230,7 +286,7 @@ test.describe("offline editing", () => {
     // in the static cache once the editor has rendered.
     await page.waitForTimeout(2500);
 
-    await context.setOffline(true);
+    await goOffline(page);
     await page.reload();
     await expect(page.locator(".tiptap")).toContainText(marker, {
       timeout: 30_000,
@@ -252,7 +308,7 @@ test.describe("offline editing", () => {
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(1000);
 
-    await context.setOffline(true);
+    await goOffline(page);
     try {
       await page.reload();
       await expect(page.locator(".tiptap")).toBeVisible({ timeout: 30_000 });

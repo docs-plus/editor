@@ -59,3 +59,6 @@ soak-report-*.json
 db-soak-test.sqlite
 db-soak-test.sqlite-wal
 db-soak-test.sqlite-shm
+
+# Pseudo-locale catalogs, built by `bun run i18n:pseudo` (scripts/i18n/pseudo.ts)
+/locales/pseudo/

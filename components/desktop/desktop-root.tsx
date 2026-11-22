@@ -17,6 +17,10 @@
 import { useEffect, useState } from "react";
 
 import { DocumentEditor } from "@/components/document-editor/document-editor";
+import { PageFrame } from "@/components/prefs/page-frame";
+// The page rules the first paint doesn't need; this root is a lazy chunk
+// itself, so they load with it, before the editor renders.
+import "@/components/prefs/page-text-styles";
 import type { TinydocyBridge } from "@/desktop/shared/ipc-contract";
 import type { DocSession } from "@/lib/platform/doc-session";
 import { DocSessionProvider } from "@/lib/platform/doc-session-context";
@@ -234,7 +238,15 @@ export function DesktopRoot() {
   if (!opened) return null;
   return (
     <DocSessionProvider value={opened.session}>
-      <DocumentEditor documentId={opened.docId} />
+      <PageFrame>
+        {({ readOnly, outlineOverlay }) => (
+          <DocumentEditor
+            documentId={opened.docId}
+            readOnly={readOnly}
+            outlineOverlay={outlineOverlay}
+          />
+        )}
+      </PageFrame>
     </DocSessionProvider>
   );
 }
