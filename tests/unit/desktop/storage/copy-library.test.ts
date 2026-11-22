@@ -306,3 +306,49 @@ test("batches are bounded by bytes, so a stop never waits on a big batch", async
   expect(byteBound.rows).toBe(rowBound.rows);
   expect(describeFile(partial2).counts).toEqual(describeFile(partial).counts);
 });
+
+describe("the copy contract (offline revision §3.4)", () => {
+  test("copies every table, trigger, index and FK of the live schema", async () => {
+    populate();
+    const partial = join(out.dir, "contract.sqlite.partial");
+    await copyLibraryBatched(openBunSqlite, library.path, partial, {
+      yieldNow: tick,
+    });
+    const master = (path: string) => {
+      const db = new Database(path, { readonly: true });
+      const rows = db
+        .query("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+        .all();
+      const fks = db
+        .query(
+          "SELECT m.name, f.* FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type = 'table' ORDER BY m.name, f.id, f.seq",
+        )
+        .all();
+      const fkCheck = db.query("PRAGMA foreign_key_check").all();
+      db.close();
+      return { rows, fks, fkCheck };
+    };
+    const live = master(library.path);
+    const copy = master(partial);
+    expect(copy.rows).toEqual(live.rows);
+    expect(copy.fks).toEqual(live.fks);
+    expect(copy.fkCheck).toEqual([]);
+    expect(
+      copy.rows.filter((r) => (r as { type: string }).type === "trigger"),
+    ).toHaveLength(3);
+  });
+
+  test("a table missing from the copy order fails the copy", async () => {
+    const raw = new Database(library.path);
+    raw.exec("CREATE TABLE stray (x INTEGER) STRICT");
+    raw.close();
+    await expect(
+      copyLibraryBatched(
+        openBunSqlite,
+        library.path,
+        join(out.dir, "stray.partial"),
+        { yieldNow: tick },
+      ),
+    ).rejects.toMatchObject({ code: "corrupt" });
+  });
+});
