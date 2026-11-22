@@ -50,6 +50,12 @@ function inFolder(
   return folderId === null ? rest : { ...rest, folderId };
 }
 
+/** 128 random bits as 32 lowercase hex, like the engine's `link_key`. */
+function newLinkKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function pinKeyAt(position: number): string {
   return `p${String(position).padStart(6, "0")}`;
 }
@@ -122,6 +128,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
         id: crypto.randomUUID(),
         title: init?.title ?? "Untitled",
         createdAt: Date.now(),
+        linkKey: newLinkKey(),
       },
       folderId,
     );
@@ -394,19 +401,21 @@ export class MemoryDocumentIndex implements LibraryIndex {
     return this.current.ready && !this.destroyed;
   }
 
-  private trashCount(): number {
-    let count = this.trashBin.size;
-    for (const unit of this.folderUnits.values()) count += unit.docs.length;
-    return count;
+  private trashedEntries(): DocumentEntry[] {
+    const entries = [...this.trashBin.values()];
+    for (const unit of this.folderUnits.values()) entries.push(...unit.docs);
+    return entries;
   }
 
   private publish(type: "load" | "change"): void {
+    const trashed = this.trashedEntries();
     this.current = {
       rev: this.current.rev + 1,
       ready: true,
       items: [...this.items],
       folders: [...this.folders],
-      trashCount: this.trashCount(),
+      trashCount: trashed.length,
+      trashed,
     };
     const snapshot = this.current;
     for (const listener of [...this.listeners]) listener(type, snapshot);

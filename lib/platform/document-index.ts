@@ -41,6 +41,12 @@ export interface DocumentEntry {
   readonly pinKey?: string;
   /** `LibraryIndex` only: when it was last opened, if ever. */
   readonly openedAt?: number;
+  /**
+   * `LibraryIndex` only: the document's link key (32 lowercase hex),
+   * minted when it is created and never derived from its id; links to it
+   * are `tinydocy:doc/<linkKey>` (search-linking §4.1).
+   */
+  readonly linkKey?: string;
 }
 
 export interface DocumentIndexSnapshot {
@@ -125,6 +131,12 @@ export interface LibraryIndexSnapshot extends DocumentIndexSnapshot {
   readonly folders: readonly FolderEntry[];
   /** Documents in the Trash, counted alone or inside trashed folders. */
   readonly trashCount: number;
+  /**
+   * The documents in the Trash, alone or inside trashed folders, with
+   * their `linkKey`s, so a link to one can say "In Trash" (search-linking
+   * §4.6). Optional: an index that doesn't list them yet leaves it out.
+   */
+  readonly trashed?: readonly DocumentEntry[];
 }
 
 export type LibraryIndexListener = (

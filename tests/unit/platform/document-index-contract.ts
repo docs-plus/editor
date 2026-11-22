@@ -520,6 +520,47 @@ export function describeLibraryIndexContract(
       expect(doc(notes.id)?.openedAt).toBeGreaterThanOrEqual(before);
     });
 
+    describe("link keys", () => {
+      it("create mints a distinct 32-hex link key", () => {
+        const { index, doc } = setup();
+        const one = index.create({ title: "One" });
+        const two = index.create({ title: "Two" });
+        if (!one || !two) throw new Error("create was refused");
+        expect(one.linkKey).toMatch(/^[0-9a-f]{32}$/);
+        expect(two.linkKey).not.toBe(one.linkKey);
+        expect(doc(one.id)?.linkKey).toBe(one.linkKey);
+      });
+
+      it("keeps a document's link key through rename, move and pin", () => {
+        const { index, doc } = setup();
+        const entry = index.create({ title: "Keep" });
+        if (!entry) throw new Error("create was refused");
+        index.rename(entry.id, "Kept");
+        index.moveItems([{ kind: "doc", id: entry.id }], work.id);
+        index.pin(entry.id);
+        expect(doc(entry.id)?.linkKey).toBe(entry.linkKey);
+      });
+
+      it("lists trashed documents with their keys, alone or in a folder", async () => {
+        const { index } = setup();
+        const entry = index.create({ title: "Gone", folderId: home.id });
+        if (!entry) throw new Error("create was refused");
+        await index.trash([notes.id]);
+        await index.trashFolder(home.id);
+        const trashed = index.snapshot().trashed ?? [];
+        expect(trashed.map((d) => d.id).sort()).toEqual(
+          [entry.id, notes.id].sort(),
+        );
+        expect(trashed.find((d) => d.id === entry.id)?.linkKey).toBe(
+          entry.linkKey,
+        );
+        await index.restoreFolder(home.id);
+        expect((index.snapshot().trashed ?? []).map((d) => d.id)).toEqual([
+          notes.id,
+        ]);
+      });
+    });
+
     describe("trash", () => {
       it("trashes a folder with everything in it, as one unit", async () => {
         const { index, docIds, dirIds } = setup();
