@@ -98,9 +98,28 @@ function save(entries: Entries): void {
 
 let killSwitchCleared = false;
 
+/**
+ * The `rememberPlace` preference (preferences design §2.1 row 18, default
+ * on), read straight from its `tinydocy-ui` slot so this chunk imports no
+ * prefs module. Turning it off already deleted the stored places.
+ */
+function rememberPlaceOff(): boolean {
+  try {
+    const raw = localStorage.getItem("tinydocy-ui");
+    if (!raw || raw.length > MAX_PAYLOAD_CHARS * 4) return false;
+    const payload = JSON.parse(raw) as {
+      v?: unknown;
+      slots?: { rememberPlace?: { last?: unknown } };
+    } | null;
+    return payload?.v === 1 && payload.slots?.rememberPlace?.last === false;
+  } catch {
+    return false;
+  }
+}
+
 /** Under the kill switch, removes what an earlier build stored, once. */
 function enabled(): boolean {
-  if (ENABLED) return true;
+  if (ENABLED) return !rememberPlaceOff();
   if (!killSwitchCleared) {
     killSwitchCleared = true;
     try {
