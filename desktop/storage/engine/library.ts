@@ -192,6 +192,28 @@ export function quickCheck(db: SqliteDriver): string {
     : messages.slice(0, 5).join("; ");
 }
 
+const SYNC_LEVELS = ["OFF", "NORMAL", "FULL", "EXTRA"] as const;
+
+/**
+ * Runs `body` (one transaction) with `synchronous = NORMAL`, then puts the
+ * connection's level back. For derived rows only (soak T21): they are a
+ * cache, so a power cut that loses them and their `derived_seq` together
+ * leaves the document stale, to be derived again, while skipping the fsync
+ * (F_FULLFSYNC on macOS, FlushFileBuffers on Windows: 4–10 ms) keeps a read
+ * queued behind a derive from waiting for the disk. WAL keeps the commit
+ * consistent, and the next FULL commit syncs it.
+ */
+function withoutSync<T>(db: SqliteDriver, body: () => T): T {
+  const level = SYNC_LEVELS[Number(scalar(db, "PRAGMA synchronous"))] ?? "FULL";
+  if (level === "OFF" || level === "NORMAL") return body();
+  db.exec("PRAGMA synchronous = NORMAL");
+  try {
+    return body();
+  } finally {
+    db.exec(`PRAGMA synchronous = ${level}`);
+  }
+}
+
 export class Library {
   readonly dir: string;
   readonly path: string;
@@ -754,12 +776,14 @@ export class Library {
     rows: derive.DerivedRows,
   ): derive.DeriveResult {
     this.assertWritable();
-    const result = derive.putDerived(
-      this.conn,
-      () => this.host.sha256(),
-      docId,
-      atSeq,
-      rows,
+    const result = withoutSync(this.conn, () =>
+      derive.putDerived(
+        this.conn,
+        () => this.host.sha256(),
+        docId,
+        atSeq,
+        rows,
+      ),
     );
     if (result === "ok") this.changed("doc", docId);
     return result;
