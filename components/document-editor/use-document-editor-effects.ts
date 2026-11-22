@@ -46,6 +46,27 @@ export function useDocumentEditorEffects({
     }
   }, [editor]);
 
+  // Dev-only: the comments perf case mounts comments, which are dark on
+  // the web. The import sits inside the constant-false branch, so a
+  // production build makes no chunk for it.
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      editor &&
+      window.__COMMENTS_PERF
+    ) {
+      let unmount: (() => void) | null = null;
+      let cancelled = false;
+      void import("./comments-test-hooks").then(({ mountCommentsForTests }) => {
+        if (!cancelled) unmount = mountCommentsForTests(editor, ydoc);
+      });
+      return () => {
+        cancelled = true;
+        unmount?.();
+      };
+    }
+  }, [editor, ydoc]);
+
   useEffect(() => {
     if (!editor) return;
     editor.commands.updateUser(getUserIdentity());
