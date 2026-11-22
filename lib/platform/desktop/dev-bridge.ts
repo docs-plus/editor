@@ -10,8 +10,8 @@
  * `createRpcDocStore(call)` makes the `DocStore` (#125); `create` is the dev
  * stand-in for `DocumentIndex.create`.
  *
- * - A reply's `{ code }` rejects as `{ code, message }`, which
- *   `toDocStoreError` keeps (`already_open`, `forbidden`…).
+ * - A reply's `{ code, retryable }` rejects as an error with that `code`,
+ *   which `toDocStoreError` keeps (`already_open`, `forbidden`…).
  * - When the socket closes, every pending and later call rejects without a
  *   code, which becomes the retryable `library_unavailable`. There is no
  *   reconnect: the host released this connection's documents, and claiming
@@ -91,8 +91,8 @@ export function connectDevBridge(options: DevBridgeOptions): DevBridge {
     pending.delete(reply.id);
     if (reply.result.ok) waiter.resolve(reply.result.value);
     else {
-      const { code, message } = reply.result.error;
-      waiter.reject(new BridgeError(message, code));
+      const { code } = reply.result.error;
+      waiter.reject(new BridgeError(`${DEV_BRIDGE_MARKER}: ${code}`, code));
     }
   });
 

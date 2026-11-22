@@ -24,6 +24,7 @@ import {
   DEV_BRIDGE_MAX_FRAME_BYTES,
   DEV_BRIDGE_OPS,
   DEV_BRIDGE_PROTOCOL,
+  type DevBridgeError,
   type DevBridgeOp,
   type DevBridgeReply,
   decodeFrame,
@@ -31,6 +32,9 @@ import {
 } from "@/lib/platform/desktop/dev-bridge-wire";
 import {
   type AppendRecord,
+  DOC_STORE_ERROR_CODES,
+  type DocStoreErrorCode,
+  isRetryableDocStoreError,
   UPDATE_ORIGINS,
   type UpdateOrigin,
 } from "@/lib/platform/doc-store";
@@ -74,8 +78,11 @@ export function memoryBackend(
         compact: (docId, state, upToSeq) =>
           store.compact(docId, state, upToSeq),
         async close(docId) {
-          await store.close(docId);
-          held.delete(docId);
+          try {
+            await store.close(docId);
+          } finally {
+            held.delete(docId);
+          }
           return null;
         },
         async flush() {
@@ -183,12 +190,27 @@ export function dispatch(
   }
 }
 
-function errorOf(error: unknown): { code: string; message: string } {
+/**
+ * The reply's error, shaped as the real IPC's (architecture §7): a code and
+ * whether to retry, never an exception's message, which may hold paths or
+ * internals. Unknown failures are `internal` and logged here only.
+ */
+const STORE_CODES: ReadonlySet<string> = new Set(DOC_STORE_ERROR_CODES);
+
+function errorOf(error: unknown): DevBridgeError {
+  // By code, not class: the engine's errors are `{ code }`-shaped (P2.6).
   const code = (error as { code?: unknown } | null)?.code;
-  return {
-    code: typeof code === "string" ? code : "internal",
-    message: error instanceof Error ? error.message : String(error),
-  };
+  if (typeof code === "string" && STORE_CODES.has(code)) {
+    return {
+      code,
+      retryable: isRetryableDocStoreError(code as DocStoreErrorCode),
+    };
+  }
+  if (error instanceof BadRequest) {
+    return { code: error.code, retryable: false };
+  }
+  console.error("[storage-host] internal error:", error);
+  return { code: "internal", retryable: false };
 }
 
 function sameToken(given: string, expected: string): boolean {

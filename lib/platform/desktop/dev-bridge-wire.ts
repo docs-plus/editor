@@ -42,7 +42,8 @@ export const DEV_BRIDGE_MAX_FRAME_BYTES = 64 * 1024 * 1024;
 
 export type DevBridgeRequest = { id: number; op: DevBridgeOp; args: unknown };
 
-export type DevBridgeError = { code: string; message: string };
+/** As the real IPC's envelope (architecture §7): no message crosses. */
+export type DevBridgeError = { code: string; retryable: boolean };
 
 export type DevBridgeReply = {
   id: number;

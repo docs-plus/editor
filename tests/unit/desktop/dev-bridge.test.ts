@@ -267,6 +267,39 @@ describe("dev storage host", () => {
     }
   });
 
+  it("sends storage codes and their retryability, never an internal message", async () => {
+    const memory = memoryBackend();
+    const leaky: DevBridgeBackend = {
+      connect() {
+        const client = memory.connect();
+        return {
+          ...client,
+          flush: () =>
+            Promise.reject(new Error("EACCES /Users/someone/lib.db")),
+          load: () => Promise.reject({ code: "disk_full" }),
+        };
+      },
+    };
+    const h = host(leaky);
+    const a = bridge(h);
+    const errors: unknown[] = [];
+    const log = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+    try {
+      const internal = await rejection(a.call("flush", {}));
+      expect(internal.code).toBe("internal");
+      expect(internal.message).not.toContain("EACCES");
+      expect(internal.message).not.toContain("/Users/");
+      expect(errors.flat().map(String).join(" ")).toContain("EACCES");
+      // A `{ code }`-shaped storage error (as the engine throws) keeps its code.
+      expect((await rejection(a.call("load", { docId: DOC }))).code).toBe(
+        "disk_full",
+      );
+    } finally {
+      console.error = log;
+    }
+  });
+
   it("rejects pending calls without a code when the socket closes", async () => {
     const library = new MemoryDocLibrary();
     const memory = memoryBackend(library);
