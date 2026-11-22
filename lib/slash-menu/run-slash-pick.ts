@@ -82,8 +82,16 @@ function withMapping(editor: Editor, run: () => boolean) {
  * announcer chunk is preloaded on idle, so this chunk does not carry its
  * own copy. A run that was allowed but did nothing, or a missing action
  * (a bug), says nothing.
+ *
+ * `typedByPlus`: the `+` typed the "/" outside the history (spec §8.2),
+ * so it leaves the same way and the pick's undo step holds only the
+ * query and the block change.
  */
-export function runSlashPick(editor: Editor, item: SlashItem): boolean {
+export function runSlashPick(
+  editor: Editor,
+  item: SlashItem,
+  typedByPlus = false,
+): boolean {
   const state = getSlashState(editor);
   const action = editorActions.get(item.actionId);
   if (!state.open) return false;
@@ -98,9 +106,14 @@ export function runSlashPick(editor: Editor, item: SlashItem): boolean {
   const typed = editor.state.doc.slice(from, to);
   const undo = undoManagerOf(editor);
   undo?.stopCapturing();
+  if (typedByPlus) {
+    editor.view.dispatch(
+      editor.state.tr.delete(from, from + 1).setMeta("addToHistory", false),
+    );
+  }
   editor.view.dispatch(
     // Without its "/" the trigger closes.
-    editor.state.tr.delete(from, to),
+    editor.state.tr.delete(from, typedByPlus ? to - 1 : to),
   );
   const { ok, mapping } = withMapping(editor, () =>
     runAction(editor, action, item.arg),

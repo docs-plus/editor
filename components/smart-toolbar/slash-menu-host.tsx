@@ -33,7 +33,8 @@ const CLOSED: SlashState = { open: false };
 
 /**
  * The "/" block menu's host (eager, small). Renders the lazy menu while
- * the trigger's state is open. It follows the editor's own events:
+ * the trigger's state is open, and the chunk's `+` on empty lines once
+ * it has loaded. It follows the editor's own events:
  * `transaction` (the state can only change there) and `update`, which
  * `setEditable` emits without a transaction, so a document turning
  * read-only closes the menu. The chunk is fetched when the browser is
@@ -80,6 +81,7 @@ export function SlashMenuHost({ editor = null }: SurfaceProps) {
   }, [open]);
 
   const Menu = loaded?.SlashMenu;
+  const Plus = loaded?.EmptyLinePlus;
   return (
     <>
       <div role="status" className="sr-only" data-slash-status="">
@@ -88,6 +90,7 @@ export function SlashMenuHost({ editor = null }: SurfaceProps) {
       {open && Menu && editor ? (
         <Menu editor={editor} state={open} announce={setStatus} />
       ) : null}
+      {Plus && editor ? <Plus editor={editor} /> : null}
     </>
   );
 }

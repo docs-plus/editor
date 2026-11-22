@@ -932,6 +932,210 @@ test.describe("slash menu", () => {
   });
 });
 
+test.describe("the + on an empty line", () => {
+  test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
+
+  const plus = (page: Page) => page.locator("[data-empty-line-plus]");
+
+  /** Entries on the collaborative undo stack (Yjs UndoManager). */
+  const undoDepth = (page: Page) =>
+    page.evaluate(() => {
+      const editor = (
+        window as unknown as {
+          __tiptap_editor: {
+            state: {
+              plugins: {
+                key: string;
+                getState(state: unknown): {
+                  undoManager?: { undoStack: unknown[] };
+                } | null;
+              }[];
+            };
+          };
+        }
+      ).__tiptap_editor;
+      const plugin = editor.state.plugins.find((p) =>
+        p.key.startsWith("y-undo"),
+      );
+      return (
+        plugin?.getState(editor.state)?.undoManager?.undoStack.length ?? -1
+      );
+    });
+
+  /** A new empty paragraph at the end, with the caret in it. */
+  async function emptyLine(page: Page) {
+    await page.locator(".tiptap").click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+  }
+
+  test("shows beside an empty paragraph, in the grip column, and not by the title", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    await expect(plus(page)).toHaveAttribute("aria-label", "Insert block");
+    await expect(plus(page)).toHaveAttribute("aria-haspopup", "listbox");
+    await expect(plus(page)).toHaveAttribute("tabindex", "-1");
+    const geometry = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const button = document.querySelector("[data-empty-line-plus]");
+      if (!view || !button) return null;
+      const { $head } = view.state.selection;
+      const block = (
+        view.nodeDOM($head.before()) as HTMLElement
+      ).getBoundingClientRect();
+      const line = view.coordsAtPos($head.pos);
+      const box = button.getBoundingClientRect();
+      return {
+        gap: block.left - box.right,
+        width: box.width,
+        middle: box.top + box.height / 2 - (line.top + line.bottom) / 2,
+      };
+    });
+    expect(geometry?.width).toBe(28);
+    expect(Math.abs(geometry?.gap ?? 99)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry?.middle ?? 99)).toBeLessThanOrEqual(1);
+
+    // Typing hides it; the title, a list item and a quote never get one.
+    await page.keyboard.type("x");
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Backspace");
+    await expect(plus(page)).toBeVisible();
+    await page.keyboard.press("ControlOrMeta+Home");
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type("- ");
+    await page.waitForTimeout(400);
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("> ");
+    await page.waitForTimeout(400);
+    await expect(plus(page)).toBeHidden();
+  });
+
+  test("a click opens the '/' menu with its ghost; Esc leaves the line empty and no undo step", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeVisible();
+    expect(await editorFocused(page)).toBe(true);
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+    await expect(plus(page)).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toEqual({
+      type: "paragraph",
+      level: null,
+      text: "",
+      offset: 0,
+    });
+    expect(await undoDepth(page)).toBe(depth);
+
+    // Typed after a click, a query filters as after a typed "/"; Esc then
+    // leaves "/query" as text.
+    await plus(page).click();
+    await page.keyboard.type("quo");
+    await expect(options(page).first()).toHaveText(/Quote/);
+    await page.keyboard.press("Escape");
+    expect(await caretBlock(page)).toMatchObject({ text: "/quo" });
+  });
+
+  test("a pick from a + menu is one undo step", async ({ page }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText(/Heading 2/);
+    await page.keyboard.press("Enter");
+    expect(await caretBlock(page)).toEqual({
+      type: "heading",
+      level: 2,
+      text: "",
+      offset: 0,
+    });
+    expect(await undoDepth(page)).toBe(depth + 1);
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ type: "paragraph", text: "" });
+  });
+
+  test("shows on hover over an empty line after a dwell", async ({ page }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("text");
+    // The caret is in a line with text: no + until the pointer rests on
+    // the empty line above.
+    await expect(plus(page)).toBeHidden();
+    const empty = page.locator(".tiptap > p").filter({ hasText: /^$/ }).last();
+    await empty.hover();
+    await expect(plus(page)).toBeVisible();
+    const [line, box] = await Promise.all([
+      empty.boundingBox(),
+      plus(page).boundingBox(),
+    ]);
+    expect(
+      Math.abs((line?.x ?? 0) - ((box?.x ?? 0) + (box?.width ?? 0))),
+    ).toBeLessThanOrEqual(1);
+    // Onto the + itself: it stays, and a click opens the menu there.
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    expect(await caretBlock(page)).toMatchObject({ text: "/", offset: 1 });
+  });
+
+  test("hides during IME composition", async ({ page }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.imeSetComposition", {
+      text: "に",
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    await expect(plus(page)).toBeHidden();
+    await cdp.send("Input.insertText", { text: "に" });
+    await cdp.detach();
+    await page.keyboard.press("Backspace");
+    await expect(plus(page)).toBeVisible();
+  });
+});
+
+test.describe("the + on a coarse pointer", () => {
+  test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 375, height: 812 },
+  });
+
+  test("never shows", async ({ page }) => {
+    await openDoc(page);
+    await page.locator(".tiptap").tap();
+    await page.evaluate(() =>
+      (
+        window as unknown as {
+          __tiptap_editor: { commands: { focus(at: string): boolean } };
+        }
+      ).__tiptap_editor.commands.focus("end"),
+    );
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(600);
+    await expect(page.locator("[data-empty-line-plus]")).toHaveCount(0);
+  });
+});
+
 test.describe("slash menu on touch", () => {
   test.skip(process.env.SLASH_BUDGET === "1", "budget run only");
   test.use({
