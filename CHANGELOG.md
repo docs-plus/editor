@@ -9,6 +9,49 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Links between documents LK1: the document links core
+
+The pieces desktop and the web library need to link one document to
+another (search-linking design §4.1–§4.6, §5, D25). Nothing in the web
+sandbox uses them: the editor gains a `linkHost` pass-through that the web
+never sets, at +31 B gz of the D23 ledger's 60 B line; web CSS unchanged.
+
+#### Added
+
+- **Links:** `lib/links/doc-link.ts` parses `tinydocy:doc/<link_key>`,
+  `tinydocy:doc/<link_key>#<heading>` and `tinydocy:here#<heading>`
+  strictly; any other `tinydocy:` href is still ours and never reaches an
+  external opener.
+- **Links:** `createLinkHost` (`lib/links/link-host.ts`) builds the
+  Hyperlink options a host passes the editor:
+  - the `tinydocy` protocol, and `isAllowedUri` that writes only document
+    links that parse;
+  - `linkIcon` drawing each §4.6 state from the index snapshot (resolves,
+    In Trash, deleted, not in this library, newer form) with lucide's
+    FileText, Trash2, FileX and FileQuestion, plus `refreshIcons` for
+    index changes (the extension draws icons once per link);
+  - `navigate`: ⌘-click opens in this tab, ⌘⇧-click or middle-click in a
+    new one, `here#` jumps in place, unresolved links are announced, web
+    links open as before; `onFollow` gives the shell its Back entry, and
+    `openAtHeading` jumps after a document opens ("The section this link
+    pointed to was removed." when the heading is gone).
+  - `lib/links/doc-links.css` dashes the underline of links that don't
+    open.
+- **Links:** the links-only pass (`lib/links/extract-links.ts`): one row per
+  document link with its section, key, heading, text and context, reading
+  only link marks and their blocks, plus `linksHash`; and the P4.4 consent
+  line (`consentLinksLine`).
+- **Platform:** `LibraryIndex` entries carry their `linkKey`, and the
+  snapshot lists `trashed` documents. `MemoryDocumentIndex` mints keys and
+  the contract suite covers both.
+- **Editor:** `DocumentEditor` takes an optional, stable `linkHost` and
+  spreads it into the Hyperlink configuration; it imports only its type
+  (import-boundary rule).
+- **Tests:** unit tests for every module, a real-editor test that a link
+  from a newer version survives loading and edits, and a links view in the
+  library harness (`?view=links`) with a Playwright spec for every state,
+  following, new tabs, `here#` jumps and the external opener.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

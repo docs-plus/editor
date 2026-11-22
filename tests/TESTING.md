@@ -341,6 +341,13 @@ The web behaviour with the flag off, and the flag-on branches, are unit tested i
 |------|---------|-----------|
 | `library-sidebar.spec.ts` | `library` (Bun harness, no Next.js or Hocus) | The files sidebar keyboard checklist (plan §5.6; UX §8.3 items 1, 2, 3, 8 and 12): F6 regions, Enter opens, F2 rename (Esc cancels, empty refused), Move to Trash and ⌘Z in the tree, a folder trashed and restored whole, Quick Open (accents, Arabic→Persian letters and digits, Create, ⌘Enter new tab, Esc returns focus), Shift+F10 menus and Pin; tree keys (→ ← * Home End, Shift+↓, ⌘A, Esc, type-ahead); a folder never moves into itself or past 4 levels (Move to…, drag, New Folder); drag and drop onto folders, Pinned and Trash, spring-loaded folders; RTL arrow keys; axe in both themes |
 
+`library-links.spec.ts` (same project) runs the document links core (LK1)
+on the harness's links view (`?view=links`): each link state's icon and
+dashed underline, ⌘-click following to a document and a heading,
+⌘⇧-click and middle-click opening a new tab, `here#` jumps, the removed
+heading notice, icons redrawn when a target is trashed, and only web links
+reaching the external opener.
+
 The harness (`tests/harness/library/`) serves the shared library components on
 a `MemoryDocumentIndex`, built with `Bun.build` and `app/globals.css` through
 Tailwind's PostCSS plugin, so nothing reaches the web build. `?dir=rtl`,
