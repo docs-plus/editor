@@ -506,6 +506,7 @@ Nothing comment-related goes into awareness: no drafts and no typing state. P4.2
   | Full | never (markers plus panel) | — |
 
 - **Alongside the outline.** The outline docks in the **left** margin (details §4: 1,240, 1,400 and 1,640 px), and the rail uses the **right** margin.
+  - **The sides follow the interface direction, never the document's** (languages design §4.2). In an RTL interface the outline docks right and the rail uses the left margin; the connector lines mirror with it. A Persian document in an English interface keeps the outline left and the rail right.
   - The outline docks slightly earlier than the rail appears, so between those widths you get the docked outline plus markers.
   - Neither takes space from the other.
 - **The Comments panel** is the list view at any width:
