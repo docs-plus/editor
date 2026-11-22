@@ -9,6 +9,37 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Docs: Phase 2 status, and the runbook and AGENTS.md brought up to date
+
+Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/superpowers/plans/2026-11-22-phase-2-status.md`. It
+  records:
+  - where each Phase 2 row stands;
+  - the decisions made while executing it: the daily-copy design, the
+    editor-chunk ledger lines and the 0 B rule, the bubble redesign
+    rulings, landing dark;
+  - how work merges;
+  - what waits on the owner;
+  - the head-of-engineering estimates.
+
+  The design spec's Phase 2 heading links to it.
+
+#### Changed
+
+- **Docs:** the deploy runbook records that automatic deploys and the
+  retention purge are on in production, and that over a non-login SSH
+  command PM2 runs as `~/.bun/bin/bunx`.
+- **Docs:** `AGENTS.md` records:
+  - the desktop and local-first layering: the ports, contract suites,
+    storage worker, desktop export, library UI and landing dark;
+  - the editor-chunk budget rule;
+  - the batch-and-wait merge practice;
+  - the Node 14 `install_deps` shim on the host;
+  - the purge state.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
