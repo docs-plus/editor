@@ -8,6 +8,10 @@
  * - One append in flight per document; batches go in order.
  * - A failed append stays queued and is retried in order with backoff, never
  *   skipped (details spec §1 rule 3): a gap would strand every later update.
+ * - Except at the document's size cap (`document_too_large`, D-O3): the
+ *   batcher halts. No retry loop runs, and the refused batch and everything
+ *   after it stay queued and are never dropped. The session goes read-only;
+ *   the Y.Doc still holds every edit, so Duplicate or Export can carry them.
  * - It counts rows since the snapshot and asks for compaction past 500 rows
  *   or 1 MiB; `compact()` captures the seq and the state in one task, with
  *   no append in flight.
@@ -102,6 +106,8 @@ export class Batcher {
   private timer: unknown = null;
   private retryTimer: unknown = null;
   private retries = 0;
+  /** Stopped at the size cap: nothing is sent until `retryNow()`. */
+  private halted = false;
   private idleWaiters: (() => void)[] = [];
 
   private acked: number;
@@ -175,10 +181,16 @@ export class Batcher {
     return done;
   }
 
+  /** True while stopped at the size cap (`document_too_large`). */
+  get isHalted(): boolean {
+    return this.halted;
+  }
+
   /** Retries a failed batch at once (after the person frees space, say). */
   retryNow(): void {
-    if (this.retryTimer === null) return;
-    this.clock.clearTimeout(this.retryTimer);
+    if (this.retryTimer === null && !this.halted) return;
+    this.halted = false;
+    if (this.retryTimer !== null) this.clock.clearTimeout(this.retryTimer);
     this.retryTimer = null;
     this.urgent = true;
     this.kick();
@@ -219,7 +231,7 @@ export class Batcher {
 
   /** Sends the head batch if it is due, or arms a timer for when it will be. */
   private kick(): void {
-    if (this.disposed || this.sending || this.paused) return;
+    if (this.disposed || this.sending || this.paused || this.halted) return;
     if (this.retryTimer !== null || this.timer !== null) return;
     const head = this.queue[0];
     if (!head) return;
@@ -293,6 +305,11 @@ export class Batcher {
     this.updateHealth({ failing });
     this.wakeIdle();
     if (this.disposed) return;
+    // The size cap won't lift by retrying: stop, and keep every batch.
+    if (failing.code === "document_too_large") {
+      this.halted = true;
+      return;
+    }
     const backoff = Math.min(RETRY_BASE_MS * 2 ** this.retries, RETRY_MAX_MS);
     this.retries++;
     this.retryTimer = this.clock.setTimeout(() => {

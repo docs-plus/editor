@@ -60,7 +60,12 @@ storage worker uses it yet; P2.6e persists P2.7b's library port on it.
 - **Desktop:** the title has one writer, the content (G4): the engine's
   `renameDoc` and `moveDoc` are gone (`moveItems` replaces `moveDoc`).
   `modified_at` changes only with content (D-O5).
-- **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`.
+- **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`, which
+  isn't retryable. When an append is refused at the cap, the batcher halts:
+  no retry loop runs, and the refused batch and everything after it stay
+  queued, never dropped. `local-session` makes the document read-only with
+  `readOnlyReason: "document_too_large"`. The Y.Doc still holds every edit,
+  so Duplicate or Export carries them.
 - **Docs:** the architecture spec allows `lib/search/normalize.ts` and
   `lib/library/tag-rules.ts` into the storage code, and records how format 2
   was built.

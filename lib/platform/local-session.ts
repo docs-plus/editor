@@ -186,7 +186,13 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
       loaded,
       clock,
       describe: options.describe && (() => options.describe?.(entry.doc) ?? {}),
-      onHealth: (health) => options.onHealth?.(entry.docId, health),
+      onHealth: (health) => {
+        // At the size cap the batcher halts with every edit kept: the
+        // document goes read-only (WriteGate) and explains the cap (D-O3).
+        if (health.failing?.code === "document_too_large")
+          setState(entry, { readOnlyReason: "document_too_large" });
+        options.onHealth?.(entry.docId, health);
+      },
       onCompactDue: () => scheduleIdle(() => void compact(entry)),
     });
     entry.batcher = batcher;
