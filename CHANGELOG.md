@@ -19,9 +19,9 @@ setting; a pixel test against `main` proves it. New browsers get the new
 Default page: 16 px text, a 33 em line (a 624 px card) and 1.6 line
 spacing. There are no controls yet: the Page popover, the palette entries
 and Settings arrive with P2.9c-2 and W13. The editor chunk group grows by
-104 B gz against `main` at `903b5c8` (393,924 B; the ledger's smart-quotes
-line is 150 B). The first load grows by 2,254 B gz of JavaScript (the
-store, schema and `PageFrame`) and 1,221 B gz of CSS, and the boot script
+124 B gz against `main` at `1548d5e` (393,944 B; the ledger's smart-quotes
+line is 150 B). The first load grows by 2,281 B gz of JavaScript (the
+store, schema and `PageFrame`) and 1,258 B gz of CSS, and the boot script
 grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
 
 #### Added
@@ -62,9 +62,12 @@ grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
 - **Page:** every paragraph renders at one size, including table cells,
   list items and blockquotes (the Default page fixes the old 15/16 px mix).
   Lists, cells and headings read the page's line spacing.
-- **Headings:** HeadingScale writes `--hd-size` in em of the page's text
-  size (`calc(<pt>em / 12)`), so headings follow Text size and match the
-  old pt sizes at 16 px.
+- **Headings:** HeadingScale writes `--hd-size` in twelfths of
+  `--hd-unit` (1 em of the page's text size by default), so headings
+  follow Text size; `classic` sets it to 16 px and keeps the old pt sizes
+  at any browser text size.
+- **Outline:** `PageFrame` alone decides docking, before the first paint;
+  the outline panel's fixed 949 px breakpoint is gone.
 - **Skeleton:** the loading card takes the same width as the editor card,
   so the page doesn't jump when the editor arrives.
 
