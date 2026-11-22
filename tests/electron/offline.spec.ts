@@ -15,7 +15,7 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { firstPage, launch, ROOT, startHocus } from "./helpers";
+import { firstPage, HOCUS_PORT, launch, ROOT, startHocus } from "./helpers";
 import { nonLoopback, parseNetLog, scanNetLog } from "./netlog";
 
 const EDITOR = '.tiptap[contenteditable="true"]';
@@ -66,6 +66,11 @@ test("a session from start to quit sends nothing off the machine", async () => {
   await page.keyboard.type("Offline check: a mispeled wrod and some text. ");
   // Long enough for a spellcheck dictionary fetch or a prefetch to start.
   await page.waitForTimeout(5000);
+  // A canary the log must show: one loopback request from main's network
+  // stack. The renderer itself now makes none (storage is local).
+  await app.evaluate(async ({ net }, port) => {
+    await net.fetch(`http://127.0.0.1:${port}/`).catch(() => undefined);
+  }, HOCUS_PORT);
 
   // Quit through the app so Chromium closes the net-log cleanly.
   await app.evaluate(({ app: electronApp }) => {
@@ -90,8 +95,9 @@ test("a session from start to quit sends nothing off the machine", async () => {
     JSON.stringify({ hosts, leaving, unparsed }),
   );
 
-  // The log must have recorded the session at all.
-  expect(parseNetLog(text).events?.length ?? 0).toBeGreaterThan(50);
+  // The log recorded the session: it parses and shows the canary.
+  expect(parseNetLog(text).events?.length ?? 0).toBeGreaterThan(0);
+  expect(hosts).toContain("127.0.0.1");
   expect(leaving).toEqual([]);
   // Fail closed: a peer we couldn't read counts as one.
   expect(unparsed).toEqual([]);
