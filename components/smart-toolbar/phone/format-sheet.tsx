@@ -13,8 +13,8 @@ import { useActionView } from "@/hooks/use-editor-context";
 import { CODE_LANGUAGES } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
-import type { ContextKind, IconComponent } from "@/lib/editor-actions/types";
-import { ChevronRightIcon, TypeIcon } from "@/lib/icons";
+import type { ContextKind } from "@/lib/editor-actions/types";
+import { ChevronRightIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
 // Installs the per-item lift behind the text styles (spec §7.2) in the
 // registry, keeping it out of the editor chunk (`core/blocks.ts`).
@@ -113,22 +113,6 @@ function Section({
     </section>
   );
 }
-
-/**
- * Gives the registry's Text action its icon when this chunk loads, so the
- * Style rows all wear one (`ActionButton` reads only `action.icon`). The
- * registry keeps none: the icon there, or installed from a module that
- * several lazy chunks share, grows the editor chunk. The other surfaces
- * carry their own fallback (Turn into, the bubble's face, "/").
- */
-function installTextIcon(): void {
-  const text = editorActions.get("style.paragraph") as
-    | { icon?: IconComponent }
-    | undefined;
-  if (text && !text.icon) text.icon = TypeIcon;
-}
-
-installTextIcon();
 
 /** A row of `variant="phone"` action buttons with their labels. */
 function PhoneActions({
