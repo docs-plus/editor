@@ -98,13 +98,8 @@ function selectionSeed(editor: Editor): string {
   return text.length <= SEED_MAX_CHARS ? text : "";
 }
 
-/**
- * Where the bar sits: under the sticky toolbar at the top right of the
- * editor's scroll container on desktop, and full width above the phone
- * bar and keyboard on phones. The container's `scroll-padding` already
- * holds those clearances (`document-editor.scss`).
- */
-function barPosition(editor: Editor): CSSProperties {
+/** The editor's scroll container (`.document-editor-wrapper`), if any. */
+function scrollContainer(editor: Editor): HTMLElement | null {
   let container: HTMLElement | null = editor.view.dom.parentElement;
   while (
     container &&
@@ -112,6 +107,17 @@ function barPosition(editor: Editor): CSSProperties {
   ) {
     container = container.parentElement;
   }
+  return container;
+}
+
+/**
+ * Where the bar sits: under the sticky toolbar at the top right of the
+ * editor's scroll container on desktop, and full width above the phone
+ * bar and keyboard on phones. The container's `scroll-padding` already
+ * holds those clearances (`document-editor.scss`).
+ */
+function barPosition(editor: Editor): CSSProperties {
+  const container = scrollContainer(editor);
   const box = container?.getBoundingClientRect() ?? {
     top: 0,
     right: window.innerWidth,
@@ -210,9 +216,21 @@ export function FindBar({ editor, request, memory, onClose }: FindBarProps) {
     place();
     window.addEventListener("resize", place);
     window.visualViewport?.addEventListener("resize", place);
+    // The phone bar sets its clearance on the container's style once its
+    // lazy chunk mounts, which can be after Find opens, and again when the
+    // keyboard moves it.
+    const container = scrollContainer(editor);
+    const styleChange = new MutationObserver(place);
+    if (container) {
+      styleChange.observe(container, {
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    }
     return () => {
       window.removeEventListener("resize", place);
       window.visualViewport?.removeEventListener("resize", place);
+      styleChange.disconnect();
     };
   }, [editor]);
 

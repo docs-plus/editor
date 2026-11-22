@@ -400,5 +400,19 @@ test.describe("Find in the document", () => {
     if (screenshots) {
       await page.screenshot({ path: `${SCREENS}/find-phone.png` });
     }
+    // The phone bar's lazy chunk can set its clearance after Find opened
+    // (a cold dev server in CI), and the keyboard changes it: the bar
+    // follows.
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>(".document-editor-wrapper")
+        ?.style.setProperty("--mobile-bar-clearance", "300px"),
+    );
+    await expect
+      .poll(async () => {
+        const box = await page.locator(BAR).boundingBox();
+        return box ? Math.round(844 - (box.y + box.height)) : null;
+      })
+      .toBe(308);
   });
 });
