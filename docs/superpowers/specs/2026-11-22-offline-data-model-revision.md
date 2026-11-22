@@ -588,6 +588,8 @@ Sessions not listed (`p22-no-provider`, `p2-7a-library-files-side`, `rethink-the
 
 ## 9. Owner decisions
 
+> **Approved by the owner, 2026-11-22: "Approve as recommended."** D-O1 to D-O8 are decided as each row's recommendation says. D-O1 reopens D24: desktop full-text search (SR5, FTS5) comes after Gate 2; v1 keeps metadata and heading search.
+
 | # | Question | Options | Recommendation |
 |---|---|---|---|
 | **D-O1** | **Body search across documents.** This **reopens D24**, which you answered "metadata only". | (a) Keep D24: metadata plus cross-document heading search, which comes free from `doc_headings` on both platforms. (b) Add desktop FTS5 body search as **SR5** (about 3 agent-days) on the LK4a pipeline, after Gate 2, as an additive table with no rebuild. The web stays at headings. First verify that FTS5 is compiled into Electron's `node:sqlite`. | **(b), scheduled after Gate 2.** A library of long documents with no body search falls short of "every feature". The data model needs no change now, so deferring costs nothing. |
