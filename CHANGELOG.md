@@ -36,13 +36,17 @@ storage worker uses it yet; P2.6e persists P2.7b's library port on it.
   New libraries start at format 1 and run the same step.
 - **Desktop:** engine operations (§4.2):
   - folders: create, rename and move, with the depth limit;
-  - folder Trash, restore and purge by trash group;
+  - folder Trash, restore and purge by trash group; a restore whose old
+    parent has moved too deep for the subtree goes to the root;
+  - new and imported documents show in Recent at once;
   - tags: create, rename, merge, add and remove by `tagNameKey`;
   - duplicate, and backup restore that never changes identity;
   - `derive.put`, with row caps, control stripping, freshness against
     `head_seq` and worker-computed hashes;
   - pins, Manual order, list views, the Trash list, lazy snippets and
     prefix search on titles and headings.
+- **Desktop:** a `quick_check` that throws on a damaged file opens the
+  library read-only as `corrupt` instead of failing to open.
 - **Desktop:** a 32 MiB per-document cap (D-O3): growth is refused with
   `document_too_large`, which isn't retryable, and deletions still pass.
 - **Desktop:** compaction checks that the new snapshot dominates what it
