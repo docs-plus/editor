@@ -56,6 +56,46 @@ const PLATFORM_ENTRIES = [
   "lib/platform/memory-doc-store.ts",
 ];
 
+// The headless schema and Markdown export/import (plan P2.8): shared by
+// desktop, the web library (W7) and the import engine (IM1), and run in
+// workers, so it must not load the editor shell, React, the collaboration
+// stack, DOM-only sanitisers or the lowlight registry.
+const HEADLESS_ENTRIES = [
+  "lib/headless/headless-schema.ts",
+  "lib/headless/markdown-export.ts",
+  "lib/headless/markdown-import.ts",
+  "lib/filenames.ts",
+];
+
+const HEADLESS_FORBIDDEN_PACKAGES = new Set([
+  "react",
+  "react-dom",
+  "@tiptap/react",
+  "@hocuspocus/provider",
+  "dompurify",
+  "lowlight",
+  "@docs.plus/extension-mermaid",
+  "@tiptap/extension-code-block-lowlight",
+]);
+
+describe("headless import boundaries", () => {
+  for (const entry of HEADLESS_ENTRIES) {
+    it(`${entry} loads no editor shell, React or collaboration code`, () => {
+      const { files, packages } = staticImports(entry);
+      for (const file of files) {
+        expect(file.startsWith("components/")).toBe(false);
+        expect(file.startsWith("lib/offline/")).toBe(false);
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file).not.toBe("lib/lowlight.ts");
+      }
+      for (const name of packages) {
+        expect(HEADLESS_FORBIDDEN_PACKAGES.has(name)).toBe(false);
+        expect(name.startsWith("@hocuspocus/")).toBe(false);
+      }
+    });
+  }
+});
+
 describe("platform import boundaries", () => {
   for (const entry of PLATFORM_ENTRIES) {
     it(`${entry} loads no sandbox, React or editor code`, () => {
