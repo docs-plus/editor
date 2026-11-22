@@ -21,17 +21,15 @@ import { availability, runAction } from "@/lib/editor-actions/registry";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { ArrowLeftIcon, ChevronRightIcon } from "@/lib/icons";
 import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
+import type { SlashItem } from "@/lib/slash-menu/slash-items";
+
 import {
+  buildSlashItems,
   HAS_NEW_BADGES,
   isNewItem,
   localDay,
-} from "@/lib/slash-menu/slash-badges";
-import {
-  buildSlashItems,
   recentInsertKinds,
-  type SlashItem,
-} from "@/lib/slash-menu/slash-items";
-
+} from "../slash/slash-menu";
 import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
 
 /*

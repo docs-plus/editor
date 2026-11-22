@@ -744,3 +744,18 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
 
 /** For the `+` on an empty line (bubble chunk), through a dynamic import. */
 export { typePlusSlash } from "@/lib/slash-menu/plus-origin";
+/*
+ * The phone Insert sheet's items come through this module, so the "/"
+ * menu's helpers have one importer and stay inside it: imported from the
+ * sheet directly too, Turbopack kept them a separate module of the "/"
+ * group and cost it 264 B gz over the 7 KB budget (spec §8.3, A21).
+ */
+export {
+  HAS_NEW_BADGES,
+  isNewItem,
+  localDay,
+} from "@/lib/slash-menu/slash-badges";
+export {
+  buildSlashItems,
+  recentInsertKinds,
+} from "@/lib/slash-menu/slash-items";
