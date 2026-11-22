@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
+import { TableKit } from "@tiptap/extension-table";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
@@ -68,7 +69,11 @@ let plain: Editor | null = null;
 
 /** A collaborative editor holding `content`, with an empty undo stack. */
 function collab(content: JSONContent, server?: CollabEditorFixture["server"]) {
-  const fixture = createCollabEditor(server ? { server } : {});
+  // Tables too, for the nested-block cases.
+  const fixture = createCollabEditor({
+    extensions: [TableKit],
+    ...(server ? { server } : {}),
+  });
   fixtures.push(fixture);
   if (!server) fixture.editor.commands.setContent(content);
   const undoManager = yUndoPluginKey.getState(fixture.editor.state)
@@ -447,6 +452,69 @@ describe("moveBlock", () => {
           "Longer",
         ),
       ).toEqual(["Title", "A", "C", "L+onger"]);
+    });
+
+    // Nested blocks: the re-created side must lose typing at any depth, not
+    // only in its own text, so the rule is the same for every block type.
+    const list = (...items: string[]): JSONContent => ({
+      type: "bulletList",
+      content: items.map((item) => ({
+        type: "listItem",
+        content: [p(item)],
+      })),
+    });
+    const table = (...cells: string[]): JSONContent => ({
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: cells.map((cell) => ({
+            type: "tableCell",
+            content: [p(cell)],
+          })),
+        },
+      ],
+    });
+    const LONG = "A paragraph longer than the nested block";
+
+    it("re-creates a smaller moved list whole, nested item included", () => {
+      expect(
+        concurrent(
+          doc(p("A"), p(LONG), list("x", "y")),
+          { block: "y", direction: "up" },
+          "y",
+        ),
+      ).toEqual(["Title", "A", "xy", LONG]);
+    });
+
+    it("re-creates a smaller passed table whole, nested cell included", () => {
+      expect(
+        concurrent(
+          doc(p("A"), table("a", "b"), p(LONG)),
+          { block: LONG, direction: "up" },
+          "b",
+        ),
+      ).toEqual(["Title", "A", LONG, "ab"]);
+    });
+
+    it("keeps typing in a nested item of a larger moved list", () => {
+      expect(
+        concurrent(
+          doc(p("A"), p("C"), list("x long item", "y long item")),
+          { block: "y long", direction: "up" },
+          "y long",
+        ),
+      ).toEqual(["Title", "A", "x long itemy+ long item", "C"]);
+    });
+
+    it("keeps typing in a nested cell of a larger passed table", () => {
+      expect(
+        concurrent(
+          doc(p("A"), table("a long cell", "b long cell"), p("C")),
+          { block: "C", direction: "up" },
+          "b long",
+        ),
+      ).toEqual(["Title", "A", "C", "a long cellb+ long cell"]);
     });
 
     it("re-reads the live document: a move after a remote delete moves what is there", () => {
