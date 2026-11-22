@@ -36,6 +36,12 @@ export interface BubbleHost {
   onHide(): void;
   /** After each applied position (or reference-hidden) result. */
   onPosition(): void;
+  /**
+   * Quiet time after Shift is released before a keyboard-made selection
+   * shows (spec §7.2, O7 b). 0 or omitted: off, keyboard selections use
+   * the normal show delay.
+   */
+  readonly keyboardSettleMs?: number;
 }
 
 /** One editor's bubble: its visibility, position and teardown. */
@@ -49,6 +55,24 @@ export interface BubbleController {
   setPlacement(placement: BubblePlacement): void;
   /** Removes every listener and timer and hides. Idempotent. */
   destroy(): void;
+}
+
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Meta", "Alt"]);
+const SELECTION_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+/** Shift+Arrow/Home/End/PageUp/PageDown, or Ctrl/⌘+A. */
+function isKeyboardSelection(event: KeyboardEvent): boolean {
+  if (event.shiftKey && SELECTION_KEYS.has(event.key)) return true;
+  return (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a";
 }
 
 type Timer = ReturnType<typeof setTimeout> | undefined;
@@ -68,6 +92,19 @@ function changesSelectionOrDoc(
 ): boolean {
   const changes = (tr: Transaction) => tr.docChanged || tr.selectionSet;
   return changes(transaction) || appended.some(changes);
+}
+
+/** `ySyncPluginKey`'s meta key (y-tiptap): marks remote Yjs transactions. */
+const Y_SYNC_META = "y-sync$";
+
+/** A selection change made here, not applied from a collaborator. */
+function isLocalSelectionChange(
+  transaction: Transaction,
+  appended: readonly Transaction[],
+): boolean {
+  const local = (tr: Transaction) =>
+    tr.selectionSet && !tr.getMeta(Y_SYNC_META);
+  return local(transaction) || appended.some(local);
 }
 
 /**
@@ -93,6 +130,14 @@ export function createBubbleController(
   let dragging = false;
   let preventHide = false;
   let showTimer: Timer;
+  let settleTimer: Timer;
+  /** The selection being changed came from a keydown (O7 b). */
+  let keyboardSelecting = false;
+  /** A keyboard selection is waiting for its settle (set by `evaluate`). */
+  let settling = false;
+  let shiftHeld = false;
+  /** A key is auto-repeating: it never shows the bubble. */
+  let repeating = false;
   let deferTimer: Timer;
   let resizeTimer: Timer;
   let stopAutoUpdate: (() => void) | undefined;
@@ -162,7 +207,11 @@ export function createBubbleController(
   /** :624-639. Cancels a pending show; the root leaves before `onHide`. */
   function hide() {
     clearTimeout(showTimer);
+    clearTimeout(settleTimer);
     showTimer = undefined;
+    settleTimer = undefined;
+    keyboardSelecting = false;
+    settling = false;
     if (!visible) return;
     visible = false;
     positionRun += 1;
@@ -177,7 +226,11 @@ export function createBubbleController(
   /** Re-evaluates now (`updateHandler`, :579-603). Never shows mid-drag. */
   function update() {
     clearTimeout(showTimer);
+    clearTimeout(settleTimer);
     showTimer = undefined;
+    settleTimer = undefined;
+    keyboardSelecting = false;
+    settling = false;
     if (destroyed || editor.isDestroyed || view.composing) return;
     if (editor.state.selection.empty || !host.shouldShow()) {
       hide();
@@ -199,11 +252,59 @@ export function createBubbleController(
     }
     if (dragging) return;
     clearTimeout(showTimer);
+    showTimer = undefined;
+    // Only a hidden bubble settles; a shown one repositions as before.
+    if (!visible && keyboardSelecting && (host.keyboardSettleMs ?? 0) > 0) {
+      settling = true;
+      armSettle();
+      return;
+    }
     showTimer = setTimeout(() => {
       showTimer = undefined;
       update();
     }, BUBBLE_SHOW_DELAY_MS);
   }
+
+  /**
+   * (Re)starts the keyboard settle (O7 b): only once Shift is up and no key
+   * is repeating; the Shift keyup and each further change call it again.
+   */
+  function armSettle() {
+    clearTimeout(settleTimer);
+    settleTimer = undefined;
+    if (shiftHeld || repeating) return;
+    settleTimer = setTimeout(() => {
+      settleTimer = undefined;
+      update();
+    }, host.keyboardSettleMs);
+  }
+
+  // Capture, on the window: ProseMirror's own keydown handler (Tiptap's
+  // Mod-a runs `selectAll` synchronously in it) must find the flag set.
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!(event.target instanceof Node && dom.contains(event.target))) return;
+    shiftHeld = event.shiftKey;
+    repeating = event.repeat;
+    if (MODIFIER_KEYS.has(event.key)) return;
+    keyboardSelecting = isKeyboardSelection(event);
+  };
+
+  // On the window: Shift may be released outside the editor. A key with no
+  // pending settle (a no-op Shift+Arrow) leaves nothing to settle.
+  const onKeyUp = (event: KeyboardEvent) => {
+    repeating = false;
+    if (event.key === "Shift" || !event.shiftKey) shiftHeld = false;
+    if (settling) armSettle();
+    else keyboardSelecting = false;
+  };
+
+  // Keys released while the window was away never report their keyup.
+  const onWindowBlur = () => {
+    shiftHeld = false;
+    repeating = false;
+    if (settling) armSettle();
+    else keyboardSelecting = false;
+  };
 
   /** Evaluates once the selection has settled (focus :459-462, IME :431-442). */
   function evaluateLater() {
@@ -222,6 +323,13 @@ export function createBubbleController(
     if (!visible && editor.state.selection.empty) return;
     if (view.composing) return;
     if (!changesSelectionOrDoc(transaction, appendedTransactions)) return;
+    // A remote change or a doc-only one must not restart the settle.
+    if (
+      settling &&
+      !isLocalSelectionChange(transaction, appendedTransactions)
+    ) {
+      return;
+    }
     evaluate();
   };
 
@@ -263,6 +371,10 @@ export function createBubbleController(
   };
 
   const onPointerDown = () => {
+    keyboardSelecting = false;
+    settling = false;
+    clearTimeout(settleTimer);
+    settleTimer = undefined;
     dragging = true;
   };
 
@@ -300,6 +412,9 @@ export function createBubbleController(
     window.removeEventListener("pointercancel", onPointerUp);
     window.removeEventListener("resize", onReposition);
     scrollTarget.removeEventListener("scroll", onReposition);
+    window.removeEventListener("keydown", onKeyDown, { capture: true });
+    window.removeEventListener("keyup", onKeyUp, { capture: true });
+    window.removeEventListener("blur", onWindowBlur);
     clearTimeout(deferTimer);
     clearTimeout(resizeTimer);
     deferTimer = undefined;
@@ -318,6 +433,9 @@ export function createBubbleController(
   dom.addEventListener("contextmenu", onHideEvent);
   dom.addEventListener("compositionend", evaluateLater);
   dom.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("keydown", onKeyDown, { capture: true });
+  window.addEventListener("keyup", onKeyUp, { capture: true });
+  window.addEventListener("blur", onWindowBlur);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   window.addEventListener("resize", onReposition);
