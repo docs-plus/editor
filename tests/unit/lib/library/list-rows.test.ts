@@ -135,6 +135,7 @@ describe("buildListRows: what a place lists", () => {
             trashedAt: 5,
             parentId: "f-work",
             docCount: 2,
+            trashGroup: "g-1",
           },
         ],
       }),

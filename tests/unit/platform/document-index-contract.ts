@@ -531,6 +531,7 @@ export function describeLibraryIndexContract(
           name: q4.name,
           parentId: work.id,
           docCount: 2,
+          trashGroup: expect.any(String),
         });
         expect(docIds()).toEqual([notes.id]);
         expect(dirIds()).toEqual([home.id, work.id].sort());
@@ -730,6 +731,15 @@ export function describeLibraryIndexContract(
           reason: "exists",
           tagId: planning.id,
         });
+        // Refused by tagNameKey: case, accents and spacing don't make a name new.
+        expect(index.renameTag(plans.id, "  PLÁNNING ")).toEqual({
+          ok: false,
+          reason: "exists",
+          tagId: planning.id,
+        });
+        expect(index.createTag("Fínance")?.id).toBe(finance.id);
+        // Its own name in another case or with accents is a plain rename.
+        expect(index.renameTag(finance.id, "FINANCÉ")).toEqual({ ok: true });
         expect(index.renameTag(plans.id, "  ")).toEqual({
           ok: false,
           reason: "invalid",
@@ -740,7 +750,7 @@ export function describeLibraryIndexContract(
         });
       });
 
-      it("merges: every document gets the target once, the source goes", () => {
+      it("merges overlapping documents: each keeps one target, others untouched", () => {
         const { index } = tagSetup();
         expect(index.mergeTags(plans.id, planning.id)).toBe(true);
         expect(index.snapshot().tags.map((tag) => tag.id)).not.toContain(
@@ -751,6 +761,68 @@ export function describeLibraryIndexContract(
         expect(tagsOf(index, "d3")).toEqual([finance.id]);
         expect(index.mergeTags(planning.id, planning.id)).toBe(false);
         expect(index.mergeTags("t-nope", planning.id)).toBe(false);
+      });
+    });
+
+    describe("trash groups (offline data-model revision §4.2)", () => {
+      it("gives a folder's subtree one group, apart from items trashed before", async () => {
+        const { index } = setup();
+        const deepGroup = await index.trashFolder(deep.id);
+        const q4Group = await index.trashFolder(q4.id);
+        expect(deepGroup?.trashGroup).toBeTruthy();
+        expect(q4Group?.trashGroup).toBeTruthy();
+        expect(q4Group?.trashGroup).not.toBe(deepGroup?.trashGroup);
+        // Q4's group holds Q4 and Plan; Deep and List stay in Deep's group.
+        expect(q4Group?.docCount).toBe(1);
+        const listed = index.snapshot().trash;
+        expect(listed.map((item) => item.id)).toEqual([q4.id, deep.id]);
+        expect(
+          listed.map((item) => (item.kind === "folder" ? item.trashGroup : "")),
+        ).toEqual([q4Group?.trashGroup ?? "", deepGroup?.trashGroup ?? ""]);
+      });
+
+      it("restores exactly its group, and a later restore goes back inside", async () => {
+        const { index, doc, dir } = setup();
+        await index.trashFolder(deep.id);
+        await index.trashFolder(q4.id);
+        expect(await index.restoreFolder(q4.id)).toBe("restored");
+        expect(doc(plan.id)?.folderId).toBe(q4.id);
+        expect(dir(deep.id)).toBeUndefined();
+        expect(doc(list.id)).toBeUndefined();
+        expect(await index.restoreFolder(deep.id)).toBe("restored");
+        expect(dir(deep.id)?.parentId).toBe(q4.id);
+        expect(doc(list.id)?.folderId).toBe(deepest.id);
+      });
+
+      it("falls back to the root while the parent is in the Trash", async () => {
+        const { index, dir } = setup();
+        await index.trashFolder(deep.id);
+        await index.trashFolder(q4.id);
+        expect(await index.restoreFolder(deep.id)).toBe("restored_to_root");
+        expect(dir(deep.id)?.parentId).toBeNull();
+        expect(await index.restoreFolder(q4.id)).toBe("restored");
+        // Deep stays where it was restored to.
+        expect(dir(deep.id)?.parentId).toBeNull();
+      });
+    });
+
+    describe("Modified counts content edits only (D-O5, provisional)", () => {
+      it("is set at creation and left alone by moves, pins, tags and opening", () => {
+        const { index, doc } = setup();
+        const created = index.create({ title: "New" });
+        const id = created?.id ?? "";
+        const stamp = doc(id)?.modifiedAt;
+        expect(stamp).toBeGreaterThanOrEqual(created?.createdAt ?? 0);
+        const tag = index.createTag("misc");
+        index.moveItems([{ kind: "doc", id }], home.id);
+        index.pin(id);
+        if (tag) index.addTag(id, tag.id);
+        index.markOpened(id);
+        index.setListView("library", { sort: "modified", descending: true });
+        expect(doc(id)?.modifiedAt).toBe(stamp);
+        const old = doc(plan.id)?.modifiedAt;
+        index.moveItems([{ kind: "doc", id: plan.id }], home.id);
+        expect(doc(plan.id)?.modifiedAt).toBe(old);
       });
     });
 

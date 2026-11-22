@@ -51,6 +51,8 @@ interface FolderUnit {
   readonly folders: FolderEntry[];
   readonly docs: DocumentEntry[];
   readonly trashedAt: number;
+  /** The subtree's one `trash_group`. */
+  readonly trashGroup: string;
 }
 
 interface TrashedDoc {
@@ -397,6 +399,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
       folders: this.folders.filter((folder) => subtree.has(folder.id)),
       docs: this.items.filter(inside),
       trashedAt: this.trashTime(),
+      trashGroup: crypto.randomUUID(),
     };
     this.folderUnits.set(id, unit);
     this.folders = this.folders.filter((folder) => !subtree.has(folder.id));
@@ -407,6 +410,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
       name: root.name,
       parentId: root.parentId,
       docCount: unit.docs.length,
+      trashGroup: unit.trashGroup,
     };
   }
 
@@ -579,6 +583,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
         trashedAt: unit.trashedAt,
         parentId: root.parentId,
         docCount: unit.docs.length,
+        trashGroup: unit.trashGroup,
       });
     }
     return list.sort((a, b) => b.trashedAt - a.trashedAt);

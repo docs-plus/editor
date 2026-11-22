@@ -41,7 +41,11 @@ export interface DocumentEntry {
   readonly pinKey?: string;
   /** `LibraryIndex` only: when it was last opened, if ever. */
   readonly openedAt?: number;
-  /** `LibraryIndex` only: the last content change (`docs.modified_at`). */
+  /**
+   * `LibraryIndex` only: the last content change (`docs.modified_at`). Only
+   * content edits change it (title included, since the title is the first
+   * heading); moves, pins, tags and opening don't (D-O5, provisional).
+   */
   readonly modifiedAt?: number;
   /**
    * `LibraryIndex` only: the start of the body as plain text, sent by the
@@ -110,6 +114,14 @@ export interface DocumentIndex {
   subscribe(listener: DocumentIndexListener): () => void;
   /** Lists a new, empty document; null when refused (not ready, full). */
   create(init?: { title?: string }): DocumentEntry | null;
+  /**
+   * Sets the title. On a `LibraryIndex` this edits the document's title
+   * heading through a session (the open window's, or a headless one for a
+   * closed document) and never writes the stored title column, which then
+   * follows from the next save: the title has one writer (offline
+   * data-model revision §4.2, gap G4). The web sandbox's tab list writes
+   * its own title directly.
+   */
   rename(id: string, title: string): void;
   /** Moves `id` to position `toIndex` of `snapshot().items`. */
   move(id: string, toIndex: number): void;
@@ -187,6 +199,8 @@ export type TrashedItem =
       readonly trashedAt: number;
       readonly parentId: string | null;
       readonly docCount: number;
+      /** The subtree's one `trash_group` (`TrashedFolder.trashGroup`). */
+      readonly trashGroup: string;
     };
 
 export interface LibraryIndexSnapshot extends DocumentIndexSnapshot {
@@ -243,9 +257,16 @@ export type MoveResult =
 export interface TrashedFolder {
   readonly id: string;
   readonly name: string;
+  /** Where it was (`trashed_from`); restore falls back to the root. */
   readonly parentId: string | null;
   /** Documents that went with it, at any depth. */
   readonly docCount: number;
+  /**
+   * One new `trash_group` shared by the folder, its live subfolders and
+   * their documents; restoring the folder restores exactly that group.
+   * Items trashed earlier on their own keep their own group.
+   */
+  readonly trashGroup: string;
 }
 
 /**
@@ -283,7 +304,8 @@ export type TagRenameResult =
  * - A trashed folder takes its subfolders and documents with it; they leave
  *   `items` and `folders` and count in `trashCount`.
  * - `restore` brings a document back to its folder, or to the root when
- *   that folder is gone.
+ *   that folder is gone or in the Trash. `restoreFolder` does the same
+ *   for a folder, and brings back its whole `trash_group` and nothing else.
  * - Tag names are unique by `tagNameKey`, at most `TAG_NAME_MAX` characters,
  *   and a document has at most `MAX_TAGS_PER_DOC` tags
  *   (`lib/library/tag-rules.ts`; the engine checks the same key, not only

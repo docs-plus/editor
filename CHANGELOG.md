@@ -19,13 +19,17 @@ use them: nothing in the web build imports `components/library` or
 #### Added
 
 - **Platform:** `LibraryIndex` gains tags (`tags`, `addTag`, `removeTag`,
-  `createTag`, `renameTag`, `mergeTags`; unique by `tagNameKey`, 40
-  characters, 20 per document), list choices per place (`listViews`,
+  `createTag`, `renameTag`, `mergeTags`; unique by `tagNameKey`, the shared
+  search normalizer, so case, accents and digit shapes don't make a new
+  tag; 40 characters, 20 per document), list choices per place (`listViews`,
   `setListView`; a folder's map to `folders.sort`, `view` and `"group"`,
   the rest to `meta`), Manual order inside a folder (`moveInFolder`,
   `docs.sort_key`), the Trash list (`trash`: documents and folder units,
-  newest first) and list metadata on entries (`modifiedAt`, `snippet`,
-  `tagIds`, `sortKey`). `MemoryDocumentIndex` implements them and the
+  newest first), one `trashGroup` per trashed folder's subtree, and list
+  metadata on entries (`modifiedAt`, `snippet`, `tagIds`, `sortKey`).
+  Modified counts content edits only (D-O5, provisional), and `rename` on
+  a `LibraryIndex` is documented as editing the title heading through a
+  session, never the stored title (offline data-model revision §4.2). `MemoryDocumentIndex` implements them and the
   shared contract suite covers them for P2.6's `IpcDocumentIndex` and W2's
   `IdbDocumentIndex`.
 - **Library:** list views for Recent, Pinned, the Library root, a folder,
