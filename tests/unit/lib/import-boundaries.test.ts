@@ -54,6 +54,20 @@ const SERVER_ENTRIES = [
 const PLATFORM_ENTRIES = [
   "lib/platform/local-session.ts",
   "lib/platform/memory-doc-store.ts",
+  "lib/platform/web/library/idb-doc-store.ts",
+  "lib/platform/web/library/storage-health.ts",
+  "lib/platform/web/library/library-flag.ts",
+];
+
+// The web library's storage (web library §7.3): it renders with no server,
+// so it must never reach the sandbox's socket, tab list, offline copies or
+// analytics.
+const LIBRARY_ENTRIES = [
+  "lib/platform/web/library/idb-doc-store.ts",
+  "lib/platform/web/library/library-db.ts",
+  "lib/platform/web/library/library-docs.ts",
+  "lib/platform/web/library/storage-health.ts",
+  "lib/platform/web/library/library-flag.ts",
 ];
 
 describe("platform import boundaries", () => {
@@ -70,6 +84,23 @@ describe("platform import boundaries", () => {
         expect(name.startsWith("@tiptap/")).toBe(false);
         expect(name.startsWith("@hocuspocus/")).toBe(false);
       }
+    });
+  }
+});
+
+describe("web library import boundaries", () => {
+  for (const entry of LIBRARY_ENTRIES) {
+    it(`${entry} loads no sandbox session, socket, offline copy or analytics`, () => {
+      const { files, packages } = staticImports(entry);
+      for (const file of files) {
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file).not.toBe("hooks/use-synced-tabs.ts");
+        expect(file).not.toBe("hooks/use-connection-state.ts");
+        expect(file.startsWith("lib/offline/")).toBe(false);
+        expect(file.startsWith("lib/analytics")).toBe(false);
+      }
+      expect([...packages]).not.toContain("@hocuspocus/provider");
+      expect([...packages]).not.toContain("fake-indexeddb");
     });
   }
 });
