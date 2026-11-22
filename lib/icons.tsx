@@ -16,6 +16,7 @@ export {
   Baseline as BaselineIcon,
   Bold as BoldIcon,
   Brain as BrainIcon,
+  CaseSensitive as CaseSensitiveIcon,
   ChartPie as ChartPieIcon,
   Check as CheckIcon,
   ChevronDown as ChevronDownIcon,
@@ -98,6 +99,7 @@ export {
   Type as TypeIcon,
   Underline as UnderlineIcon,
   Undo2 as Undo2Icon,
+  WholeWord as WholeWordIcon,
   Workflow as MermaidIcon,
   X as CloseIcon,
 } from "lucide-react";
