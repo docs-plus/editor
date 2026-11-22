@@ -236,7 +236,7 @@ test.describe("selection bubble", () => {
       );
     // Spec §7.1: Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌 │ 💬 (unregistered).
     expect(names).toEqual([
-      "Text",
+      "Turn into Text",
       "Bold",
       "Italic",
       "Underline",
@@ -249,7 +249,7 @@ test.describe("selection bubble", () => {
       "Paint format",
     ]);
     const style = styleButton(page);
-    await expect(style).toHaveAccessibleName("Text");
+    await expect(style).toHaveAccessibleName("Turn into Text");
     await expect(style).toHaveAttribute("aria-haspopup", "menu");
     // The face is sized once to the longest face word, at least 64px.
     const width = await style.evaluate(
@@ -948,7 +948,11 @@ test.describe("selection bubble", () => {
         /Inline code/,
       );
     }
-    for (const name of [/^Inline code$/, /^Clear formatting$/, /^Text$/]) {
+    for (const name of [
+      /^Inline code$/,
+      /^Clear formatting$/,
+      /^Turn into Text$/,
+    ]) {
       await expect(toolbar.getByRole("button", { name })).not.toHaveAttribute(
         "aria-disabled",
         "true",
@@ -1032,6 +1036,119 @@ async function openTab(page: Page, id: string) {
     );
   });
 }
+
+const TURN_DOC = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+    paragraph(text("Plain words to turn")),
+    {
+      type: "bulletList",
+      content: [
+        { type: "listItem", content: [paragraph(text("Listed words"))] },
+      ],
+    },
+    { type: "blockquote", content: [paragraph(text("Quoted words"))] },
+    { type: "heading", attrs: { level: 2 }, content: [text("Heading words")] },
+    paragraph(text("Tail paragraph")),
+  ],
+};
+
+/** The top-level block holding `needle`, with its first child's type. */
+const blockOf = (page: Page, needle: string) =>
+  page.evaluate((target) => {
+    let found = "";
+    window.__tiptap_editor?.state.doc.forEach((node) => {
+      if (!found && node.textContent.includes(target)) {
+        found = `${node.type.name}${node.attrs.level ? node.attrs.level : ""}`;
+      }
+    });
+    return found;
+  }, needle);
+
+/** Opens Style ▾ from the bubble and picks `item` ("Text", "Heading 2"). */
+async function turnInto(page: Page, needle: string, item: string) {
+  await selectText(page, needle);
+  await expectBubbleOpen(page);
+  await styleButton(page).click();
+  await page
+    .getByRole("menu", { name: "Turn into" })
+    .getByRole("menuitemradio", { name: item, exact: true })
+    .click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
+  test("the face follows the selection while the bubble is open", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await selectText(page, "Plain words");
+    await expectBubbleOpen(page);
+    await expect(styleButton(page)).toHaveAttribute("data-face", "Text");
+    await expect(styleButton(page)).toHaveAccessibleName("Turn into Text");
+    // Shift+Arrow keeps the bubble; the selection grows into the list.
+    await selectText(page, "Listed words");
+    await expect(styleButton(page)).toHaveAttribute("data-face", "List");
+    await selectText(page, "Heading words");
+    await expect(styleButton(page)).toHaveAccessibleName(
+      "Turn into H2 Heading 2",
+    );
+  });
+
+  for (const [needle, item, before, after] of [
+    ["Listed words", "Text", "bulletList", "paragraph"],
+    ["Quoted words", "Heading 2", "blockquote", "heading2"],
+    ["Heading words", "Bullet list", "heading2", "bulletList"],
+  ] as const) {
+    test(`turn into ${item} from ${before} is one undo step`, async ({
+      page,
+    }) => {
+      await openDoc(page, TURN_DOC);
+      expect(await blockOf(page, needle)).toBe(before);
+      await turnInto(page, needle, item);
+      await expect.poll(() => blockOf(page, needle)).toBe(after);
+      await expect(page.locator(".tiptap")).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => blockOf(page, needle)).toBe(before);
+    });
+  }
+
+  test("RTL: the inline-end arrow opens More headings; Esc goes back one level at a time", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await selectText(page, "Plain words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(styleButton(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    const menu = page.getByRole("menu", { name: "Turn into" });
+    await expect(menu).toBeVisible();
+    const more = menu.getByRole("menuitem", { name: "More headings" });
+    for (let i = 0; i < 6; i += 1) {
+      if (await more.evaluate((el) => el === document.activeElement)) break;
+      await page.keyboard.press("ArrowDown");
+    }
+    await expect(more).toBeFocused();
+    // In RTL the inline end is the left.
+    await page.keyboard.press("ArrowLeft");
+    await expect(
+      page.getByRole("menuitemradio", { name: "Heading 4" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(styleButton(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tiptap")).toBeFocused();
+  });
+});
 
 test.describe("selection bubble controller (spec §12.1)", () => {
   test("mounting the bubble chunk registers no plugin", async ({ page }) => {

@@ -1,5 +1,9 @@
+import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
+import { useSyncExternalStore } from "react";
+
+import { getEditorContextStore } from "@/lib/editor-context/store";
 
 /**
  * The Style ▾ face (spec §7.1, §7.2): the selection's block type as one
@@ -78,9 +82,15 @@ function blockFace(node: PMNode, index: number): StyleFace | null {
  */
 export function styleFace(state: EditorState): StyleFace {
   const { doc, selection } = state;
+  const { $from, $to } = selection;
   const last = doc.childCount - 1;
-  const start = Math.min(selection.$from.index(0), last);
-  const end = Math.min(selection.$to.index(0), last);
+  const start = Math.min($from.index(0), last);
+  // A range that ends between blocks (a top-level node selection) or at
+  // the very start of a top-level block does not touch that block.
+  const before =
+    !selection.empty &&
+    ($to.depth === 0 || $to.pos === $to.start(1) + $to.depth - 1);
+  const end = Math.max(start, Math.min($to.index(0) - (before ? 1 : 0), last));
   let face: StyleFace | null = null;
   for (let index = start; index <= end; index += 1) {
     const own = blockFace(doc.child(index), index);
@@ -89,4 +99,20 @@ export function styleFace(state: EditorState): StyleFace {
     face = own;
   }
   return face ?? "Text";
+}
+
+const serverFace = (): StyleFace => "Text";
+
+/**
+ * The live face, re-rendered when it changes: subscribed to the editor's
+ * shared context store (selection at once, doc changes after the settle
+ * window), with the face word as the snapshot, so a caret moving from a
+ * paragraph into a list or a remote edit updates it.
+ */
+export function useStyleFace(editor: Editor): StyleFace {
+  return useSyncExternalStore(
+    getEditorContextStore(editor).subscribe,
+    () => styleFace(editor.state),
+    serverFace,
+  );
 }

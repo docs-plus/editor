@@ -23,9 +23,11 @@ const APPLY_ID = "color.text.apply";
 /**
  * The bubble's text colour split (spec §7.1 slot 7): the face reapplies
  * the remembered colour ("Apply text colour: Red"), the 24px chevron opens
- * the colour menu away from the text. `ColorSplit`'s text half, with the
- * inline code reason (`useBubbleReason`), in the bubble chunk so the
- * editor chunk's split stays as it is.
+ * the colour menu away from the text. Mirrors `ColorSplit`'s text half
+ * (`components/smart-toolbar/color-controls.tsx`) plus the inline code
+ * reason (`useBubbleReason`): a copy, not a prop on `ColorSplit`, because
+ * that module is in the editor chunk and the phase's gate is 0 B. Keep the
+ * two in step.
  */
 export function BubbleColorSplit({
   editor,

@@ -1,7 +1,8 @@
 "use client";
 
+import type { EditorState } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
-import { useId } from "react";
+import { useId, useSyncExternalStore } from "react";
 
 import {
   DropdownMenuRadioGroup,
@@ -19,12 +20,14 @@ import {
   ariaKeyShortcuts,
   formatKeyCombo,
 } from "@/lib/editor-actions/key-combo";
-import { runAction } from "@/lib/editor-actions/registry";
-import type { IconComponent } from "@/lib/editor-actions/types";
+import { canRun, runAction } from "@/lib/editor-actions/registry";
+import type { AnyAction, IconComponent } from "@/lib/editor-actions/types";
+import { computeContext } from "@/lib/editor-context/snapshot";
+import { getEditorContextStore } from "@/lib/editor-context/store";
 import { HeadingIcon, TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 
-import { styleFace } from "../bubble/style-face";
+import { type StyleFace, styleFace } from "../bubble/style-face";
 import { lazySurface } from "../lazy-surface";
 
 /*
@@ -72,8 +75,8 @@ const LIST_ID_BY_TYPE: Readonly<Record<string, string>> = {
 };
 
 /** The list id every top-level block of the selection shares, or "". */
-function listId(editor: Editor): string {
-  const { doc, selection } = editor.state;
+function listId(state: EditorState): string {
+  const { doc, selection } = state;
   const last = doc.childCount - 1;
   const end = Math.min(selection.$to.index(0), last);
   let id = "";
@@ -86,17 +89,72 @@ function listId(editor: Editor): string {
 }
 
 /**
- * The checked row: the face's block type. Title and Mixed check nothing
- * (spec §7.4 "Mixed selection: no ✓"), nor does a mix of list types.
+ * The checked row for a face: its block type. Title and Mixed check
+ * nothing (spec §7.4 "Mixed selection: no ✓"), nor does a mix of lists.
  */
-function currentId(editor: Editor): string {
-  const face = styleFace(editor.state);
+function currentId(face: StyleFace, state: EditorState): string {
   if (face === "Text") return "style.paragraph";
-  if (face === "List") return listId(editor);
+  if (face === "List") return listId(state);
   if (face === "Quote") return "insert.quote";
   if (face === "Code") return "insert.codeBlock";
   if (face.startsWith("H")) return `style.heading${face.slice(1)}`;
   return "";
+}
+
+const serverValue = () => "Text|";
+
+/**
+ * The face and the checked id, re-rendered when either changes (the
+ * shared context store: selection at once, doc changes after the settle
+ * window), so a remote edit or a caret move updates the ✓ and the title
+ * lock while the menu is open.
+ */
+function useTurnIntoValue(editor: Editor): [StyleFace, string] {
+  const value = useSyncExternalStore(
+    getEditorContextStore(editor).subscribe,
+    () => {
+      const face = styleFace(editor.state);
+      return `${face}|${currentId(face, editor.state)}`;
+    },
+    serverValue,
+  );
+  const [face, id] = value.split("|");
+  return [face as StyleFace, id];
+}
+
+/** Lists and quotes a text style turns out of (ruling a: Turn into unwraps). */
+const WRAPPERS = new Set([
+  "bulletList",
+  "orderedList",
+  "taskList",
+  "blockquote",
+]);
+
+function inWrapper(state: EditorState): boolean {
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if (WRAPPERS.has($from.node(depth).type.name)) return true;
+  }
+  return false;
+}
+
+/**
+ * Runs a pick. Text and the headings turn a list item or a quote into
+ * that block, unwrapped, in one undo step (the registry's `setTextStyle`
+ * only restyles a textblock in place); everything else is the registry's
+ * own run. The registry's checks still decide (`canRun`: the title,
+ * read-only, code).
+ */
+function turnInto(editor: Editor, action: AnyAction): boolean {
+  if (!action.id.startsWith("style.") || !inWrapper(editor.state)) {
+    return runAction(editor, action);
+  }
+  if (!canRun(action, computeContext(editor))) return false;
+  const level = Number(action.id.slice("style.heading".length)) || 0;
+  const chain = editor.chain().focus().clearNodes();
+  return (
+    level ? chain.setNode("heading", { level }) : chain.setNode("paragraph")
+  ).run();
 }
 
 /**
@@ -116,7 +174,7 @@ interface TurnIntoItemProps {
 
 /**
  * One block type as a radio row. No Markdown chips (spec §7.4): they teach
- * in the "/" menu. A pick is one undo step through `runAction`.
+ * in the "/" menu. A pick is one undo step (`turnInto`).
  */
 function TurnIntoItem({
   id,
@@ -145,7 +203,7 @@ function TurnIntoItem({
       onClick={() => {
         if (disabled) return;
         onPicked();
-        runAction(editor, action);
+        turnInto(editor, action);
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : <span aria-hidden="true" />}
@@ -191,12 +249,10 @@ export function TurnIntoMenuItems({
   formats = false,
   removing = false,
 }: TurnIntoMenuItemsProps) {
-  // Subscribes to the snapshot, so the ✓ follows the selection.
-  useActionView("style.paragraph", editor);
+  const [face, value] = useTurnIntoValue(editor);
   const titleId = useId();
-  const inTitle = styleFace(editor.state) === "Title";
+  const inTitle = face === "Title";
   const titleReasonId = inTitle ? titleId : undefined;
-  const value = currentId(editor);
   const item = (id: string) => (
     <TurnIntoItem
       key={id}

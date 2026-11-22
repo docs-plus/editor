@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor } from "@tiptap/core";
-import { AllSelection, TextSelection } from "@tiptap/pm/state";
+import { AllSelection, NodeSelection, TextSelection } from "@tiptap/pm/state";
 
 import { styleFace } from "@/components/smart-toolbar/bubble/style-face";
 
@@ -83,6 +83,27 @@ describe("styleFace", () => {
   it("is one type across blocks that share it", () => {
     setup(h1("Title"), p("One"), p("Two"));
     selectBetween("One", "Two");
+    expect(styleFace(editor.state)).toBe("Text");
+  });
+
+  it("ignores the block a range ends at the start of", () => {
+    setup(h1("Title"), p("Body"), h2("Section"));
+    const start = posInside(editor, "Body");
+    const end = posInside(editor, "Section");
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, start, end),
+      ),
+    );
+    expect(styleFace(editor.state)).toBe("Text");
+  });
+
+  it("reads a top-level node selection as that block alone", () => {
+    setup(h1("Title"), p("Body"), h2("Section"));
+    const pos = posInside(editor, "Body") - 1;
+    editor.view.dispatch(
+      editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)),
+    );
     expect(styleFace(editor.state)).toBe("Text");
   });
 

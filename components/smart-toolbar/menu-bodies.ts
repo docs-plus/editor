@@ -17,9 +17,5 @@ export { LanguageMenuItems } from "./context-slot/slot-menu-bodies";
 export { InsertMenuContent } from "./insert/insert-menu-body";
 export { PhoneListMenuItems } from "./phone/phone-menu-bodies";
 export { ActionMenuItems, ToolbarMenuContent } from "./row/menu-items";
-export {
-  AlignMenuItems,
-  OverflowMenuItems,
-  StyleMenuItems,
-} from "./row/row-menu-bodies";
+export { AlignMenuItems, OverflowMenuItems } from "./row/row-menu-bodies";
 export { TurnIntoMenuItems } from "./row/turn-into-menu-items";

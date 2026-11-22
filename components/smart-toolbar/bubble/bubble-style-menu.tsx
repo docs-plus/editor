@@ -1,14 +1,14 @@
 "use client";
 
+import { DirectionProvider } from "@base-ui/react/direction-provider";
 import type { Editor } from "@tiptap/react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { useActionView } from "@/hooks/use-editor-context";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import {
   BlockquoteIcon,
@@ -19,14 +19,18 @@ import {
   TypeIcon,
 } from "@/lib/icons";
 
-import { menuBody, prefetchMenuBodies, useMenuGate } from "../lazy-menu";
-import { useMenuFocus } from "../row/action-menu";
+import {
+  focusLostOnClose,
+  menuBody,
+  prefetchMenuBodies,
+  useMenuGate,
+} from "../lazy-menu";
 import type { BubblePlacement } from "./bubble-rules";
 import {
   STYLE_FACE_NAMES,
   STYLE_FACES,
   type StyleFace,
-  styleFace,
+  useStyleFace,
 } from "./style-face";
 
 const Content = menuBody((bodies) => bodies.ToolbarMenuContent);
@@ -48,34 +52,78 @@ const FACE_ICONS: Partial<Record<StyleFace, IconComponent>> = {
 const faceIcon = (face: StyleFace): IconComponent =>
   FACE_ICONS[face] ?? (face.startsWith("H") ? HeadingIcon : TypeIcon);
 
+/** The widest face word, in the face's own font and untransformed. */
+function widestFaceWord(host: HTMLElement): number {
+  const probe = document.createElement("span");
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+  host.append(probe);
+  let widest = 0;
+  for (const face of STYLE_FACES) {
+    probe.textContent = face;
+    // `offsetWidth`, not the client rect: the panel scales in on show.
+    widest = Math.max(widest, probe.offsetWidth);
+  }
+  probe.remove();
+  return widest;
+}
+
 /**
- * The widest face word in the face's own font, measured once at mount, so
- * the face never moves the other items or reflows while open. Null before
- * it is measured (layout runs before paint) or where nothing lays out.
+ * The widest face word, measured at mount, so the face never moves the
+ * other items or reflows while open; measured again once web fonts have
+ * loaded. Null before it is measured (layout runs before paint) or where
+ * nothing lays out.
  */
 function useFaceWordWidth(word: React.RefObject<HTMLSpanElement | null>) {
   const [width, setWidth] = useState<number | null>(null);
   useLayoutEffect(() => {
-    const host = word.current;
-    if (!host) return;
-    const probe = document.createElement("span");
-    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
-    host.append(probe);
-    let widest = 0;
-    for (const face of STYLE_FACES) {
-      probe.textContent = face;
-      widest = Math.max(widest, probe.getBoundingClientRect().width);
-    }
-    probe.remove();
-    if (widest > 0) setWidth(Math.ceil(widest));
+    let live = true;
+    const measure = () => {
+      const host = word.current;
+      const widest = live && host ? widestFaceWord(host) : 0;
+      if (widest > 0) setWidth(widest);
+    };
+    measure();
+    document.fonts?.ready.then(measure, () => undefined);
+    return () => {
+      live = false;
+    };
   }, [word]);
   return width;
 }
 
 /**
+ * `useMenuFocus` (`row/action-menu.tsx`), kept here on purpose: importing
+ * that eager module from this lazy chunk splits the editor chunk group
+ * (+176 B measured), and the gate is 0 B. After a pick the editor already
+ * holds the selection, so focus goes there at once; Esc and outside
+ * clicks fall back to the trigger unless focus moved on.
+ */
+function useBubbleMenuFocus(editor: Editor) {
+  const [open, setOpen] = useState(false);
+  const picked = useRef(false);
+  const onOpenChange = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      if (!next && picked.current) editor.view.focus();
+    },
+    [editor],
+  );
+  const finalFocus = useCallback(() => {
+    if (!picked.current) return focusLostOnClose();
+    picked.current = false;
+    return editor.view.dom;
+  }, [editor]);
+  const markPicked = useCallback(() => {
+    picked.current = true;
+  }, []);
+  return { open, onOpenChange, finalFocus, markPicked };
+}
+
+/**
  * Style ▾ in the bubble (spec §7.1 slot 1, §7.4): the selection's block
  * type as one word ("Text", "H2", "List", "Mixed"), opening Turn into.
- * Named by the face plus the full name ("H2 Heading 2", WCAG 2.5.3). The
+ * Named "Turn into" plus the face and its full name ("Turn into H2
+ * Heading 2": the visible word is in the name, WCAG 2.5.3). The
  * menu's body is the row's, from the menu chunk, without Your formats; it
  * opens away from the text (`side`, spec §10.4).
  */
@@ -86,50 +134,66 @@ export function BubbleStyleMenu({
   editor: Editor;
   placement: BubblePlacement;
 }) {
-  // Subscribes to the snapshot: the face follows the selection.
-  useActionView("style.paragraph", editor);
-  const menu = useMenuFocus(editor);
+  const menu = useBubbleMenuFocus(editor);
   const openMenu = useMenuGate(menu.onOpenChange);
+  // Base UI reads the direction from context, not from the page: the
+  // submenu opens on the inline-end arrow (← in RTL, spec §7.10).
+  const [direction, setDirection] = useState<"ltr" | "rtl">("ltr");
+  const onOpenChange: typeof openMenu = (next, details) => {
+    if (next) {
+      setDirection(
+        getComputedStyle(editor.view.dom).direction === "rtl" ? "rtl" : "ltr",
+      );
+    }
+    openMenu(next, details);
+  };
   const wordRef = useRef<HTMLSpanElement>(null);
   const wordWidth = useFaceWordWidth(wordRef);
-  const face = styleFace(editor.state);
+  const face = useStyleFace(editor);
   const name = STYLE_FACE_NAMES[face];
   const iconOnly = wordWidth !== null && wordWidth + FACE_CHROME > FACE_MAX;
   const Icon = faceIcon(face);
   return (
-    <DropdownMenu open={menu.open} onOpenChange={openMenu}>
-      <DropdownMenuTrigger
-        render={
-          <ToolbarButton
-            type="button"
-            aria-haspopup="menu"
-            tooltip="Turn into"
-            size="sm"
-            className="st-bubble-style"
-            data-face={face}
-            style={{ minWidth: FACE_MIN }}
-            onPointerEnter={prefetchMenuBodies}
-            onFocus={prefetchMenuBodies}
-          />
-        }
-      >
-        {iconOnly ? <Icon aria-hidden="true" /> : null}
-        <span
-          ref={wordRef}
-          className="st-bubble-style-word"
-          hidden={iconOnly}
-          style={wordWidth === null ? undefined : { width: wordWidth }}
+    <DirectionProvider direction={direction}>
+      <DropdownMenu open={menu.open} onOpenChange={onOpenChange}>
+        <DropdownMenuTrigger
+          render={
+            <ToolbarButton
+              type="button"
+              aria-haspopup="menu"
+              tooltip="Turn into"
+              size="sm"
+              className="st-bubble-style"
+              data-face={face}
+              style={{ minWidth: FACE_MIN }}
+              onPointerEnter={prefetchMenuBodies}
+              onFocus={prefetchMenuBodies}
+            />
+          }
         >
-          {face}
-        </span>
-        {iconOnly || name !== face ? (
-          <span className="sr-only">{name}</span>
-        ) : null}
-        <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
-      </DropdownMenuTrigger>
-      <Content finalFocus={menu.finalFocus} label="Turn into" side={placement}>
-        <TurnIntoMenuItems editor={editor} onPicked={menu.markPicked} />
-      </Content>
-    </DropdownMenu>
+          <span className="sr-only">Turn into </span>
+          {iconOnly ? <Icon aria-hidden="true" /> : null}
+          <span
+            ref={wordRef}
+            className="st-bubble-style-word"
+            hidden={iconOnly}
+            style={wordWidth === null ? undefined : { width: wordWidth }}
+          >
+            {face}
+          </span>
+          {iconOnly || name !== face ? (
+            <span className="sr-only">{name}</span>
+          ) : null}
+          <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <Content
+          finalFocus={menu.finalFocus}
+          label="Turn into"
+          side={placement}
+        >
+          <TurnIntoMenuItems editor={editor} onPicked={menu.markPicked} />
+        </Content>
+      </DropdownMenu>
+    </DirectionProvider>
   );
 }
