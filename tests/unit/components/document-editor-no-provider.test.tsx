@@ -62,9 +62,13 @@ afterAll(() => {
   }));
 });
 
-const { DocumentEditor } = await import(
-  "@/components/document-editor/document-editor"
-);
+// The editor plus the chip the web root hands it: the editor folder imports
+// no chip, so nothing there reads collab-session.
+const [{ DocumentEditor }, { CollabStatusGroup }] = await Promise.all([
+  import("@/components/document-editor/document-editor"),
+  import("@/components/tiptap-ui/user-identity-button"),
+]);
+const STATUS_CHIP = <CollabStatusGroup />;
 
 /** Counts WebSocket constructions, whatever creates them. */
 let socketsOpened = 0;
@@ -136,7 +140,7 @@ async function render() {
   await act(async () => {
     root?.render(
       <DocSessionProvider value={docSession}>
-        <DocumentEditor documentId="local-doc" />
+        <DocumentEditor documentId="local-doc" statusChip={STATUS_CHIP} />
       </DocSessionProvider>,
     );
   });
