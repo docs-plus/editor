@@ -10,7 +10,7 @@
  *   `trashed_from`; everything inside keeps its pointers, so the group can
  *   come back whole. Items already in the Trash keep their own group.
  * - `restoreFolder` brings back exactly that group, to `trashed_from` when it
- *   is live, otherwise to the root.
+ *   is live and the subtree still fits under it (I2), otherwise to the root.
  * - `purgeFolder` deletes the group's documents, then its folders bottom-up,
  *   in one transaction (`ON DELETE RESTRICT` makes any other order fail).
  */
@@ -281,13 +281,17 @@ export function restoreFolder(
     if (!row) throw new StorageError("not_found", "no such trashed folder");
     const group = String(row.trash_group);
     const from = typeof row.trashed_from === "string" ? row.trashed_from : null;
+    const folders = liveFolders(db);
+    // The old parent may have moved deeper since: then the subtree no
+    // longer fits under it and goes to the root (I2).
     const live =
       from !== null &&
       scalar(
         db,
         "SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL",
         from,
-      ) !== undefined;
+      ) !== undefined &&
+      depthOf(folders, from) + heightOf(folders, id) <= MAX_FOLDER_DEPTH;
     if (from !== null && !live) result = "restored_to_root";
     db.prepare(
       `UPDATE folders SET parent_id = ?, trashed_at = NULL, trash_group = NULL,

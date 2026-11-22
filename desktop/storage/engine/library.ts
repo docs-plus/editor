@@ -50,7 +50,7 @@ import {
 } from "./daily-copy";
 import * as derive from "./derive";
 import * as docsCopy from "./docs-copy";
-import type { OpenSqlite, SqliteDriver } from "./driver";
+import type { OpenSqlite, SqliteDriver, SqlRow } from "./driver";
 import { storageErrorFrom } from "./driver";
 import { StorageError } from "./errors";
 import * as folders from "./folders";
@@ -174,8 +174,18 @@ function countCleanOpen(db: SqliteDriver, host: StorageHost, dir: string) {
       host.remove(host.join(dir, file));
 }
 
-function quickCheck(db: SqliteDriver): string {
-  const rows = db.prepare("PRAGMA quick_check").all();
+/**
+ * `quick_check`'s verdict. A badly damaged file makes the pragma itself
+ * throw ("database disk image is malformed"): that is a verdict too, so the
+ * library opens read-only as `corrupt` and the SEC-009 rebuild can start.
+ */
+export function quickCheck(db: SqliteDriver): string {
+  let rows: SqlRow[];
+  try {
+    rows = db.prepare("PRAGMA quick_check").all();
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
   const messages = rows.map((row) => String(Object.values(row)[0]));
   return messages.length === 1 && messages[0] === "ok"
     ? "ok"

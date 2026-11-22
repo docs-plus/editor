@@ -155,13 +155,15 @@ export function insertDoc(
     schema: number;
     lineage: string;
     linkKey: string;
+    /** Set for a new or imported document, so it lists in Recent at once. */
+    openedAt?: number | null;
   },
   now: number,
 ) {
   db.prepare(
     `INSERT INTO docs (id, title, title_key, folder_id, sort_key, created_at,
-       modified_at, lineage, link_key, kind, schema)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       modified_at, opened_at, lineage, link_key, kind, schema)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.id,
     row.title,
@@ -170,6 +172,7 @@ export function insertDoc(
     row.sortKey,
     now,
     now,
+    row.openedAt ?? null,
     row.lineage,
     row.linkKey,
     row.kind,
@@ -211,6 +214,9 @@ export function createDoc(
         schema,
         lineage,
         linkKey,
+        // New and imported documents list in Recent right away (web parity);
+        // duplicate and restore stay "opened only".
+        openedAt: now,
       },
       now,
     );
