@@ -136,6 +136,8 @@ Each fact below was checked against the code during the audit and the two review
 
 ## 3. Approaches considered
 
+> **2026-11-22 revision:** the offline data model (format 2, the relationship layer, long-document policy and the offline feature matrix) is in [2026-11-22-offline-data-model-revision.md](2026-11-22-offline-data-model-revision.md), which wins over §3.2 and the §8.4 Phase 2 rows where it differs.
+
 ### 3.1 Desktop shell (recommended: Electron)
 
 | | Electron | Tauri 2 | Electrobun | PWA only |

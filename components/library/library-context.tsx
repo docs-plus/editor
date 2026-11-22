@@ -28,6 +28,8 @@ import {
   moveRefusalMessage,
 } from "@/lib/library/folder-rules";
 import type { OpenTarget } from "@/lib/library/library-keys";
+import { compareManual } from "@/lib/library/list-rows";
+import type { LibraryPlace } from "@/lib/library/list-view";
 import {
   entryTitle,
   itemKey,
@@ -38,26 +40,22 @@ import type {
   LibraryIndex,
   LibraryIndexSnapshot,
   LibraryItemRef,
+  TrashedItem,
 } from "@/lib/platform/document-index";
 
-import { ItemMenu, type MenuAnchor } from "./item-menu";
+import { ItemMenu, type ItemMenuEntry, type MenuAnchor } from "./item-menu";
 import { LibraryDnd } from "./library-dnd";
 import { MoveToDialog } from "./move-to-dialog";
 import { QuickOpen } from "./quick-open";
+import { TagMergeDialog } from "./tag-merge-dialog";
 
-/** A list the host shows in the main area (UX §4.1). */
-export type LibraryPlace =
-  | { kind: "recent" }
-  | { kind: "pinned" }
-  | { kind: "library" }
-  | { kind: "trash" }
-  | { kind: "folder"; id: string };
+export type { LibraryPlace };
 
 export interface LibraryHostProps {
   index: LibraryIndex;
   /** Opens a document in this tab, a new tab or a new window. */
   onOpenDocument: (id: string, target: OpenTarget) => void;
-  /** Shows a list (Recent, Pinned, a folder, Trash) in the main area. */
+  /** Shows a list (Recent, Pinned, a folder, a tag, Trash) in the main area. */
   onOpenPlace?: (place: LibraryPlace, target: OpenTarget) => void;
   /**
    * Renames a document. The first heading is its only title (details spec
@@ -84,6 +82,8 @@ interface MenuState {
   returnFocus: HTMLElement | null;
   /** The menu was opened on a pinned row. */
   pinned: boolean;
+  /** Entries the row's list adds (Move Up / Move Down in a Manual list). */
+  extra?: readonly ItemMenuEntry[];
 }
 
 interface FocusRequest {
@@ -107,13 +107,23 @@ export interface LibraryActions {
   /** Creates "New Folder" in `parentId` and starts renaming it. */
   createFolder(parentId: string | null): void;
   rename(item: LibraryItemRef, name: string): void;
-  trash(items: readonly LibraryItemRef[], focusAfter?: string | null): void;
+  /**
+   * Moves to Trash with an Undo pill. Undo reveals the first item in the
+   * tree, or calls `onUndone` (a list focuses its own row).
+   */
+  trash(
+    items: readonly LibraryItemRef[],
+    focusAfter?: string | null,
+    onUndone?: (first: LibraryItemRef) => void,
+  ): void;
   /** Moves; announces a refusal. True when it moved. */
   move(items: readonly LibraryItemRef[], folderId: string | null): boolean;
   pin(id: string): void;
   unpin(id: string): void;
   /** Moves a pinned document to `toIndex` among the pinned. */
   movePin(id: string, toIndex: number): void;
+  /** Moves a document within its folder's Manual order (undoable). */
+  moveInFolder(id: string, toIndex: number): void;
   undo(): void;
   toggleFolder(id: string, open?: boolean): void;
   expandFolders(ids: readonly string[]): void;
@@ -123,7 +133,23 @@ export interface LibraryActions {
   stopRename(): void;
   openMoveTo(items: readonly LibraryItemRef[]): void;
   openQuickOpen(): void;
-  openMenu(item: LibraryItemRef, anchor: MenuAnchor, pinned?: boolean): void;
+  openMenu(
+    item: LibraryItemRef,
+    anchor: MenuAnchor,
+    pinned?: boolean,
+    extra?: readonly ItemMenuEntry[],
+  ): void;
+  /** Restores Trash list items: documents to their folder, folders whole. */
+  restoreTrashed(items: readonly TrashedItem[]): void;
+  /** Shows or hides the sidebar's Tags section (collapsed by default). */
+  toggleTags(open?: boolean): void;
+  startTagRename(id: string): void;
+  stopTagRename(): void;
+  /**
+   * Renames a tag everywhere; a name another tag has asks to merge them
+   * (details §3). True when renamed (or unchanged).
+   */
+  renameTag(id: string, name: string): boolean;
 }
 
 export interface LibraryContextValue {
@@ -135,6 +161,10 @@ export interface LibraryContextValue {
   renaming: string | null;
   focusRequest: FocusRequest | null;
   recentDestinations: readonly (string | null)[];
+  /** The sidebar's Tags section is expanded. */
+  tagsOpen: boolean;
+  /** The tag being renamed in the sidebar. */
+  renamingTag: string | null;
   actions: LibraryActions;
 }
 
@@ -208,6 +238,12 @@ export function LibraryProvider({
     returnFocus: HTMLElement | null;
   } | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [renamingTag, setRenamingTag] = useState<string | null>(null);
+  const [merge, setMerge] = useState<{
+    fromId: string;
+    intoId: string;
+  } | null>(null);
   const [undoStack] = useState(createFileUndoStack);
 
   // Actions read the host's latest callbacks through a ref, so the actions
@@ -326,7 +362,7 @@ export function LibraryProvider({
           },
         });
       },
-      trash(items, focusAfter) {
+      trash(items, focusAfter, onUndone) {
         const docs = items.filter((item) => item.kind === "doc");
         const folders = items.filter((item) => item.kind === "folder");
         const firstLabel = items.length === 1 ? labelOf(items[0]) : "";
@@ -370,7 +406,8 @@ export function LibraryProvider({
               const first = docResult.trashed[0]
                 ? { kind: "doc" as const, id: docResult.trashed[0].id }
                 : { kind: "folder" as const, id: trashedFolders[0].id };
-              self.reveal(first);
+              if (onUndone) onUndone(first);
+              else self.reveal(first);
             },
           });
           announce(message, {
@@ -434,6 +471,22 @@ export function LibraryProvider({
         index.movePin(id, to);
         undoStack.push({ label: "Move", undo: () => index.movePin(id, at) });
       },
+      moveInFolder(id, to) {
+        const doc = now().items.find((entry) => entry.id === id);
+        if (!doc) return;
+        const order = now()
+          .items.filter(
+            (entry) => (entry.folderId ?? null) === (doc.folderId ?? null),
+          )
+          .sort(compareManual);
+        const at = order.findIndex((entry) => entry.id === id);
+        if (to < 0 || to >= order.length || to === at) return;
+        index.moveInFolder(id, to);
+        undoStack.push({
+          label: "Move",
+          undo: () => index.moveInFolder(id, at),
+        });
+      },
       undo() {
         void undoStack.undo().then((done) => {
           if (!done) announce("Nothing to undo.");
@@ -483,15 +536,83 @@ export function LibraryProvider({
             },
         );
       },
-      openMenu(item, anchor, pinned = false) {
+      openMenu(item, anchor, pinned = false, extra) {
         // Shift+F10 can also raise the browser's own `contextmenu` event:
         // one menu at a time, the first one wins.
         const returnFocus = document.activeElement as HTMLElement | null;
         menuSerial.current += 1;
         const serial = menuSerial.current;
         setMenu(
-          (current) => current ?? { item, anchor, pinned, returnFocus, serial },
+          (current) =>
+            current ?? { item, anchor, pinned, returnFocus, serial, extra },
         );
+      },
+      restoreTrashed(items) {
+        const docs = items.filter((item) => item.kind === "doc");
+        const folders = items.filter((item) => item.kind === "folder");
+        void (async () => {
+          const docResults =
+            docs.length > 0
+              ? ((await index.restore(
+                  docs.map((doc) => ({ id: doc.id, title: doc.title })),
+                )) ?? {})
+              : {};
+          const folderResults = await Promise.all(
+            folders.map((folder) => index.restoreFolder(folder.id)),
+          );
+          const restoredDocs = docs.filter(
+            (doc) => docResults[doc.id] === "restored",
+          );
+          const restoredFolders = folders.filter(
+            (_, at) =>
+              folderResults[at] === "restored" ||
+              folderResults[at] === "restored_to_root",
+          );
+          const count = restoredDocs.length + restoredFolders.length;
+          if (count === 0) {
+            announce("Couldn't restore that. It may have been deleted.");
+            return;
+          }
+          if (count > 1) {
+            announce(`Restored ${count} items.`);
+          } else if (restoredDocs.length === 1) {
+            const doc = restoredDocs[0];
+            const home = now().items.find((entry) => entry.id === doc.id);
+            const where = folderName(home?.folderId ?? null);
+            announce(`Restored ${quote(entryTitle(doc))} to ${where}.`);
+          } else {
+            const folder = restoredFolders[0];
+            const toRoot =
+              folderResults[folders.indexOf(folder)] === "restored_to_root";
+            announce(
+              toRoot
+                ? `Restored ${quote(folder.name)} to Library because its folder was deleted.`
+                : `Restored ${quote(folder.name)} to ${folderName(folder.parentId)}.`,
+            );
+          }
+        })();
+      },
+      toggleTags(open) {
+        setTagsOpen((current) => open ?? !current);
+      },
+      startTagRename(id) {
+        setTagsOpen(true);
+        setRenamingTag(id);
+      },
+      stopTagRename() {
+        setRenamingTag(null);
+      },
+      renameTag(id, name) {
+        const result = index.renameTag(id, name);
+        if (result.ok) return true;
+        if (result.reason === "exists") {
+          setMerge({ fromId: id, intoId: result.tagId });
+        } else if (result.reason === "invalid") {
+          announce("A tag needs a name.");
+        } else {
+          announce("Couldn't rename that tag. Try again in a moment.");
+        }
+        return false;
       },
     };
     return self;
@@ -506,6 +627,8 @@ export function LibraryProvider({
       renaming,
       focusRequest,
       recentDestinations,
+      tagsOpen,
+      renamingTag,
       actions,
     }),
     [
@@ -516,6 +639,8 @@ export function LibraryProvider({
       renaming,
       focusRequest,
       recentDestinations,
+      tagsOpen,
+      renamingTag,
       actions,
     ],
   );
@@ -549,10 +674,39 @@ export function LibraryProvider({
           item={menu.item}
           anchor={menu.anchor}
           pinned={menu.pinned}
+          extra={menu.extra}
           onClose={(keepFocus) => {
             const { returnFocus } = menu;
             setMenu(null);
             if (!keepFocus) focusSoon(returnFocus);
+          }}
+        />
+      )}
+      {merge && (
+        <TagMergeDialog
+          fromId={merge.fromId}
+          intoId={merge.intoId}
+          onClose={(merged) => {
+            const { fromId, intoId } = merge;
+            setMerge(null);
+            const tags = index.snapshot().tags;
+            const name = (id: string) =>
+              tags.find((tag) => tag.id === id)?.name ?? "";
+            const from = name(fromId);
+            if (merged && index.mergeTags(fromId, intoId)) {
+              announce(`Merged ${quote(from)} into ${quote(name(intoId))}.`);
+            }
+            // Back to the tag's row (the rename field is gone): the source
+            // after Cancel, the tag it merged into after Merge.
+            const row = (id: string) =>
+              document.querySelector<HTMLElement>(
+                `[data-tag-row="${CSS.escape(id)}"]`,
+              );
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() =>
+                (row(fromId) ?? row(intoId))?.focus(),
+              ),
+            );
           }}
         />
       )}

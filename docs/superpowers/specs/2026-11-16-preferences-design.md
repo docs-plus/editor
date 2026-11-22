@@ -749,6 +749,10 @@ All values are custom properties on `:root`, chosen by attributes. They are unre
 - **Code:**
   - `.tiptap code, .tiptap pre { letter-spacing: normal; word-spacing: normal; font-family: <code stack> }`.
   - Code never takes the page font or extra letter spacing.
+- **Right-to-left blocks (languages design §5.3, L4):**
+  - `.tiptap :dir(rtl) { letter-spacing: normal; }`, keeping `word-spacing: var(--page-word)`.
+  - Letter spacing breaks or is not interoperable for joined (Arabic-script) letters, and CSS can't select by script, so every RTL block turns it off, Hebrew included. Word spacing still applies.
+  - `:dir()` matches blocks that `dir="auto"` resolved to RTL.
 - **Full width:**
   - Text blocks (`p`, `ul`, `ol`, `blockquote`, `h1`–`h6`, task lists) get `max-inline-size: calc(46 * var(--page-size))`, aligned to the start edge.
   - Tables, images, Mermaid and code blocks use the full width.
@@ -931,6 +935,13 @@ Desktop and the web library are new installs on new storage, so they get the new
   - The desktop static export bundles them. Desktop CSP `font-src 'self'` covers them.
 - **Fallback metrics.** Each family gets a fallback `@font-face` with `size-adjust` and `ascent-override` tuned against its stack, so swapping causes little reflow.
 - **Licences.** OFL texts are added to About › Third-party notices (desktop) and the web licences page, generated from the packages.
+- **Script fallbacks (languages design §5.2, L4).** None of the families above covers Arabic script or Hebrew, so four OFL faces join the stacks:
+  - **Vazirmatn** (Arabic subset) in the Default, Sans, Legible and Mono stacks;
+  - **Noto Naskh Arabic** in the Serif stack;
+  - **Noto Sans Hebrew** in the Default, Sans, Legible and Mono stacks;
+  - **Noto Serif Hebrew** in the Serif stack.
+
+  Each is a `@font-face` with a `unicode-range` (Arabic U+0600–06FF, U+0750–077F, U+08A0–08FF, U+FB50–FDFF, U+FE70–FEFF; Hebrew U+0590–05FF, U+FB1D–FB4F), listed **after** the page font, so it downloads only when such text renders. They are bundled, cached and offline the same way as the faces above. **`classic` keeps today's stack** (no visible change); the fallbacks join every new style.
 
 ### 5.14 Bundle impact
 
@@ -972,7 +983,7 @@ Desktop and the web library are new installs on new storage, so they get the new
   11. **Outline docking** at the table's thresholds ± 1 px, with the files sidebar open.
   12. **Spellcheck off:** `spellcheck` is false on `.ProseMirror`.
   13. **Reading mode:** no Yjs update is emitted while toggling and scrolling.
-- **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and `firefox`, checking joining, diacritics and caret movement. If a browser breaks joining, letter spacing is scoped with `:lang()`.
+- **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and the `firefox` project (defined once by test strategy Q7; languages L7 adds its RTL specs there), checking joining, diacritics and caret movement. Letter spacing is already off in RTL blocks (§5.4), so this checks that word spacing and the fallback faces keep letters joined.
 - **`perf`:**
   - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds.
   - Typing latency is unchanged.

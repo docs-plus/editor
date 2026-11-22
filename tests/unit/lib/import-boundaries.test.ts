@@ -66,6 +66,20 @@ const SERVER_ENTRIES = [
 const PLATFORM_ENTRIES = [
   "lib/platform/local-session.ts",
   "lib/platform/memory-doc-store.ts",
+  "lib/platform/web/library/idb-doc-store.ts",
+  "lib/platform/web/library/storage-health.ts",
+  "lib/platform/web/library/library-flag.ts",
+];
+
+// The web library's storage (web library §7.3): it renders with no server,
+// so it must never reach the sandbox's socket, tab list, offline copies or
+// analytics.
+const LIBRARY_STORAGE_ENTRIES = [
+  "lib/platform/web/library/idb-doc-store.ts",
+  "lib/platform/web/library/library-db.ts",
+  "lib/platform/web/library/library-docs.ts",
+  "lib/platform/web/library/storage-health.ts",
+  "lib/platform/web/library/library-flag.ts",
 ];
 
 // The headless schema and Markdown export/import (plan P2.8): shared by
@@ -175,6 +189,23 @@ describe("platform import boundaries", () => {
   }
 });
 
+describe("web library import boundaries", () => {
+  for (const entry of LIBRARY_STORAGE_ENTRIES) {
+    it(`${entry} loads no sandbox session, socket, offline copy or analytics`, () => {
+      const { files, packages } = staticImports(entry);
+      for (const file of files) {
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file).not.toBe("hooks/use-synced-tabs.ts");
+        expect(file).not.toBe("hooks/use-connection-state.ts");
+        expect(file.startsWith("lib/offline/")).toBe(false);
+        expect(file.startsWith("lib/analytics")).toBe(false);
+      }
+      expect([...packages]).not.toContain("@hocuspocus/provider");
+      expect([...packages]).not.toContain("fake-indexeddb");
+    });
+  }
+});
+
 // The editor reads its DocSession from context (architecture §3.3): neither
 // the hook nor the editor may load the sandbox's collab-session or a
 // platform adapter, so the desktop graph never contains them.
@@ -234,5 +265,60 @@ describe("editor chunk boundary (P2.12)", () => {
     expect([...files]).toEqual(["lib/markdown/parse.ts"]);
     // Type-only: the model classes are passed in (`MarkdownModel`).
     expect([...packages]).toEqual([]);
+  });
+});
+
+// The web library lands dark (web library §2.8): nothing the web app builds
+// may import it, statically or through `import()` (a lazy chunk still
+// ships), from any folder, by alias or relative path. W4 removes this when
+// it adds the route.
+describe("web library lands dark", () => {
+  const LIBRARY_DIR = "lib/platform/web/library/";
+  const WEB_APP_DIRS = [
+    "app",
+    "components",
+    "hooks",
+    "extensions",
+    "lib",
+    "scripts",
+    "types",
+  ];
+  const WEB_APP_FILES = ["next.config.ts"];
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(path.join(ROOT, dir), {
+      recursive: true,
+      encoding: "utf8",
+    })
+      .filter((name) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(name))
+      .filter((name) => !name.split(path.sep).includes("node_modules"))
+      .map((name) => path.join(dir, name));
+  }
+
+  it("is imported by nothing in the web app or its scripts", () => {
+    const files = [
+      ...WEB_APP_DIRS.flatMap(sourceFiles),
+      ...WEB_APP_FILES,
+    ].filter((file) => !file.startsWith(LIBRARY_DIR));
+    expect(files.length).toBeGreaterThan(100);
+    const importers: string[] = [];
+    for (const file of files) {
+      const full = path.join(ROOT, file);
+      const transpiler = /x$/.test(file) ? tsx : ts;
+      const { imports } = transpiler.scan(readFileSync(full, "utf8"));
+      for (const { path: spec } of imports) {
+        if (!spec.startsWith("@/") && !spec.startsWith(".")) continue;
+        let resolved: string;
+        try {
+          resolved = Bun.resolveSync(spec, path.dirname(full));
+        } catch {
+          continue;
+        }
+        if (path.relative(ROOT, resolved).startsWith(LIBRARY_DIR)) {
+          importers.push(`${file} -> ${spec}`);
+        }
+      }
+    }
+    expect(importers).toEqual([]);
   });
 });
