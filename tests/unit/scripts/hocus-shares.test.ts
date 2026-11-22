@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import * as Y from "yjs";
@@ -364,21 +364,49 @@ describe("hocus-server share server (HOCUS_SHARES=on)", () => {
     async () => {
       const server = await start({ HOCUS_SHARES: "on", HOCUS_LOGGER: "1" });
       const secrets: ShareSecrets = makeShareSecrets();
-      const { name } = await createShare(server, secrets);
+      const { name, shareId } = await createShare(server, secrets);
       const editor = attach(server, name, secrets.authEdit);
       expect(await editor.outcome).toBe("synced:read-write");
       writeParagraph(editor.document, "secret-free");
       await waitFor(() => !editor.provider.hasUnsyncedChanges, "editor sent");
       await Bun.sleep(300);
+
+      // Reset and stop: owner calls carry only the owner secret and hashes.
+      const next = makeShareSecrets();
+      const reset = await fetch(
+        httpUrl(server, `/api/shares/${shareId}/reset`),
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secrets.ownerToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ ...next.hashes, schema: 3 }),
+        },
+      );
+      expect(reset.status).toBe(201);
+      const { share_id: nextId } = (await reset.json()) as { share_id: string };
+      const stop = await fetch(httpUrl(server, `/api/shares/${nextId}`), {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${next.ownerToken}` },
+      });
+      expect(stop.status).toBe(200);
       await server.stop();
 
-      const stored = readFileSync(server.dbPath).toString("latin1");
+      const stored = [server.dbPath, `${server.dbPath}-wal`]
+        .filter((file) => existsSync(file))
+        .map((file) => readFileSync(file).toString("latin1"))
+        .join("\n");
       const logs = server.logs();
       for (const form of [
         ...rawSecretForms(secrets),
+        ...rawSecretForms(next),
         secrets.authEdit,
         secrets.authView,
         secrets.ownerToken,
+        next.authEdit,
+        next.authView,
+        next.ownerToken,
       ]) {
         expect(logs).not.toContain(form);
         expect(stored).not.toContain(form);
