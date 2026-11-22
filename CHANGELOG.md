@@ -23,27 +23,31 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
   comes first when there are any, then "Blocks" (the caret's block is empty)
   or "Turn into" (it has text), then Insert. Kinds that can't run here show
   their reason on a second line. Table and Embed open their step inside the
-  sheet, from the lazy insert step chunk; Diagram lists the templates. A
-  pick closes the sheet and puts the caret in the new block, with the
-  keyboard back. "/embed" on a phone opens the sheet at the embed step.
-  The sheet rides above the keyboard while the link field has focus, and a
-  pick refused since it opened (a collaborator's edit) says why inside it.
+  sheet; Diagram lists the templates. A pick closes the sheet and puts the
+  caret in the new block, with the keyboard back. "/embed" on a phone opens
+  the sheet at the embed step. The sheet rides above the keyboard while the
+  link field has focus, and a pick refused since it opened (a
+  collaborator's edit) says why inside it. Its cells and steps are their own
+  lazy chunk, fetched when the browser is idle and on the cell's press.
 - **Touch tablets:** at 848px and wider on a coarse pointer, the row's
-  stand-ins read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a). The
-  words are CSS only, from the lazy menu chunk, so they appear once the
-  browser is idle after the first sync. Below 848px the row has no room for
+  stand-ins read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from
+  first paint (CSS in `app/globals.css`). Below 848px the row has no room for
   their 120px in every context, so they stay off.
 
 #### Changed
 
+- **Toolbar:** the stand-ins are named "Format" (was "More text
+  formatting"), "Layout" (was "Paragraph") and "Block: Section tools" and so
+  on (was "Section tools"), so each name begins with the word shown on it
+  (WCAG 2.5.3). The phone's slot cell takes the same name.
 - **Phone:** the Aa sheet starts with Style: Text and H1–H3, a More
   headings disclosure for H4–H6 (open when the current style is one of
-  them), then the lists and Quote, the current style pressed. Colours
-  follow. Both sheets end in a 16px fade while they scroll, above the home
-  indicator.
+  them, closable all the same), then the lists and Quote, the current style
+  pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
+  above the home indicator.
 
-The editor chunk group gets 37 B smaller (the phone bar no longer renders
-the row's Insert menu); its CSS is unchanged.
+The editor chunk group gets 38 B smaller; its CSS is unchanged. The phone
+bar chunk grows 930 B gz, and the sheet body is a 3.6 KB gz chunk of its own.
 
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
