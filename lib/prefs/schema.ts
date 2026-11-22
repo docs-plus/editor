@@ -18,6 +18,7 @@ import {
   CLASSIC_CARD_PX,
   cardWidthFor,
   dockMinPxFor,
+  FULL_CARD_MEASURE,
   FULL_TEXT_MEASURE,
   OUTLINE_DOCK_EXTRA_PX,
   PAGE_MEASURES,
@@ -278,6 +279,31 @@ export function prefsAttributes(
   return attributes;
 }
 
+/**
+ * The card's knob variables, written inline on `<html>` by the boot script
+ * and `applyPrefs`: the first paint needs them for the card and the
+ * skeleton, and an inline value costs the first load no stylesheet.
+ */
+export const PAGE_PROPERTIES = ["--page-size", "--page-measure"] as const;
+export type PageProperties = Partial<
+  Record<(typeof PAGE_PROPERTIES)[number], string>
+>;
+
+/** The inline knob variables of a page (none in `classic` or Default). */
+export function pageProperties(page: PageState): PageProperties {
+  const properties: PageProperties = {};
+  if (page.style === "classic") return properties;
+  if (page.size !== undefined) {
+    properties["--page-size"] = `${page.size / 16}rem`;
+  }
+  if (page.width !== undefined) {
+    properties["--page-measure"] = String(
+      PAGE_MEASURES[page.width] ?? FULL_CARD_MEASURE,
+    );
+  }
+  return properties;
+}
+
 /** The page card's width in CSS px (`page-metrics.ts`); null for Full. */
 export function cardWidthPx(page: PageState, rootPx = 16): number | null {
   return cardWidthFor(effectivePage(page), rootPx);
@@ -312,6 +338,8 @@ export interface BootResult {
   dark: boolean;
   prefs: WebPrefs;
   attributes: PrefAttributes;
+  /** Inline `<html>` style: the card's knob variables. */
+  properties: PageProperties;
   /** The only boot-time writes (§5.6), made in the same task. */
   writes: Partial<Record<string, string>>;
 }
@@ -360,6 +388,7 @@ export function resolveBoot({
     dark: theme === "dark" || (theme === "system" && systemDark),
     prefs,
     attributes: prefsAttributes(prefs, { systemContrast }),
+    properties: pageProperties(prefs.page),
     writes,
   };
 }

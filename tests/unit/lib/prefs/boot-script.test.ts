@@ -8,6 +8,7 @@ import {
 } from "@/lib/prefs/boot-script";
 import {
   type BootStorage,
+  PAGE_PROPERTIES,
   PREF_ATTRIBUTES,
   resolveBoot,
   SYSTEM_CONTRAST_QUERY,
@@ -107,6 +108,7 @@ function stubMatchMedia(dark: boolean, contrast = false) {
 function resetDocument() {
   const root = document.documentElement;
   for (const name of PREF_ATTRIBUTES) root.removeAttribute(name);
+  for (const name of PAGE_PROPERTIES) root.style.removeProperty(name);
   root.classList.remove("dark");
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
     meta.remove();
@@ -134,6 +136,15 @@ function readStorage(): Record<string, string> {
     all[key] = localStorage.getItem(key) as string;
   }
   return all;
+}
+
+function readProperties(): Record<string, string> {
+  const properties: Record<string, string> = {};
+  for (const name of PAGE_PROPERTIES) {
+    const value = document.documentElement.style.getPropertyValue(name);
+    if (value) properties[name] = value;
+  }
+  return properties;
 }
 
 function readAttributes(): Record<string, string> {
@@ -187,6 +198,9 @@ describe("boot script parity with resolveBoot()", () => {
 
           expect(readAttributes()).toEqual(
             expected.attributes as Record<string, string>,
+          );
+          expect(readProperties()).toEqual(
+            expected.properties as Record<string, string>,
           );
           expect(document.documentElement.classList.contains("dark")).toBe(
             expected.dark,

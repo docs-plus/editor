@@ -18,11 +18,12 @@ TinyDocy before keep today's exact look (`classic`) until they change a
 setting; a pixel test against `main` proves it. New browsers get the new
 Default page: 16 px text, a 33 em line (a 624 px card) and 1.6 line
 spacing. There are no controls yet: the Page popover, the palette entries
-and Settings arrive with P2.9c-2 and W13. The editor chunk group grows by
-124 B gz against `main` at `1548d5e` (393,944 B; the ledger's smart-quotes
-line is 150 B). The first load grows by 2,281 B gz of JavaScript (the
-store, schema and `PageFrame`) and 1,258 B gz of CSS, and the boot script
-grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
+and Settings arrive with P2.9c-2 and W13. Against `main` at `84a9458`, the editor chunk group grows by 109 B gz
+(394,127 B; the ledger's smart-quotes line is 150 B). The first load grows
+by 537 B gz of JavaScript (`PageFrame`) and 475 B gz of CSS (the Default
+card, the docking threshold and the contrast set). The store and the
+page-text rules load later. The boot script grows from 600 B to 2,282 B
+(352 B to 1,141 B gzipped) per HTML response.
 
 #### Added
 
@@ -30,8 +31,14 @@ grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
   widths Narrow 30 em, Standard 33 em, Wide 46 em and Full, spacing
   Compact, Normal and Relaxed), the web store over new `tinydocy-ui`
   slots (`page`, `a11y`, `spellcheck`, `smartQuotes`, `rememberPlace`)
-  and the attribute applier. `PrefsRuntime` in the root layout keeps
-  `<html>` in step, across tabs too.
+  and the attribute applier. They load in a lazy runtime that `PageFrame`
+  starts once the page is idle, which keeps `<html>` in step across tabs
+  and with the OS contrast setting.
+- **Page:** `styles/_page.scss` holds what the first paint needs: the
+  Default card, the skeleton's width and outline column, the docking
+  threshold and increased contrast. `_page-text.scss` holds the knobs, the
+  document text's rules, reading mode and the motion override; it loads
+  next to the editor, which waits for it.
 - **Page:** boot script v2 (`lib/prefs/boot-script.ts`, replacing
   `lib/theme-boot.ts`) decides the theme and the page look from one
   storage snapshot before first paint. Its allowlists are generated from
@@ -39,14 +46,14 @@ grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
   payloads, and `BOOT_SCRIPT_SHA256` is its CSP source for the desktop
   shell; `bun run build:desktop` fails if an exported page inlines any
   other string.
-- **Page:** `PageFrame` wraps the editor and its skeleton. It owns
-  `data-reading` (and `data-doc-width` for library hosts later) and
-  decides whether the outline docks: when the main area is at least the
-  card plus 302 px wide, the card computed from the preferences (950 px
-  in `classic`, as before; 926 px for Default; Full never docks).
-- **Page:** reading mode, per tab and never stored: the document is
-  read-only through the editor's `readOnly` prop and the toolbar hides.
-  It emits no Yjs update.
+- **Page:** `PageFrame` wraps the editor and its skeleton, on the web
+  and in the desktop root. It decides whether the outline docks: when
+  the main area is at least the card plus 302 px wide, which CSS computes
+  from the card's own variables (`--page-dock-min`): 950 px in `classic`,
+  as before; 926 px for Default; Full never docks.
+- **Page:** reading mode, per tab and never stored (`data-reading` on
+  `<html>`): the document is read-only through the editor's `readOnly`
+  prop and the toolbar hides. It emits no Yjs update.
 - **Writing:** a smart-quotes switch (owner Q2). Typography's input rules
   read `data-smart-quotes`, so turning it off rebuilds nothing; code
   blocks and inline code never curl. A spellcheck switch through
@@ -55,7 +62,7 @@ grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
 - **Accessibility:** Increase contrast and Reduce motion overrides for the
   web (owner Q4, `data-contrast`, `data-motion`). The high-contrast token
   set also follows the OS setting (`prefers-contrast: more`) outside
-  `classic`, and the `motion-reduce:` variant covers both.
+  `classic`: the boot script and the runtime set `data-contrast` for it.
 
 #### Changed
 

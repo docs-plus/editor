@@ -1,18 +1,16 @@
 @use "sass:map";
-@use "sass:math";
 @use "page-scopes" as *;
 
 // The page rules the first paint doesn't need (preferences design §5.4):
-// the text size and width knobs, the document text's font, line spacing
-// and gaps, reading mode and the motion override. This sheet loads with
-// the editor (`components/prefs/page-text-styles.ts`), which waits for it,
-// so the editor never shows a page without it; the first paint carries
-// only `_page.scss`.
+// the document text's font, line spacing and gaps, Full's text cap, a
+// document's own width, reading mode and the motion override. This sheet
+// loads with the editor (`components/prefs/page-text-styles.ts`), which
+// waits for it, so the editor never shows a page without it; the first
+// paint carries only `_page.scss`, and the boot script writes the card's
+// text size and width inline.
 //
 // `classic`'s rules are today's rules, moved here unchanged.
 
-// Owner Q1: 14–32 px, in rem of the browser's own default size.
-$text-sizes: 14, 16, 18, 20, 24, 28, 32;
 // `lib/prefs/page-metrics.ts` and `_page.scss` hold the same table.
 $measures: (
   narrow: 30,
@@ -53,16 +51,14 @@ $spacings: (
 }
 
 /* =====================
-     KNOBS: text size and width (the card's variables in `_page.scss`)
+     WIDTH: Full's text cap, and a document's own width on its frame
+     (library hosts). The card's measure for the app-wide width is inline.
      ===================== */
-@each $size in $text-sizes {
-  :root[data-text-size="#{$size}"] {
-    --page-size: #{math.div($size, 16)}rem;
-  }
+:root[data-page-width="full"] {
+  --page-text-cap: calc(#{$full-text-measure} * var(--page-size));
 }
 
 @each $width in (narrow, standard, wide, full) {
-  :root[data-page-width="#{$width}"],
   .page-frame[data-doc-width="#{$width}"] {
     @if $width == full {
       --page-measure: #{$full-measure};

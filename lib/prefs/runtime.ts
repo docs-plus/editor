@@ -1,6 +1,10 @@
 import { applyPrefs } from "@/lib/prefs/apply";
 import { setReadingMode } from "@/lib/prefs/reading-mode";
-import { prefsAttributes, SYSTEM_CONTRAST_QUERY } from "@/lib/prefs/schema";
+import {
+  pageProperties,
+  prefsAttributes,
+  SYSTEM_CONTRAST_QUERY,
+} from "@/lib/prefs/schema";
 import * as store from "@/lib/prefs/store-web";
 
 /**
@@ -24,12 +28,13 @@ export function startPrefsRuntime(): () => void {
     typeof window.matchMedia === "function"
       ? window.matchMedia(SYSTEM_CONTRAST_QUERY)
       : null;
-  const apply = () =>
+  const apply = () => {
+    const prefs = store.getPrefs();
     applyPrefs(
-      prefsAttributes(store.getPrefs(), {
-        systemContrast: contrast?.matches ?? false,
-      }),
+      prefsAttributes(prefs, { systemContrast: contrast?.matches ?? false }),
+      pageProperties(prefs.page),
     );
+  };
   apply();
   const unsubscribe = store.subscribePrefs(apply);
   contrast?.addEventListener("change", apply);

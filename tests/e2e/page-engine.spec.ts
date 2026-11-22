@@ -4,6 +4,7 @@ import {
   outlineDockMinPx,
   PAGE_WIDTHS,
   type PageState,
+  pageProperties,
   parsePrefs,
   prefsAttributes,
   TEXT_SIZES,
@@ -278,23 +279,33 @@ test.describe("page engine", () => {
       const attributes = prefsAttributes(
         parsePrefs({ page: state }, "classic"),
       );
-      const css = await page.evaluate((attrs) => {
-        const root = document.documentElement;
-        for (const name of [
-          "data-page-style",
-          "data-text-size",
-          "data-page-width",
-        ]) {
-          root.removeAttribute(name);
-        }
-        for (const [name, value] of Object.entries(attrs)) {
-          if (name !== "data-prefs") root.setAttribute(name, value as string);
-        }
-        const frame = document.querySelector(".page-frame") as Element;
-        return Number.parseFloat(
-          getComputedStyle(frame).getPropertyValue("--page-dock-min"),
-        );
-      }, attributes);
+      const properties = pageProperties(state);
+      // Written the way the boot script and applyPrefs write them.
+      const css = await page.evaluate(
+        ({ attrs, props }) => {
+          const root = document.documentElement;
+          for (const name of [
+            "data-page-style",
+            "data-text-size",
+            "data-page-width",
+          ]) {
+            root.removeAttribute(name);
+          }
+          root.style.removeProperty("--page-size");
+          root.style.removeProperty("--page-measure");
+          for (const [name, value] of Object.entries(attrs)) {
+            if (name !== "data-prefs") root.setAttribute(name, value as string);
+          }
+          for (const [name, value] of Object.entries(props)) {
+            root.style.setProperty(name, value as string);
+          }
+          const frame = document.querySelector(".page-frame") as Element;
+          return Number.parseFloat(
+            getComputedStyle(frame).getPropertyValue("--page-dock-min"),
+          );
+        },
+        { attrs: attributes, props: properties },
+      );
       const expected = outlineDockMinPx(state);
       if (expected === Number.POSITIVE_INFINITY) {
         expect(css).toBeGreaterThan(100_000);

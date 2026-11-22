@@ -15,6 +15,8 @@ export const PAGE_MEASURES: Readonly<Record<PageWidth, number | null>> = {
   full: null,
 };
 export const FULL_TEXT_MEASURE = 46;
+/** Full's card measure: wide enough that the card fills any main area. */
+export const FULL_CARD_MEASURE = 10000;
 /** The Default style's text size (px at a 16 px root) and width. */
 export const DEFAULT_TEXT_SIZE = 16;
 export const DEFAULT_PAGE_WIDTH: PageWidth = "standard";
