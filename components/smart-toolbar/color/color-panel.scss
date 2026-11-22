@@ -413,10 +413,13 @@
     min-height: 44px;
   }
 
-  // Six a line, 10px apart: 6 × 44 + 5 × 10 = 314px (spec §7.3).
+  // Six a line, 10px apart: 6 × 44 + 5 × 10 = 314px (spec §7.3). Where
+  // the sheet is narrower (320px phones), the gaps shrink, never the
+  // swatches, so nothing scrolls sideways.
   .st-color-swatches {
     --swatch-size: 44px;
-    gap: 10px;
+    row-gap: 10px;
+    column-gap: clamp(2px, (100% - 6 * 44px) / 5, 10px);
   }
 
   .st-color-item {
