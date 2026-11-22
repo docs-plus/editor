@@ -44,7 +44,7 @@ function codeOf(run: () => unknown) {
 }
 
 describe("creating documents", () => {
-  test("mints a UUID, a lineage and a 32-hex link key at insert", () => {
+  test("mints a UUID, a lineage and a 32-hex link key at insert", async () => {
     const a = library.createDoc();
     const b = library.createDoc();
     expect(a.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -54,7 +54,7 @@ describe("creating documents", () => {
     expect(a.linkKey).not.toBe(b.linkKey);
   });
 
-  test("keeps a lineage and link key only when given (backup restore)", () => {
+  test("keeps a lineage and link key only when given (backup restore)", async () => {
     const lineage = crypto.randomUUID();
     const linkKey = "a".repeat(32);
     expect(library.createDoc({ lineage, linkKey })).toMatchObject({
@@ -66,7 +66,7 @@ describe("creating documents", () => {
     );
   });
 
-  test("refuses malformed ids, link keys and kinds", () => {
+  test("refuses malformed ids, link keys and kinds", async () => {
     expect(codeOf(() => library.createDoc({ id: "../x" }))).toBe(
       "invalid_argument",
     );
@@ -78,14 +78,14 @@ describe("creating documents", () => {
     );
   });
 
-  test("templates are stored with kind 'template'", () => {
+  test("templates are stored with kind 'template'", async () => {
     library.createDoc({ kind: "template", title: "Weekly" });
     expect(library.sidebar().docs[0]?.kind).toBe("template");
   });
 });
 
 describe("the sidebar snapshot", () => {
-  test("lists live folders, documents and tags; rev moves on every write", () => {
+  test("lists live folders, documents and tags; rev moves on every write", async () => {
     const start = library.sidebar().rev;
     const folder = library.createFolder({ name: "Work" });
     const doc = library.createDoc({ title: "Plan", folderId: folder.id });
@@ -107,19 +107,19 @@ describe("the sidebar snapshot", () => {
     ]);
   });
 
-  test("tag names are unique regardless of case", () => {
+  test("tag names are unique regardless of case", async () => {
     library.createTag("Urgent");
     expect(codeOf(() => library.createTag("urgent"))).toBe("invalid_argument");
   });
 
-  test("opening a document records opened_at", () => {
+  test("opening a document records opened_at", async () => {
     const doc = library.createDoc();
     clock.advance(1000);
     library.load(doc.id, "w1");
     expect(library.sidebar().docs[0]?.openedAt).toBe(clock.now);
   });
 
-  test("rename and move", () => {
+  test("rename and move", async () => {
     const folder = library.createFolder({ name: "A" });
     const doc = library.createDoc({ title: "x" });
     library.renameDoc(doc.id, "  Renamed  ");
@@ -136,7 +136,7 @@ describe("the sidebar snapshot", () => {
 });
 
 describe("Trash and purge", () => {
-  test("trash hides a document and restore brings it back to its folder", () => {
+  test("trash hides a document and restore brings it back to its folder", async () => {
     const folder = library.createFolder({ name: "A" });
     const doc = library.createDoc({ folderId: folder.id });
     library.trashDoc(doc.id);
@@ -145,7 +145,7 @@ describe("Trash and purge", () => {
     expect(library.sidebar().docs[0]?.folderId).toBe(folder.id);
   });
 
-  test("purge cascades to rows, snapshot, tags, view and import source", () => {
+  test("purge cascades to rows, snapshot, tags, view and import source", async () => {
     const doc = library.createDoc();
     const tag = library.createTag("t");
     library.setDocTags(doc.id, [tag.id]);
@@ -188,7 +188,7 @@ describe("Trash and purge", () => {
     library = openTestLibrary(temp.dir, createTestHost(clock));
   });
 
-  test("idle jobs empty Trash after 30 days, skipping open documents", () => {
+  test("idle jobs empty Trash after 30 days, skipping open documents", async () => {
     const old = library.createDoc();
     const open = library.createDoc();
     const recent = library.createDoc();
@@ -198,18 +198,18 @@ describe("Trash and purge", () => {
     library.trashDoc(recent.id);
     library.load(open.id, "w1");
     clock.advance(IDLE_MS + 1000);
-    expect(library.runIdleJobs().purged).toBe(1);
+    expect((await library.runIdleJobs()).purged).toBe(1);
     expect(library.stats().docs).toBe(2);
   });
 });
 
 describe("ids and schema at creation", () => {
-  test("accepts any safe id and stores the given schema", () => {
+  test("accepts any safe id and stores the given schema", async () => {
     const { id } = library.createDoc({ id: "doc-a_1", schema: 3 });
     expect(library.load(id, "w1").schema).toBe(3);
   });
 
-  test("refuses ids that aren't safe in SQL, paths or logs", () => {
+  test("refuses ids that aren't safe in SQL, paths or logs", async () => {
     for (const id of ["", "../x", "a b", "a/b", "-x", "x".repeat(65)])
       expect(codeOf(() => library.createDoc({ id }))).toBe("invalid_argument");
     expect(codeOf(() => library.createDoc({ schema: -1 }))).toBe(
