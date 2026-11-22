@@ -325,3 +325,56 @@ describe("failed-token keys", () => {
     expect(limiter.isAddressBlocked("2001:db8:a:ff::/64")).toBe(false);
   });
 });
+
+describe("failed-token key table (M2)", () => {
+  it("checks never add keys; only a recorded failure does", () => {
+    const limiter = createFailedTokenLimiter({
+      perShare: 3,
+      perPrefix: 3,
+      maxKeys: 4,
+    });
+    for (let i = 0; i < 50; i++) {
+      expect(limiter.isAddressBlocked(`2001:db8:a:${i}::/64`)).toBe(false);
+      expect(limiter.isShareBlocked(mintShareId())).toBe(false);
+    }
+    // The table is still empty, so a real failure is still counted.
+    const shareId = mintShareId();
+    for (let i = 0; i < 3; i++) limiter.recordFailure(shareId, IP);
+    expect(limiter.isShareBlocked(shareId)).toBe(true);
+    expect(limiter.isAddressBlocked(IP)).toBe(true);
+  });
+
+  it("a flood of random share ids from one /48 never makes a real share busy", () => {
+    const { shareId, secrets } = seedShare(db, nowMs);
+    const ctx = context({
+      failedTokens: createFailedTokenLimiter({
+        perShare: 30,
+        perPrefix: 10,
+        maxKeys: 20,
+        now: () => nowMs,
+      }),
+    });
+    for (let i = 0; i < 500; i++) {
+      authenticateShare(
+        ctx,
+        mintShareId(),
+        makeShareSecrets().authEdit,
+        `2001:db8:a:${i % 4000}::/64`,
+        "connection",
+      );
+    }
+    expect(
+      authenticateShare(ctx, shareId, secrets.authEdit, IP, "connection"),
+    ).toMatchObject({ ok: true, role: "edit" });
+    // A wrong token elsewhere is refused as unknown, not as busy.
+    expect(
+      authenticateShare(
+        ctx,
+        shareId,
+        makeShareSecrets().authEdit,
+        "198.51.100.9",
+        "connection",
+      ),
+    ).toEqual({ ok: false, reason: SHARE_UNAVAILABLE });
+  });
+});

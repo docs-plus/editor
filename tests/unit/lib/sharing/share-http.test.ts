@@ -312,6 +312,36 @@ describe("POST /api/shares", () => {
   });
 });
 
+describe("HTTP rate limits per IPv6 /48 (M2)", () => {
+  it("counts reads and mutations from every /64 of a /48 together", async () => {
+    const http = createHttp({
+      limits: { ...LIMITS, readsPerMinute: 2, mutationsPerMinute: 2 },
+    });
+    const read = (n: number) =>
+      http.handle(new Request(`${BASE}/api/info`), `2001:db8:a:${n}::/64`);
+    expect((await read(1)).status).toBe(200);
+    expect((await read(2)).status).toBe(200);
+    expect((await read(3)).status).toBe(429);
+    // Another /48 has its own budget.
+    expect(
+      (await http.handle(new Request(`${BASE}/api/info`), "2001:db8:b:1::/64"))
+        .status,
+    ).toBe(200);
+
+    const stop = (n: number) =>
+      http.handle(
+        new Request(`${BASE}/api/shares/${mintShareId()}`, {
+          method: "DELETE",
+          headers: bearer(makeShareSecrets().ownerToken),
+        }),
+        `2001:db8:c:${n}::/64`,
+      );
+    expect((await stop(1)).status).toBe(404);
+    expect((await stop(2)).status).toBe(404);
+    expect((await stop(3)).status).toBe(429);
+  });
+});
+
 describe("CORS and CSRF", () => {
   it("answers a preflight from an allowed origin only", async () => {
     const http = createHttp();

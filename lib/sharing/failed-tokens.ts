@@ -9,6 +9,12 @@ import { createTimestampWindows } from "@/lib/security/rate-limit";
  * tokens, so nobody can lock a token holder (or the owner) out of a share
  * by flooding it. IPs arrive pinned (`pinClientIp`): IPv6 is already one
  * key per /64, and each /64 also counts toward its /48.
+ *
+ * Checks only read: a key is added when a failure is recorded, so a flood
+ * of checks (random share ids, say) cannot fill the table. Share keys live
+ * in their own smaller table. A full table drops new keys, which fails
+ * open: the other limits (upgrade rate, HTTP rate, sockets) still bound
+ * the load, and failing closed would make every share answer `busy`.
  */
 export type FailedTokenLimiter = {
   /** True when this address (IPv4, IPv6 /64 or its /48) is over its limit. */
@@ -23,10 +29,14 @@ type FailedTokenLimiterOptions = {
   perPrefix: number;
   windowMs?: number;
   now?: () => number;
+  /** Address keys tracked; `RATE_LIMIT_MAX_KEYS` by default. */
   maxKeys?: number;
+  /** Share keys tracked, in a table of their own. */
+  maxShareKeys?: number;
 };
 
 const ONE_MINUTE_MS = 60_000;
+const MAX_SHARE_KEYS = 10_000;
 const IPV6_PREFIX_64 =
   /^([0-9a-f]{1,4}:[0-9a-f]{1,4}:[0-9a-f]{1,4}):[0-9a-f]{1,4}::\/64$/i;
 
@@ -41,30 +51,32 @@ export function createFailedTokenLimiter(
   options: FailedTokenLimiterOptions,
 ): FailedTokenLimiter {
   const now = options.now ?? Date.now;
-  const windows = createTimestampWindows(
-    options.windowMs ?? ONE_MINUTE_MS,
+  const windowMs = options.windowMs ?? ONE_MINUTE_MS;
+  const addresses = createTimestampWindows(
+    windowMs,
     now,
     options.maxKeys ?? RATE_LIMIT_MAX_KEYS,
   );
-  const overLimit = (key: string, limit: number) => {
-    const recent = windows.recent(key);
-    // A full key table fails closed, like every other limiter here.
-    return !recent || recent.length >= limit;
-  };
-  const shareKey = (shareId: string) => `share:${shareId}`;
+  const shares = createTimestampWindows(
+    windowMs,
+    now,
+    options.maxShareKeys ?? MAX_SHARE_KEYS,
+  );
 
   return {
     isAddressBlocked(ip) {
-      return addressKeys(ip).some((key) => overLimit(key, options.perPrefix));
+      // The /48 first: a blocked /48 never needs its /64 looked at.
+      return addressKeys(ip)
+        .reverse()
+        .some((key) => addresses.peek(key) >= options.perPrefix);
     },
     isShareBlocked(shareId) {
-      return overLimit(shareKey(shareId), options.perShare);
+      return shares.peek(shareId) >= options.perShare;
     },
     recordFailure(shareId, ip) {
       const at = now();
-      for (const key of [shareKey(shareId), ...addressKeys(ip)]) {
-        windows.recent(key)?.push(at);
-      }
+      shares.recent(shareId)?.push(at);
+      for (const key of addressKeys(ip)) addresses.recent(key)?.push(at);
     },
   };
 }

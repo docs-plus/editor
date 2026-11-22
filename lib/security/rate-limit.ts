@@ -54,6 +54,13 @@ export function createTimestampWindows(
       windows.set(key, recent);
       return recent;
     },
+    /** How many timestamps `key` has in the window; never adds the key. */
+    peek(key: string): number {
+      const current = now();
+      sweep(current);
+      const cutoff = current - windowMs;
+      return (windows.get(key) ?? []).filter((t) => t > cutoff).length;
+    },
     size: () => windows.size,
   };
 }

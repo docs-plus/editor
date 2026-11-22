@@ -5,8 +5,10 @@ import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { readJsonBody, withBusyRetry } from "@/lib/security/json-body";
 import {
   createSlidingWindowLimiter,
+  type RateLimitDecision,
   type SlidingWindowLimiter,
 } from "@/lib/security/rate-limit";
+import { addressKeys } from "@/lib/sharing/failed-tokens";
 import {
   authenticateShare,
   SHARE_BUSY,
@@ -230,6 +232,22 @@ function isJsonRequest(request: Request): boolean {
 
 function isEndReason(reason: string): reason is ShareEndReason {
   return (SHARE_END_REASONS as readonly string[]).includes(reason);
+}
+
+/**
+ * Checks `limiter` for every address key of `ip`: the /48 first, then the
+ * IPv4 address or /64, so a /48 over its budget adds none of its /64s.
+ */
+function checkAddress(
+  limiter: SlidingWindowLimiter,
+  ip: string,
+): RateLimitDecision {
+  const [own, prefix48] = addressKeys(ip);
+  if (prefix48) {
+    const decision = limiter.check(prefix48);
+    if (!decision.allowed) return decision;
+  }
+  return limiter.check(own);
 }
 
 export function createShareHttp(options: ShareHttpOptions): ShareHttp {
@@ -511,7 +529,7 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
           return error(request, 403, "origin_not_allowed");
         }
       }
-      const decision = (isRead ? reads : mutations).check(ip);
+      const decision = checkAddress(isRead ? reads : mutations, ip);
       if (!decision.allowed) {
         return throttled(request, decision, ip, "share_http_throttled");
       }
