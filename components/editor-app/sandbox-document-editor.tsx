@@ -12,8 +12,11 @@ import type { ComponentProps } from "react";
 import { DocumentEditor } from "@/components/document-editor/document-editor";
 import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 
+/** One element for every render: the editor's props stay referentially stable. */
+const STATUS_CHIP = <CollabStatusGroup />;
+
 export function SandboxDocumentEditor(
   props: ComponentProps<typeof DocumentEditor>,
 ) {
-  return <DocumentEditor {...props} statusChip={<CollabStatusGroup />} />;
+  return <DocumentEditor {...props} statusChip={STATUS_CHIP} />;
 }
