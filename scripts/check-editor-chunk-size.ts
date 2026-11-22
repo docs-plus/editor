@@ -40,6 +40,10 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * core 400 (`t()`, registry labels, `lang`/`dir`; languages design
  * §3.7.1), P2.13 `dir` + direction commands + Enter + « » 350, LK1 60,
  * LK3 120, OB2 10, M19 phone keyboards 40 (+80 conditional).
+ *
+ * #168 security allowlist: +145 B (84a9458 → +16,130 B; #168 → +16,275 B).
+ * A security exemption, coordinator-approved 2026-11-22, outside the
+ * total above; the fence still passes, so it was not raised.
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
