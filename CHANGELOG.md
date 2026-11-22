@@ -51,6 +51,30 @@ P2.2 as well (1.26 and 1.20 on branches without it); P2.2 did not shift it
 - **Tests:** a run over budget after `PERF_ROUNDS` (7) runs
   `PERF_EXTRA_ROUNDS` more (default 7, `0` disables) and is judged on all of
   them, so a noisy draw gets a second look and a real regression still fails.
+
+### The editor no longer imports the sandbox status chip
+
+`components/document-editor/` no longer reaches `collab-session` through the
+status chip, so the desktop graph won't load it from there (desktop
+architecture §3.3). The web looks and loads the same: the chip still paints in
+the same commit as the editor (12 cold loads on a production build, median
+0.0 ms apart, as on `main`) and no new chunk is made. No schema or protocol
+change; no Deploy note.
+
+#### Changed
+
+- **Editor:** `DocumentEditor` takes the connection and identity chip as a
+  `statusChip` prop, still shown only with a provider. The web sandbox's root,
+  `components/editor-app/sandbox-document-editor.tsx`, wraps the editor in the
+  sandbox `DocSession` and passes `CollabStatusGroup`; `EditorApp` lazy-loads
+  it in place of the editor, so the chip stays in the editor's chunk group.
+- **Tests:** the editor import-boundary test has no exceptions left (the
+  `user-identity-button.tsx` entry P2.1c listed is gone).
+- **Bytes:** the editor chunk group grows by 198 B gz on `main` after P2.1c
+  (about 100 B of code; the rest is the minifier re-ranking names in the
+  editor's hoisted module); the app shell grows by 1 B. The D23 ledger
+  (details §1 rule 5) gains a 198 B line for it, and the fence rises by
+  exactly that, to `main` + 2,053 B.
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

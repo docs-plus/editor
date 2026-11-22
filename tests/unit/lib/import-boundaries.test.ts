@@ -186,18 +186,10 @@ const EDITOR_ENTRIES = [
     .map((name) => `components/document-editor/${name}`),
 ];
 
-/**
- * Known path, left to P2.2's folder: `document-editor.tsx` imports
- * `CollabStatusGroup` statically, and its connection status reads
- * collab-session's unsynced-changes state. It renders only with a provider,
- * so lazy-loading it there removes this last path.
- */
-const KNOWN_PATHS = ["components/tiptap-ui/user-identity-button.tsx"];
-
 describe("editor import boundaries", () => {
   for (const entry of EDITOR_ENTRIES) {
     it(`${entry} loads no collab-session or platform adapter`, () => {
-      const { files } = staticImports(entry, KNOWN_PATHS);
+      const { files } = staticImports(entry);
       for (const file of files) {
         expect(file).not.toBe("lib/collab-session.ts");
         expect(file.startsWith("lib/platform/web/")).toBe(false);
