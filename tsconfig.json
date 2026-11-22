@@ -34,11 +34,14 @@
   "exclude": [
     "node_modules",
     "out",
+    "dist",
     "lib/pwa/service-worker.ts",
     "desktop/smoke",
     "desktop/storage-harness",
     "desktop/storage",
     "desktop/main",
-    "desktop/build"
+    "desktop/preload",
+    "desktop/build/node_modules",
+    "desktop/build/check-fuses.ts"
   ]
 }
