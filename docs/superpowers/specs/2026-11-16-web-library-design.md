@@ -9,7 +9,7 @@
 > **Plan v8 (2026-11-16):** **D36** phones and tablets are fully supported in v1 ([phones and tablets design](2026-11-16-phones-tablets-design.md), M18–M28). **D39** comments work in library documents, as on desktop. **D40** the seams: the page generates share secrets and derives the tokens itself (S1, §8.1), the `/join` fragment uses the S1b grammar, the export zip writes `TINYDOC2` only (S8, §6.1), `library.json` gains `link_key`, `kind`, `sort_key` and tag names (S8b), and only a backup-zip or `library.json` restore keeps ids (S8c). The phones review adds: W-D7 takes a host flag; the "deleting the Home Screen app deletes these documents" copy ships only after M18 verifies it.
 
 
-- **Status:** Draft for owner review (2026-11-16). **W2's storage engine is built** (2026-11-22, dark behind `NEXT_PUBLIC_LIBRARY`): `IdbDocStore`, the schema, opening and versions, the quota path, the `persist()` and `estimate()` rules and the kill switch. `IdbDocumentIndex` and the browser-matrix runs follow.
+- **Status:** Draft for owner review (2026-11-16). **W2 is in progress, not done.** Its storage engine is built (2026-11-22, dark behind `NEXT_PUBLIC_LIBRARY`): `IdbDocStore`, the schema, opening and versions, the quota path, the `persist()` and `estimate()` rules and the kill switch, verified on `fake-indexeddb` only. W2 is done when the rest of its §11 row exists: `IdbDocumentIndex`, the contract suite in three browsers, and the `perf` comparison (owners in §2.2 "Still open for W2").
 - **Decision it implements:** D3 (plan §13): the web app gets a personal document library stored in the browser, as well as the public sandbox. D6 (one combined release) means it ships in v1 together with sharing.
 - **Parent documents:**
   - [Plan v7](2026-11-15-desktop-local-first-design.md): releases, PRs and gates
@@ -97,8 +97,26 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - **`snapshots.upto_seq`.** Next to `rev`, the snapshot keeps the highest seq any compaction claimed to cover, so `load()` reports `maxSeq` after every row was folded in. Unlike desktop, `load()` returns every row of the document, whatever its seq: a row another tab left below `upto_seq` is still content.
 - **`updates.writer`** records the tab session that appended a row, for diagnostics only.
 - **Compaction also writes `docs.size_bytes`** (the snapshot plus the rows left), so its scope is `snapshots`, `updates` and `docs`.
-- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`. `IdbDocStore` registers its own `flush()` (issued writes); the composition root (W4) also registers the session's `flush()`, so queued batches are sent first.
+- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`. `IdbDocStore` registers its own `flush()`, which waits only for transactions it already issued. Batches still queued in the batcher are not covered by it.
+  - **W4 must** register the session's batcher drain (`flush()`) as a close hook, so queued batches are written before the connection closes.
+  - **W4 and W6 must** show `library_reload` as a blocking state: the connection is closed for good, and `IdbDocStore` has no reopen path (it holds one connection promise), so a reload is the only recovery. Until the reload, edits still queued stay visible in the editor and the `beforeunload` guard stays armed; if the drain failed, the state offers **Export** for the open document.
+  - `IdbDocStore.dispose()` unregisters its hook and forgets every open document; W4 calls `close(docId)` when a tab or route lets a document go, and `dispose()` when the library root unmounts.
+- **`library_upgrade_unblocked`.** `onblocked` reports `library_upgrade_blocked`; when the old tab lets go and the open succeeds, `library_upgrade_unblocked` follows, so W6 can clear the notice.
+- **Appends don't bump `meta.rev` (decided 2026-11-22).** `append` and `compact` rewrite list columns of the `docs` row (`title`, `snippet`, `modified_at`, `size_bytes`), but only index writes (`createLibraryDoc`, later every `IdbDocumentIndex` write) bump `meta.rev`. Bumping in every append would put a `meta` read-modify-write inside every strict content transaction, against the `perf` criterion (§2.3). So:
+  - The writer publishes title, snippet and modified-time changes only as `{ changes }` on BroadcastChannel `tinydocy-library`, with no rev bump.
+  - A tab that may have missed messages can't rely on a rev jump for these. `IdbDocumentIndex` therefore reloads `snapshot()` on `pageshow` with `persisted` true (back from bfcache) and on `visibilitychange` to visible, whatever `rev` says.
+  - A unit test pins this (`idb-doc-store.test.ts`, "the index rev").
+- **`foreign` is apply-then-ack (§2.5).** After a compaction returns `foreign`, the session keeps its state vector. Until a later compaction's `state` covers it (the caller applied it), every compaction merges the stored snapshot again and returns it again. A caller that drops `foreign` (a destroyed doc, an apply that throws) costs a repeat merge, not the other tab's content. One gap remains: a foreign snapshot that only deletes counts as covered at once.
 - **`IdbDocumentIndex`** (folders, tags, pins, Trash, the rev feed) is not in this PR. W2 writes only the document row `DocumentIndex.create` will (`createLibraryDoc`) and bumps `meta.rev` with it.
+
+**Still open for W2** (its §11 exit criteria), with owners:
+
+| Item | Owner | State |
+|---|---|---|
+| `IdbDocumentIndex` with the rev feed, on the shared `LibraryIndex` contract suite | W2b, the next library storage PR | Not started |
+| The `DocStore` contract suite in Chromium, Firefox and WebKit (real `durability: "strict"`, key ranges, `onblocked` and `onversionchange` timing, quota aborts) | W2b, in the `firefox` and `webkit` Playwright projects | Not started |
+| The property test at 50,000 runs | Nightly `library-property` job (`.github/workflows/nightly.yml`) | Wired 2026-11-22; one local pass so far (437 s) |
+| Typing latency within 5% in `perf` with strict commits | W4, the first PR that mounts `IdbDocStore` | Waits for W4 |
 
 ### 2.3 Transactions and durability
 
@@ -128,7 +146,7 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
   |---|---|
   | `onupgradeneeded` | Creates the stores. |
   | `onblocked` | Health becomes `library_upgrade_blocked`: "TinyDocy was updated. Close other TinyDocy tabs to continue." |
-  | `db.onversionchange` | Flush, then `db.close()`. Health becomes `library_reload`: "TinyDocy was updated in another tab. Reload to keep editing." [Reload] |
+  | `db.onversionchange` | Flush (the close hooks, §2.2 As built), then `db.close()`. Health becomes `library_reload`: "TinyDocy was updated in another tab. Reload to keep editing." [Reload] |
 
 - **`format_version` guard.** If `meta.format_version` is newer than this bundle knows (an old tab, or an old service-worker copy after a deploy), the whole library is **read-only** with `library_too_new`.
   - Upgrades stay in place. `onupgradeneeded` runs each step, and IndexedDB makes it atomic.
@@ -176,7 +194,7 @@ compact(docId, state, upToSeq):            // port signature unchanged
 2. A row in `keys` was either loaded at hydrate (so it is in `doc`) or appended from `doc` (so it is in `doc`). Both happened before `state` was encoded in the same task. So **deleted rows ⊆ `state` ⊆ the new snapshot.**
 3. The old snapshot is in the new one. Either its `rev` equals `snapRev`, meaning this session loaded or wrote it and so it is in `doc`. Or it is merged explicitly. So **old snapshot ⊆ new snapshot.**
 4. Rows this session never applied are never deleted. They stay for the next `load`, whoever appended them.
-5. Applying `foreign` after commit, with `STORAGE_ORIGIN`, brings another writer's merged content into this `doc`. A later compaction with an unchanged `rev` therefore can't drop it.
+5. Applying `foreign` after commit, with `STORAGE_ORIGIN`, brings another writer's merged content into this `doc`. A later compaction with an unchanged `rev` therefore can't drop it. As built, the store doesn't trust the caller to apply it: until a later `state` covers `foreign`'s state vector, it merges again (§2.2 As built).
 6. **Hydrate sees a consistent cut.** A readonly transaction sees every row committed before it started. The key generator only increases, so a row committed later always has a larger key.
 
 This holds whether Web Locks work, fail, are stolen, or don't exist. Locks (§4) only decide who **edits**. The property test in §10 checks this rule against a reference document under random interleavings of two or three writers.

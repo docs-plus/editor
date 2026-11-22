@@ -14,9 +14,13 @@ since the previous tag.
 The storage core of My documents, the personal library stored in the
 browser (spec `2026-11-16-web-library-design.md` §2, PR W2). It lands dark:
 nothing in the web app imports it, `NEXT_PUBLIC_LIBRARY` defaults to off,
-and the web build is unchanged: the editor chunk group measures 393,465 B
-gz, the same as `main` (+0 B, 1,287 B under the P2.2 fence), and no
-built file under `.next/` contains the library.
+and the web build is unchanged: every JS and CSS file under
+`.next/static` matches a build of `main` at `903b5c8` (apart from the
+build's version string), the editor chunk group measures 393,820 B gz on
+both (+0 B, 1,207 B under the fence), and no built file contains the
+library. W2 is not done: `IdbDocumentIndex`, the contract suite in three
+browsers and the `perf` comparison are still open (spec §2.2, "Still open
+for W2").
 
 #### Added
 
@@ -30,19 +34,37 @@ built file under `.next/` contains the library.
   writing the same document (W-D3): it merges into the stored snapshot and
   deletes only the rows its own session applied, and returns another tab's
   snapshot as `foreign` for `local-session` to apply.
-- **Web library:** opening handles an upgrade in another tab (flush, close,
-  "Reload"), a blocked upgrade, a newer database or `format_version`
+- **Web library:** compaction treats `foreign` as apply-then-ack: until a
+  later compaction's state covers it, each compaction merges the stored
+  snapshot again, so a caller that drops `foreign` loses nothing.
+- **Web library:** opening handles an upgrade in another tab (close hooks,
+  close, "Reload"), a blocked upgrade and its clearing
+  (`library_upgrade_unblocked`), a newer database or `format_version`
   (read-only), and a browser that won't store anything (never a silent
-  fallback to memory).
+  fallback to memory). `IdbDocStore.dispose()` unregisters its close hook
+  and forgets every open document.
 - **Web library:** `persist()`, `persisted()` and `estimate()` helpers with
-  the §2.6–§2.7 rules (silent requests on Chromium and Safari only, the
-  10 GiB Chromium quota report ignored), and the `NEXT_PUBLIC_LIBRARY`
-  switch, which never deletes the library.
+  the §2.6–§2.7 rules (silent requests on Chromium and Safari only, every
+  iOS browser counted as Safari, the 10 GiB Chromium quota report
+  ignored), and the `NEXT_PUBLIC_LIBRARY` switch, which never deletes the
+  library.
 - **Tests:** the shared `DocStore` contract suite on `IdbDocStore` under
   `fake-indexeddb` (new dev dependency), a seeded multi-writer compaction
-  property test (2,000 runs; `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_SEED`),
-  quota fault injection through `local-session`, and web library import
-  boundaries.
+  property test (2,000 runs from seed 1 on every PR, about 21 s;
+  `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_BASE_SEED`,
+  `LIBRARY_PROPERTY_SEED`), quota fault injection through `local-session`,
+  web library import boundaries, and a check that nothing in `app/`,
+  `components/`, `hooks/`, `extensions/`, `lib/` or `scripts/` imports the
+  library.
+- **CI:** the nightly `library-property` job runs the property test at
+  50,000 runs, seeded from the run id.
+
+#### Changed
+
+- **Spec:** web library appends and compactions never bump `meta.rev`; only
+  index writes do. Title and snippet changes reach other tabs through
+  BroadcastChannel, and `IdbDocumentIndex` reloads its snapshot on
+  `pageshow` from bfcache and when the tab becomes visible (spec §2.2).
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 

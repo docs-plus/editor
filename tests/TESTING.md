@@ -164,8 +164,9 @@ Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDr
 happy-dom has no IndexedDB, so the web library's tests use `fake-indexeddb` through `tests/helpers/fake-idb.ts`: each `createFakeBrowser()` is a fresh, empty profile, and nothing is installed on `globalThis`. `injectQuotaFault()` makes the next readwrite transaction abort with `QuotaExceededError` after its request runs, as a full disk does at commit.
 
 - **Contract:** P2.1's shared `DocStore` suite (`tests/helpers/doc-store-contract.ts`) on `IdbDocStore`, with `exclusiveOpen: false` (any tab may append).
-- **Compaction property** (`idb-compaction-property.test.ts`, W-D3): 2–3 tabs append, compact and reload at random, some at the same time; after every step a fresh `load()` must equal the union of every acked update. Seeded, and a failure prints `LIBRARY_PROPERTY_SEED=<n>` to replay it. `LIBRARY_PROPERTY_RUNS` sets the run count: 2,000 by default (about 10 s), 50,000 nightly.
-- **Opening and versions:** an upgrade in another tab, a blocked upgrade, a newer database or `format_version` (read-only), and no IndexedDB.
+- **Compaction property** (`idb-compaction-property.test.ts`, W-D3): 2–3 tabs append, compact and reload at random, some at the same time; after every step a fresh `load()` must equal the union of every acked update. Seeds run from `LIBRARY_PROPERTY_BASE_SEED` (1 by default, so every PR run is the same), and a failure prints `LIBRARY_PROPERTY_SEED=<n>` to replay it. `LIBRARY_PROPERTY_RUNS` sets the run count: 2,000 by default (about 21 s at a load average near 90; the timeout is 120 s or 30 ms a run, whichever is longer). The nightly `library-property` job runs 50,000 from the run id (one local run took 437 s).
+- **Opening and versions:** an upgrade in another tab, a blocked upgrade and its clearing, a newer database or `format_version` (read-only), and no IndexedDB.
+- **Not covered by `fake-indexeddb`:** `durability: "strict"`, the `[docId, Infinity]` key range, `onblocked` and `onversionchange` timing and real quota aborts are only modelled. The contract suite in Chromium, Firefox and WebKit (spec §11, W2 exit criteria) is still to come.
 
 ### Stress Probe
 
