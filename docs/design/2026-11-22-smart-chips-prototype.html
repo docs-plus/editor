@@ -1,0 +1,1603 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart chips prototype</title>
+<!--
+  Throwaway clickable prototype for §4.2a "Smart chips" in
+  docs/superpowers/specs/2026-11-16-search-linking-design.md (proposed, 2026-11-22).
+  Not app code. The editor is a tiny document model (text units plus chip units) with its own caret,
+  so caret, selection and delete behave exactly as the spec's key table says and screenshots are
+  deterministic. The chip markup is the spec's node view markup, byte for byte where it matters
+  (role, contenteditable, data-link-state, the aria-hidden icon wrapper holding U+2060, <bdi>, the hidden
+  suffix, no href, no aria-label, no title). Tokens are app/globals.css values. The only dependency is lucide 0.469.0.
+  window.proto.scene(id) sets every scene the screenshots use.
+-->
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" integrity="sha384-hJnF5AwidE18GSWTAGHv3ByzzvfNZ1Tcx5y1UUV3WkauuMCEzBJBMSwSt/PUPXnM" crossorigin="anonymous"></script>
+<style>
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --bubble-edge: oklch(0.87 0 0);
+  --focus-ring: oklch(0.439 0 0);
+  --page-bg: oklch(0.985 0.002 247);
+  --selection: oklch(0.88 0.06 250);
+  --selection-fg: inherit;
+  --link: oklch(0.49 0.17 258);
+  --radius: 0.45rem;
+  --shadow: 0 4px 16px oklch(0 0 0 / 0.10), 0 1px 3px oklch(0 0 0 / 0.08);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --pill-bg: oklch(0.205 0 0);
+  --pill-fg: oklch(0.985 0 0);
+  /* §4.2a tokens. In the app they live in the lazy lib/links/doc-links.css, never --tt-*. */
+  --doc-chip-bg: var(--secondary);
+  --doc-chip-fg: var(--foreground);
+  --doc-chip-border: var(--muted-foreground);
+  --doc-chip-icon: var(--muted-foreground);
+  --doc-chip-danger: var(--destructive);
+  --doc-chip-hover: oklch(0.93 0.002 286);
+  --doc-chip-broken-fg: var(--foreground);
+  --doc-chip-broken-border: var(--muted-foreground);
+  --ed-size: 16px;
+  --ed-lead: 1.6;
+}
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --bubble-edge: oklch(1 0 0 / 36%);
+  --focus-ring: oklch(0.87 0 0);
+  --page-bg: oklch(0.17 0 0);
+  --selection: oklch(0.42 0.08 250);
+  --link: oklch(0.76 0.12 255);
+  --shadow: 0 6px 20px oklch(0 0 0 / 0.5), 0 1px 3px oklch(0 0 0 / 0.4);
+  --pill-bg: oklch(0.92 0 0);
+  --pill-fg: oklch(0.145 0 0);
+  --doc-chip-hover: oklch(0.32 0.006 286);
+}
+/* Forced colours: the real media query, and the same tokens under the "Simulated" control. */
+@media (forced-colors: active) {
+  :root, .dark {
+    --background: Canvas; --foreground: CanvasText; --card: Canvas; --popover: Canvas; --popover-foreground: CanvasText;
+    --secondary: Canvas; --muted: Canvas; --muted-foreground: CanvasText; --accent: Canvas; --border: CanvasText;
+    --bubble-edge: CanvasText; --focus-ring: Highlight; --page-bg: Canvas; --selection: Highlight; --selection-fg: HighlightText;
+    --link: LinkText; --pill-bg: Canvas; --pill-fg: CanvasText; --shadow: none;
+    --doc-chip-bg: Canvas; --doc-chip-fg: LinkText; --doc-chip-border: LinkText; --doc-chip-icon: LinkText;
+    --doc-chip-danger: CanvasText; --doc-chip-hover: Canvas; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText;
+  }
+  .sel, .doc-chip.in-sel, .caret::after { forced-color-adjust: none; }
+  .pill { border: 1px solid CanvasText; }
+  /* Prototype chrome only: pressed and selected states as Highlight, so their text stays visible. */
+  .seg button[aria-pressed="true"], .ias .seg button[aria-checked="true"], .log .k.ann, .primary, .a11y tr.focus td, .opt[aria-selected="true"] {
+    forced-color-adjust: none; background: Highlight !important; color: HighlightText !important; border-color: Highlight !important;
+  }
+}
+:root[data-fc="on"], :root[data-fc="on"].dark {
+  --background: Canvas; --foreground: CanvasText; --card: Canvas; --popover: Canvas; --popover-foreground: CanvasText;
+  --secondary: Canvas; --muted: Canvas; --muted-foreground: CanvasText; --accent: Canvas; --border: CanvasText;
+  --bubble-edge: CanvasText; --focus-ring: Highlight; --page-bg: Canvas; --selection: Highlight; --selection-fg: HighlightText;
+  --link: LinkText; --pill-bg: Canvas; --pill-fg: CanvasText; --shadow: none;
+  --doc-chip-bg: Canvas; --doc-chip-fg: LinkText; --doc-chip-border: LinkText; --doc-chip-icon: LinkText;
+  --doc-chip-danger: CanvasText; --doc-chip-hover: Canvas; --doc-chip-broken-fg: CanvasText; --doc-chip-broken-border: CanvasText;
+}
+:root[data-fc="on"] .pill { border: 1px solid CanvasText; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page-bg); color: var(--foreground);
+}
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; animation: none !important; } }
+button, input, select { font: inherit; color: inherit; }
+svg.lucide { width: 16px; height: 16px; stroke-width: 2; flex: none; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+kbd { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 4px; border: 1px solid var(--border); border-block-end-width: 2px; border-radius: 4px; background: var(--muted); }
+
+/* ── Controls ───────────────────────────────────────────── */
+.controls {
+  position: sticky; top: 0; z-index: 100; background: var(--card); border-block-end: 1px solid var(--border);
+  padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12px;
+}
+.controls h1 { font-size: 13px; margin: 0; margin-inline-end: 6px; font-weight: 600; }
+.ctl { display: inline-flex; align-items: center; gap: 4px; }
+.ctl > span { color: var(--muted-foreground); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 3px 7px; cursor: pointer; font-size: 12px; }
+.seg button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.controls select { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); max-width: 100%; }
+.btn { border: 1px solid var(--border); background: var(--background); border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
+.btn:hover { background: var(--muted); }
+
+/* ── Layout ─────────────────────────────────────────────── */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 16px; padding: 12px 16px 24px; align-items: start; }
+@media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.scene-note { font-size: 12px; color: var(--muted-foreground); margin: 0 0 8px; min-height: 18px; }
+.scene-note b { color: var(--foreground); font-weight: 600; }
+.stage { min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.stage > .scene-note { align-self: stretch; }
+.win {
+  position: relative; width: 100%; height: 760px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  display: flex; flex-direction: column; background: var(--background);
+}
+.win[data-device="phone"] { width: 390px; height: 780px; border: 10px solid oklch(0.25 0 0); border-radius: 40px; }
+.tabs { display: flex; align-items: end; gap: 4px; height: 36px; padding-inline: 10px; background: var(--page-bg); border-block-end: 1px solid var(--border); flex: none; overflow: hidden; }
+.tab { padding: 6px 12px; border-radius: 8px 8px 0 0; font-size: 12.5px; color: var(--muted-foreground); display: flex; gap: 6px; align-items: center; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.tab.on { background: var(--background); color: var(--foreground); }
+.tab .badge { font-size: 10.5px; border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.topbar { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 10px; border-block-end: 1px solid var(--border); background: var(--background); flex: none; font-size: 13px; }
+.topbar .crumb { color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .grow { flex: 1; }
+.tb { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; }
+.tb:hover { background: var(--muted); }
+[dir="rtl"] .flip-rtl { transform: scaleX(-1); }
+.scroller { position: relative; flex: 1; overflow: auto; background: var(--page-bg); }
+.page { max-width: 760px; margin: 20px auto 120px; background: var(--background); padding: 36px 56px 48px; border-radius: 8px; border: 1px solid var(--border); }
+.win[data-device="phone"] .scroller { background: var(--background); }
+.win[data-device="phone"] .page { margin: 0; border: 0; border-radius: 0; padding: 20px 16px 120px; }
+
+/* ── Editor ─────────────────────────────────────────────── */
+#ed { outline: none; font-size: var(--ed-size); line-height: var(--ed-lead); cursor: text; overflow-wrap: break-word; }
+#ed[aria-readonly="true"] { cursor: default; }
+#ed h1 { font-size: 1.85em; line-height: 1.2; margin: 0 0 .6em; font-weight: 700; }
+#ed h2 { font-size: 1.3em; line-height: 1.3; margin: 1.3em 0 .45em; font-weight: 650; }
+#ed p { margin: 0 0 .8em; }
+#ed .r { white-space: pre-wrap; }
+.sel { background: var(--selection); color: var(--selection-fg); }
+.caret { position: relative; }
+.caret::after { content: ""; position: absolute; inset-block: 0; inset-inline-start: -1px; width: 2px; background: var(--foreground); animation: blink 1.06s steps(1, end) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+#ed a.doc-link { color: var(--link); text-decoration: underline; text-underline-offset: .18em; cursor: pointer; }
+#ed a.doc-link[data-card-open] { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: 2px; }
+.doc-link-icon { display: inline-flex; vertical-align: -0.125em; margin-inline-end: .15em; color: var(--muted-foreground); }
+.doc-link-icon > svg { width: 1em; height: 1em; }
+
+/* §4.2a: the chip. Inline, padding-block 0, so the line box never grows. */
+.doc-chip {
+  display: inline; padding-block: 0; padding-inline: .3em .45em;
+  border: max(1px, .0625em) solid var(--doc-chip-border); border-radius: 999px;
+  background: var(--doc-chip-bg); color: var(--doc-chip-fg);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  overflow-wrap: anywhere; cursor: pointer; font-weight: 500;
+  transition: background-color .12s var(--ease);
+}
+.doc-chip:hover { background: var(--doc-chip-hover); }
+/* The icon is out of flow inside an inline wrapper that reserves its width. An in-flow <svg> is an
+   atomic inline, and Chromium allows a line break after it even before U+2060, which strands the icon
+   at the end of a line. The wrapper has no break opportunity, so the icon always starts the title's line. */
+.doc-chip-icon { position: relative; padding-inline-end: 1.25em; }
+.doc-chip-icon > svg { position: absolute; inset-inline-start: 0; top: 50%; transform: translateY(-50%); width: 1em; height: 1em; color: var(--doc-chip-icon); stroke-width: 2; }
+.doc-chip[data-link-state="deleted"] .doc-chip-icon > svg { color: var(--doc-chip-danger); }
+.doc-chip:is([data-link-state="deleted"], [data-link-state="not_in_library"], [data-link-state="unknown_form"]) {
+  border-style: dashed; border-color: var(--doc-chip-broken-border); color: var(--doc-chip-broken-fg);
+}
+.doc-chip.in-sel { background: var(--selection); color: var(--selection-fg); }
+.doc-chip:focus-visible, .doc-chip[data-card-open] { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+@media print {
+  .doc-chip { border: 0; background: none; padding: 0; color: inherit; font-weight: inherit; }
+  .doc-chip-icon { display: none; }
+}
+
+/* ── Overlays ───────────────────────────────────────────── */
+.pop {
+  position: absolute; z-index: 30; background: var(--popover); color: var(--popover-foreground);
+  border: 1px solid var(--bubble-edge); border-radius: 10px; box-shadow: var(--shadow);
+  animation: pop-in .12s var(--ease);
+}
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px); } }
+.ghost { position: absolute; z-index: 25; color: var(--muted-foreground); pointer-events: none; white-space: nowrap; }
+
+.slash { width: 300px; max-height: 340px; display: flex; flex-direction: column; font-size: 13px; }
+.slash .list { overflow: auto; padding: 4px; }
+.grp-label { font-size: 11px; color: var(--muted-foreground); padding: 8px 8px 4px; font-weight: 600; }
+.opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; min-height: 32px; }
+.opt[aria-selected="true"] { background: var(--accent); box-shadow: inset 2px 0 0 var(--foreground); }
+[dir="rtl"] .opt[aria-selected="true"] { box-shadow: inset -2px 0 0 var(--foreground); }
+.opt .hint { margin-inline-start: auto; color: var(--muted-foreground); font-size: 12px; }
+.opt .path { margin-inline-start: auto; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.opt .badge { font-size: 10.5px; border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; color: var(--muted-foreground); }
+.foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-block-start: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
+.foot .grow { flex: 1; }
+.foot button { border: 0; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 4px; color: var(--muted-foreground); }
+.foot button:hover { background: var(--muted); }
+
+.picker { width: 460px; font-size: 13px; display: flex; flex-direction: column; max-height: 420px; }
+.pk-in { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-block-end: 1px solid var(--border); }
+.pk-in input { flex: 1; border: 0; background: transparent; outline: none; font-size: 14px; min-width: 0; }
+.pk-in .step { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.pk-list { overflow: auto; padding: 4px; flex: 1; min-height: 60px; }
+.pk-empty { padding: 12px; color: var(--muted-foreground); }
+.ias { display: inline-flex; align-items: center; gap: 6px; }
+.ias .seg button { font-size: 12px; padding: 2px 8px; }
+.ias .seg button[aria-checked="true"] { background: var(--foreground); color: var(--background); }
+.ias .seg button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.pk-note { padding: 0 10px 8px; font-size: 12px; color: var(--muted-foreground); }
+
+.card { width: 340px; padding: 12px; font-size: 13px; }
+.card:focus { outline: none; }
+.card-head { display: flex; gap: 8px; align-items: flex-start; }
+.card-head svg { margin-block-start: 2px; color: var(--muted-foreground); }
+.card-head svg.danger { color: var(--destructive); }
+.card-title { font-weight: 600; font-size: 14px; }
+.card-meta { color: var(--muted-foreground); font-size: 12px; margin-block-start: 2px; }
+.card-msg { margin: 8px 0 0; }
+.card-snip { margin: 6px 0 0; color: var(--muted-foreground); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 10px; }
+.act { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--background); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12.5px; }
+.act:hover { background: var(--muted); }
+.actions + .actions { border-block-start: 1px solid var(--border); padding-block-start: 10px; }
+.card.sheet { inset-inline: 0 !important; inset-block-end: 0 !important; inset-block-start: auto !important; left: 0 !important; width: auto; border-radius: 16px 16px 0 0; padding: 16px; }
+.card.sheet .actions { flex-direction: column; gap: 0; }
+.card.sheet .act { min-height: 44px; border: 0; border-block-start: 1px solid var(--border); border-radius: 0; font-size: 15px; justify-content: flex-start; padding-inline: 4px; width: 100%; }
+.card.sheet .actions + .actions { padding-block-start: 0; margin-block-start: 0; }
+.sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: -6px auto 10px; }
+
+.scrim { position: absolute; inset: 0; z-index: 40; background: oklch(0 0 0 / .35); }
+.consent { z-index: 41; width: min(400px, calc(100% - 32px)); inset-inline-start: 50%; top: 30%; transform: translateX(-50%); padding: 18px; }
+[dir="rtl"] .consent { transform: translateX(50%); }
+.consent h2 { font-size: 15px; margin: 0 0 8px; }
+.consent p { margin: 0 0 14px; }
+.row-end { display: flex; justify-content: flex-end; gap: 8px; }
+.primary { background: var(--foreground) !important; color: var(--background) !important; border-color: var(--foreground) !important; }
+
+#pills { position: absolute; inset-inline: 0; bottom: 18px; z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding-inline: 16px; }
+.pill { pointer-events: auto; display: flex; gap: 10px; align-items: center; background: var(--pill-bg); color: var(--pill-fg); border-radius: 10px; padding: 8px 10px 8px 14px; font-size: 13px; max-width: 560px; box-shadow: var(--shadow); animation: pop-in .12s var(--ease); }
+.pill button { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; font-size: 12.5px; }
+
+.target h1 { font-size: 1.85em; margin: 0 0 .2em; line-height: 1.2; }
+.target .meta { color: var(--muted-foreground); font-size: 13px; margin: 0 0 1.2em; }
+.target h2 { font-size: 1.3em; margin: 1.3em 0 .45em; }
+.target:focus { outline: none; }
+.target { font-size: var(--ed-size); line-height: var(--ed-lead); }
+.banner { display: flex; gap: 10px; align-items: center; border: 1px solid var(--border); background: var(--muted); border-radius: 8px; padding: 8px 12px; margin-block-end: 16px; font-size: 13px; }
+.proto-note { margin-block-start: 2em; font-size: 12px; color: var(--muted-foreground); border-block-start: 1px dashed var(--border); padding-block-start: 8px; }
+
+/* ── Side panel ─────────────────────────────────────────── */
+.side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.box h2 { font-size: 12.5px; margin: 0 0 6px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.box h2 .grow { flex: 1; }
+.lib-list { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.lib-list li { display: flex; align-items: center; gap: 6px; padding: 3px 0; min-height: 28px; border-block-end: 1px solid var(--border); }
+.lib-list li:last-child { border-block-end: 0; }
+.lib-list .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-list .tag { font-size: 10.5px; border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; color: var(--muted-foreground); white-space: nowrap; }
+.lib-list button { border: 0; background: transparent; cursor: pointer; padding: 3px; border-radius: 4px; color: var(--muted-foreground); display: inline-flex; }
+.lib-list button:hover { background: var(--muted); color: var(--foreground); }
+.lib-list input { flex: 1; min-width: 0; font-size: 12.5px; padding: 2px 6px; border: 1px solid var(--focus-ring); border-radius: 4px; background: var(--background); }
+.clip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-block-start: 8px; font-size: 12px; }
+.clip input { flex: 1 1 100%; font: 11.5px ui-monospace, Menlo, monospace; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); min-width: 0; }
+[role="tablist"] { display: flex; gap: 2px; border-block-end: 1px solid var(--border); margin: -2px -12px 8px; padding-inline: 8px; }
+[role="tab"] { border: 0; background: transparent; padding: 6px 8px; cursor: pointer; font-size: 12.5px; color: var(--muted-foreground); border-block-end: 2px solid transparent; }
+[role="tab"][aria-selected="true"] { color: var(--foreground); border-block-end-color: var(--foreground); font-weight: 600; }
+[role="tabpanel"] { max-height: 470px; overflow: auto; font-size: 12px; }
+.a11y { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.a11y th, .a11y td { text-align: start; vertical-align: top; padding: 4px 4px; border-block-end: 1px solid var(--border); overflow-wrap: anywhere; }
+.a11y th { font-weight: 600; color: var(--muted-foreground); font-size: 11px; position: sticky; top: 0; background: var(--card); }
+.a11y td:first-child { font: 11.5px ui-monospace, Menlo, monospace; }
+.a11y tr.focus td { background: var(--selection); color: var(--selection-fg); }
+.a11y caption { caption-side: bottom; text-align: start; color: var(--muted-foreground); padding-block-start: 6px; }
+.log { list-style: none; margin: 0; padding: 0; }
+.log li { padding: 4px 0; border-block-end: 1px solid var(--border); display: flex; gap: 6px; align-items: baseline; }
+.log .k { font-size: 10.5px; border-radius: 999px; padding: 0 6px; border: 1px solid var(--border); white-space: nowrap; }
+.log .k.ann { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.log .k.quiet { border-style: dashed; }
+.counters { color: var(--muted-foreground); margin-block-end: 6px; }
+pre.code { white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.45 ui-monospace, Menlo, monospace; margin: 0 0 10px; background: var(--muted); padding: 8px; border-radius: 6px; }
+.keys { width: 100%; border-collapse: collapse; }
+.keys td { padding: 4px; border-block-end: 1px solid var(--border); vertical-align: top; }
+.keys td:first-child { white-space: nowrap; }
+.measure { position: absolute; visibility: hidden; inset-inline-start: 0; top: 0; width: 600px; }
+</style>
+</head>
+<body>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
+<header class="controls" aria-label="Prototype controls">
+  <h1>Smart chips</h1>
+  <span id="controls" style="display:contents"></span>
+  <label class="ctl"><span>Scene</span><select id="scene"></select></label>
+  <button class="btn" type="button" id="reset">Reset</button>
+</header>
+
+<main class="layout">
+  <section class="stage" aria-label="Prototype stage">
+    <p class="scene-note" id="scene-note"></p>
+    <div class="win" id="win" data-device="desktop">
+      <div class="tabs" id="tabs"></div>
+      <div class="topbar" id="topbar"></div>
+      <div class="scroller" id="scroller">
+        <article class="page" id="page">
+          <div id="ed" role="textbox" aria-multiline="true" aria-label="Project plan" tabindex="0" spellcheck="false"></div>
+          <div id="target" class="target" tabindex="-1" hidden></div>
+        </article>
+      </div>
+      <div id="ov"></div>
+      <div id="pills"></div>
+    </div>
+  </section>
+
+  <aside class="side" aria-label="Prototype panels">
+    <section class="box" aria-labelledby="lib-h">
+      <h2 id="lib-h"><span class="grow">Library (the index snapshot)</span><button class="btn" type="button" id="remote">Remote edit</button></h2>
+      <ul class="lib-list" id="lib-list"></ul>
+      <div class="clip">
+        <label for="clip-in" style="flex:1 1 100%;color:var(--muted-foreground)">Clipboard (simulated: buttons paste at the caret)</label>
+        <input id="clip-in" spellcheck="false">
+        <button class="btn" type="button" id="paste-btn">Paste <kbd>⌘V</kbd></button>
+        <button class="btn" type="button" id="paste-plain">Paste as text <kbd>⌘⇧V</kbd></button>
+        <button class="btn" type="button" id="paste-hostile">Paste hostile HTML</button>
+      </div>
+    </section>
+    <section class="box" aria-label="Inspector">
+      <div role="tablist" aria-label="Inspector" id="side-tabs">
+        <button role="tab" id="tab-a11y" aria-controls="panel-a11y" aria-selected="true">Accessibility</button>
+        <button role="tab" id="tab-log" aria-controls="panel-log" aria-selected="false" tabindex="-1">Announcements</button>
+        <button role="tab" id="tab-stored" aria-controls="panel-stored" aria-selected="false" tabindex="-1">Stored</button>
+        <button role="tab" id="tab-export" aria-controls="panel-export" aria-selected="false" tabindex="-1">Export</button>
+        <button role="tab" id="tab-keys" aria-controls="panel-keys" aria-selected="false" tabindex="-1">Keys</button>
+      </div>
+      <div role="tabpanel" id="panel-a11y" aria-labelledby="tab-a11y" tabindex="0"></div>
+      <div role="tabpanel" id="panel-log" aria-labelledby="tab-log" tabindex="0" hidden></div>
+      <div role="tabpanel" id="panel-stored" aria-labelledby="tab-stored" tabindex="0" hidden></div>
+      <div role="tabpanel" id="panel-export" aria-labelledby="tab-export" tabindex="0" hidden></div>
+      <div role="tabpanel" id="panel-keys" aria-labelledby="tab-keys" tabindex="0" hidden></div>
+    </section>
+  </aside>
+</main>
+
+<script>
+"use strict";
+/* ═════════ helpers ═════════ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return e;
+}
+const kebab = (s) => s.replace(/([a-z0-9])([A-Z0-9])/g, "$1-$2").toLowerCase();
+const MISSING_ICONS = new Set();
+function ic(name, cls = "") {
+  const node = window.lucide && lucide.icons && lucide.icons[name];
+  if (!node) { MISSING_ICONS.add(name); return h("span", { class: "ic-missing " + cls, "aria-hidden": "true" }); }
+  const svg = lucide.createElement(node);
+  svg.setAttribute("class", `lucide lucide-${kebab(name)} ${cls}`.trim());
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  return svg;
+}
+function hex32(s) {
+  let out = "", x = 2166136261 >>> 0;
+  for (let k = 0; k < 4; k++) { for (const ch of s + "#" + k) { x ^= ch.codePointAt(0); x = Math.imul(x, 16777619) >>> 0; } out += x.toString(16).padStart(8, "0"); }
+  return out;
+}
+const uuid = (s) => { const x = hex32(s); return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`; };
+const BIDI = /[‪-‮⁦-⁩‎‏؜]/g;
+function cleanLabel(s) { return [...String(s || "").replace(BIDI, "")].slice(0, 200).join(""); }
+const short = (href) => href.replace(/([0-9a-f]{6})[0-9a-f]{20}([0-9a-f]{6})/, "$1…$2").replace(/#([0-9a-f]{8})[0-9a-f-]{28}/, "#$1…");
+function norm(s) { return String(s).normalize("NFKD").replace(/[̀-ًͯ-ٟـ]/g, "").replace(/ي/g, "ی").replace(/ك/g, "ک").toLowerCase(); }
+const isRTLText = (s) => /[֐-ࣿיִ-﷿ﹰ-﻿]/.test(s);
+
+/* §4.1 parser, as LK1's lib/links/doc-link.ts */
+const DOC_LINK = /^tinydocy:(doc\/[0-9a-f]{32}|here)(#[0-9a-f-]{36})?$/;
+function parseDocLink(href) {
+  if (typeof href !== "string" || href.length > 256) return null;
+  const m = DOC_LINK.exec(href);
+  if (!m) return null;
+  const tocId = m[2] ? m[2].slice(1) : null;
+  if (m[1] === "here") return tocId ? { kind: "here", tocId } : null;
+  return { kind: "doc", key: m[1].slice(4), tocId };
+}
+
+/* ═════════ data ═════════ */
+const K = { q4: hex32("q4"), hire: hex32("hire"), road: hex32("road"), launch: hex32("launch"), fa: hex32("fa"), cjk: hex32("cjk"), tpl: hex32("tpl"), gone: hex32("gone"), foreign: hex32("foreign"), plan: hex32("plan") };
+const TOC = { travel: uuid("travel"), approvals: uuid("approvals"), roles: uuid("roles"), states: uuid("states"), risks: uuid("risks"), next: uuid("next") };
+function makeLib() {
+  return {
+    docs: [
+      { id: "plan", key: K.plan, title: "Project plan", path: ["Work"], edited: "Today" },
+      { id: "q4", key: K.q4, title: "Q4 budget", path: ["Finance"], edited: "12 Nov", snippet: "Spend for October to December: travel, hiring and tools, with the approval limits for each team.",
+        headings: [{ id: TOC.travel, text: "Travel", body: "Economy fares only, booked 14 days ahead." }, { id: TOC.approvals, text: "Approvals", body: "Team leads approve up to 2,000. Above that, finance signs off." }] },
+      { id: "hire", key: K.hire, title: "Hiring plan", path: ["People"], edited: "9 Nov", snippet: "Three engineers and a designer by March, in that order.", headings: [{ id: TOC.roles, text: "Roles", body: "Two backend, one frontend, one product designer." }] },
+      { id: "road", key: K.road, title: "Roadmap 2027", path: ["Work"], edited: "2 Nov", snippet: "Desktop app, shared documents, then templates.", headings: [] },
+      { id: "launch", key: K.launch, title: "Launch checklist", path: ["Work"], edited: "1 Nov", trashed: true, snippet: "Everything to check before the public launch.", headings: [] },
+      { id: "fa", key: K.fa, title: "بودجهٔ سه‌ماههٔ چهارم", path: ["مالی"], edited: "10 Nov", snippet: "هزینه‌های سفر و استخدام برای سه ماه آخر سال.", headings: [] },
+      { id: "cjk", key: K.cjk, title: "第四季度预算", path: ["Finance"], edited: "8 Nov", snippet: "差旅和招聘的季度预算。", headings: [] },
+      { id: "tpl", key: K.tpl, title: "Weekly notes template", path: ["Templates"], edited: "1 Oct", kind: "template", headings: [] },
+    ],
+    purged: new Set([K.gone]),
+  };
+}
+const C = (key, label) => ({ chip: `tinydocy:doc/${key}`, label });
+const CH = (toc, label) => ({ chip: `tinydocy:here#${toc}`, label });
+const L = (href, text) => ({ link: href, text });
+function toUnits(parts) {
+  const out = [];
+  for (const p of parts) {
+    if (typeof p === "string") for (const c of p) out.push({ t: "x", c });
+    else if (p.chip) out.push({ t: "chip", href: p.chip, label: p.label });
+    else if (p.link) for (const c of p.text) out.push({ t: "x", c, link: p.link });
+  }
+  return out;
+}
+function makeDoc() {
+  const B = (type, id, ...parts) => ({ type, id, units: toUnits(parts) });
+  return [
+    B("h1", null, "Project plan"),
+    B("p", null, "Budget numbers live in ", C(K.q4, "Q4 budget"), " and the hiring targets in ", C(K.hire, "Hiring plan"), ". Read ", CH(TOC.risks, "Risks"), " before sign-off."),
+    B("h2", TOC.states, "Every chip state"),
+    B("p", null, "In Trash: ", C(K.launch, "Launch checklist"), " · Deleted: ", C(K.gone, "Vendor contracts"), " · Not on this device: ", C(K.foreign, "Board deck"),
+      " · Needs a newer version: ", { chip: "tinydocy:board/7f3a9c", label: "Roadmap board" }, " · A CJK title: ", C(K.cjk, "第四季度预算"), "."),
+    B("p", null, "A text link, for comparison: ", L(`tinydocy:doc/${K.q4}`, "Q4 budget"), ". Its text stays as typed."),
+    B("h2", TOC.risks, "Risks"),
+    B("p", null, "Travel may run over in December. The limits are in ", C(K.q4, "Q4 budget"), "."),
+    B("p", null, "جزئیات بودجه در ", C(K.fa, "بودجهٔ سه‌ماههٔ چهارم"), " آمده است و نقش‌ها در ", C(K.hire, "Hiring plan"), "."),
+    B("h2", TOC.next, "Next steps"),
+    B("p", null, "Add links here: "),
+  ];
+}
+
+/* ═════════ state ═════════ */
+const CFG = { theme: "light", dir: "ltr", size: "16", lead: "1.6", motion: "full", fc: "off", mode: "edit", device: "desktop", ready: "ready", viewer: "me", live: "local" };
+let LIB, S;
+function freshState() {
+  return {
+    doc: makeDoc(), sel: { a: { b: 9, o: 16 }, h: { b: 9, o: 16 } }, hist: [], fut: [], lastKind: null,
+    writes: { local: 0, remote: 0 }, repaints: 0, renameTx: 0,
+    slash: null, picker: null, card: null, consent: false, consented: false,
+    nav: [], view: "editor", tabs: [{ title: "Project plan", on: true }],
+    hintShown: false, pasteHintShown: false, usedKinds: [], renaming: null,
+    log: [], spies: { navigate: 0, windowOpen: 0, openExternal: 0 }, lastCopy: null, plainNext: false,
+  };
+}
+const ed = $("#ed"), win = $("#win"), ov = $("#ov"), scroller = $("#scroller");
+const registry = new Map(); // chip element → unit (one registry per host)
+
+/* ═════════ resolve (LK1 resolve.ts, from the snapshot) ═════════ */
+function headingBlock(tocId) { return S.doc.findIndex((b) => b.id === tocId && b.type === "h2"); }
+const blockText = (blk) => blk.units.map((u) => (u.t === "chip" ? chipView(u).text : u.c)).join("");
+function resolveHref(href) {
+  const p = parseDocLink(href);
+  if (!p) return { state: "unknown_form" };
+  if (p.kind === "here") { const bi = headingBlock(p.tocId); return { state: "here", title: bi >= 0 ? blockText(S.doc[bi]) : null, tocId: p.tocId }; }
+  if (CFG.ready !== "ready") return { state: "pending" };
+  if (CFG.viewer === "collab") return { state: "not_in_library" };
+  const d = LIB.docs.find((x) => x.key === p.key);
+  if (!d) return { state: LIB.purged.has(p.key) ? "deleted" : "not_in_library" };
+  if (d.deleted) return { state: "deleted" };
+  const head = p.tocId ? (d.headings || []).find((x) => x.id === p.tocId) : null;
+  if (d.trashed) return { state: "in_trash", title: d.title, doc: d, tocId: p.tocId, head };
+  return { state: "resolves", title: d.title, doc: d, tocId: p.tocId, head };
+}
+const ICON = { resolves: "FileText", pending: "FileText", here: "Hash", in_trash: "Trash2", deleted: "FileX", not_in_library: "FileQuestion", unknown_form: "FileQuestion" };
+const SUFFIX = { resolves: ", document", pending: ", document", here: ", section", in_trash: ", document, in Trash", deleted: ", document, deleted", not_in_library: ", document, not in your library", unknown_form: ", needs a newer version of TinyDocy" };
+function chipView(u) {
+  const r = resolveHref(u.href);
+  const label = cleanLabel(u.label);
+  let text;
+  switch (r.state) {
+    case "resolves": case "in_trash": text = r.title || label || "Document"; break;
+    case "here": text = r.title || label || "Section"; break;
+    case "unknown_form": text = label || "Link"; break;
+    default: text = label || "Document";
+  }
+  return { state: r.state, text, suffix: SUFFIX[r.state], icon: ICON[r.state], r };
+}
+
+/* ═════════ node view (vanilla DOM, §4.2a "DOM") ═════════ */
+function paintChip(el, v) {
+  const key = v.state + "|" + v.text;
+  if (el.dataset.k === key) return false;
+  el.dataset.k = key;
+  el.setAttribute("data-link-state", v.state);
+  // The icon and U+2060 share one aria-hidden wrapper, so U+2060 stays out of the accessible name
+  // (Chromium keeps a bare U+2060 in the name). The wrapper's CSS keeps the icon on the title's line.
+  el.replaceChildren(h("span", { class: "doc-chip-icon", "aria-hidden": "true" }, ic(v.icon), "⁠"), h("bdi", { dir: "auto" }, v.text), h("span", { class: "sr-only" }, v.suffix));
+  return true;
+}
+function chipEl(u, b, i, inSel) {
+  const el = h("span", { class: "doc-chip" + (inSel ? " in-sel" : ""), role: "link", contenteditable: "false", "data-b": b, "data-i": i });
+  if (CFG.mode === "read") el.tabIndex = 0;
+  if (S.card && S.card.kind === "chip" && S.card.b === b && S.card.i === i) el.setAttribute("data-card-open", "");
+  paintChip(el, chipView(u));
+  registry.set(el, u);
+  return el;
+}
+let repaintQueued = false;
+function scheduleRepaint() {
+  if (repaintQueued) return;
+  repaintQueued = true;
+  requestAnimationFrame(() => {
+    repaintQueued = false;
+    for (const [el, u] of registry) if (paintChip(el, chipView(u))) S.repaints++;
+    $$("a.doc-link", ed).forEach((a) => { const st = resolveHref(a.dataset.href).state; const i = a.querySelector(".doc-link-icon"); if (i) { i.setAttribute("data-link-state", st); } });
+    if (S.card) renderCard(false);
+    if (S.view !== "editor") renderTarget();
+    renderStored(); renderExport();
+  });
+}
+
+/* ═════════ selection helpers ═════════ */
+const cmp = (p, q) => p.b - q.b || p.o - q.o;
+const selFrom = () => (cmp(S.sel.a, S.sel.h) <= 0 ? S.sel.a : S.sel.h);
+const selTo = () => (cmp(S.sel.a, S.sel.h) <= 0 ? S.sel.h : S.sel.a);
+const collapsed = () => cmp(S.sel.a, S.sel.h) === 0;
+function setCaret(p) { S.sel = { a: { ...p }, h: { ...p } }; }
+function clampPos(p) { const b = Math.max(0, Math.min(S.doc.length - 1, p.b)); return { b, o: Math.max(0, Math.min(S.doc[b].units.length, p.o)) }; }
+function validateSel() { S.sel = { a: clampPos(S.sel.a), h: clampPos(S.sel.h) }; }
+function blockDir(blk) {
+  for (const u of blk.units) if (u.t === "x" && /\p{L}/u.test(u.c)) return isRTLText(u.c) ? "rtl" : "ltr";
+  return CFG.dir;
+}
+const canChip = (b) => S.doc[b] && S.doc[b].type !== "h1";
+
+/* ═════════ history (one entry per commit; typing coalesces) ═════════ */
+const snapshot = () => ({ doc: structuredClone(S.doc), sel: structuredClone(S.sel) });
+function commit(fn, kind) {
+  if (!(kind === "type" && S.lastKind === "type")) { S.hist.push(snapshot()); S.fut = []; }
+  S.lastKind = kind || "op";
+  fn();
+  S.writes.local++;
+  validateSel();
+  render();
+}
+function undo() {
+  const s = S.hist.pop(); if (!s) return;
+  S.fut.push(snapshot()); S.doc = s.doc; S.sel = s.sel; S.lastKind = null; S.writes.local++;
+  dismissPill("paste"); closeSlash(); render();
+}
+function redo() {
+  const s = S.fut.pop(); if (!s) return;
+  S.hist.push(snapshot()); S.doc = s.doc; S.sel = s.sel; S.lastKind = null; S.writes.local++; render();
+}
+function deleteRange(from, to) {
+  if (from.b === to.b) S.doc[from.b].units.splice(from.o, to.o - from.o);
+  else {
+    const first = S.doc[from.b], last = S.doc[to.b];
+    first.units.splice(from.o, first.units.length - from.o, ...last.units.slice(to.o));
+    S.doc.splice(from.b + 1, to.b - from.b);
+  }
+  setCaret(from);
+}
+function insertUnits(at, units) { S.doc[at.b].units.splice(at.o, 0, ...units); setCaret({ b: at.b, o: at.o + units.length }); }
+const textUnits = (text, link) => [...text].map((c) => (link ? { t: "x", c, link } : { t: "x", c }));
+function rangeUnits(from, to) {
+  const out = [];
+  for (let b = from.b; b <= to.b; b++) { const us = S.doc[b].units; out.push(...us.slice(b === from.b ? from.o : 0, b === to.b ? to.o : us.length)); }
+  return out;
+}
+
+/* ═════════ render ═════════ */
+function render() {
+  applyCfg();
+  renderTabs(); renderTopbar();
+  const inEditor = S.view === "editor";
+  ed.hidden = !inEditor; $("#target").hidden = inEditor;
+  if (inEditor) renderEditor(); else renderTarget();
+  positionOverlays();
+  renderLibrary(); renderStored(); renderExport(); renderLog();
+  scheduleA11y();
+}
+function renderEditor() {
+  registry.clear();
+  const focusedish = document.activeElement === ed || S.picker || S.card || S.slash;
+  const showCaret = CFG.mode === "edit" && collapsed() && focusedish;
+  const from = selFrom(), to = selTo();
+  const frag = document.createDocumentFragment();
+  S.doc.forEach((blk, bi) => {
+    const tag = blk.type === "h1" ? "h1" : blk.type === "h2" ? "h2" : "p";
+    const be = h(tag, { dir: blockDir(blk), "data-b": bi, "data-toc-id": blk.id });
+    const n = blk.units.length;
+    const s = bi > from.b ? 0 : bi === from.b ? from.o : Infinity;
+    const e = bi < to.b ? n : bi === to.b ? to.o : -Infinity;
+    const caretO = showCaret && S.sel.h.b === bi ? S.sel.h.o : -1;
+    let i = 0;
+    while (i <= n) {
+      if (i === caretO) be.append(h("span", { class: "caret", "aria-hidden": "true" }));
+      if (i === n) break;
+      const u = blk.units[i];
+      const inSel = i >= s && i < e;
+      if (u.t === "chip") { be.append(chipEl(u, bi, i, inSel)); i++; continue; }
+      let j = i, txt = "";
+      while (j < n && blk.units[j].t !== "chip" && blk.units[j].link === u.link && ((j >= s && j < e) === inSel) && (j === i || j !== caretO)) { txt += blk.units[j].c; j++; }
+      const run = h("span", { class: "r" + (inSel ? " sel" : ""), "data-b": bi, "data-s": i }, txt);
+      if (u.link) {
+        const first = i === 0 || blk.units[i - 1].link !== u.link;
+        const st = resolveHref(u.link).state;
+        const a = h("a", { class: "doc-link", role: "link", "data-href": u.link, "data-b": bi, "data-i": i });
+        if (S.card && S.card.kind === "link" && S.card.b === bi && linkRange(bi, S.card.i).s <= i && i < linkRange(bi, S.card.i).e) a.setAttribute("data-card-open", "");
+        if (first && u.link.startsWith("tinydocy:")) a.append(h("span", { class: "doc-link-icon", "data-link-state": st, "aria-hidden": "true" }, ic(ICON[st])));
+        a.append(run); be.append(a);
+      } else be.append(run);
+      i = j;
+    }
+    if (n === 0) be.append(h("br"));
+    frag.append(be);
+  });
+  ed.replaceChildren(frag);
+  ed.setAttribute("aria-readonly", CFG.mode === "read" ? "true" : "false");
+  if (S.slash) { ed.setAttribute("aria-controls", "slash-menu"); ed.setAttribute("aria-activedescendant", `sl-opt-${S.slash.active}`); }
+  else { ed.removeAttribute("aria-controls"); ed.removeAttribute("aria-activedescendant"); }
+}
+function renderTabs() {
+  $("#tabs").replaceChildren(...S.tabs.map((t) => h("div", { class: "tab" + (t.on ? " on" : "") }, ic("FileText"), h("bdi", { dir: "auto" }, t.title), t.on && CFG.live === "live" ? h("span", { class: "badge" }, "Live") : null)));
+}
+function currentTitle() { return S.view === "editor" ? blockText(S.doc[0]) : (LIB.docs.find((d) => d.id === S.view.docId) || {}).title; }
+function renderTopbar() {
+  S.tabs.find((t) => t.on).title = currentTitle();
+  const back = S.nav.length ? h("button", { class: "tb", type: "button", id: "back", "aria-keyshortcuts": "Meta+BracketLeft", onclick: back_ }, ic("ArrowLeft", "flip-rtl"), "Back") : null;
+  const d = S.view === "editor" ? LIB.docs.find((x) => x.id === "plan") : LIB.docs.find((x) => x.id === S.view.docId);
+  $("#topbar").replaceChildren(...[back, h("span", { class: "crumb" }, ["Library", ...(d ? d.path : [])].join(" › ")), h("span", { class: "grow" }),
+    h("span", { class: "crumb" }, CFG.mode === "read" ? "Reading" : "Editing")].filter(Boolean));
+}
+
+/* ═════════ target view (stand-in for the opened document) ═════════ */
+function renderTarget() {
+  const d = LIB.docs.find((x) => x.id === S.view.docId);
+  const t = $("#target");
+  if (!d) { t.replaceChildren(h("p", {}, "This document is no longer in your library.")); return; }
+  const kids = [];
+  if (d.trashed) kids.push(h("div", { class: "banner", role: "note" }, ic("Trash2"), h("span", { style: "flex:1" }, `“${d.title}” is in Trash.`), h("button", { class: "act", type: "button", onclick: () => libChange(() => { d.trashed = false; }, `Restored “${d.title}”`) }, "Restore")));
+  kids.push(h("h1", { id: "tv-title", dir: "auto" }, d.title), h("p", { class: "meta" }, ["Library", ...d.path].join(" › ") + " · Edited " + d.edited), h("p", { dir: "auto" }, d.snippet || ""));
+  for (const hd of d.headings || []) kids.push(h("h2", { id: "tv-" + hd.id, dir: "auto" }, hd.text), h("p", {}, hd.body));
+  kids.push(h("p", { class: "proto-note" }, "Stand-in for the linked document (read-only here). Back or ⌘[ returns with the caret after the chip."));
+  t.replaceChildren(...kids);
+}
+
+/* ═════════ position overlays ═════════ */
+function relRect(el) { const r = el.getBoundingClientRect(), w = win.getBoundingClientRect(); return { top: r.top - w.top, bottom: r.bottom - w.top, left: r.left - w.left, right: r.right - w.left, width: r.width, height: r.height }; }
+function place(pop, a) {
+  if (!pop || !a) return;
+  const W = win.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let top = a.bottom + 6;
+  if (top + ph > W.height - 8 && a.top - ph - 6 > 8) top = a.top - ph - 6;
+  const rtl = document.documentElement.dir === "rtl";
+  let left = rtl ? a.right - pw : a.left;
+  left = Math.max(8, Math.min(left, W.width - pw - 8));
+  pop.style.top = top + "px"; pop.style.left = left + "px";
+}
+function caretRect() { const c = $(".caret", ed); if (c) return relRect(c); const s = $$(".sel, .in-sel", ed).pop(); return s ? relRect(s) : null; }
+function positionOverlays() {
+  if (S.slash) { place($("#slash-menu"), caretRect()); const g = $("#slash-ghost"), c = $(".caret", ed); if (g && c) { const r = relRect(c); const rtl = blockDir(S.doc[S.slash.b]) === "rtl"; g.style.top = r.top + "px"; g.style.left = (rtl ? r.left - g.offsetWidth - 4 : r.left + 4) + "px"; } }
+  if (S.picker) place($("#picker"), S.picker.anchor ? (caretRect() || S.picker.anchor) : null);
+  if (S.card && CFG.device !== "phone") { const el = cardAnchorEl(); if (el) place($("#card"), relRect(el)); }
+}
+scroller.addEventListener("scroll", positionOverlays);
+window.addEventListener("resize", positionOverlays);
+
+/* ═════════ keyboard in the editor ═════════ */
+let modHeld = false;
+ed.addEventListener("keydown", onKey);
+function onKey(e) {
+  const mod = e.metaKey || e.ctrlKey;
+  if (CFG.mode === "read") {
+    const chip = e.target.closest && e.target.closest(".doc-chip");
+    if (chip && e.key === "Enter") { e.preventDefault(); followAt(+chip.dataset.b, +chip.dataset.i, "chip", { newTab: mod && e.shiftKey, kbd: true }); }
+    return;
+  }
+  if (S.slash && slashKey(e)) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (mod && k === "k") { e.preventDefault(); modK(); return; }
+  if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && k === "y") { e.preventDefault(); redo(); return; }
+  if (mod && k === "c") { copySel(); return; }
+  if (mod && e.shiftKey && k === "v") { S.plainNext = true; return; }
+  if (mod) return;
+  if (e.altKey && e.key === "Enter") { e.preventDefault(); altEnter(); return; }
+  switch (e.key) {
+    case "ArrowLeft": case "ArrowRight": e.preventDefault(); moveH(e.key, e.shiftKey); return;
+    case "ArrowUp": case "ArrowDown": e.preventDefault(); moveV(e.key === "ArrowDown" ? 1 : -1, e.shiftKey); return;
+    case "Home": case "End": e.preventDefault(); { const p = { b: S.sel.h.b, o: e.key === "Home" ? 0 : S.doc[S.sel.h.b].units.length }; if (e.shiftKey) S.sel.h = p; else setCaret(p); S.lastKind = null; render(); } return;
+    case "Backspace": e.preventDefault(); del(-1); return;
+    case "Delete": e.preventDefault(); del(1); return;
+    case "Enter": e.preventDefault(); splitBlock(); return;
+    case "Escape": if (S.card) { e.preventDefault(); closeCard(true); } return;
+    case "Tab": return; // Tab indents in the app; here it leaves the editor so the panels stay reachable.
+  }
+  if (!e.altKey && e.key.length === 1 || e.key === " ") { e.preventDefault(); typeChar(e.key); }
+}
+function moveH(key, shift) {
+  const blk = S.doc[S.sel.h.b];
+  let dir = key === "ArrowRight" ? 1 : -1;
+  if (blockDir(blk) === "rtl") dir = -dir;
+  S.lastKind = null;
+  if (!shift && !collapsed()) { setCaret(dir > 0 ? selTo() : selFrom()); render(); updateSlash(); return; }
+  let p = { ...S.sel.h };
+  if (dir > 0) { if (p.o < blk.units.length) p.o++; else if (p.b < S.doc.length - 1) p = { b: p.b + 1, o: 0 }; }
+  else { if (p.o > 0) p.o--; else if (p.b > 0) p = { b: p.b - 1, o: S.doc[p.b - 1].units.length }; }
+  if (shift) S.sel.h = p; else setCaret(p);
+  render(); updateSlash();
+}
+function moveV(dir, shift) {
+  const p = clampPos({ b: S.sel.h.b + dir, o: S.sel.h.o });
+  S.lastKind = null;
+  if (shift) S.sel.h = p; else setCaret(p);
+  render(); updateSlash();
+}
+function typeChar(ch) {
+  commit(() => {
+    if (!collapsed()) deleteRange(selFrom(), selTo());
+    const p = S.sel.h, us = S.doc[p.b].units;
+    const prev = us[p.o - 1], next = us[p.o];
+    const link = prev && next && prev.link && prev.link === next.link ? prev.link : undefined;
+    insertUnits(p, [link ? { t: "x", c: ch, link } : { t: "x", c: ch }]);
+  }, "type");
+  if (ch === "/" && !S.slash) {
+    const p = S.sel.h, blk = S.doc[p.b], before = blk.units[p.o - 2];
+    if (blk.type === "p" && (p.o - 1 === 0 || (before && before.t === "x" && /\s/.test(before.c)))) { S.slash = { b: p.b, from: p.o - 1, active: 0 }; render(); renderSlash(); }
+  } else updateSlash();
+}
+function del(dir) {
+  if (!collapsed()) {
+    const gone = rangeUnits(selFrom(), selTo()).filter((u) => u.t === "chip");
+    commit(() => deleteRange(selFrom(), selTo()));
+    if (gone.length === 1) announce(`Removed link to ${chipView(gone[0]).text}`);
+    else if (gone.length > 1) announce(`Removed ${gone.length} links`);
+    updateSlash(); return;
+  }
+  const p = { ...S.sel.h }, blk = S.doc[p.b];
+  if (dir < 0) {
+    if (p.o > 0) {
+      const u = blk.units[p.o - 1];
+      commit(() => { blk.units.splice(p.o - 1, 1); setCaret({ b: p.b, o: p.o - 1 }); });
+      if (u.t === "chip") announce(`Removed link to ${chipView(u).text}`);
+    } else if (p.b > 0) mergeInto(p.b - 1, p.b);
+  } else {
+    if (p.o < blk.units.length) {
+      const u = blk.units[p.o];
+      commit(() => { blk.units.splice(p.o, 1); });
+      if (u.t === "chip") announce(`Removed link to ${chipView(u).text}`);
+    } else if (p.b < S.doc.length - 1) mergeInto(p.b, p.b + 1);
+  }
+  updateSlash();
+}
+function mergeInto(a, b) {
+  if (!canChip(a) && S.doc[b].units.some((u) => u.t === "chip")) return; // never move a chip into the title
+  commit(() => { const at = { b: a, o: S.doc[a].units.length }; S.doc[a].units.push(...S.doc[b].units); S.doc.splice(b, 1); setCaret(at); });
+}
+function splitBlock() {
+  commit(() => {
+    if (!collapsed()) deleteRange(selFrom(), selTo());
+    const p = S.sel.h, blk = S.doc[p.b];
+    const rest = blk.units.splice(p.o);
+    S.doc.splice(p.b + 1, 0, { type: "p", id: null, units: rest });
+    setCaret({ b: p.b + 1, o: 0 });
+  });
+}
+/* The chip next to the caret: the one before first, then the one after; or a selection holding exactly one chip. */
+function adjacentChip() {
+  if (!collapsed()) {
+    const f = selFrom(), t = selTo();
+    if (f.b !== t.b) return null;
+    const idx = []; for (let i = f.o; i < t.o; i++) if (S.doc[f.b].units[i].t === "chip") idx.push(i);
+    return idx.length === 1 ? { b: f.b, i: idx[0] } : null;
+  }
+  const p = S.sel.h, us = S.doc[p.b].units;
+  if (us[p.o - 1] && us[p.o - 1].t === "chip") return { b: p.b, i: p.o - 1 };
+  if (us[p.o] && us[p.o].t === "chip") return { b: p.b, i: p.o };
+  return null;
+}
+function adjacentLink() {
+  const p = S.sel.h, us = S.doc[p.b].units;
+  const i = us[p.o - 1] && us[p.o - 1].link ? p.o - 1 : us[p.o] && us[p.o].link ? p.o : -1;
+  return i >= 0 ? { b: p.b, i } : null;
+}
+function modK() {
+  const c = adjacentChip(); if (c) { openCard({ ...c, kind: "chip", via: "kbd" }); return; }
+  const l = adjacentLink(); if (l && collapsed()) { openCard({ ...l, kind: "link", via: "kbd" }); return; }
+  openPicker({});
+}
+function altEnter() {
+  const c = adjacentChip(); if (c) { followAt(c.b, c.i, "chip", { kbd: true }); return; }
+  const l = adjacentLink(); if (l) followAt(l.b, l.i, "link", { kbd: true });
+}
+
+/* ═════════ pointer ═════════ */
+let dragging = false;
+function posFromPoint(x, y) {
+  const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+  const target = document.elementFromPoint(x, y);
+  const chip = target && target.closest(".doc-chip");
+  if (chip && ed.contains(chip)) {
+    const rc = chip.getBoundingClientRect(), b = +chip.dataset.b, i = +chip.dataset.i;
+    const rtl = blockDir(S.doc[b]) === "rtl";
+    const after = rtl ? x < rc.left + rc.width / 2 : x > rc.left + rc.width / 2;
+    return { b, o: after ? i + 1 : i };
+  }
+  if (r && r.startContainer.nodeType === 3) {
+    const run = r.startContainer.parentElement.closest("[data-s]");
+    if (run && ed.contains(run)) return { b: +run.dataset.b, o: +run.dataset.s + r.startOffset };
+  }
+  const blk = target && target.closest("[data-b]");
+  if (blk && ed.contains(blk)) { const b = +blk.dataset.b; return { b, o: S.doc[b].units.length }; }
+  return null;
+}
+ed.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || CFG.mode === "read") return;
+  const p = posFromPoint(e.clientX, e.clientY); if (!p) return;
+  e.preventDefault();
+  if (S.card && !(e.target.closest(".doc-chip, a.doc-link"))) closeCard(false);
+  ed.focus();
+  if (e.shiftKey) S.sel.h = p; else setCaret(p);
+  S.lastKind = null; dragging = true; render(); updateSlash();
+});
+window.addEventListener("mousemove", (e) => { if (!dragging) return; const p = posFromPoint(e.clientX, e.clientY); if (p && cmp(p, S.sel.h)) { S.sel.h = p; render(); } });
+window.addEventListener("mouseup", () => { dragging = false; });
+ed.addEventListener("click", (e) => {
+  const chip = e.target.closest(".doc-chip"), link = e.target.closest("a.doc-link");
+  const el = chip || link; if (!el) return;
+  const b = +el.dataset.b, i = +el.dataset.i, kind = chip ? "chip" : "link";
+  const mod = e.metaKey || e.ctrlKey;
+  if (CFG.mode === "read" || mod) { followAt(b, i, kind, { newTab: mod && e.shiftKey }); return; }
+  openCard({ b, i, kind, via: "pointer" }); // a plain click while editing opens the card; act on click, never pointer-down
+});
+ed.addEventListener("auxclick", (e) => { if (e.button !== 1) return; const el = e.target.closest(".doc-chip, a.doc-link"); if (el) { e.preventDefault(); followAt(+el.dataset.b, +el.dataset.i, el.classList.contains("doc-chip") ? "chip" : "link", { newTab: true }); } });
+let hoverOpenT = 0, hoverCloseT = 0;
+ed.addEventListener("mouseover", (e) => {
+  const el = e.target.closest(".doc-chip, a.doc-link"); if (!el) return;
+  clearTimeout(hoverCloseT);
+  if (!(CFG.mode === "read" || modHeld)) return;
+  clearTimeout(hoverOpenT);
+  hoverOpenT = setTimeout(() => openCard({ b: +el.dataset.b, i: +el.dataset.i, kind: el.classList.contains("doc-chip") ? "chip" : "link", via: "hover" }), 350);
+});
+ed.addEventListener("mouseout", (e) => {
+  const el = e.target.closest(".doc-chip, a.doc-link"); if (!el) return;
+  clearTimeout(hoverOpenT);
+  if (S.card && S.card.via === "hover") hoverCloseT = setTimeout(() => closeCard(false), 300);
+});
+ed.addEventListener("focus", () => render());
+ed.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== ed) render(); }, 0));
+ed.addEventListener("paste", (e) => { e.preventDefault(); doPaste(e.clipboardData.getData("text/plain"), { plain: S.plainNext, html: e.clipboardData.getData("text/html") }); S.plainNext = false; });
+ed.addEventListener("copy", (e) => { const c = copySel(); if (c) { e.preventDefault(); e.clipboardData.setData("text/plain", c.text); e.clipboardData.setData("text/html", c.html); } });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Meta" || e.key === "Control") modHeld = true;
+  const inInput = e.target.matches && e.target.matches("input, select, textarea");
+  if ((e.metaKey || e.ctrlKey) && e.key === "[" && !inInput) { e.preventDefault(); back_(); }
+  if (e.key === "Escape" && S.card && S.card.via === "hover" && !e.defaultPrevented) closeCard(false);
+}, false);
+window.addEventListener("keyup", (e) => { if (e.key === "Meta" || e.key === "Control") modHeld = false; });
+window.addEventListener("blur", () => { modHeld = false; });
+
+/* ═════════ "/" menu (owned by the bubble session; shown only to place Link to Document) ═════════ */
+const SLASH = [
+  { id: "text", label: "Text", icon: "Type", sec: "Text" },
+  { id: "h2", label: "Heading 2", icon: "Heading2", sec: "Text", hint: "##" },
+  { id: "h3", label: "Heading 3", icon: "Heading3", sec: "Text", hint: "###" },
+  { id: "ul", label: "Bulleted list", icon: "List", sec: "Lists", hint: "-" },
+  { id: "ol", label: "Numbered list", icon: "ListOrdered", sec: "Lists", hint: "1." },
+  { id: "docLink", label: "Link to Document", icon: "FileSymlink", sec: "Insert", hint: "⌘K", aliases: ["link", "doc", "document", "page", "chip", "mention"] },
+  { id: "table", label: "Table", icon: "Table", sec: "Insert", hint: "3 × 3" },
+  { id: "image", label: "Image", icon: "Image", sec: "Insert" },
+  { id: "hr", label: "Divider", icon: "Minus", sec: "Insert", hint: "---" },
+];
+function slashQuery() {
+  const s = S.slash, us = S.doc[s.b].units; let q = "";
+  for (let i = s.from + 1; i < S.sel.h.o; i++) { if (us[i].t === "chip") return null; q += us[i].c; }
+  return q;
+}
+function slashItems() {
+  const q = slashQuery() || "";
+  const words = q.trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  if (!words.length && S.usedKinds.includes("docLink")) out.push({ ...SLASH.find((x) => x.id === "docLink"), sec: "Suggested" });
+  for (const it of SLASH) {
+    if (!words.length) { out.push(it); continue; }
+    const names = [norm(it.label), ...(it.aliases || [])];
+    const first = norm(words[0]);
+    const hit = names.some((n) => n.split(/\s+/).some((w) => w.startsWith(first)) || n.startsWith(first));
+    if (!hit) continue;
+    if (words.length > 1 && it.id !== "docLink") continue;
+    out.push({ ...it, prefill: words.slice(1).join(" ") });
+  }
+  return out;
+}
+function updateSlash() {
+  if (!S.slash) return;
+  const s = S.slash, us = S.doc[s.b] && S.doc[s.b].units;
+  const ok = us && collapsed() && S.sel.h.b === s.b && S.sel.h.o > s.from && us[s.from] && us[s.from].c === "/";
+  const q = ok ? slashQuery() : null;
+  if (!ok || q == null || q.length > 40 || /\s\s/.test(q)) { closeSlash(); return; }
+  renderSlash();
+}
+function closeSlash() { if (!S.slash) return; S.slash = null; $("#slash-menu")?.remove(); $("#slash-ghost")?.remove(); ed.removeAttribute("aria-controls"); ed.removeAttribute("aria-activedescendant"); scheduleA11y(); }
+function renderSlash() {
+  $("#slash-menu")?.remove(); $("#slash-ghost")?.remove();
+  const items = slashItems();
+  S.slash.items = items;
+  if (S.slash.active >= items.length) S.slash.active = 0;
+  const list = h("div", { class: "list" });
+  let sec = null, grp = null;
+  items.forEach((it, i) => {
+    if (it.sec !== sec) { sec = it.sec; const gid = "sl-g-" + kebab(sec); grp = h("div", { role: "group", "aria-labelledby": gid }, h("div", { class: "grp-label", id: gid }, sec)); list.append(grp); }
+    grp.append(h("div", { class: "opt", role: "option", id: `sl-opt-${i}`, "aria-selected": i === S.slash.active ? "true" : "false", onmousedown: (e) => { e.preventDefault(); S.slash.active = i; pickSlash(); } },
+      ic(it.icon), h("span", {}, it.label), it.hint ? h("span", { class: "hint", "aria-hidden": "true" }, it.hint) : null));
+  });
+  if (!items.length) list.append(h("div", { class: "pk-empty" }, "No blocks match. Keep typing, or press esc."));
+  const active = items[S.slash.active];
+  const tip = active && active.id === "docLink" ? "↵ opens the document picker" : active && active.hint && active.hint !== "⌘K" ? `Type ${active.hint} then space for ${active.label}` : "↑ ↓ to move · ↵ to insert";
+  const menu = h("div", { class: "slash pop", id: "slash-menu", role: "listbox", "aria-label": "Insert" }, list,
+    h("div", { class: "foot" }, h("span", { class: "grow" }, tip), h("button", { type: "button", tabindex: "-1", onmousedown: (e) => { e.preventDefault(); closeSlash(); render(); } }, "Close · esc")));
+  ov.append(menu);
+  if ((slashQuery() || "") === "" && S.sel.h.o === S.doc[S.slash.b].units.length) ov.append(h("span", { class: "ghost", id: "slash-ghost", "aria-hidden": "true", style: `font-size:var(--ed-size)` }, "Type to search"));
+  ed.setAttribute("aria-controls", "slash-menu");
+  ed.setAttribute("aria-activedescendant", items.length ? `sl-opt-${S.slash.active}` : "");
+  positionOverlays(); scheduleA11y();
+}
+function slashKey(e) {
+  const n = (S.slash.items || []).length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (n) S.slash.active = (S.slash.active + (e.key === "ArrowDown" ? 1 : -1) + n) % n; renderSlash(); return true; }
+  if (e.key === "Enter") { e.preventDefault(); if (n) pickSlash(); else closeSlash(); return true; }
+  if (e.key === "Escape") { e.preventDefault(); closeSlash(); render(); return true; }
+  return false;
+}
+function pickSlash() {
+  const it = S.slash.items[S.slash.active]; if (!it) return;
+  const range = { from: { b: S.slash.b, o: S.slash.from }, to: { ...S.sel.h } };
+  closeSlash();
+  if (it.id === "docLink") { openPicker({ range, fromSlash: true, query: it.prefill || "" }); return; }
+  if (it.id === "text" || it.id === "h2") { commit(() => { deleteRange(range.from, range.to); S.doc[range.from.b].type = it.id === "h2" ? "h2" : "p"; if (it.id === "h2") S.doc[range.from.b].id = uuid("new" + Date.now()); }); return; }
+  pill(`“${it.label}” isn't part of this prototype.`, [], { ttl: 2500 }); render();
+}
+
+/* ═════════ ⌘K picker ═════════ */
+function openPicker({ range, fromSlash = false, query = "" }) {
+  closeCard(false);
+  const had = !range && !collapsed() && selFrom().b === selTo().b;
+  const r = range || (had ? { from: { ...selFrom() }, to: { ...selTo() } } : { from: { ...S.sel.h }, to: { ...S.sel.h } });
+  S.picker = { range: r, hadSelection: had, fromSlash, query, active: 0, step: null, insertAs: had ? "link" : "chip", anchor: caretRect() };
+  render();
+  const input = h("input", { id: "pk-input", role: "combobox", "aria-expanded": "true", "aria-controls": "pk-list", "aria-autocomplete": "list", "aria-label": "Search documents or paste a web address", placeholder: "Search documents or paste a web address", autocomplete: "off", spellcheck: "false" });
+  input.value = query;
+  input.addEventListener("input", () => { S.picker.query = input.value; S.picker.active = 0; renderPickerList(); });
+  input.addEventListener("keydown", pickerKey);
+  const pop = h("div", { class: "picker pop", id: "picker", role: "dialog", "aria-label": "Link to a document" },
+    h("div", { class: "pk-in" }, ic("Search"), h("span", { id: "pk-step-wrap" }), input),
+    h("div", { class: "pk-list", id: "pk-list", role: "listbox", "aria-label": "Link targets" }),
+    h("p", { class: "pk-note", id: "pk-note", hidden: true }),
+    h("div", { class: "foot" },
+      h("span", { class: "ias" }, h("span", { id: "ias-l" }, "Insert as"),
+        h("span", { class: "seg", role: "radiogroup", "aria-labelledby": "ias-l", id: "ias" })),
+      h("span", { class: "grow" }), h("span", { id: "pk-keys" })),
+    h("div", { class: "sr-only", role: "status", id: "pk-status" }));
+  pop.addEventListener("focusout", (e) => { if (!pop.contains(e.relatedTarget) && e.relatedTarget !== ed && e.relatedTarget) closePicker(false); });
+  ov.append(pop);
+  renderPickerList();
+  positionOverlays();
+  input.focus();
+}
+function pickerOptions() {
+  const pk = S.picker, raw = pk.query.trim(), q = norm(raw);
+  if (/^https?:\/\/\S+$/i.test(raw)) return [{ group: "Web address", kind: "url", url: raw, title: raw }];
+  if (pk.step) {
+    const d = LIB.docs.find((x) => x.id === pk.step);
+    return [{ group: d.title, kind: "doc", doc: d, title: d.title, whole: true }, ...(d.headings || []).filter((x) => !q || norm(x.text).includes(q)).map((hd) => ({ group: d.title, kind: "docHeading", doc: d, heading: hd, title: `${d.title} › ${hd.text}` }))];
+  }
+  const match = (t) => !q || norm(t).split(/\s+/).some((w) => w.startsWith(q)) || norm(t).includes(q);
+  const docs = LIB.docs.filter((d) => d.kind !== "template" && !d.trashed && !d.deleted && d.id !== "plan" && match(d.title))
+    .sort((a, b) => (norm(b.title).startsWith(q) ? 1 : 0) - (norm(a.title).startsWith(q) ? 1 : 0)).slice(0, 6);
+  const heads = S.doc.map((b, bi) => ({ b, bi })).filter(({ b }) => b.type === "h2" && b.id && match(blockText(b)));
+  return [...docs.map((d) => ({ group: "Documents", kind: "doc", doc: d, title: d.title })), ...heads.map(({ b }) => ({ group: "In this document", kind: "here", tocId: b.id, title: blockText(b) }))];
+}
+function chipBlockedReason(opt) {
+  if (!opt) return null;
+  if (!canChip(S.picker.range.from.b)) return "Chips can't go in the title.";
+  if (opt.kind === "url") return "Web addresses stay text links in v1.";
+  if (opt.kind === "docHeading") return "Chips for headings in other documents come later.";
+  return null;
+}
+function renderPickerList() {
+  const pk = S.picker; if (!pk) return;
+  const opts = pickerOptions(); pk.opts = opts;
+  if (pk.active >= opts.length) pk.active = 0;
+  const list = $("#pk-list"); list.replaceChildren();
+  let group = null, grp = null;
+  opts.forEach((o, i) => {
+    if (o.group !== group) { group = o.group; const gid = "pk-g-" + i; grp = h("div", { role: "group", "aria-labelledby": gid }, h("div", { class: "grp-label", id: gid, dir: "auto" }, group)); list.append(grp); }
+    const icon = o.kind === "url" ? "Globe" : o.kind === "here" || o.kind === "docHeading" ? "Hash" : "FileText";
+    const label = o.whole ? "Whole document" : o.kind === "docHeading" ? o.heading.text : o.title;
+    const path = o.kind === "doc" && !o.whole ? ["Library", ...o.doc.path].join(" › ") : null;
+    grp.append(h("div", { class: "opt", role: "option", id: `pk-opt-${i}`, "aria-selected": i === pk.active ? "true" : "false", onmousedown: (e) => { e.preventDefault(); pk.active = i; pickerInsert(false); } },
+      ic(icon), h("bdi", { dir: "auto" }, label),
+      path ? h("span", { class: "path" }, h("span", { class: "sr-only" }, ", in "), path) : null,
+      o.kind === "doc" && !o.whole && (o.doc.headings || []).length && i === pk.active ? h("span", { class: "badge", "aria-hidden": "true" }, "⇥ Headings") : null));
+  });
+  if (!opts.length) list.append(h("div", { class: "pk-empty", dir: "auto" }, `No documents match “${pk.query}”.`));
+  $("#pk-input").setAttribute("aria-activedescendant", opts.length ? `pk-opt-${pk.active}` : "");
+  // step chip
+  const sw = $("#pk-step-wrap"); sw.replaceChildren();
+  if (pk.step) sw.append(h("span", { class: "step", dir: "auto" }, LIB.docs.find((x) => x.id === pk.step).title + " ›"));
+  // Insert as
+  const reason = chipBlockedReason(opts[pk.active]);
+  const eff = reason ? "link" : pk.insertAs;
+  const ias = $("#ias"); ias.replaceChildren();
+  [["chip", "Chip"], ["link", "Link text"]].forEach(([v, l]) => {
+    const on = eff === v, dis = v === "chip" && !!reason;
+    ias.append(h("button", { type: "button", role: "radio", "aria-checked": on ? "true" : "false", "aria-disabled": dis ? "true" : null, tabindex: on ? "0" : "-1",
+      onclick: () => { if (!dis) { pk.insertAs = v; renderPickerList(); } },
+      onkeydown: (e) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) { e.preventDefault(); if (!reason) { pk.insertAs = pk.insertAs === "chip" ? "link" : "chip"; renderPickerList(); $("#ias [aria-checked=true]").focus(); } } } }, l));
+  });
+  const note = $("#pk-note"); note.hidden = !reason; note.textContent = reason || "";
+  const other = eff === "chip" ? "link text" : "chip";
+  $("#pk-keys").replaceChildren(...[h("kbd", {}, "↵"), ` ${eff === "chip" ? "Chip" : "Link text"} · `, ...(reason ? [] : [h("kbd", {}, "⇧↵"), ` ${other[0].toUpperCase() + other.slice(1)} · `]), h("kbd", {}, "esc"), " Cancel"]);
+  // debounced count (polite, never per keystroke)
+  clearTimeout(pk.countT);
+  pk.countT = setTimeout(() => { if (!S.picker) return; const n = opts.length; const msg = n ? `${n} ${n === 1 ? "result" : "results"}` : "No matches"; $("#pk-status").textContent = msg; log("picker", `Picker status (its own polite region): “${msg}”`); }, 400);
+  positionOverlays(); scheduleA11y();
+}
+function pickerKey(e) {
+  const pk = S.picker, n = (pk.opts || []).length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (n) pk.active = (pk.active + (e.key === "ArrowDown" ? 1 : -1) + n) % n; renderPickerList(); return; }
+  if (e.key === "Enter") { e.preventDefault(); if (n) pickerInsert(e.shiftKey); return; }
+  if (e.key === "Escape") { e.preventDefault(); if (pk.step) { pk.step = null; renderPickerList(); } else closePicker(true); return; }
+  if (e.key === "Tab" && !e.shiftKey) { const o = pk.opts && pk.opts[pk.active]; if (o && o.kind === "doc" && !o.whole && (o.doc.headings || []).length) { e.preventDefault(); pk.step = o.doc.id; pk.active = 0; e.target.value = ""; pk.query = ""; renderPickerList(); } return; }
+  if (e.key === "Backspace" && pk.step && !e.target.value) { e.preventDefault(); pk.step = null; renderPickerList(); }
+}
+function closePicker(refocus) { if (!S.picker) return; clearTimeout(S.picker.countT); S.picker = null; $("#picker")?.remove(); if (refocus) ed.focus(); render(); }
+function hrefFor(o) { return o.kind === "url" ? o.url : o.kind === "here" ? `tinydocy:here#${o.tocId}` : o.kind === "docHeading" ? `tinydocy:doc/${o.doc.key}#${o.heading.id}` : `tinydocy:doc/${o.doc.key}`; }
+function pickerInsert(invert) {
+  const pk = S.picker, o = pk.opts[pk.active]; if (!o) return;
+  let form = pk.insertAs; if (invert) form = form === "chip" ? "link" : "chip";
+  if (chipBlockedReason(o)) form = "link";
+  const href = hrefFor(o), r = pk.range;
+  const selText = pk.hadSelection ? rangeUnits(r.from, r.to).map((u) => (u.t === "chip" ? chipView(u).text : u.c)).join("") : null;
+  closePicker(false);
+  commit(() => {
+    deleteRange(r.from, r.to);
+    const at = { ...S.sel.h };
+    if (form === "chip") insertUnits(at, [{ t: "chip", href, label: cleanLabel(o.title) }]);
+    else insertUnits(at, textUnits(selText || o.title, href));
+  });
+  ed.focus();
+  announce(`Linked to ${o.title}`);
+  if (pk.fromSlash && !S.usedKinds.includes("docLink")) S.usedKinds.unshift("docLink");
+  if (form === "chip") firstChipHint();
+}
+function firstChipHint() {
+  if (S.hintShown) return; S.hintShown = true;
+  pill("Chips show a document's current title on this device. People you share with see the title it had when you added it, and can't open it.", [{ label: "OK" }], { id: "hint" });
+}
+
+/* ═════════ paste (decision 5: two transactions, so the first ⌘Z leaves a link) ═════════ */
+function doPaste(text, { plain = false, html = "" } = {}) {
+  if (CFG.mode === "read" || S.view !== "editor") return;
+  closeSlash(); closeCard(false);
+  const t = (text || "").trim();
+  if (html && /data-doc-chip/.test(html) && !plain) return pasteHtml(html);
+  if (plain || !t) { if (text) commit(() => { if (!collapsed()) deleteRange(selFrom(), selTo()); insertUnits({ ...S.sel.h }, textUnits(text)); }); return; }
+  const p = parseDocLink(t);
+  const isUrl = /^https?:\/\/\S+$/i.test(t);
+  if (!p && !isUrl) { commit(() => { if (!collapsed()) deleteRange(selFrom(), selTo()); insertUnits({ ...S.sel.h }, textUnits(text)); }); if (/^tinydocy:/i.test(t)) log("quiet", "Pasted text starting tinydocy: that doesn't parse: kept as plain text (isAllowedUri refuses it)"); return; }
+  const r = p ? resolveHref(t) : null;
+  const name = r && r.title ? r.title : p ? chipView({ href: t, label: "" }).text : t;
+  if (!collapsed()) { // over a selection: a link on the selected text
+    const f = { ...selFrom() }, to = { ...selTo() };
+    commit(() => { for (let b = f.b; b <= to.b; b++) { const us = S.doc[b].units; for (let i = b === f.b ? f.o : 0; i < (b === to.b ? to.o : us.length); i++) if (us[i].t === "x") us[i].link = t; } });
+    announce(`Pasted link to ${name}`); return;
+  }
+  const at = { ...S.sel.h };
+  const linkText = r && r.title ? r.title : t;
+  if (isUrl || !canChip(at.b) || (p.kind === "doc" && p.tocId)) { commit(() => insertUnits(at, textUnits(linkText, t))); announce(`Pasted link to ${name}`); return; }
+  commit(() => insertUnits(at, textUnits(linkText, t)));                         // transaction 1: a plain link
+  commit(() => { S.doc[at.b].units.splice(at.o, [...linkText].length, { t: "chip", href: t, label: cleanLabel(r && r.title ? r.title : "") }); setCaret({ b: at.b, o: at.o + 1 }); }); // transaction 2: the chip
+  const first = !S.pasteHintShown; S.pasteHintShown = true;
+  announce(first ? `Pasted link to ${name}. Undo keeps it as a link.` : `Pasted link to ${name}`);
+  pill("Pasted as a chip. ⌘Z keeps it as a link.", [{ label: "Keep as Link", fn: () => { undo(); ed.focus(); } }], { id: "paste", ttl: first ? 0 : 8000 });
+}
+function pasteHtml(html) {
+  const docu = new DOMParser().parseFromString(html, "text/html"); // inert: no script runs, no image loads
+  const units = [];
+  const walk = (n) => n.childNodes.forEach((c) => {
+    if (c.nodeType === 3) units.push(...textUnits(c.data));
+    else if (c.nodeType === 1 && c.matches("a[data-doc-chip]")) {
+      const href = c.getAttribute("href") || "", label = cleanLabel(c.textContent);
+      const p = parseDocLink(href);
+      if (p) { const r = resolveHref(href); units.push({ t: "chip", href, label: r.title ? r.title : label }); }
+      else { units.push(...textUnits(label)); log("quiet", `Refused href “${href.slice(0, 40).replace(/[\u0000-\u001f]/g, "␀")}${href.length > 40 ? "…" : ""}”: pasted as plain text`); }
+    } else if (c.nodeType === 1) walk(c);
+  });
+  walk(docu.body);
+  commit(() => { if (!collapsed()) deleteRange(selFrom(), selTo()); insertUnits({ ...S.sel.h }, canChip(S.sel.h.b) ? units : units.map((u) => (u.t === "chip" ? textUnits(u.label) : [u])).flat()); });
+}
+function copySel() {
+  if (collapsed()) return null;
+  const us = rangeUnits(selFrom(), selTo());
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  let html = "", text = "";
+  for (const u of us) {
+    if (u.t === "chip") { const v = chipView(u); html += `<a data-doc-chip href="${esc(u.href)}">${esc(cleanLabel(u.label) || v.text)}</a>`; text += v.text; }
+    else { html += esc(u.c); text += u.c; }
+  }
+  S.lastCopy = { html, text }; renderExport();
+  return S.lastCopy;
+}
+
+/* ═════════ card (hovercard and click card; LK4 openPreviewPopover in the app) ═════════ */
+function linkRange(b, i) { const us = S.doc[b].units, href = us[i] && us[i].link; let s = i, e = i + 1; while (s > 0 && us[s - 1].link === href) s--; while (e < us.length && us[e].link === href) e++; return { s, e, href, text: us.slice(s, e).map((x) => x.c).join("") }; }
+function cardAnchorEl() {
+  const c = S.card; if (!c) return null;
+  if (c.kind === "chip") return $(`.doc-chip[data-b="${c.b}"][data-i="${c.i}"]`, ed);
+  return $(`a.doc-link[data-card-open]`, ed) || $(`a.doc-link[data-b="${c.b}"]`, ed);
+}
+function openCard(c) {
+  clearTimeout(hoverCloseT); clearTimeout(hoverOpenT);
+  if (S.picker) closePicker(false);
+  closeSlash();
+  if (c.via === "pointer" && c.kind === "chip") setCaret({ b: c.b, o: c.i + 1 });
+  S.card = c;
+  render();
+  renderCard(c.via === "kbd");
+}
+function renderCard(focusFirst) {
+  const prevFocus = document.activeElement && document.activeElement.closest && document.activeElement.closest("#card") ? $$("#card button").indexOf(document.activeElement) : -1;
+  $("#card")?.remove();
+  const c = S.card; if (!c) return;
+  const us = S.doc[c.b] && S.doc[c.b].units, u = us && us[c.i];
+  if (!u || (c.kind === "chip" && u.t !== "chip") || (c.kind === "link" && !u.link)) { S.card = null; return; }
+  const href = c.kind === "chip" ? u.href : u.link;
+  const v = c.kind === "chip" ? chipView(u) : null;
+  const r = resolveHref(href), st = r.state, editable = CFG.mode === "edit";
+  const lr = c.kind === "link" ? linkRange(c.b, c.i) : null;
+  const TITLES = { deleted: "Deleted document", not_in_library: "Not in your library", unknown_form: "Link from a newer version" };
+  const title = TITLES[st] || (st === "here" ? (r.title || "Section") : st === "pending" ? (v ? v.text : lr.text) : r.title + (r.head ? ` › ${r.head.text}` : ""));
+  const MSG = {
+    in_trash: `“${r.title}” is in Trash.`, deleted: "This document was deleted.", not_in_library: "This links to a document that isn't in your library.",
+    unknown_form: "This link needs a newer version of TinyDocy.", here: "Section in this document", pending: "Your library is still loading. The chip shows the title it had when it was added.",
+  };
+  const kids = [];
+  if (CFG.device === "phone") kids.push(h("div", { class: "sheet-grip", "aria-hidden": "true" }));
+  kids.push(h("div", { class: "card-head" }, ic(ICON[st], st === "deleted" ? "danger" : ""), h("div", {},
+    h("div", { class: "card-title", id: "card-title" }, h("bdi", { dir: "auto" }, title)),
+    st === "resolves" ? h("div", { class: "card-meta" }, ["Library", ...r.doc.path].join(" › ") + " · Edited " + r.doc.edited) : null)));
+  const msgId = "card-msg";
+  if (st === "resolves") kids.push(h("p", { class: "card-snip", id: msgId, dir: "auto" }, r.head ? r.head.body : r.doc.snippet));
+  else kids.push(h("p", { class: "card-msg", id: msgId, dir: "auto" }, MSG[st]));
+  const acts = [], edits = [];
+  const btn = (label, icon, fn) => h("button", { class: "act", type: "button", onclick: fn }, ic(icon), label);
+  const add = (...a) => acts.push(btn(...a));
+  const addE = (...a) => edits.push(btn(...a));
+  if (st === "resolves" || st === "pending") { add("Open", "ArrowUpRight", () => followAt(c.b, c.i, c.kind, { kbd: true })); add("Open in New Tab", "ExternalLink", () => followAt(c.b, c.i, c.kind, { newTab: true, kbd: true })); add("Copy Link", "Copy", () => copyLink(href)); }
+  if (st === "here") { add("Go to Section", "Hash", () => followAt(c.b, c.i, c.kind, { kbd: true })); add("Copy Link", "Copy", () => copyLink(href)); }
+  if (st === "in_trash") { add("Open", "ArrowUpRight", () => followAt(c.b, c.i, c.kind, { kbd: true })); add("Restore", "RotateCcw", () => libChange(() => { r.doc.trashed = false; }, `Restored “${r.doc.title}”`)); }
+  if (editable) {
+    if (c.kind === "chip") {
+      if (["resolves", "pending", "here", "in_trash"].includes(st)) addE("Turn into Link", "Link", () => turnIntoLink(c));
+      if (st !== "unknown_form") addE("Remove Link", "Unlink", () => removeLink(c));
+    } else {
+      const p = parseDocLink(href);
+      if (p && !(p.kind === "doc" && p.tocId) && ["resolves", "pending", "here", "in_trash"].includes(st)) addE("Turn into Chip", "FileSymlink", () => turnIntoChip(c));
+      if (st === "resolves" && r.title !== lr.text) addE("Use Current Title", "Pencil", () => useCurrentTitle(c));
+      if (st !== "unknown_form") addE("Remove Link", "Unlink", () => removeLink(c));
+    }
+  }
+  if (acts.length) kids.push(h("div", { class: "actions", role: "group", "aria-label": "Open" }, acts));
+  if (edits.length) kids.push(h("div", { class: "actions", role: "group", "aria-label": "Edit link" }, edits));
+  const card = h("div", { class: "card pop" + (CFG.device === "phone" ? " sheet" : ""), id: "card", role: "dialog", "aria-labelledby": "card-title", "aria-describedby": msgId, tabindex: "-1" }, kids);
+  card.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCard(true); } });
+  card.addEventListener("mouseenter", () => clearTimeout(hoverCloseT));
+  card.addEventListener("mouseleave", () => { if (S.card && S.card.via === "hover") hoverCloseT = setTimeout(() => closeCard(false), 300); });
+  card.addEventListener("focusout", (e) => { if (e.relatedTarget && !card.contains(e.relatedTarget) && e.relatedTarget !== ed && !e.relatedTarget.closest("#consent")) closeCard(false); });
+  ov.append(card);
+  positionOverlays();
+  const btns = $$("button", card);
+  if (prevFocus >= 0) (btns[prevFocus] || btns[0] || card).focus();
+  else if (focusFirst) (btns[0] || card).focus();
+  scheduleA11y();
+}
+function closeCard(refocus) { if (!S.card) return; S.card = null; $("#card")?.remove(); if (refocus && S.view === "editor") ed.focus(); render(); }
+function copyLink(href) { S.lastCopy = { text: href, html: `<a href="${href}">${href}</a>` }; renderExport(); pill("Link copied.", [], { ttl: 2500 }); }
+function turnIntoLink(c) {
+  const u = S.doc[c.b].units[c.i], v = chipView(u);
+  const go = () => {
+    commit(() => { S.doc[c.b].units.splice(c.i, 1, ...textUnits(v.text, u.href)); setCaret({ b: c.b, o: c.i + [...v.text].length }); });
+    S.card = null; $("#card")?.remove(); render(); ed.focus(); announce("Changed to text link");
+  };
+  if (CFG.live === "live" && !S.consented) askConsent(v.text, () => { S.consented = true; go(); }); else go();
+}
+function turnIntoChip(c) {
+  const lr = linkRange(c.b, c.i);
+  commit(() => { S.doc[c.b].units.splice(lr.s, lr.e - lr.s, { t: "chip", href: lr.href, label: cleanLabel(lr.text) }); setCaret({ b: c.b, o: lr.s + 1 }); });
+  S.card = null; $("#card")?.remove(); render(); ed.focus(); announce("Changed to chip");
+}
+function useCurrentTitle(c) {
+  const lr = linkRange(c.b, c.i), r = resolveHref(lr.href);
+  commit(() => { S.doc[c.b].units.splice(lr.s, lr.e - lr.s, ...textUnits(r.title, lr.href)); setCaret({ b: c.b, o: lr.s + [...r.title].length }); });
+  S.card = null; $("#card")?.remove(); render(); ed.focus();
+}
+function removeLink(c) {
+  const us = S.doc[c.b].units;
+  if (c.kind === "chip") {
+    const u = us[c.i], name = chipView(u).text, label = cleanLabel(u.label);
+    commit(() => { us.splice(c.i, 1, ...textUnits(label)); setCaret({ b: c.b, o: c.i + [...label].length }); });
+    announce(`Removed link to ${name}`);
+  } else {
+    const lr = linkRange(c.b, c.i), name = resolveHref(lr.href).title || lr.text;
+    commit(() => { for (let i = lr.s; i < lr.e; i++) delete S.doc[c.b].units[i].link; setCaret({ b: c.b, o: lr.e }); });
+    announce(`Removed link to ${name}`);
+  }
+  S.card = null; $("#card")?.remove(); render(); ed.focus();
+}
+function askConsent(title, ok) {
+  const done = (yes) => { $("#consent")?.remove(); $("#consent-scrim")?.remove(); S.consent = false; if (yes) ok(); else { renderCard(true); } scheduleA11y(); };
+  S.consent = true;
+  const cancel = h("button", { class: "act", type: "button", onclick: () => done(false) }, "Cancel");
+  const yes = h("button", { class: "act primary", type: "button", onclick: () => done(true) }, "Turn into Link");
+  const dlg = h("div", { class: "consent pop", id: "consent", role: "alertdialog", "aria-modal": "true", "aria-labelledby": "cs-t", "aria-describedby": "cs-d" },
+    h("h2", { id: "cs-t" }, "Write this title into the document?"),
+    h("p", { id: "cs-d" }, "A text link keeps its text in the document. This document is Live, so people you share it with will see “", h("bdi", { dir: "auto" }, title), "”."),
+    h("div", { class: "row-end" }, cancel, yes));
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); }
+    if (e.key === "Tab") { e.preventDefault(); (document.activeElement === cancel ? yes : cancel).focus(); }
+  });
+  ov.append(h("div", { class: "scrim", id: "consent-scrim" }), dlg);
+  cancel.focus(); scheduleA11y();
+}
+
+/* ═════════ follow and Back (LK1 navigate; never window.open or openExternal) ═════════ */
+const navigate = (href, { newTab = false } = {}) => { S.spies.navigate++; log("spy", `navigate("${short(href)}", { newTab: ${newTab} })`); };
+function followAt(b, i, kind, { newTab = false, kbd = false } = {}) {
+  const us = S.doc[b].units, u = us[i];
+  const href = kind === "chip" ? u.href : u.link;
+  const r = resolveHref(href);
+  if (["deleted", "not_in_library", "unknown_form"].includes(r.state)) { openCard({ b, i, kind, via: "kbd" }); return; } // broken: the card, with focus in it
+  if (r.state === "pending") { pill("Your library is still loading.", [], { ttl: 2500 }); return; }
+  navigate(href, { newTab });
+  const ret = kind === "chip" ? { b, o: i + 1 } : { b, o: linkRange(b, i).e };
+  S.card = null; $("#card")?.remove();
+  if (r.state === "here") { S.nav.push({ ret, top: scroller.scrollTop }); jumpToHeading(r.tocId); return; }
+  if (newTab) { S.tabs.push({ title: r.title, on: false }); render(); return; }
+  S.nav.push({ ret, top: scroller.scrollTop });
+  S.view = { docId: r.doc.id, tocId: r.tocId };
+  closeSlash(); render();
+  scroller.scrollTop = 0;
+  const t = $("#target"); t.focus();
+  if (r.tocId) requestAnimationFrame(() => { const hd = $("#tv-" + r.tocId); if (hd) hd.scrollIntoView({ block: "start" }); });
+}
+function jumpToHeading(tocId) {
+  const bi = headingBlock(tocId); if (bi < 0) return;
+  setCaret({ b: bi, o: S.doc[bi].units.length }); S.lastKind = null;
+  ed.focus(); render();
+  requestAnimationFrame(() => { const el = $(`[data-b="${bi}"]`, ed); if (el) el.scrollIntoView({ block: "start" }); });
+}
+function back_() {
+  const n = S.nav.pop(); if (!n) return;
+  S.view = "editor"; setCaret(clampPos(n.ret)); S.lastKind = null;
+  render(); ed.focus(); scroller.scrollTop = n.top;
+  requestAnimationFrame(() => { const c = $(".caret", ed); if (c) c.scrollIntoView({ block: "nearest" }); positionOverlays(); });
+}
+
+/* ═════════ library (renames repaint chips; they never write the document) ═════════ */
+function libChange(fn, msg) { fn(); log("quiet", `${msg}. Chips repaint; no announcement, no document write.`); scheduleRepaint(); renderLibrary(); renderTopbar(); scheduleA11y(); }
+function renderLibrary() {
+  const ul = $("#lib-list"); if (!ul) return;
+  ul.replaceChildren(...LIB.docs.filter((d) => d.id !== "plan").map((d) => {
+    const icon = d.deleted ? "FileX" : d.trashed ? "Trash2" : "FileText";
+    const tag = d.kind === "template" ? "template" : d.deleted ? "deleted" : d.trashed ? "in Trash" : null;
+    const kids = [ic(icon)];
+    if (S.renaming === d.id) {
+      const inp = h("input", { "aria-label": `New title for ${d.title}`, value: d.title });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { const v = inp.value.trim(); const old = d.title; S.renaming = null; if (v && v !== old) libChange(() => { d.title = v; }, `Renamed “${old}” to “${v}”`); else renderLibrary(); } if (e.key === "Escape") { S.renaming = null; renderLibrary(); } });
+      kids.push(inp); setTimeout(() => inp.focus(), 0);
+    } else kids.push(h("span", { class: "t" }, h("bdi", { dir: "auto" }, d.title)));
+    if (tag) kids.push(h("span", { class: "tag" }, tag));
+    if (!d.deleted && S.renaming !== d.id) {
+      kids.push(h("button", { type: "button", "aria-label": `Rename ${d.title}`, onclick: () => { S.renaming = d.id; renderLibrary(); } }, ic("Pencil")));
+      kids.push(d.trashed ? h("button", { type: "button", "aria-label": `Restore ${d.title}`, onclick: () => libChange(() => { d.trashed = false; }, `Restored “${d.title}”`) }, ic("RotateCcw"))
+        : h("button", { type: "button", "aria-label": `Move ${d.title} to Trash`, onclick: () => libChange(() => { d.trashed = true; }, `Moved “${d.title}” to Trash`) }, ic("Trash2")));
+      kids.push(h("button", { type: "button", "aria-label": `Delete ${d.title} forever`, onclick: () => libChange(() => { d.deleted = true; LIB.purged.add(d.key); }, `Deleted “${d.title}” forever`) }, ic("FileX")));
+    }
+    return h("li", {}, kids);
+  }));
+}
+$("#remote").addEventListener("click", () => {
+  const b = S.doc.findIndex((x) => x.id === TOC.risks) + 1;
+  if (b > 0 && S.doc[b]) { S.doc[b].units.push(...textUnits(" (Sam: confirmed.)")); S.writes.remote++; validateSel(); log("quiet", "Remote change from Sam. No announcement."); render(); }
+});
+const atCaret = (fn) => { if (S.view !== "editor") return; ed.focus(); fn(); };
+$("#paste-btn").addEventListener("click", () => atCaret(() => doPaste($("#clip-in").value)));
+$("#paste-plain").addEventListener("click", () => atCaret(() => doPaste($("#clip-in").value, { plain: true })));
+$("#paste-hostile").addEventListener("click", () => atCaret(() => doPaste("", { html: HOSTILE })));
+const HOSTILE = `<a data-doc-chip href="JaVaScRiPt:alert(1)">"&gt;&lt;img src=x onerror=alert(1)&gt;</a> <a data-doc-chip href="\u0001tinydocy:doc/${K.q4}">ctrl prefix</a> <a data-doc-chip href="data:text/html,hi">data url</a> <a data-doc-chip href="tinydocy:doc/${K.q4}">‮evil title</a>`;
+
+/* ═════════ announcements (polite region, local actions only) ═════════ */
+const live = $("#live");
+function announce(msg) { live.textContent = ""; setTimeout(() => { live.textContent = msg; scheduleA11y(); }, 30); log("ann", msg); }
+function log(kind, msg) { S.log.push({ kind, msg, t: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) }); renderLog(); }
+function renderLog() {
+  const p = $("#panel-log"); if (!p) return;
+  const KL = { ann: "Announced", quiet: "Not announced", spy: "Spy", picker: "Picker" };
+  p.replaceChildren(
+    h("p", { class: "counters" }, `navigate: ${S.spies.navigate} · window.open: ${S.spies.windowOpen} · openExternal: ${S.spies.openExternal}`),
+    S.log.length ? h("ul", { class: "log" }, S.log.slice().reverse().map((x) => h("li", {}, h("span", { class: "k " + x.kind }, KL[x.kind]), h("span", { dir: "auto" }, x.msg)))) : h("p", {}, "Nothing yet. Loading announced nothing."));
+}
+
+/* ═════════ pills ═════════ */
+function pill(text, actions = [], { id, ttl = 0 } = {}) {
+  if (id) dismissPill(id);
+  const el = h("div", { class: "pill", "data-pill": id || "" }, h("span", { dir: "auto" }, text),
+    actions.map((a) => h("button", { type: "button", onclick: () => { el.remove(); a.fn && a.fn(); scheduleA11y(); } }, a.label)));
+  $("#pills").append(el);
+  if (ttl) setTimeout(() => { el.remove(); scheduleA11y(); }, ttl);
+  scheduleA11y();
+  return el;
+}
+function dismissPill(id) { $$(`#pills [data-pill="${id}"]`).forEach((x) => x.remove()); }
+
+/* ═════════ stored / export panels ═════════ */
+function renderStored() {
+  const p = $("#panel-stored"); if (!p) return;
+  const nodes = [];
+  S.doc.forEach((b) => b.units.forEach((u) => { if (u.t === "chip") nodes.push({ type: "docChip", attrs: { href: short(u.href), label: u.label } }); }));
+  p.replaceChildren(
+    h("p", { class: "counters" }, `Document writes: ${S.writes.local} local, ${S.writes.remote} remote · chip DOM repaints: ${S.repaints} · writes from renames: 0`),
+    h("p", {}, "What the Y.Doc holds for each chip (keys shortened here). A rename changes the snapshot, never this:"),
+    h("pre", { class: "code" }, nodes.map((n) => JSON.stringify(n)).join("\n")));
+}
+function mdEsc(s) { return s.replace(/([\\`*_{}\[\]()#+\-.!|<>])/g, "\\$1"); }
+function slug(s) { return s.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s+/g, "-"); }
+function exportMd(all) {
+  return S.doc.map((b) => {
+    const body = b.units.map((u, i) => {
+      if (u.t === "chip") {
+        const v = chipView(u), r = v.r;
+        if (!all) return mdEsc(v.text);
+        if (r.state === "here") return `[${mdEsc(v.text)}](#${slug(v.text)})`;
+        if (r.state === "resolves") return `[${mdEsc(v.text)}](${["..", ...r.doc.path].join("/")}/${encodeURIComponent(r.doc.title)}-${r.doc.key.slice(0, 6)}.md)`;
+        return mdEsc(v.text);
+      }
+      return u.c;
+    }).join("");
+    return (b.type === "h1" ? "# " : b.type === "h2" ? "## " : "") + body;
+  }).join("\n\n");
+}
+function renderExport() {
+  const p = $("#panel-export"); if (!p) return;
+  p.replaceChildren(
+    h("p", {}, h("b", {}, "Export all (Markdown)"), ": chips become relative links."),
+    h("pre", { class: "code", dir: "auto" }, exportMd(true)),
+    h("p", {}, h("b", {}, "Single document, Copy as Markdown, HTML"), ": the title as escaped text, never a tinydocy: link."),
+    h("pre", { class: "code", dir: "auto" }, exportMd(false)),
+    h("p", {}, h("b", {}, ".tinydoc"), ": the docChip node, unchanged. ", h("b", {}, "Markdown import"), ": hyperlink marks only, never chips."),
+    h("p", {}, h("b", {}, "Last copy"), " (select text with a chip, then ⌘C):"),
+    h("pre", { class: "code" }, S.lastCopy ? `text/html:  ${S.lastCopy.html}\ntext/plain: ${S.lastCopy.text}` : "Nothing copied yet."));
+}
+$("#panel-keys").append(h("table", { class: "keys" }, h("tbody", {}, [
+  ["← →", "Pass a chip in one press, in LTR and RTL paragraphs."], ["⇧ + arrow", "Extend the selection over the whole chip."],
+  ["⌫ / Delete", "Remove the chip in one press (announced, one undo step)."], ["⌥↵", "Follow the chip before the caret, else the one after. Broken chips open the card."],
+  ["⌘K", "Next to a chip: the card, focus inside. Elsewhere: the picker."], ["Click", "Editing: the card. Reading: open. ⌘-click opens here, ⌘⇧-click or middle click a new tab."],
+  ["Esc", "Close the card; focus returns to the editor, selection unchanged."], ["⌘[", "Back, caret after the chip."],
+  ["/", "At a paragraph start or after a space: the \"/\" menu; Link to Document opens the picker."], ["⌘V", "A lone tinydocy:doc/… link pastes as a chip; ⌘Z keeps a link. Over a selection: a link."],
+  ["⌘Z", "Undo. ⌘⇧Z redo."], ["Picker", "↑ ↓, ↵ insert, ⇧↵ the other form, ⇥ headings of a document, esc cancel."],
+].map(([k, d]) => h("tr", {}, h("td", {}, h("kbd", {}, k)), h("td", {}, d))))));
+
+/* ═════════ accessibility panel (computed from the DOM on every change) ═════════ */
+const NAME_FROM_CONTENT = new Set(["link", "button", "option", "radio", "tab", "heading"]);
+function roleOf(el) { const r = el.getAttribute("role"); if (r) return r; const t = el.tagName; return t === "BUTTON" ? "button" : t === "INPUT" ? "textbox" : /^H[1-6]$/.test(t) ? "heading" : t.toLowerCase(); }
+function textOf(n) {
+  if (!n) return "";
+  let s = "";
+  n.childNodes.forEach((c) => {
+    if (c.nodeType === 3) s += c.data;
+    else if (c.nodeType === 1) {
+      if (c.getAttribute("aria-hidden") === "true" || c.hidden) return;
+      const cs = getComputedStyle(c);
+      if (cs.display === "none" && !c.classList.contains("sr-only")) return;
+      // Like Chromium: an out-of-flow or block child is set off by spaces, so the hidden suffix reads "Q4 budget , document".
+      const apart = cs.position === "absolute" || cs.position === "fixed" || cs.display === "block";
+      s += apart ? ` ${textOf(c)} ` : textOf(c);
+    }
+  });
+  return s.replace(/\s+/g, " ").trim();
+}
+function accName(el) {
+  if (!el) return "";
+  const lb = el.getAttribute("aria-labelledby"); if (lb) return lb.split(/\s+/).map((id) => textOf(document.getElementById(id))).join(" ").trim();
+  const al = el.getAttribute("aria-label"); if (al) return al;
+  return NAME_FROM_CONTENT.has(roleOf(el)) ? textOf(el) : "";
+}
+function statesOf(el) {
+  const st = [];
+  if (document.activeElement === el) st.push("focused");
+  if (el.id === "ed") { st.push("multiline"); if (el.getAttribute("aria-readonly") === "true") st.push("read-only"); const ad = el.getAttribute("aria-activedescendant"); if (ad) st.push(`activedescendant → “${accName(document.getElementById(ad))}”`); if (!ad) st.push("no aria-expanded"); }
+  if (el.classList.contains("doc-chip")) {
+    st.push(el.dataset.linkState);
+    st.push(el.hasAttribute("tabindex") ? "Tab stop" : "not a Tab stop");
+    if (!el.hasAttribute("href")) st.push("no href");
+    if (el.classList.contains("in-sel")) st.push("in selection");
+    if (el.hasAttribute("data-card-open")) st.push("card open");
+  }
+  if (el.id === "pk-input") { const ad = el.getAttribute("aria-activedescendant"); st.push(`expanded, activedescendant → “${ad ? accName(document.getElementById(ad)) : "none"}”`); }
+  for (const a of ["aria-selected", "aria-checked", "aria-disabled", "aria-modal", "aria-keyshortcuts"]) if (el.hasAttribute(a) && el.id !== "pk-input") st.push(`${a.slice(5)}=${el.getAttribute(a)}`);
+  if (el.getAttribute("aria-describedby")) st.push(`description “${textOf(document.getElementById(el.getAttribute("aria-describedby")))}”`);
+  return st.join(", ");
+}
+function a11yTargets() {
+  const sel = ["#back", "#ed", "#ed .doc-chip", "#ed a.doc-link", "#slash-menu", "#slash-menu [aria-selected=true]", "#picker", "#pk-input", "#pk-list [aria-selected=true]", "#ias", "#ias [role=radio]", "#pk-status",
+    "#card", "#card button", "#consent", "#consent button", "#pills button", "#target"].join(",");
+  const seen = new Set();
+  return $$(sel).filter((el) => {
+    if (el.matches("#ed a.doc-link")) { const k = el.dataset.href + el.dataset.b; if (seen.has(k)) return false; seen.add(k); }
+    return !el.closest("[hidden]") && (el.getClientRects().length || el.classList.contains("sr-only"));
+  });
+}
+let a11yQueued = false;
+function scheduleA11y() { if (a11yQueued) return; a11yQueued = true; requestAnimationFrame(() => { a11yQueued = false; renderA11y(); }); }
+function renderA11y() {
+  const p = $("#panel-a11y"); if (!p) return;
+  const rows = a11yTargets().map((el) => {
+    const role = roleOf(el);
+    let name = accName(el);
+    if (role === "status") name = `(content) “${textOf(el)}”`;
+    if (el.id === "target") name = textOf($("#tv-title"));
+    return h("tr", { class: document.activeElement === el ? "focus" : "" }, h("td", {}, role), h("td", { dir: "auto" }, name || "—"), h("td", {}, statesOf(el) || "—"));
+  });
+  rows.unshift(h("tr", {}, h("td", {}, "status"), h("td", { dir: "auto" }, `(polite) “${live.textContent}”`), h("td", {}, "announcement region")));
+  p.replaceChildren(h("table", { class: "a11y" },
+    h("caption", {}, "Computed from the DOM after every change: role, accessible name and state. Icons and U+2060 sit in an aria-hidden wrapper; the hidden suffix counts, and Chromium sets it off with a space (“Q4 budget , document”), as shown here. The screenshot run checks these names against Chromium's accessibility tree."),
+    h("colgroup", {}, h("col", { style: "width:19%" }), h("col", { style: "width:43%" }), h("col", { style: "width:38%" })),
+    h("thead", {}, h("tr", {}, h("th", {}, "Role"), h("th", {}, "Name"), h("th", {}, "State"))), h("tbody", {}, rows)));
+  // Keep the focused element's row in view when focus moves, so the panel follows keyboard use.
+  if (document.activeElement !== lastA11yFocus) {
+    lastA11yFocus = document.activeElement;
+    const f = $("tr.focus", p);
+    if (f) p.scrollTop = Math.max(0, f.offsetTop - 80);
+  }
+}
+let lastA11yFocus = null;
+new MutationObserver(scheduleA11y).observe(win, { subtree: true, childList: true, attributes: true, characterData: true });
+document.addEventListener("focusin", scheduleA11y);
+document.addEventListener("focusout", scheduleA11y);
+
+/* side tabs (APG tabs, automatic activation) */
+const sideTabs = $$("#side-tabs [role=tab]");
+function selectTab(id) { sideTabs.forEach((t) => { const on = t.id === "tab-" + id; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; $("#" + t.getAttribute("aria-controls")).hidden = !on; }); }
+sideTabs.forEach((t, i) => {
+  t.addEventListener("click", () => selectTab(t.id.slice(4)));
+  t.addEventListener("keydown", (e) => { const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key] * (document.documentElement.dir === "rtl" ? -1 : 1); if (d) { const n = sideTabs[(i + d + sideTabs.length) % sideTabs.length]; n.focus(); selectTab(n.id.slice(4)); } });
+});
+
+/* ═════════ controls ═════════ */
+const CONTROLS = [
+  ["theme", "Theme", [["light", "Light"], ["dark", "Dark"]]], ["dir", "Interface", [["ltr", "LTR"], ["rtl", "RTL"]]],
+  ["size", "Text", [["14", "14"], ["16", "16"], ["20", "20"], ["24", "24"], ["32", "32"]]], ["lead", "Leading", [["1.15", "1.15"], ["1.6", "1.6"], ["1.8", "1.8"]]],
+  ["motion", "Motion", [["full", "Full"], ["reduce", "Reduced"]]], ["fc", "Forced colours", [["off", "Off"], ["on", "Simulated"]]],
+  ["mode", "Mode", [["edit", "Editing"], ["read", "Reading"]]], ["device", "Device", [["desktop", "Desktop"], ["phone", "Phone"]]],
+  ["ready", "Index", [["ready", "Ready"], ["loading", "Loading"]]], ["viewer", "View as", [["me", "Me"], ["collab", "Collaborator"]]],
+  ["live", "Document", [["local", "Local"], ["live", "Live"]]],
+];
+$("#controls").append(...CONTROLS.map(([k, label, opts]) => h("span", { class: "ctl", role: "group", "aria-label": label }, h("span", { "aria-hidden": "true" }, label),
+  h("span", { class: "seg" }, opts.map(([v, l]) => h("button", { type: "button", "data-k": k, "data-v": v, "aria-pressed": "false", onclick: () => setCfg({ [k]: v }) }, l))))));
+function applyCfg() {
+  const root = document.documentElement;
+  root.classList.toggle("dark", CFG.theme === "dark");
+  root.dir = CFG.dir; root.lang = CFG.dir === "rtl" ? "fa" : "en";
+  root.dataset.motion = CFG.motion; root.dataset.fc = CFG.fc;
+  root.style.setProperty("--ed-size", CFG.size + "px"); root.style.setProperty("--ed-lead", CFG.lead);
+  win.dataset.device = CFG.device;
+  $$("#controls [data-k]").forEach((b) => b.setAttribute("aria-pressed", CFG[b.dataset.k] === b.dataset.v ? "true" : "false"));
+}
+function setCfg(patch) {
+  const before = { ...CFG }; Object.assign(CFG, patch);
+  if (before.mode !== CFG.mode) { closeSlash(); if (S.picker) closePicker(false); }
+  if (before.device !== CFG.device && S.card) { render(); renderCard(false); }
+  render();
+  if (["ready", "viewer"].some((k) => before[k] !== CFG[k])) { log("quiet", CFG.ready !== "ready" ? "Index loading: chips show their stored label, solid border, no announcement." : CFG.viewer === "collab" ? "Viewing as a collaborator: chips read their stored label, not in your library." : "Index ready: chips repaint, no announcement."); scheduleRepaint(); }
+}
+
+/* ═════════ scenes (window.proto.scene) ═════════ */
+function press(key, mods = {}) { const t = document.activeElement || ed; t.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: !!mods.shift, metaKey: !!mods.mod, altKey: !!mods.alt, bubbles: true, cancelable: true })); }
+function type(str) { for (const ch of str) press(ch); }
+function caretAt(b, o) { setCaret({ b, o }); S.lastKind = null; ed.focus(); render(); }
+const chipIdx = (b, label) => S.doc[b].units.findIndex((u) => u.t === "chip" && u.label === label);
+const textIdx = (b, str) => S.doc[b].units.map((u) => (u.t === "chip" ? "￼" : u.c)).join("").indexOf(str);
+const endOf = (b) => S.doc[b].units.length;
+function pickerType(q) { const i = $("#pk-input"); i.value = q; i.dispatchEvent(new Event("input", { bubbles: true })); }
+function reset(cfg = {}) {
+  Object.assign(CFG, { theme: "light", dir: "ltr", size: "16", lead: "1.6", motion: "full", fc: "off", mode: "edit", device: "desktop", ready: "ready", viewer: "me", live: "local" }, cfg);
+  ov.replaceChildren(); $("#pills").replaceChildren(); live.textContent = "";
+  LIB = makeLib(); S = freshState();
+  $("#clip-in").value = `tinydocy:doc/${K.q4}`;
+  scroller.scrollTop = 0; render(); selectTab("a11y");
+}
+const SCENES = {
+  overview: ["Chips in text", "Three chips in one sentence: two documents and a section of this document. The caret sits after “Q4 budget”.", () => { caretAt(1, chipIdx(1, "Q4 budget") + 1); }],
+  caret: ["Caret and selection", "One ⇧→ from before the chip selects the whole chip. Typing would replace the selection; a chip never looks focused without being selected.", () => { caretAt(1, chipIdx(1, "Q4 budget")); press("ArrowRight", { shift: true }); }],
+  delete: ["Delete in one press", "⌫ after “Hiring plan” removed the chip in one press, one undo step, announced. ⌘Z brings it back.", () => { caretAt(1, chipIdx(1, "Hiring plan") + 1); press("Backspace"); selectTab("log"); }],
+  slash: ["“/” menu", "Typed “/link q4” at the end of the last paragraph. Link to Document sits in Insert; the rest of the menu belongs to the bubble session.", () => { caretAt(9, endOf(9)); type("/link q4"); }],
+  "slash-picker": ["“/” → picker", "↵ on Link to Document opens the ⌘K picker with “q4” prefilled. Inserting removes “/link q4” and adds the chip in one undo step.", () => { caretAt(9, endOf(9)); type("/link q4"); press("Enter"); }],
+  picker: ["⌘K picker", "⌘K with no selection: Insert as Chip. ⇧↵ inserts link text instead. Templates and trashed documents are never listed.", () => { caretAt(9, endOf(9)); press("k", { mod: true }); pickerType("q4"); }],
+  "picker-selection": ["⌘K with a selection", "With text selected, Insert as defaults to Link text, so the selection becomes the link's text.", () => { const b = 6, s = textIdx(b, "December"); S.sel = { a: { b, o: s }, h: { b, o: s + 8 } }; ed.focus(); render(); press("k", { mod: true }); pickerType("road"); }],
+  "picker-heading": ["⇥ Headings", "⇥ on a document lists its headings. A heading in another document inserts link text in v1; chips for those come later.", () => { caretAt(9, endOf(9)); press("k", { mod: true }); pickerType("q4"); press("Tab"); press("ArrowDown"); }],
+  inserted: ["Inserted, first-time hint", "↵ inserted the chip: “Linked to Q4 budget” is announced and the one-time hint explains what collaborators see.", () => { caretAt(9, endOf(9)); press("k", { mod: true }); pickerType("q4"); press("Enter"); selectTab("log"); }],
+  paste: ["Paste a link", "Pasting a lone tinydocy:doc/… link with no selection makes a chip in a second transaction. The pill says how to keep the link.", () => { caretAt(9, endOf(9)); doPaste(`tinydocy:doc/${K.q4}`); selectTab("log"); }],
+  "paste-undo": ["Paste, then ⌘Z", "The first ⌘Z undoes only the chip step and leaves an ordinary text link. A second ⌘Z removes the paste.", () => { caretAt(9, endOf(9)); doPaste(`tinydocy:doc/${K.q4}`); press("z", { mod: true }); }],
+  card: ["Card from the keyboard", "⌘K next to a chip opens its card with focus on Open. Esc returns focus to the editor with the selection unchanged.", () => { caretAt(1, chipIdx(1, "Q4 budget") + 1); press("k", { mod: true }); }],
+  "card-link": ["A text link's card", "The card of a document text link offers Turn into Chip. The chip's stored label is the link's text, so nothing new is written.", () => { caretAt(4, textIdx(4, "Q4") + 2); press("k", { mod: true }); }],
+  converted: ["Turned into a chip", "Turn into Chip replaced the text link with a chip: one undo step, “Changed to chip” announced.", () => { caretAt(4, textIdx(4, "Q4") + 2); press("k", { mod: true }); $$("#card button").find((b) => /Chip/.test(b.textContent)).click(); selectTab("log"); }],
+  consent: ["Live document consent", "In a Live document, the first Turn into Link asks first: it writes the current title into the shared document.", () => { setCfg({ live: "live" }); caretAt(1, chipIdx(1, "Q4 budget") + 1); press("k", { mod: true }); $$("#card button").find((b) => /into Link/.test(b.textContent)).click(); }],
+  states: ["Every state", "In Trash, deleted, not on this device, a newer form, and a CJK title. Broken states are dashed; the hidden suffix names the state.", () => { caretAt(3, endOf(3)); }],
+  trash: ["In Trash card", "⌘K next to a trashed document's chip: “Launch checklist” is in Trash, with Open and Restore.", () => { caretAt(3, chipIdx(3, "Launch checklist") + 1); press("k", { mod: true }); }],
+  deleted: ["Deleted: ⌥↵ opens the card", "⌥↵ on a broken chip opens its card instead of following, with focus inside. Remove Link leaves the label as text.", () => { caretAt(3, chipIdx(3, "Vendor contracts") + 1); press("Enter", { alt: true }); }],
+  renamed: ["Renamed live", "“Q4 budget” was renamed in the library. Both chips repaint; the stored label, the announcements and the document writes are unchanged.", () => { caretAt(9, endOf(9)); libChange(() => { LIB.docs.find((d) => d.id === "q4").title = "Q4 budget (final)"; }, "Renamed “Q4 budget” to “Q4 budget (final)”"); selectTab("stored"); }],
+  pending: ["Index loading", "Before the snapshot is ready, chips show their stored label with a solid border: no dashed flash, nothing announced.", () => { setCfg({ ready: "loading" }); caretAt(9, endOf(9)); }],
+  collaborator: ["A collaborator's view", "Someone you shared with has none of your documents: every document chip reads its stored label and “not in your library”. Section chips still work.", () => { setCfg({ viewer: "collab" }); caretAt(9, endOf(9)); }],
+  followed: ["Followed", "⌥↵ after “Q4 budget” opened it through navigate() (no window.open). Back returns.", () => { caretAt(1, chipIdx(1, "Q4 budget") + 1); press("Enter", { alt: true }); selectTab("log"); }],
+  back: ["Back", "⌘[ returned to the document with the caret after the chip.", () => { caretAt(1, chipIdx(1, "Q4 budget") + 1); press("Enter", { alt: true }); press("[", { mod: true }); }],
+  here: ["Section chip", "⌥↵ on the “Risks” chip moved the caret to the end of that heading and scrolled it to the top. Back returns.", () => { caretAt(1, chipIdx(1, "Risks") + 1); press("Enter", { alt: true }); }],
+  hover: ["Reading mode hovercard", "In reading mode, hovering a chip opens the card after a delay. It stays while the pointer is on the chip or card, and Esc dismisses it (WCAG 1.4.13).", () => { setCfg({ mode: "read" }); caretAt(9, endOf(9)); openCard({ b: 1, i: chipIdx(1, "Q4 budget"), kind: "chip", via: "hover" }); }],
+  "read-focus": ["Reading mode focus", "When not editable, chips are Tab stops (tabindex 0) with a 2 px focus ring; Enter opens.", () => { setCfg({ mode: "read" }); caretAt(9, endOf(9)); $(`.doc-chip[data-b="1"]`, ed).focus(); }],
+  rtl: ["RTL", "Persian interface and paragraph. ← moves forward in an RTL paragraph and still passes a chip in one press; the LTR title sits in <bdi>.", () => { setCfg({ dir: "rtl" }); caretAt(7, chipIdx(7, "بودجهٔ سه‌ماههٔ چهارم") + 1); }],
+  phone: ["Phone card", "On phones a tap opens the card as a bottom sheet with 44 px rows.", () => { setCfg({ device: "phone" }); caretAt(1, chipIdx(1, "Q4 budget") + 1); openCard({ b: 1, i: chipIdx(1, "Q4 budget"), kind: "chip", via: "kbd" }); }],
+  hostile: ["Hostile paste", "Pasted HTML chips whose href fails parseDocLink (javascript: in mixed case, a control-character prefix, data:) become plain text. Bidi controls are stripped from labels.", () => { caretAt(9, endOf(9)); doPaste("", { html: HOSTILE }); selectTab("log"); }],
+};
+const sceneSel = $("#scene");
+Object.entries(SCENES).forEach(([id, [t]]) => sceneSel.append(h("option", { value: id }, t)));
+sceneSel.addEventListener("change", () => scene(sceneSel.value, { keep: true }));
+$("#reset").addEventListener("click", () => scene(sceneSel.value, { keep: true }));
+function scene(id, opts = {}) {
+  const sc = SCENES[id]; if (!sc) throw new Error("no scene " + id);
+  const keep = opts.keep ? { theme: CFG.theme, size: CFG.size, lead: CFG.lead, motion: CFG.motion, fc: CFG.fc } : {};
+  const { keep: _k, side, ...cfg } = opts;
+  reset({ ...keep, ...cfg });
+  sceneSel.value = id;
+  $("#scene-note").replaceChildren(h("b", {}, sc[0] + ". "), sc[1]);
+  sc[2]();
+  if (side) selectTab(side);
+  lastA11yFocus = null;
+  scheduleA11y();
+  window.scrollTo(0, 0);
+  return true;
+}
+function measureLineBoxes() {
+  const m = h("div", { class: "measure" });
+  const p1 = h("p", { style: "margin:0" }, "Plain line with descenders, gyp");
+  const p2 = h("p", { style: "margin:0" }, "Line with ", chipEl({ t: "chip", href: `tinydocy:doc/${K.q4}`, label: "Q4 budget" }, 0, 0, false), " gyp");
+  const p3 = h("p", { style: "margin:0" }, "Line with ", chipEl({ t: "chip", href: `tinydocy:doc/${K.gone}`, label: "Vendor contracts" }, 0, 0, false), " gyp");
+  m.append(p1, p2, p3); ed.append(m);
+  const out = { plain: p1.getBoundingClientRect().height, chip: p2.getBoundingClientRect().height, dashed: p3.getBoundingClientRect().height };
+  m.remove(); registry.clear(); render();
+  return out;
+}
+window.proto = { scene, setCfg, press, type, measureLineBoxes, missingIcons: () => [...MISSING_ICONS], get state() { return S; }, ready: false };
+
+reset();
+scene("overview");
+window.proto.ready = !!window.lucide;
+</script>
+</body>
+</html>

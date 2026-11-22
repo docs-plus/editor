@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Docs: smart chips for document links (proposed)
+
+A design proposal, pending owner approval. Nothing in the app changes.
+
+#### Added
+
+- **Docs:** §4.2a "Smart chips" in
+  `docs/superpowers/specs/2026-11-16-search-linking-design.md`. It specifies
+  an inline `docChip { href, label }` node whose title is resolved only when
+  it renders and never written. It covers the DOM and accessible name per
+  state, the keys, the card, inserting from ⌘K, "/" and paste, conversion
+  both ways, exports, bytes and schema, tests, and nine owner decisions
+  (C1–C9). The LK2 row grows to M–L, about 5.5 days.
+- **Docs:** a self-contained clickable prototype,
+  `docs/design/2026-11-22-smart-chips-prototype.html`, with an Accessibility
+  panel showing each element's role, name and state, and 39 headless
+  screenshots in `docs/design/2026-11-22-smart-chips/`.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its
