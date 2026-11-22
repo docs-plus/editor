@@ -531,16 +531,402 @@
   margin-inline-start: auto;
 }
 
+/* Tags section (P2.7b): a disclosure row like a folder's. */
+.lib-section-toggle {
+  font-weight: 500;
+  color: var(--lib-muted);
+}
+.lib-section-toggle[aria-expanded="true"] .lib-chevron svg {
+  transform: rotate(90deg);
+}
+
+/* List views (P2.7b; UX §4.6, §6.4, §8.1). Rows are placed by the windowed
+   body, so every row has a fixed height per kind (library-list.tsx). */
+.lib-list {
+  --lib-muted: color-mix(
+    in oklab,
+    var(--muted-foreground) 78%,
+    var(--foreground)
+  );
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--foreground);
+  container-type: inline-size;
+}
+.lib-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+}
+.lib-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lib-list-title > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--lib-muted);
+}
+.lib-list-title:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.lib-list-count {
+  margin-inline-end: auto;
+  color: var(--lib-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lib-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+.lib-filterbar .lib-filter {
+  flex: 1 1 200px;
+  max-width: 360px;
+  height: 28px;
+}
+.lib-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lib-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 14em;
+  height: 20px;
+  padding-inline: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.lib-tag-chip-filter {
+  height: 24px;
+  padding-inline-end: 2px;
+  font-size: 12px;
+}
+.lib-tag-chip-filter button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lib-muted);
+}
+.lib-tag-chip-filter button:hover {
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+  color: var(--foreground);
+}
+.lib-tag-chip-filter button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+.lib-tag-chip-filter svg {
+  width: 12px;
+  height: 12px;
+}
+
+.lib-grid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.lib-lrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5em;
+  align-items: center;
+  column-gap: 12px;
+  padding-inline: 16px;
+}
+.lib-grid[data-folder-column] .lib-lrow {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 32%) 8.5em;
+}
+.lib-lhead {
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  color: var(--lib-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lib-colbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px;
+  margin-inline-start: -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+button.lib-colbtn:not(:disabled):hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+[aria-sort] .lib-colbtn {
+  color: var(--foreground);
+}
+.lib-sortarrow {
+  width: 12px;
+  height: 12px;
+}
+.lib-grid-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: none;
+  outline: none;
+}
+.lib-grid-sizer {
+  position: relative;
+}
+.lib-grid-sizer > .lib-lrow {
+  position: absolute;
+  inset-inline: 0;
+  box-sizing: border-box;
+  cursor: default;
+}
+.lib-grid-sizer > .lib-lrow[role="row"]:not(.lib-lgroup) {
+  border-radius: var(--radius-md, 6px);
+  margin-inline: 4px;
+  padding-inline: 12px;
+}
+.lib-lgroup {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 4px;
+  color: var(--lib-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.lib-lcell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.lib-lcell-name > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--lib-muted);
+}
+.lib-ltitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-ltitle mark {
+  background: none;
+  color: inherit;
+  font-weight: 700;
+}
+.lib-lmeta {
+  color: var(--lib-muted);
+}
+.lib-ltags {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.lib-lcell-folder,
+.lib-lcell-date {
+  color: var(--lib-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-lcell-folder > bdi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-lcell-date {
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.lib-lhead .lib-lcell-date {
+  display: flex;
+  justify-content: flex-end;
+}
+.lib-lrow[data-preview] {
+  align-items: start;
+  padding-block: 8px;
+}
+.lib-lrow[data-preview] .lib-lcell-name > svg {
+  margin-top: 1px;
+}
+.lib-lstack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lib-lline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 500;
+}
+.lib-lsnippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--lib-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.lib-lrow[data-preview] .lib-lcell-date,
+.lib-lrow[data-preview] .lib-lcell-folder {
+  align-self: start;
+  padding-top: 1px;
+}
+/* Rows: no hover on macOS is the shell's call (UX §6.4); muted/60 here.
+   Selected: grey while the list doesn't have focus, accent while it does. */
+.lib-grid-sizer > .lib-lrow[aria-selected]:hover {
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.lib-grid-sizer > .lib-lrow[aria-selected="true"] {
+  background: var(--muted);
+  font-weight: 500;
+}
+.lib-grid-body:focus-within
+  > .lib-grid-sizer
+  > .lib-lrow[aria-selected="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.lib-grid-body:focus-within
+  > .lib-grid-sizer
+  > .lib-lrow[aria-selected="true"]
+  :is(svg, .lib-lcell-folder, .lib-lcell-date, .lib-lsnippet, .lib-lmeta) {
+  color: inherit;
+}
+.lib-grid-body:focus-within
+  > .lib-grid-sizer
+  > .lib-lrow[aria-selected="true"]
+  .lib-tag-chip {
+  border-color: color-mix(in oklab, var(--primary-foreground) 50%, transparent);
+  background: transparent;
+  color: inherit;
+}
+.lib-grid-sizer > .lib-lrow:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.lib-grid-body:focus-within
+  > .lib-grid-sizer
+  > .lib-lrow[aria-selected="true"]:focus-visible {
+  outline-color: var(--primary-foreground);
+  outline-offset: -3px;
+}
+.lib-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 24px;
+  text-align: center;
+}
+.lib-empty > svg {
+  width: 32px;
+  height: 32px;
+  color: var(--lib-muted);
+}
+.lib-empty-title {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.lib-empty-text {
+  margin: 0 0 8px;
+  max-width: 32em;
+  color: var(--lib-muted);
+}
+.lib-list-foot {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--lib-muted);
+  font-size: 12px;
+}
+.lib-sheet {
+  max-width: min(420px, calc(100% - 2rem));
+}
+
+/* Narrow lists: drop the Folder column and the sort label. */
+@container (max-width: 560px) {
+  .lib-grid[data-folder-column] .lib-lrow {
+    grid-template-columns: minmax(0, 1fr) 7em;
+  }
+  .lib-grid[data-folder-column] .lib-lcell-folder {
+    display: none;
+  }
+  .lib-list-sortlabel {
+    display: none;
+  }
+  .lib-list-head,
+  .lib-filterbar {
+    padding-inline: 12px;
+  }
+  .lib-lrow {
+    padding-inline: 12px;
+  }
+}
+
 @media (forced-colors: active) {
   .lib-tree:focus-within .lib-treeitem[aria-selected="true"] > .lib-row,
   .lib-treeitem[aria-selected="true"] > .lib-row,
-  .lib-dest[aria-selected="true"] {
+  .lib-dest[aria-selected="true"],
+  .lib-grid-sizer > .lib-lrow[aria-selected="true"] {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
   }
   .lib-treeitem:focus-visible > .lib-row,
-  .lib-dest:focus-visible {
+  .lib-dest:focus-visible,
+  .lib-grid-sizer > .lib-lrow:focus-visible {
     outline-color: CanvasText;
   }
   [data-drop="ok"] > .lib-row,

@@ -3,10 +3,13 @@ import { describe, expect, it } from "bun:test";
 import {
   horizontalIntent,
   isContextMenuKey,
+  isFilterKey,
   isNewFolderKey,
   isQuickOpenKey,
+  isSelectAllKey,
   isTrashKey,
   isUndoKey,
+  manualMoveKey,
   openTarget,
 } from "@/lib/library/library-keys";
 
@@ -109,5 +112,40 @@ describe("library keys (UX §4.6)", () => {
     expect(horizontalIntent("ArrowRight", "rtl")).toBe("out");
     expect(horizontalIntent("ArrowLeft", "rtl")).toBe("in");
     expect(horizontalIntent("ArrowUp", "ltr")).toBeNull();
+  });
+});
+
+describe("list view keys (P2.7b, UX §4.6)", () => {
+  it("⌘F / Ctrl+F filters the list, also on other layouts", () => {
+    expect(isFilterKey(key({ key: "f", metaKey: true }), true)).toBe(true);
+    expect(
+      isFilterKey(key({ key: "ب", code: "KeyF", metaKey: true }), true),
+    ).toBe(true);
+    expect(isFilterKey(key({ key: "f", ctrlKey: true }), false)).toBe(true);
+    expect(
+      isFilterKey(key({ key: "f", metaKey: true, shiftKey: true }), true),
+    ).toBe(false);
+    expect(isFilterKey(key({ key: "f", ctrlKey: true }), true)).toBe(false);
+  });
+
+  it("⌘A / Ctrl+A selects all", () => {
+    expect(isSelectAllKey(key({ key: "a", metaKey: true }), true)).toBe(true);
+    expect(isSelectAllKey(key({ key: "a", ctrlKey: true }), false)).toBe(true);
+    expect(isSelectAllKey(key({ key: "a" }), false)).toBe(false);
+  });
+
+  it("⌥⌘↑ / ⌥⌘↓ (Ctrl+Alt off macOS) move in a Manual list", () => {
+    expect(
+      manualMoveKey(key({ key: "ArrowUp", metaKey: true, altKey: true }), true),
+    ).toBe("up");
+    expect(
+      manualMoveKey(
+        key({ key: "ArrowDown", ctrlKey: true, altKey: true }),
+        false,
+      ),
+    ).toBe("down");
+    expect(manualMoveKey(key({ key: "ArrowDown", altKey: true }), true)).toBe(
+      null,
+    );
   });
 });
