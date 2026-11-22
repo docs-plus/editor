@@ -17,8 +17,13 @@ import { getPlaywrightModifierKey } from "./helpers/playwright-modifier-key";
  */
 
 const MENU = "[data-slash-menu]";
-/** Slash chunk budget (gzip), plan "Budgets". */
-const SLASH_BUDGET_BYTES = 6 * 1024;
+/**
+ * Slash chunk budget (gzip). Raised from 6 KB to 7 KB by the owner's decision
+ * of 2026-11-22 for the quick-insert phase (P2), which added, in gz: the
+ * `+`'s undo handling 336 B, the footer 269 B, the "Type to search" hint
+ * 258 B, Suggested 154 B and the RTL anchor 66 B (measured 7,041 B).
+ */
+const SLASH_BUDGET_BYTES = 7 * 1024;
 const SCREENS = process.env.SLASH_SCREENS_DIR;
 
 type EditorWindow = Window & {

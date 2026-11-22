@@ -15,8 +15,11 @@ The "/" menu gains what the second reference set showed it lacked, and a
 pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
 §8.2, §8.5; v1 contract A19). The editor chunk group is unchanged
 (393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
-from 5,772 B to 7,041 B gz (over its 6 KB test budget, `SLASH_BUDGET=1`;
-the budget is the owner's call) and the bubble chunk, which now mounts the
+from 5,772 B to 7,041 B gz, and its test budget (`SLASH_BUDGET=1`) is
+raised from 6 KB to 7 KB (7,168 B) by the owner's decision of 2026-11-22.
+The growth by feature (gz): the `+`'s undo handling 336 B, the footer
+269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor
+66 B; "New" badges compile out while none is declared. The bubble chunk, which now mounts the
 `+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
 rather than its own `slash-footer.tsx` (the plan's file list): it shares
 the menu's state and placement, and a separate module would only add
