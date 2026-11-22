@@ -137,6 +137,10 @@ describe("CI workflow", () => {
       ),
     );
     expect(writers).toHaveLength(2);
+    // Averaged with the timings this run read, never written from a PR.
+    const write = writers.find((step) => step.name === "Write shard timings");
+    expect(write?.env?.PREVIOUS).toBe(`\${{ needs.changes.outputs.timings }}`);
+    expect(write?.run).toContain("previous-timings.json");
     for (const step of writers) expect(step.if).toBe(MAIN_ONLY);
     // No other job uploads the timings artifact.
     const uploads = Object.values(jobs).flatMap((job) =>

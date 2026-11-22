@@ -506,13 +506,19 @@ jobs:
           fi
 
       # Green pushes to main only: the shard timings the next runs pack by.
+      # Averaged with the timings this run packed by (the changes job's
+      # output, from the previous green push), so one noisy run moves the
+      # plan only halfway.
       - name: Write shard timings
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/report.json
+          PREVIOUS: ${{ needs.changes.outputs.timings }}
         run: |
           bun playwright merge-reports --reporter=json all-blob-reports
-          bun scripts/e2e-shards.ts timings "$RUNNER_TEMP/report.json" e2e-timings.json
+          printf '%s' "$PREVIOUS" > "$RUNNER_TEMP/previous-timings.json"
+          bun scripts/e2e-shards.ts timings "$RUNNER_TEMP/report.json" \
+            e2e-timings.json "$RUNNER_TEMP/previous-timings.json"
 
       - name: Publish shard timings
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
