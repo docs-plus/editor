@@ -27,7 +27,7 @@
  * Tests pass their own steps (soak T5); {@link FORMAT_STEPS} holds the real
  * ones. A fresh library is created at format 1 and runs them with no backup.
  */
-import type { SqliteDriver } from "./driver";
+import { checkpointTruncate, type SqliteDriver } from "./driver";
 import { StorageError } from "./errors";
 import { FORMAT_2_STEP } from "./format-2";
 import type { StorageHost } from "./host";
@@ -221,6 +221,6 @@ function runRebuildStep(
     if (readForeignKeys(db) !== 1)
       // biome-ignore lint/correctness/noUnsafeFinally: a library without FKs must not stay open
       throw new StorageError("io_error", "foreign_keys did not turn back on");
-    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    checkpointTruncate(db);
   }
 }

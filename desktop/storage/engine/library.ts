@@ -51,7 +51,7 @@ import {
 import * as derive from "./derive";
 import * as docsCopy from "./docs-copy";
 import type { OpenSqlite, SqliteDriver, SqlRow } from "./driver";
-import { storageErrorFrom } from "./driver";
+import { checkpointTruncate, storageErrorFrom } from "./driver";
 import { StorageError } from "./errors";
 import * as folders from "./folders";
 import type { StorageHost } from "./host";
@@ -606,7 +606,7 @@ export class Library {
    */
   private afterPurge() {
     this.wrote();
-    this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    checkpointTruncate(this.conn);
   }
 
   // Tags (tags.ts)
@@ -881,7 +881,7 @@ export class Library {
       this.changed("doc", id);
       purged += 1;
     }
-    if (purged > 0) this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (purged > 0) checkpointTruncate(this.conn);
     return purged;
   }
 
@@ -987,7 +987,7 @@ export class Library {
     try {
       if (!this.status.readOnly) {
         writeMeta(db, "unclean_exit", "0");
-        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        checkpointTruncate(db);
       }
     } finally {
       this.db = null;
