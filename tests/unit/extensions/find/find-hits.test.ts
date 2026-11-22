@@ -301,7 +301,7 @@ describe("paintableHits", () => {
     const around = paintableHits(e.state.doc, hits, current);
     expect(around).toHaveLength(1 + MAX_PAINTED_PER_BLOCK + 2);
     expect(around).toContain(current);
-    expect(around[1]).toBe(hits[1_000 - MAX_PAINTED_PER_BLOCK / 2]);
+    expect(around[1]).toBe(hits[1_000 - Math.floor(MAX_PAINTED_PER_BLOCK / 2)]);
     // Near the block's end the window stops at its last hit.
     const late = paintableHits(e.state.doc, hits, hits[2_000]);
     expect(late[MAX_PAINTED_PER_BLOCK]).toBe(hits[2_000]);

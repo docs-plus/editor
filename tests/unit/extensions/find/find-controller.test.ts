@@ -11,6 +11,7 @@ import {
 import {
   type FindHit,
   MAX_PAINTED_PER_BLOCK,
+  scanHits,
 } from "@/extensions/find/find-hits";
 import type { FindPainter } from "@/extensions/find/find-painter";
 
@@ -181,6 +182,34 @@ describe("FindController", () => {
     expect(painter.hits).toHaveLength(MAX_PAINTED_PER_BLOCK);
     // The first window's hits left it, and their ranges are released.
     expect(painter.released).toEqual(expect.arrayContaining([...firstWindow]));
+  });
+
+  it("keeps a 25-hit window centred on the current hit as it steps, counting every hit", () => {
+    expect(MAX_PAINTED_PER_BLOCK).toBe(25);
+    const {
+      editor: e,
+      painter,
+      controller: c,
+    } = setup([heading("Title"), paragraph("pin ".repeat(60))]);
+    c.search("pin", loose);
+    expect(c.getSnapshot().total).toBe(60);
+    const hits = scanHits(e.state.doc, /pin/giu);
+    const window = () =>
+      painter.hits.map((hit) => hits.findIndex((h) => h.from === hit.from));
+    // At the first hit the window starts at the block's first hit.
+    expect(window()).toEqual([...Array(25).keys()]);
+    for (let i = 0; i < 30; i++) c.step(1);
+    // Hit 30 is current: 12 before it, 12 after it.
+    expect(c.getSnapshot().current).toBe(30);
+    expect(window()).toEqual([...Array(25).keys()].map((k) => k + 18));
+    // Near the block's end the window stops at its last hit.
+    for (let i = 0; i < 28; i++) c.step(1);
+    expect(c.getSnapshot().current).toBe(58);
+    expect(window()).toEqual([...Array(25).keys()].map((k) => k + 35));
+    // Stepping wraps through every hit, painted or not.
+    c.step(1);
+    c.step(1);
+    expect(c.getSnapshot().current).toBe(0);
   });
 
   it("moves to the next hit when the current one's text is edited away", () => {

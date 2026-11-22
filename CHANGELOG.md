@@ -54,12 +54,14 @@ of 7,030 B gz fetched when the browser is first idle.
   2026-11-22). An edit, local or remote,
   rescans only the textblocks it touched, and hits whose text did not
   change keep their painted ranges, which the browser moves with the text.
-  Chromium's highlight cost grows with the square of the ranges in one
-  text node, so a block with more than 200 hits paints the 200 around the
-  current hit. Measured with real keys, keydown to the next frame, Find
-  closed → open (`find-perf.spec.ts`, local, unthrottled): 1,000 headings
-  with 2,000 hits, median 19.8 → 18.8 ms; one paragraph with 5,000 hits,
-  16.9 → 17.5 ms; one at the 10,000-hit cap, 17.2 → 17.7 ms. At most
+  Chromium updates every live range in a text node on each edit, so a
+  block with more than 25 hits paints the 25 around the current hit; the
+  window follows each step, and every hit is still counted (coordinator
+  decision, 2026-11-22). The first CI run of `find-perf.spec.ts` showed a
+  200 cap adding +25 ms per key in one paragraph of 5,000 hits. Measured
+  at 3× CPU throttle, the median it adds is +0.2 ms at a cap of 1,
+  +1 ms at 25, +4 ms at 50, +9 ms at 100 and +20 to +34 ms at 200
+  (budget +4 ms; the table is in the details spec, rule 6). At most
   10,000 hits are kept ("10,000+"); Replace all replaces every one.
 - **Browsers without the Highlight API** (Firefox before 140, Safari
   before 17.2): Find still works. It paints no hits, but the bar shows the

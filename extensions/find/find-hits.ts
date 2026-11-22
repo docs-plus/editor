@@ -14,16 +14,16 @@ export interface FindHit {
 export const MAX_FIND_HITS = 10_000;
 
 /**
- * Most hits painted in one textblock. Chromium's cost for highlight ranges
- * grows with the square of the ranges in one text node (measured,
- * `find-perf.spec.ts`): 2,000 ranges in one paragraph add about 35 ms to
- * every keystroke anywhere in the document and 5,000 about 250 ms; typing
- * inside a paragraph with 500 still adds about 14 ms, with 200 under one
- * frame. Many blocks are fine (20 paragraphs of 500 add nothing
- * measurable). A crowded block paints the 200 around the current hit,
- * which move with it.
+ * Most hits painted in one textblock. Chromium updates every live range in
+ * a text node on each edit, so the cost of typing in a crowded block grows
+ * faster than the ranges in it (`find-perf.spec.ts`). With one paragraph
+ * of 5,000 hits, 3x CPU throttle (where 200 matched CI's +25 ms), the
+ * median keystroke-to-paint added: 1 → +0.2 ms, 25 → +1 ms, 50 → +4 ms,
+ * 100 → +9 ms, 200 → +20 to +34 ms. Many blocks are fine (1,000 headings
+ * with 2,000 hits pass). A crowded block paints the 25 around the current
+ * hit, which move with it; every hit is still counted and stepped through.
  */
-export const MAX_PAINTED_PER_BLOCK = 200;
+export const MAX_PAINTED_PER_BLOCK = 25;
 
 /**
  * A transaction with more steps than this (Replace all, a pasted document)
@@ -255,7 +255,7 @@ export function paintableHits(
     let stop = j;
     if (j - i > perBlock) {
       crowded = true;
-      const centre = at < 0 ? i : at - perBlock / 2;
+      const centre = at < 0 ? i : at - Math.floor(perBlock / 2);
       start = Math.max(i, Math.min(centre, j - perBlock));
       stop = start + perBlock;
     }
