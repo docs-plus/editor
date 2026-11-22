@@ -6,7 +6,7 @@
 > - **D30:** the **L2 string-extraction sweep** is third in the pre-approved v1 cut order. If cut, new strings are linted instead (the "new strings through `t()`" rule stays, as §9.2 already says).
 > - **Staff integration review:** row 26 Language is hidden until L1b (v1.1). The `firefox` Playwright project is defined once, by test strategy **Q7**; **L7 adds the RTL specs to it** rather than creating it, and P2.13's exit depends on Q7. **L3 owns the one keymap module** (`APP_KEYMAP`, `matchShortcut` / `visualStep`, `formatKeyCombo`, `lib/shortcuts.ts`; UX spec §4.6), and `matchShortcut` also fixes ⌘⇧F, which today matches `event.key === "f"` on `window` and fails on Persian and Arabic layouts. L3 is v1.1 under D26, so whether the module and `matchShortcut` land ahead of the rest of L3 is **not decided**.
 
-- **Status:** Draft for owner review (2026-11-16). Planning only; nothing is built.
+- **Status:** Draft for owner review (2026-11-16). **L0 landed (2026-11-22):** the §9.3 amendments, the UX §9.4 copy rules and the `locales/glossary.md` seed, plus L1a groundwork that nothing in the app imports yet (0 B): `lib/i18n/` (`t-core`, `format`, `locale`, `isolate`, `registry-labels`), `scripts/i18n/` (`extract`, `check`, `pseudo`), `locales/en/actions.json`, the `i18n:*` scripts and the §8.1 unit tests. L1a still owns the wiring (§9).
 - **Decides:**
   - which interface languages v1 ships
   - how strings are written, stored, loaded and translated
@@ -146,6 +146,9 @@ scripts/i18n/
 
 - **Generated `loaders.ts`, not template-literal `import()`.** An explicit map of static imports gives the bundler one chunk per file, with no guessing about how Turbopack expands dynamic paths. L1a verifies the chunk names in a production build.
 - **Flat keys, dotted by surface:** `library.empty.title`, `trash.emptyConfirm.body`, `action.mark.bold.label`. Keys never contain English, so fixing an English typo doesn't orphan translations; a stale-source hash does that instead (§3.11).
+- **The key names its namespace (L0, a call made):** the first dotted segment is the namespace (§3.7), so `library.trash.empty` lives in `library.json` and `trash.emptyConfirm.body` above becomes `library.trash.emptyConfirm.body`. The registry boundary writes two namespaces of its own: `action.<id>.label` and `action.<id>.keywords` (comma-separated) in `actions.json`, and `reason:<English>` in `reasons.json`. The extractor refuses a key whose prefix names no namespace, so no lookup by file path is needed.
+- **Entry shapes:** `locales/en/<ns>.json` maps key → English; a translation maps key → `{ "text": …, "src": … }` (§3.11).
+- **Two `t()` functions, one call shape:** `t-core`'s `t` formats `{name}` only and is what the editor chunk imports; `format.ts` exports a `t` with the whole ICU subset for lazy chunks. The extractor reads both. In English neither adds bidi isolates, so English output is exactly the text in code; in another language, values are wrapped in FSI…PDI.
 
 ### 3.3 Writing a message
 
