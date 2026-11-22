@@ -1,24 +1,34 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dir, "../../..");
-const transpiler = new Bun.Transpiler({ loader: "tsx" });
+const tsx = new Bun.Transpiler({ loader: "tsx" });
+const ts = new Bun.Transpiler({ loader: "ts" });
+/** Stylesheets and other assets are imported for their side effect only. */
+const SCRIPT = /\.[cm]?[jt]sx?$/;
 
 /**
  * Project files and packages reachable from `entry` through static (runtime)
  * imports. Type-only imports are erased by the transpiler; dynamic
  * `import()` is a separate chunk and is not followed.
  */
-function staticImports(entry: string): {
+function staticImports(
+  entry: string,
+  /** Project files the walk does not enter (a known path, fixed elsewhere). */
+  skip: readonly string[] = [],
+): {
   files: Set<string>;
   packages: Set<string>;
 } {
   const seen = new Set<string>();
   const packages = new Set<string>();
   const visit = (file: string) => {
-    if (seen.has(file)) return;
+    if (seen.has(file) || !SCRIPT.test(file)) return;
+    if (skip.includes(path.relative(ROOT, file))) return;
     seen.add(file);
+    // `.ts` parsed as TSX misreads generics such as `<T>(x) => x` as JSX.
+    const transpiler = file.endsWith("x") ? tsx : ts;
     const { imports } = transpiler.scan(readFileSync(file, "utf8"));
     for (const { path: spec, kind } of imports) {
       if (kind !== "import-statement") continue;
@@ -69,6 +79,38 @@ describe("platform import boundaries", () => {
         expect(name).not.toBe("react");
         expect(name.startsWith("@tiptap/")).toBe(false);
         expect(name.startsWith("@hocuspocus/")).toBe(false);
+      }
+    });
+  }
+});
+
+// The editor reads its DocSession from context (architecture §3.3): neither
+// the hook nor the editor may load the sandbox's collab-session or a
+// platform adapter, so the desktop graph never contains them.
+const EDITOR_ENTRIES = [
+  "hooks/use-yjs-document.ts",
+  // Every module in the editor's folder, lazy ones included.
+  ...readdirSync(path.join(ROOT, "components/document-editor"))
+    .filter((name) => /\.tsx?$/.test(name))
+    .map((name) => `components/document-editor/${name}`),
+];
+
+/**
+ * Known path, left to P2.2's folder: `document-editor.tsx` imports
+ * `CollabStatusGroup` statically, and its connection status reads
+ * collab-session's unsynced-changes state. It renders only with a provider,
+ * so lazy-loading it there removes this last path.
+ */
+const KNOWN_PATHS = ["components/tiptap-ui/user-identity-button.tsx"];
+
+describe("editor import boundaries", () => {
+  for (const entry of EDITOR_ENTRIES) {
+    it(`${entry} loads no collab-session or platform adapter`, () => {
+      const { files } = staticImports(entry, KNOWN_PATHS);
+      for (const file of files) {
+        expect(file).not.toBe("lib/collab-session.ts");
+        expect(file.startsWith("lib/platform/web/")).toBe(false);
+        expect(file.startsWith("lib/platform/desktop/")).toBe(false);
       }
     });
   }
