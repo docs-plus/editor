@@ -35,12 +35,12 @@ import {
 import { Toolbar } from "@/components/ui/toolbar";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { useActionView } from "@/hooks/use-editor-context";
-import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { announce } from "@/lib/announce";
 import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
+import { useKeyboardInset } from "@/lib/keyboard-inset";
 import {
   RECENT_COLORS_CHOICE,
   useRememberedChoice,
