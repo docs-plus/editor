@@ -59,6 +59,14 @@ export interface LibraryHostProps {
   onOpenDocument: (id: string, target: OpenTarget) => void;
   /** Shows a list (Recent, Pinned, a folder, Trash) in the main area. */
   onOpenPlace?: (place: LibraryPlace, target: OpenTarget) => void;
+  /**
+   * Renames a document. The first heading is its only title (details spec
+   * §2.3): desktop and the web library must route this through the editor
+   * (`setTitleText`, open or closed), or the next save rewrites the stored
+   * title from the heading. Defaults to `index.rename`, for hosts whose
+   * index title is the source (tests, the harness).
+   */
+  onRenameDocument?: (id: string, title: string) => void;
   /** The document open in this tab, if any (`aria-current`). */
   activeDocumentId?: string | null;
   children?: ReactNode;
@@ -88,6 +96,14 @@ export interface LibraryActions {
   open(id: string, target?: OpenTarget): void;
   openPlace(place: LibraryPlace, target?: OpenTarget): void;
   createDocument(folderId: string | null): void;
+  /**
+   * New Document by the fixed rule (preferences design §5): in the folder
+   * that has focus in the sidebar, else at the Library root. ⌘N and the
+   * Library header's button use it.
+   */
+  createDocumentHere(): void;
+  /** The tree reports the folder of the row that has focus (null: none). */
+  setFocusedFolder(folderId: string | null): void;
   /** Creates "New Folder" in `parentId` and starts renaming it. */
   createFolder(parentId: string | null): void;
   rename(item: LibraryItemRef, name: string): void;
@@ -165,6 +181,7 @@ export function LibraryProvider({
   index,
   onOpenDocument,
   onOpenPlace,
+  onRenameDocument,
   activeDocumentId = null,
   children,
 }: LibraryHostProps) {
@@ -195,8 +212,10 @@ export function LibraryProvider({
 
   // Actions read the host's latest callbacks through a ref, so the actions
   // object is stable and rows never re-render because of it.
-  const latest = useRef({ onOpenDocument, onOpenPlace });
-  latest.current = { onOpenDocument, onOpenPlace };
+  const latest = useRef({ onOpenDocument, onOpenPlace, onRenameDocument });
+  latest.current = { onOpenDocument, onOpenPlace, onRenameDocument };
+  /** The folder of the focused tree row, while focus is in the sidebar. */
+  const focusedFolder = useRef<string | null>(null);
   const serial = useRef(0);
   const menuSerial = useRef(0);
 
@@ -256,6 +275,14 @@ export function LibraryProvider({
         expandAncestors(folderId);
         self.open(entry.id);
       },
+      createDocumentHere() {
+        const id = focusedFolder.current;
+        const live = id !== null && now().folders.some((f) => f.id === id);
+        self.createDocument(live ? id : null);
+      },
+      setFocusedFolder(folderId) {
+        focusedFolder.current = folderId;
+      },
       createFolder(parentId) {
         const snap = now();
         if (!canCreateFolderIn(indexFolders(snap.folders), parentId)) {
@@ -283,13 +310,18 @@ export function LibraryProvider({
         if (clean === before.trim() || (item.kind === "folder" && !clean)) {
           return;
         }
+        const renameDocument = (id: string, title: string) => {
+          const host = latest.current.onRenameDocument;
+          if (host) host(id, title);
+          else index.rename(id, title);
+        };
         if (item.kind === "folder") index.renameFolder(item.id, clean);
-        else index.rename(item.id, clean);
+        else renameDocument(item.id, clean);
         undoStack.push({
           label: "Rename",
           undo: () => {
             if (item.kind === "folder") index.renameFolder(item.id, before);
-            else index.rename(item.id, before);
+            else renameDocument(item.id, before);
             requestFocus(itemKey(item));
           },
         });

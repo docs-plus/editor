@@ -555,7 +555,14 @@ export function LibraryTree() {
       onKeyDown={onKeyDown}
       onFocus={(event) => {
         const key = (event.target as HTMLElement).dataset.key;
-        if (key && key !== focusKey) setFocusKey(key);
+        if (!key) return;
+        if (key !== focusKey) setFocusKey(key);
+        const row = rows[rowIndex.get(key) ?? -1];
+        if (row) {
+          actions.setFocusedFolder(
+            row.kind === "folder" ? row.id : row.parentId,
+          );
+        }
       }}
     >
       {rows.map((row) => (

@@ -213,7 +213,18 @@ export function LibrarySidebar({
   const is = (kind: LibraryPlace["kind"]) => currentPlace?.kind === kind;
 
   return (
-    <nav className="lib-sidebar" aria-label="Files" data-region="">
+    <nav
+      className="lib-sidebar"
+      aria-label="Files"
+      data-region=""
+      onBlur={(event) => {
+        // Focus left the sidebar: new documents go to the root again.
+        const next = event.relatedTarget as Node | null;
+        if (!next || !event.currentTarget.contains(next)) {
+          actions.setFocusedFolder(null);
+        }
+      }}
+    >
       <div className="lib-scroll">
         <button
           type="button"
@@ -290,7 +301,7 @@ export function LibrarySidebar({
             size="icon-xs"
             aria-label="New Document"
             title={`New Document (${mac ? "⌘N" : "Ctrl+N"})`}
-            onClick={() => actions.createDocument(null)}
+            onClick={() => actions.createDocumentHere()}
           >
             <FilePlusIcon aria-hidden="true" />
           </Button>

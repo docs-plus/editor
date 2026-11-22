@@ -38,7 +38,10 @@ use it: the web build is unchanged (every JS and CSS chunk identical to
   destinations first and keeps refused folders visible with the reason.
   Quick Open searches titles and folder names only (D24), shows the folder
   path, offers Create when nothing matches, and opens in a new tab with
-  ⌘Enter. Right-to-left sidebars mirror, ← and → included.
+  ⌘Enter. Right-to-left sidebars mirror, ← and → included. New Document
+  goes into the folder that has focus in the sidebar, else the root.
+  Document renames go through the host's `onRenameDocument`, so desktop and
+  the web library can edit the title heading (details spec §2.3).
 - **Focus:** `lib/region-focus.ts` moves between regions with F6 /
   Shift+F6 and returns to the last focused element of each.
 - **Tests:** the `library` Playwright project runs the keyboard checklist,

@@ -54,6 +54,7 @@ async function tabTo(page: Page, locator: Locator, back = false) {
 
 /** F6 until focus is in the Files region. */
 async function f6ToSidebar(page: Page) {
+  await expect(tree(page)).toBeVisible();
   for (let i = 0; i < 5; i++) {
     await page.keyboard.press("F6");
     const inFiles = await page.evaluate(
@@ -178,6 +179,12 @@ test.describe("keyboard checklist (plan §5.6, UX §8.3)", () => {
       dialog.getByRole("textbox", { name: "Filter folders" }),
     ).toBeFocused();
     await page.keyboard.type("trips");
+    // The filter keeps Library and Trips; the document was made in the
+    // focused folder (Archive), so Library is a destination too.
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      dialog.getByRole("treeitem", { name: "Library" }),
+    ).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(dialog.getByRole("treeitem", { name: "Trips" })).toBeFocused();
     await page.keyboard.press("Enter");
@@ -194,6 +201,29 @@ test.describe("keyboard checklist (plan §5.6, UX §8.3)", () => {
       "aria-expanded",
       "true",
     );
+  });
+
+  test("New Document goes into the focused folder, else the root", async ({
+    page,
+  }) => {
+    await f6ToSidebar(page);
+    await typeTo(page, "work", "folder:f-work");
+    await tabTo(page, page.getByRole("button", { name: "New Document" }), true);
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("doc-title")).toBeFocused();
+    await page.keyboard.type("In Work");
+    let snap = await library(page);
+    expect(snap.items.find((d) => d.title === "In Work")?.folderId).toBe(
+      "f-work",
+    );
+
+    // Focus is in the document now, not the sidebar: the root.
+    await page.getByRole("button", { name: "New Document" }).click();
+    await page.keyboard.type("At root");
+    snap = await library(page);
+    expect(
+      snap.items.find((d) => d.title === "At root")?.folderId ?? null,
+    ).toBeNull();
   });
 
   test("item 2: F2 renames in place; Esc cancels; an empty name is refused", async ({
