@@ -160,6 +160,11 @@ export type StorageWorkerOptions = {
   /** Soak only: how long without a write counts as idle (default 30 s). */
   idleMs?: number;
   /**
+   * Contract runs only: the clock grows by at least 1 ms a call, so two
+   * Trash operations never share a time (the Trash list then orders by id).
+   */
+  strictClock?: boolean;
+  /**
    * The daily-copy thread's bundle (`copy-worker.cjs`). `StorageClient`
    * defaults it to the worker's sibling. Without it, no daily copy runs.
    */

@@ -7,7 +7,9 @@
  *
  * Modes (`--mode=`):
  * - `contract`: P2.1's shared `DocStore` contract over the worker
- *   (`CASE_OK` / `CASE_FAIL` lines).
+ *   (`CASE_OK` / `CASE_FAIL` lines), then P2.7b's `LibraryIndex` contract
+ *   through `RpcLibraryIndex` over the worker (`LIBRARY_CASE_OK` /
+ *   `LIBRARY_CASE_FAIL`).
  * - `churn`: edits a document with product batching (or `--dense`) until
  *   killed; `--target=compaction` compacts after every ack;
  *   `--quit-after-ms` runs the quit flush instead (T4). The worker prints
@@ -34,10 +36,17 @@ import * as Y from "yjs";
 
 import { createRpcDocStore } from "../../lib/platform/desktop/rpc-doc-store";
 import type { DocStore } from "../../lib/platform/doc-store";
+import { takeCases } from "../../tests/helpers/bun-test-shim";
 import {
   DOC_STORE_CONTRACT,
   type DocStoreHarness,
 } from "../../tests/helpers/doc-store-contract";
+import {
+  createLibraryContractFactory,
+  type LibraryTransport,
+  type StorageCall,
+} from "../../tests/helpers/library-index-harness";
+import { describeLibraryIndexContract } from "../../tests/unit/platform/document-index-contract";
 import { StorageClient } from "../storage/client";
 import { openNodeSqlite } from "../storage/drivers/node-sqlite";
 import { Library } from "../storage/engine/library";
@@ -137,7 +146,92 @@ async function contract() {
     }
   }
   say(`CONTRACT ${passed} passed, ${failed} failed`);
-  if (failed > 0) fail(`${failed} contract case(s) failed`);
+  const library = await libraryContract();
+  if (failed > 0 || library > 0)
+    fail(`${failed + library} contract case(s) failed`);
+}
+
+/** A transport to a worker on `dir`, started on first use. */
+function workerTransport(dir: string): LibraryTransport {
+  const listeners: ((rev: number, changes: unknown[]) => void)[] = [];
+  const started = StorageClient.start(
+    workerPath(),
+    { dir, strictClock: true },
+    {
+      onIndexChanged: (rev, changes) => {
+        for (const listener of listeners) listener(rev, changes);
+      },
+    },
+  );
+  // A failed start rejects every call instead.
+  started.catch(() => {});
+  let closed = false;
+  return {
+    call: (async (op, callArgs) =>
+      (await started).call(op, copied(callArgs))) as StorageCall,
+    onIndexChanged: (listener) => listeners.push(listener),
+    async close() {
+      if (closed) return;
+      closed = true;
+      const client = await started.catch(() => null);
+      await client?.shutdown();
+    },
+  };
+}
+
+/**
+ * P2.7b's `LibraryIndex` contract (P2.6e) through `RpcLibraryIndex` over the
+ * real worker on `node:sqlite`: each case seeds a temp library on this
+ * thread, shuts it down, and starts a worker on it. Returns the failures.
+ */
+async function libraryContract(): Promise<number> {
+  const cleanups: (() => Promise<void>)[] = [];
+  describeLibraryIndexContract(
+    "RpcLibraryIndex on the storage worker (node:sqlite)",
+    createLibraryContractFactory({
+      tempDir() {
+        const libraryDir = mkdtempSync(path.join(tmpdir(), "library-"));
+        return {
+          dir: libraryDir,
+          remove: () =>
+            rmSync(libraryDir, {
+              recursive: true,
+              force: true,
+              maxRetries: 10,
+              retryDelay: 200,
+            }),
+        };
+      },
+      open: (libraryDir, now) =>
+        Library.open({
+          dir: libraryDir,
+          host: createNodeHost({ now }),
+          openSqlite: openNodeSqlite,
+          fullfsync: false,
+        }),
+      attach(libraryDir, seeded) {
+        seeded?.shutdown();
+        return workerTransport(libraryDir);
+      },
+      track: (cleanup) => cleanups.push(cleanup),
+    }),
+  );
+  let passed = 0;
+  let failed = 0;
+  for (const testCase of takeCases()) {
+    try {
+      await testCase.run();
+      passed += 1;
+      say(`LIBRARY_CASE_OK ${testCase.name}`);
+    } catch (error) {
+      failed += 1;
+      say(`LIBRARY_CASE_FAIL ${testCase.name}: ${String(error)}`);
+    } finally {
+      for (const cleanup of cleanups.splice(0)) await cleanup().catch(() => {});
+    }
+  }
+  say(`LIBRARY_CONTRACT ${passed} passed, ${failed} failed`);
+  return failed;
 }
 
 async function churn() {
