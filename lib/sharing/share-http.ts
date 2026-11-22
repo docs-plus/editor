@@ -6,7 +6,6 @@ import { readJsonBody, withBusyRetry } from "@/lib/security/json-body";
 import {
   createSlidingWindowLimiter,
   type RateLimitDecision,
-  type SlidingWindowLimiter,
 } from "@/lib/security/rate-limit";
 import { addressKeys } from "@/lib/sharing/failed-tokens";
 import {
@@ -235,20 +234,40 @@ function isEndReason(reason: string): reason is ShareEndReason {
   return (SHARE_END_REASONS as readonly string[]).includes(reason);
 }
 
-/**
- * Checks `limiter` for every address key of `ip`: the /48 first, then the
- * IPv4 address or /64, so a /48 over its budget adds none of its /64s.
- */
-function checkAddress(
-  limiter: SlidingWindowLimiter,
-  ip: string,
-): RateLimitDecision {
-  const [own, prefix48] = addressKeys(ip);
-  if (prefix48) {
-    const decision = limiter.check(prefix48);
-    if (!decision.allowed) return decision;
-  }
-  return limiter.check(own);
+/** An IPv6 /48 may spend this many times one address's HTTP budget. */
+export const PREFIX_48_BUDGET_FACTOR = 8;
+
+type AddressLimiter = {
+  /**
+   * Checks the IPv4 address or /64, and (unless `prefix48` is false) the
+   * /48's shared budget. The address's own budget is looked at first, so
+   * a /64 over it spends none of its neighbours' /48 budget.
+   */
+  check(ip: string, options?: { prefix48?: boolean }): RateLimitDecision;
+};
+
+function createAddressLimiter(
+  limit: number,
+  windowMs: number,
+  now: () => number,
+): AddressLimiter {
+  const own = createSlidingWindowLimiter({ limit, windowMs, now });
+  const prefix = createSlidingWindowLimiter({
+    limit: limit * PREFIX_48_BUDGET_FACTOR,
+    windowMs,
+    now,
+  });
+  return {
+    check(ip, { prefix48 = true } = {}) {
+      const [ownKey, prefixKey] = addressKeys(ip);
+      if (own.peek(ownKey) >= limit) return own.check(ownKey);
+      if (prefix48 && prefixKey) {
+        const decision = prefix.check(prefixKey);
+        if (!decision.allowed) return decision;
+      }
+      return own.check(ownKey);
+    },
+  };
 }
 
 const HASH_IN_USE = "hash_in_use";
@@ -272,12 +291,22 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
   const { db, limits } = options;
   const allowedOrigins = new Set(options.allowedOrigins);
   const ipHashKey = options.ipHashKey || randomBytes(32).toString("hex");
-  const limiter = (limit: number, windowMs: number): SlidingWindowLimiter =>
-    createSlidingWindowLimiter({ limit, windowMs, now });
-  const mutations = limiter(limits.mutationsPerMinute, MINUTE_MS);
-  const reads = limiter(limits.readsPerMinute, MINUTE_MS);
-  const creationsPerIp = limiter(limits.creationsPerHourPerIp, HOUR_MS);
-  const creations = limiter(limits.creationsPerHour, HOUR_MS);
+  const mutations = createAddressLimiter(
+    limits.mutationsPerMinute,
+    MINUTE_MS,
+    now,
+  );
+  const reads = createAddressLimiter(limits.readsPerMinute, MINUTE_MS, now);
+  const creationsPerIp = createAddressLimiter(
+    limits.creationsPerHourPerIp,
+    HOUR_MS,
+    now,
+  );
+  const creations = createSlidingWindowLimiter({
+    limit: limits.creationsPerHour,
+    windowMs: HOUR_MS,
+    now,
+  });
 
   function respond(
     request: Request,
@@ -355,13 +384,17 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
   }
 
   /** Global cap, then per-address (IPv4, IPv6 /64 and /48) and global hourly creation limits. */
-  function creationRefused(request: Request, ip: string): Response | null {
+  function creationRefused(
+    request: Request,
+    ip: string,
+    { ownerCall = false } = {},
+  ): Response | null {
     const at = now();
     if (countActiveShares(db, at, limits.expiryMs) >= limits.maxTotalShares) {
       logAbuseEvent("share_create_refused", { ip, reason: "shares_full" });
       return error(request, 503, "shares_full");
     }
-    const perIp = checkAddress(creationsPerIp, ip);
+    const perIp = creationsPerIp.check(ip, { prefix48: !ownerCall });
     if (!perIp.allowed) {
       return throttled(request, perIp, ip, "share_create_throttled");
     }
@@ -502,7 +535,7 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     if (body instanceof Response) return body;
     const hashes = parseHashes(body, limits);
     if (!hashes) return error(request, 400, "invalid_body");
-    const limited = creationRefused(request, ip);
+    const limited = creationRefused(request, ip, { ownerCall: true });
     if (limited) return limited;
     const nextId = mintShareId();
     const reset = insertOrConflict(() =>
@@ -549,7 +582,15 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
           return error(request, 403, "origin_not_allowed");
         }
       }
-      const decision = checkAddress(isRead ? reads : mutations, ip);
+      // Owner calls skip the /48 budget, so neighbours cannot lock an owner
+      // out; wrong owner secrets still count per /48 as failed tokens.
+      const ownerCall =
+        route.kind === "stop" ||
+        route.kind === "reset" ||
+        route.kind === "view-only";
+      const decision = (isRead ? reads : mutations).check(ip, {
+        prefix48: !ownerCall,
+      });
       if (!decision.allowed) {
         return throttled(request, decision, ip, "share_http_throttled");
       }

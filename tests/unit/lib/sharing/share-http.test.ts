@@ -6,6 +6,7 @@ import { createHocusHttpRoutes } from "@/lib/security/hocus-http-routes";
 import { createFailedTokenLimiter } from "@/lib/sharing/failed-tokens";
 import {
   createShareHttp,
+  PREFIX_48_BUDGET_FACTOR,
   type ServerInfo,
   type ShareHttpLimits,
   type ShareHttpOptions,
@@ -308,7 +309,11 @@ describe("POST /api/shares", () => {
     const create = (ip: string) =>
       http.handle(post("/api/shares", createBody(makeShareSecrets())), ip);
     expect((await create("2001:db8:a:1::/64")).status).toBe(201);
-    expect((await create("2001:db8:a:2::/64")).status).toBe(429);
+    expect((await create("2001:db8:a:1::/64")).status).toBe(429);
+    for (let n = 2; n <= PREFIX_48_BUDGET_FACTOR; n++) {
+      expect((await create(`2001:db8:a:${n}::/64`)).status).toBe(201);
+    }
+    expect((await create("2001:db8:a:99::/64")).status).toBe(429);
     expect((await create("2001:db8:b:1::/64")).status).toBe(201);
   });
 
@@ -342,33 +347,51 @@ describe("POST /api/shares", () => {
   });
 });
 
-describe("HTTP rate limits per IPv6 /48 (M2)", () => {
-  it("counts reads and mutations from every /64 of a /48 together", async () => {
-    const http = createHttp({
-      limits: { ...LIMITS, readsPerMinute: 2, mutationsPerMinute: 2 },
-    });
-    const read = (n: number) =>
-      http.handle(new Request(`${BASE}/api/info`), `2001:db8:a:${n}::/64`);
-    expect((await read(1)).status).toBe(200);
-    expect((await read(2)).status).toBe(200);
-    expect((await read(3)).status).toBe(429);
-    // Another /48 has its own budget.
-    expect(
-      (await http.handle(new Request(`${BASE}/api/info`), "2001:db8:b:1::/64"))
-        .status,
-    ).toBe(200);
+describe("HTTP rate limits per IPv6 /48", () => {
+  const prefix48 = (limit: number) => limit * PREFIX_48_BUDGET_FACTOR;
 
-    const stop = (n: number) =>
+  it("give each /48 its own larger budget; a /64 over its own spends none of it", async () => {
+    const http = createHttp({ limits: { ...LIMITS, readsPerMinute: 2 } });
+    const read = (n: number, block = "a") =>
       http.handle(
-        new Request(`${BASE}/api/shares/${mintShareId()}`, {
-          method: "DELETE",
-          headers: bearer(makeShareSecrets().ownerToken),
-        }),
-        `2001:db8:c:${n}::/64`,
+        new Request(`${BASE}/api/info`),
+        `2001:db8:${block}:${n}::/64`,
       );
-    expect((await stop(1)).status).toBe(404);
-    expect((await stop(2)).status).toBe(404);
-    expect((await stop(3)).status).toBe(429);
+    // A noisy /64 is stopped by its own budget ...
+    for (let i = 0; i < 20; i++) {
+      expect((await read(1)).status).toBe(i < 2 ? 200 : 429);
+    }
+    // ... and its neighbours keep the rest of the /48's.
+    const neighbours = prefix48(2) / 2 - 1;
+    for (let n = 2; n < 2 + neighbours; n++) {
+      expect((await read(n)).status).toBe(200);
+      expect((await read(n)).status).toBe(200);
+    }
+    expect((await read(99)).status).toBe(429);
+    // Another /48 has its own budget.
+    expect((await read(1, "b")).status).toBe(200);
+  });
+
+  it("never count an owner's stop against its /48 (M1)", async () => {
+    const http = createHttp({ limits: { ...LIMITS, mutationsPerMinute: 1 } });
+    const { shareId, secrets } = await createShare(http);
+    const create = (n: number) =>
+      http.handle(
+        post("/api/shares", createBody(makeShareSecrets())),
+        `2001:db8:a:${n}::/64`,
+      );
+    for (let n = 1; n <= prefix48(1); n++) {
+      expect((await create(n)).status).toBe(201);
+    }
+    expect((await create(99)).status).toBe(429);
+    const stop = await http.handle(
+      new Request(`${BASE}/api/shares/${shareId}`, {
+        method: "DELETE",
+        headers: bearer(secrets.ownerToken),
+      }),
+      "2001:db8:a:100::/64",
+    );
+    expect(stop.status).toBe(200);
   });
 });
 
