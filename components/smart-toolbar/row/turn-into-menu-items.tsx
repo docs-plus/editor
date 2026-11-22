@@ -22,7 +22,6 @@ import {
 } from "@/lib/editor-actions/key-combo";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
-import { TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 
 import { type StyleFace, styleFace } from "../bubble/style-face";
@@ -64,11 +63,6 @@ export const MORE_HEADING_IDS = [
 const HEADING_IDS = TURN_INTO_IDS.slice(0, 4);
 const LIST_IDS = TURN_INTO_IDS.slice(4, 7);
 const BLOCK_IDS = TURN_INTO_IDS.slice(7);
-
-/** Text has no icon in the registry; kept here, in the lazy menu chunk. */
-const ICONS: Partial<Record<string, IconComponent>> = {
-  "style.paragraph": TypeIcon,
-};
 
 const LIST_ID_BY_TYPE: Readonly<Record<string, string>> = {
   bulletList: "list.bullet",
@@ -128,6 +122,8 @@ function useTurnIntoValue(editor: Editor): [StyleFace, string] {
  * The row's grid: icon, label, shortcut, then the ✓ as the trailing cell
  * (`16px 1fr auto 16px`, spec §7.4); the reason line spans under the label.
  */
+const SUB_ROW =
+  "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pe-1.5";
 const ROW =
   "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-2 *:data-[slot=dropdown-menu-reason]:col-start-2 *:data-[slot=dropdown-menu-reason]:col-span-3";
 
@@ -164,7 +160,7 @@ function TurnIntoItem({
       ? undefined
       : refused;
   const disabled = titleReasonId !== undefined || own !== undefined;
-  const Icon = action.icon ?? ICONS[id];
+  const Icon = action.icon;
   const mac = isMac();
   const combo = action.shortcut;
   return (
@@ -191,7 +187,7 @@ function TurnIntoItem({
       <span aria-hidden="true">
         <kbd
           dir="ltr"
-          className="font-sans text-xs tracking-widest text-muted-foreground"
+          className="font-sans text-xs tracking-widest tabular-nums text-muted-foreground"
         >
           {combo ? formatKeyCombo(combo, mac) : null}
         </kbd>
@@ -263,9 +259,13 @@ export function TurnIntoMenuItems({
           <DropdownMenuSubTrigger
             disabled={inTitle}
             aria-describedby={titleReasonId}
+            // The rows' grid, so its label starts where theirs do; the ▸
+            // takes the ✓ cell.
+            className={SUB_ROW}
           >
             <MoreHeadingsIcon />
             <span>More headings</span>
+            <span aria-hidden="true" />
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent side="inline-end">
             <DropdownMenuRadioGroup value={value}>

@@ -930,6 +930,86 @@ test.describe("⋯ More formatting in RTL", () => {
   });
 });
 
+test.describe("menu row polish", () => {
+  test("RTL: ⋯ shortcuts end at the row's inline end, all in one line", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "More formatting").click();
+    const menu = page.getByRole("menu", { name: "More formatting" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const edges = await menu.evaluate((el) =>
+      [...el.querySelectorAll('[data-slot="dropdown-menu-shortcut"]')].map(
+        (node) => {
+          const item = node.closest('[role^="menuitem"]') as HTMLElement;
+          return {
+            shortcut: Math.round(node.getBoundingClientRect().left),
+            item: Math.round(item.getBoundingClientRect().left),
+          };
+        },
+      ),
+    );
+    expect(edges.length).toBeGreaterThan(2);
+    // Every shortcut's inline end (its left in RTL) at the same x, near the
+    // row's own left edge, not right after the label.
+    expect(new Set(edges.map((edge) => edge.shortcut)).size).toBe(1);
+    for (const edge of edges) {
+      expect(edge.shortcut - edge.item).toBeLessThan(40);
+    }
+  });
+
+  test("Text style: every label starts at one x, More headings too; digits line up", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Text").click();
+    const menu = page.getByRole("menu", { name: "Text style" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const geometry = await menu.evaluate((el) => {
+      const rows = [...el.querySelectorAll('[role^="menuitem"]')].filter(
+        (row) =>
+          /^(Text|Heading \d|More headings|Bullet list|Quote)/.test(
+            row.textContent ?? "",
+          ),
+      );
+      const labelLeft = (row: Element) => {
+        const span = [...row.querySelectorAll("span")].find((node) =>
+          /^(Text|Heading \d|More headings|Bullet list|Quote)$/.test(
+            node.textContent ?? "",
+          ),
+        );
+        return Math.round(span?.getBoundingClientRect().left ?? -1);
+      };
+      const kbds = [...el.querySelectorAll("kbd")]
+        .filter((kbd) => /\d$/.test(kbd.textContent ?? ""))
+        .map((kbd) => {
+          const r = kbd.getBoundingClientRect();
+          return { left: Math.round(r.left), right: Math.round(r.right) };
+        });
+      return { labels: rows.map(labelLeft), kbds };
+    });
+    expect(new Set(geometry.labels).size, JSON.stringify(geometry.labels)).toBe(
+      1,
+    );
+    // ⌘⌥0 … ⌘⌥3: same width, so the digits line up.
+    expect(
+      new Set(geometry.kbds.map((kbd) => kbd.right - kbd.left)).size,
+      JSON.stringify(geometry.kbds),
+    ).toBe(1);
+  });
+});
+
 test.describe("context slot fit and focus (WCAG 1.4.12, 2.4.11)", () => {
   test("no slot kind overflows its fixed width with text spacing", async ({
     page,

@@ -185,7 +185,8 @@ export function ActionMenuItem({
   const body = (
     <>
       {Icon ? <Icon aria-hidden="true" /> : null}
-      <span>{label ?? action.label}</span>
+      {/* `auto`: an English label keeps its trailing "…" in RTL. */}
+      <span dir="auto">{label ?? action.label}</span>
       <Shortcut combo={action.shortcut} mac={mac} />
       <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </>
@@ -255,7 +256,7 @@ export function ActionRadioItem({
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : null}
-      <span>{label ?? action.label}</span>
+      <span dir="auto">{label ?? action.label}</span>
       <Shortcut combo={shortcut} mac={mac} className="order-1 ms-0" />
       <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </DropdownMenuRadioItem>

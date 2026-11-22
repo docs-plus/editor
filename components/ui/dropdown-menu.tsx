@@ -265,19 +265,23 @@ function DropdownMenuReason({
 
 function DropdownMenuShortcut({
   className,
+  children,
   ...props
 }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="dropdown-menu-shortcut"
-      // Key glyphs read left to right in every script (rtl:184).
-      dir="ltr"
       className={cn(
-        "ms-auto text-xs tracking-widest text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground",
+        "ms-auto text-xs tracking-widest tabular-nums text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground",
         className,
       )}
       {...props}
-    />
+    >
+      {/* Key glyphs read left to right in every script (rtl:184); the
+          span around them keeps the row's direction, so `ms-auto` puts
+          it at the row's inline end in RTL too. */}
+      <span dir="ltr">{children}</span>
+    </span>
   );
 }
 
