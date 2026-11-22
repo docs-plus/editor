@@ -21,9 +21,14 @@ import {
   NetworkIcon,
   TypeIcon,
 } from "@/lib/icons";
-import type { TableSize } from "@/lib/remembered-choice";
+import type { InsertKind, TableSize } from "@/lib/remembered-choice";
 
-export type SlashSection = "Text" | "Lists" | "Insert" | "Diagrams";
+export type SlashSection =
+  | "Suggested"
+  | "Text"
+  | "Lists"
+  | "Insert"
+  | "Diagrams";
 
 export interface SlashItem {
   /** `actionId`, or `actionId:<option value>` for a template. */
@@ -35,6 +40,8 @@ export interface SlashItem {
   name?: string;
   /** Leads its ties (the last used template, design pass §9). */
   lead?: boolean;
+  /** One of the writer's recent insert kinds: wins rank ties (A19). */
+  recent?: boolean;
   keywords: readonly string[];
   /** The Markdown shortcut, trimmed ("##", ">"). */
   hint?: string;
@@ -124,6 +131,45 @@ function templateItem(
   };
 }
 
+/** Up to this many recent insert kinds lead the empty query (A19). */
+const MAX_SUGGESTED = 3;
+
+/** The insert kind an item adds ("insert.table" → "table"), if any. */
+export const insertKindOf = (item: SlashItem): string | null =>
+  item.actionId === "template.mermaid"
+    ? "mermaid"
+    : item.actionId.startsWith("insert.")
+      ? item.actionId.slice(7)
+      : null;
+
+/**
+ * Suggested (A19): a copy of each recent kind's runnable row, newest
+ * first, under its own key. The row stays in its own section too, so
+ * positions there never move. A diagram is its last used template once
+ * the templates are listed (its lead), else the first.
+ */
+function suggestedItems(
+  items: readonly SlashItem[],
+  recentKinds: readonly InsertKind[],
+): SlashItem[] {
+  const suggested: SlashItem[] = [];
+  for (const kind of recentKinds) {
+    const own = items.filter(
+      (item) => !item.reason && insertKindOf(item) === kind,
+    );
+    const item = own.find((candidate) => candidate.lead) ?? own[0];
+    if (item) {
+      suggested.push({
+        ...item,
+        key: `suggested:${item.key}`,
+        section: "Suggested",
+      });
+    }
+    if (suggested.length === MAX_SUGGESTED) break;
+  }
+  return suggested;
+}
+
 /**
  * Text styles, lists and Insert kinds, in registry order. Those that
  * cannot run here carry their `reason` and are never rows (the menu is
@@ -131,12 +177,14 @@ function templateItem(
  * their reasons): a query that matches only them says why
  * (`slashEmptyNote`). As in the Insert menu's Diagram ▸ submenu,
  * Diagram is either one row (before E's engine lists the templates) or
- * the templates, never both.
+ * the templates, never both. With `recentKinds`, a Suggested section
+ * leads (A19).
  */
 export function buildSlashItems(
   ctx: Ctx,
   actions: readonly AnyAction[],
   tableSize: TableSize,
+  recentKinds: readonly InsertKind[] = [],
 ): SlashItem[] {
   const reason = (action: AnyAction) => {
     const enabled = availability(action, ctx);
@@ -168,7 +216,14 @@ export function buildSlashItems(
       }),
     );
   }
-  return [...items, ...diagrams];
+  const all = [...items, ...diagrams];
+  for (const item of all) {
+    const kind = insertKindOf(item);
+    if (kind && (recentKinds as readonly string[]).includes(kind)) {
+      item.recent = true;
+    }
+  }
+  return [...suggestedItems(all, recentKinds), ...all];
 }
 
 const words = (text: string) => text.split(/\s+/);
@@ -197,8 +252,10 @@ function rank(item: SlashItem, query: string, tokens: string[]): number {
  * hints, among the items that can run here. The best match leads; each
  * section stays together (in the order its best match ranks), so every
  * section heading shows once, and ↑ ↓ walk the rows as they are drawn.
- * An empty query keeps all but the `searchOnly` ones. Typography turns
- * a typed "--" into "—", so "/---" still finds Divider.
+ * An empty query keeps all but the `searchOnly` ones; a query drops
+ * Suggested (its rows are in their own sections), and among equal ranks
+ * a recent kind leads. Typography turns a typed "--" into "—", so
+ * "/---" still finds Divider.
  */
 export function matchSlashItems(
   items: readonly SlashItem[],
@@ -209,13 +266,16 @@ export function matchSlashItems(
   const q = query.trim().toLowerCase().replaceAll("—", "--");
   if (!q) return pool.filter((item) => !item.searchOnly);
   const tokens = words(q);
+  const flag = (value?: boolean) => Number(Boolean(value));
   const ranked = pool
+    .filter((item) => item.section !== "Suggested")
     .map((item, index) => ({ item, index, rank: rank(item, q, tokens) }))
     .filter((entry) => entry.rank >= 0)
     .sort(
       (a, b) =>
         a.rank - b.rank ||
-        Number(Boolean(b.item.lead)) - Number(Boolean(a.item.lead)) ||
+        flag(b.item.recent) - flag(a.item.recent) ||
+        flag(b.item.lead) - flag(a.item.lead) ||
         a.index - b.index,
     )
     .map((entry) => entry.item);

@@ -233,6 +233,45 @@ describe("M10: a fresh profile has no remembered Insert kind", () => {
   });
 });
 
+describe("A19: Suggested reads the last 3 insert kinds", () => {
+  it("still reads an entry stored while maxRecent was 0", () => {
+    setRaw(
+      STORAGE_KEYS.choices,
+      JSON.stringify({
+        v: STORAGE_VERSION,
+        slots: { insertKind: { last: "table", recent: [] } },
+      }),
+    );
+    expect(readChoice(INSERT_KIND_CHOICE)).toEqual({
+      last: "table",
+      recent: [],
+    });
+  });
+
+  it("keeps the last 3 kinds, newest first; last is unchanged", () => {
+    for (const kind of ["table", "image", "divider"] as const) {
+      rememberChoice(INSERT_KIND_CHOICE, kind);
+    }
+    expect(readChoice(INSERT_KIND_CHOICE)).toEqual({
+      last: "divider",
+      recent: ["divider", "image", "table"],
+    });
+    rememberChoice(INSERT_KIND_CHOICE, "quote");
+    expect(readChoice(INSERT_KIND_CHOICE).recent).toEqual([
+      "quote",
+      "divider",
+      "image",
+    ]);
+  });
+
+  it("a new writer has none, and Forget clears them", () => {
+    expect(readChoice(INSERT_KIND_CHOICE).recent).toEqual([]);
+    rememberChoice(INSERT_KIND_CHOICE, "table");
+    forgetChoices();
+    expect(readChoice(INSERT_KIND_CHOICE)).toEqual({ last: null, recent: [] });
+  });
+});
+
 describe("forget my choices", () => {
   it("clears tinydocy-choices and keeps ui and formats", () => {
     rememberChoice(TEXT, "blue");

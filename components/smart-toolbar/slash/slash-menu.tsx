@@ -20,7 +20,12 @@ import {
 import { editorActions } from "@/lib/editor-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
-import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
+import {
+  INSERT_KIND_CHOICE,
+  isInsertKind,
+  readChoice,
+  TABLE_SIZE_CHOICE,
+} from "@/lib/remembered-choice";
 import { runSlashPick } from "@/lib/slash-menu/run-slash-pick";
 import {
   buildSlashItems,
@@ -238,6 +243,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       computeContext(editor),
       editorActions.list(),
       readChoice(TABLE_SIZE_CHOICE).last,
+      readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind),
     ),
   );
   const [coarse] = useState(isCoarse);

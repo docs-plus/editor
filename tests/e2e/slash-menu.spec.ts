@@ -438,6 +438,38 @@ test.describe("slash menu", () => {
     expect(await caretBlock(page)).toMatchObject({ text: "" });
   });
 
+  test("Suggested shows the last insert kinds after use, until Forget", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    const groups = menu(page).locator('[role="group"]');
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Text");
+    await page.keyboard.type("div");
+    await page.keyboard.press("Enter");
+    await expect(menu(page)).toHaveCount(0);
+    await typeAtEnd(page, "/quo");
+    await page.keyboard.press("Enter");
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Suggested");
+    await expect(groups.first().getByRole("option")).toHaveText([
+      /Quote/,
+      /Divider/,
+    ]);
+    // A query lists each kind once, in its own section.
+    await page.keyboard.type("quo");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+
+    await page
+      .getByRole("toolbar", { name: "Formatting" })
+      .getByRole("button", { name: "More formatting" })
+      .click();
+    await page.getByRole("menuitem", { name: "Forget my choices" }).click();
+    await typeAtEnd(page, "/");
+    await expect(groups.first()).toHaveAccessibleName("Text");
+  });
+
   test("'and/or', a URL, a heading and the title never open it", async ({
     page,
   }) => {
