@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { editorActions } from "@/lib/editor-actions";
-import { ChevronDownIcon, TypeIcon } from "@/lib/icons";
+import { ChevronDownIcon } from "@/lib/icons";
 
 import { clearOfSelection } from "../color/clear-of-selection";
 import {
@@ -48,14 +48,17 @@ const FACE_ICON_IDS: Partial<Record<StyleFace, string>> = {
 /**
  * The icon face, for a locale whose longest word would pass 96px: the
  * registry's own icons (no new icon import, so the editor chunk keeps its
- * shape), Type for Text, Title and Mixed.
+ * shape); Text's (installed by `style-lift`, which the bubble imports)
+ * also stands for Title and Mixed.
  */
 function FaceIcon({ face }: { face: StyleFace }) {
   const id =
     FACE_ICON_IDS[face] ??
-    (face.startsWith("H") ? `style.heading${face.slice(1)}` : "");
-  const Icon = editorActions.get(id)?.icon ?? TypeIcon;
-  return <Icon aria-hidden="true" />;
+    (face.startsWith("H")
+      ? `style.heading${face.slice(1)}`
+      : "style.paragraph");
+  const Icon = editorActions.get(id)?.icon;
+  return Icon ? <Icon aria-hidden="true" /> : null;
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   ChartPieIcon,
   CircleDotIcon,
   NetworkIcon,
+  TypeIcon,
 } from "@/lib/icons";
 import {
   INSERT_KIND_CHOICE,
@@ -111,7 +112,8 @@ function actionItem(
     label: action.label,
     keywords: [...(action.keywords ?? []), ...aliases(action)],
     hint: action.markdownHint?.trim() || undefined,
-    icon: action.icon,
+    icon:
+      action.icon ?? (action.id === "style.paragraph" ? TypeIcon : undefined),
     section,
     ...extra,
   };
