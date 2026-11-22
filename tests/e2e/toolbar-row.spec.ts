@@ -320,7 +320,7 @@ test.describe("alignment items", () => {
     await page.setViewportSize({ width: 860, height: 900 });
     await openDoc(page);
     await caretIn(page, "Plain");
-    await toolbarButton(page, "Paragraph").click();
+    await toolbarButton(page, "Layout").click();
     const indent = page.getByRole("menuitem", { name: /^Indent/ });
     await expect(indent).toBeVisible();
     const boxes = await alignItemBoxes(page);
@@ -352,7 +352,7 @@ test.describe("alignment items", () => {
     await page.setViewportSize({ width: 860, height: 900 });
     await openDoc(page);
     await caretIn(page, "Plain");
-    await toolbarButton(page, "Paragraph").click();
+    await toolbarButton(page, "Layout").click();
     await expect(
       page.getByRole("menuitemradio", { name: "Align center", exact: true }),
     ).toHaveAttribute("aria-keyshortcuts", "Control+Shift+E");

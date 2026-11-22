@@ -72,7 +72,11 @@ export function SizeCollapseMenu({ editor: provided }: SurfaceProps) {
   );
 }
 
-/** T3: align + indent → ¶ menu. */
+/**
+ * T3: align + indent → ¶ menu. Each stand-in's name begins with the word
+ * touch tablets show on it ("Layout", "Format", "Block";
+ * `standin-words.scss`), so a spoken "Layout" finds it (WCAG 2.5.3).
+ */
 export function ParagraphCollapseMenu({ editor: provided }: SurfaceProps) {
   const editor = useSurfaceEditor(provided);
   const view = useActionView("align.left", editor);
@@ -80,7 +84,7 @@ export function ParagraphCollapseMenu({ editor: provided }: SurfaceProps) {
   if (!editor || !view) return null;
   return (
     <ToolbarMenu
-      label="Paragraph"
+      label="Layout"
       tooltip="Alignment and indent"
       readOnly={isReadOnly(view.enabled)}
       icon={<PilcrowIcon aria-hidden="true" />}
@@ -88,7 +92,7 @@ export function ParagraphCollapseMenu({ editor: provided }: SurfaceProps) {
       open={menu.open}
       onOpenChange={menu.onOpenChange}
       finalFocus={menu.finalFocus}
-      contentLabel="Paragraph"
+      contentLabel="Layout"
     >
       <ParagraphMenuItems
         editor={editor}
@@ -129,7 +133,7 @@ export function SlotCollapseButton({ editor: provided }: SurfaceProps) {
   if (!editor || !ids || !label) return null;
   return (
     <ToolbarMenu
-      label={label}
+      label={`Block: ${label}`}
       tooltip={label}
       readOnly={!editor.isEditable}
       icon={<SlidersHorizontalIcon aria-hidden="true" />}
@@ -228,7 +232,7 @@ export function AaCollapseMenu({ editor: provided }: SurfaceProps) {
   if (!editor || !view) return null;
   return (
     <ToolbarMenu
-      label="More text formatting"
+      label="Format"
       tooltip="Underline and strikethrough"
       readOnly={isReadOnly(view.enabled)}
       icon={<TypeIcon aria-hidden="true" />}
@@ -236,7 +240,7 @@ export function AaCollapseMenu({ editor: provided }: SurfaceProps) {
       open={menu.open}
       onOpenChange={menu.onOpenChange}
       finalFocus={menu.finalFocus}
-      contentLabel="More text formatting"
+      contentLabel="Format"
     >
       <AaMenuItems editor={editor} onPicked={menu.markPicked} />
     </ToolbarMenu>

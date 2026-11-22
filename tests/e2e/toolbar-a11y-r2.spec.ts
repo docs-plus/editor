@@ -93,13 +93,13 @@ test.describe("I1: a tier hiding the focused control hands focus to its stand-in
     {
       name: "Underline",
       width: 850,
-      expected: "More text formatting",
+      expected: "Format",
       caret: "paragraph",
     },
     {
       name: "Align left",
       width: 1100,
-      expected: "Paragraph",
+      expected: "Layout",
       caret: "paragraph",
     },
     {
@@ -114,11 +114,11 @@ test.describe("I1: a tier hiding the focused control hands focus to its stand-in
       expected: "View",
       caret: "paragraph",
     },
-    { name: "Indent", width: 1100, expected: "Paragraph", caret: "paragraph" },
+    { name: "Indent", width: 1100, expected: "Layout", caret: "paragraph" },
     {
       name: "Fold section",
       width: 1100,
-      expected: "Section tools",
+      expected: "Block: Section tools",
       caret: "heading",
     },
   ] as const;

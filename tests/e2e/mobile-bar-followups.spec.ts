@@ -156,7 +156,7 @@ const BASE_CELLS = ["Undo", "Text format", "Bold", "Italic", "List", "Indent"];
 /** The cells expected at `width` with the slot cell named `slot`. */
 function expectedCells(width: number, slot: string) {
   if (width < 360) return [...BASE_CELLS, "Insert"];
-  const cells = [...BASE_CELLS, slot, "Insert"];
+  const cells = [...BASE_CELLS, `Block: ${slot}`, "Insert"];
   return width >= 404 ? ["Undo", "Redo", ...cells.slice(1)] : cells;
 }
 
@@ -248,7 +248,7 @@ test.describe("context slot cell", () => {
     // Esc goes back to the cell, never the page.
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
-    await expect.poll(() => focusedName(page)).toBe("Section tools");
+    await expect.poll(() => focusedName(page)).toBe("Block: Section tools");
 
     await cell.tap();
     await menu.getByRole("menuitem", { name: /Move section up/ }).tap();
@@ -339,7 +339,7 @@ test.describe("context slot cell", () => {
     await expect(menu).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
-    await expect.poll(() => focusedName(page)).toBe("Table tools");
+    await expect.poll(() => focusedName(page)).toBe("Block: Table tools");
     // Focus moves on: the hold lets go and the cell leaves.
     await page.evaluate(() => window.__tiptap_editor?.commands.focus());
     await expect(cell).toHaveCount(0);

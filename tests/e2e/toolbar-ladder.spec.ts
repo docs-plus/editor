@@ -204,14 +204,21 @@ test.describe("touch", () => {
     await expect
       .poll(() => standInWords(page))
       .toEqual({
-        "More text formatting": "Format",
-        Paragraph: "Layout",
-        "Section tools": "Block",
+        Format: "Format",
+        Layout: "Layout",
+        "Block: Section tools": "Block",
       });
-    // Words never change the names: one icon plus one fixed word.
+    // WCAG 2.5.3: each name begins with the word on screen, so a spoken
+    // "Layout" finds its control.
+    const words = Object.entries(await standInWords(page)).map(
+      ([name, word]) => [name, String(word)] as const,
+    );
+    for (const [name, word] of words) {
+      expect(name.startsWith(word), `${name} starts with ${word}`).toBe(true);
+    }
     await expectRowFits(page, "touch words @900");
     await caretIn(page, "table");
-    expect((await standInWords(page))["Table tools"]).toBe("Block");
+    expect((await standInWords(page))["Block: Table tools"]).toBe("Block");
     await expectRowFits(page, "touch words @900 table");
     // The widest context fits them from an 848px window; below, no words.
     for (const width of [848, 1100]) {
@@ -275,7 +282,7 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
       toolbar.getByRole("button", { name, exact: true }),
     ).toBeHidden();
   }
-  await toolbar.getByRole("button", { name: "Paragraph" }).click();
+  await toolbar.getByRole("button", { name: "Layout" }).click();
   await expect(
     page.getByRole("menuitemradio", { name: "Align center" }),
   ).toBeVisible();
@@ -285,13 +292,13 @@ test("collapsed groups come back through their stand-ins", async ({ page }) => {
   // even with the menu chunk that draws them in.
   expect(await standInWords(page)).toEqual({});
 
-  await toolbar.getByRole("button", { name: "Section tools" }).click();
+  await toolbar.getByRole("button", { name: "Block: Section tools" }).click();
   await expect(page.getByRole("menuitem", { name: /fold|Fold/ })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // The table's stand-in: Delete row and Delete column carry a trash icon.
   await caretIn(page, "table");
-  await toolbar.getByRole("button", { name: "Table tools" }).click();
+  await toolbar.getByRole("button", { name: "Block: Table tools" }).click();
   const tableMenu = page.getByRole("menu", { name: "Table tools" });
   for (const name of ["Delete row", "Delete column"]) {
     const item = tableMenu.getByRole("menuitem", { name });
