@@ -42,9 +42,9 @@ function staticImports(entry: string): {
 // Server code: the API routes, the retention cron and the Hocus server must
 // never load the client tab API or the browser collaboration provider.
 const SERVER_ENTRIES = [
-  "app/api/documents/[id]/route.ts",
-  "app/api/documents/restore/route.ts",
-  "app/api/documents/closed/route.ts",
+  "app/api/documents/[id]/route.web.ts",
+  "app/api/documents/restore/route.web.ts",
+  "app/api/documents/closed/route.web.ts",
   "scripts/purge-retention.ts",
   "scripts/delete-document.ts",
   "scripts/hocus-server.ts",

@@ -1,6 +1,6 @@
-import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { getSchema } from "@tiptap/core";
 import type { Schema } from "@tiptap/pm/model";
+import type { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
 import { buildDocumentEditorExtensions } from "@/components/document-editor/document-editor-config";
@@ -11,7 +11,9 @@ export function getEditorSchema(): Schema {
     buildDocumentEditorExtensions({
       documentId: "schema-test",
       ydoc: new Y.Doc(),
-      provider: {} as HocuspocusProvider,
+      awareness: {} as Awareness,
+      getProvider: () => null,
+      canWrite: () => true,
       onFoldChange() {},
       onFilterChange() {},
       onTocUpdate() {},

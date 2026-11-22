@@ -8,9 +8,9 @@ import { MAX_TABS_PER_CLIENT } from "@/lib/constants";
 import { bootstrapDocumentActivityTable } from "@/lib/security/activity-store";
 import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
-type DeleteRoute = typeof import("@/app/api/documents/[id]/route");
-type RestoreRoute = typeof import("@/app/api/documents/restore/route");
-type ClosedRoute = typeof import("@/app/api/documents/closed/route");
+type DeleteRoute = typeof import("@/app/api/documents/[id]/route.web");
+type RestoreRoute = typeof import("@/app/api/documents/restore/route.web");
+type ClosedRoute = typeof import("@/app/api/documents/closed/route.web");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const DAY_MS = 86_400_000;
@@ -69,11 +69,11 @@ function tombstone(name: string): void {
 }
 
 const loadDelete = () =>
-  importFresh<DeleteRoute>("@/app/api/documents/[id]/route");
+  importFresh<DeleteRoute>("@/app/api/documents/[id]/route.web");
 const loadRestore = () =>
-  importFresh<RestoreRoute>("@/app/api/documents/restore/route");
+  importFresh<RestoreRoute>("@/app/api/documents/restore/route.web");
 const loadClosed = () =>
-  importFresh<ClosedRoute>("@/app/api/documents/closed/route");
+  importFresh<ClosedRoute>("@/app/api/documents/closed/route.web");
 
 function params(id: string) {
   return { params: Promise.resolve({ id }) };
