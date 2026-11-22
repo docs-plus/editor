@@ -9,6 +9,8 @@
  * `library-property` job. Seeds run from `LIBRARY_PROPERTY_BASE_SEED`,
  * which is 1 by default, so a PR run is the same every time; the nightly
  * job passes its run id. `LIBRARY_PROPERTY_SEED` replays one failing run.
+ * Every choice and every Yjs client id comes from the seed, so a replay
+ * takes the same steps.
  */
 import { describe, expect, it } from "bun:test";
 
@@ -48,10 +50,13 @@ type Tab = {
 
 type Library = Awaited<ReturnType<typeof createFakeLibrary>>;
 
-async function openTab(library: Library): Promise<Tab> {
+async function openTab(library: Library, clientId: number): Promise<Tab> {
   const store = library.connect();
   const loaded = await store.load("doc");
   const doc = new Y.Doc();
+  // Fixed, never reused: Yjs breaks ties between concurrent inserts by
+  // client id, so a random one would make a seed replay differently.
+  doc.clientID = clientId;
   if (loaded.snapshot) Y.applyUpdate(doc, loaded.snapshot);
   for (const update of loaded.updates) Y.applyUpdate(doc, update);
   return { store, doc, upTo: loaded.maxSeq };
@@ -65,8 +70,10 @@ async function runOnce(seed: number): Promise<void> {
     await library.createDoc("doc", 1);
     const reference = new Y.Doc();
     const tabs: Tab[] = [];
+    let nextClientId = 1;
+    const open = () => openTab(library, nextClientId++);
     const tabCount = 2 + pick(2);
-    for (let i = 0; i < tabCount; i++) tabs.push(await openTab(library));
+    for (let i = 0; i < tabCount; i++) tabs.push(await open());
     let counter = 0;
 
     const append = async (tab: Tab) => {
@@ -86,7 +93,7 @@ async function runOnce(seed: number): Promise<void> {
     };
     const reload = async (index: number) => {
       await tabs[index].store.close("doc");
-      tabs[index] = await openTab(library);
+      tabs[index] = await open();
     };
 
     for (let step = 0; step < STEPS; step++) {
@@ -104,7 +111,7 @@ async function runOnce(seed: number): Promise<void> {
         }),
       );
 
-      const check = await openTab(library);
+      const check = await open();
       expect(check.doc.getText("t").toString()).toBe(
         reference.getText("t").toString(),
       );
