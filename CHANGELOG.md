@@ -9,6 +9,46 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.11: find and replace in the document
+
+⌘F (Ctrl+F) opens a find bar over the document, on the web and in the
+desktop app (spec `2026-11-15-desktop-local-first-design.md` §8.4 row P2.11,
+details spec E1). P2.11 has no ledger line, and the editor chunk group does
+not grow (393,776 B gz, −44 B against `main` at `903b5c8`). The keys add
+602 B gz to first-load JS (142,332 B against 141,730 B), and the bar is a
+lazy chunk of 6,390 B gz fetched when the browser is first idle.
+
+#### Added
+
+- **Find:** ⌘F / Ctrl+F opens the bar, seeded with a short selection.
+  Enter / Shift+Enter, ⌘G / ⌘⇧G, Ctrl+G and F3 / Shift+F3 step through the
+  hits; Esc closes and selects the current hit. Match case and Whole word
+  are toggles. Only the document's text is searched, never the outline or
+  other sidebar text. A key a focused list has already handled is left
+  alone.
+- **Replace:** from the bar's ▸ toggle; ⌥⌘F (macOS) and Ctrl+H (Windows and
+  Linux) open it in the desktop app only, since the browser owns Ctrl+H.
+  Replace moves past the replacement, and Replace all is one undo step. The
+  toggle is hidden in a read-only document.
+- **Right-to-left and Persian or Arabic text:** without Match case, Arabic
+  ي/ك match Persian ی/ک, Persian and Arabic-Indic digits match ASCII, and
+  harakat and tatweel are ignored. Whole word keeps ZWNJ inside a word.
+  Highlights follow the text's own direction.
+- **Fast on large documents:** hits are painted with the CSS Custom
+  Highlight API (no plugin, no decoration, no change to the editor's DOM),
+  so typing, IME composition and a collaborator's edits are never redrawn
+  for Find. An edit, local or remote, rescans only the textblocks it
+  touched. On 1,000 headings (2,000 hits) Find adds about 0.2 ms to a
+  keystroke's transaction, and a step takes about 16 ms. At most 10,000
+  hits are kept ("10,000+"); Replace all replaces every one.
+- **Config:** `NEXT_PUBLIC_FIND=0` turns Find off (⌘F opens the browser's
+  find bar again). On by default; a unit test pins it.
+
+#### Deploy
+
+- None. To keep the browser's own ⌘F on the web, build with
+  `NEXT_PUBLIC_FIND=0` in `.env.production`.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

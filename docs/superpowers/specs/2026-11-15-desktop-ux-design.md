@@ -482,7 +482,7 @@ The palette's budget rule (A7, 20 KB gz) applies to the web chunk. On desktop th
 | Focus toolbar | Alt+F10 | Alt+F10 | existing | — |
 | Context menu | ⇧F10, or ⌃-click | Shift+F10, Menu key | — | P2.7 |
 | Open the menu (Windows) | — | Alt (alone), F10 | AltGr must not trigger it | P2.9a |
-| Find in document | ⌘F, ⌘G, ⌘⇧G | Ctrl+F, F3, Shift+F3 | ⌘⇧F is the heading filter (`use-document-editor-effects.ts:107`). When a list has focus, ⌘F filters the list instead (P2.7b, **scoped**). | P2.11 |
+| Find in document | ⌘F, ⌘G, ⌘⇧G | Ctrl+F, F3, Shift+F3 | ⌘⇧F is the heading filter (`use-document-editor-effects.ts:107`). When a list has focus, ⌘F filters the list instead (P2.7b, **scoped**). As built: a window listener in the app shell (`components/find/find-keys.ts`) that skips a key a focused list already handled (`defaultPrevented`); Ctrl+G and Ctrl+Shift+G also step off macOS, and non-Latin layouts match by physical key. | P2.11 |
 | Replace | ⌥⌘F | Ctrl+H (desktop) | v7: Ctrl+Alt+F is AltGr. On the web, Replace is reached from the find bar only (the browser owns Ctrl+H, history). | P2.11 |
 | Filter list **(scoped)** | ⌘F | Ctrl+F | Only when the tree or a list view has focus; metadata matching (D24) | P2.7b |
 | Heading filter **(scoped to the editor)** | ⌘⇧F | Ctrl+Shift+F | v7: today `use-document-editor-effects.ts` listens on `window` and matches `event.key === "f"`, so it fires outside the editor and fails on Persian and Arabic layouts. Fix: listen on the editor and match with `matchShortcut` (languages design §4.5, L3). | existing; fix in L3 |
