@@ -37,6 +37,8 @@ const perfResults: Array<{
   on: number;
   /** Median of the per-round on/off ratios: the verdict. */
   ratio: number;
+  /** Rounds actually run: PERF_ROUNDS, plus PERF_EXTRA_ROUNDS if it was close. */
+  roundsRun: number;
   rounds: { off: number[]; on: number[] };
 }> = [];
 
@@ -110,8 +112,8 @@ test.describe("typing latency", () => {
     writeReport(`perf-report-${Date.now()}.json`, {
       timestamp: new Date().toISOString(),
       shape: PERF_SHAPE,
-      rounds: PERF_ROUNDS,
-      extraRounds: PERF_EXTRA_ROUNDS,
+      configuredRounds: PERF_ROUNDS,
+      configuredExtraRounds: PERF_EXTRA_ROUNDS,
       cpuThrottle: PERF_CPU_THROTTLE,
       maxRegression: PERF_MAX_REGRESSION,
       results: perfResults,
@@ -169,6 +171,7 @@ test.describe("typing latency", () => {
         off,
         on,
         ratio,
+        roundsRun: p95.on.length,
         rounds: p95,
       });
       expect(
