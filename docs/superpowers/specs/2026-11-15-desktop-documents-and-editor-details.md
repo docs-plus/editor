@@ -68,7 +68,7 @@ These came out of the staff feasibility review. Each one was checked against the
    | "Type / for blocks" placeholder | OB2 | 10 B |
    | Phone keyboards: prose and code `autocorrect` / `autocapitalize` / `spellcheck` attributes (D41, v8) | M19 | 40 B |
    | Undo-gesture handler, **only if spike M18 shows native undo mutates the DOM** (D41, v8) | M19 | 80 B, conditional |
-   | Markdown paste hook: the `clipboardTextParser` prop and the idle load of the lazy rule (E2) | P2.12 | 152 B (measured 152 B; **pending owner approval**, requested in #156) |
+   | Markdown paste hook: the `clipboardTextParser` prop and the idle load of the lazy rule (E2) | P2.12 | 152 B (measured 152 B on `main` at `1548d5e`, 129 B at `84a9458`; **pending owner approval**, requested in #156) |
    | **Total** | | **2,205 B, or 2,285 B with the undo handler** |
 
    - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,284 B (08b7663), so P2.2 set the fence at +16,864 B (15,284 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,286 B remain for the other lines. P2.1c added its 275 B line and raised the fence by exactly that, to +17,139 B (15,284 + 1,855); its bytes sit with the lazy editor chunk so that first load stays flat (−32 B). #134 added its 198 B status-chip line and raised the fence by exactly that, to +17,337 B (15,284 + 2,053); first load +1 B.
