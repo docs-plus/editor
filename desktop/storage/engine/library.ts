@@ -859,8 +859,10 @@ export class Library {
         this.changed("folder", id);
         for (const docId of result.docIds) this.changed("doc", docId);
         purged += result.docIds.length;
-      } catch {
+      } catch (error) {
         // A document in it is open: the next idle pass tries again.
+        if (!(error instanceof StorageError && error.code === "document_open"))
+          throw error;
       }
     }
     for (const id of index.expiredTrash(this.conn, now)) {
@@ -956,6 +958,8 @@ export class Library {
         foreignKeys: scalar(db, "PRAGMA foreign_keys"),
       },
       sqliteVersion: scalar(db, "SELECT sqlite_version()"),
+      /** 2 = INCREMENTAL (new libraries); 0 on one created before it. */
+      autoVacuum: scalar(db, "PRAGMA auto_vacuum"),
     };
   }
 

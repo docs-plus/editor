@@ -63,9 +63,13 @@ storage worker uses it yet; P2.6e persists P2.7b's library port on it.
 - **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`, which
   isn't retryable. When an append is refused at the cap, the batcher halts:
   no retry loop runs, and the refused batch and everything after it stay
-  queued, never dropped. `local-session` makes the document read-only with
-  `readOnlyReason: "document_too_large"`. The Y.Doc still holds every edit,
-  so Duplicate or Export carries them.
+  queued, never dropped. Every `flush()` rejects with the refusal instead of
+  waiting, so close, re-open and quit never hang. `local-session` makes the
+  document read-only with `readOnlyReason: "document_too_large"`. The open
+  Y.Doc still holds every edit, and "Copy into a new tab" carries them.
+  Duplicate copies stored state, which doesn't have them. Any other
+  non-retryable refusal halts the same way, except a transient `forbidden`
+  during a worker restart.
 - **Docs:** the architecture spec allows `lib/search/normalize.ts` and
   `lib/library/tag-rules.ts` into the storage code, and records how format 2
   was built.
