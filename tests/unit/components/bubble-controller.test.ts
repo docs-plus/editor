@@ -194,6 +194,16 @@ describe("createBubbleController", () => {
     expect(onHide).toHaveBeenCalledTimes(2);
   });
 
+  test("pending is true only while a show waits", async () => {
+    expect(controller.pending).toBe(false);
+    select();
+    expect(controller.pending).toBe(true);
+    await until(() => controller.visible);
+    expect(controller.pending).toBe(false);
+    controller.hide();
+    expect(controller.pending).toBe(false);
+  });
+
   test("a hide during the delay cancels the pending show", async () => {
     select();
     editor.view.dom.dispatchEvent(new Event("contextmenu"));

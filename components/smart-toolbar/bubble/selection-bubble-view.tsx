@@ -34,6 +34,7 @@ import {
   chooseBubblePlacement,
   clearsBubbleSuppression,
   isBubbleDismissKey,
+  KEYBOARD_SETTLE_MS,
   OPEN_POPOVER_TRIGGER,
   POPOVER_CONTENT,
   shouldShowBubble,
@@ -43,12 +44,6 @@ import "./selection-bubble.scss";
 // Installs the per-item lift behind the text styles (spec §7.2) in the
 // registry, keeping it out of the editor chunk (`core/blocks.ts`).
 import "@/lib/editor-actions/style-lift";
-
-/**
- * A keyboard selection shows once Shift is up and the selection has been
- * still this long, never on auto-repeat (spec §7.2, O7 b).
- */
-const KEYBOARD_SETTLE_MS = 300;
 
 /** Exit fade (spec §11.1, O10: 120 ms in / 80 ms out). */
 const EXIT_MS = 80;
@@ -345,9 +340,13 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
       // A Shift+Arrow just before may be only in the DOM yet: Chromium fires
       // its `selectionchange` later, and ProseMirror drops it once focus
       // has left the editor. Read it into the state first.
+      // ProseMirror's own keydown runs `forceFlush()`, which only flushes a
+      // flush already scheduled, not a selection change it has not seen.
+      // Private API, so fully guarded. The cause (a later
+      // `selectionchange`) is likely, not proven.
       (
-        editor.view as unknown as { domObserver?: { flush(): void } }
-      ).domObserver?.flush();
+        editor.view as unknown as { domObserver?: { flush?(): void } }
+      ).domObserver?.flush?.();
       controller.update();
       if (!controller.visible) return;
       event.preventDefault();
@@ -375,7 +374,9 @@ function BubbleView({ editor, scrollTarget }: SelectionBubbleViewProps) {
         // A bubble still waiting (its delay, a keyboard settle): Esc says
         // no to it too; the settle's or delay's re-check finds it
         // suppressed until a new selection.
-        if (event.key === "Escape") suppressedRef.current = true;
+        if (event.key === "Escape" && controllerRef.current?.pending) {
+          suppressedRef.current = true;
+        }
         return;
       }
       if (event.key === "Escape") {

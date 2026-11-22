@@ -169,6 +169,16 @@ export interface BubbleRect {
 
 export type BubblePlacement = "top" | "bottom";
 
+/** Delay before a non-empty selection shows the bubble (`updateDelay`, :378). */
+export const BUBBLE_SHOW_DELAY_MS = 250;
+/** Debounce for repositioning on resize and scroll (`resizeDelay`, :379). */
+export const BUBBLE_RESIZE_DELAY_MS = 60;
+/**
+ * A keyboard selection shows once Shift is up and the selection has been
+ * still this long, never on auto-repeat (spec §7.2, O7 b).
+ */
+export const KEYBOARD_SETTLE_MS = 300;
+
 /** Gap between the selection and the bubble, as the plugin's `offset`. */
 export const BUBBLE_OFFSET = 8;
 

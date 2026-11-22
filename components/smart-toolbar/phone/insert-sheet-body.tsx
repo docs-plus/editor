@@ -33,7 +33,7 @@ import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
  * push it past its 7 KB budget (A21).
  */
 type SlashHelpers = Pick<typeof SlashMenuModule, "slashItemsFor">;
-let slash: SlashHelpers;
+let slash: SlashHelpers | null = null;
 
 /** Called by the loader before the body renders. */
 export function setSlashHelpers(helpers: SlashHelpers): void {
@@ -93,7 +93,12 @@ function diagramItem(): SlashItem | null {
  * keys that show "New" as they do there (none while none are declared).
  */
 function buildModel(editor: Editor) {
-  const { items, fresh } = slash.slashItemsFor(editor);
+  // Rendered without its loader (which always hands them over first): an
+  // empty sheet, never a bare TypeError.
+  const { items, fresh } = slash?.slashItemsFor(editor) ?? {
+    items: [],
+    fresh: new Set<string>(),
+  };
   return {
     ...insertSheetGroups(items, {
       emptyBlock: editor.state.selection.$from.parent.content.size === 0,

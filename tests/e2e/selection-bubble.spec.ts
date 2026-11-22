@@ -6,7 +6,12 @@ import { mkdirSync } from "node:fs";
 
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import { BUBBLE_ACTION_IDS } from "@/components/smart-toolbar/bubble/bubble-rules";
+import {
+  BUBBLE_ACTION_IDS,
+  BUBBLE_RESIZE_DELAY_MS,
+  BUBBLE_SHOW_DELAY_MS,
+  KEYBOARD_SETTLE_MS,
+} from "@/components/smart-toolbar/bubble/bubble-rules";
 
 import {
   expectNoSeriousA11yViolations,
@@ -913,10 +918,31 @@ test.describe("selection bubble", () => {
         }
       }
       await page.keyboard.press("Escape");
-      await page.waitForTimeout(700);
+      // Past the settle and the show delay, which would have shown it.
+      await page.waitForTimeout(
+        KEYBOARD_SETTLE_MS + BUBBLE_SHOW_DELAY_MS + 150,
+      );
       await expect(bubble(page)).toHaveCount(0);
     });
   }
+
+  test("Esc with nothing pending leaves the next selection's bubble alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    // A caret, no show waiting: this Esc refuses nothing.
+    await page.keyboard.press("Escape");
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+  });
 
   test("Alt+F10 shows a pending bubble at once, focus on Style ▾", async ({
     page,
@@ -1286,7 +1312,8 @@ test.describe("bubble Style ▾ placement (spec §10.4)", () => {
         const line = editor.view.coordsAtPos(editor.state.selection.from);
         wrapper.scrollTop += line.top - target;
       }, top);
-      await page.waitForTimeout(300);
+      // The scroll repositions (and may flip) after its debounce.
+      await page.waitForTimeout(BUBBLE_RESIZE_DELAY_MS + 200);
       await expectBubbleOpen(page);
       await styleButton(page).click();
       const menu = page.getByRole("menu", { name: "Turn into" });

@@ -9,7 +9,12 @@ import {
 import type { Editor, EditorEvents } from "@tiptap/core";
 import type { Transaction } from "@tiptap/pm/state";
 
-import { BUBBLE_OFFSET, type BubblePlacement } from "./bubble-rules";
+import {
+  BUBBLE_OFFSET,
+  BUBBLE_RESIZE_DELAY_MS,
+  BUBBLE_SHOW_DELAY_MS,
+  type BubblePlacement,
+} from "./bubble-rules";
 
 /**
  * Selection bubble controller (spec §12.1): shows, hides and positions one
@@ -19,10 +24,8 @@ import { BUBBLE_OFFSET, type BubblePlacement } from "./bubble-rules";
  * (`@tiptap/extension-bubble-menu` 3.33); line numbers below cite it.
  */
 
-/** Delay before a non-empty selection shows the bubble (`updateDelay`, :378). */
-export const BUBBLE_SHOW_DELAY_MS = 250;
-/** Debounce for repositioning on resize and scroll (`resizeDelay`, :379). */
-export const BUBBLE_RESIZE_DELAY_MS = 60;
+// The delays live with the pure rules, where the e2e can read them too.
+export { BUBBLE_RESIZE_DELAY_MS, BUBBLE_SHOW_DELAY_MS } from "./bubble-rules";
 
 /** What the controller drives: the view's root, rules and callbacks. */
 export interface BubbleHost {
@@ -47,6 +50,8 @@ export interface BubbleHost {
 /** One editor's bubble: its visibility, position and teardown. */
 export interface BubbleController {
   readonly visible: boolean;
+  /** A show is waiting: the show delay or a keyboard settle. */
+  readonly pending: boolean;
   /** Re-evaluates now, without the show delay. */
   update(): void;
   updatePosition(): void;
@@ -446,6 +451,9 @@ export function createBubbleController(
   const controller: BubbleController = {
     get visible() {
       return visible;
+    },
+    get pending() {
+      return showTimer !== undefined || settleTimer !== undefined;
     },
     update,
     updatePosition,

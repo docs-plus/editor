@@ -162,10 +162,12 @@ export function turnInto(editor: Editor, action: AnyAction): boolean {
 type Chain = ReturnType<Editor["chain"]>;
 
 /** Code block or Quote over the selection, its items lifted out first. */
-function wrapChain(editor: Editor, id: string, chain: Chain) {
+function wrapChain(editor: Editor, id: string, chain: Chain, dryRun = false) {
   const lifted = chain.command(({ tr }) => liftWrapped(tr));
   if (id === "insert.quote") return lifted.setBlockquote();
-  const language = suggestedCodeLanguage(editor.state.doc);
+  // The dry run (`liftsInto`, every render of an open menu) skips the
+  // language, whose suggestion scans the whole document.
+  const language = dryRun ? null : suggestedCodeLanguage(editor.state.doc);
   return lifted.toggleCodeBlock(language ? { language } : undefined);
 }
 
@@ -183,7 +185,7 @@ export function liftsInto(editor: Editor, id: string): boolean {
     return false;
   }
   try {
-    return wrapChain(editor, id, editor.can().chain()).run();
+    return wrapChain(editor, id, editor.can().chain(), true).run();
   } catch {
     return false;
   }
