@@ -340,7 +340,7 @@ export function resolveBoot({
     }
     if (remember) slots = parseUiSlots(storage.ui);
   }
-  const prefs = slotsToPrefs(slots, remember ? marker : "classic");
+  const prefs = parsePrefs(slots, remember ? marker : "classic");
   // The kill switch forces the continue position off, as before (C10).
   if (!remember) prefs.rememberPlace = false;
   return {
@@ -352,18 +352,34 @@ export function resolveBoot({
   };
 }
 
-/** Stored slot values (already `.last`) plus the page fallback. */
-export function slotsToPrefs(
-  slots: Record<string, unknown>,
-  marker: LookMarker,
+/**
+ * The stored preferences payload version (offline data-model audit): the
+ * web `tinydocy-ui` key carries it as `v`, and so will desktop
+ * `meta('prefs')` (P2.9b). A newer `v` is read field by field, never
+ * dropped, so a downgraded app keeps a newer build's values.
+ */
+export const PREFS_VERSION = 1;
+
+/**
+ * The one validator for stored preference values, shared by every store:
+ * the web store passes the `tinydocy-ui` slots' `last` values, and desktop
+ * main will pass its `meta('prefs')` JSON (the same fields at the top
+ * level, beside `v`). Unknown fields are ignored; an invalid value reads
+ * its default; a missing page falls back by the look marker (desktop and
+ * the library are new installs, so `new`).
+ */
+export function parsePrefs(
+  record: unknown,
+  marker: LookMarker = "new",
 ): WebPrefs {
+  const values: Record<string, unknown> = isRecord(record) ? record : {};
   const bool = (name: BooleanPref) =>
-    typeof slots[name] === "boolean"
-      ? (slots[name] as boolean)
+    typeof values[name] === "boolean"
+      ? (values[name] as boolean)
       : PREF_DEFAULTS[name];
   return {
-    page: parsePageSlot(slots.page) ?? fallbackPage(marker),
-    a11y: parseA11y(slots.a11y),
+    page: parsePageSlot(values.page) ?? fallbackPage(marker),
+    a11y: parseA11y(values.a11y),
     spellcheck: bool("spellcheck"),
     smartQuotes: bool("smartQuotes"),
     rememberPlace: bool("rememberPlace"),

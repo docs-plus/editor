@@ -6,10 +6,11 @@ import {
   outlineDockMinPx,
   PAGE_WIDTHS,
   type PageState,
+  PREFS_VERSION,
   parsePageSlot,
+  parsePrefs,
   prefsAttributes,
   resolveBoot,
-  slotsToPrefs,
   stepTextSize,
   TEXT_SIZES,
   withKnob,
@@ -93,7 +94,7 @@ describe("outline docking (§5.9)", () => {
 
 describe("attributes", () => {
   it("writes overrides only, and the switches only when off", () => {
-    const prefs = slotsToPrefs(
+    const prefs = parsePrefs(
       {
         page: { style: "default", size: 24, width: "full" },
         a11y: { contrast: "more", motion: "system" },
@@ -112,10 +113,42 @@ describe("attributes", () => {
   });
 
   it("classic writes only the style", () => {
-    expect(prefsAttributes(slotsToPrefs({}, "classic"))).toEqual({
+    expect(prefsAttributes(parsePrefs({}, "classic"))).toEqual({
       "data-page-style": "classic",
       "data-prefs": "1",
     });
+  });
+});
+
+describe("one validator for every store", () => {
+  it("reads a desktop meta('prefs') payload, ignoring what it doesn't know", () => {
+    expect(
+      parsePrefs({
+        v: PREFS_VERSION,
+        appearance: "system",
+        zoom: 125,
+        page: { style: "default", size: 18, width: "huge" },
+        spellcheck: false,
+        smartQuotes: "yes",
+      }),
+    ).toEqual({
+      page: { style: "default", size: 18 },
+      a11y: { contrast: "system", motion: "system" },
+      spellcheck: false,
+      smartQuotes: true,
+      rememberPlace: true,
+    });
+  });
+
+  it("reads a newer version's known fields instead of dropping them", () => {
+    expect(
+      parsePrefs({ v: PREFS_VERSION + 1, rememberPlace: false }).rememberPlace,
+    ).toBe(false);
+  });
+
+  it("defaults everything for a missing or hostile payload", () => {
+    expect(parsePrefs(null).page).toEqual({ style: "default" });
+    expect(parsePrefs("x", "classic").page).toEqual({ style: "classic" });
   });
 });
 
