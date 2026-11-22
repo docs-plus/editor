@@ -47,8 +47,12 @@ export function appEnv(userData: string): Record<string, string> {
 export type Launched = {
   app: ElectronApplication;
   userData: string;
-  /** Every stdout line main printed, as it arrives. */
+  /** Every complete stdout line main printed, as it arrives. */
   stdout: string[];
+  /** Resolves with the exit code once the app's process has exited. */
+  exited: Promise<number | null>;
+  /** True once the process has exited (Playwright's handle is gone then). */
+  hasExited: () => boolean;
 };
 
 export async function launch(
@@ -63,11 +67,52 @@ export async function launch(
     timeout: 60_000,
   });
   const stdout: string[] = [];
-  app.process().stdout?.on("data", (chunk: Buffer) => {
-    for (const line of chunk.toString().split("\n"))
-      if (line) stdout.push(line);
+  let partial = "";
+  const proc = app.process();
+  proc.stdout?.on("data", (chunk: Buffer) => {
+    const lines = (partial + chunk.toString()).split("\n");
+    partial = lines.pop() ?? "";
+    for (const line of lines) if (line) stdout.push(line.replace(/\r$/, ""));
   });
-  return { app, userData, stdout };
+  let done = false;
+  const exited = new Promise<number | null>((resolve) =>
+    proc.once("exit", (code) => {
+      done = true;
+      resolve(code);
+    }),
+  );
+  return { app, userData, stdout, exited, hasExited: () => done };
+}
+
+/** main's `[tinydocy] {...}` stdout lines, parsed. */
+export function parseEvents(lines: readonly string[]): DiagnosticEvent[] {
+  return lines
+    .filter((line) => line.startsWith("[tinydocy] "))
+    .map((line) => JSON.parse(line.slice("[tinydocy] ".length)));
+}
+
+/**
+ * Runs the app once without Playwright (`TINYDOCY_QUIT_AFTER_READY=1`): it
+ * starts, opens the library and the first window, then quits. For checks
+ * on the first launch's own arguments.
+ */
+export async function runOnce(
+  args: string[],
+): Promise<{ code: number | null; events: DiagnosticEvent[]; stderr: string }> {
+  const { executable, args: full } = command(args);
+  const child = Bun.spawn([executable, ...full], {
+    env: { ...appEnv(newUserData()), TINYDOCY_QUIT_AFTER_READY: "1" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const timer = setTimeout(() => child.kill(), 60_000);
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  clearTimeout(timer);
+  return { code, events: parseEvents(stdout.split(/\r?\n/)), stderr };
 }
 
 export const diagnostics = (app: ElectronApplication) =>
@@ -99,7 +144,11 @@ export async function waitForEvent(
 
 /** The app's first document window, loaded from the app origin. */
 export async function firstPage(app: ElectronApplication): Promise<Page> {
-  const page = await app.firstWindow();
+  return bridgeReady(await app.firstWindow());
+}
+
+/** Waits until a window is on the app origin and its bridge is up. */
+export async function bridgeReady(page: Page): Promise<Page> {
   await page.waitForURL(/^app:\/\/tinydocy\//, { timeout: 60_000 });
   await page.waitForFunction(() => "tinydocy" in window, undefined, {
     timeout: 30_000,

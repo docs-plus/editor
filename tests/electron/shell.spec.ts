@@ -18,11 +18,14 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 import {
+  bridgeReady,
   diagnostics,
   firstPage,
   type Launched,
   launch,
+  parseEvents,
   ROOT,
+  runOnce,
   secondInstance,
   startHocus,
   waitForEvent,
@@ -61,12 +64,10 @@ test.afterAll(async () => {
 
 let current: Launched | null = null;
 test.afterEach(async () => {
-  if (!current) return;
-  const proc = current.app.process();
-  if (proc.exitCode === null) {
-    await current.app.close().catch(() => undefined);
-  }
+  const launched = current;
   current = null;
+  if (!launched || launched.hasExited()) return;
+  await launched.app.close().catch(() => undefined);
 });
 
 const windowIds = (launched: Launched) =>
@@ -132,6 +133,11 @@ test("windows are sandboxed, shown on ready-to-show, with no reload, DevTools or
   const { app } = current;
   const page = await firstPage(app);
   await waitForEvent(app, "window_ready_to_show");
+  await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
+  // For the design review: the first window as each OS shows it.
+  await page.screenshot({
+    path: join(RESULTS, `first-window-${process.platform}.png`),
+  });
 
   const roles = await app.evaluate(({ Menu }) => {
     const out: string[] = [];
@@ -261,6 +267,7 @@ test("opening a document already open in another window focuses that window", as
   const pages = app.windows();
   let pageB: Page | null = null;
   for (const page of pages) {
+    await bridgeReady(page);
     const hello = await page.evaluate(() =>
       window.tinydocy.invoke("app.hello", {}),
     );
@@ -282,22 +289,39 @@ test("opening a document already open in another window focuses that window", as
   expect(focusEvents.at(-1)?.window).toBe(createdA.window);
 });
 
-test("navigation, window.open and bad argv are refused", async () => {
+test("bad argv on the first launch is refused, and the app still starts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "tinydocy-argv-"));
+  const run = await runOnce([
+    "tinydocy://evil/x",
+    join(dir, "missing.md"),
+    "javascript:alert(1)",
+  ]);
+  if (run.code !== 0) console.log(run.stderr.slice(-2000));
+  expect(run.code).toBe(0);
+  expect(run.events.find((e) => e.event === "argv_refused")?.count).toBe(3);
+  expect(run.events.filter((e) => e.event === "window_created")).toHaveLength(
+    1,
+  );
+  expect(run.events.some((e) => e.event === "exit")).toBe(true);
+});
+
+test("a deep link on the first launch opens that document's window only", async () => {
+  const run = await runOnce([`tinydocy://local/${randomUUID()}`]);
+  expect(run.code).toBe(0);
+  const created = run.events.filter((e) => e.event === "window_created");
+  expect(created.map((e) => e.forDoc)).toEqual([true]);
+});
+
+test("navigation, window.open and bad argv from a second instance are refused", async () => {
   const dir = mkdtempSync(join(tmpdir(), "tinydocy-argv-"));
   const goodFile = join(dir, "notes.md");
   writeFileSync(goodFile, "# Notes\n");
-  current = await launch({
-    args: ["tinydocy://evil/x", join(dir, "missing.md")],
-  });
+  current = await launch();
   const { app, userData } = current;
   const page = await firstPage(app);
 
-  const firstRefusal = await waitForEvent(app, "argv_refused");
-  expect(firstRefusal.count).toBe(2);
-  expect(await windowIds(current)).toHaveLength(1);
-
   const bad = [
-    `tinydocy://local/not-a-uuid`,
+    "tinydocy://local/not-a-uuid",
     `tinydocy://local/${randomUUID()}?next=https://example.com`,
     join(dir, "missing.md"),
     join(dir, "notes.txt"),
@@ -306,34 +330,26 @@ test("navigation, window.open and bad argv are refused", async () => {
     "file:///etc/passwd",
   ];
   expect(await secondInstance(userData, bad)).toBe(0);
-  await expect
-    .poll(async () =>
-      (await diagnostics(app))
-        .filter((e) => e.event === "argv_refused")
-        .map((e) => e.count),
-    )
-    .toEqual([2, bad.length]);
+  const refused = await waitForEvent(app, "argv_refused");
+  expect(refused.count).toBe(bad.length);
   expect(await windowIds(current)).toHaveLength(1);
 
   expect(await secondInstance(userData, [goodFile])).toBe(0);
   const accepted = await waitForEvent(app, "open_file_accepted");
   expect(accepted.type).toBe("md");
+  expect(await windowIds(current)).toHaveLength(1);
 
   const startUrl = page.url();
   await page.evaluate(() => {
     window.location.href = "https://example.com/";
   });
   await waitForEvent(app, "navigation_refused");
+  // Chromium blocks a file: load from this origin before Electron sees it;
+  // either way the page stays and nothing goes to the system browser.
   await page.evaluate(() => {
     window.location.href = "file:///etc/passwd";
   });
-  await expect
-    .poll(
-      async () =>
-        (await diagnostics(app)).filter((e) => e.event === "navigation_refused")
-          .length,
-    )
-    .toBe(2);
+  await page.waitForTimeout(500);
   expect(page.url()).toBe(startUrl);
 
   const opened = await page.evaluate(
@@ -347,11 +363,37 @@ test("navigation, window.open and bad argv are refused", async () => {
   // The two https URLs went to the (logged) system browser; file: did not.
   expect(external).toHaveLength(2);
   expect(await windowIds(current)).toHaveLength(1);
+
+  // A refused navigation never commits, so the page's hello still stands.
+  const flushed = await page.evaluate(() =>
+    window.tinydocy.invoke("doc.flush", {}),
+  );
+  expect(flushed.ok).toBe(true);
+});
+
+test("the editor runs under the strict CSP, and no spellcheck dictionary is downloaded", async () => {
+  current = await launch();
+  const { app } = current;
+  const page = await firstPage(app);
+  await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
+  await page.locator(EDITOR).first().click();
+  await page.keyboard.type("A mispeled wrod in the editor. ");
+  await page.waitForTimeout(2000);
+  const events = await diagnostics(app);
+  const violations = events
+    .filter((e) => e.event === "csp_violation")
+    .map((e) => `${e.directive} ${e.scheme}`);
+  console.log(`[csp] ${process.platform}`, JSON.stringify(violations));
+  // Remote images stay placeholders until the user loads them (D10).
+  expect(violations.filter((v) => !/^img-src https?:$/.test(v))).toEqual([]);
+  expect(events.filter((e) => e.event === "spellcheck_download_begin")).toEqual(
+    [],
+  );
 });
 
 test("#106: quit with unsynced edits and a vetoing beforeunload exits within budget", async () => {
   current = await launch();
-  const { app, stdout } = current;
+  const { app, stdout, exited } = current;
   const page = await firstPage(app);
   await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
 
@@ -372,10 +414,6 @@ test("#106: quit with unsynced edits and a vetoing beforeunload exits within bud
   await page.locator(EDITOR).first().click();
   await page.keyboard.type("unsynced edit before quit");
 
-  const proc = app.process();
-  const exited = new Promise<number | null>((resolve) =>
-    proc.once("exit", (code) => resolve(code)),
-  );
   const started = Date.now();
   await app.evaluate(({ app: electronApp }) => {
     setTimeout(() => electronApp.quit(), 0);
@@ -385,22 +423,16 @@ test("#106: quit with unsynced edits and a vetoing beforeunload exits within bud
     new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 15_000)),
   ]);
   const wallMs = Date.now() - started;
-  const marks = stdout
-    .filter((line) => line.startsWith("[tinydocy] "))
-    .map(
-      (line) =>
-        JSON.parse(line.slice("[tinydocy] ".length)) as Record<string, unknown>,
-    )
-    .filter((e) =>
-      [
-        "quit_start",
-        "flush_done",
-        "flush_timeout",
-        "storage_closed",
-        "exit",
-        "watchdog_exit",
-      ].includes(String(e.event)),
-    );
+  const marks = parseEvents(stdout).filter((e) =>
+    [
+      "quit_start",
+      "flush_done",
+      "flush_timeout",
+      "storage_closed",
+      "exit",
+      "watchdog_exit",
+    ].includes(String(e.event)),
+  );
 
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(
@@ -430,21 +462,37 @@ test("#106: quit with unsynced edits and a vetoing beforeunload exits within bud
   );
 });
 
-test("closing the last window flushes it, then quits (Windows and Linux)", async () => {
-  test.skip(
-    process.platform === "darwin",
-    "macOS keeps running with no window",
-  );
+test("closing the last window with a vetoing beforeunload flushes it (and quits on Windows and Linux)", async () => {
   current = await launch();
-  const { app } = current;
-  await firstPage(app);
-  const proc = app.process();
-  const exited = new Promise<number | null>((resolve) =>
-    proc.once("exit", (code) => resolve(code)),
-  );
+  const { app, exited, hasExited } = current;
+  const page = await firstPage(app);
+  await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
+  await page.evaluate(() => {
+    window.tinydocy.on(
+      "app.flushRequested",
+      () => new Promise<void>((resolve) => setTimeout(resolve, 100)),
+    );
+    window.addEventListener("beforeunload", (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    });
+  });
+  await page.locator(EDITOR).first().click();
+  await page.keyboard.type("edit before closing the window");
+
   await app.evaluate(({ BrowserWindow }) => {
     setTimeout(() => BrowserWindow.getAllWindows()[0].close(), 0);
   });
+  if (process.platform === "darwin") {
+    // macOS keeps the app running with no window.
+    const flushed = await waitForEvent(app, "window_close_flushed");
+    expect(flushed.unanswered).toBe(0);
+    await expect.poll(() => windowIds(current as Launched)).toHaveLength(0);
+    expect(hasExited()).toBe(false);
+    await app.evaluate(({ app: electronApp }) => {
+      setTimeout(() => electronApp.quit(), 0);
+    });
+  }
   const code = await Promise.race([
     exited,
     new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 15_000)),
