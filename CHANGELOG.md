@@ -13,8 +13,9 @@ since the previous tag.
 
 The on-screen keyboard is measured once for the whole page (phones and
 tablets design §4.6, §6.4, §6.5, PR M20). Phones only: desktop subscribes to
-nothing and renders the same. The editor chunk group is unchanged
-(393,465 B gz, 0 B against `main` at `ed2a7cd`, 1,287 B under the P2.2 fence); everything lives in the phone bar's lazy chunk.
+nothing and renders the same. The editor chunk group is unchanged (393,820 B
+gz, 0 B against `main` at `903b5c8`, 1,207 B under the fence); everything
+lives in the phone bar's lazy chunk.
 
 #### Added
 
