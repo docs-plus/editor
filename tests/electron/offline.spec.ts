@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { firstPage, launch, ROOT, startHocus } from "./helpers";
-import { hostsInNetLog, nonLoopback, parseNetLog } from "./netlog";
+import { nonLoopback, parseNetLog, scanNetLog } from "./netlog";
 
 const EDITOR = '.tiptap[contenteditable="true"]';
 const RESULTS = join(ROOT, "test-results-electron");
@@ -27,9 +27,9 @@ const RESULTS = join(ROOT, "test-results-electron");
  *   every Windows start whatever the app does (spike S1, every Windows
  *   net-log); it is a lookup, never a connection.
  */
-const ALLOWED: Record<NodeJS.Platform, RegExp[]> = {
-  win32: [/^wpad$/],
-} as Record<NodeJS.Platform, RegExp[]>;
+const ALLOWED: Partial<Record<NodeJS.Platform, string[]>> = {
+  win32: ["wpad"],
+};
 
 let hocus: Awaited<ReturnType<typeof startHocus>> | null = null;
 
@@ -71,21 +71,23 @@ test("a session from start to quit sends nothing off the machine", async () => {
   expect(code).toBe(0);
 
   const text = readFileSync(netLog, "utf8");
-  const hosts = hostsInNetLog(text);
+  const { hosts, unparsed } = scanNetLog(text);
   const leaving = nonLoopback(hosts, ALLOWED[process.platform] ?? []);
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(
     join(RESULTS, `netlog-hosts-${process.platform}.json`),
-    `${JSON.stringify({ platform: process.platform, hosts, leaving }, null, 2)}\n`,
+    `${JSON.stringify({ platform: process.platform, hosts, leaving, unparsed }, null, 2)}\n`,
   );
   console.log(
     `[netlog] ${process.platform}`,
-    JSON.stringify({ hosts, leaving }),
+    JSON.stringify({ hosts, leaving, unparsed }),
   );
 
   // The log must have recorded the session at all.
   expect(parseNetLog(text).events?.length ?? 0).toBeGreaterThan(50);
   expect(leaving).toEqual([]);
+  // Fail closed: a peer we couldn't read counts as one.
+  expect(unparsed).toEqual([]);
   // #100: no Hunspell dictionary host, ever (it isn't on any allowlist).
   expect(hosts.filter((host) => /(^|\.)gvt1\.com$/.test(host))).toEqual([]);
 });

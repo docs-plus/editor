@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { hostOf, hostsInNetLog, nonLoopback } from "../../../electron/netlog";
+import {
+  hostOf,
+  hostsInNetLog,
+  nonLoopback,
+  scanNetLog,
+} from "../../../electron/netlog";
 
 const log = (events: Array<Record<string, unknown>>) =>
   JSON.stringify({
@@ -37,15 +42,46 @@ describe("net-log hosts", () => {
   test("nonLoopback keeps only hosts that leave the machine", () => {
     expect(
       nonLoopback(
-        ["127.0.0.1", "localhost", "[::1]", "tinydocy", "wpad", "a.gvt1.com"],
-        [/^wpad$/],
+        [
+          "127.0.0.1",
+          "localhost",
+          "[::1]",
+          "wpad",
+          "wpad.evil.com",
+          "a.gvt1.com",
+        ],
+        ["wpad"],
       ),
-    ).toEqual(["a.gvt1.com"]);
+    ).toEqual(["wpad.evil.com", "a.gvt1.com"]);
   });
 
   test("hostOf ignores free text and lowercases", () => {
     expect(hostOf("HTTPS://Example.COM/x")).toBe("example.com");
     expect(hostOf("two words")).toBeNull();
     expect(hostOf("app://tinydocy/")).toBeNull();
+  });
+
+  test("userinfo never hides the host, and socket params are read", () => {
+    const { hosts, unparsed } = scanNetLog(
+      log([
+        { url: "https://127.0.0.1@evil.example/x" },
+        { url: "wss://user:pw@evil2.example:443/" },
+        { remote_address: "93.184.216.34:443" },
+        { source_address: "fe80::1" },
+        { address_list: ["[2001:db8::1]:443", "10.0.0.5:80"] },
+        { host: "under_score.example" },
+        { url: "https://[bad" },
+      ]),
+    );
+    expect(hosts).toEqual([
+      "10.0.0.5",
+      "93.184.216.34",
+      "[2001:db8::1]",
+      "[fe80::1]",
+      "evil.example",
+      "evil2.example",
+      "under_score.example",
+    ]);
+    expect(unparsed).toEqual(["https://[bad"]);
   });
 });
