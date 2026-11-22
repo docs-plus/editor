@@ -25,6 +25,8 @@
     "test:fuzz": "bun test tests/unit/fuzz",
     "test:e2e": "playwright test --project=chromium --project=perf",
     "test:pwa": "playwright test --project=pwa",
+    "harness:library": "bun tests/harness/library/serve.ts",
+    "test:library": "playwright test --project=library",
     "test:perf": "playwright test --project=perf --no-deps",
     "test:perf-collab": "playwright test tests/e2e/performance-collab.spec.ts --project=chromium",
     "test:load": "bun tests/load/yjs-load-harness.ts",
