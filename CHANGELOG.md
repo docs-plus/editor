@@ -402,6 +402,77 @@ unchanged).
   exemption outside LK1's line (coordinator-approved 2026-11-22). The
   fence still passes, so it is unchanged.
 
+### Desktop P2.9c-1: the page engine (text size, width, spacing, reading mode)
+
+Pages now take their text size, width and spacing from preferences, through
+`<html>` attributes and CSS variables, on the web and on desktop
+(preferences design §5, owner answers Q1, Q2 and Q4). Browsers that used
+TinyDocy before keep today's exact look (`classic`) until they change a
+setting; a pixel test against `main` proves it. New browsers get the new
+Default page: 16 px text, a 33 em line (a 624 px card) and 1.6 line
+spacing. There are no controls yet: the Page popover, the palette entries
+and Settings arrive with P2.9c-2 and W13. Against `main` at `84a9458`, the editor chunk group grows by 109 B gz
+(394,127 B; the ledger's smart-quotes line is 150 B). The first load grows
+by 537 B gz of JavaScript (`PageFrame`) and 475 B gz of CSS (the Default
+card, the docking threshold and the contrast set). The store and the
+page-text rules load later. The boot script grows from 600 B to 2,445 B
+(352 B to 1,212 B gzipped) per HTML response.
+
+#### Added
+
+- **Page:** `lib/prefs/` holds the schema (text sizes 14–32 px in rem,
+  widths Narrow 30 em, Standard 33 em, Wide 46 em and Full, spacing
+  Compact, Normal and Relaxed), the web store over new `tinydocy-ui`
+  slots (`page`, `a11y`, `spellcheck`, `smartQuotes`, `rememberPlace`)
+  and the attribute applier. They load in a lazy runtime that `PageFrame`
+  starts once the page is idle, which keeps `<html>` in step across tabs
+  and with the OS contrast setting.
+- **Page:** `styles/_page.scss` holds what the first paint needs: the
+  Default card, the skeleton's width and outline column, the docking
+  threshold and increased contrast. `_page-text.scss` holds the knobs, the
+  document text's rules, reading mode and the motion override; it loads
+  next to the editor, which waits for it.
+- **Page:** boot script v2 (`lib/prefs/boot-script.ts`, replacing
+  `lib/theme-boot.ts`) decides the theme and the page look from one
+  storage snapshot before first paint. Its allowlists are generated from
+  the schema, a parity test runs it against `resolveBoot()` over 224
+  payloads, and `BOOT_SCRIPT_SHA256` is its CSP source for the desktop
+  shell; `bun run build:desktop` fails if an exported page inlines any
+  other string.
+- **Page:** `PageFrame` wraps the editor and its skeleton, on the web
+  and in the desktop root. It decides whether the outline docks: when
+  the main area is at least the card plus 302 px wide, which CSS computes
+  from the card's own variables (`--page-dock-min`): 950 px in `classic`,
+  as before; 926 px for Default; Full never docks.
+- **Page:** reading mode, per tab and never stored (`data-reading` on
+  `<html>`): the document is read-only through the editor's `readOnly`
+  prop and the toolbar hides. It emits no Yjs update.
+- **Writing:** a smart-quotes switch (owner Q2). Typography's input rules
+  read `data-smart-quotes`, so turning it off rebuilds nothing; code
+  blocks and inline code never curl. A spellcheck switch through
+  `<html spellcheck="false">`. A Remember my place switch that gates the
+  continue position and forgets stored places when turned off.
+- **Accessibility:** Increase contrast and Reduce motion overrides for the
+  web (owner Q4, `data-contrast`, `data-motion`). The high-contrast token
+  set also follows the OS setting (`prefers-contrast: more`) outside
+  `classic`: the boot script and the runtime set `data-contrast` for it.
+
+#### Changed
+
+- **Page:** every paragraph renders at one size, including table cells,
+  list items and blockquotes (the Default page fixes the old 15/16 px mix).
+  Lists, cells and headings read the page's line spacing.
+- **Headings:** HeadingScale writes `--hd-size` in twelfths of
+  `--hd-unit` (1 em of the page's text size by default), so headings
+  follow Text size; `classic` sets it to 16 px and keeps the old pt sizes
+  at any browser text size.
+- **Outline:** `PageFrame` alone decides docking, before the first paint;
+  the outline panel's fixed 949 px breakpoint is gone.
+- **Skeleton:** the loading card takes the same width as the editor card,
+  so the page doesn't jump when the editor arrives.
+
+No schema or protocol change; no Deploy note.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.

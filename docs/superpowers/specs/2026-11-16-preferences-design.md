@@ -955,6 +955,15 @@ Desktop and the web library are new installs on new storage, so they get the new
 | HTML | boot script about +0.9 KB per response | — |
 | Fonts | 0 until chosen | — |
 
+**Measured in P2.9c-1 (#161, against `main` at `84a9458`, gzipped)** — the first-load targets set in review (coordinator, 2026-11-22) and the results:
+
+| | Target | Measured | Notes |
+|---|---|---|---|
+| Editor chunk group | ≤ +150 B (the D23 smart-quotes line) | **+109 B** (394,127 B) | |
+| First-load JS | ≤ +600 B | **+537 B** | `PageFrame` only. The store, schema and applier are a lazy runtime loaded on idle (2,183 B). |
+| First-load CSS | ≤ +400 B | **+475 B, approved** | Over by 75 B for the increased-contrast set (about 230 B), which stays eager. OS "Increase contrast" users must never see a frame at normal contrast, so accessibility outranks 230 B (coordinator ruling, 2026-11-22). The knobs, the text rules, reading mode and motion are in `_page-text.scss` (724 B), which loads next to the editor. |
+| HTML | — | +1,413 B | The boot script is 2,445 B (1,212 B gzipped), including the inline knob values. |
+
 ### 5.15 Tests
 
 - **Unit** (`bun test`):
@@ -985,7 +994,11 @@ Desktop and the web library are new installs on new storage, so they get the new
   13. **Reading mode:** no Yjs update is emitted while toggling and scrolling.
 - **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and the `firefox` project (defined once by test strategy Q7; languages L7 adds its RTL specs there), checking joining, diacritics and caret movement. Letter spacing is already off in RTL blocks (§5.4), so this checks that word spacing and the fallback faces keep letters joined.
 - **`perf`:**
-  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds.
+  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds. *Amended in P2.9c-1 (#161):*
+    - The fixture is the 500-heading document, because the server refuses the 1,000-heading one (2 MiB cap).
+    - "One layout" holds for the engine itself, measured with every block rendered.
+    - On the real page, `content-visibility: auto` (off-screen blocks) adds at most one relevance pass in the same frame after any geometry change.
+    - A theme flip, which moves nothing, stays at one.
   - Typing latency is unchanged.
   - `check-editor-chunk-size` passes.
 - **Electron:**

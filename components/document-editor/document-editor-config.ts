@@ -24,7 +24,6 @@ import { Superscript } from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { TextAlign } from "@tiptap/extension-text-align";
-import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
@@ -65,6 +64,7 @@ import {
 } from "@/extensions/render-once";
 import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import { SlashTrigger } from "@/extensions/slash-trigger/slash-trigger";
+import { SmartTypography } from "@/extensions/smart-typography/smart-typography";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
@@ -322,7 +322,7 @@ export function buildDocumentEditorExtensions({
     TaskItem.configure({ nested: true }),
     TokenHighlight.configure({ multicolor: true }),
     HyperMultimediaKit,
-    Typography,
+    SmartTypography,
     Superscript,
     SubscriptByTarget,
     Selection,

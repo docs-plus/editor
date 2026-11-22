@@ -26,6 +26,7 @@ export default defineConfig({
         "**/library-lists*.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
+        "**/page-engine-perf.spec.ts",
       ],
       use: {
         browserName: "chromium",
@@ -62,7 +63,11 @@ export default defineConfig({
       // chromium suite (when both are selected), on one worker. Run it by
       // itself with `--project=perf --no-deps`.
       name: "perf",
-      testMatch: ["**/performance.spec.ts", "**/toolbar-perf.spec.ts"],
+      testMatch: [
+        "**/performance.spec.ts",
+        "**/toolbar-perf.spec.ts",
+        "**/page-engine-perf.spec.ts",
+      ],
       dependencies: ["chromium"],
       workers: 1,
       use: {
