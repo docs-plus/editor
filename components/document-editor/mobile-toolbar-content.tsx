@@ -40,7 +40,11 @@ import { READ_ONLY_REASON } from "@/lib/editor-actions/types";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { setMobileBarClearance } from "@/lib/editor-scroll-clearance";
-import { onViewportWidthChange, useKeyboardInset } from "@/lib/keyboard-inset";
+import {
+  createWidthMemo,
+  onViewportWidthChange,
+  useKeyboardInset,
+} from "@/lib/keyboard-inset";
 import {
   RECENT_COLORS_CHOICE,
   useRememberedChoice,
@@ -52,6 +56,13 @@ function scrollCaretIntoView(editor: Editor) {
   if (editor.isDestroyed || !editor.view.hasFocus()) return;
   editor.commands.scrollIntoView();
 }
+
+/**
+ * The layout width the bar last saw, kept across its unmount: a mount or
+ * unmount scrolls the caret only when the width moved (a rotation across
+ * 768px), never on a StrictMode remount or an editor switch.
+ */
+const widthMoved = createWidthMemo();
 
 /** The bar's constant cell height (spec §4.7), above any safe area. */
 export const MOBILE_BAR_HEIGHT = 44;
@@ -250,12 +261,15 @@ export function MobileToolbarContent({
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => scrollCaretIntoView(editor));
     };
-    keepCaretInView();
-    const stop = onViewportWidthChange(keepCaretInView);
+    if (widthMoved()) keepCaretInView();
+    const stop = onViewportWidthChange(() => {
+      widthMoved();
+      keepCaretInView();
+    });
     return () => {
       stop();
       cancelAnimationFrame(frame);
-      if (!editor.isDestroyed && editor.view.hasFocus()) {
+      if (widthMoved() && !editor.isDestroyed && editor.view.hasFocus()) {
         requestAnimationFrame(() => scrollCaretIntoView(editor));
       }
     };
@@ -357,6 +371,7 @@ export function MobileToolbarContent({
               <span aria-hidden="true">Aa</span>
             </SheetTrigger>
             <SheetContent
+              keyboard={false}
               data-format-sheet=""
               data-toolbar-popup=""
               finalFocus={finalFocus}

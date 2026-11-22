@@ -37,7 +37,10 @@ afterEach(() => {
   if (original) Object.defineProperty(window, "visualViewport", original);
 });
 
-function render(open: boolean) {
+function render(
+  open: boolean,
+  content: Parameters<typeof SheetContent>[0] = {},
+) {
   container ??= document.body.appendChild(document.createElement("div"));
   root ??= createRoot(container);
   act(() => {
@@ -47,7 +50,7 @@ function render(open: boolean) {
         { open },
         createElement(
           SheetContent,
-          null,
+          content,
           createElement(SheetTitle, null, "Rename"),
           createElement("input", { "aria-label": "Name" }),
         ),
@@ -65,7 +68,7 @@ describe("a bottom sheet and the on-screen keyboard (§4.6)", () => {
     const classes = popup()?.className ?? "";
     expect(classes).toContain("bottom-[var(--keyboard-inset,0px)]");
     expect(classes).toContain(
-      "max-h-[min(85dvh,var(--visual-viewport-height,85dvh))]",
+      "max-h-[min(var(--sheet-max-h,85dvh),var(--visual-viewport-height,var(--sheet-max-h,85dvh)))]",
     );
     expect(classes).not.toMatch(/(^|\s)bottom-0(\s|$)/);
   });
@@ -81,6 +84,33 @@ describe("a bottom sheet and the on-screen keyboard (§4.6)", () => {
     ).toBe("300px");
     act(() => root?.unmount());
     root = undefined;
+    expect(
+      document.documentElement.style.getPropertyValue(KEYBOARD_INSET_VAR),
+    ).toBe("");
+  });
+
+  it("composes a caller's height cap with the visual viewport cap", () => {
+    render(true, { className: "[--sheet-max-h:60dvh]" });
+    const classes = popup()?.className ?? "";
+    expect(classes).toContain(
+      "max-h-[min(var(--sheet-max-h,85dvh),var(--visual-viewport-height,var(--sheet-max-h,85dvh)))]",
+    );
+    expect(classes).toContain("[--sheet-max-h:60dvh]");
+  });
+});
+
+describe("a sheet without a field stays off the keyboard (the Aa sheet)", () => {
+  it("sits on the screen bottom with its own cap and no visual viewport cap", () => {
+    render(true, { keyboard: false, className: "max-h-[60dvh]" });
+    const classes = popup()?.className ?? "";
+    expect(classes).toMatch(/(^|\s)bottom-0(\s|$)/);
+    expect(classes).toContain("max-h-[60dvh]");
+    expect(classes).not.toContain("--keyboard-inset");
+    expect(classes).not.toContain("--visual-viewport-height");
+  });
+
+  it("does not keep --keyboard-inset live on its own", () => {
+    render(true, { keyboard: false });
     expect(
       document.documentElement.style.getPropertyValue(KEYBOARD_INSET_VAR),
     ).toBe("");

@@ -15,8 +15,11 @@ import { cn } from "@/lib/utils";
  * on-screen keyboard (phones and tablets design §4.6): while open it sits on
  * `--keyboard-inset` and fits the visual viewport, so a field in it stays
  * above the keyboard. With the keyboard down (or on desktop) both fall back
- * to the plain bottom sheet. A caller's own `max-h-*` replaces the cap: a
- * sheet with a field writes it as `min(…, var(--visual-viewport-height, …))`.
+ * to the plain bottom sheet. A caller caps the height with
+ * `[--sheet-max-h:…]`, which keeps the visual viewport cap (a `max-h-*`
+ * class would replace it). A sheet with no field passes `keyboard={false}`:
+ * opening it closes the keyboard, so riding it would only make the sheet
+ * jump while the keyboard animates away.
  */
 type SheetActions = React.RefObject<SheetPrimitive.Root.Actions | null>;
 
@@ -71,12 +74,22 @@ function KeyboardInsetVars() {
   return null;
 }
 
+const RIDES_KEYBOARD =
+  "bottom-[var(--keyboard-inset,0px)] max-h-[min(var(--sheet-max-h,85dvh),var(--visual-viewport-height,var(--sheet-max-h,85dvh)))]";
+const OFF_KEYBOARD = "bottom-0 max-h-[var(--sheet-max-h,85dvh)]";
+
+interface SheetContentProps extends SheetPrimitive.Popup.Props {
+  /** Rides the on-screen keyboard (default). False for a sheet with no field. */
+  keyboard?: boolean;
+}
+
 function SheetContent({
   className,
   children,
   onKeyDown,
+  keyboard = true,
   ...props
-}: SheetPrimitive.Popup.Props) {
+}: SheetContentProps) {
   return (
     <SheetPrimitive.Portal data-slot="sheet-portal">
       <SheetPrimitive.Backdrop
@@ -87,7 +100,8 @@ function SheetContent({
         data-slot="sheet-content"
         aria-modal="true"
         className={cn(
-          "fixed inset-x-0 bottom-[var(--keyboard-inset,0px)] z-50 flex max-h-[min(85dvh,var(--visual-viewport-height,85dvh))] flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
+          "fixed inset-x-0 z-50 flex flex-col rounded-t-xl border-t border-border bg-background text-sm text-foreground shadow-lg outline-none duration-150 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none",
+          keyboard ? RIDES_KEYBOARD : OFF_KEYBOARD,
           className,
         )}
         onKeyDown={(event) => {
@@ -96,7 +110,7 @@ function SheetContent({
         }}
         {...props}
       >
-        <KeyboardInsetVars />
+        {keyboard ? <KeyboardInsetVars /> : null}
         {children}
       </SheetPrimitive.Popup>
     </SheetPrimitive.Portal>
