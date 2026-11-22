@@ -327,3 +327,41 @@ describe("offline copy read slower than the hydrate timeout", () => {
     expect(reopened.hasLocalCopy).toBe(true);
   });
 });
+
+describe("offline copy of the first server sync", () => {
+  async function openSynced() {
+    const memory = offline.createMemoryBackend();
+    store = new offline.LocalDocStore(memory, HOST, NOW);
+    const name = unique();
+    vi.useFakeTimers();
+    const session = acquireCollabSession(name);
+    const provider = created.at(-1) as FakeProvider;
+    await settle();
+    expect(provider.attach).toHaveBeenCalledOnce();
+    return { memory, name, provider, session };
+  }
+
+  it("is saved at once, without the debounce", async () => {
+    // The tab list may already be on the device: a reload offline before
+    // the debounce ended would show this tab with nothing to open.
+    const { memory, name, provider, session } = await openSynced();
+    receive(session, provider, "from the server");
+    provider.emit("synced", {});
+    await settle();
+    expect(await storedText(memory, name)).toBe("from the server");
+  });
+
+  it("keeps the debounce for later updates", async () => {
+    const { memory, name, provider, session } = await openSynced();
+    receive(session, provider, "first");
+    provider.emit("synced", {});
+    await settle();
+    receive(session, provider, " second");
+    provider.emit("synced", {}); // a reconnect
+    await settle();
+    expect(await storedText(memory, name)).toBe("first");
+    vi.advanceTimersByTime(750);
+    await settle();
+    expect(await storedText(memory, name)).toContain("second");
+  });
+});

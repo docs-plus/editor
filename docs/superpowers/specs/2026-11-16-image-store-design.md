@@ -202,8 +202,8 @@ INDEX doc_blobs(hash)
 
 | Object store | Key | Value |
 |---|---|---|
-| `blobs` | `hash` | `{ hash, mime, size, width, height, createdAt, origin, data: Blob }` |
-| `doc_blobs` | `[docId, hash, kind]` | `{ droppedAt }`, with an index on `hash` |
+| `blobs` | `hash` | `{ hash, mime, size, width, height, created_at, origin, data: Blob }` |
+| `doc_blobs` | `[doc_id, hash, kind]` | `{ dropped_at }`, with an index on `hash` (snake_case, as on desktop: offline data-model revision §3.6) |
 
 - **Write order:** put the blob and the provisional row in **one IndexedDB transaction**, then insert the node. IndexedDB transactions are atomic, so no orphan sweep is needed.
 - **Rendering:** a reference-counted object-URL cache (`lib/assets/object-url-cache.ts`):
