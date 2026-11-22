@@ -9,6 +9,26 @@ since the previous tag.
 
 ## [Unreleased]
 
+### CI: a parallel shadow run of the unit tests
+
+`bun test --parallel` runs the unit tests in about 26 s on CI's four-core
+runners, against about 57 s serially. Before it can replace the serial
+gate, it runs beside it and is compared file by file.
+
+#### Added
+
+- **CI:** after the serial `Unit tests` gate, the checks job runs the same
+  files with `bun test --parallel` (`continue-on-error`), and
+  `scripts/compare-unit-runs.ts` compares the two JUnit reports file by
+  file, warning on each file whose passed, failed or skipped count differs.
+  It matched on 6 of 6 runs before this merged.
+- **Tests:** `tests/unit/ci/compare-unit-runs.test.ts`; `ci-workflow.test.ts`
+  pins that the serial step gates and the parallel one does not.
+
+**Deploy:** none. Promoting the parallel run to the gate needs 5 identical
+runs, the owner's sign-off and the timing-budget unit tests moved to a
+serial pass first.
+
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision
