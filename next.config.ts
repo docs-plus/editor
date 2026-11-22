@@ -62,6 +62,13 @@ const nextConfig: NextConfig = {
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,
   poweredByHeader: false,
+  // cmdk's unused `Command.Dialog` would carry Radix Dialog into the
+  // palette chunk (contract A7: palette plus cmdk within 20 KB gz).
+  turbopack: {
+    resolveAlias: {
+      "@radix-ui/react-dialog": "./lib/cmdk-radix-dialog-stub.ts",
+    },
+  },
   // A static export has no server to send headers; the desktop shell sets
   // its own CSP (P2.5).
   ...(isDesktop ? {} : { headers: webHeaders }),
