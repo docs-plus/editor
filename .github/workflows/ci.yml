@@ -1,14 +1,24 @@
 name: CI
 
-# Runs on every pull request and on pushes to main:
-#   checks  Biome, ESLint, typecheck (3 projects), unit tests, production build
-#   e2e     Playwright Chromium suite, then the typing-budget perf project,
-#           against `next dev` + Hocuspocus
+# Runs on every pull request, in the merge queue and on pushes to main:
+#   changes   decides whether the pull request needs the browser suites
+#   checks    Biome, ESLint, typecheck, unit tests, production build
+#   e2e       the Playwright chromium project in 3 shards against
+#             `next dev` + Hocuspocus
+#   perf      the typing-budget project on its own runner, one worker
+#   e2e-gate  "Playwright (Chromium)": merges the shard reports and passes
+#             only if every shard and perf passed, or if the pull request
+#             changes docs only
+#
+# Required checks (the main ruleset and the merge queue use these names, so
+# keep them stable): "Lint, typecheck, unit tests, build" and
+# "Playwright (Chromium)". See docs/operations/deploy-runbook.md.
 #
 # Read-only token and no secrets: pull requests from forks run the same way.
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -16,11 +26,61 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels a pull request's older run. Runs on main are never
+# cancelled once started, so each one finishes and can deploy; they queue in
+# commit order. GitHub keeps one pending run per group, so when a third push
+# arrives while one runs, the waiting run is dropped and only the newest
+# waits: the newest commit always deploys. Merge queue runs each have their
+# own ref (gh-readonly-queue/...), and the queue cancels them itself.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      e2e: ${{ steps.decide.outputs.e2e }}
+    steps:
+      # Pull requests only: pushes to main, the merge queue and manual runs
+      # always run every suite. A renamed file counts at both paths.
+      - name: List changed files
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/$GH_REPO/pulls/$PR/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)' \
+            > "$RUNNER_TEMP/changed-files.txt"
+          cat "$RUNNER_TEMP/changed-files.txt"
+
+      # Skips the browser suites only when every changed path is under docs/
+      # or a Markdown file, and none is under desktop/ (the web build can
+      # still change). tests/unit/ci/ci-workflow.test.ts runs this script.
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FILES: ${{ runner.temp }}/changed-files.txt
+        run: |
+          if [ "$EVENT" != pull_request ] || [ ! -s "$FILES" ]; then
+            e2e=true
+          elif grep -qvE '^(docs/.*|.*\.md)$' "$FILES" ||
+            grep -qE '^desktop/' "$FILES"; then
+            e2e=true
+          else
+            e2e=false
+          fi
+          echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
+          echo "Browser suites: $e2e"
+
   checks:
     name: Lint, typecheck, unit tests, build
     runs-on: ubuntu-latest
@@ -28,23 +88,27 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Bun
+      - &setup-bun
+        name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .tool-versions
 
-      - name: Install
+      - &install
+        name: Install
         run: bun install --frozen-lockfile
 
       # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
       # The runner image ships Node, so a stub makes any call to it fail
       # loudly. Install comes first: lifecycle scripts (husky) call `node`.
-      - name: Block Node.js
+      - &block-node
+        name: Block Node.js
         run: |
           mkdir -p "$RUNNER_TEMP/no-node"
           cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
@@ -87,12 +151,19 @@ jobs:
         run: bun scripts/check-editor-chunk-size.ts
 
   e2e:
-    name: Playwright (Chromium)
+    name: Playwright shard ${{ matrix.shard }}/3
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: read
-    env:
+    strategy:
+      # Every shard reports, so one failure does not hide another.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env: &e2e-env
       # Same raised limits as playwright.config.ts: three workers open many
       # sockets and documents from one IP.
       DOC_CREATION_RATE_LIMIT: "2000"
@@ -101,40 +172,20 @@ jobs:
       WS_UPGRADE_RATE_LIMIT: "6000"
       HOCUS_THROTTLE: "0"
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
+      - *setup-bun
+      - *install
+      - *block-node
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: .tool-versions
-
-      - name: Install
-        run: bun install --frozen-lockfile
-
-      # Everything after install runs on Bun (bunfig.toml `[run] bun = true`).
-      # The runner image ships Node, so a stub makes any call to it fail
-      # loudly. Install comes first: lifecycle scripts (husky) call `node`.
-      - name: Block Node.js
-        run: |
-          mkdir -p "$RUNNER_TEMP/no-node"
-          cat > "$RUNNER_TEMP/no-node/node" <<'EOF'
-          #!/bin/sh
-          echo "::error::node was called: $*" >&2
-          exit 1
-          EOF
-          chmod +x "$RUNNER_TEMP/no-node/node"
-          echo "$RUNNER_TEMP/no-node" >> "$GITHUB_PATH"
-
-      - name: Install Chromium
+      - &install-chromium
+        name: Install Chromium
         run: bun playwright install --with-deps chromium
 
       # `make dev` runs next dev and Hocuspocus on one db.sqlite (the DELETE
       # route and Hocuspocus must read the same tombstones) with isolated
       # tab lists allowed. Pages are compiled once before the tests start.
-      - name: Start dev servers
+      - &start-dev-servers
+        name: Start dev servers
         run: |
           make dev > "$RUNNER_TEMP/dev.log" 2>&1 &
           for _ in $(seq 1 120); do
@@ -150,19 +201,146 @@ jobs:
 
       # CI= : use the servers started above instead of Playwright's webServer.
       # One retry absorbs cold-runner timing; retried passes are still listed
-      # as "flaky" in the summary. The perf project (typing budget) starts
-      # after the chromium suite and runs on one worker, so it is not timed
-      # under parallel load.
+      # as "flaky". Shards split by spec file; the blob report is merged by
+      # "Playwright (Chromium)".
       - name: Run Playwright
-        run: CI= bun playwright test --project=chromium --project=perf --retries=1 --trace off
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-chromium-${{ matrix.shard }}.zip
+        run: >-
+          CI="" bun playwright test --project=chromium
+          --shard=${{ matrix.shard }}/3 --retries=1 --trace off
+          --reporter=list,blob
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: blob-report-chromium-${{ matrix.shard }}
+          path: blob-report/
+          if-no-files-found: ignore
+          retention-days: 1
 
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-results
+          name: e2e-results-shard-${{ matrix.shard }}
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
           if-no-files-found: ignore
           retention-days: 7
+
+  perf:
+    name: Playwright perf (typing budget)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env: *e2e-env
+    steps:
+      - *checkout
+      - *setup-bun
+      - *install
+      - *block-node
+      - *install-chromium
+      - *start-dev-servers
+
+      # The typing budget compares timings, so it gets a runner of its own
+      # and one worker (the project's setting). --no-deps: the project
+      # depends on chromium, which the shards run.
+      - name: Run Playwright
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-perf.zip
+        run: >-
+          CI="" bun playwright test --project=perf --no-deps --retries=1
+          --trace off --reporter=list,blob
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: blob-report-perf
+          path: blob-report/
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results-perf
+          path: |
+            test-results/
+            ${{ runner.temp }}/dev.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required check. It always runs, because a skipped required check
+  # counts as passing: it passes only if every shard and perf passed, or if
+  # `changes` skipped them for a docs-only pull request.
+  e2e-gate:
+    name: Playwright (Chromium)
+    needs: [changes, e2e, perf]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Also on a docs-only pull request (about 15 s), so the steps stay
+      # the same as the other jobs'.
+      - *checkout
+      - *setup-bun
+      - *install
+      - *block-node
+
+      - name: Download blob reports
+        if: needs.changes.outputs.e2e == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      # One report for all shards and perf: each failure is annotated at its
+      # test (file and line) on the run and the pull request, and the HTML
+      # report is uploaded when something failed.
+      - name: Merge reports
+        if: needs.changes.outputs.e2e == 'true'
+        continue-on-error: true
+        run: bun playwright merge-reports --reporter=github,html all-blob-reports
+
+      - name: Upload HTML report
+        if: needs.e2e.result == 'failure' || needs.perf.result == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Verdict
+        if: always()
+        env:
+          RUN_E2E: ${{ needs.changes.outputs.e2e }}
+          CHANGES: ${{ needs.changes.result }}
+          SHARDS: ${{ needs.e2e.result }}
+          PERF: ${{ needs.perf.result }}
+        run: |
+          echo "changes=$CHANGES e2e=$RUN_E2E shards=$SHARDS perf=$PERF"
+          if [ "$CHANGES" != success ]; then
+            echo "::error::Changed files job: $CHANGES"; exit 1
+          fi
+          if [ "$RUN_E2E" = false ] && [ "$SHARDS" = skipped ] &&
+            [ "$PERF" = skipped ]; then
+            echo "::notice::Docs-only pull request: browser suites skipped"
+            exit 0
+          fi
+          if [ "$SHARDS" != success ] || [ "$PERF" != success ]; then
+            echo "::error::Playwright shards: $SHARDS, perf: $PERF"; exit 1
+          fi
