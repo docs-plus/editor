@@ -162,7 +162,13 @@ function Main({ view }: { view: View }) {
   const { snapshot } = useLibrary();
   if (view.kind === "doc") {
     const doc = snapshot.items.find((entry) => entry.id === view.id);
-    if (!doc) return <p className="h-muted">This document is in Trash.</p>;
+    if (!doc) {
+      return (
+        <p className="h-muted" dir="auto">
+          This document is in Trash.
+        </p>
+      );
+    }
     return (
       <article className="h-doc">
         <input
@@ -195,11 +201,17 @@ function Main({ view }: { view: View }) {
         <h1 className="h-place" tabIndex={-1} data-testid="place">
           {placeTitle(view.place)}
         </h1>
-        <p className="h-muted">List views come with P2.7b.</p>
+        <p className="h-muted" dir="auto">
+          List views come with P2.7b.
+        </p>
       </section>
     );
   }
-  return <p className="h-muted">Open a document from the sidebar.</p>;
+  return (
+    <p className="h-muted" dir="auto">
+      Open a document from the sidebar.
+    </p>
+  );
 }
 
 function Shell({
