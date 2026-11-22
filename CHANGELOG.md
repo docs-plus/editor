@@ -22,8 +22,8 @@ and Settings arrive with P2.9c-2 and W13. Against `main` at `84a9458`, the edito
 (394,127 B; the ledger's smart-quotes line is 150 B). The first load grows
 by 537 B gz of JavaScript (`PageFrame`) and 475 B gz of CSS (the Default
 card, the docking threshold and the contrast set). The store and the
-page-text rules load later. The boot script grows from 600 B to 2,282 B
-(352 B to 1,141 B gzipped) per HTML response.
+page-text rules load later. The boot script grows from 600 B to 2,445 B
+(352 B to 1,212 B gzipped) per HTML response.
 
 #### Added
 
