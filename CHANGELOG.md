@@ -19,9 +19,10 @@ setting; a pixel test against `main` proves it. New browsers get the new
 Default page: 16 px text, a 33 em line (a 624 px card) and 1.6 line
 spacing. There are no controls yet: the Page popover, the palette entries
 and Settings arrive with P2.9c-2 and W13. The editor chunk group grows by
-93 B gz (393,558 B, the ledger's smart-quotes line is 150 B), and the boot
-script grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML
-response.
+104 B gz against `main` at `903b5c8` (393,924 B; the ledger's smart-quotes
+line is 150 B). The first load grows by 2,254 B gz of JavaScript (the
+store, schema and `PageFrame`) and 1,221 B gz of CSS, and the boot script
+grows from 600 B to 2,144 B (352 B to 1,095 B gzipped) per HTML response.
 
 #### Added
 
