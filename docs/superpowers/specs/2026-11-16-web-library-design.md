@@ -9,7 +9,7 @@
 > **Plan v8 (2026-11-16):** **D36** phones and tablets are fully supported in v1 ([phones and tablets design](2026-11-16-phones-tablets-design.md), M18–M28). **D39** comments work in library documents, as on desktop. **D40** the seams: the page generates share secrets and derives the tokens itself (S1, §8.1), the `/join` fragment uses the S1b grammar, the export zip writes `TINYDOC2` only (S8, §6.1), `library.json` gains `link_key`, `kind`, `sort_key` and tag names (S8b), and only a backup-zip or `library.json` restore keeps ids (S8c). The phones review adds: W-D7 takes a host flag; the "deleting the Home Screen app deletes these documents" copy ships only after M18 verifies it.
 
 
-- **Status:** Draft for owner review (2026-11-16). Nothing is built yet.
+- **Status:** Draft for owner review (2026-11-16). **W2's storage engine is built** (2026-11-22, dark behind `NEXT_PUBLIC_LIBRARY`): `IdbDocStore`, the schema, opening and versions, the quota path, the `persist()` and `estimate()` rules and the kill switch. `IdbDocumentIndex` and the browser-matrix runs follow.
 - **Decision it implements:** D3 (plan §13): the web app gets a personal document library stored in the browser, as well as the public sandbox. D6 (one combined release) means it ships in v1 together with sharing.
 - **Parent documents:**
   - [Plan v7](2026-11-15-desktop-local-first-design.md): releases, PRs and gates
@@ -91,6 +91,15 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - **Ids** come from `crypto.randomUUID()`: document, folder and tag ids, `lineage` and `library_id`.
 - **No document data lives in `localStorage`.** UI preferences stay in `tinydocy-ui`.
 
+**As built (W2, 2026-11-22),** in `lib/platform/web/library/library-schema.ts`:
+- **Seams in version 1.** `docs` also has `link_key` (32 hex, unique index `by_link_key`, minted at insert, S16) and `kind`, as the desktop schema does (D-A5). `import_sources` (index `by_source_hash`), `remotes`, `blobs` and `doc_blobs` (the image store design §3.3 shapes) are created now, empty: a store added later is a version bump, and a version bump makes every older tab reload (§2.4).
+- **Index keys with no nulls.** IndexedDB leaves a record out of an index when any part of its key is null. So `by_folder` indexes `list_key = [folder_id ?? "", trashed_at ?? 0]` and `by_parent` indexes `parent_key = parent_id ?? ""`. The columns themselves keep the desktop meaning (null for the root, null for not trashed).
+- **`snapshots.upto_seq`.** Next to `rev`, the snapshot keeps the highest seq any compaction claimed to cover, so `load()` reports `maxSeq` after every row was folded in. Unlike desktop, `load()` returns every row of the document, whatever its seq: a row another tab left below `upto_seq` is still content.
+- **`updates.writer`** records the tab session that appended a row, for diagnostics only.
+- **Compaction also writes `docs.size_bytes`** (the snapshot plus the rows left), so its scope is `snapshots`, `updates` and `docs`.
+- **Close hooks.** On `versionchange` the connection runs every registered close hook before `db.close()`. `IdbDocStore` registers its own `flush()` (issued writes); the composition root (W4) also registers the session's `flush()`, so queued batches are sent first.
+- **`IdbDocumentIndex`** (folders, tags, pins, Trash, the rev feed) is not in this PR. W2 writes only the document row `DocumentIndex.create` will (`createLibraryDoc`) and bumps `meta.rev` with it.
+
 ### 2.3 Transactions and durability
 
 | Write | Stores in scope | Durability |
@@ -109,6 +118,7 @@ The stores mirror the desktop tables (architecture §5.3, details spec §3, §4,
 - Hiding the page (`visibilitychange` to hidden), `pagehide`, `blur` and Ctrl/⌘S flush at once.
 - The `beforeunload` guard is armed while any batch is queued, in flight or failed. On the web this is correct, unlike in Electron.
 - **W2's exit criterion:** typing latency in the `perf` project stays within 5% of `main` while strict commits loop.
+  - **Perf note (W2, 2026-11-22):** W2 ships `IdbDocStore` dark, so no route types through it and `perf` is unchanged by construction. The comparison runs in W4, the first PR that mounts the store behind `NEXT_PUBLIC_LIBRARY` (see `tests/TESTING.md`, Performance Tests). If it misses, risk WK4's fallback applies.
 
 ### 2.4 Opening, versions and old tabs
 

@@ -9,6 +9,39 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Web library W2: the IndexedDB storage engine (dark)
+
+The storage core of My documents, the personal library stored in the
+browser (spec `2026-11-16-web-library-design.md` §2, PR W2). It lands dark:
+nothing in the web app imports it, `NEXT_PUBLIC_LIBRARY` defaults to off,
+and the web build is unchanged (editor chunk group +0 B).
+
+#### Added
+
+- **Web library:** `IdbDocStore`, the `DocStore` port over a new IndexedDB
+  database `tinydocy-library` (schema version 1, every store the library
+  will need, including the image store and Live seams). Every content write
+  is one `durability: "strict"` transaction that settles on commit; a full
+  disk or any other abort rejects with a retryable error and writes
+  nothing, so the batcher keeps the batch and retries it in order.
+- **Web library:** compaction that stays safe with any number of tabs
+  writing the same document (W-D3): it merges into the stored snapshot and
+  deletes only the rows its own session applied, and returns another tab's
+  snapshot as `foreign` for `local-session` to apply.
+- **Web library:** opening handles an upgrade in another tab (flush, close,
+  "Reload"), a blocked upgrade, a newer database or `format_version`
+  (read-only), and a browser that won't store anything (never a silent
+  fallback to memory).
+- **Web library:** `persist()`, `persisted()` and `estimate()` helpers with
+  the §2.6–§2.7 rules (silent requests on Chromium and Safari only, the
+  10 GiB Chromium quota report ignored), and the `NEXT_PUBLIC_LIBRARY`
+  switch, which never deletes the library.
+- **Tests:** the shared `DocStore` contract suite on `IdbDocStore` under
+  `fake-indexeddb` (new dev dependency), a seeded multi-writer compaction
+  property test (2,000 runs; `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_SEED`),
+  quota fault injection through `local-session`, and web library import
+  boundaries.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
