@@ -231,6 +231,38 @@ describe("editor import boundaries", () => {
   }
 });
 
+// The lazy comments chunk shares no module with the editor chunk (a shared
+// one splits the editor group, contract A16): it reaches the editor's
+// Yjs, y-tiptap and ProseMirror code only through `CommentsDeps`.
+describe("comments chunk boundary", () => {
+  it("extensions/comments/comments-controller.ts loads only comments code", () => {
+    const { files, packages } = staticImports(
+      "extensions/comments/comments-controller.ts",
+    );
+    for (const file of files) {
+      expect(
+        file.startsWith("lib/comments/") ||
+          file === "extensions/comments/comments-controller.ts",
+      ).toBe(true);
+    }
+    expect([...files]).not.toContain("lib/comments/entry-check.ts");
+    expect([...packages]).toEqual([]);
+  });
+
+  it("extensions/comments/comments-host.ts loads only comments code", () => {
+    const { files, packages } = staticImports(
+      "extensions/comments/comments-host.ts",
+    );
+    for (const file of files) {
+      expect(
+        file.startsWith("lib/comments/") ||
+          file === "extensions/comments/comments-host.ts",
+      ).toBe(true);
+    }
+    expect([...packages]).toEqual([]);
+  });
+});
+
 describe("import boundaries", () => {
   for (const entry of SERVER_ENTRIES) {
     it(`${entry} imports neither the client tab API nor @hocuspocus/provider`, () => {

@@ -315,7 +315,8 @@ export function buildDocumentEditorExtensions({
     }),
     WriteGate.configure({ canWrite }),
     // Comment highlights and Find hits declare their layers here (rule 6).
-    DecorationHost,
+    // Comments map their set through edits (comments design §8).
+    DecorationHost.configure({ layers: [{ name: "comments", map: true }] }),
     HorizontalRule,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     TaskList,

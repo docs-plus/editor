@@ -659,6 +659,7 @@ CREATE TABLE doc_view (
 | IndexedDB `tinydocy-library.doc_view` | `{ width?, place? }` | Library only. W2's schema already reserves the store. `place` moves the library's continue position out of `tinydocy-continue`. The sandbox keeps `tinydocy-continue`. |
 | `tinydocy-user` | `{ name, color }` (legacy shape, now validated) | §5.12 |
 | `tinydocy-continue` | unchanged | Written only when `rememberPlace` is on. Turning it off deletes the key. |
+| `tinydocy-author` (P4.9) | the comment device secret: 22 base64url characters (128 bits) | Minted on first use (`lib/comments/author-id.ts`); never leaves the browser. Each comment stores the per-document author id derived from it (HMAC with the document's lineage, SEC-002), never the secret, and never in awareness. Not a preference: Forget and R=0 leave it, as they leave `tinydocy-user`. |
 
 - **The `page` slot stores a style name plus overrides.**
   - The effective value is `STYLES[style]` with the overrides merged over it.
@@ -825,7 +826,7 @@ Desktop and the web library are new installs on new storage, so they get the new
 | `appearance` (`tinydocy-theme`) | kept | **stored** (today) |
 | Page settings, `a11y`, `spellcheck`, `smartQuotes`, `outline`, `simpleToolbar` (`tinydocy-ui`) | kept | **session only**, with the "not saved" line. `simpleToolbar` changes from "disabled with a reason" to session-only, so all settings behave the same way. |
 | `rememberPlace` / `tinydocy-continue` | kept | forced off (today) |
-| `identity`, `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
+| `identity` (and the comment device secret, `tinydocy-author`), `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
 | Library `doc_view` | kept | the library origin is expected to keep R = 1. If 0, per-document width is session-only too. |
 
 - Desktop builds don't carry the flag. Desktop "Forget my formatting choices" clears the renderer's `tinydocy-choices` exactly as on the web.
