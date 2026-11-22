@@ -605,6 +605,11 @@ const TEST_STEPS = [
   "Smoke",
   "Soak",
   "Property test",
+  // CI's parallel unit tests checked against a serial run (unit-runs).
+  "Unit tests (serial)",
+  "Unit tests (as CI runs them)",
+  "Compare serial and parallel",
+  "Stress benchmark (informational)",
   // The desktop shell (#135): building, installing and checking the app.
   "Export the desktop renderer",
   "Audit the packaging dependencies",

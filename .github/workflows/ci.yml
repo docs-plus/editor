@@ -4,10 +4,12 @@ name: CI
 #   changes   decides whether the pull request needs the browser suites
 #             (not while it is a draft, nor for docs-only changes), and
 #             fetches the shard timings from the latest green main run
-#   checks    Biome, ESLint, typecheck, unit tests, production build
-#   e2e       the Playwright chromium and library projects in 3 shards,
+#   checks    Biome, ESLint, typecheck, unit tests (parallel), production
+#             build
+#   e2e       the Playwright chromium and library projects in 4 shards,
 #             against `next dev` + Hocuspocus and the library's Bun harness
-#   perf      the typing-budget project on its own runner, one worker
+#   perf      the perf project in two jobs, each on its own runner with one
+#             worker: the typing budget, and the feature budgets
 #   desktop   the desktop static export and the local (dev bridge) project;
 #             not a required check
 #   e2e-gate  "Playwright (Chromium)": merges the shard reports and passes
@@ -121,7 +123,11 @@ jobs:
             timings=$(jq -c . "$RUNNER_TEMP/timings/e2e-timings.json") || timings=""
           fi
           echo "timings=$timings" >> "$GITHUB_OUTPUT"
-          echo "Shard timings from run ${run:-none}: ${timings:+found}${timings:-none}"
+          if [ -n "$timings" ]; then
+            echo "Shard timings: $(jq length <<< "$timings") files, from run $run"
+          else
+            echo "Shard timings: none (latest green run: ${run:-none})"
+          fi
 
   checks:
     name: Lint, typecheck, unit tests, build
@@ -174,15 +180,14 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # `bun run test` skips the stress probe; it runs below as a non-gating
-      # benchmark.
+      # Every file with `bun test --parallel`, then the files that assert a
+      # wall-clock budget serially (scripts/unit-tests.ts). The repository
+      # variable UNIT_SERIAL=1 runs them all serially instead. The stress
+      # probe runs nightly.
       - name: Unit tests
-        run: bun run test
-
-      # Shared runners vary in speed, so a miss here is reported, not fatal.
-      - name: Stress benchmark (informational)
-        continue-on-error: true
-        run: bun run test:stress
+        env:
+          UNIT_SERIAL: ${{ vars.UNIT_SERIAL }}
+        run: bun scripts/unit-tests.ts
 
       - name: Production build
         run: bun run build
@@ -193,7 +198,7 @@ jobs:
         run: bun scripts/check-editor-chunk-size.ts
 
   e2e:
-    name: Playwright shard ${{ matrix.shard }}/3
+    name: Playwright shard ${{ matrix.shard }}/4
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
@@ -204,7 +209,7 @@ jobs:
       # Every shard reports, so one failure does not hide another.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     env: &e2e-env
       # Same raised limits as playwright.config.ts: three workers open many
       # sockets and documents from one IP.
@@ -266,7 +271,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           printf '%s' "$TIMINGS" > "$RUNNER_TEMP/e2e-timings.json"
-          args=$(bun scripts/e2e-shards.ts plan "$SHARD/3" \
+          args=$(bun scripts/e2e-shards.ts plan "$SHARD/4" \
             "$RUNNER_TEMP/e2e-timings.json" "$RUNNER_TEMP/shard-tests.txt")
           echo "args=$args" >> "$GITHUB_OUTPUT"
 
@@ -303,13 +308,25 @@ jobs:
           retention-days: 7
 
   perf:
-    name: Playwright perf (typing budget)
+    name: Playwright perf (${{ matrix.suite }})
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      # The typing budget (performance, toolbar-perf) is one job; every other
+      # spec of the perf project is the other, so a new perf spec lands there.
+      matrix:
+        include:
+          - suite: typing budget
+            select: --test-list
+            key: perf-typing
+          - suite: features
+            select: --test-list-invert
+            key: perf-features
     env: *e2e-env
     steps:
       - *checkout
@@ -319,21 +336,25 @@ jobs:
       - *install-chromium
       - *start-dev-servers
 
-      # The typing budget compares timings, so it gets a runner of its own
-      # and one worker (the project's setting). --no-deps: the project
-      # depends on chromium, which the shards run.
+      # Budgets compare timings, so each job gets a runner of its own and
+      # one worker (the project's setting). --no-deps: the project depends
+      # on chromium, which the shards run.
       - name: Run Playwright
         env:
-          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-perf.zip
-        run: >-
-          CI="" bun playwright test --project=perf --no-deps --retries=1
-          --trace off --reporter=list,blob
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.key }}.zip
+          SELECT: ${{ matrix.select }}
+        run: |
+          printf '%s\n' performance.spec.ts toolbar-perf.spec.ts \
+            > "$RUNNER_TEMP/typing-budget.txt"
+          CI="" bun playwright test --project=perf --no-deps \
+            "$SELECT=$RUNNER_TEMP/typing-budget.txt" --retries=1 \
+            --trace off --reporter=list,blob
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: blob-report-perf
+          name: blob-report-${{ matrix.key }}
           path: blob-report/
           if-no-files-found: ignore
           retention-days: 1
@@ -342,7 +363,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-results-perf
+          name: e2e-results-${{ matrix.key }}
           path: |
             test-results/
             ${{ runner.temp }}/dev.log
