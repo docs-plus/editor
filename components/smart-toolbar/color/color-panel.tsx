@@ -11,6 +11,9 @@ import {
   useState,
 } from "react";
 
+import { announce } from "@/lib/announce";
+import { editorActions } from "@/lib/editor-actions";
+import { runAction } from "@/lib/editor-actions/registry";
 import { BanIcon, CheckIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
 import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
@@ -19,7 +22,6 @@ import { cn } from "@/lib/utils";
 import { isCoarsePointer } from "../coarse-pointer";
 import { ColorRows } from "./color-rows";
 import {
-  announcePick,
   applySwatch,
   type ColorState,
   LOW_CONTRAST,
@@ -61,9 +63,26 @@ export interface ColorPanelProps {
  * hover name cannot work, so each pick shows a pill naming it with Undo.
  * Lazy chunk: loaded on first open.
  */
+/**
+ * Names a pick in the polite live region and on the pill, with Undo
+ * (WCAG 4.1.3, spec §7.3 and §14): "Teal text".
+ */
+function announcePick(editor: Editor, swatch: Swatch): void {
+  announce(swatchName(swatch), {
+    done: true,
+    action: {
+      label: "Undo",
+      run: () => {
+        const undo = editorActions.get("history.undo");
+        if (undo) runAction(editor, undo);
+      },
+    },
+  });
+}
+
 export function ColorPanel({ layout = "rows", ...props }: ColorPanelProps) {
   return layout === "rows" ? (
-    <ColorRows {...props} />
+    <ColorRows {...props} onPicked={announcePick} />
   ) : (
     <SwatchGrid {...props} />
   );

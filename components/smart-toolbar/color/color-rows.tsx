@@ -33,7 +33,6 @@ import {
   typeahead,
 } from "./color-order";
 import {
-  announcePick,
   applySwatch,
   type ColorState,
   LOW_CONTRAST,
@@ -383,11 +382,14 @@ export function ColorRows({
   recent,
   focusKind,
   focusOnMount = true,
+  onPicked,
 }: {
   editor: Editor;
   recent: readonly RecentColor[];
   focusKind: Kind;
   focusOnMount?: boolean;
+  /** Names an applied colour (live region and pill, `color-panel.tsx`). */
+  onPicked: (editor: Editor, swatch: Swatch) => void;
 }) {
   const state = useColorState(editor);
   // M3 is frozen while the menu is open: applying never reshuffles it.
@@ -447,7 +449,7 @@ export function ColorRows({
     const done = () => {
       closeMenu(panelRef.current);
       // After closing: the Esc that closes the menu also dismisses the pill.
-      announcePick(editor, swatch);
+      onPicked(editor, swatch);
     };
     if (openMore === null) {
       done();
