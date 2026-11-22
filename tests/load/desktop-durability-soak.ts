@@ -8,7 +8,7 @@
  * the two drivers read each other's files. The shape follows spike S2's
  * kill harness.
  *
- *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8
+ *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8|T21
  *     [--kills=200] [--out=soak-out] [--verbose]
  *
  * T7 (slow-hydrate overwrite) is a web-library case: it tests the session
@@ -64,6 +64,7 @@ import {
   TEXT,
 } from "@/desktop/storage-harness/gen";
 import { writeFormat1Library } from "@/tests/helpers/format-1-library";
+import { caseT21 } from "@/tests/load/desktop-soak-t21";
 
 const ROOT = join(import.meta.dir, "../..");
 const HARNESS = join(ROOT, "desktop/storage-harness");
@@ -228,14 +229,20 @@ async function runHarness(
 // ── contract: the engine DocStore cases inside the Electron worker ──────
 
 async function caseContract(): Promise<CaseResult> {
-  const run = await runHarness(["--mode=contract"]);
-  const ok = run.lines.filter((l) => l.startsWith("CASE_OK")).length;
-  const failed = run.lines.filter((l) => l.startsWith("CASE_FAIL"));
+  const run = await runHarness(["--mode=contract"], () => {}, 300_000);
+  const count = (prefix: string) =>
+    run.lines.filter((l) => l.startsWith(`${prefix} `)).length;
+  const ok = count("CASE_OK");
+  // P2.7b's LibraryIndex contract through RpcLibraryIndex (P2.6e).
+  const libraryOk = count("LIBRARY_CASE_OK");
+  const failed = run.lines.filter(
+    (l) => l.startsWith("CASE_FAIL") || l.startsWith("LIBRARY_CASE_FAIL"),
+  );
   return {
     name: "contract",
-    pass: run.exitCode === 0 && failed.length === 0 && ok > 0,
-    summary: `P2.1's DocStore contract: ${ok} cases passed on node:sqlite in the Electron worker`,
-    details: { ok, exitCode: run.exitCode },
+    pass: run.exitCode === 0 && failed.length === 0 && ok > 0 && libraryOk > 0,
+    summary: `on node:sqlite in the Electron worker: P2.1's DocStore contract ${ok} cases passed; P2.7b's LibraryIndex contract (RpcLibraryIndex) ${libraryOk} cases passed`,
+    details: { ok, libraryOk, exitCode: run.exitCode },
     failures: [
       ...failed,
       ...(run.exitCode === 0 ? [] : [run.stderr.slice(0, 2000)]),
@@ -1353,6 +1360,7 @@ const CASES: Record<string, () => Promise<CaseResult>> = {
   T23: caseT23,
   T24: caseT24,
   T24b: caseT24b,
+  T21: () => caseT21({ runHarness, removeDir, args }),
 };
 
 const selected =

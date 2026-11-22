@@ -264,6 +264,39 @@ note. `NEXT_PUBLIC_COMMENTS` (default off) and the browser's
   and view-only silence. The `perf` Playwright typing case with 300
   threads is written but skipped unless `PERF_COMMENTS=1`.
 
+### Desktop P2.6e: the library port on SQLite
+
+P2.7b's `LibraryIndex` port now persists on the desktop SQLite library,
+through the storage worker. Nothing in the app uses it yet: the
+composition root (P2.5) wires it in.
+
+#### Added
+
+- **Desktop:** `lib/platform/desktop/library-index-rpc.ts`, `RpcLibraryIndex`:
+  - It loads the sidebar, the Trash list and the saved list choices into a
+    snapshot.
+  - It applies each port operation to the snapshot at once, then persists it
+    over `call(op, args)` on one serial chain. The same code runs over the
+    worker or in-process.
+  - Changes not yet saved are reapplied after every reload. A refused write
+    reloads what storage holds.
+  - It follows the worker's `index_changed` feed with a full reload, skipping
+    its own changes.
+  - `rename` goes through an injected `renameTitle`, which edits the title
+    heading in a session: the title has one writer (G4).
+- **Desktop:** storage worker ops for the port: folders, folder Trash, tags,
+  pins, Manual order, list choices, the Trash list, lazy snippets, title and
+  heading search, `putDerived` and backlinks.
+- **Tests:** P2.7b's `LibraryIndex` contract runs on SQLite in two places:
+  - on `bun:sqlite` in `bun test`, with `settle` and `reopen`;
+  - on `node:sqlite` in the Electron worker, in the soak's `contract` case,
+    through a small `bun:test` shim.
+- **Tests:** soak case T21, the storage half: 10,000 documents with 200,000
+  links and 100,000 headings. It measures:
+  - the sidebar's SQL time and its round trip through the worker;
+  - backlinks queued behind a `putDerived`;
+  - title search against Quick Open's 16 ms budget.
+
 ### Desktop P2.6d: library format 2 and the relationship layer
 
 The desktop library moves to format 2, the offline data-model revision's

@@ -4,7 +4,9 @@ name: Desktop storage soak
 # SIGKILLed during appends, compactions and migrations, quit with writes in
 # flight, opened by an older app, and run through a simulated year with
 # 1,000 documents. The verifier reopens every library with the engine on
-# bun:sqlite. See tests/load/desktop-durability-soak.ts.
+# bun:sqlite. The contract case also runs P2.7b's LibraryIndex contract
+# over the worker, and T21 times the sidebar, backlinks and title search on
+# 10,000 linked documents. See tests/load/desktop-durability-soak.ts.
 #
 # Pull requests that touch storage run a short profile (20 kills per case);
 # the nightly and manual runs use the plan's 200, and so does a pull request
@@ -22,7 +24,12 @@ on:
       - lib/platform/desktop/**
       - lib/platform/doc-store.ts
       - tests/helpers/doc-store-contract.ts
+      - tests/helpers/library-index-harness.ts
+      - tests/helpers/bun-test-shim.ts
+      - lib/platform/document-index.ts
+      - tests/unit/platform/document-index-contract.ts
       - tests/load/desktop-durability-soak.ts
+      - tests/load/desktop-soak-t21.ts
       - .github/workflows/desktop-storage-soak.yml
   workflow_call:
     inputs:
@@ -61,8 +68,8 @@ jobs:
             cases: T1,T1-dense
           - name: T2 kill during compaction
             cases: T2
-          - name: T8 year and startup
-            cases: T8
+          - name: T8 year and startup, T21 10,000 linked documents
+            cases: T8,T21
           - name: format 2 (T20, T23, T24, T24b)
             cases: T20,T23,T24,T24b
     defaults:
