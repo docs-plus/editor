@@ -147,6 +147,18 @@ async function caretInto(page: Page, text: string) {
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowLeft");
   await expect.poll(() => caretLink(page)).toContain(text);
+  // The editor reads the DOM caret on its own schedule: wait until its
+  // selection sits in the link mark too, or Mod-K finds no link.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const dom = document.querySelector(".h-editor .ProseMirror");
+        const editor = (dom as { editor?: { isActive(n: string): boolean } })
+          ?.editor;
+        return editor?.isActive("hyperlink") ?? false;
+      }),
+    )
+    .toBe(true);
 }
 
 test("a link that doesn't open shows its preview, never its key", async ({
