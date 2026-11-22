@@ -58,6 +58,7 @@ These came out of the staff feasibility review. Each one was checked against the
    |---|---|---|
    | No provider, `WriteGate` and the decoration host | P2.2 | 300 B (measured 294 B) |
    | Sandbox `DocSession` adapter, context and hook: `use-yjs-document` reads `DocSession` (K14's P2.1 allowance; added 2026-11-22 by coordinator decision) | P2.1c | 275 B (measured 275 B) |
+   | Status chip from the composition root: `DocumentEditor` takes `statusChip` and the web root passes `CollabStatusGroup`, so the editor folder never reaches `collab-session` (architecture §3.3, the P2.2 import boundary; about 100 B of code, the rest the minifier re-ranking names in the hoisted editor module; a lazy `import()` instead cost +1.3 KB on first load) | #134 (P2.2 follow-up) | 198 B (measured 198 B) |
    | Comments hook | P4.9 | 150 B (measured 140 B: the `comments` layer, the `sectionMove` meta and `comment.add` without its icon). **Not yet counted:** `mountComments` (`extensions/comments/comments-loader.ts`), which nothing imports yet, so the bundler drops it. With a throwaway eager import it measured **+617 B gz** more (about 590 B without the throwaway's own line). That cost lands when P4.10 imports it, and no ledger line holds it: an owner decision before P4.10 (a ledger amendment, or a smaller loader). |
    | Smart-quotes gate | P2.9c-1 | 150 B |
    | i18n core (`t()`, registry labels, `lang`/`dir`; also pays L3's `matchShortcut` / `visualStep` bytes, languages §3.7.1) | L1a | 400 B |
@@ -67,11 +68,11 @@ These came out of the staff feasibility review. Each one was checked against the
    | "Type / for blocks" placeholder | OB2 | 10 B |
    | Phone keyboards: prose and code `autocorrect` / `autocapitalize` / `spellcheck` attributes (D41, v8) | M19 | 40 B |
    | Undo-gesture handler, **only if spike M18 shows native undo mutates the DOM** (D41, v8) | M19 | 80 B, conditional |
-   | **Total** | | **1,855 B, or 1,935 B with the undo handler** |
+   | **Total** | | **2,053 B, or 2,133 B with the undo handler** |
 
-   - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,284 B (08b7663), so P2.2 set the fence at +16,864 B (15,284 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,286 B remain for the other lines. P2.1c added its 275 B line and raised the fence by exactly that, to +17,139 B (15,284 + 1,855); its bytes sit with the lazy editor chunk so that first load stays flat (−32 B).
+   - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,284 B (08b7663), so P2.2 set the fence at +16,864 B (15,284 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,286 B remain for the other lines. P2.1c added its 275 B line and raised the fence by exactly that, to +17,139 B (15,284 + 1,855); its bytes sit with the lazy editor chunk so that first load stays flat (−32 B). #134 added its 198 B status-chip line and raised the fence by exactly that, to +17,337 B (15,284 + 2,053); first load +1 B.
    - **Phones (D41):** M27's hardware-keyboard listener (shortcut glyphs) stays **out** of the editor chunk.
-   - **Fencing:** P2.2 lowers `EDITOR_CHUNK_BUDGET_BYTES` to the size on `main` plus the ledger total, so unrelated work can't spend these bytes. Raising it needs an amendment to this rule. While D41's conditional 80 B undo line is unconfirmed, the fence is `main` + 1,855 B (1,580 B, plus P2.1c's 275 B line). If spike M18 confirms the line, the fence rises to `main` + 1,935 B with no further approval (pre-approved by D41).
+   - **Fencing:** P2.2 lowers `EDITOR_CHUNK_BUDGET_BYTES` to the size on `main` plus the ledger total, so unrelated work can't spend these bytes. Raising it needs an amendment to this rule. While D41's conditional 80 B undo line is unconfirmed, the fence is `main` + 2,053 B (1,580 B, plus P2.1c's 275 B line and #134's 198 B line). If spike M18 confirms the line, the fence rises to `main` + 2,133 B with no further approval (pre-approved by D41).
    - **A PR that would go over its line** stops for a budget review. A line's unused bytes don't move to another line without an amendment.
    - **Cut order if the ledger is over:** LK3, then « » by script, then the i18n core, then P2.13 last.
    - **LK3 measures `slash-trigger` first** (with `SlashMenuHost` it must stay under 1,000 B gz, AGENTS.md) before adding its own bytes.
