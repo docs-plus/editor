@@ -1,0 +1,293 @@
+@use "sass:map";
+@use "sass:math";
+
+// Page preferences (preferences design §5.4). The boot script and
+// `PrefsRuntime` set `<html>` attributes; this sheet maps them to custom
+// properties and owns the page rules that read them. Global, loaded with
+// the page, so the skeleton has the same geometry as the editor and the
+// editor chunk pays nothing for it.
+//
+// `classic` (§5.6) is today's exact look for sandbox browsers that used
+// TinyDocy before. Its rules are today's rules, moved here unchanged. Both
+// scopes sit inside `:where()`, so every selector keeps the specificity it
+// had in its original file.
+//
+// The custom properties are unregistered on purpose: an `em` resolves where
+// a property is used, and a frame (`PageFrame`) can override the measure
+// for its document.
+
+$classic: ':where(:root[data-page-style="classic"])';
+$paged: ':where(:root:not([data-page-style="classic"]))';
+
+// Owner Q1: 14–32 px, in rem of the browser's own default size.
+$text-sizes: 14, 16, 18, 20, 24, 28, 32;
+$measures: (
+  narrow: 30,
+  standard: 33,
+  wide: 46,
+);
+// Full: the card takes the whole main area; text keeps 46 em.
+$full-measure: 10000;
+$full-text-measure: 46;
+$spacings: (
+  compact: (
+    leading: 1.45,
+    gap: 0.75em,
+    list-gap: 0.25em,
+    heading-leading: 1.2,
+  ),
+  normal: (
+    leading: 1.6,
+    gap: 1em,
+    list-gap: 0.35em,
+    heading-leading: 1.2,
+  ),
+  relaxed: (
+    leading: 1.8,
+    gap: 1.5em,
+    list-gap: 0.5em,
+    heading-leading: 1.25,
+  ),
+);
+
+@mixin spacing($name) {
+  $values: map.get($spacings, $name);
+  --page-leading: #{map.get($values, leading)};
+  --page-gap: #{map.get($values, gap)};
+  --page-list-gap: #{map.get($values, list-gap)};
+  --page-heading-leading: #{map.get($values, heading-leading)};
+}
+
+@mixin measure($width) {
+  @if $width == full {
+    --page-measure: #{$full-measure};
+    --page-text-cap: calc(#{$full-text-measure} * var(--page-size));
+  } @else {
+    --page-measure: #{map.get($measures, $width)};
+  }
+}
+
+/* =====================
+     VARIABLES: the Default style, then the knob overrides
+     ===================== */
+:root {
+  --page-size: 1rem;
+  --page-measure: #{map.get($measures, standard)};
+  --page-font: Arial, "Liberation Sans", Arimo, sans-serif;
+  @include spacing(normal);
+}
+
+@each $size in $text-sizes {
+  :root[data-text-size="#{$size}"] {
+    --page-size: #{math.div($size, 16)}rem;
+  }
+}
+
+@each $width in (narrow, standard, wide, full) {
+  :root[data-page-width="#{$width}"],
+  .page-frame[data-doc-width="#{$width}"] {
+    @include measure($width);
+  }
+}
+
+@each $name, $_ in $spacings {
+  :root[data-spacing="#{$name}"] {
+    @include spacing($name);
+  }
+}
+
+// Today's line heights for list items and headings (a real selector, so
+// it outranks the Default variables on `:root`).
+:root[data-page-style="classic"] {
+  --page-leading: 1.15;
+  --page-heading-leading: 1.15;
+}
+
+/* =====================
+     CARD AND SKELETON: one width, so nothing moves on load
+     ===================== */
+#{$classic} :is(.document-editor-content, .skeleton-page) {
+  max-width: 648px;
+}
+
+#{$paged} :is(.document-editor-content, .skeleton-page) {
+  // The measure in em of the text size, plus the 3 rem padding each side.
+  max-width: calc(var(--page-measure) * var(--page-size) + 6rem);
+  font-size: var(--page-size);
+}
+
+// The skeleton's outline column shows only where the live outline docks:
+// at least the card plus 302 px (§5.9), from the same table the frame
+// computes. `classic` keeps today's skeleton.
+$outline-dock-extra: 302px;
+@each $size in $text-sizes {
+  @each $width, $measure in $measures {
+    $dock: $measure * $size * 1px + 96px + $outline-dock-extra;
+    $size-match: '[data-text-size="#{$size}"]';
+    @if $size == 16 {
+      $size-match: ':is([data-text-size="16"], :not([data-text-size]))';
+    }
+    $width-match: '[data-page-width="#{$width}"]';
+    @if $width == standard {
+      $width-match: ':is([data-page-width="standard"], :not([data-page-width]))';
+    }
+    @media (max-width: #{$dock - 0.02px}) {
+      :root:not([data-page-style="classic"])#{$size-match}#{$width-match}
+        .skeleton-toc {
+        display: none;
+      }
+    }
+  }
+}
+
+:root[data-page-width="full"]:not([data-page-style="classic"]) .skeleton-toc {
+  display: none;
+}
+
+/* =====================
+     BODY TEXT
+     ===================== */
+#{$classic} .tiptap.ProseMirror {
+  font-family: Arial, sans-serif;
+
+  p:not(:first-child):not(td p):not(th p) {
+    font-size: 15px;
+    line-height: 1.15;
+    font-weight: normal;
+    margin-top: 12px;
+  }
+}
+
+// Every paragraph, in lists, cells and blockquotes too, at one size.
+#{$paged} .tiptap.ProseMirror {
+  font-family: var(--page-font);
+  font-size: var(--page-size);
+
+  p {
+    line-height: var(--page-leading);
+    font-weight: normal;
+  }
+
+  // Cells keep their own tight spacing (`table-node.scss`), as before.
+  p:not(:first-child):not(td p):not(th p) {
+    margin-top: var(--page-gap);
+  }
+
+  li + li {
+    margin-top: var(--page-list-gap);
+  }
+
+  // Full width: tables, media, diagrams and code use the whole card; text
+  // keeps a readable line.
+  > :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6) {
+    max-inline-size: var(--page-text-cap, none);
+  }
+}
+
+/* =====================
+     INCREASED CONTRAST (web override and the OS setting)
+     One token set for both triggers. Forced colours replace colours
+     anyway, so the media query leaves them alone.
+     ===================== */
+@mixin contrast-tokens($theme) {
+  @if $theme == light {
+    --foreground: oklch(0 0 0);
+    --card-foreground: oklch(0 0 0);
+    --popover-foreground: oklch(0 0 0);
+    --muted-foreground: oklch(0.4 0 0);
+    --border: oklch(0.5 0 0);
+    --input: oklch(0.5 0 0);
+    --focus-ring: oklch(0 0 0);
+    --tt-border-color-tint: oklch(0.5 0 0);
+  } @else {
+    --foreground: oklch(1 0 0);
+    --card-foreground: oklch(1 0 0);
+    --popover-foreground: oklch(1 0 0);
+    --muted-foreground: oklch(0.85 0 0);
+    --border: oklch(0.65 0 0);
+    --input: oklch(0.65 0 0);
+    --focus-ring: oklch(1 0 0);
+    --tt-border-color-tint: oklch(0.65 0 0);
+  }
+}
+
+@mixin contrast-rules {
+  :focus-visible {
+    outline-width: 3px;
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: auto;
+    backdrop-filter: none;
+  }
+
+  .tiptap.ProseMirror a {
+    text-decoration-thickness: 2px;
+  }
+}
+
+:root[data-contrast="more"] {
+  @include contrast-tokens(light);
+}
+
+:root.dark[data-contrast="more"] {
+  @include contrast-tokens(dark);
+}
+
+:root[data-contrast="more"] {
+  @include contrast-rules;
+}
+
+@media (prefers-contrast: more) and (forced-colors: none) {
+  :root {
+    @include contrast-tokens(light);
+  }
+
+  :root.dark {
+    @include contrast-tokens(dark);
+  }
+
+  :root {
+    @include contrast-rules;
+  }
+}
+
+/* =====================
+     REDUCED MOTION (web override)
+     The OS setting already matches each rule's own
+     `prefers-reduced-motion` query; Tailwind's `motion-reduce:` variant
+     covers both (`globals.css`).
+     ===================== */
+:root[data-motion="reduce"] {
+  scroll-behavior: auto;
+
+  :is(
+      [data-slot="dropdown-menu-content"],
+      [data-slot="dropdown-menu-sub-content"],
+      [data-slot="popover-content"],
+      [data-command-palette],
+      .outline-panel,
+      .skeleton-block
+    ) {
+    animation: none;
+  }
+}
+
+/* =====================
+     PAGE FRAME AND READING MODE
+     The frame (`PageFrame`) wraps the editor or its skeleton in the app
+     shell and takes the place the editor had, so nothing moves.
+     ===================== */
+.page-frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+// Reading mode: no toolbar row and no phone bar; the editor is read-only.
+.page-frame[data-reading] [data-slot="toolbar"]:is([data-variant="fixed"], [data-variant="docked"]) {
+  display: none;
+}

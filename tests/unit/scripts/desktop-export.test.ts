@@ -122,6 +122,15 @@ describe("checkDesktopExport", () => {
     expect(checkDesktopExport(join(root, "out"))).toEqual([]);
   });
 
+  it("requires the exact boot script in every page (the CSP hashes it)", () => {
+    const boot = "(function(){})();";
+    validExport();
+    write("out/index.html", `${PAGE}<script>${boot}</script>`);
+    expect(checkDesktopExport(join(root, "out"), { bootScript: boot })).toEqual(
+      ["about.html lacks the boot script"],
+    );
+  });
+
   it("reports web-only routes", () => {
     validExport();
     write("out/privacy.html", PAGE);

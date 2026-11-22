@@ -6,7 +6,10 @@
  *
  *   bun run build:desktop
  */
+
 import { join } from "node:path";
+
+import { BOOT_SCRIPT } from "@/lib/prefs/boot-script";
 
 import {
   checkDesktopExport,
@@ -52,7 +55,9 @@ async function main(): Promise<number> {
   }
   if (code !== 0) return code;
 
-  const problems = checkDesktopExport(join(root, "out"));
+  const problems = checkDesktopExport(join(root, "out"), {
+    bootScript: BOOT_SCRIPT,
+  });
   for (const problem of problems) console.error(`[desktop-export] ${problem}`);
   if (problems.length > 0) return 1;
   console.log("[desktop-export] out/ is a valid desktop renderer");

@@ -108,7 +108,9 @@ interface SwipeState {
   popup: HTMLElement;
 }
 
+/** The OS setting, or the web's "Reduce motion: Always" (`data-motion`). */
 const prefersReducedMotion = () =>
+  document.documentElement.dataset.motion === "reduce" ||
   matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**

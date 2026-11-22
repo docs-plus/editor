@@ -9,7 +9,8 @@
     color: inherit;
     font-style: inherit;
     font-weight: 700;
-    line-height: 1.15;
+    // A host's page spacing can set it (TinyDocy: `styles/_page.scss`).
+    line-height: var(--page-heading-leading, 1.15);
   }
 
   > h1:first-child,
@@ -28,7 +29,7 @@
   }
 
   h1 {
-    font-size: var(--hd-size, 20pt);
+    font-size: var(--hd-size, calc(20em / 12));
     margin-top: 1.33em;
   }
 
@@ -59,27 +60,27 @@
   }
 
   h2 {
-    font-size: var(--hd-size, 16pt);
+    font-size: var(--hd-size, calc(16em / 12));
     margin-top: 1.15em;
   }
 
   h3 {
-    font-size: var(--hd-size, 14pt);
+    font-size: var(--hd-size, calc(14em / 12));
     margin-top: 1em;
   }
 
   h4 {
-    font-size: var(--hd-size, 12pt);
+    font-size: var(--hd-size, calc(12em / 12));
     margin-top: 1em;
   }
 
   h5 {
-    font-size: var(--hd-size, 11pt);
+    font-size: var(--hd-size, calc(11em / 12));
     margin-top: 1em;
   }
 
   h6 {
-    font-size: var(--hd-size, 10pt);
+    font-size: var(--hd-size, calc(10em / 12));
     margin-top: 1em;
   }
 }

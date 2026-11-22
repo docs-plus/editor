@@ -42,6 +42,30 @@ describe("HeadingScale plugin decorations", () => {
     editor.destroy();
   });
 
+  it("sizes in em of the page text, the old pt sizes on a 16 px base", () => {
+    const heading = (level: number) => ({
+      type: "heading",
+      attrs: { level },
+      content: [{ type: "text", text: `H${level}` }],
+    });
+    const editor = createTestEditor({
+      content: { type: "doc", content: [heading(1), heading(2), heading(4)] },
+    });
+    const styles = getScaleDecos(editor)
+      .find()
+      .map(
+        (deco) =>
+          (deco as unknown as { type: { attrs: { style: string } } }).type.attrs
+            .style,
+      );
+    expect(styles).toEqual([
+      "--hd-size: calc(20em / 12)",
+      "--hd-size: calc(16em / 12)",
+      "--hd-size: calc(12em / 12)",
+    ]);
+    editor.destroy();
+  });
+
   it("same rank count → same visual sizing: H1>H2>H4 vs H1>H3>H5", () => {
     const editor1 = createTestEditor({
       content: {

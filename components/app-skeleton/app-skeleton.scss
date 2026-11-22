@@ -1,5 +1,5 @@
 // Loading shell. Mirrors the live layout (tab bar 38px, toolbar 44px,
-// 270px table of contents from 768px, 648px page card) so nothing moves
+// 270px table of contents from 768px, the page card) so nothing moves
 // when the editor replaces it. Loaded with the page, not the editor chunk.
 
 .app-skeleton {
@@ -67,7 +67,8 @@
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
-  max-width: 648px;
+  // Its width follows the page preferences, as the editor's card does
+  // (`styles/_page.scss`).
   margin: 0.75rem auto;
   padding: 3rem;
   background-color: var(--background);

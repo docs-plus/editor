@@ -112,8 +112,14 @@ function walk(dir: string, visit: (path: string) => void): void {
  * Problems with an exported `out/`, empty when it is a valid desktop
  * renderer: no web-only route, no web metadata tag in any page, and the
  * flat segment-prefetch layout (Windows writes `__next.<segment>/`, #103).
+ * With `bootScript`, every page must also inline that exact string: the
+ * desktop CSP allows inline scripts by their SHA-256, so a page whose boot
+ * script differs from the hashed one would run without preferences.
  */
-export function checkDesktopExport(outDir: string): string[] {
+export function checkDesktopExport(
+  outDir: string,
+  { bootScript }: { bootScript?: string } = {},
+): string[] {
   const problems: string[] = [];
   for (const name of readdirSync(outDir)) {
     if (WEB_ONLY_OUTPUT.test(name)) problems.push(`web-only output: ${name}`);
@@ -128,6 +134,9 @@ export function checkDesktopExport(outDir: string): string[] {
     const html = readFileSync(path, "utf8");
     for (const tag of WEB_ONLY_TAGS) {
       if (tag.test(html)) problems.push(`${rel} has ${tag.source}`);
+    }
+    if (bootScript && !html.includes(`<script>${bootScript}</script>`)) {
+      problems.push(`${rel} lacks the boot script`);
     }
   });
   return problems;

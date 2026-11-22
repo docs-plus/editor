@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import * as sass from "sass";
+
 import { contrastRatio, MIN_TEXT_CONTRAST } from "@/lib/text-style-contrast";
 import { HIGHLIGHT_PALETTE, HIGHLIGHT_TOKENS } from "@/lib/text-style-tokens";
 import {
@@ -26,8 +28,33 @@ const SURFACES = [
   "secondary",
 ] as const;
 
-function hex(theme: Theme, token: string): string {
-  const value = readThemeTokens(theme)[token];
+/**
+ * The increased-contrast token set (P2.9c-1, preferences design §5.4),
+ * compiled from `styles/_page.scss`, laid over the theme's tokens.
+ */
+function contrastTokens(theme: Theme): Record<string, string> {
+  const css = sass.compile(join(ROOT, "styles/_page.scss")).css;
+  const selector =
+    theme === "dark"
+      ? ":root.dark[data-contrast=more] {"
+      : ":root[data-contrast=more] {";
+  const start = css.indexOf(selector);
+  if (start < 0) throw new Error(`no ${selector} block`);
+  const body = css.slice(start, css.indexOf("}", start));
+  const tokens: Record<string, string> = {};
+  for (const [, name, value] of body.matchAll(/--([\w-]+):\s*([^;]+);/g)) {
+    tokens[name] = value.trim();
+  }
+  return tokens;
+}
+
+type ContrastSet = "normal" | "more";
+
+function hex(theme: Theme, token: string, set: ContrastSet = "normal"): string {
+  const value = {
+    ...readThemeTokens(theme),
+    ...(set === "more" ? contrastTokens(theme) : {}),
+  }[token];
   if (value === undefined) throw new Error(`--${token} not defined`);
   return oklchToHex(value);
 }
@@ -40,18 +67,54 @@ describe("design token contrast", () => {
     expect(oklchToHex("oklch(0.769 0.188 70.08)")).toBe("#fe9a00");
   });
 
-  // P2.9c-1 adds the high-contrast set to this loop.
-  it.each<Theme>(["light", "dark"])(
-    "--primary-ink is at least 4.5:1 on every surface (%s)",
-    (theme) => {
-      const ink = hex(theme, "primary-ink");
+  const SETS: [Theme, ContrastSet][] = [
+    ["light", "normal"],
+    ["dark", "normal"],
+    ["light", "more"],
+    ["dark", "more"],
+  ];
+
+  it.each(SETS)(
+    "--primary-ink is at least 4.5:1 on every surface (%s, %s contrast)",
+    (theme, set) => {
+      const ink = hex(theme, "primary-ink", set);
       for (const surface of SURFACES) {
-        const ratio = contrastRatio(ink, hex(theme, surface));
+        const ratio = contrastRatio(ink, hex(theme, surface, set));
         expect({ surface, ok: ratio >= MIN_TEXT_CONTRAST }).toEqual({
           surface,
           ok: true,
         });
       }
+    },
+  );
+
+  it.each<Theme>(["light", "dark"])(
+    "increased contrast: text 7:1, muted text 7:1, borders and focus 3:1 (%s)",
+    (theme) => {
+      const failing: string[] = [];
+      const check = (
+        token: string,
+        min: number,
+        surfaces: readonly string[],
+      ) => {
+        for (const surface of surfaces) {
+          const ratio = contrastRatio(
+            hex(theme, token, "more"),
+            hex(theme, surface, "more"),
+          );
+          if (ratio < min)
+            failing.push(`${token} on ${surface} ${ratio.toFixed(2)}`);
+        }
+      };
+      expect(contrastTokens(theme).foreground).toBe(
+        theme === "dark" ? "oklch(1 0 0)" : "oklch(0 0 0)",
+      );
+      check("foreground", 7, ["background", "card", "muted"]);
+      check("muted-foreground", 7, ["background", "card", "popover"]);
+      check("muted-foreground", 4.5, ["muted", "secondary", "sidebar"]);
+      check("border", 3, ["background", "card"]);
+      check("focus-ring", 3, ["background", "card", "muted"]);
+      expect(failing).toEqual([]);
     },
   );
 
