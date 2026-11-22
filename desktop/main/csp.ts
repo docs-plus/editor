@@ -81,3 +81,30 @@ export function buildDesktopCsp({
     "object-src 'none'",
   ].join("; ");
 }
+
+/**
+ * The CSP for every non-HTML response (SEC-008). A script, stylesheet,
+ * font or image loaded by a page is governed by that page's CSP; this one
+ * applies only when a response becomes a document or a worker of its own:
+ * an SVG opened directly, or a script started as a worker.
+ * - Nothing loads but same-origin files; no inline script, no connections
+ *   beyond the app's origin, no frames, forms or plugins.
+ * - An SVG is also sandboxed (an opaque origin with scripts off), so a
+ *   document made of one can't act as the app.
+ */
+export function buildResourceCsp(contentType: string): string {
+  const directives = [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self'",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+  ];
+  if (contentType.startsWith("image/svg+xml")) directives.push("sandbox");
+  return directives.join("; ");
+}
