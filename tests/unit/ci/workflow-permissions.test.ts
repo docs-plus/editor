@@ -147,6 +147,41 @@ it("finds the workflow_run workflows", () => {
   expect(WORKFLOW_RUN_FILES).toContain("deploy.yml");
 });
 
+// Pull request and merge queue runs build code nobody has merged yet (from a
+// fork, for a pull request), so no job in them gets a write scope.
+const UNTRUSTED_TRIGGER_FILES = WORKFLOW_FILES.filter((file) =>
+  triggers(readWorkflow(file).workflow).some(
+    (trigger) => trigger === "pull_request" || trigger === "merge_group",
+  ),
+);
+
+describe.each(UNTRUSTED_TRIGGER_FILES)("pull request workflow %s", (file) => {
+  const { workflow } = readWorkflow(file);
+
+  it("gives every job explicit read-only permissions", () => {
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      expect(isReadOnly(job.permissions), name).toBe(true);
+    }
+  });
+});
+
+it("finds the pull request and merge queue workflows", () => {
+  expect(UNTRUSTED_TRIGGER_FILES).toContain("ci.yml");
+  expect(triggers(readWorkflow("ci.yml").workflow)).toContain("merge_group");
+});
+
+// A merge queue CI run is on a gh-readonly-queue/... branch and its event is
+// merge_group: Deploy acts only on pushes to main (checked above), so the
+// queue never deploys; the push that lands the merge does.
+it("deploys only after CI on main", () => {
+  const on = readWorkflow("deploy.yml").workflow.on as Record<
+    string,
+    { workflows?: string[]; branches?: string[] }
+  >;
+  expect(on.workflow_run.workflows).toEqual(["CI"]);
+  expect(on.workflow_run.branches).toEqual(["main"]);
+});
+
 // A workflow may use no actions at all (release.yml only runs gh), but the
 // parser above must still find the ones that exist.
 it("finds the actions the workflows use", () => {

@@ -120,6 +120,82 @@ without purging; the next 03:17 run writes `db-first.sqlite` and does the
 first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
 pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
 
+### CI: `main` runs are never cancelled; merge queue support
+
+A merge on `main` no longer cancels the previous commit's CI run, which left
+that commit undeployed (29f6faf and e64ae84). CI also runs in the merge queue,
+so the owner can require it on `main`. No app change.
+
+#### Changed
+
+- **CI:** only pull request runs are cancelled by a newer push. A started run
+  on `main` always finishes and can deploy; runs queue in commit order, and
+  when several merges land together the newest commit's run waits and
+  deploys everything before it.
+- **CI:** a `merge_group` trigger. Merge queue runs never deploy (Deploy acts
+  only on CI runs from a push to `main`).
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the
+  no-cancel rule and the two required check names;
+  `workflow-permissions.test.ts` requires explicit read-only permissions on
+  every job of a `pull_request` or `merge_group` workflow.
+
+**Deploy:** none. **Owner (once):** to turn the merge queue on, add
+**Require merge queue** to the **Protect main** ruleset as
+`docs/operations/deploy-runbook.md` → *Turning the merge queue on*
+describes; the required checks keep their names.
+
+### Desktop: no partial daily copy left after a quit on Windows
+
+On Windows, a quit during a daily copy could leave
+`daily/library-<date>.sqlite.partial` behind. The copy thread was stopped
+with `terminate()`, which skips its cleanup, so its SQLite handle could still
+hold the file when shutdown tried to delete it. Windows won't delete an open
+file, and nothing retried.
+
+#### Fixed
+
+- **Desktop:** quit now asks the copy thread to stop. At its next batch the
+  thread rolls back, closes its connection and the read-only attach, and only
+  then exits; `terminate()` is the fallback after 500 ms. The partial file is
+  then deleted with retries for about 420 ms, inside the 2 s shutdown budget.
+  The previous copies are never touched.
+- **Desktop:** the storage host's deletes retry briefly on `EBUSY`. Opening a
+  library still succeeds when a partial can't be deleted yet; the next open
+  removes it.
+- **Tests:** T4-copy runs 30 times on `windows-latest`. Every quit must land
+  during a copy, and every copy must be stopped with its partial deleted.
+
+### Docs: Phase 2 status, and the runbook and AGENTS.md brought up to date
+
+Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/superpowers/plans/2026-11-22-phase-2-status.md`. It
+  records:
+  - where each Phase 2 row stands;
+  - the decisions made while executing it: the daily-copy design, the
+    editor-chunk ledger lines and the 0 B rule, the bubble redesign
+    rulings, landing dark;
+  - how work merges;
+  - what waits on the owner;
+  - the head-of-engineering estimates.
+
+  The design spec's Phase 2 heading links to it.
+
+#### Changed
+
+- **Docs:** the deploy runbook records that automatic deploys and the
+  retention purge are on in production, and that over a non-login SSH
+  command PM2 runs as `~/.bun/bin/bunx`.
+- **Docs:** `AGENTS.md` records:
+  - the desktop and local-first layering: the ports, contract suites,
+    storage worker, desktop export, library UI and landing dark;
+  - the editor-chunk budget rule;
+  - the batch-and-wait merge practice;
+  - the Node 14 `install_deps` shim on the host;
+  - the purge state.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
