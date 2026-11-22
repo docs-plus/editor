@@ -525,6 +525,26 @@ Its decisions, adopted here (§14):
 
 **Kill switches.** `HOCUS_SHARES=on|readonly|off`, `HOCUS_ASSETS=on|readonly|off` and `HOCUS_COMMENTS=on|readonly|off`, reported in `/api/info.features`.
 
+**As built: P4.1 and P4.2a–d (dark, 2026-11-22).** Code in `lib/sharing/`, `lib/security/hocus-delete-route.ts` and `scripts/hocus-server.ts`. Both flags default to off. These choices fill gaps in the rows above; P4.4 and W10 build on them.
+- **Wire format (frozen).** Every token and hash is unpadded base64url. `auth_edit` and `auth_view` are 32 bytes and the owner secret is 16. The server hashes the **decoded bytes**, so `edit_hash = base64url(SHA-256(bytes(auth_edit)))`, and the same for the view and owner hashes. Test vectors are in `tests/unit/lib/sharing/share-name-token.test.ts`.
+- **Endpoints.**
+  - `POST /api/shares` takes exactly `{lineage, edit_hash, view_hash, owner_hash, schema}`. Any other key is refused, so a client bug that sends `e` fails loudly. It returns `201 {share_id}`.
+  - `GET /api/shares/:id/status` takes any token of the share (owner, edit or view) as `Authorization: Bearer`. It returns `{status: pending|committed, view_only}` or `{status: ended, reason}`.
+  - `POST …/reset` takes `{edit_hash, view_hash, owner_hash, schema}` and returns `201 {share_id}`.
+  - When `HOCUS_SHARES=readonly`, create and reset answer `503 shares_readonly`. Stop and view-only still work, and every connection is read-only.
+- **Refusals.**
+  - An unknown share and a wrong token both get `share_unavailable` (HTTP 404), so only token holders learn a share's state.
+  - The order is the failed-token limits, then the row, then the token, then the state.
+  - Ended shares answer with their reason (HTTP 410 on owner calls).
+  - An edit token on a view-only share gets `view_only`. Failed-token and capacity limits answer `busy` (HTTP 429).
+- **Tombstone reasons.** The reason is stored in `shares.ended_reason` (CHECK-constrained), not as a new column on `document_tombstones`. That table is shared with Next.js and the purge job on the production database, and a dark deploy must not migrate it. An ended row is never deleted, so it is the share's permanent tombstone. Ending a share also deletes its stored document and writes a `document_tombstones` row, so the existing store paths refuse the name.
+- **Extra columns.** `view_only` keeps `edit_hash` (Make view-only turns editing off; it doesn't drop the hash), so an edit token is told `view_only` instead of counting as a failed token. `last_edit_at` drives the 30-day expiry, which is checked when a share is used. `ended_at` dates the end.
+- **Capacity.** Share connections have their own per-IP counter (`SHARE_WS_CONNECTIONS_PER_IP`, 10), separate from `WS_CONNECTION_LIMIT`. Shares never get `document_activity` rows, so the sandbox retention purge can't end them. The socket gate (`WS_SOCKETS_PER_IP`) and Throttle are still shared, and the staging capacity test (20 clients behind one IP across a restart) must check them before Gate 4.
+- **`created_ip_hash`** is HMAC-SHA-256 keyed by `SHARE_IP_HASH_KEY` (a random key per process when unset). It is cleared 30 days after creation, each time a share is created.
+- **Viewers** are marked in awareness for every read-only connection (`viewer: true`, cursor removed). The server also removes any `viewer` field an editor sends.
+- **P4.1.** `DELETE /api/documents/:id` runs in Hocus behind `HOCUS_DELETE_ROUTE=on`, with the Next.js route's contract, and refuses `share:*` and `sync:*`. The Next.js route stays live until the operator moves the Traefik route. Its exit criterion (the close-tab e2e suite on staging) runs then, and the Next.js route is deleted in that follow-up.
+- **Not yet built:** `allowedSchemas` runs from the sandbox minimum to `max(CLIENT_SCHEMA, 3)`, so no shipped client can share until A1 raises `CLIENT_SCHEMA` to 3. Reports, `share-admin`, alerts and the runbook are P4.2e.
+
 **OWASP pass**, written up in `docs/operations/` before Gate 4:
 - access control: owner secrets, no create-by-guess, server-generated IDs
 - crypto: client-side CSPRNG secrets, HKDF-SHA-256 tokens under versioned labels, only SHA-256 hashes of tokens stored, 32-byte hashes required, `timingSafeEqual` after the `share_id` lookup, distinct hashes at create (v8, seam S1)
