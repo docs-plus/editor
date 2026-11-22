@@ -35,8 +35,12 @@ const rect = ({ left, top, right, bottom }: Box) =>
     height: bottom - top,
   }) as DOMRect;
 
-const element = (box: Box) =>
-  ({ getBoundingClientRect: () => rect(box) }) as Element;
+const element = (box: Box, inBubble = false) =>
+  ({
+    getBoundingClientRect: () => rect(box),
+    closest: (selector: string) =>
+      inBubble && selector === "[data-smart-bubble]" ? ({} as Element) : null,
+  }) as unknown as Element;
 
 const CHEVRON = element({ left: 626, top: 46, right: 650, bottom: 74 });
 
@@ -215,5 +219,84 @@ describe("clearOfSelection", () => {
       { x: 707, ...line(640) },
     );
     expect(clearOfSelection(below, button, TOP, SIDE_OFFSET)).toEqual([0, 0]);
+  });
+
+  describe("from the bubble (spec §10.4)", () => {
+    /** The bubble's A▾ over "some words", flipped below the bubble. */
+    const BUBBLE_CHEVRON = element(
+      { left: 640, top: 140, right: 664, bottom: 168 },
+      true,
+    );
+    // Short words: a slide just right of them would still span A▾.
+    const SELECTED = editorWith(
+      { x: 600, ...line(180) },
+      { x: 630, ...line(180) },
+    );
+
+    it("never slides along the line: it goes below the selection's last line", () => {
+      // A slide right of the words would fit, but covers the line.
+      const [across, away] = clearOfSelection(
+        SELECTED,
+        BUBBLE_CHEVRON,
+        BOTTOM,
+        SIDE_OFFSET,
+      );
+      expect(across).toBe(0);
+      expect(168 + SIDE_OFFSET + away).toBe(197 + SELECTION_GAP);
+    });
+
+    it("clears the selection's whole lines, not just its words", () => {
+      // The words end left of the menu, but their line runs under it.
+      const short = editorWith(
+        { x: 400, ...line(180) },
+        { x: 450, ...line(180) },
+      );
+      const [, away] = clearOfSelection(
+        short,
+        BUBBLE_CHEVRON,
+        BOTTOM,
+        SIDE_OFFSET,
+      );
+      expect(168 + SIDE_OFFSET + away).toBe(197 + SELECTION_GAP);
+    });
+
+    it("still goes below when the room is short: the menu scrolls inside", () => {
+      setInnerHeight(300);
+      const [, away] = clearOfSelection(
+        SELECTED,
+        BUBBLE_CHEVRON,
+        BOTTOM,
+        SIDE_OFFSET,
+      );
+      expect(168 + SIDE_OFFSET + away).toBe(197 + SELECTION_GAP);
+    });
+
+    it("opening upward rises above the selection's first line", () => {
+      const low = element(
+        { left: 640, top: 600, right: 664, bottom: 628 },
+        true,
+      );
+      const editor = editorWith(
+        { x: 600, ...line(560) },
+        { x: 700, ...line(590) },
+      );
+      const [across, away] = clearOfSelection(editor, low, TOP, SIDE_OFFSET);
+      expect(across).toBe(0);
+      expect(600 - SIDE_OFFSET - away).toBe(560 - SELECTION_GAP);
+    });
+
+    it("does not move when the menu already sits clear of the lines", () => {
+      const above = element(
+        { left: 640, top: 100, right: 664, bottom: 128 },
+        true,
+      );
+      const below = editorWith(
+        { x: 600, ...line(500) },
+        { x: 700, ...line(500) },
+      );
+      expect(clearOfSelection(below, above, BOTTOM, SIDE_OFFSET)).toEqual([
+        0, 0,
+      ]);
+    });
   });
 });

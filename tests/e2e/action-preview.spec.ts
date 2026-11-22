@@ -388,8 +388,9 @@ test.describe("hover preview", () => {
     const swatch = dialog.getByRole("menuitemradio", { name: "Red text" });
     await swatch.hover();
     await expect(previews(page)).toHaveCount(1);
+    // A pick closes the menu (spec §7.10); its unmount clears the preview.
     await swatch.click();
-    await expect(swatch).toHaveAttribute("aria-checked", "true");
+    await expect(dialog).toBeHidden();
     await expect(previews(page)).toHaveCount(0);
     await expect(
       page.locator('.tiptap span[data-text-color="red"]:not(.tt-preview)'),
@@ -468,9 +469,9 @@ test.describe("hover preview", () => {
           expect(box && !intersects(box, clip)).toBe(true);
           const previewed = await page.screenshot({ clip });
 
+          // A pick closes the menu, which clears the preview.
           await button.click();
-          await expect(button).toHaveAttribute("aria-checked", "true");
-          await dialog.locator(".st-color-row-label").first().hover();
+          await expect(dialog).toBeHidden();
           await expect(previews(page)).toHaveCount(0);
           // The applied result under the same wrapper the preview used (it
           // inherits every colour and only drops the blurred selection's
@@ -658,6 +659,51 @@ async function settledBox(locator: Locator): Promise<Box> {
   return box;
 }
 
+/** The selection's line band: its first line's top to its last line's bottom. */
+const selectionBand = (page: Page) =>
+  page.evaluate(() => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("editor missing");
+    const { from, to } = editor.state.selection;
+    return {
+      top: editor.view.coordsAtPos(from).top,
+      bottom: editor.view.coordsAtPos(to, -1).bottom,
+    };
+  });
+
+test.describe("the bubble's colour menu (spec §10.4)", () => {
+  // A low window: no room above the first body line for the menu.
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  for (const [where, needle] of [
+    ["the first body line, under the row", "some words"],
+    ["a line lower down", "blue words"],
+  ] as const) {
+    test(`never covers the selection's lines on ${where}`, async ({ page }) => {
+      await openDoc(page);
+      await selectText(page, needle);
+      await expect(bubble(page)).toHaveAttribute("data-state", "open");
+      await bubble(page)
+        .getByRole("button", { name: "More text colours" })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "Text colours" });
+      await dialog.getByRole("menuitemradio", { name: "Purple text" }).hover();
+      await expect(previews(page)).toHaveAttribute("data-text-color", "purple");
+      const menu = await settledBox(dialog);
+      const band = await selectionBand(page);
+      // Above the first line or below the last, whole lines included.
+      expect(
+        menu.y + menu.height <= band.top || menu.y >= band.bottom,
+        `menu ${JSON.stringify(menu)} vs lines ${JSON.stringify(band)}`,
+      ).toBe(true);
+      // Still all on screen: capped to the room, it scrolls inside.
+      expect(menu.y + menu.height).toBeLessThanOrEqual(720);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+    });
+  }
+});
+
 test.describe("hover preview at 1440", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -727,19 +773,16 @@ test.describe("hover preview on touch", () => {
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     const swatch = dialog.getByRole("menuitemradio", { name: "Red text" });
     await expect(swatch).toBeVisible();
-    // A tap marks no swatch: the ring is for a pointer that hovers.
-    const blue = dialog.getByRole("menuitemradio", { name: "Blue text" });
-    await blue.tap();
-    await expect(blue).toHaveAttribute("aria-checked", "true");
-    await expect(dialog.locator("[data-pointed]")).toHaveCount(0);
-    expect((await ring(blue)).style).toBe("none");
-
     await swatch.hover();
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
+    // A tap applies and closes the menu (spec §7.10), previewing nothing.
     await swatch.tap();
-    await expect(swatch).toHaveAttribute("aria-checked", "true");
+    await expect(dialog).toBeHidden();
     await expect(previews(page)).toHaveCount(0);
+    await expect(
+      page.locator('.tiptap span[data-text-color="red"]:not(.tt-preview)'),
+    ).toHaveText("some words");
   });
 
   test("touch with a hardware keyboard: arrows preview, a pointer does not; Esc clears", async ({

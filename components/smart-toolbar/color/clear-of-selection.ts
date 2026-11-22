@@ -14,15 +14,25 @@ type SelectionEditor = Pick<Editor, "state" | "isDestroyed"> & {
   view: Pick<Editor["view"], "coordsAtPos" | "dom">;
 };
 
+/** The selection bubble's root: menus opened from it follow spec §10.4. */
+const BUBBLE = "[data-smart-bubble]";
+
 /**
  * The move [across, away from the button] that keeps the colour popover
- * off the selection, which the hover preview paints: opened from the row
- * over the first lines, it hid the very words it previews. Sideways along
- * the toolbar first, as far as it still spans its button (Base UI's
- * `limitShift` keeps it touching the button anyway); else straight past
- * the selection, still centred on the button. [0, 0] when it covers
- * nothing or no move fits the viewport. Popovers that already open away
- * from the text (the bubble's) never cover it, so they never move.
+ * off the selection, which the hover preview paints.
+ *
+ * From the row: opened over the first lines, it hid the very words it
+ * previews. Sideways along the toolbar first, as far as it still spans its
+ * button (Base UI's `limitShift` keeps it touching the button anyway);
+ * else straight past the selection, still centred on the button. [0, 0]
+ * when it covers nothing or no move fits the viewport.
+ *
+ * From the bubble (spec §10.4): the menu opens away from the text, but
+ * with no room there Base UI flips it toward the text. It never slides
+ * along the line: it goes below the selection's last line (above its
+ * first line when opening upward), even when the room is short, where
+ * its height is capped to the room and it scrolls (`color-panel.scss`).
+ * Every line the selection touches counts, not only its words.
  *
  * In the lazy colour chunk: the eager trigger reaches it once the chunk
  * has loaded (`loadedColorPanel()`), which hovering or focusing the
@@ -48,14 +58,12 @@ export function clearOfSelection(
   const x = anchor.left + (anchor.width - width) / 2;
   const up = side === "top";
   const y = up ? anchor.top - sideOffset - height : anchor.bottom + sideOffset;
-  if (
-    x >= right ||
-    x + width <= left ||
-    y >= end.bottom ||
-    y + height <= start.top
-  ) {
-    return [0, 0];
-  }
+  const away = up
+    ? y + height + SELECTION_GAP - start.top
+    : end.bottom + SELECTION_GAP - y;
+  const coversLines = y < end.bottom && y + height > start.top;
+  if (trigger.closest(BUBBLE)) return [0, coversLines ? away : 0];
+  if (!coversLines || x >= right || x + width <= left) return [0, 0];
   const room = document.documentElement.clientWidth;
   const shifts = [left - SELECTION_GAP - width - x, right + SELECTION_GAP - x]
     .filter((shift) => {
@@ -72,8 +80,5 @@ export function clearOfSelection(
   const fits = up
     ? start.top - SELECTION_GAP - height >= 0
     : end.bottom + SELECTION_GAP + height <= window.innerHeight;
-  const away = up
-    ? y + height + SELECTION_GAP - start.top
-    : end.bottom + SELECTION_GAP - y;
   return [0, fits ? away : 0];
 }
