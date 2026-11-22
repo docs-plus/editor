@@ -117,7 +117,8 @@ export type StorageOps = {
   };
   purgeDoc: { args: { id: string }; result: number };
   createTag: {
-    args: { name: string; color?: string | null };
+    /** `id` is the caller's when no tag has the name's key yet. */
+    args: { name: string; color?: string | null; id?: string };
     result: ReturnType<Library["createTag"]>;
   };
   setDocTags: { args: { docId: string; tagIds: string[] }; result: number };
@@ -260,7 +261,11 @@ function run(library: Library, request: StorageRequest): unknown {
     case "purgeDoc":
       return library.purgeDoc(request.args.id);
     case "createTag":
-      return library.createTag(request.args.name, request.args.color ?? null);
+      return library.createTag(
+        request.args.name,
+        request.args.color ?? null,
+        request.args.id,
+      );
     case "setDocTags":
       return library.setDocTags(request.args.docId, request.args.tagIds);
     case "listDailyCopies":
