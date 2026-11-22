@@ -1,5 +1,12 @@
 # Tablet stand-in words: the decision (P4, O8 a)
 
+**Decided 2026-11-22: the owner chose option (b), and it is built.**
+- `option-b-built-{768,820}-{paragraph,code}-{light,dark}.jpg` show the shipped row; all fit (0 px overflow).
+- `option-b-built-820-more-menu-{light,dark}.jpg` show Redo leading ⋯ on a touch tablet.
+- The real rule uses a window query, `(min-width: 768px) and (max-width: 847.98px) and (pointer: coarse)`, so that ⋯, which is portalled outside the row, can match it too. The mock below used a container query instead.
+- Measured: app CSS +71 B gz for the step, +138 B gz for the words; the editor chunk group is unchanged at −23 B against `main` 84a9458.
+- The mocks below are kept as the record.
+
 These are headless shots of the row on a coarse pointer (`hasTouch`, `isMobile`) in the light theme, with the caret in a paragraph or in a code block. Each file is `<case>-{paragraph,code}.jpg`. The words add 120 px to the row: Format +44, Layout +42, Block +34. The code block is the widest context; a table gives the same width.
 
 Row overflow, measured in the shot script as `scrollWidth − clientWidth`:

@@ -29,10 +29,12 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
   link field has focus, and a pick refused since it opened (a
   collaborator's edit) says why inside it. Its cells and steps are their own
   lazy chunk, fetched when the browser is idle and on the cell's press.
-- **Touch tablets:** at 848px and wider on a coarse pointer, the row's
-  stand-ins read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from
-  first paint (CSS in `app/globals.css`). Below 848px the row has no room for
-  their 120px in every context, so they stay off.
+- **Touch tablets:** on a coarse pointer from 768px, the row's stand-ins
+  read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from first paint
+  (CSS in `app/globals.css`). Below an 848px window the row has no room for
+  their 120px in a code block or table, so (owner decision, option b) Redo
+  moves from the row to the top of ⋯ there, and the list button keeps only
+  List ▾. ⌘⇧Z still redoes. Desktop's ⋯ menu is unchanged.
 
 #### Changed
 
@@ -46,12 +48,12 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
   pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
   above the home indicator.
 
-Measured against `main` at 84a9458, with the "/" menu's P2 work merged in:
-the editor chunk group gets 23 B smaller (393,995 B gz against 394,018 B).
-The lazy chunks, measured against `main` at 1548d5e: the phone bar chunk
-grows 978 B gz (18,175 B), and the sheet body is a chunk of its own, 3,926 B
-gz. The app's CSS grows 374 B gz (16,367 B), 157 B of it for the tablet
-words.
+Measured against `main` at 84a9458, with the "/" menu's P2 and the grouped ⋯
+menu's P3 work merged in: the editor chunk group gets 23 B smaller (393,995 B
+gz against 394,018 B). The phone bar chunk grows 978 B gz (18,175 B), and the
+sheet body is a chunk of its own, 3,926 B gz. The app's CSS grows 494 B gz
+(16,487 B): 138 B for the tablet words and 71 B for the touch step that
+moves Redo; the rest is P2 and P3.
 
 ### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
 
