@@ -207,3 +207,58 @@ describe("import boundaries", () => {
     });
   }
 });
+
+// The web library lands dark (web library §2.8): nothing the web app builds
+// may import it, statically or through `import()` (a lazy chunk still
+// ships), from any folder, by alias or relative path. W4 removes this when
+// it adds the route.
+describe("web library lands dark", () => {
+  const LIBRARY_DIR = "lib/platform/web/library/";
+  const WEB_APP_DIRS = [
+    "app",
+    "components",
+    "hooks",
+    "extensions",
+    "lib",
+    "scripts",
+    "types",
+  ];
+  const WEB_APP_FILES = ["next.config.ts"];
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(path.join(ROOT, dir), {
+      recursive: true,
+      encoding: "utf8",
+    })
+      .filter((name) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(name))
+      .filter((name) => !name.split(path.sep).includes("node_modules"))
+      .map((name) => path.join(dir, name));
+  }
+
+  it("is imported by nothing in the web app or its scripts", () => {
+    const files = [
+      ...WEB_APP_DIRS.flatMap(sourceFiles),
+      ...WEB_APP_FILES,
+    ].filter((file) => !file.startsWith(LIBRARY_DIR));
+    expect(files.length).toBeGreaterThan(100);
+    const importers: string[] = [];
+    for (const file of files) {
+      const full = path.join(ROOT, file);
+      const transpiler = /x$/.test(file) ? tsx : ts;
+      const { imports } = transpiler.scan(readFileSync(full, "utf8"));
+      for (const { path: spec } of imports) {
+        if (!spec.startsWith("@/") && !spec.startsWith(".")) continue;
+        let resolved: string;
+        try {
+          resolved = Bun.resolveSync(spec, path.dirname(full));
+        } catch {
+          continue;
+        }
+        if (path.relative(ROOT, resolved).startsWith(LIBRARY_DIR)) {
+          importers.push(`${file} -> ${spec}`);
+        }
+      }
+    }
+    expect(importers).toEqual([]);
+  });
+});

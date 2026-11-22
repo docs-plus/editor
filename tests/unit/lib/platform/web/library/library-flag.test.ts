@@ -49,32 +49,8 @@ describe("NEXT_PUBLIC_LIBRARY (web library §2.8)", () => {
     expect(await flagWith(" 1 ")).toBe(true);
   });
 
-  it("is imported by nothing the web app ships yet (W4 adds the route)", () => {
-    const LIBRARY_DIR = "lib/platform/web/library";
-    // `lib/` and `scripts/` too: a shared module importing the library
-    // would carry it into the app transitively.
-    const importers = [
-      "app",
-      "components",
-      "hooks",
-      "extensions",
-      "lib",
-      "scripts",
-    ]
-      .flatMap((dir) => sourceFiles(path.join(ROOT, dir)))
-      .map((file) => path.relative(ROOT, file))
-      .filter((file) => !file.startsWith(`${LIBRARY_DIR}/`))
-      .filter((file) => {
-        const source = readFileSync(path.join(ROOT, file), "utf8");
-        if (source.includes(LIBRARY_DIR)) return true;
-        // A relative import from a neighbour (`./library/…`).
-        return (
-          file.startsWith("lib/platform/web/") &&
-          /from\s+["']\.\/library[/"']/.test(source)
-        );
-      });
-    expect(importers).toEqual([]);
-  });
+  // That nothing imports the library is checked, import by import, in
+  // `tests/unit/lib/import-boundaries.test.ts` ("web library lands dark").
 
   it("never wipes the library: the module deletes nothing", () => {
     const dir = path.join(ROOT, "lib/platform/web/library");
