@@ -469,6 +469,11 @@ describe("memory layer (PR D2)", () => {
       mermaidTemplate: "choices",
       outlineOpen: "ui",
       toolbarDensity: "ui",
+      page: "ui",
+      a11y: "ui",
+      spellcheck: "ui",
+      smartQuotes: "ui",
+      rememberPlace: "ui",
     });
   });
 
