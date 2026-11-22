@@ -129,6 +129,14 @@ describe("document links with no host", () => {
       expect(view.commands.setHyperlink({ href: `tinydocy:doc/${KEY}` })).toBe(
         false,
       );
+      // The default isAllowedUri adds to the extension's own safety gate,
+      // which still runs first: dangerous schemes stay refused.
+      for (const href of ["javascript:alert(1)", " data:text/html,x"]) {
+        expect(view.commands.setHyperlink({ href })).toBe(false);
+      }
+      expect(view.commands.setHyperlink({ href: "https://example.com/" })).toBe(
+        true,
+      );
     } finally {
       open.mockRestore();
     }

@@ -338,6 +338,22 @@ export function describeLibraryIndexContract(
     }
 
     describe("snapshot", () => {
+      it("keeps one snapshot object until something changes", async () => {
+        // Link icons and Quick Open cache by snapshot identity.
+        const { index } = setup();
+        const before = index.snapshot();
+        expect(index.snapshot()).toBe(before);
+        index.renameFolder("f-nope", "X");
+        index.pin("doc-nope");
+        expect(index.snapshot()).toBe(before);
+        index.pin(notes.id);
+        const after = index.snapshot();
+        expect(after).not.toBe(before);
+        expect(index.snapshot()).toBe(after);
+        await index.trash([notes.id]);
+        expect(index.snapshot()).not.toBe(after);
+      });
+
       it("lists folders, each document's folder and an empty Trash", () => {
         const { index, doc, dirIds } = setup();
         expect(dirIds()).toEqual(
