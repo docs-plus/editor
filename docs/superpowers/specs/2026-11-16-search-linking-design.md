@@ -253,7 +253,7 @@ The first version of this document designed full-text search: a renderer text ex
 
 > **Status: approved by the owner, 2026-11-22 ("I approve those smart-chips"): C1–C9 as recommended.** Nothing here is built yet; LK2 builds it after LK1 (#154) merges. The decisions are in the table at the end of this section.
 > - **Polish round (2026-11-22):** one refinement pass on the approved design, accessibility first. C1–C9 are unchanged. It reconciles the states with the approved linking decisions Q4–Q7 (#163): one **Not available** state, `FileMinus` for In Trash, `Hash` for `here#`, and a card that is the Q7 preview. §4.6, §7 and §8 on this branch still show the text from before Q4; #163 owns those hunks, and this section follows its approved text.
-> - **Chip colour and corner (2026-11-22):** the owner asked for chip colour as an app preference the user can change, and for a less round corner. The corner is `--radius-sm` (owner, 2026-11-22). The colour preference is **C10**, the coordinator's call, pending the owner's sign-off: see [Chip colour (preference)](#chip-colour-preference).
+> - **Chip colour and corner (2026-11-22):** the owner asked for chip colour as an app preference the user can change, and for a less round corner. The corner is `--radius-sm` (owner, 2026-11-22). The colour preference is **C10**, approved by the owner on 2026-11-22 ("approve"): see [Chip colour (preference)](#chip-colour-preference).
 > - **Prototype:** [`docs/design/2026-11-22-smart-chips-prototype.html`](../../design/2026-11-22-smart-chips-prototype.html). It is self-contained (lucide 0.469.0 is its only dependency) and has an Accessibility panel that shows each element's role, name and state. Its default scene is 15 px at leading 1.15, the tightest line the app ships. A Chip colour control in its toolbar switches every scene live.
 > - **Screenshots:** [`docs/design/2026-11-22-smart-chips/`](../../design/2026-11-22-smart-chips/): 67 numbered headless captures (01–53 and 58–67 in Chromium, 54–57 in Firefox and WebKit) and 12 before/after pairs (`p01`–`p11` from the polish round, `p12` for the corner).
 >   - 01–57 and `p01`–`p11` predate C10: they show the pill corner and the Neutral fill.
@@ -409,7 +409,7 @@ LK1's `DASHED_LINK_STATES` drives both links and chips.
 
 #### Chip colour (preference)
 
-> **C10: the coordinator's call, pending the owner's sign-off.** The owner, 2026-11-22: "for smart chips, it would be good to come up with color (but let's control the chips color in prefrence of the app and let user to change it)".
+> **C10: approved by the owner, 2026-11-22 ("approve").** The owner, 2026-11-22: "for smart chips, it would be good to come up with color (but let's control the chips color in prefrence of the app and let user to change it)".
 
 **What it is**
 - **One app setting, per device: Chip colour.** The choices are Neutral, **Blue** (the default), Green, Amber, Rose and Teal.
@@ -729,7 +729,7 @@ Broken states use the Neutral values, which pairs 1–5 already cover for Neutra
 | **C7** | Web-address chips and fetching titles | In v1 / Later | **Not in v1, and never fetching automatically.** |
 | **C8** | `DOC_SCHEMA` | A no-op step to 1, so older builds open stamped documents as `doc_too_new` (read-only) / `docChip` joins the schema-0 baseline | **The step,** if any desktop or web-library build has reached testers before chips ship. If none has, the baseline. If in doubt, the step. |
 | **C9** | Marks on chips | `marks: ""` / allow colour marks | **`marks: ""` in v1.** Colour marks would break the contrast pairs, and the guard doesn't check marks on inline atoms. |
-| **C10** | Chip colour (owner, 2026-11-22: a colour the user changes in preferences). *The coordinator's call, pending the owner's sign-off.* | One global, per-device preference with six colours / a colour per chip or per document / no choice | **One global, per-device preference:** Neutral, **Blue** (default), Green, Amber, Rose and Teal, with no purple or indigo. It is set by the boot script as `data-chip-color` and mapped by CSS, so it adds 0 B to the editor chunk and never writes to Yjs. Broken states stay Neutral and dashed. It lives in ⋯ until Settings › Page ships. See [Chip colour (preference)](#chip-colour-preference). |
+| **C10** | Chip colour (owner, 2026-11-22: a colour the user changes in preferences). *Approved by the owner, 2026-11-22.* | One global, per-device preference with six colours / a colour per chip or per document / no choice | **One global, per-device preference:** Neutral, **Blue** (default), Green, Amber, Rose and Teal, with no purple or indigo. It is set by the boot script as `data-chip-color` and mapped by CSS, so it adds 0 B to the editor chunk and never writes to Yjs. Broken states stay Neutral and dashed. It lives in ⋯ until Settings › Page ships. See [Chip colour (preference)](#chip-colour-preference). |
 
 ### 4.3 Following a link
 
