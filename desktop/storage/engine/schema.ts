@@ -1,5 +1,6 @@
 /**
- * The library schema, `format_version` 1 (desktop architecture §5.3).
+ * The library schema at `format_version` 1 (desktop architecture §5.3), the
+ * starting point every library is created from.
  *
  * Everything the Local release needs is created here, so no later migration
  * is needed for it: `tags`, `doc_tags` and `doc_view` (D7, D10), the details
@@ -12,7 +13,12 @@
  * compaction deletes the newest rows: a reused seq at or below a snapshot's
  * `upto_seq` would be skipped on load.
  */
-export const FORMAT_VERSION = 1;
+/**
+ * The format this build writes. Format 2 (`format-2.ts`) is reached from
+ * format 1 by one rebuild step; a new library is created as format 1 and
+ * runs it, so `SCHEMA_V1` stays the starting point.
+ */
+export const FORMAT_VERSION = 2;
 
 /** The Yjs update encoding of every stored BLOB (`meta.yjs_encoding`). */
 export const YJS_ENCODING = "v1";

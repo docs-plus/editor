@@ -85,6 +85,12 @@ function withTitle(json: DocJson, title: string): DocJson {
   return { type: "doc", content: [...titleDocument(title).content, ...rest] };
 }
 
+/** The engine refuses a folder that is too deep or a bad tag name. */
+function created<T>(row: T | null, name: string): T {
+  if (!row) throw new Error(`the engine refused ${name}`);
+  return row;
+}
+
 function createFolders(
   library: Library,
   fanOut: readonly number[],
@@ -97,7 +103,7 @@ function createFolders(
     for (const parentId of parents)
       for (let i = 0; i < width; i++) {
         const name = `${rng.pick(FOLDER_NAMES)} ${all.length + next.length + 1}`;
-        next.push(library.createFolder({ name, parentId }).id);
+        next.push(created(library.createFolder({ name, parentId }), name).id);
       }
     all.push(...next);
     parents = next;
@@ -125,7 +131,11 @@ export function generateLibrary(
     );
     const tagIds = Array.from(
       { length: spec.tags },
-      (_, i) => library.createTag(`tag-${i + 1}`, rng.pick(TAG_COLORS)).id,
+      (_, i) =>
+        created(
+          library.createTag(`tag-${i + 1}`, rng.pick(TAG_COLORS)),
+          `tag-${i + 1}`,
+        ).id,
     );
     const docRng = rng.fork("docs");
     for (let i = 0; i < spec.docs; i++) {
@@ -140,9 +150,9 @@ export function generateLibrary(
           ? docRng.pick(folderIds)
           : null;
       const { id } = library.createDoc({
+        // The worker mints lineage and link_key (format 2, §4.2): only the
+        // id is seeded.
         id: docRng.uuid(),
-        lineage: docRng.uuid(),
-        linkKey: docRng.hex(16),
         schema: DOC_SCHEMA,
         title,
         folderId,

@@ -10,7 +10,9 @@
  * `Library` in-process with {@link dispatch}.
  */
 import type { AppendInput, LoadedContent } from "./engine/content";
+import type { DerivedRows } from "./engine/derive";
 import { type StorageErrorEnvelope, toEnvelope } from "./engine/errors";
+import type { FolderMoveItem } from "./engine/folders";
 import type { Library, LibraryStatus } from "./engine/library";
 import type {
   CreateDocInput,
@@ -18,6 +20,17 @@ import type {
   IndexChange,
   SidebarSnapshot,
 } from "./engine/library-index";
+
+/** The result of a `Library` method, as a reply carries it. */
+type Out<K extends keyof Library> = Library[K] extends (
+  ...args: never[]
+) => infer R
+  ? R
+  : never;
+
+type None = Record<string, never>;
+type ById = { id: string };
+type Keys = { keys: { id: string; key: string }[] };
 
 /** Every request: `args` in, `result` out. */
 export type StorageOps = {
@@ -40,20 +53,73 @@ export type StorageOps = {
   sidebar: { args: Record<string, never>; result: SidebarSnapshot };
   createDoc: { args: CreateDocInput; result: CreatedDoc };
   createFolder: {
-    args: { name: string; parentId?: string | null };
-    result: { id: string; rev: number };
+    /** `id` is minted by the caller (the library port creates synchronously). */
+    args: {
+      id?: string;
+      name: string;
+      parentId?: string | null;
+      sortKey?: string;
+    };
+    result: Out<"createFolder">;
   };
-  renameDoc: { args: { id: string; title: string }; result: number };
-  moveDoc: {
-    args: { id: string; folderId: string | null; sortKey: string };
+  // The library port (P2.6e: `lib/platform/desktop/library-index-rpc.ts`).
+  renameFolder: { args: { id: string; name: string }; result: number };
+  setFolderView: {
+    args: {
+      id: string;
+      columns: {
+        sort: string | null;
+        view: string | null;
+        group: string | null;
+      };
+    };
     result: number;
   };
-  trashDoc: { args: { id: string; group?: string | null }; result: number };
-  restoreDoc: { args: { id: string }; result: number };
+  moveItems: {
+    args: { items: FolderMoveItem[]; folderId: string | null };
+    result: Out<"moveItems">;
+  };
+  trashFolder: { args: ById; result: Out<"trashFolder"> };
+  restoreFolder: { args: ById; result: Out<"restoreFolder"> };
+  purgeFolder: { args: ById; result: Out<"purgeFolder"> };
+  duplicateDoc: { args: ById; result: Out<"duplicateDoc"> };
+  markOpened: { args: ById; result: number };
+  renameTag: { args: { id: string; name: string }; result: Out<"renameTag"> };
+  mergeTags: {
+    args: { fromId: string; intoId: string };
+    result: Out<"mergeTags">;
+  };
+  addTag: { args: { docId: string; tagId: string }; result: Out<"addTag"> };
+  removeTag: { args: { docId: string; tagId: string }; result: number };
+  pinDoc: { args: { id: string; pinKey: string }; result: number };
+  unpinDoc: { args: ById; result: number };
+  setPinKeys: { args: Keys; result: number };
+  setSortKeys: { args: Keys; result: number };
+  setPlaceView: {
+    args: { place: string; json: string | null };
+    result: number;
+  };
+  placeViews: { args: None; result: Out<"placeViews"> };
+  trashList: { args: None; result: Out<"trashList"> };
+  snippets: { args: { ids: string[] }; result: Out<"snippets"> };
+  searchTitles: { args: { query: string }; result: Out<"searchTitles"> };
+  searchHeadings: { args: { query: string }; result: Out<"searchHeadings"> };
+  // Derived rows (LK4a's `derive.put`; T21 times them).
+  putDerived: {
+    args: { docId: string; atSeq: number; rows: DerivedRows };
+    result: Out<"putDerived">;
+  };
+  backlinks: { args: { linkKey: string }; result: Out<"backlinks"> };
+  trashDoc: { args: { id: string }; result: number };
+  restoreDoc: {
+    args: { id: string };
+    result: ReturnType<Library["restoreDoc"]>;
+  };
   purgeDoc: { args: { id: string }; result: number };
   createTag: {
-    args: { name: string; color?: string | null };
-    result: { id: string; rev: number };
+    /** `id` is the caller's when no tag has the name's key yet. */
+    args: { name: string; color?: string | null; id?: string };
+    result: ReturnType<Library["createTag"]>;
   };
   setDocTags: { args: { docId: string; tagIds: string[] }; result: number };
   listDailyCopies: { args: Record<string, never>; result: string[] };
@@ -93,6 +159,11 @@ export type StorageWorkerOptions = {
   idlePollMs?: number;
   /** Soak only: how long without a write counts as idle (default 30 s). */
   idleMs?: number;
+  /**
+   * Contract runs only: the clock grows by at least 1 ms a call, so two
+   * Trash operations never share a time (the Trash list then orders by id).
+   */
+  strictClock?: boolean;
   /**
    * The daily-copy thread's bundle (`copy-worker.cjs`). `StorageClient`
    * defaults it to the worker's sibling. Without it, no daily copy runs.
@@ -136,22 +207,70 @@ function run(library: Library, request: StorageRequest): unknown {
       return library.createDoc(request.args);
     case "createFolder":
       return library.createFolder(request.args);
-    case "renameDoc":
-      return library.renameDoc(request.args.id, request.args.title);
-    case "moveDoc":
-      return library.moveDoc(
-        request.args.id,
-        request.args.folderId,
-        request.args.sortKey,
+    case "renameFolder":
+      return library.renameFolder(request.args.id, request.args.name);
+    case "setFolderView":
+      return library.setFolderView(request.args.id, request.args.columns);
+    case "moveItems":
+      return library.moveItems(request.args.items, request.args.folderId);
+    case "trashFolder":
+      return library.trashFolder(request.args.id);
+    case "restoreFolder":
+      return library.restoreFolder(request.args.id);
+    case "purgeFolder":
+      return library.purgeFolder(request.args.id);
+    case "duplicateDoc":
+      return library.duplicateDoc(request.args.id);
+    case "markOpened":
+      return library.markOpened(request.args.id);
+    case "renameTag":
+      return library.renameTag(request.args.id, request.args.name);
+    case "mergeTags":
+      return library.mergeTags(request.args.fromId, request.args.intoId);
+    case "addTag":
+      return library.addTag(request.args.docId, request.args.tagId);
+    case "removeTag":
+      return library.removeTag(request.args.docId, request.args.tagId);
+    case "pinDoc":
+      return library.pinDoc(request.args.id, request.args.pinKey);
+    case "unpinDoc":
+      return library.unpinDoc(request.args.id);
+    case "setPinKeys":
+      return library.setPinKeys(request.args.keys);
+    case "setSortKeys":
+      return library.setSortKeys(request.args.keys);
+    case "setPlaceView":
+      return library.setPlaceView(request.args.place, request.args.json);
+    case "placeViews":
+      return library.placeViews();
+    case "trashList":
+      return library.trashList();
+    case "snippets":
+      return library.snippets(request.args.ids);
+    case "searchTitles":
+      return library.searchTitles(request.args.query);
+    case "searchHeadings":
+      return library.searchHeadings(request.args.query);
+    case "putDerived":
+      return library.putDerived(
+        request.args.docId,
+        request.args.atSeq,
+        request.args.rows,
       );
+    case "backlinks":
+      return library.backlinks(request.args.linkKey);
     case "trashDoc":
-      return library.trashDoc(request.args.id, request.args.group ?? null);
+      return library.trashDoc(request.args.id);
     case "restoreDoc":
       return library.restoreDoc(request.args.id);
     case "purgeDoc":
       return library.purgeDoc(request.args.id);
     case "createTag":
-      return library.createTag(request.args.name, request.args.color ?? null);
+      return library.createTag(
+        request.args.name,
+        request.args.color ?? null,
+        request.args.id,
+      );
     case "setDocTags":
       return library.setDocTags(request.args.docId, request.args.tagIds);
     case "listDailyCopies":

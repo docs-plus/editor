@@ -2,6 +2,8 @@
  * Bundles the harness main and the real storage worker as CJS for
  * Electron, the way `desktop/build/build.ts` (P2.5) will: `node:*` and
  * `electron` stay external, everything else (Yjs, the engine) is inlined.
+ * `bun:test` resolves to a small shim, so the `LibraryIndex` contract
+ * (written for `bun test`) runs in Electron main too.
  */
 import path from "node:path";
 
@@ -17,6 +19,16 @@ const result = await Bun.build({
   format: "cjs",
   external: ["electron"],
   naming: "[name].cjs",
+  plugins: [
+    {
+      name: "bun-test-shim",
+      setup(build) {
+        build.onResolve({ filter: /^bun:test$/ }, () => ({
+          path: path.join(root, "../../tests/helpers/bun-test-shim.ts"),
+        }));
+      },
+    },
+  ],
 });
 if (!result.success) {
   for (const log of result.logs) console.error(log);

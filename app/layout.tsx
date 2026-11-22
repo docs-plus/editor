@@ -22,6 +22,8 @@ import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
 import "@/styles/_page.scss";
+// After the page styles, so print rules come later in the cascade.
+import "@/styles/_print.scss";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
