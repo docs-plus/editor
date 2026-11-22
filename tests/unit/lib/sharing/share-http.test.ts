@@ -463,6 +463,28 @@ describe("CORS and CSRF", () => {
     expect(getShare(db, shareId)?.status).toBe("pending");
   });
 
+  it("rate-limits refused origins and logs a bounded origin", async () => {
+    const http = createHttp({ limits: { ...LIMITS, mutationsPerMinute: 2 } });
+    const origin = `https://${"x".repeat(5000)}.example`;
+    const statuses: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const response = await http.handle(
+        new Request(`${BASE}/api/shares/${mintShareId()}`, {
+          method: "DELETE",
+          headers: { origin },
+        }),
+        IP,
+      );
+      statuses.push(response.status);
+    }
+    expect(statuses).toEqual([403, 403, 429]);
+    const rejected = logs.filter((line) =>
+      line.includes("share_origin_rejected"),
+    );
+    expect(rejected).toHaveLength(2);
+    for (const line of rejected) expect(line.length).toBeLessThan(400);
+  });
+
   it("echoes only allowed origins and never allows credentials", async () => {
     const http = createHttp();
     const response = await http.handle(

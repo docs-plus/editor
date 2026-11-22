@@ -57,6 +57,8 @@ const MAX_CREATE_BODY_BYTES = 1024;
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const PREFLIGHT_MAX_AGE_S = 600;
+/** A refused `Origin` is attacker-chosen: only its start is logged. */
+const MAX_LOGGED_ORIGIN_CHARS = 200;
 const ALLOWED_METHODS = ["GET", "POST", "DELETE"];
 const ALLOWED_HEADERS = "authorization, content-type";
 
@@ -582,24 +584,28 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
       }
 
       const isRead = route.kind === "info" || route.kind === "status";
-      if (!isRead) {
-        const origin = request.headers.get("origin");
-        if (origin && !allowedOrigins.has(origin)) {
-          logAbuseEvent("share_origin_rejected", { ip, origin });
-          return error(request, 403, "origin_not_allowed");
-        }
-      }
       // Owner calls skip the /48 budget, so neighbours cannot lock an owner
       // out; wrong owner secrets still count per /48 as failed tokens.
       const ownerCall =
         route.kind === "stop" ||
         route.kind === "reset" ||
         route.kind === "view-only";
+      // Before the origin check, so refused origins cannot flood the log.
       const decision = (isRead ? reads : mutations).check(ip, {
         prefix48: !ownerCall,
       });
       if (!decision.allowed) {
         return throttled(request, decision, ip, "share_http_throttled");
+      }
+      if (!isRead) {
+        const origin = request.headers.get("origin");
+        if (origin && !allowedOrigins.has(origin)) {
+          logAbuseEvent("share_origin_rejected", {
+            ip,
+            origin: origin.slice(0, MAX_LOGGED_ORIGIN_CHARS),
+          });
+          return error(request, 403, "origin_not_allowed");
+        }
       }
 
       try {
