@@ -1,6 +1,7 @@
 import { type CDPSession, expect, type Page, test } from "@playwright/test";
 
 import { EditorPage } from "./helpers/editor-page";
+import { listenerCounts } from "./helpers/listener-counts";
 
 /** Longer than collab-session's deferred release (1 s). */
 const SETTLE_MS = 1_100;
@@ -44,36 +45,6 @@ async function liveEditors(cdp: CDPSession): Promise<number> {
     return result.value as number;
   } finally {
     // Handles held by the protocol would keep the editors alive themselves.
-    await cdp.send("Runtime.releaseObjectGroup", { objectGroup });
-  }
-}
-
-/**
- * Event listeners on `document` and `window`, counted per target and type
- * (`"document:keydown"`), so a failure names the listener that leaked.
- */
-async function listenerCounts(
-  cdp: CDPSession,
-): Promise<Record<string, number>> {
-  const objectGroup = "listener-count";
-  const counts: Record<string, number> = {};
-  try {
-    for (const target of ["document", "window"]) {
-      const { result } = await cdp.send("Runtime.evaluate", {
-        expression: target,
-        objectGroup,
-      });
-      if (!result.objectId) throw new Error(`no ${target}`);
-      const { listeners } = await cdp.send("DOMDebugger.getEventListeners", {
-        objectId: result.objectId,
-      });
-      for (const { type } of listeners) {
-        const key = `${target}:${type}`;
-        counts[key] = (counts[key] ?? 0) + 1;
-      }
-    }
-    return counts;
-  } finally {
     await cdp.send("Runtime.releaseObjectGroup", { objectGroup });
   }
 }

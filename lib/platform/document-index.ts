@@ -22,8 +22,9 @@
  *   they must not write back to the index synchronously.
  *
  * Which document is active is per-window state, never in the index.
- * Folders, pins, tags, purge and title search join the port with the
- * libraries that need them (P2.7a/b).
+ * Folders and pins are the `LibraryIndex` extension below (P2.7a); tags,
+ * purge and the large-library search fallback join with P2.7b, P2.8 and
+ * SR1.
  */
 
 /** One document in the index. */
@@ -31,6 +32,15 @@ export interface DocumentEntry {
   readonly id: string;
   readonly title: string;
   readonly createdAt: number;
+  /** `LibraryIndex` only: its folder; absent or null at the Library root. */
+  readonly folderId?: string | null;
+  /**
+   * `LibraryIndex` only: set while pinned. Pinned documents sort by this
+   * key (string order); it carries no other meaning.
+   */
+  readonly pinKey?: string;
+  /** `LibraryIndex` only: when it was last opened, if ever. */
+  readonly openedAt?: number;
 }
 
 export interface DocumentIndexSnapshot {
@@ -99,4 +109,113 @@ export interface DocumentIndex {
   ): Promise<Record<string, RestoreResult> | null>;
   /** Stops listening to the store; later mutations are ignored. */
   destroy(): void;
+}
+
+/** A folder in a `LibraryIndex`. */
+export interface FolderEntry {
+  readonly id: string;
+  readonly name: string;
+  /** Null at the Library root. */
+  readonly parentId: string | null;
+  readonly createdAt: number;
+}
+
+export interface LibraryIndexSnapshot extends DocumentIndexSnapshot {
+  /** Live folders (not in the Trash), in no particular order. */
+  readonly folders: readonly FolderEntry[];
+  /** Documents in the Trash, counted alone or inside trashed folders. */
+  readonly trashCount: number;
+}
+
+export type LibraryIndexListener = (
+  type: DocumentIndexEventType,
+  snapshot: LibraryIndexSnapshot,
+) => void;
+
+/** A document or a folder, for operations that take both. */
+export type LibraryItemRef =
+  | { readonly kind: "doc"; readonly id: string }
+  | { readonly kind: "folder"; readonly id: string };
+
+/**
+ * Why a move was refused; nothing moved.
+ * - `into_itself`: a folder would go inside itself or one of its folders.
+ * - `too_deep`: folders would nest deeper than `MAX_FOLDER_DEPTH`.
+ * - `not_found`: an item or the destination isn't listed.
+ * - `not_ready`: the index isn't loaded, or is destroyed.
+ */
+export type MoveRefusal =
+  | "into_itself"
+  | "too_deep"
+  | "not_found"
+  | "not_ready";
+
+export type MoveResult =
+  | {
+      readonly ok: true;
+      /** Each moved item's folder before the move ("doc:id" / "folder:id"). */
+      readonly from: Readonly<Record<string, string | null>>;
+    }
+  | { readonly ok: false; readonly reason: MoveRefusal };
+
+/** A folder brought to the Trash with everything in it. */
+export interface TrashedFolder {
+  readonly id: string;
+  readonly name: string;
+  readonly parentId: string | null;
+  /** Documents that went with it, at any depth. */
+  readonly docCount: number;
+}
+
+/**
+ * - `restored`: back where it was.
+ * - `restored_to_root`: its parent folder is gone, so it is at the root.
+ * - `gone`: it can no longer be restored.
+ */
+export type FolderRestoreResult = "restored" | "restored_to_root" | "gone";
+
+/**
+ * The document library (desktop and the web library, D3): a `DocumentIndex`
+ * with folders and pins. The web sandbox's `GlobalTabsIndex` is not one;
+ * the library components take only a `LibraryIndex`.
+ *
+ * Contract additions (`describeLibraryIndexContract`):
+ * - Folder and pin operations apply to the snapshot before they return and
+ *   notify synchronously, like `rename`.
+ * - `moveItems` moves all the items or none, and refuses a folder into its
+ *   own subtree or deeper than `MAX_FOLDER_DEPTH` levels
+ *   (`lib/library/folder-rules.ts`).
+ * - A trashed folder takes its subfolders and documents with it; they leave
+ *   `items` and `folders` and count in `trashCount`.
+ * - `restore` brings a document back to its folder, or to the root when
+ *   that folder is gone.
+ */
+export interface LibraryIndex extends DocumentIndex {
+  snapshot(): LibraryIndexSnapshot;
+  subscribe(listener: LibraryIndexListener): () => void;
+  /** Lists a new document in `folderId` (the root when absent or null). */
+  create(init?: {
+    title?: string;
+    folderId?: string | null;
+  }): DocumentEntry | null;
+  /** Null when refused: not ready, unknown parent, or too deep. */
+  createFolder(init: {
+    name: string;
+    parentId?: string | null;
+  }): FolderEntry | null;
+  renameFolder(id: string, name: string): void;
+  /** Moves documents and folders into `folderId` (null: the root). */
+  moveItems(
+    items: readonly LibraryItemRef[],
+    folderId: string | null,
+  ): MoveResult;
+  /** Pins at the end of the pinned list; no-op if pinned. */
+  pin(id: string): void;
+  unpin(id: string): void;
+  /** Moves a pinned document to `toIndex` among the pinned ones. */
+  movePin(id: string, toIndex: number): void;
+  /** Stamps `openedAt` (the store does this when a document loads). */
+  markOpened(id: string): void;
+  trashFolder(id: string): Promise<TrashedFolder | null>;
+  restoreFolder(id: string): Promise<FolderRestoreResult | null>;
 }
