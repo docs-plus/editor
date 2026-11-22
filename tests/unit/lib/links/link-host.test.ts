@@ -80,11 +80,22 @@ describe("isAllowedLinkUri (search-linking §4.1)", () => {
     expect(ctx.defaultValidate).not.toHaveBeenCalled();
   });
 
-  it("leaves every other href to the extension's policy", () => {
-    const ctx = { defaultValidate: mock(defaultValidate) };
-    expect(isAllowedLinkUri("https://example.com", ctx)).toBe(true);
-    expect(isAllowedLinkUri("ftp://example.com", ctx)).toBe(false);
-    expect(ctx.defaultValidate).toHaveBeenCalledTimes(2);
+  it("allows only https, http and mailto otherwise, after the extension's gate", () => {
+    const ctx = { defaultValidate: mock(() => true) };
+    for (const uri of ["https://example.com", "http://x.y", "MAILTO:a@b.c"]) {
+      expect(isAllowedLinkUri(uri, ctx)).toBe(true);
+    }
+    for (const uri of [
+      "ms-msdt:/id x",
+      "search-ms:query=x",
+      "smb://evil/share",
+      "vscode://evil/run",
+      "ftp://example.com",
+    ]) {
+      expect(isAllowedLinkUri(uri, ctx)).toBe(false);
+    }
+    const refuse = { defaultValidate: mock(() => false) };
+    expect(isAllowedLinkUri("https://example.com", refuse)).toBe(false);
   });
 });
 
@@ -92,6 +103,13 @@ describe("createLinkHost (search-linking §4.1)", () => {
   it("registers no linkify protocol (typed tinydocy: never autolinks)", () => {
     const { host } = setup();
     expect(host.protocols).toBeUndefined();
+  });
+
+  it("brings its own popovers: the document preview for document links", () => {
+    const { host } = setup();
+    expect(typeof host.popovers?.previewHyperlink).toBe("function");
+    expect(typeof host.popovers?.editHyperlink).toBe("function");
+    expect(typeof host.popovers?.createHyperlink).toBe("function");
   });
 
   it("keeps one host object that never changes", () => {

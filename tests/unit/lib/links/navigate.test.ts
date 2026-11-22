@@ -163,6 +163,22 @@ describe("createLinkNavigator (search-linking §4.3)", () => {
     expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.unknownForm);
   });
 
+  it("never opens anything but https, http and mailto externally", () => {
+    for (const href of [
+      "ms-msdt:/id PCWDiagnostic /skip force",
+      "search-ms:query=x",
+      "smb://evil/share",
+      "vscode://evil.extension/run",
+      `\u00a0tinydocy:doc/${KEY}`,
+      "ftp://example.com",
+      "javascript:alert(1)",
+    ]) {
+      const { deps, navigate } = setup();
+      navigate(href, { newTab: true });
+      expect(deps.openExternal).not.toHaveBeenCalled();
+    }
+  });
+
   it("passes web links through unchanged, with no announcement or follow", () => {
     const { deps, navigate } = setup();
     navigate("https://example.com/a", { newTab: true });

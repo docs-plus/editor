@@ -166,7 +166,7 @@ interface BuildDocumentEditorExtensionsOptions {
   onInvalidContent?: (error: Error) => void;
   /**
    * Document links (search-linking §4.1): the host's Hyperlink options for
-   * `tinydocy:` (protocols, isAllowedUri, navigate, linkIcon). Passed
+   * `tinydocy:` (isAllowedUri, navigate, linkIcon, popovers). Passed
    * through as they are; the web sandbox passes none.
    */
   linkHost?: LinkHost;

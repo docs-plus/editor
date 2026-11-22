@@ -5,6 +5,7 @@ import {
   docHref,
   hereHref,
   isOurScheme,
+  isWebLink,
   parseDocLink,
 } from "@/lib/links/doc-link";
 
@@ -121,4 +122,27 @@ describe("isOurScheme", () => {
       expect(parseDocLink(href)).toBeNull();
     }
   });
+});
+
+describe("isWebLink", () => {
+  it.each([
+    "https://a.b",
+    "http://a.b",
+    "mailto:a@b.c",
+    " HTTPS://a.b",
+    "ht\ttps://a.b",
+  ])("allows %p", (href) => expect(isWebLink(href)).toBe(true));
+  it.each([
+    "ms-msdt:x",
+    "search-ms:x",
+    "smb://a",
+    "vscode://a",
+    "tinydocy:doc/x",
+    "ftp://a",
+    "javascript:alert(1)",
+    "\u0001https://a.b",
+    "/relative",
+    "#top",
+    "",
+  ])("refuses %p", (href) => expect(isWebLink(href)).toBe(false));
 });

@@ -15,11 +15,12 @@ import type { Editor } from "@tiptap/core";
 
 import { findTocAnchor } from "@/extensions/table-of-contents/table-of-contents-items";
 import type { ScrollBlock } from "@/lib/heading-navigation";
-import { isOurScheme, parseDocLink } from "@/lib/links/doc-link";
+import { isOurScheme, isWebLink, parseDocLink } from "@/lib/links/doc-link";
 import { trackLinkGestures } from "@/lib/links/gestures";
 import { LINK_COPY } from "@/lib/links/link-copy";
 import type { LinkHost } from "@/lib/links/link-host-types";
 import { createLinkIcon, refreshLinkIcons } from "@/lib/links/link-icon";
+import { createLinkPopovers } from "@/lib/links/link-preview";
 import {
   createLinkNavigator,
   type LinkNavigatorDeps,
@@ -43,15 +44,16 @@ export interface LinkHostDeps
 }
 
 /**
- * Only valid document links can be written; every other href keeps the
- * extension's own policy, so web links behave as before.
+ * Only valid document links and web links (`isWebLink`: https, http,
+ * mailto) can be written or opened; the extension's own safety gate still
+ * runs as well.
  */
 export function isAllowedLinkUri(
   uri: string,
   ctx: Pick<IsAllowedUriContext, "defaultValidate">,
 ): boolean {
   if (isOurScheme(uri)) return parseDocLink(uri) !== null;
-  return ctx.defaultValidate(uri);
+  return isWebLink(uri) && ctx.defaultValidate(uri);
 }
 
 export interface LinkHostHandle {
@@ -72,21 +74,28 @@ export function createLinkHost(deps: LinkHostDeps): LinkHostHandle {
       snapshot: deps.getSnapshot(),
       purgedKeys: deps.purgedKeys?.(),
     });
+  const navigate = createLinkNavigator({
+    resolve,
+    openDocument: (docId, opts) => deps.openDocument(docId, opts),
+    goToHeadingHere: (tocId) => deps.goToHeadingHere(tocId),
+    openExternal: (href, opts) => deps.openExternal(href, opts),
+    announce: (message) => deps.announce(message),
+    wantsNewTab: gestures.wantsNewTab,
+    lastAnchor: gestures.lastAnchor,
+    getSource: () => deps.getSource?.() ?? null,
+    // Only when the host listens: the source position costs a DOM read.
+    onFollow: deps.onFollow && ((event) => deps.onFollow?.(event)),
+  });
   const host: LinkHost = Object.freeze({
     isAllowedUri: isAllowedLinkUri,
-    navigate: createLinkNavigator({
-      resolve,
-      openDocument: (docId, opts) => deps.openDocument(docId, opts),
-      goToHeadingHere: (tocId) => deps.goToHeadingHere(tocId),
-      openExternal: (href, opts) => deps.openExternal(href, opts),
-      announce: (message) => deps.announce(message),
-      wantsNewTab: gestures.wantsNewTab,
-      lastAnchor: gestures.lastAnchor,
-      getSource: () => deps.getSource?.() ?? null,
-      // Only when the host listens: the source position costs a DOM read.
-      onFollow: deps.onFollow && ((event) => deps.onFollow?.(event)),
-    }),
+    navigate,
     linkIcon: createLinkIcon(resolve),
+    // Document links get their own preview (never the href or key); web
+    // links keep the package's popovers.
+    popovers: createLinkPopovers({
+      resolve,
+      follow: (href, newTab) => navigate(href, { newTab }),
+    }),
   });
   return {
     host,

@@ -15,7 +15,7 @@ import type * as Y from "yjs";
 
 import { findTocAnchor } from "@/extensions/table-of-contents/table-of-contents-items";
 import { UNTITLED } from "@/lib/library/tree-rows";
-import { isOurScheme } from "@/lib/links/doc-link";
+import { isOurScheme, isWebLink } from "@/lib/links/doc-link";
 import {
   LINK_COPY,
   MERGE_DELETED_INTO_NOT_AVAILABLE,
@@ -140,7 +140,9 @@ function headingText(source: LinkSourceEditor | null, tocId: string) {
 export function createLinkNavigator(deps: LinkNavigatorDeps): LinkNavigator {
   return (href, ctx) => {
     if (!isOurScheme(href)) {
-      deps.openExternal(href, { newTab: ctx.newTab });
+      // The second check before anything leaves the app (the editor's
+      // isAllowedUri is the first, main's IPC handler the third).
+      if (isWebLink(href)) deps.openExternal(href, { newTab: ctx.newTab });
       return;
     }
     // A host that can't resolve one of ours reads it as a future form.
