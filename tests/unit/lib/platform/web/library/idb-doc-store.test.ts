@@ -347,6 +347,23 @@ describe("IdbDocStore: lifetime", () => {
     await library.dispose();
   });
 
+  it("keeps no state for a load that settles after close or dispose", async () => {
+    const library = await createFakeLibrary();
+    await library.createDoc("one", 1);
+    await library.createDoc("two", 1);
+    const store = new IdbDocStore({ library: library.browser.open() });
+    const closedDuringLoad = store.load("one");
+    await store.close("one");
+    await closedDuringLoad;
+    expect(store.openDocCount).toBe(0);
+
+    const disposedDuringLoad = store.load("two");
+    await store.dispose();
+    await disposedDuringLoad;
+    expect(store.openDocCount).toBe(0);
+    await library.dispose();
+  });
+
   it("disposes cleanly when the library never opened", async () => {
     const { openLibraryDb } = await import(
       "@/lib/platform/web/library/library-db"

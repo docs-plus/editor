@@ -114,6 +114,11 @@ export class IdbDocStore implements DocStore {
   private readonly now: () => number;
   private readonly writer: string;
   private readonly sessions = new Map<string, SessionState>();
+  /**
+   * One token per `load` in flight. `close` and `dispose` drop it, so a load
+   * that settles after them doesn't bring the session back.
+   */
+  private readonly loading = new Map<string, symbol>();
   private readonly writes = new Set<Promise<unknown>>();
   private unregisterCloseHook: (() => void) | null = null;
   private disposed = false;
@@ -141,8 +146,32 @@ export class IdbDocStore implements DocStore {
    * only increase, so a row committed later is newer than all of these.
    */
   async load(docId: string): Promise<LoadedDoc> {
-    const library = await this.library;
-    const { doc, snapshot, rows } = await library.run<Loaded>(
+    const token = Symbol(docId);
+    this.loading.set(docId, token);
+    try {
+      const library = await this.library;
+      const { doc, snapshot, rows } = await this.readDoc(library, docId);
+      // `close`, `dispose` or a newer load came first: keep no state.
+      if (!this.disposed && this.loading.get(docId) === token) {
+        this.sessions.set(docId, {
+          applied: new Set(rows.map((row) => row.seq)),
+          snapRev: snapshot?.rev ?? null,
+          foreignSv: null,
+        });
+      }
+      return {
+        snapshot: snapshot ? snapshot.data : null,
+        updates: rows.map((row) => row.data),
+        maxSeq: Math.max(rows.at(-1)?.seq ?? 0, snapshot?.upto_seq ?? 0),
+        schema: doc.schema,
+      };
+    } finally {
+      if (this.loading.get(docId) === token) this.loading.delete(docId);
+    }
+  }
+
+  private readDoc(library: LibraryDb, docId: string): Promise<Loaded> {
+    return library.run<Loaded>(
       [STORES.docs, STORES.snapshots, STORES.updates],
       "readonly",
       null,
@@ -168,17 +197,6 @@ export class IdbDocStore implements DocStore {
         });
       },
     );
-    this.sessions.set(docId, {
-      applied: new Set(rows.map((row) => row.seq)),
-      snapRev: snapshot?.rev ?? null,
-      foreignSv: null,
-    });
-    return {
-      snapshot: snapshot ? snapshot.data : null,
-      updates: rows.map((row) => row.data),
-      maxSeq: Math.max(rows.at(-1)?.seq ?? 0, snapshot?.upto_seq ?? 0),
-      schema: doc.schema,
-    };
   }
 
   /** The update row and the document's list metadata, in one strict transaction. */
@@ -343,6 +361,7 @@ export class IdbDocStore implements DocStore {
   /** Forgets this session's state; the web has no open-document registry. */
   async close(docId: string): Promise<void> {
     this.sessions.delete(docId);
+    this.loading.delete(docId);
   }
 
   /** Documents this store holds session state for (diagnostics, tests). */
@@ -357,6 +376,7 @@ export class IdbDocStore implements DocStore {
   async dispose(): Promise<void> {
     this.disposed = true;
     this.sessions.clear();
+    this.loading.clear();
     await this.library.catch(() => null);
     this.unregisterCloseHook?.();
     this.unregisterCloseHook = null;
