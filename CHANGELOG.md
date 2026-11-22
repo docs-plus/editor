@@ -40,6 +40,8 @@ idempotent: a second run changes nothing.
   - Rows are copied table by table in the explicit format-2 order, in
     batches. A damaged page is stepped over: rowid tables find the first
     readable rowid after it, keyed tables resume at the next document.
+  - The damaged file is never written to: with no `-wal` or `-journal`
+    beside it, it is opened immutable, so no `-shm` appears on any OS.
   - `meta` is copied except `format_version`.
   - The `updates` sequence is carried, so a seq is never reused.
   - Rows whose parent was lost are settled: a lost folder sends its items to
@@ -59,6 +61,8 @@ idempotent: a second run changes nothing.
     than 4, and that a malformed file made open throw instead of opening
     read-only as `corrupt`. P2.6d fixes both, and the folder case runs here
     as an ordinary test.
+- **Desktop:** `document_too_large` (the 32 MiB cap) is an IPC error code,
+  as the Electron shell's contract test requires of every storage code.
 
 ### Desktop P2.6d: library format 2 and the relationship layer
 
