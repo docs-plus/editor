@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { DEV_BRIDGE_MARKER } from "@/lib/platform/desktop/dev-bridge-wire";
 import {
   checkDesktopExport,
   listParked,
@@ -144,6 +145,17 @@ describe("checkDesktopExport", () => {
       'index.html has <link rel="manifest"',
       'index.html has <meta property="og:image"',
       'index.html has href="\\/privacy"',
+    ]);
+  });
+
+  it("reports the dev bridge in any page or chunk (architecture §11)", () => {
+    validExport();
+    write(
+      "out/_next/static/chunks/b.js",
+      `throw new Error("${DEV_BRIDGE_MARKER}: closed")`,
+    );
+    expect(checkDesktopExport(join(root, "out"))).toEqual([
+      `${join("_next", "static", "chunks", "b.js")} has the dev bridge`,
     ]);
   });
 

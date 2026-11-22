@@ -34,6 +34,8 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 
+import { DEV_BRIDGE_MARKER } from "../lib/platform/desktop/dev-bridge-wire";
+
 /** Web-only files parked during a desktop export, relative to the root. */
 export const WEB_ONLY_FILES = [
   "app/sitemap.ts",
@@ -110,8 +112,9 @@ function walk(dir: string, visit: (path: string) => void): void {
 
 /**
  * Problems with an exported `out/`, empty when it is a valid desktop
- * renderer: no web-only route, no web metadata tag in any page, and the
- * flat segment-prefetch layout (Windows writes `__next.<segment>/`, #103).
+ * renderer: no web-only route, no web metadata tag in any page, no dev
+ * bridge code (architecture §11), and the flat segment-prefetch layout
+ * (Windows writes `__next.<segment>/`, #103).
  */
 export function checkDesktopExport(outDir: string): string[] {
   const problems: string[] = [];
@@ -124,10 +127,14 @@ export function checkDesktopExport(outDir: string): string[] {
     if (name.startsWith("__next.") && !name.endsWith(".txt")) {
       problems.push(`nested segment directory (Windows layout): ${rel}`);
     }
+    if (!/\.(html|js)$/.test(rel)) return;
+    const text = readFileSync(path, "utf8");
+    if (text.includes(DEV_BRIDGE_MARKER)) {
+      problems.push(`${rel} has the dev bridge`);
+    }
     if (!rel.endsWith(".html")) return;
-    const html = readFileSync(path, "utf8");
     for (const tag of WEB_ONLY_TAGS) {
-      if (tag.test(html)) problems.push(`${rel} has ${tag.source}`);
+      if (tag.test(text)) problems.push(`${rel} has ${tag.source}`);
     }
   });
   return problems;
