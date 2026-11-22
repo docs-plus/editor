@@ -4,6 +4,8 @@ import type {
   DocumentEntry,
   DocumentIndex,
   DocumentIndexEventType,
+  FolderEntry,
+  LibraryIndex,
 } from "@/lib/platform/document-index";
 
 /**
@@ -253,6 +255,333 @@ export function describeDocumentIndexContract(
         const { index } = setup();
         expect(await index.restore([])).toBeNull();
       });
+    });
+  });
+}
+
+export interface LibraryContractOptions {
+  items?: readonly DocumentEntry[];
+  folders?: readonly FolderEntry[];
+  deferLoad?: boolean;
+}
+
+export interface LibraryContractHarness {
+  index: LibraryIndex;
+  load(): void;
+  /** Makes trashed documents and folders unrecoverable. */
+  purge(): void;
+}
+
+export type LibraryContractFactory = (
+  options: LibraryContractOptions,
+) => LibraryContractHarness;
+
+const folder = (
+  id: string,
+  parentId: string | null,
+  name = id,
+): FolderEntry => ({ id, name, parentId, createdAt: 1 });
+
+/**
+ * The `LibraryIndex` additions (folders, pins, folder trash), run on every
+ * library implementation: `MemoryDocumentIndex` here, the desktop
+ * `IpcDocumentIndex` (P2.6) and the web `IdbDocumentIndex` (W2) later.
+ */
+export function describeLibraryIndexContract(
+  name: string,
+  create: LibraryContractFactory,
+): void {
+  describe(`LibraryIndex contract: ${name}`, () => {
+    // work ─ q4 ─ deep ─ deepest      (4 levels)
+    // home
+    const work = folder("f-work", null, "Work");
+    const q4 = folder("f-q4", "f-work", "Q4");
+    const deep = folder("f-deep", "f-q4", "Deep");
+    const deepest = folder("f-deepest", "f-deep", "Deepest");
+    const home = folder("f-home", null, "Home");
+    const plan: DocumentEntry = {
+      id: "doc-plan",
+      title: "Plan",
+      createdAt: 1,
+      folderId: "f-q4",
+    };
+    const notes: DocumentEntry = {
+      id: "doc-notes",
+      title: "Notes",
+      createdAt: 2,
+    };
+    const list: DocumentEntry = {
+      id: "doc-list",
+      title: "List",
+      createdAt: 3,
+      folderId: "f-deepest",
+    };
+
+    function setup(options: LibraryContractOptions = {}) {
+      const harness = create({
+        items: [plan, notes, list],
+        folders: [work, q4, deep, deepest, home],
+        ...options,
+      });
+      const { index } = harness;
+      const doc = (id: string) =>
+        index.snapshot().items.find((item) => item.id === id);
+      const dir = (id: string) =>
+        index.snapshot().folders.find((item) => item.id === id);
+      const docIds = () => index.snapshot().items.map((item) => item.id);
+      const dirIds = () =>
+        index
+          .snapshot()
+          .folders.map((item) => item.id)
+          .sort();
+      return { ...harness, index, doc, dir, docIds, dirIds };
+    }
+
+    describe("snapshot", () => {
+      it("lists folders, each document's folder and an empty Trash", () => {
+        const { index, doc, dirIds } = setup();
+        expect(dirIds()).toEqual(
+          [work, q4, deep, deepest, home].map((x) => x.id).sort(),
+        );
+        expect(doc(plan.id)?.folderId).toBe(q4.id);
+        expect(doc(notes.id)?.folderId ?? null).toBeNull();
+        expect(index.snapshot().trashCount).toBe(0);
+      });
+
+      it("is empty until loaded", () => {
+        const { index, load, dirIds } = setup({ deferLoad: true });
+        expect(index.snapshot().folders).toEqual([]);
+        expect(index.createFolder({ name: "X" })).toBeNull();
+        load();
+        expect(dirIds()).toHaveLength(5);
+      });
+    });
+
+    describe("folders", () => {
+      it("createFolder lists a folder at the root or inside another", () => {
+        const { index, dir } = setup();
+        const events = record(index);
+        const top = index.createFolder({ name: "  Drafts  " });
+        const inner = index.createFolder({ name: "Old", parentId: work.id });
+        if (!top || !inner) throw new Error("createFolder was refused");
+        expect(top).toMatchObject({ name: "Drafts", parentId: null });
+        expect(inner.parentId).toBe(work.id);
+        expect(dir(top.id)).toEqual(top);
+        expect(top.id).not.toBe(inner.id);
+        expect(events).toHaveLength(2);
+      });
+
+      it("createFolder refuses an unknown parent, a fifth level and no name", () => {
+        const { index } = setup();
+        const before = index.snapshot();
+        expect(
+          index.createFolder({ name: "X", parentId: "f-nope" }),
+        ).toBeNull();
+        expect(
+          index.createFolder({ name: "X", parentId: deepest.id }),
+        ).toBeNull();
+        expect(index.createFolder({ name: "   " })).toBeNull();
+        expect(index.snapshot()).toBe(before);
+      });
+
+      it("renameFolder renames in place and ignores a blank name", () => {
+        const { index, dir } = setup();
+        index.renameFolder(home.id, " House ");
+        expect(dir(home.id)?.name).toBe("House");
+        const before = index.snapshot();
+        index.renameFolder(home.id, "  ");
+        index.renameFolder("f-nope", "X");
+        expect(index.snapshot()).toBe(before);
+      });
+
+      it("create puts a document in a folder, and refuses an unknown one", () => {
+        const { index, doc } = setup();
+        const entry = index.create({ title: "In Home", folderId: home.id });
+        if (!entry) throw new Error("create was refused");
+        expect(doc(entry.id)?.folderId).toBe(home.id);
+        expect(index.create({ folderId: "f-nope" })).toBeNull();
+      });
+    });
+
+    describe("moveItems", () => {
+      it("moves documents and folders, and says where they were", () => {
+        const { index, doc, dir } = setup();
+        const result = index.moveItems(
+          [
+            { kind: "doc", id: notes.id },
+            { kind: "folder", id: home.id },
+          ],
+          work.id,
+        );
+        expect(result).toEqual({
+          ok: true,
+          from: { [`doc:${notes.id}`]: null, [`folder:${home.id}`]: null },
+        });
+        expect(doc(notes.id)?.folderId).toBe(work.id);
+        expect(dir(home.id)?.parentId).toBe(work.id);
+        index.moveItems([{ kind: "doc", id: plan.id }], null);
+        expect(doc(plan.id)?.folderId ?? null).toBeNull();
+      });
+
+      it("refuses a folder into its own descendant, moving nothing", () => {
+        const { index } = setup();
+        const before = index.snapshot();
+        const events = record(index);
+        expect(
+          index.moveItems(
+            [
+              { kind: "doc", id: notes.id },
+              { kind: "folder", id: work.id },
+            ],
+            deep.id,
+          ),
+        ).toEqual({ ok: false, reason: "into_itself" });
+        expect(index.moveItems([{ kind: "folder", id: q4.id }], q4.id)).toEqual(
+          { ok: false, reason: "into_itself" },
+        );
+        expect(index.snapshot()).toBe(before);
+        expect(events).toEqual([]);
+      });
+
+      it("refuses nesting past 4 levels", () => {
+        const { index } = setup();
+        const sub = index.createFolder({ name: "Sub", parentId: home.id });
+        if (!sub) throw new Error("createFolder was refused");
+        // Home (2 levels) under Deep (level 3) would reach level 5.
+        expect(
+          index.moveItems([{ kind: "folder", id: home.id }], deep.id),
+        ).toEqual({ ok: false, reason: "too_deep" });
+        expect(
+          index.moveItems([{ kind: "folder", id: home.id }], q4.id).ok,
+        ).toBe(true);
+      });
+
+      it("refuses unknown items and destinations", () => {
+        const { index } = setup();
+        expect(
+          index.moveItems([{ kind: "doc", id: "doc-nope" }], null),
+        ).toEqual({ ok: false, reason: "not_found" });
+        expect(
+          index.moveItems([{ kind: "doc", id: notes.id }], "f-nope"),
+        ).toEqual({ ok: false, reason: "not_found" });
+      });
+
+      it("changes nothing when everything is already there", () => {
+        const { index } = setup();
+        const before = index.snapshot();
+        const result = index.moveItems([{ kind: "doc", id: plan.id }], q4.id);
+        expect(result.ok).toBe(true);
+        expect(index.snapshot()).toBe(before);
+      });
+    });
+
+    describe("pins", () => {
+      const pinned = (index: LibraryIndex) =>
+        index
+          .snapshot()
+          .items.filter((item) => item.pinKey !== undefined)
+          .sort((x, y) =>
+            (x.pinKey ?? "") < (y.pinKey ?? "")
+              ? -1
+              : (x.pinKey ?? "") > (y.pinKey ?? "")
+                ? 1
+                : 0,
+          )
+          .map((item) => item.id);
+
+      it("pins at the end, unpins, and ignores a second pin", () => {
+        const { index } = setup();
+        index.pin(list.id);
+        index.pin(plan.id);
+        const before = index.snapshot();
+        index.pin(list.id);
+        expect(index.snapshot()).toBe(before);
+        expect(pinned(index)).toEqual([list.id, plan.id]);
+        index.unpin(list.id);
+        expect(pinned(index)).toEqual([plan.id]);
+      });
+
+      it("movePin reorders the pinned documents", () => {
+        const { index } = setup();
+        index.pin(list.id);
+        index.pin(plan.id);
+        index.pin(notes.id);
+        index.movePin(notes.id, 0);
+        expect(pinned(index)).toEqual([notes.id, list.id, plan.id]);
+        index.movePin(notes.id, 2);
+        expect(pinned(index)).toEqual([list.id, plan.id, notes.id]);
+      });
+    });
+
+    it("markOpened stamps the time it was opened", () => {
+      const { index, doc } = setup();
+      const before = Date.now();
+      index.markOpened(notes.id);
+      expect(doc(notes.id)?.openedAt).toBeGreaterThanOrEqual(before);
+    });
+
+    describe("trash", () => {
+      it("trashes a folder with everything in it, as one unit", async () => {
+        const { index, docIds, dirIds } = setup();
+        const trashed = await index.trashFolder(q4.id);
+        expect(trashed).toEqual({
+          id: q4.id,
+          name: q4.name,
+          parentId: work.id,
+          docCount: 2,
+        });
+        expect(docIds()).toEqual([notes.id]);
+        expect(dirIds()).toEqual([home.id, work.id].sort());
+        expect(index.snapshot().trashCount).toBe(2);
+
+        expect(await index.restoreFolder(q4.id)).toBe("restored");
+        expect(docIds().sort()).toEqual([plan.id, notes.id, list.id].sort());
+        expect(dirIds()).toHaveLength(5);
+        expect(index.snapshot().trashCount).toBe(0);
+      });
+
+      it("restores to the root when the parent folder is gone", async () => {
+        const { index, dir, doc } = setup();
+        await index.trashFolder(deep.id);
+        const { trashed } = await index.trash([notes.id]);
+        await index.trashFolder(work.id);
+        expect(await index.restoreFolder(deep.id)).toBe("restored_to_root");
+        expect(dir(deep.id)?.parentId).toBeNull();
+        expect(doc(list.id)?.folderId).toBe(deepest.id);
+        await index.restore(trashed);
+        expect(doc(notes.id)?.folderId ?? null).toBeNull();
+      });
+
+      it("restores a document into a trashed folder at the root", async () => {
+        const { index, doc } = setup();
+        const { trashed } = await index.trash([plan.id]);
+        await index.trashFolder(q4.id);
+        expect(await index.restore(trashed)).toEqual({ [plan.id]: "restored" });
+        expect(doc(plan.id)?.folderId ?? null).toBeNull();
+      });
+
+      it("answers gone for an unknown or purged folder", async () => {
+        const { index, purge } = setup();
+        expect(await index.restoreFolder("f-nope")).toBe("gone");
+        await index.trashFolder(home.id);
+        purge();
+        expect(await index.restoreFolder(home.id)).toBe("gone");
+        expect(await index.trashFolder("f-nope")).toBeNull();
+      });
+    });
+
+    it("refuses folder and pin operations after destroy", async () => {
+      const { index } = setup();
+      const before = index.snapshot();
+      index.destroy();
+      expect(index.createFolder({ name: "X" })).toBeNull();
+      expect(index.moveItems([{ kind: "doc", id: notes.id }], work.id)).toEqual(
+        { ok: false, reason: "not_ready" },
+      );
+      index.pin(notes.id);
+      index.renameFolder(work.id, "W");
+      expect(await index.trashFolder(work.id)).toBeNull();
+      expect(index.snapshot()).toBe(before);
     });
   });
 }

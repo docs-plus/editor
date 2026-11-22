@@ -6,15 +6,28 @@ import type { Clock } from "@/lib/platform/batcher";
 
 type Timer = { id: number; at: number; fn: () => void };
 
-/** Lets promise chains (store calls, acks) settle. */
+/**
+ * Lets promise chains (store calls, acks) settle, including ones behind a
+ * real `setTimeout(0)`. Only for tests that use real delays; `FakeClock`
+ * never waits on a real timer.
+ */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
 /**
+ * Runs queued promise callbacks without waiting on any real timer, so a
+ * store call and its ack (a few promise hops each) finish. Deterministic
+ * and as fast on a loaded machine as on an idle one.
+ */
+async function drainMicrotasks(): Promise<void> {
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+}
+
+/**
  * A clock that moves only when told. `advance` fires due timers in time
- * order and lets promises settle after each one, so an ack scheduled by a
- * timer lands before the next timer runs.
+ * order and drains promise callbacks after each one, so an ack scheduled by
+ * a timer lands before the next timer runs. It never waits on real time.
  */
 export class FakeClock implements Clock {
   private time = 0;
@@ -42,7 +55,7 @@ export class FakeClock implements Clock {
 
   async advance(ms: number): Promise<void> {
     const end = this.time + ms;
-    await settle();
+    await drainMicrotasks();
     for (;;) {
       const due = this.timers
         .filter((timer) => timer.at <= end)
@@ -51,7 +64,7 @@ export class FakeClock implements Clock {
       this.timers = this.timers.filter((timer) => timer !== due);
       this.time = due.at;
       due.fn();
-      await settle();
+      await drainMicrotasks();
     }
     this.time = end;
   }

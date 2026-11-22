@@ -19,6 +19,147 @@ visible heading and `role="group"` with the same label, and every row keeps a
 there). Nothing is added or removed. Page width follows with the preferences
 work. Editor chunk +2 B from chunk-name hashes only; no eager code.
 
+### Desktop P2.1c: the editor opens documents through `DocSession`
+
+`use-yjs-document` now opens documents through the `DocSession` its
+composition root provides, instead of importing `collab-session`. The web
+provides the sandbox adapter, which wraps `collab-session` unchanged, so
+nothing changes for users. The adapter loads with the lazy editor chunk,
+not on first load (first load −32 B gz, editor chunk group +275 B gz). The
+desktop and library roots will provide `local-session`.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session-context.tsx`
+  (`DocSessionProvider`, `useDocSession`) and
+  `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
+  sandbox `DocSession` over `collab-session`).
+- **Editor:** `components/editor-app/sandbox-document-editor.tsx`, the web
+  wrapper that `EditorApp` loads lazily in place of `DocumentEditor`: the
+  editor under the sandbox `DocSession`.
+- **Tests:** an import-boundary test that neither the hook nor any module in
+  `components/document-editor/` loads `collab-session` or a platform
+  adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
+  statically and its connection status reads `collab-session`.
+
+#### Changed
+
+- **Editor:** `use-yjs-document` returns the same fields as before, now read
+  from the `DocSession` handle (`ydoc` and `awareness` are `undefined`, not
+  `null`, before the first open).
+- **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
+  (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
+  that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
+- **Tests:** the SIGKILL batcher test kills its child once at least 10
+  tokens are past the 1 s window and it is still typing, instead of at a
+  fixed time, so a slow CI runner makes the run longer rather than failing
+  its "enough typed" check.
+- **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
+  Reload button saves through `DocSession.flush()` (on the web, the same
+  device-copy flush as before) before reloading.
+
+### Desktop P2.7a: files sidebar, Quick Open and Move to…
+
+The library's files sidebar for desktop and the web library (D3), in
+`components/library/`, driven by a `LibraryIndex`. The web sandbox doesn't
+use it: the web build is unchanged (every JS and CSS chunk identical to
+`main`; first load and editor chunk +0 B).
+
+#### Added
+
+- **Platform:** `LibraryIndex` extends the `DocumentIndex` port with
+  folders (4 levels), all-or-none moves that refuse a folder into its own
+  subtree, pins in their own order, `markOpened`, and a folder trashed and
+  restored as one unit (to the root when its parent is gone).
+  `GlobalTabsIndex` stays a plain `DocumentIndex`. `MemoryDocumentIndex`
+  implements it, and the shared contract suite covers it for P2.6's
+  `IpcDocumentIndex` and W2's `IdbDocumentIndex`.
+- **Search:** `lib/search/normalize.ts`, the one metadata normalizer
+  (D-A8): case, Latin, Arabic and Hebrew marks, tatweel, Arabic yeh and kaf
+  to Persian, Persian and Arabic-Indic digits to ASCII, with an offset map
+  so highlights keep the original text. `lib/search/match.ts` matches word
+  prefixes before substrings.
+- **Library:** the files sidebar (Search, Recent, Pinned, the Library tree,
+  Trash), an APG tree with one tab stop, multi-select, type-ahead, F2
+  rename, Move to Trash (⌘⌫ / Delete) and file-operation undo (⌘Z, 20
+  steps), Shift+F10 row menus, and pointer drag and drop with
+  spring-loaded folders (700 ms, or Space). Move to… lists recent
+  destinations first and keeps refused folders visible with the reason.
+  Quick Open searches titles and folder names only (D24), shows the folder
+  path, offers Create when nothing matches, and opens in a new tab with
+  ⌘Enter. Right-to-left sidebars mirror, ← and → included. New Document
+  goes into the folder that has focus in the sidebar, else the root.
+  Document renames go through the host's `onRenameDocument`, so desktop and
+  the web library can edit the title heading (details spec §2.3).
+- **Focus:** `lib/region-focus.ts` moves between regions with F6 /
+  Shift+F6 and returns to the last focused element of each.
+- **Tests:** the `library` Playwright project runs the keyboard checklist,
+  folder refusals, drag and drop, RTL keys and axe on a Bun harness
+  (`tests/harness/library`, `bun run harness:library`); CI starts it in
+  the e2e job. Unit tests cover the normalizer, the matcher, folder and
+  drop rules, tree rows, keys, the undo stack and F6 regions; the import
+  boundary test keeps the library UI free of sandbox, desktop, editor and
+  test code.
+
+#### Changed
+
+- **Build:** `app/globals.css` leaves `components/library` and
+  `tests/harness` out of Tailwind's sources; the library styles itself in
+  plain CSS on the shadcn tokens, shipped only with the components.
+
+### Retention purge: on
+
+The daily `editor-purge` run now deletes. Four dry runs in production
+(2026-11-19 to 2026-11-22, 03:17) each listed the same 2 documents idle for
+more than 30 days (`staleTotal` 2), no closed documents past 7 days and no
+expired tombstones.
+
+#### Changed
+
+- **Ops:** `PURGE_MODE` is `on` for `editor-purge` in `ecosystem.config.cjs`.
+  Each run first backs the database up to `backups/` (`db-first.sqlite` kept
+  forever, dated copies 14 days) and deletes nothing if the backup fails.
+
+**Deploy:** nothing to do by hand. The automatic deploy registers the new env
+without purging; the next 03:17 run writes `db-first.sqlite` and does the
+first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
+pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
+
+### Selection bubble P0: a plugin-free controller and a first-line anchor
+
+The selection bubble no longer registers a ProseMirror plugin from its lazy
+chunk, and it anchors to the line it belongs to (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §12.1, v1 contract A18). The
+editor chunk group is unchanged (393,465 B gz, −1 B against `main` at
+`29f6faf`, 1,287 B under the P2.2 fence), and the
+bubble chunk shrinks from 12,238 B to 9,798 B gz (−2,440 B).
+
+#### Changed
+
+- **Bubble:** a `BubbleController` per editor shows, hides and positions the
+  bubble instead of Tiptap's `BubbleMenu`, so the bubble chunk landing no
+  longer rebuilds all 29 plugin views. The DOM contract is unchanged: one
+  `[data-smart-bubble]` root, appended to the scroll container on show and
+  removed on hide.
+- **Bubble:** it anchors to the first selected line that shows, not to the
+  box between the selection's two ends: a selection that wraps onto the
+  next line is centred on its selected part of the first line, not the
+  middle of the column, and one that starts at the end of a paragraph
+  anchors to the next line's text, never to a whole block. Below the text,
+  it stays in view when the selection runs past the bottom of the window.
+- **Bubble:** Esc on a bubble item plays the 90 ms exit fade before the
+  bubble goes; a re-shown bubble never flashes at its old position.
+
+#### Fixed
+
+- **Bubble:** select all (⌘A / Ctrl+A) shows the bubble, under the first
+  visible line; a whitespace-only selection shows none.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
