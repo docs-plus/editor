@@ -14,14 +14,15 @@ since the previous tag.
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A21):
 Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. The editor chunk
-group does not grow: 394,021 B gz against 394,018 B on `main` at `84a9458`
-(+3 B of chunk-name churn; 393,995 B with P2–P4 under it at `60bc13b`). The
+group does not grow: 394,417 B gz against 394,415 B on `main` at `7b9fdc7`
+(+2 B of chunk-name churn, with P2–P4 merged; first measured 394,021 B against
+394,018 B at `84a9458`). The
 per-item lift behind the text styles is injected from the lazy chunks. The
 "/" chunk is back under its 7 KB budget, 7,087 B gz by its own test
 (`SLASH_BUDGET=1`; 7,334 B on the P4 tip): the phone Insert sheet now gets
 the "/" items at load instead of importing them. The bubble chunk is
-14,411 B gz (9,798 B on `main`), the menu chunk that holds Turn into
-6,077 B gz (3,173 B) and the colour chunk 6,583 B gz.
+14,734 B gz (9,781 B on `main` at `7b9fdc7`), the menu chunk that holds
+Turn into 6,384 B gz (3,156 B) and the colour chunk 6,566 B gz (3,622 B).
 
 #### Added
 
