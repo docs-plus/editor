@@ -473,6 +473,99 @@ page-text rules load later. The boot script grows from 600 B to 2,445 B
 
 No schema or protocol change; no Deploy note.
 
+### Desktop P2.5: the Electron shell
+
+The desktop app now has a shell: an Electron main process, a sandboxed
+preload and an unsigned internal build for macOS, Windows and Linux. It
+serves the desktop export on `app://tinydocy` and stores documents through
+the storage worker. Nothing changes on the web.
+
+#### Added
+
+- **Desktop:** the typed bridge. `desktop/shared/ipc-contract.ts` declares
+  each call (`app.hello`, `app.flushed`, `doc.open`, `doc.append`,
+  `doc.compact`, `doc.close`, `doc.flush`, `index.create`) and event
+  (`app.flushRequested`, `index.changed`) once, with the guard main runs on
+  it. The preload exposes `window.tinydocy` (`build`, `invoke`, `on`) and
+  nothing else. Main refuses calls until a window's preload has said hello
+  with the same build.
+- **Desktop:** the main process (`desktop/main/`):
+  - serves the export through the `app://tinydocy` handler with a CSP built
+    per page (inline-script hashes, Tiptap's stylesheet by hash, no
+    `'unsafe-inline'` scripts, `img-src 'self'`, no X hosts);
+  - shows each window on `ready-to-show` over a background that matches
+    the OS theme, sandboxed, with no page zoom, reload or DevTools;
+  - refuses navigation away from the app origin and `window.open` (an
+    `https` link opens in the system browser) and denies permissions by
+    default;
+  - sets YouTube's Referer to the website's origin;
+  - holds the single-instance lock, and filters `argv` and `open-file` to
+    `tinydocy://`, `tinydocy://local/<uuid>` and existing `.md`, `.html`
+    and `.tinydoc` files (import is P2.8);
+  - keeps the open-document registry: opening a document that another
+    window holds focuses that window;
+  - starts the storage worker beside the first window, restarts it after a
+    crash (at most 3 times a minute, replaying the registry), and is
+    otherwise read-only.
+- **Desktop:** quitting never waits on the page (#106). Main ignores
+  `beforeunload` vetoes and asks each window to flush through the bridge
+  (at most 3 s). It then shuts the worker down (at most 2 s) and exits; a
+  watchdog guarantees the exit.
+- **Desktop:** the unsigned internal build (`desktop/build/`): DMG, NSIS
+  installer, `.deb` and AppImage. Fuses: `RunAsNode` off, `NodeOptions`
+  off, cookie encryption on, ASAR integrity on (Electron enforces it on
+  macOS and Windows only), app only from the ASAR. `check-fuses.ts` reads
+  them back from the installed binary.
+- **Tests:** the `electron` Playwright project runs against the installed
+  app on all three OSes (`desktop-shell.yml`, also nightly). It covers the
+  D-A12 checks, the bridge, the registry, the refusals and the quit. Unit
+  tests cover the guards and the `argv` filter (both fuzzed), the
+  registry, the handlers, the supervisor and the quit coordinator.
+
+- **Desktop:** the packaged renderer opens documents from local storage:
+  `DesktopRoot` puts `local-session` over `IpcDocStore`
+  (`createRpcDocStore` over `window.tinydocy`). A window gets its document
+  from main; one opened with none gets this install's default document
+  until the library UI (P2.7).
+
+#### Security (review of #135)
+
+- **Desktop:** two build flavors. The **release** flavor (installers) has
+  the inspect fuse off and compiles every test hook out (a build check
+  refuses a release bundle that names one). The **test** flavor (unpacked,
+  never shipped) keeps the hooks and the inspector for Playwright.
+- **Desktop:** Windows registers `tinydocy://` as `… -- "%1"`; a link with
+  `--inspect=9229` after it opens no inspector (checked on the installed
+  release app on all three OSes).
+- **Desktop:** only the app's own top frame can send an `https` link to
+  the system browser, at most 3 per window per 10 s; embed frames and an
+  unknown focused frame are refused. Downloads and device choosers
+  (Bluetooth, HID, serial, USB) are refused.
+- **Desktop:** every response from `app://tinydocy` carries a CSP (a
+  minimal one for non-HTML, SVG sandboxed); symlinks are never served,
+  and a renderer export containing one fails the build.
+- **Desktop:** a `tinydocy://local/<uuid>` link opens a window only for a
+  document that exists, at most 5 new windows per 10 s; CSP reports from
+  a page are capped per window; a renderer may append only `local` and
+  `migration` updates, and `schemaTo` only with `migration`.
+- **Desktop:** the sync URL baked into `connect-src` must be a bare
+  `ws:`/`wss:` origin (`wss:` for release). On Windows the library lives
+  under `%LOCALAPPDATA%\TinyDocy`.
+- **Desktop:** the Linux spellcheck guard is installed on every session as
+  it is created. An offline spec reads Chromium's net-log for a whole
+  session and finds nothing leaving the machine; the only entry besides
+  loopback is Chromium's IPv6 reachability probe, which sends no packet.
+
+#### Changed
+
+- **Desktop:** the D-A12 smoke serves its fixture on `app://tinydocy` with
+  the shell's path rules. A test keeps every Electron pin at 45.3.2.
+- **Desktop:** Linux spellcheck stays off until dictionaries can be
+  delivered without a network download (#100). Turning it off alone still
+  let Chromium download a dictionary from Google, so Linux also sets no
+  spellcheck languages and a closed loopback download URL; a spec fails
+  on any spellcheck event. macOS and Windows use the OS spellchecker.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
