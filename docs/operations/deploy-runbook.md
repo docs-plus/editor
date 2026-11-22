@@ -170,7 +170,7 @@ must not change:
 | Check | Job | What it covers |
 | --- | --- | --- |
 | `Lint, typecheck, unit tests, build` | `checks` | audit, Biome, ESLint, typecheck, unit tests, production build, editor chunk size |
-| `Playwright (Chromium)` | `e2e-gate` | passes only when the three `Playwright shard N/3` jobs and `Playwright perf (typing budget)` passed, or when the pull request changes only `docs/**` or Markdown files (outside `desktop/**`) and they were skipped |
+| `Playwright (Chromium)` | `e2e-gate` | passes only when the four `Playwright shard N/4` jobs, `Playwright perf (typing budget)` and `Playwright perf (features)` passed, or when the pull request changes only `docs/**` or Markdown files (outside `desktop/**`) and they were skipped |
 
 The desktop shell workflow (`.github/workflows/desktop-shell.yml`) adds a
 third check for the ruleset:
@@ -195,9 +195,11 @@ pull requests ahead of it, and merges only what passed. CI already runs on
 1. Settings → Rules → Rulesets → **Protect main** → Add rule →
    **Require merge queue**:
    - Merge method: **Merge commit** (what `main` uses today).
-   - Build concurrency: **2** (each entry runs about seven jobs, and GitHub's
-     free plan runs 20 jobs at a time across the organisation: three entries
-     would take about 21, leaving nothing for pull requests).
+   - Build concurrency: **1** (each entry runs about 17 jobs: 11 of CI and
+     6 of the desktop shell, and GitHub's free plan runs 20 jobs at a time
+     across the organisation, so two entries would leave nothing for pull
+     requests). The group fills in the wait below, so one entry still merges
+     several pull requests.
    - Merge limits: minimum **1**, maximum **5**; wait **1 minute** to fill
      a group, so pull requests queued together usually land as one push to
      `main`, one CI run and one deploy, without holding a lone one back.
@@ -241,7 +243,7 @@ gh api repos/docs-plus/editor/rulesets/26847251 \
   | jq '{name, target, enforcement, conditions, bypass_actors,
          rules: (.rules + [{type: "merge_queue", parameters: {
            merge_method: "MERGE", grouping_strategy: "ALLGREEN",
-           max_entries_to_build: 2, min_entries_to_merge: 1,
+           max_entries_to_build: 1, min_entries_to_merge: 1,
            max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 1,
            check_response_timeout_minutes: 60}}])}' \
   | gh api -X PUT repos/docs-plus/editor/rulesets/26847251 --input -
