@@ -10,7 +10,8 @@
  * - downloads are refused until managed export lands (SEC-004), and
  *   Bluetooth, HID, serial and USB choosers are dismissed;
  * - YouTube player frames get a web Referer (D-A11: Error 153 without it);
- * - spellcheck is configured last (`spellcheck.ts`; off on Linux, #100).
+ * - spellcheck is guarded per session from `index.ts` (`spellcheck.ts`; off
+ *   on Linux, #100).
  */
 import {
   app,
@@ -24,7 +25,6 @@ import { APP_ORIGIN, EMBED_REFERER } from "../shared/app-identity";
 import { DESKTOP_FRAME_HOSTS } from "./csp";
 import { diagnostics } from "./diagnostics";
 import { ExternalLinkGate } from "./external-links";
-import { configureSpellcheck } from "./spellcheck";
 import { testHooks } from "./test-hooks";
 
 /** `${protocol}//${host}`: Node's `.origin` is "null" for `app:` (S1). */
@@ -196,5 +196,4 @@ export function hardenSession(): void {
   );
 
   // Last, so nothing above can be skipped if a spellcheck call throws.
-  configureSpellcheck(ses);
 }
