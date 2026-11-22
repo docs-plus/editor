@@ -968,6 +968,8 @@ Forget my choices…
 | Colour named rows | colour chunk | 0 B |
 | `+` on the empty line | slash chunk, plus **a little eager JSX in `SlashMenuHost`**, which renders chunk code only while the menu is open | about +100–200 B (estimate), **inside** the 1,000 B slash cap; measure |
 | "/" Suggested, ghost hint, footer, badges | slash chunk; `INSERT_KIND_CHOICE.maxRecent` 0 → 3 is one constant | 0 to +4 B |
+
+**Lazy slash chunk budget (owner, 2026-11-22):** the quick-insert phase measured the slash chunk at 7,041 B gz (from 5,772 B), over its 6 KB test budget. The owner raised the budget to **7 KB (7,168 B gz)**. The growth by feature (gz): the `+`'s undo handling 336 B, the footer 269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor 66 B; "New" badges compile out while none is declared. A later lazy piece for Suggested and the footer was rejected: both must render on the first frame. The `+` itself mounts from the bubble chunk (0 eager bytes), not the slash host.
 | Phone Insert sheet | phone chunk; the table and embed steps load only through `lazySurface(loadInsertStep)` (A9 measured +1.5 KB when phone imported menus statically) | 0 B |
 | ⋯ regroup and Page width | menus chunk | 0 B |
 | Comment button | comments PR's own ledger line (150 B) | — |
