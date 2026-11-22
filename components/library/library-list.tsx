@@ -95,7 +95,11 @@ import { ListRowView } from "./list-row";
 import type { RenameExit } from "./rename-field";
 
 export const ROW_HEIGHT = 32;
-export const PREVIEW_ROW_HEIGHT = 72;
+/**
+ * Preview rows hold exactly what they show (library.css): 6 px padding,
+ * a 20 px title line, a 2 px gap and two 16 px snippet lines, 6 px padding.
+ */
+export const PREVIEW_ROW_HEIGHT = 66;
 export const GROUP_ROW_HEIGHT = 28;
 const OVERSCAN = 8;
 const TYPE_AHEAD_MS = 700;

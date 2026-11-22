@@ -24,6 +24,36 @@ export function classifyRequest(request: RequestLike, origin: string): SwRoute {
   return "bypass";
 }
 
+/** The message a page posts with the static files it loaded uncontrolled. */
+export const CACHE_LOADED_MESSAGE = "tinydocy:cache-loaded";
+
+/** At most this many URLs per message, so one message cannot fill the cache. */
+const MAX_LOADED_URLS = 200;
+
+/**
+ * The same-origin /_next/static paths among `urls` (a page's resource
+ * timing names), deduplicated and capped. Anything else a message carries
+ * (other origins, /api, the worker itself, non-strings) is dropped.
+ */
+export function loadedStaticPaths(urls: unknown, origin: string): string[] {
+  if (!Array.isArray(urls)) return [];
+  const paths = new Set<string>();
+  for (const value of urls) {
+    if (typeof value !== "string") continue;
+    let url: URL;
+    try {
+      url = new URL(value, origin);
+    } catch {
+      continue;
+    }
+    if (url.origin === origin && STATIC_PATH.test(url.pathname)) {
+      paths.add(url.pathname);
+      if (paths.size === MAX_LOADED_URLS) break;
+    }
+  }
+  return [...paths];
+}
+
 /** Every /_next/static URL an HTML page references, deduplicated. */
 export function extractStaticAssets(html: string): string[] {
   return [...new Set(html.match(STATIC_URL_IN_HTML) ?? [])];

@@ -789,9 +789,11 @@ button.lib-colbtn:not(:disabled):hover {
   display: flex;
   justify-content: flex-end;
 }
+/* Preview: 6 + 20 (title) + 2 + 2 × 16 (snippet) + 6 = 66 px, the row
+   height library-list.tsx uses (PREVIEW_ROW_HEIGHT). */
 .lib-lrow[data-preview] {
   align-items: start;
-  padding-block: 8px;
+  padding-block: 6px;
 }
 .lib-lrow[data-preview] .lib-lcell-name > svg {
   margin-top: 1px;
@@ -801,6 +803,9 @@ button.lib-colbtn:not(:disabled):hover {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+.lib-lrow[data-preview] .lib-lline {
+  height: 20px;
 }
 .lib-lline {
   display: flex;
@@ -816,7 +821,7 @@ button.lib-colbtn:not(:disabled):hover {
   overflow: hidden;
   color: var(--lib-muted);
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 16px;
 }
 .lib-lrow[data-preview] .lib-lcell-date,
 .lib-lrow[data-preview] .lib-lcell-folder {
