@@ -408,9 +408,12 @@ ul.st-sheet-list {
   text-align: start;
 }
 
+// The text only takes its own width, so a note ("3 × 3") follows its
+// label: pushed to the cell's inline end it met the next column's text and
+// read as that cell's in RTL. The ▸ alone keeps the inline end.
 .st-sheet-list .st-insert-cell > .st-insert-cell-text {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: column;
 }
 

@@ -1642,6 +1642,45 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
       };
     });
 
+  test("RTL at 390: Table's size note stays with its label, inside its cell", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    const table = insertSheet(page).getByRole("button", { name: /^Table/ });
+    const boxes = await table.evaluate((el) => {
+      const box = (selector: string) => {
+        const r = (
+          el.querySelector(selector) as HTMLElement
+        ).getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      };
+      const cell = el.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(
+        el.querySelector(".st-insert-cell-label") as Node,
+      );
+      const text = range.getBoundingClientRect();
+      return {
+        cell: { left: cell.left, right: cell.right },
+        note: box(".st-insert-note"),
+        chevron: box(".st-insert-chevron"),
+        label: { left: text.left, right: text.right },
+      };
+    });
+    // The note follows its label (to its left in RTL), not the column gap
+    // where it read as the next column's; the ‹ stays at the inline end.
+    expect(boxes.note.right).toBeLessThanOrEqual(boxes.label.left);
+    expect(boxes.label.left - boxes.note.right).toBeLessThan(16);
+    expect(boxes.chevron.left).toBeLessThan(boxes.cell.left + 24);
+    expect(boxes.note.left).toBeGreaterThan(boxes.chevron.right);
+  });
+
   test("an empty block opens Blocks; a block with text opens Turn into", async ({
     page,
   }) => {
