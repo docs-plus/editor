@@ -1,61 +1,53 @@
 "use client";
 
-import type { HocuspocusProvider } from "@hocuspocus/provider";
-import { useEffect, useState } from "react";
-import type * as Y from "yjs";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-import {
-  acquireCollabSession,
-  isSessionReady,
-  releaseCollabSession,
-  subscribeSession,
-} from "@/lib/collab-session";
+import type { DocHandle, DocHandleState } from "@/lib/platform/doc-session";
+import { useDocSession } from "@/lib/platform/doc-session-context";
 
+const LOADING: DocHandleState = {
+  ready: false,
+  authoritative: false,
+  readOnlyReason: null,
+  error: null,
+};
+const subscribeNone = () => () => {};
+const getLoading = () => LOADING;
+
+/**
+ * Opens `documentId` through the `DocSession` in context (the sandbox's
+ * collab-session on the web, `local-session` on desktop and in the library)
+ * and keeps it open while mounted. Imports no adapter (architecture §3.3).
+ */
 export function useYjsDocument(documentId: string) {
-  const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
-  const [providerRef, setProviderRef] = useState<HocuspocusProvider | null>(
-    null,
-  );
-  /** Renderable: synced with the server, or restored from the offline copy. */
-  const [synced, setSynced] = useState(false);
-  /** The server has confirmed this document at least once. */
-  const [serverSynced, setServerSynced] = useState(false);
-  /** Why edits are refused (size cap, deleted, offline budget), if they are. */
-  const [rejectedReason, setRejectedReason] = useState<string | null>(null);
+  const docSession = useDocSession();
+  const [handle, setHandle] = useState<DocHandle | null>(null);
 
   useEffect(() => {
-    const session = acquireCollabSession(documentId);
-    const { doc, provider } = session;
-    const sync = () => {
-      setSynced(isSessionReady(session));
-      setServerSynced(session.hasSynced || provider.isSynced);
-      setRejectedReason(session.rejectedReason);
-    };
-    sync();
-    const unsubscribe = subscribeSession(session, sync);
-    provider.on("synced", sync);
-    setYdoc(doc);
-    setProviderRef(provider);
-
+    const opened = docSession.open(documentId);
+    setHandle(opened);
     return () => {
-      unsubscribe();
-      provider.off("synced", sync);
-      releaseCollabSession(documentId);
-      setYdoc(null);
-      setProviderRef(null);
-      setSynced(false);
-      setServerSynced(false);
-      setRejectedReason(null);
+      opened.release();
+      setHandle(null);
     };
-  }, [documentId]);
+  }, [docSession, documentId]);
+
+  const state = useSyncExternalStore(
+    handle ? handle.subscribe : subscribeNone,
+    handle ? handle.getState : getLoading,
+    getLoading,
+  );
 
   return {
-    ydoc,
-    /** The session's one Awareness (DocSession shape); the provider's here. */
-    awareness: providerRef?.awareness ?? null,
-    provider: providerRef,
-    synced,
-    serverSynced,
-    rejectedReason,
+    ydoc: handle?.doc ?? null,
+    /** The session's one Awareness (DocSession shape). */
+    awareness: handle?.awareness ?? null,
+    provider: handle?.provider ?? null,
+    /** Renderable: loaded, synced, or restored from the device copy. */
+    synced: state.ready,
+    /** This copy is the authority (server confirmed, or a local library). */
+    serverSynced: state.authoritative,
+    /** Why edits are refused, if they are. */
+    rejectedReason: state.readOnlyReason,
   };
 }
