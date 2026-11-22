@@ -9,6 +9,32 @@ since the previous tag.
 
 ## [Unreleased]
 
+### CI: sharded e2e, a perf job, one gate check, docs-only skip
+
+The Playwright suite runs in parallel, so CI on a pull request or `main`
+takes about 7.5 minutes instead of about 27 (median of the last five green
+`main` runs, 19.7 to 31.6 min). Required check names are unchanged.
+
+#### Changed
+
+- **CI:** the `chromium` project runs in three shards (`Playwright shard
+  N/3`, `--retries=1`, about 6 min each), and the typing budget in its own
+  job on its own runner (`Playwright perf (typing budget)`, `--no-deps`, one
+  worker, about 5 min).
+- **CI:** `Playwright (Chromium)`, the required check, always runs. It merges
+  the shards' and perf's blob reports (failures are annotated at their file
+  and line; the HTML report is uploaded on failure) and passes only if all
+  of them passed.
+- **CI:** a pull request that changes only `docs/**` or Markdown files (none
+  under `desktop/**`) skips the shards and perf, and `Playwright (Chromium)`
+  passes with a notice. Pushes, the merge queue and manual runs always run
+  everything.
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` checks the shards, the
+  gate's `needs` and `if`, and runs the docs-only and verdict scripts.
+
+**Deploy:** none. Each CI run now uses about seven jobs instead of two; the
+merge queue's build concurrency (runbook) is set with that in mind.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
