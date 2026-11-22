@@ -7,6 +7,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { openToolbarTestDoc } from "./helpers/a11y";
+import { CHUNK_MARKERS, holdChunk } from "./helpers/lazy-chunk";
 
 const MOUSE_WIDTHS = [1440, 1280, 1128, 1024, 1008, 900, 860, 840, 768];
 const TOUCH_WIDTHS = [1440, 1224, 1096, 920, 824, 768];
@@ -200,7 +201,6 @@ test.describe("touch", () => {
     ).toBe(true);
     await seedContexts(page);
     await caretIn(page, "heading");
-    // Drawn by the menu chunk's CSS, fetched when the browser is idle.
     await expect
       .poll(() => standInWords(page))
       .toEqual({
@@ -231,6 +231,40 @@ test.describe("touch", () => {
       expect(await standInWords(page)).toEqual({});
       await expectRowFits(page, `touch @${width}`);
     }
+  });
+
+  test("tablet: the words are there at first paint; the row never shifts when the menu chunk lands", async ({
+    page,
+  }) => {
+    const held = await holdChunk(page, CHUNK_MARKERS.menus);
+    await page.setViewportSize({ width: 900, height: 1180 });
+    await openToolbarTestDoc(page);
+    await seedContexts(page);
+    await caretIn(page, "heading");
+    /** Each visible item's right edge, by name. */
+    const edges = () =>
+      row(page).evaluate((el) =>
+        Array.from(el.querySelectorAll<HTMLElement>("[data-toolbar-item]"))
+          .filter((item) => item.checkVisibility())
+          .map(
+            (item) =>
+              `${item.getAttribute("aria-label")}@${Math.round(item.getBoundingClientRect().right)}`,
+          ),
+      );
+    // The menu chunk is still held: the words are drawn already.
+    expect(await standInWords(page)).toEqual({
+      Format: "Format",
+      Layout: "Layout",
+      "Block: Section tools": "Block",
+    });
+    const before = await edges();
+    held.release();
+    await held.restore();
+    // The chunk is in once a stand-in's menu opens.
+    await row(page).getByRole("button", { name: "Layout" }).click();
+    await expect(page.getByRole("menu", { name: "Layout" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(await edges()).toEqual(before);
   });
 
   test("phone: the docked bar replaces the row, 44px cells, Aa on screen", async ({

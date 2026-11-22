@@ -222,3 +222,58 @@ button[aria-pressed="mixed"]::after {
     color: GrayText;
   }
 }
+
+/*
+ * Touch tablets (O8 a, spec §13.2): the row's stand-ins whose icons don't
+ * explain themselves show one fixed word between the icon and the chevron
+ * ("Format", "Layout", "Block"; each stand-in's name begins with it, WCAG
+ * 2.5.3, `collapse-menus.tsx`). Here, with the app's first CSS, so the row
+ * has its final width at first paint and never shifts, at no cost to the
+ * editor chunk group. The words add 120px; the row fits them in every
+ * context from an 832px row (an 848px window), so below that they stay off
+ * rather than make the row scroll (`toolbar-ladder.spec.ts`).
+ */
+@media (min-width: 768px) and (pointer: coarse) {
+  @container smart-toolbar (width >= 832px) {
+    :is(
+        [data-toolbar-group="marks"],
+        [data-toolbar-group="paragraph"],
+        [data-toolbar-group="slot"]
+      )
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      order: 1;
+      font-size: 0.8125rem;
+      font-weight: 500;
+    }
+
+    :is(
+        [data-toolbar-group="marks"],
+        [data-toolbar-group="paragraph"],
+        [data-toolbar-group="slot"]
+      )
+      > [data-collapse-standin]
+      [data-toolbar-item]
+      > svg:last-child {
+      order: 2;
+    }
+
+    [data-toolbar-group="marks"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Format" / "";
+    }
+
+    [data-toolbar-group="paragraph"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Layout" / "";
+    }
+
+    [data-toolbar-group="slot"]
+      > [data-collapse-standin]
+      [data-toolbar-item]::after {
+      content: "Block" / "";
+    }
+  }
+}
