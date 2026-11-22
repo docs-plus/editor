@@ -340,16 +340,22 @@ The web behaviour with the flag off, and the flag-on branches, are unit tested i
 | Test | Project | Validates |
 |------|---------|-----------|
 | `library-sidebar.spec.ts` | `library` (Bun harness, no Next.js or Hocus) | The files sidebar keyboard checklist (plan §5.6; UX §8.3 items 1, 2, 3, 8 and 12): F6 regions, Enter opens, F2 rename (Esc cancels, empty refused), Move to Trash and ⌘Z in the tree, a folder trashed and restored whole, Quick Open (accents, Arabic→Persian letters and digits, Create, ⌘Enter new tab, Esc returns focus), Shift+F10 menus and Pin; tree keys (→ ← * Home End, Shift+↓, ⌘A, Esc, type-ahead); a folder never moves into itself or past 4 levels (Move to…, drag, New Folder); drag and drop onto folders, Pinned and Trash, spring-loaded folders; RTL arrow keys; axe in both themes |
+| `library-lists.spec.ts` | `library` | List views (P2.7b): UX §8.3 item 4 (open Trash and restore with the keyboard), the empty Trash, list keys (arrows, Home/End, Shift extends, ⌘A, Esc, ⌘⌫/Delete with focus on the next row, ⌘Z, Enter on a folder focuses its list), F2 and type-to-select, ⌘F and the filter bar (titles, tags and folders, never the snippet; D24), the AND tag filter, sort/view/group kept per folder, By date groups, Manual order with ⌥⌘↓ and ⌘Z, the Tags section (rename everywhere, merge asks with Cancel focused), axe in both themes and RTL |
+| `library-lists-speed.spec.ts` | `library` | First paint of a folder list and of Recent at 1,000 and 10,000 documents (details §6.3: ≤ 100 ms and ≤ 300 ms), plus the filter keystroke. Asserted only on a production harness (`LIBRARY_HARNESS_PROD=1`); the development harness in CI records the numbers |
 
 The harness (`tests/harness/library/`) serves the shared library components on
 a `MemoryDocumentIndex`, built with `Bun.build` and `app/globals.css` through
 Tailwind's PostCSS plugin, so nothing reaches the web build. `?dir=rtl`,
-`?theme=dark` and `?seed=empty` switch its state; below 720 px the sidebar is
-an overlay. The page bundle is built once at start, so restart it after edits.
+`?theme=dark` and `?seed=empty` switch its state, `?seed=10000` generates that
+many documents in a folder "Big" and `?trash=1` starts with items in Trash;
+below 720 px the sidebar is an overlay. The page bundle is built once at
+start, so restart it after edits. `LIBRARY_HARNESS_PROD=1` builds production
+React for the speed spec.
 
 ```bash
 bun run harness:library            # http://127.0.0.1:3871/
 CI= bun playwright test --project=library
+LIBRARY_HARNESS_PROD=1 bun run harness:library   # then the speed spec
 ```
 
 Manual install checklist (localhost production build):

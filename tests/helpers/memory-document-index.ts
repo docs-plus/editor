@@ -3,6 +3,17 @@ import {
   checkMove,
   indexFolders,
 } from "@/lib/library/folder-rules";
+import {
+  appendedManualKey,
+  compareManual,
+  renumberManual,
+} from "@/lib/library/list-rows";
+import { cleanListViewPrefs } from "@/lib/library/list-view";
+import {
+  cleanTagName,
+  findTagByName,
+  MAX_TAGS_PER_DOC,
+} from "@/lib/library/tag-rules";
 import type {
   DocumentEntry,
   FolderEntry,
@@ -11,10 +22,14 @@ import type {
   LibraryIndexListener,
   LibraryIndexSnapshot,
   LibraryItemRef,
+  ListViewPrefs,
   MoveResult,
   RestorableEntry,
   RestoreResult,
+  TagEntry,
+  TagRenameResult,
   TrashedFolder,
+  TrashedItem,
   TrashResult,
 } from "@/lib/platform/document-index";
 
@@ -23,6 +38,8 @@ export interface MemoryDocumentIndexOptions {
   items?: readonly DocumentEntry[];
   /** Folders at the start (`LibraryIndex`). */
   folders?: readonly FolderEntry[];
+  /** Tags at the start (`LibraryIndex`). */
+  tags?: readonly TagEntry[];
   /** Start not ready; `load()` makes it ready. */
   deferLoad?: boolean;
   /** Ids `trash` refuses. */
@@ -33,6 +50,14 @@ export interface MemoryDocumentIndexOptions {
 interface FolderUnit {
   readonly folders: FolderEntry[];
   readonly docs: DocumentEntry[];
+  readonly trashedAt: number;
+  /** The subtree's one `trash_group`. */
+  readonly trashGroup: string;
+}
+
+interface TrashedDoc {
+  readonly entry: DocumentEntry;
+  readonly trashedAt: number;
 }
 
 const NAME_CAP = 200;
@@ -41,13 +66,18 @@ function cleanName(name: string): string {
   return name.trim().slice(0, NAME_CAP);
 }
 
-/** The entry with `folderId` set, or dropped at the root. */
+/**
+ * The entry with `folderId` set (or dropped at the root) and `sortKey`,
+ * its place in that folder's Manual order (or none).
+ */
 function inFolder(
   entry: DocumentEntry,
   folderId: string | null,
+  sortKey?: string,
 ): DocumentEntry {
-  const { folderId: _old, ...rest } = entry;
-  return folderId === null ? rest : { ...rest, folderId };
+  const { folderId: _old, sortKey: _key, ...rest } = entry;
+  const placed = folderId === null ? rest : { ...rest, folderId };
+  return sortKey === undefined ? placed : { ...placed, sortKey };
 }
 
 function pinKeyAt(position: number): string {
@@ -62,27 +92,35 @@ function pinKeyAt(position: number): string {
  */
 export class MemoryDocumentIndex implements LibraryIndex {
   private readonly listeners = new Set<LibraryIndexListener>();
-  private readonly trashBin = new Map<string, DocumentEntry>();
+  private readonly trashBin = new Map<string, TrashedDoc>();
   private readonly folderUnits = new Map<string, FolderUnit>();
   private readonly failTrash: ReadonlySet<string>;
   private items: DocumentEntry[];
   private folders: FolderEntry[];
+  private tags: TagEntry[];
+  private listViews: Record<string, Partial<ListViewPrefs>> = {};
   private current: LibraryIndexSnapshot;
   private destroyed = false;
+  /** Trash times only grow, so the Trash list's order is stable. */
+  private lastTrashedAt = 0;
 
   constructor(options: MemoryDocumentIndexOptions = {}) {
     this.items = [...(options.items ?? [])];
     this.folders = [...(options.folders ?? [])];
+    this.tags = [...(options.tags ?? [])];
     this.failTrash = new Set(options.failTrash);
     this.current = options.deferLoad
-      ? { rev: 0, ready: false, items: [], folders: [], trashCount: 0 }
-      : {
-          rev: 1,
-          ready: true,
-          items: [...this.items],
-          folders: [...this.folders],
+      ? {
+          rev: 0,
+          ready: false,
+          items: [],
+          folders: [],
           trashCount: 0,
-        };
+          tags: [],
+          listViews: {},
+          trash: [],
+        }
+      : this.build(1);
   }
 
   /** Makes a deferred index ready, or reloads it: emits `load`. */
@@ -117,13 +155,16 @@ export class MemoryDocumentIndex implements LibraryIndex {
     if (folderId !== null && !this.folders.some((f) => f.id === folderId)) {
       return null;
     }
+    const now = Date.now();
     const entry = inFolder(
       {
         id: crypto.randomUUID(),
         title: init?.title ?? "Untitled",
-        createdAt: Date.now(),
+        createdAt: now,
+        modifiedAt: now,
       },
       folderId,
+      appendedManualKey(this.siblings(folderId)),
     );
     this.items.push(entry);
     this.publish("change");
@@ -159,8 +200,11 @@ export class MemoryDocumentIndex implements LibraryIndex {
     }
     if (trashed.length === 0) return { trashed, failed };
     const gone = new Set(trashed.map((entry) => entry.id));
+    const trashedAt = this.trashTime();
     for (const item of this.items) {
-      if (gone.has(item.id)) this.trashBin.set(item.id, item);
+      if (gone.has(item.id)) {
+        this.trashBin.set(item.id, { entry: item, trashedAt });
+      }
     }
     this.items = this.items.filter((item) => !gone.has(item.id));
     this.publish("change");
@@ -185,12 +229,20 @@ export class MemoryDocumentIndex implements LibraryIndex {
         continue;
       }
       this.trashBin.delete(entry.id);
-      const folderId = trashed.folderId ?? null;
+      const folderId = trashed.entry.folderId ?? null;
       const home = this.folders.some((f) => f.id === folderId)
         ? folderId
         : null;
       const at = Math.min(entry.index ?? this.items.length, this.items.length);
-      this.items.splice(at, 0, inFolder(trashed, home));
+      const restored =
+        home === folderId
+          ? trashed.entry
+          : inFolder(
+              trashed.entry,
+              home,
+              appendedManualKey(this.siblings(home)),
+            );
+      this.items.splice(at, 0, restored);
       results[entry.id] = "restored";
       changed = true;
     }
@@ -259,12 +311,15 @@ export class MemoryDocumentIndex implements LibraryIndex {
       items.filter((item) => item.kind === "folder").map((item) => item.id),
     );
     let changed = false;
+    const joined: DocumentEntry[] = [...this.siblings(folderId)];
     this.items = this.items.map((entry) => {
       if (!docs.has(entry.id) || (entry.folderId ?? null) === folderId) {
         return entry;
       }
       changed = true;
-      return inFolder(entry, folderId);
+      const moved = inFolder(entry, folderId, appendedManualKey(joined));
+      joined.push(moved);
+      return moved;
     });
     this.folders = this.folders.map((entry) => {
       if (!dirs.has(entry.id) || entry.parentId === folderId) return entry;
@@ -343,6 +398,8 @@ export class MemoryDocumentIndex implements LibraryIndex {
     const unit: FolderUnit = {
       folders: this.folders.filter((folder) => subtree.has(folder.id)),
       docs: this.items.filter(inside),
+      trashedAt: this.trashTime(),
+      trashGroup: crypto.randomUUID(),
     };
     this.folderUnits.set(id, unit);
     this.folders = this.folders.filter((folder) => !subtree.has(folder.id));
@@ -353,6 +410,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
       name: root.name,
       parentId: root.parentId,
       docCount: unit.docs.length,
+      trashGroup: unit.trashGroup,
     };
   }
 
@@ -372,9 +430,114 @@ export class MemoryDocumentIndex implements LibraryIndex {
     return parentKept ? "restored" : "restored_to_root";
   }
 
+  setListView(place: string, prefs: Partial<ListViewPrefs>): void {
+    if (!this.writable()) return;
+    const clean = cleanListViewPrefs(prefs);
+    if (Object.keys(clean).length === 0) return;
+    this.listViews = {
+      ...this.listViews,
+      [place]: { ...this.listViews[place], ...clean },
+    };
+    this.publish("change");
+  }
+
+  moveInFolder(id: string, toIndex: number): void {
+    if (!this.writable()) return;
+    const entry = this.items.find((item) => item.id === id);
+    if (!entry) return;
+    const order = this.siblings(entry.folderId ?? null)
+      .sort(compareManual)
+      .map((item) => item.id);
+    const from = order.indexOf(id);
+    const to = Math.min(Math.max(toIndex, 0), order.length - 1);
+    if (from === to) return;
+    order.splice(to, 0, ...order.splice(from, 1));
+    const keys = renumberManual(order);
+    this.items = this.items.map((item) => {
+      const key = keys.get(item.id);
+      return key === undefined ? item : { ...item, sortKey: key };
+    });
+    this.publish("change");
+  }
+
+  createTag(name: string): TagEntry | null {
+    if (!this.writable()) return null;
+    const clean = cleanTagName(name);
+    if (!clean) return null;
+    const existing = findTagByName(this.tags, clean);
+    if (existing) return existing;
+    const tag: TagEntry = { id: crypto.randomUUID(), name: clean, color: null };
+    this.tags.push(tag);
+    this.publish("change");
+    return tag;
+  }
+
+  addTag(docId: string, tagId: string): boolean {
+    if (!this.writable() || !this.tags.some((tag) => tag.id === tagId)) {
+      return false;
+    }
+    const entry = this.items.find((item) => item.id === docId);
+    if (!entry) return false;
+    const own = entry.tagIds ?? [];
+    if (own.includes(tagId)) return true;
+    if (own.length >= MAX_TAGS_PER_DOC) return false;
+    this.updateDoc(docId, (doc) => ({ ...doc, tagIds: [...own, tagId] }));
+    return true;
+  }
+
+  removeTag(docId: string, tagId: string): void {
+    this.updateDoc(docId, (entry) => {
+      if (!entry.tagIds?.includes(tagId)) return entry;
+      return { ...entry, tagIds: entry.tagIds.filter((id) => id !== tagId) };
+    });
+  }
+
+  renameTag(id: string, name: string): TagRenameResult {
+    if (!this.writable()) return { ok: false, reason: "not_ready" };
+    const at = this.tags.findIndex((tag) => tag.id === id);
+    if (at < 0) return { ok: false, reason: "not_found" };
+    const clean = cleanTagName(name);
+    if (!clean) return { ok: false, reason: "invalid" };
+    const taken = findTagByName(this.tags, clean);
+    if (taken && taken.id !== id) {
+      return { ok: false, reason: "exists", tagId: taken.id };
+    }
+    if (this.tags[at].name !== clean) {
+      this.tags[at] = { ...this.tags[at], name: clean };
+      this.publish("change");
+    }
+    return { ok: true };
+  }
+
+  mergeTags(fromId: string, intoId: string): boolean {
+    if (!this.writable() || fromId === intoId) return false;
+    const known = (tagId: string) => this.tags.some((tag) => tag.id === tagId);
+    if (!known(fromId) || !known(intoId)) return false;
+    this.tags = this.tags.filter((tag) => tag.id !== fromId);
+    this.items = this.items.map((entry) => {
+      if (!entry.tagIds?.includes(fromId)) return entry;
+      const rest = entry.tagIds.filter((tagId) => tagId !== fromId);
+      return {
+        ...entry,
+        tagIds: rest.includes(intoId) ? rest : [...rest, intoId],
+      };
+    });
+    this.publish("change");
+    return true;
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.listeners.clear();
+  }
+
+  private trashTime(): number {
+    this.lastTrashedAt = Math.max(Date.now(), this.lastTrashedAt + 1);
+    return this.lastTrashedAt;
+  }
+
+  private siblings(folderId: string | null): DocumentEntry[] {
+    return this.items.filter((item) => (item.folderId ?? null) === folderId);
   }
 
   private updateDoc(
@@ -400,14 +563,47 @@ export class MemoryDocumentIndex implements LibraryIndex {
     return count;
   }
 
-  private publish(type: "load" | "change"): void {
-    this.current = {
-      rev: this.current.rev + 1,
+  private trashList(): TrashedItem[] {
+    const list: TrashedItem[] = [];
+    for (const { entry, trashedAt } of this.trashBin.values()) {
+      list.push({
+        kind: "doc",
+        id: entry.id,
+        title: entry.title,
+        trashedAt,
+        folderId: entry.folderId ?? null,
+      });
+    }
+    for (const [id, unit] of this.folderUnits) {
+      const root = unit.folders[0];
+      list.push({
+        kind: "folder",
+        id,
+        name: root.name,
+        trashedAt: unit.trashedAt,
+        parentId: root.parentId,
+        docCount: unit.docs.length,
+        trashGroup: unit.trashGroup,
+      });
+    }
+    return list.sort((a, b) => b.trashedAt - a.trashedAt);
+  }
+
+  private build(rev: number): LibraryIndexSnapshot {
+    return {
+      rev,
       ready: true,
       items: [...this.items],
       folders: [...this.folders],
       trashCount: this.trashCount(),
+      tags: [...this.tags],
+      listViews: this.listViews,
+      trash: this.trashList(),
     };
+  }
+
+  private publish(type: "load" | "change"): void {
+    this.current = this.build(this.current.rev + 1);
     const snapshot = this.current;
     for (const listener of [...this.listeners]) listener(type, snapshot);
   }
