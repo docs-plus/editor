@@ -4,10 +4,13 @@
  * pseudo-locales `en-XA` and `ar-XB` (§3.12) exist only when
  * `NEXT_PUBLIC_PSEUDO_LOCALES=1` (dev, CI and preview builds), off by
  * default and never set in production.
+ *
+ * Lazy chunks only: the editor chunk imports `dir.ts` (through `t-core`)
+ * and never this file (`tests/unit/i18n/editor-chunk-imports.test.ts`).
  */
+import { SOURCE_LOCALE } from "@/lib/i18n/dir";
 
-/** English is the source language: messages are written in code. */
-export const SOURCE_LOCALE = "en";
+export { dirOf, SOURCE_LOCALE, type TextDirection } from "@/lib/i18n/dir";
 
 /** Languages with a reviewed catalog (each L8.x adds one). */
 export const SHIPPED_LOCALES: readonly string[] = [SOURCE_LOCALE];
@@ -56,29 +59,6 @@ export function matchLocale(
     }
   }
   return SOURCE_LOCALE;
-}
-
-/** Languages written right to left (Arabic script, Hebrew and others). */
-const RTL_LANGUAGES = new Set([
-  "ar",
-  "ckb",
-  "dv",
-  "fa",
-  "he",
-  "ps",
-  "sd",
-  "ug",
-  "ur",
-  "yi",
-]);
-
-export type TextDirection = "ltr" | "rtl";
-
-/** The interface direction for a locale (`ar-XB` is Arabic, so `rtl`). */
-export function dirOf(locale: string): TextDirection {
-  const tag = canonical(locale);
-  if (!tag) return "ltr";
-  return RTL_LANGUAGES.has(new Intl.Locale(tag).language) ? "rtl" : "ltr";
 }
 
 const PSEUDO_NAMES: Record<string, string> = {

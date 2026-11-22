@@ -43,9 +43,22 @@ function reachable(entry: string): Set<string> {
 const FORBIDDEN = [
   /^lib\/i18n\/format\.ts$/,
   /^lib\/i18n\/intl\.ts$/,
+  /^lib\/i18n\/locale\.ts$/,
   /^locales\//,
   /^scripts\/i18n\//,
 ];
+
+/** The only `lib/i18n` files the editor chunk may carry (L1a's ledger line). */
+const EAGER_I18N = [
+  "lib/i18n/dir.ts",
+  "lib/i18n/registry-labels.ts",
+  "lib/i18n/t-core.ts",
+];
+
+const offendersIn = (files: Set<string>) =>
+  [...files].filter((file) => FORBIDDEN.some((pattern) => pattern.test(file)));
+const i18nFilesIn = (files: Set<string>) =>
+  [...files].filter((file) => file.startsWith("lib/i18n/")).sort();
 
 describe("editor chunk i18n imports", () => {
   const files = reachable(ENTRY);
@@ -56,9 +69,30 @@ describe("editor chunk i18n imports", () => {
   });
 
   it("never reaches the formatter, Intl helpers, catalogs or scripts", () => {
-    const offenders = [...files].filter((file) =>
-      FORBIDDEN.some((pattern) => pattern.test(file)),
+    expect(offendersIn(files)).toEqual([]);
+  });
+
+  it("carries only the eager i18n files", () => {
+    for (const file of i18nFilesIn(files)) expect(EAGER_I18N).toContain(file);
+  });
+});
+
+describe("the eager i18n modules", () => {
+  // The editor test above passes vacuously until L1a wires `t-core` in, so
+  // pin what the eager modules pull in themselves.
+  it("t-core and registry-labels reach only dir.ts and each other", () => {
+    expect(i18nFilesIn(reachable("lib/i18n/registry-labels.ts"))).toEqual(
+      EAGER_I18N,
     );
-    expect(offenders).toEqual([]);
+    expect(i18nFilesIn(reachable("lib/i18n/t-core.ts"))).toEqual([
+      "lib/i18n/dir.ts",
+      "lib/i18n/t-core.ts",
+    ]);
+  });
+
+  it("would flag a graph that reaches the formatter (positive control)", () => {
+    expect(offendersIn(reachable("scripts/i18n/check.ts"))).toEqual(
+      expect.arrayContaining(["lib/i18n/format.ts", "scripts/i18n/check.ts"]),
+    );
   });
 });

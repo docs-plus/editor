@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { dirOf as eagerDirOf } from "@/lib/i18n/dir";
 import {
   availableLocales,
   dirOf,
@@ -48,10 +49,40 @@ describe("dirOf", () => {
     }
   });
 
+  it("follows the script, so Arabic-script tags of other languages are rtl", () => {
+    for (const locale of [
+      "ku-Arab",
+      "pa-Arab",
+      "ks",
+      "uz-Arab",
+      "ms-Arab",
+      "az-Arab",
+      "ckb",
+      "dv",
+      "yi",
+    ]) {
+      expect(dirOf(locale)).toBe("rtl");
+    }
+  });
+
   it("is ltr otherwise", () => {
-    for (const locale of ["en", "en-XA", "fr", "ru", "zh-TW", "nonsense!"]) {
+    for (const locale of [
+      "en",
+      "en-XA",
+      "fr",
+      "ru",
+      "zh-TW",
+      "ku",
+      "pa",
+      "sd-Deva",
+      "nonsense!",
+    ]) {
       expect(dirOf(locale)).toBe("ltr");
     }
+  });
+
+  it("is the same function in the eager dir.ts", () => {
+    expect(dirOf).toBe(eagerDirOf);
   });
 });
 

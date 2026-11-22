@@ -11,9 +11,17 @@
  * sentence around it.
  *
  * Not imported by the app yet: L1a wires it in under its 400 B gz ledger
- * line (desktop details §1 rule 5).
+ * line (desktop details §1 rule 5). It imports only `dir.ts`, never
+ * `locale.ts` (`tests/unit/i18n/editor-chunk-imports.test.ts`).
+ *
+ * The locale and catalog are module state, which suits the browser and
+ * Electron renderers (one interface language per page). `setUiLocale` and
+ * `addMessages` therefore run client-side at boot only: on the Next.js
+ * server this state would be shared across requests, so server code must
+ * not call them (L1a passes per-request state explicitly if it ever needs
+ * translated server output).
  */
-import { dirOf, SOURCE_LOCALE, type TextDirection } from "@/lib/i18n/locale";
+import { dirOf, SOURCE_LOCALE, type TextDirection } from "@/lib/i18n/dir";
 
 let locale = SOURCE_LOCALE;
 let dir: TextDirection = "ltr";
