@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { randomBytes } from "node:crypto";
 
 import type { FailedTokenLimiter } from "@/lib/sharing/failed-tokens";
 import type { SharesMode } from "@/lib/sharing/share-config";
@@ -13,6 +14,7 @@ import {
   AUTH_TOKEN_BYTES,
   decodeBase64url,
   OWNER_SECRET_BYTES,
+  SHARE_HASH_BYTES,
   tokenMatchesHash,
 } from "@/lib/sharing/share-token";
 
@@ -52,6 +54,28 @@ export type ShareAuthContext = {
 
 type Credential = "connection" | "owner" | "any";
 
+/**
+ * Compared against when the row is missing, so an unknown share costs the
+ * same digest work as a known one with a wrong token (no existence timing
+ * oracle). Its random hashes match nothing.
+ */
+const MISSING_SHARE: ShareRow = {
+  share_id: "",
+  lineage: "",
+  edit_hash: randomBytes(SHARE_HASH_BYTES),
+  view_hash: randomBytes(SHARE_HASH_BYTES),
+  owner_hash: randomBytes(SHARE_HASH_BYTES),
+  status: "ended",
+  view_only: 0,
+  ended_reason: null,
+  created_at: 0,
+  last_edit_at: 0,
+  ended_at: null,
+  created_ip_hash: null,
+  size_bytes: 0,
+  schema: 0,
+};
+
 function matchRole(
   share: ShareRow,
   token: string,
@@ -90,7 +114,10 @@ export function authenticateShare(
     return { ok: false, reason: SHARE_BUSY };
   }
   const share = getShare(context.db, shareId);
-  const role = share && token ? matchRole(share, token, credential) : null;
+  const matched = token
+    ? matchRole(share ?? MISSING_SHARE, token, credential)
+    : null;
+  const role = share ? matched : null;
   if (!share || !role) {
     const shareBlocked = failedTokens.isShareBlocked(shareId);
     failedTokens.recordFailure(shareId, ip);
