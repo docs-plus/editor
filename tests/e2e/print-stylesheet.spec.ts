@@ -44,6 +44,48 @@ const PRINT_DOC = {
       ],
     },
     { type: "heading", attrs: { level: 2 }, content: text("Open section") },
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Inline " },
+        { type: "text", text: "code", marks: [{ type: "inlineCode" }] },
+        { type: "text", text: " and a " },
+        {
+          type: "text",
+          text: "highlight",
+          marks: [{ type: "highlight", attrs: { color: "yellow" } }],
+        },
+        { type: "text", text: "." },
+      ],
+    },
+    {
+      type: "blockquote",
+      content: [{ type: "paragraph", content: text("A quoted line.") }],
+    },
+    {
+      type: "codeBlock",
+      attrs: { language: "javascript" },
+      content: text("const total = items.reduce((sum, x) => sum + x, 0);"),
+    },
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: ["Quarter", "Revenue"].map((cell) => ({
+            type: "tableHeader",
+            content: [{ type: "paragraph", content: text(cell) }],
+          })),
+        },
+        {
+          type: "tableRow",
+          content: ["Q3", "1,200"].map((cell) => ({
+            type: "tableCell",
+            content: [{ type: "paragraph", content: text(cell) }],
+          })),
+        },
+      ],
+    },
     { type: "paragraph", content: text("Last paragraph.") },
   ],
 };
@@ -125,15 +167,33 @@ test.describe("print stylesheet", () => {
 
   test("print is light in the dark theme", async ({ page }) => {
     await page.emulateMedia({ media: "print" });
-    const textColor = (dark: boolean) =>
-      page.evaluate((on: boolean) => {
-        document.documentElement.classList.toggle("dark", on);
-        const paragraph = document.querySelector(".tiptap p");
-        return paragraph ? getComputedStyle(paragraph).color : "";
-      }, dark);
-    const light = await textColor(false);
-    // Dark text on paper whatever the theme: the light print's colour.
-    expect(await textColor(true)).toBe(light);
+    // Ink of body text, inline code and a code block, as printed.
+    const ink = () =>
+      page.evaluate(() =>
+        [".tiptap p", ".tiptap p code", ".tiptap pre"].map((selector) => {
+          const element = document.querySelector(selector);
+          return element ? getComputedStyle(element).color : "";
+        }),
+      );
+    const light = await ink();
+
+    await page.evaluate(() => document.documentElement.classList.add("dark"));
+    // `emulateMedia` fires no print events; the print dialog does.
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    expect(await ink()).toEqual(light);
     await savePreview(page, "print-dark-theme.png");
+
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains("dark"),
+      ),
+    ).toBe(true);
   });
+});
+
+test("print leaves pages without the editor whole", async ({ page }) => {
+  await page.goto("/privacy");
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator("h1").first()).toBeVisible();
 });

@@ -10,24 +10,13 @@
      start with `html` to outrank them.
      ===================== */
 @media print {
-  /* Paper is light: a dark theme's light text would vanish on it. Only
-     the tokens body text, links and rules read; the rest stay readable. */
-  html.dark {
-    color-scheme: light;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --border: oklch(0.922 0 0);
-    --tt-canvas-color: transparent;
-  }
-
-  html.dark .tiptap.ProseMirror {
-    --link-text-color: #1155cc;
-  }
+  /* Paper is light: `watchPrintTheme` (lib/print-theme.ts) takes the dark
+     class off for the print, so every token prints its light value. */
 
   /* Chrome: everything but the document itself. Overlays the editor
-     portals to the body (popovers, menus, tooltips) go with it. */
-  body > :not(.app-shell),
+     portals to the body (popovers, menus, tooltips) go with it. Pages
+     without the editor (About, Privacy) print as they are. */
+  body:has(> .app-shell) > :not(.app-shell),
   .app-shell > :not(.document-editor-wrapper),
   .document-editor-wrapper > :not(.editor-with-toc),
   .editor-with-toc > :not(.document-editor-content) {
