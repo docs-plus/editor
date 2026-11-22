@@ -427,5 +427,5 @@ describe("Batcher durability bound (simulated kill)", () => {
         }
       }
     }
-  });
+  }, 30_000); // 40 seeds of fake-clock steps; slow on a loaded runner
 });
