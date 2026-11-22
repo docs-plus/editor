@@ -34,9 +34,12 @@ export function createTag(
   name: string,
   now: number,
   color: string | null = null,
+  /** The port mints ids synchronously; the engine keeps the caller's. */
+  newId?: string,
 ): { id: string; created: boolean; rev: number } | null {
   const clean = cleanTagName(name);
   if (!clean) return null;
+  if (newId !== undefined) requireId(newId, "tag id");
   const key = tagNameKey(clean);
   let id = "";
   let created = false;
@@ -46,7 +49,7 @@ export function createTag(
       id = existing;
       return;
     }
-    id = crypto.randomUUID();
+    id = newId ?? crypto.randomUUID();
     created = true;
     db.prepare(
       "INSERT INTO tags (id, name, name_key, color, created_at) VALUES (?, ?, ?, ?, ?)",

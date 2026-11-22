@@ -186,7 +186,14 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
       loaded,
       clock,
       describe: options.describe && (() => options.describe?.(entry.doc) ?? {}),
-      onHealth: (health) => options.onHealth?.(entry.docId, health),
+      onHealth: (health) => {
+        // At the size cap the batcher halts with every edit kept in the open
+        // Y.Doc: the document goes read-only (WriteGate) and explains the cap
+        // (D-O3); "Copy into a new tab" carries the edits the store refused.
+        if (health.failing?.code === "document_too_large")
+          setState(entry, { readOnlyReason: "document_too_large" });
+        options.onHealth?.(entry.docId, health);
+      },
       onCompactDue: () => scheduleIdle(() => void compact(entry)),
     });
     entry.batcher = batcher;
@@ -242,9 +249,17 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
     forget(entry);
     const batcher = entry.batcher;
     if (batcher) {
-      await batcher.flush();
+      // A halted batcher (size cap) rejects: its refused edits can't be
+      // stored, so close without compacting instead of hanging the close
+      // and every re-open. The shell warns before releasing such a document
+      // and offers "Copy into a new tab" (the refused edits live only in
+      // this Y.Doc).
+      const flushed = await batcher.flush().then(
+        () => true,
+        () => false,
+      );
       await entry.compacting;
-      if (batcher.rowsSinceSnapshot > 0) await compact(entry);
+      if (flushed && batcher.rowsSinceSnapshot > 0) await compact(entry);
       batcher.dispose();
     }
     // Set after the final compaction, so a load still in flight closes itself.
@@ -328,7 +343,13 @@ export function createLocalSession(options: LocalSessionOptions): DocSession {
         ...[...entries.values()].map((entry) => entry.batcher),
         ...[...closing.values()].map((record) => record.batcher),
       ];
-      await Promise.all(batchers.map((batcher) => batcher?.flush()));
+      // Every document is flushed; a halted one (size cap) is reported after
+      // the others are durable, never by hanging the quit.
+      const results = await Promise.allSettled(
+        batchers.map((batcher) => batcher?.flush()),
+      );
+      const refused = results.find((result) => result.status === "rejected");
+      if (refused) throw (refused as PromiseRejectedResult).reason;
     },
   };
 }

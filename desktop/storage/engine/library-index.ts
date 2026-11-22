@@ -54,6 +54,7 @@ export type SidebarFolder = {
   id: string;
   parentId: string | null;
   name: string;
+  createdAt: number;
   sortKey: string;
   sort: string | null;
   view: string | null;
@@ -365,7 +366,7 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
     );
   const folders = db
     .prepare(
-      `SELECT id, parent_id, name, sort_key, sort, view, "group"
+      `SELECT id, parent_id, name, created_at, sort_key, sort, view, "group"
        FROM folders WHERE trashed_at IS NULL`,
     )
     .all()
@@ -374,6 +375,7 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
         id: row.id as string,
         parentId: nullableString(row.parent_id),
         name: row.name as string,
+        createdAt: row.created_at as number,
         sortKey: row.sort_key as string,
         sort: nullableString(row.sort),
         view: nullableString(row.view),

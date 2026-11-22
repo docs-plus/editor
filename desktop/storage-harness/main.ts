@@ -19,6 +19,8 @@
  * - `startup`: worker spawn → ready → sidebar rows (T8, the §10 budget).
  * - `copy-quit`: quit while the daily copy runs in its thread (decision 5).
  * - `copy-time`: how long the batched daily copy takes (decision 5).
+ * - `migrate-v2`: the 1→2 step, optionally killed at a boundary (T24, T24b).
+ * - `long-doc`: load, compact and grow a long document (T20, T20b).
  *
  * An uncaught throw in Electron main opens a modal dialog, so every failure
  * exits with `process.exit(1)` after printing `HARNESS_FAIL`.
@@ -221,6 +223,103 @@ async function migrate() {
   library.shutdown();
 }
 
+/**
+ * T24 and T24b: the real 1→2 step (`FORMAT_STEPS`) on `node:sqlite`, on
+ * main's thread like T5. Prints `BOUNDARY <k> <name>` at each statement
+ * boundary; with `--kill-at=k` it SIGKILLs itself there (TerminateProcess
+ * on Windows), so every boundary is hit deterministically.
+ */
+async function migrateV2() {
+  const killAt = args["kill-at"] ? Number(args["kill-at"]) : 0;
+  let boundary = 0;
+  say("READY");
+  const started = performance.now();
+  const library = Library.open({
+    dir: dir(),
+    host: createNodeHost(),
+    openSqlite: openNodeSqlite,
+    migrationBoundary: (name) => {
+      boundary += 1;
+      say(`BOUNDARY ${boundary} ${name}`);
+      if (boundary === killAt) process.kill(process.pid, "SIGKILL");
+    },
+  });
+  const ms = performance.now() - started;
+  say(
+    `MIGRATED_V2 ${JSON.stringify({ ms, formatVersion: library.status.formatVersion, readOnly: library.status.readOnly, boundaries: boundary, foreignKeys: library.stats().pragmas.foreignKeys })}`,
+  );
+  library.shutdown();
+}
+
+/**
+ * T20 and T20b, the storage half: load a long document through the real
+ * worker, rebuild it in main as the renderer would, compact it (the I10
+ * check runs in the worker), then grow it to the 32 MiB cap and delete.
+ */
+async function longDoc() {
+  const docId = args.doc ?? fail("--doc is required");
+  const client = await StorageClient.start(workerPath(), { dir: dir() });
+  const owner = "long";
+  const t0 = performance.now();
+  const loaded = await client.call("load", { docId, owner });
+  const loadMs = performance.now() - t0;
+  const t1 = performance.now();
+  const doc = new Y.Doc();
+  if (loaded.snapshot) Y.applyUpdate(doc, loaded.snapshot);
+  for (const update of loaded.updates) Y.applyUpdate(doc, update);
+  const applyMs = performance.now() - t1;
+  const state = Y.encodeStateAsUpdate(doc);
+  // Read sizes before a call: the client transfers the bytes it sends.
+  const bytes = state.byteLength;
+  const t2 = performance.now();
+  await client.call("compact", { docId, owner, state, upToSeq: loaded.maxSeq });
+  const compactMs = performance.now() - t2;
+  let refused = false;
+  let appended = 0;
+  let deleteOk = false;
+  if (args.grow) {
+    const text = doc.getText("grow");
+    for (let i = 0; i < 64 && !refused; i += 1) {
+      let update: Uint8Array = new Uint8Array();
+      doc.once("update", (u: Uint8Array) => {
+        update = u;
+      });
+      text.insert(text.length, "g".repeat(4 * 1024 * 1024));
+      const size = update.byteLength;
+      try {
+        await client.call("append", {
+          docId,
+          owner,
+          record: { origin: "local", update },
+        });
+        appended += size;
+      } catch (error) {
+        refused = (error as { code?: string }).code === "document_too_large";
+        if (!refused) throw error;
+      }
+    }
+    let deletion: Uint8Array = new Uint8Array();
+    doc.once("update", (u: Uint8Array) => {
+      deletion = u;
+    });
+    text.delete(0, 1000);
+    try {
+      await client.call("append", {
+        docId,
+        owner,
+        record: { origin: "local", update: deletion },
+      });
+      deleteOk = true;
+    } catch {
+      deleteOk = false;
+    }
+  }
+  say(
+    `LONGDOC ${JSON.stringify({ bytes, loadMs, applyMs, compactMs, refused, appended, deleteOk, rss: process.memoryUsage().rss })}`,
+  );
+  await client.shutdown();
+}
+
 async function readonly() {
   const client = await StorageClient.start(workerPath(), { dir: dir() });
   say(`STATUS ${JSON.stringify(client.status)}`);
@@ -394,6 +493,8 @@ const MODES: Record<string, () => Promise<void>> = {
   "commit-timing": commitTiming,
   startup,
   "copy-quit": copyQuit,
+  "migrate-v2": migrateV2,
+  "long-doc": longDoc,
   "copy-time": copyTime,
 };
 

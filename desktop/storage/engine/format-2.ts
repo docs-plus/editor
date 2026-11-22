@@ -213,6 +213,19 @@ export function preflightFormat2(db: SqliteDriver): string[] {
     }
     if (at === start) problems.push(`folder ${start}: in a folder cycle`);
   }
+  // I4: nothing live inside a trashed folder (format 1 never trashed
+  // folders, so only a hand-made file has this; a later purge would hit
+  // RESTRICT).
+  for (const row of db
+    .prepare(
+      `SELECT 'doc ' || d.id AS item FROM docs d JOIN folders f ON f.id = d.folder_id
+         WHERE d.trashed_at IS NULL AND f.trashed_at IS NOT NULL
+       UNION ALL
+       SELECT 'folder ' || c.id FROM folders c JOIN folders p ON p.id = c.parent_id
+         WHERE c.trashed_at IS NULL AND p.trashed_at IS NOT NULL`,
+    )
+    .all())
+    problems.push(`${row.item}: live inside a trashed folder`);
   for (const row of db.prepare("PRAGMA foreign_key_check").all())
     problems.push(`foreign_key_check: ${JSON.stringify(row)}`);
   return problems;
@@ -262,8 +275,11 @@ function upFormat2(db: SqliteDriver, context: StepContext) {
   db.exec(
     `INSERT INTO folders_v2 (id, parent_id, name, sort_key, created_at, modified_at,
        trashed_at, trash_group, trashed_from, sort, view, "group")
-     SELECT id, parent_id, name, sort_key, created_at, modified_at,
-       trashed_at, NULL, NULL, sort, view, "group" FROM folders`,
+     SELECT id, CASE WHEN trashed_at IS NULL THEN parent_id ELSE NULL END,
+       name, sort_key, created_at, modified_at, trashed_at,
+       CASE WHEN trashed_at IS NULL THEN NULL ELSE 'v1-' || id END,
+       CASE WHEN trashed_at IS NULL THEN NULL ELSE parent_id END,
+       sort, view, "group" FROM folders`,
   );
   context.boundary("copied folders");
   // A document trashed alone keeps its folder only in trashed_from, so a
@@ -275,7 +291,9 @@ function upFormat2(db: SqliteDriver, context: StepContext) {
        head_seq, derived_seq, links_hash, headings_hash)
      SELECT id, title, '', CASE WHEN trashed_at IS NULL THEN folder_id ELSE NULL END,
        sort_key, pin_key, pinned, created_at, modified_at, opened_at, trashed_at,
-       trash_group, CASE WHEN trashed_at IS NULL THEN NULL
+       CASE WHEN trashed_at IS NULL THEN NULL
+         ELSE COALESCE(trash_group, 'v1-' || id) END,
+       CASE WHEN trashed_at IS NULL THEN NULL
          ELSE COALESCE(trashed_from, folder_id) END,
        schema, lineage, size_bytes, snippet, mirrored_at, link_key, kind,
        MAX(COALESCE((SELECT MAX(seq) FROM updates u WHERE u.doc_id = docs.id), 0),

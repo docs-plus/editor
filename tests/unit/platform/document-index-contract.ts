@@ -272,6 +272,19 @@ export interface LibraryContractHarness {
   load(): void;
   /** Makes trashed documents and folders unrecoverable. */
   purge(): void;
+  /**
+   * Resolves once every write `index` has accepted is persisted. Operations
+   * apply to the snapshot synchronously, but an index over a worker (IPC)
+   * or IndexedDB persists later; the suite awaits this before `reopen`.
+   * Absent or a no-op in memory.
+   */
+  settle?(index: LibraryIndex): Promise<void>;
+  /**
+   * A second, loaded index over the same backend (a reopened library, or
+   * another window's instance). The durability cases run only when it is
+   * given.
+   */
+  reopen?(): LibraryIndex | Promise<LibraryIndex>;
 }
 
 export type LibraryContractFactory = (
@@ -780,6 +793,61 @@ export function describeLibraryIndexContract(
         expect(tagsOf(index, "d3")).toEqual([finance.id]);
         expect(index.mergeTags(planning.id, planning.id)).toBe(false);
         expect(index.mergeTags("t-nope", planning.id)).toBe(false);
+      });
+    });
+
+    describe("durability (with `settle` and `reopen`)", () => {
+      /** What a reopened library must show again, order-free. */
+      const durable = (index: LibraryIndex) => {
+        const snap = index.snapshot();
+        const byId = <T extends { id: string }>(list: readonly T[]) =>
+          [...list].sort((a, b) => (a.id < b.id ? -1 : 1));
+        return {
+          items: byId(snap.items).map((item) => ({
+            id: item.id,
+            title: item.title,
+            folderId: item.folderId ?? null,
+            pinKey: item.pinKey ?? null,
+            sortKey: item.sortKey || null,
+            tagIds: [...(item.tagIds ?? [])].sort(),
+          })),
+          folders: byId(snap.folders),
+          tags: byId(snap.tags),
+          listViews: snap.listViews,
+          trash: snap.trash.map((item) => ({ kind: item.kind, id: item.id })),
+          trashCount: snap.trashCount,
+        };
+      };
+
+      it("keeps folders, Manual order, pins, tags, list choices and Trash", async () => {
+        const harness = setup();
+        if (!harness.reopen) return;
+        const { index } = harness;
+        const box = index.createFolder({ name: "Box", parentId: home.id });
+        const one = index.create({ title: "One", folderId: home.id });
+        const two = index.create({ title: "Two", folderId: home.id });
+        index.moveInFolder(two?.id ?? "", 0);
+        index.moveItems([{ kind: "doc", id: one?.id ?? "" }], box?.id ?? null);
+        index.pin(notes.id);
+        index.pin(plan.id);
+        index.movePin(plan.id, 0);
+        const tag = index.createTag("Durable");
+        index.addTag(notes.id, tag?.id ?? "");
+        index.renameTag(tag?.id ?? "", "Kept");
+        index.setListView(`folder:${home.id}`, {
+          sort: "manual",
+          view: "preview",
+        });
+        await index.trash([list.id]);
+        await index.trashFolder(deep.id);
+        const before = durable(index);
+        await harness.settle?.(index);
+        const again = await harness.reopen();
+        expect(again.snapshot().ready).toBe(true);
+        expect(durable(again)).toEqual(before);
+        // The trash groups still restore as one unit.
+        expect(await again.restoreFolder(deep.id)).toBe("restored");
+        again.destroy();
       });
     });
 
