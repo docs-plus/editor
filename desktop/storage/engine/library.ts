@@ -63,6 +63,7 @@ import {
   readFormatVersion,
   runFormatSteps,
 } from "./migrations";
+import * as queries from "./queries";
 import { FORMAT_VERSION, SCHEMA_V1, YJS_ENCODING } from "./schema";
 import { readMeta, readRev, scalar, transaction, writeMeta } from "./sql";
 import * as tags from "./tags";
@@ -626,6 +627,61 @@ export class Library {
     const rev = tags.setDocTags(this.conn, docId, tagIds);
     this.changed("doc", docId);
     return rev;
+  }
+
+  // Pins, Manual order, list views, Trash list, search (queries.ts)
+
+  pinDoc(id: string, pinKey: string): number {
+    this.assertWritable();
+    const rev = queries.pinDoc(this.conn, id, pinKey);
+    this.changed("doc", id);
+    return rev;
+  }
+
+  unpinDoc(id: string): number {
+    this.assertWritable();
+    const rev = queries.unpinDoc(this.conn, id);
+    this.changed("doc", id);
+    return rev;
+  }
+
+  setPinKeys(keys: readonly { id: string; key: string }[]): number {
+    this.assertWritable();
+    const rev = queries.setKeys(this.conn, "pin_key", keys);
+    for (const { id } of keys) this.changed("doc", id);
+    return rev;
+  }
+
+  setSortKeys(keys: readonly { id: string; key: string }[]): number {
+    this.assertWritable();
+    const rev = queries.setKeys(this.conn, "sort_key", keys);
+    for (const { id } of keys) this.changed("doc", id);
+    return rev;
+  }
+
+  setPlaceView(place: string, json: string | null): number {
+    this.assertWritable();
+    return queries.setPlaceView(this.conn, place, json);
+  }
+
+  placeViews(): Record<string, string> {
+    return queries.placeViews(this.conn);
+  }
+
+  trashList() {
+    return queries.trashList(this.conn);
+  }
+
+  snippets(ids: readonly string[]): Record<string, string> {
+    return queries.snippets(this.conn, ids);
+  }
+
+  searchTitles(query: string) {
+    return queries.searchTitles(this.conn, query);
+  }
+
+  searchHeadings(query: string) {
+    return queries.searchHeadings(this.conn, query);
   }
 
   // Derived rows (derive.ts; LK4a's derive.put)

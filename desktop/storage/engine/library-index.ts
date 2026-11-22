@@ -71,7 +71,6 @@ export type SidebarDoc = {
   modifiedAt: number;
   openedAt: number | null;
   sizeBytes: number;
-  snippet: string;
   kind: DocKind;
   tagIds: string[];
 };
@@ -344,7 +343,7 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
   const docs = db
     .prepare(
       `SELECT id, title, folder_id, sort_key, pin_key, pinned, created_at,
-         modified_at, opened_at, size_bytes, snippet, kind
+         modified_at, opened_at, size_bytes, kind
        FROM docs WHERE trashed_at IS NULL`,
     )
     .all()
@@ -360,7 +359,6 @@ export function sidebarSnapshot(db: SqliteDriver): SidebarSnapshot {
         modifiedAt: row.modified_at as number,
         openedAt: nullableNumber(row.opened_at),
         sizeBytes: row.size_bytes as number,
-        snippet: row.snippet as string,
         kind: row.kind as DocKind,
         tagIds: tagsByDoc.get(row.id as string) ?? [],
       }),
