@@ -306,12 +306,11 @@ test("the sheet applies style, size, colours, align and more, then returns focus
     dialog.getByRole("spinbutton", { name: "Font size" }),
   ).toHaveAttribute("aria-disabled", "true");
   await expect(dialog).toBeVisible();
-  // The sheet's own controls. A colour pick's pill (Undo, P1.4) is the
-  // shared status pill's 24px action, tracked separately.
+  // The sheet's controls, and the pill a colour pick shows (Undo, P1.4).
   expect(
     await smallTargets(
       page,
-      '[data-format-sheet] button:not([data-status-pill] *), [data-format-sheet] [role="spinbutton"]',
+      '[data-format-sheet] button, [data-format-sheet] [role="spinbutton"]',
     ),
   ).toEqual([]);
 
