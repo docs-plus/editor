@@ -14,7 +14,9 @@ since the previous tag.
 The storage core of My documents, the personal library stored in the
 browser (spec `2026-11-16-web-library-design.md` §2, PR W2). It lands dark:
 nothing in the web app imports it, `NEXT_PUBLIC_LIBRARY` defaults to off,
-and the web build is unchanged (editor chunk group +0 B).
+and the web build is unchanged: the editor chunk group measures 393,465 B
+gz, the same as `main` (+0 B, 1,287 B under the P2.2 fence), and no
+built file under `.next/` contains the library.
 
 #### Added
 
