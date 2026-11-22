@@ -9,6 +9,32 @@ since the previous tag.
 
 ## [Unreleased]
 
+### CI: shards packed by duration
+
+Playwright's own `--shard` splits by test count, so the specs with slow
+tests shared the middle shard, which ran 1.5–2.5 min longer than the others
+(median slowest shard 8m38s over six runs). Shards are now packed by each
+spec file's measured time.
+
+#### Changed
+
+- **CI:** `scripts/e2e-shards.ts` packs the `chromium` and `library` spec
+  files into the three shards by duration (longest first, into the
+  least-loaded shard) and hands each shard its files with `--test-list`.
+  The per-file times come from the `e2e-timings` artifact that `Playwright
+  (Chromium)` publishes on green pushes to `main` only; `Changed files`
+  reads it once per run, so every shard packs the same plan. With no usable
+  timings the shards use Playwright's `--shard`, as before.
+- **CI:** each browser job logs its runner's CPU model, which explains most
+  of the remaining shard-to-shard spread.
+- **Tests:** `tests/unit/ci/e2e-shards.test.ts` covers the packer, the
+  timings parser and the report reader; `ci-workflow.test.ts` pins that only
+  a green push to `main` publishes timings and that all shards read the same
+  ones.
+
+**Deploy:** none. The first green push to `main` after this merges
+publishes the first timings; until then the shards split as before.
+
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`

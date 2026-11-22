@@ -561,9 +561,9 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 | Job | Runs |
 |---|---|
-| Changed files | Pull requests only: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run |
+| Changed files | Pull requests: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run. Every run: reads the shard timings from the latest green push run on `main` |
 | Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
-| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `CI= bun playwright test --project=chromium --project=library --shard=N/3 --retries=1` with a blob report |
+| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `bun scripts/e2e-shards.ts plan N/3` and `CI= bun playwright test --project=chromium --project=library --test-list=<shard files> --retries=1` with a blob report |
 | Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
 | Desktop renderer (export and local) | not required: `bun run build:desktop`, the `desktop` project on the served export, then the `local` project over the dev bridge (`next dev` on port 3926, no retries) |
 | Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
@@ -577,8 +577,26 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   a Markdown file, and none is under `desktop/`, the shards, perf and the
   desktop job are skipped and `Playwright (Chromium)` passes with a notice. Pushes to `main`,
   the merge queue and manual runs always run every suite.
-- **Shards:** Playwright splits the `chromium` project by spec file. To run
-  one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
+- **Shards:** `scripts/e2e-shards.ts` packs the `chromium` and `library`
+  spec files into three shards by duration (longest first, into the
+  least-loaded shard; a new spec counts as the median), from per-file
+  seconds that `Playwright (Chromium)` publishes as the `e2e-timings`
+  artifact on green pushes to `main` only. The `Changed files` job reads them
+  once, so every shard packs the same plan; without usable timings (none
+  yet, expired after 30 days, or invalid) every shard uses Playwright's own
+  `--shard=N/3`. Each browser job logs its runner's CPU before the suites.
+  To run one shard locally: `CI= bun playwright test --project=chromium
+  --project=library --shard=2/3`, or plan it from a timings file with
+  `bun scripts/e2e-shards.ts plan 2/3 e2e-timings.json list.txt`.
+- **Shard balance:** Playwright's own `--shard` gives each shard a
+  contiguous range of spec files sized by test *count*, so the specs with
+  slow tests (palette, selection-bubble, paint-format, slash-menu,
+  outline-overlay) shared shard 2, which ran 1.5–2.5 min longer than the
+  others on any CPU (A/B on #155). Splitting a spec into adjacent files
+  does not help (its tests keep their positions), renamed files and
+  `PWTEST_SHARD_WEIGHTS` drift or may vanish, so the shards are packed by
+  measured time instead. The runner's CPU still varies shard times by
+  about 40% (Intel Xeon 6975P vs AMD EPYC 7763).
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
