@@ -42,6 +42,7 @@ tests/
 │   ├── report-writer.ts                 # writeReport(filename, data) → test-reports/
 │   ├── import-fresh.ts                   # importFresh(): re-import a module after changing env
 │   ├── memory-document-index.ts          # MemoryDocumentIndex: the in-memory DocumentIndex and LibraryIndex (folders, pins, folder trash; deferLoad, failTrash, purgeTrash)
+│   ├── fake-idb.ts                       # fake-indexeddb browsers for the web library (createFakeBrowser, createFakeLibrary, injectQuotaFault)
 │   ├── image-bytes.ts                    # PNG, WebP, Exif (GPS, orientation) and two-frame GIF bytes built in code (Bun and Playwright)
 │   ├── editor-keymap.ts                  # collectEditorKeys(): every combo the editor's extensions bind; normalizeCombo()
 │   ├── soak-config.ts                    # SOAK_* env parsing (parseSoakDuration, parseSoakHeadings, etc.)
@@ -73,7 +74,7 @@ tests/
 │   │   ├── playwright-modifier-key.ts    # Meta vs Control for keyboard shortcuts
 │   │   ├── perf-observer.ts              # PerformanceObserver injection + latency stats
 │   │   ├── soak-bot.ts                   # Weighted-random action generator (10 action types)
-│   │   └── soak-journeys.ts              # 2 scripted critical-path sequences
+│   │   └── soak-journeys.ts              # 2 scripted journeys, 3 results (typing at 100 ms, commands at 200 ms)
 │   ├── collaboration.spec.ts             # 2-user collaboration (join + real-time sync)
 │   ├── drag.spec.ts                      # Heading drag handle visibility
 │   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds, image resize gripper
@@ -158,6 +159,17 @@ Assert internal state of HeadingScale, HeadingFold, HeadingFilter, and HeadingDr
 
 - **Chaos fuzz:** 5000 random malformed operations (invalid positions, null content, out-of-range levels) — verifies the editor never crashes
 - **Schema fuzz:** 5000 random valid operations (insert heading, delete, split, join) — verifies invariants hold after each
+
+### Web library storage (`tests/unit/lib/platform/web/library/`)
+
+happy-dom has no IndexedDB, so the web library's tests use `fake-indexeddb` through `tests/helpers/fake-idb.ts`: each `createFakeBrowser()` is a fresh, empty profile, and nothing is installed on `globalThis`. `injectQuotaFault()` makes the next readwrite transaction abort with `QuotaExceededError` after its request runs, as a full disk does at commit.
+
+- **Contract:** P2.1's shared `DocStore` suite (`tests/helpers/doc-store-contract.ts`) on `IdbDocStore`, with `exclusiveOpen: false` (any tab may append).
+- **Compaction property** (`idb-compaction-property.test.ts`, W-D3): 2–3 tabs append, compact and reload at random, some at the same time; after every step a fresh `load()` must equal the union of every acked update. Every choice and every Yjs client id comes from the seed. Seeds run from `LIBRARY_PROPERTY_BASE_SEED` (1 by default, so every PR run is the same), and a failure prints `LIBRARY_PROPERTY_SEED=<n>` to replay it. `LIBRARY_PROPERTY_RUNS` sets the run count: 2,000 by default; the timeout is 120 s or 30 ms a run, whichever is longer. The nightly `library-property` job runs 50,000 from the run id.
+- **Schema** (`library-schema.test.ts`): the exact stores and indexes of version 1, null-free index keys (`''` for null, `stale` as `1`/`0`), `head_seq`, `stale` and `title_key` through create, append and compact, an upgrade of a populated library to version 2 with every row unchanged, the eviction sentinel and its `localStorage` marker, and the `library.json` field lists. It also shows that `fake-indexeddb` leaves records with a null or boolean index key out of the index and throws `DataError` for such a primary key, as browsers do.
+- **Opening and versions** (`library-db.test.ts`): an upgrade in another tab, a blocked upgrade and its clearing (also when the open then fails), close hooks that throw or never settle (`CLOSE_HOOK_TIMEOUT_MS`), a newer database or `format_version` (read-only), and no IndexedDB.
+- **Reload-only recovery** (`idb-local-session.test.ts`): with `local-session` over `IdbDocStore`, a session drain registered as a close hook writes a queued batch before another tab's upgrade closes the connection; without it the batch stays queued and fails with `library_unavailable`.
+- **Not covered by `fake-indexeddb`:** `durability: "strict"`, the `[docId, Infinity]` key range, `onblocked` and `onversionchange` timing and real quota aborts are only modelled. No test runs the library in a real browser.
 
 ### Stress Probe
 
@@ -264,7 +276,9 @@ it again after typing, before requiring all 220 keystroke samples.
 
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
 
-The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as CI and `make test-e2e` do) times typing only after the parallel suite has finished, so other workers never compete for the CPU. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as `make test-e2e` does) times typing only after the parallel suite has finished, so other workers never compete for the CPU; CI runs `perf` on a runner of its own instead. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+
+**Web library:** the `perf` project doesn't exercise the web library's IndexedDB store; no route mounts it.
 
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 
@@ -393,6 +407,30 @@ make test-soak                 # full suite (30 min)
 3. Sustained editing with memory sampling every 30s
 4. Reports: JS heap growth, p50/p95 latency, action counts, error count
 5. Writes JSON report to `test-reports/soak-report-{timestamp}.json`
+
+#### Soak journeys
+
+Each journey records keyboard events through Event Timing, which reports
+only events of 16 ms or more, so a p95 is the p95 of the slow tail and a
+few heavy events decide it. Each event is tagged with the journey step it
+fell in, and the five slowest are logged with their input delay, processing
+and presentation times.
+
+| Result | Events | p95 under |
+|--------|--------|-----------|
+| `typing-and-structural` | Typing, Enter, heading level, undo/redo | 100 ms |
+| `filter-lifecycle typing` | Typing in the document while a filter is active | 100 ms |
+| `filter-lifecycle commands` | Mod+Shift+F (open the bar) and Enter (commit a filter) | 200 ms (INP "good") |
+
+Commands and keystrokes are different interactions, so they are judged
+apart; typing keeps 100 ms. The split comes from the nightly (2026-11-22, PR
+#165): the filter journey's p95 swung between 64 and 168 ms on one commit.
+Its six heaviest events were always the bar shortcut (three keydowns in one
+frame) and the three commits. Each re-renders the whole editor shell (the
+toolbar about half of it, plus all 50 outline rows), costing 90–170 ms under
+`next dev` on a GitHub runner; typing in the same journey stayed at 40–72 ms.
+Moving the filter state out of the shell is the tracked fix for those
+commands. Clear is a click, which the observer does not record.
 
 ### Multi-User Soak (`soak-collab.spec.ts`)
 
@@ -523,16 +561,33 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 | Job | Runs |
 |---|---|
-| Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
-| Playwright (Chromium) | `make dev`, a warm-up request per page, the library harness, then `CI= bun playwright test --project=chromium --project=library --project=perf --retries=1` (`perf` starts after `chromium`, on one worker) |
+| Changed files | Pull requests only: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run |
+| Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
+| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, the library harness (`tests/harness/library/serve.ts`), then `CI= bun playwright test --project=chromium --project=library --shard=N/3 --retries=1` with a blob report |
+| Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
+| Desktop renderer (export and local) | not required: `bun run build:desktop`, the `desktop` project on the served export, then the `local` project over the dev bridge (`next dev` on port 3926, no retries) |
+| Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
 
+- **Required checks:** the `main` ruleset requires `Lint, typecheck, unit
+  tests, build` and `Playwright (Chromium)`; keep both names, and every
+  shard and perf job behind the second. `tests/unit/ci/ci-workflow.test.ts`
+  checks the job names, the shards, the gate's `needs` and runs the docs-only
+  and verdict scripts. Merge queue setup: `docs/operations/deploy-runbook.md`.
+- **Docs-only pull requests:** when every changed path is under `docs/` or is
+  a Markdown file, and none is under `desktop/`, the shards, perf and the
+  desktop job are skipped and `Playwright (Chromium)` passes with a notice. Pushes to `main`,
+  the merge queue and manual runs always run every suite.
+- **Shards:** Playwright splits the `chromium` project by spec file. To run
+  one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
 - **Retries:** a test that passes on retry is listed as "flaky" in the
   Playwright summary; treat that as a bug to fix, not a pass.
-- **On failure:** `test-results/` and the dev-server log are uploaded as the
-  `e2e-results` artifact.
+- **On failure:** each failing test is annotated at its file and line, the
+  merged HTML report is uploaded as `playwright-report`, and each failed
+  job's `test-results/` and dev-server log as `e2e-results-shard-N` or
+  `e2e-results-perf`.
 - **Nightly, not per PR:** `.github/workflows/nightly.yml` runs the `pwa`
   project against a production build, the Yjs soak, the quick multi- and
   single-user soaks, the load harness (both scenarios) and the two schema
@@ -546,9 +601,45 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   workflow file. Each workflow needs a read-only default token, explicit
   per-job permissions, `persist-credentials: false` on checkout, and actions
   pinned to commit SHAs. Every job in a workflow that runs on `pull_request`
-  or `merge_group` must have explicit read-only permissions;
-  `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the no-cancel rule on
-  `main` and the two required check names.
+  or `merge_group` must have explicit read-only permissions.
+
+## Generated fixtures and the nightly streak
+
+Large fixtures are generated from a seed at test time, never committed (test
+strategy §3, Q1). `bun scripts/fixtures/generate.ts --list` names the sets
+and the ones still waiting on unmerged work.
+
+```bash
+bun scripts/fixtures/generate.ts --set library-1k --seed 42 --out "$TMPDIR/fx"
+bun scripts/fixtures/generate.ts --set doc-rtl,hostile --out "$TMPDIR/fx"   # seed: --seed, then SEED, then 42
+bun scripts/fixtures/generate.ts --cache-key                               # actions/cache key: a hash of the generator sources
+```
+
+- The seed is printed first; `SEED=<n>` replays a run. Each set lands in
+  `<out>/<set>/` with a `manifest.json` (sha256 per file; a logical summary
+  for libraries, whose SQLite bytes vary run to run). A set folder that
+  already holds files is refused; `--force` empties it first.
+- `FIXTURES_FULL_SIZE=1 bun test tests/unit/scripts/fixtures.test.ts` also
+  replays the slow full-size sets (12 MP photos, `library-1k`,
+  `library-10k`); it is off by default.
+- `doc-images` photos are PNGs with an `eXIf` block (no JPEG encoder is in
+  the tree); a JPEG-only EXIF path is covered by the structural JPEG in
+  `exif`.
+- Libraries are written through the storage engine's own API. Images join
+  `library-1k` with the asset store (P2.6b).
+- Document generators take an optional seeded `random`
+  (`generateLargeDocument(n, { random })`); callers that pass none keep
+  `Math.random`.
+
+`bun scripts/nightly-streak.ts` prints the §1.6 streak per gate as Markdown,
+for the pinned streak issue (read-only `gh run list` / `gh run view`; the
+owner pastes the output). A gating job counts towards a gate when its name
+contains the gate's label (`T1–T8`, `T16–T18`, `T9–T15`, `T19`,
+`library-soak`), and a set passes only when every job carrying its label
+finished `success`; a label no job carries yet reports the gate as not
+running. A new step in a gating workflow must be classified as setup
+(`SETUP_STEPS` in the script) or test (`TEST_STEPS` in its unit test), or
+the test fails.
 
 ## Key Conventions
 

@@ -139,6 +139,29 @@ describe("folders (§4.2)", () => {
     ]);
   });
 
+  test("restore goes to the root when the old parent moved too deep for the subtree (I2)", () => {
+    const parent = mustFolder(library, { name: "p" });
+    const a = mustFolder(library, { name: "a", parentId: parent.id });
+    const b = mustFolder(library, { name: "b", parentId: a.id });
+    mustFolder(library, { name: "c", parentId: b.id });
+    library.trashFolder(a.id);
+    const top = mustFolder(library, { name: "top" });
+    expect(
+      library.moveItems([{ kind: "folder", id: parent.id }], top.id),
+    ).toMatchObject({ ok: true });
+    // Under p (now depth 2) the three levels would reach depth 5.
+    expect(library.restoreFolder(a.id).result).toBe("restored_to_root");
+    const folders = library.sidebar().folders;
+    expect(folders).toContainEqual(
+      expect.objectContaining({ id: a.id, parentId: null }),
+    );
+    const parentOf = new Map(folders.map((f) => [f.id, f.parentId]));
+    const depth = (id: string | null): number =>
+      id === null ? 0 : 1 + depth(parentOf.get(id) ?? null);
+    for (const folder of folders)
+      expect(depth(folder.id)).toBeLessThanOrEqual(MAX_FOLDER_DEPTH);
+  });
+
   test("RESTRICT trap: a doc trashed alone never blocks purging its old folder", () => {
     const folder = mustFolder(library, { name: "f" });
     const sub = mustFolder(library, { name: "s", parentId: folder.id });
@@ -473,4 +496,16 @@ test("a tag keeps the id its caller minted, unless the name is taken", () => {
   });
   expect(library.createFolder({ name: "f" })).not.toBeNull();
   expect(library.sidebar().folders[0]?.createdAt).toBe(clock.now);
+});
+
+test("a new document lists in Recent at once; a duplicate or restore waits to be opened", () => {
+  const { id } = library.createDoc({ title: "fresh" });
+  write(id, "x");
+  const created = library.sidebar().docs.find((d) => d.id === id);
+  expect(created?.openedAt).toBe(clock.now);
+  library.close(id, "w1");
+  const copy = library.duplicateDoc(id);
+  expect(
+    library.sidebar().docs.find((d) => d.id === copy.id)?.openedAt,
+  ).toBeNull();
 });

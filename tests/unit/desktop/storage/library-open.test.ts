@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { SqliteDriver } from "@/desktop/storage/engine/driver";
 import { StorageError } from "@/desktop/storage/engine/errors";
 import { TABLES_V2 } from "@/desktop/storage/engine/format-2";
-import { LIBRARY_FILE } from "@/desktop/storage/engine/library";
+import { LIBRARY_FILE, quickCheck } from "@/desktop/storage/engine/library";
 import { LOCK_FILE } from "@/desktop/storage/engine/lock";
 import type { FormatStep } from "@/desktop/storage/engine/migrations";
 import {
@@ -179,6 +180,17 @@ describe("library.lock", () => {
 });
 
 describe("unclean exit", () => {
+  test("a quick_check that throws is a verdict, not a failed open", () => {
+    const malformed = {
+      prepare: () => ({
+        all: () => {
+          throw new Error("database disk image is malformed");
+        },
+      }),
+    } as unknown as SqliteDriver;
+    expect(quickCheck(malformed)).toBe("database disk image is malformed");
+  });
+
   test("a clean shutdown needs no quick_check", () => {
     openTestLibrary(temp.dir, createTestHost(clock)).shutdown();
     const library = openTestLibrary(temp.dir, createTestHost(clock));
