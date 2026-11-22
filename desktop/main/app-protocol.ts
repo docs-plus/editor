@@ -3,10 +3,11 @@
  * the static export from `<appPath>/renderer` with the path rules in
  * `desktop/shared/export-paths.ts` (traversal, unknown types and the
  * Windows segment layout are refused there). Every HTML response carries
- * the desktop CSP with that page's inline-script hashes.
+ * the desktop CSP with that page's inline-script hashes; every other
+ * response, a 404 included, carries a minimal one (SEC-008). Nothing is
+ * served through a symlink (SEC-009, `safe-file.ts`).
  */
 
-import { statSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -14,8 +15,9 @@ import { protocol } from "electron";
 
 import { APP_HOST, APP_SCHEME } from "../shared/app-identity";
 import { resolveExportFile } from "../shared/export-paths";
-import { buildDesktopCsp, hashInline } from "./csp";
+import { buildDesktopCsp, buildResourceCsp, hashInline } from "./csp";
 import { diagnostics } from "./diagnostics";
+import { safeFileCheck } from "./safe-file";
 
 /** Must run before `app` is ready. */
 export function registerAppScheme(): void {
@@ -38,22 +40,22 @@ const COMMON_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
 };
 
+const PLAIN_TEXT = "text/plain; charset=utf-8";
+
 function notFound(): Response {
   return new Response("Not found", {
     status: 404,
-    headers: { "content-type": "text/plain; charset=utf-8", ...COMMON_HEADERS },
+    headers: {
+      "content-type": PLAIN_TEXT,
+      "content-security-policy": buildResourceCsp(PLAIN_TEXT),
+      ...COMMON_HEADERS,
+    },
   });
 }
 
 export function installAppProtocol(options: AppProtocolOptions): void {
   const cspByFile = new Map<string, string>();
-  const isFile = (rel: string) => {
-    try {
-      return statSync(join(options.rendererDir, rel)).isFile();
-    } catch {
-      return false;
-    }
-  };
+  const isFile = safeFileCheck(options.rendererDir);
 
   protocol.handle(APP_SCHEME, async (request) => {
     try {
@@ -82,6 +84,10 @@ export function installAppProtocol(options: AppProtocolOptions): void {
         }
         headers["content-security-policy"] = csp;
         diagnostics.log("protocol_html");
+      } else {
+        headers["content-security-policy"] = buildResourceCsp(
+          found.contentType,
+        );
       }
       return new Response(body, { headers });
     } catch {
