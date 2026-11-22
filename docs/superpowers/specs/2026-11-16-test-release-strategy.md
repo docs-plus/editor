@@ -168,6 +168,12 @@ Plan §10 needs "7 nightly runs in a row". `nightly.yml` runs twice a day, so a 
 - **A void day** is a run that was cancelled or failed before any test step: runner lost, GitHub outage, a dependency download failure. It neither counts nor resets. One manual re-run is allowed per void day, linked from the streak issue. At most 2 void days fit in one streak; a third resets it.
 - **Tracking.** `scripts/nightly-streak.ts` reads `gh run list` and prints the current streak per gate (Gate 2/3 set: T1–T8 and T16–T18; Gate 5 set: T1–T19 plus `library-soak`). A pinned issue holds the latest output.
 - **Gate rule.** Gate 2 needs a 5-day streak. Gates 3 and 5 need 7 days. The streak must end within 3 days of the build being signed off.
+- **How the tracker reads these rules** (Q5, 2026-11-22; pinned by `tests/unit/scripts/nightly-streak.test.ts`):
+  - **Run.** `success` is green; a cancelled run is void. A failed run is red when any failed job's first failing step is a test step, and void when every failed job broke in a setup step (`Set up job`, `Checkout`, `Set up Bun`, `Install`, `Install Chromium`, `Install Playwright browsers`, `Block Node.js`, `Complete job`) or lost its runner (no failing step recorded). A job that times out inside a test step is red.
+  - **Re-run.** The one allowed re-run is the run's second attempt. It decides only when the first attempt was void; a re-run never clears a red first attempt, and attempts after the second are ignored.
+  - **Day.** A run belongs to the UTC day it was created (GitHub can start a scheduled run hours late). A day with no scheduled run at all is void, never green. Today is still running: it is shown but not counted.
+  - **Gate sets.** A gate counts a green day only when each of its job sets passed that day. A job belongs to a set when its name contains the set's label: `T1–T8`, `T16–T18`, `T9–T15`, `T19`, `library-soak` (the nightly `Desktop storage soak (T1–T8) / …` jobs already do). New nightly jobs name themselves to match. A set no job carries yet reports the gate as "not running yet", never green.
+  - **Output.** Markdown (or `--json`) for the owner to paste into the pinned streak issue. The script only reads `gh run list` and `gh run view`; it never writes to GitHub.
 
 ### 1.7 Flake policy
 
@@ -310,6 +316,15 @@ Every new workflow (`nightly-desktop.yml`, `release-desktop.yml`, `update-snapsh
 | `hostile/` | titles with separators, `..`, reserved names (`CON`, `aux`), 300-character names, trailing dots; a bad `.tinydoc` header; unknown roots; an SVG named `.png`; an HTML/PNG polyglot; a GIF bomb | P2.8, the import guard, image sniffing |
 | `prefs/` | about 40 stored preference payloads, including newer `v` and invalid ones | boot-script parity, migration matrix |
 | `web-library/` | IndexedDB dumps at `format_version` N and N+1 | the versions test, the eviction marker |
+
+**Status (Q1, 2026-11-22).** `scripts/fixtures/generate.ts` builds `library-s`, `library-1k` (without images), `library-10k`, `doc-large`, `doc-near-cap`, `doc-images` (the inline data-URL images, 200 asset image files and 10 photos of 12 MP as files), `doc-rtl`, `doc-legacy` (the marks and an editor-root leftover), `exif` (JPEG, PNG and WebP with synthetic GPS; the JPEG is structural, since no JPEG encoder is in the tree) and `hostile` (titles as data, the SVG named `.png`, the polyglot, the GIF bomb, a Yjs state with unknown roots). These wait on unmerged work, and the PR that lands each one adds it to the generator:
+- `doc-comments`: the comments model (P4.9)
+- `prefs/`: the preferences schema (`lib/prefs`)
+- `web-library/`: the web library's IndexedDB format (W2)
+- the asset-store part of `doc-images` and the images of `library-1k`: the asset store (P2.6b)
+- the bad `.tinydoc` header in `hostile/`, and the schema 1 and 2 bundles of `doc-legacy`: the `.tinydoc` format (P2.8) and the first `DOC_SCHEMA` bump
+
+`--cache-key` prints `fixtures-<hash>` over the generator sources, the helpers they extend, the storage engine, the schema snapshot and `bun.lock`; the first workflow that generates fixtures uses it as its `actions/cache` key (none does yet).
 
 **Seeding commands** (all Bun):
 - `bun scripts/fixtures/generate.ts --set library-1k --seed 42 --out $TMP`
@@ -683,13 +698,13 @@ Effort is in agent-days. Rows marked "in P…" ride inside an existing plan PR. 
 
 | # | PR / task | Contents | Effort | Lands with |
 |---|---|---|---|---|
-| Q1 | `test(fixtures): seeded fixture generators` | `scripts/fixtures/generate.ts`, the §3.2 sets, synthetic images and EXIF, the hostile set, a CI cache key | 2.0 | before P2.6 |
+| Q1 | `test(fixtures): seeded fixture generators` | `scripts/fixtures/generate.ts`, the §3.2 sets, synthetic images and EXIF, the hostile set, a CI cache key. **Built** (2026-11-22) except the sets §3.2 lists as waiting. | 2.0 | before P2.6 |
 | Q2 | `ci: local project as its own PR job` | in P2.4: a separate Linux job with its own `next dev` (desktop target) and the dev storage host | 0.5 | P2.4 |
 | Q3 | `ci: electron-mac PR job` | unsigned `--dir` build, smoke and full spec sets, merge-base diff step, artifact on failure | 1.5 | P2.5 |
 | Q4 | `ci: nightly-desktop workflow` | `electron` on 3 OSes, `durability`, `property`, the Electron `node:sqlite` contract, `webkit` core list, `quarantine` | 3.0 | P2.6 |
-| Q5 | `chore(scripts): nightly streak tracker` | `scripts/nightly-streak.ts`, the §1.6 rules, a pinned issue updated by hand from its output | 0.5 | P2.6 |
+| Q5 | `chore(scripts): nightly streak tracker` | `scripts/nightly-streak.ts`, the §1.6 rules, a pinned issue updated by hand from its output. **Built** (2026-11-22); the owner pins the issue. | 0.5 | P2.6 |
 | Q6 | `test: flake quarantine` | `@quarantine` tag, grep-invert in gating projects, the TESTING.md policy, a unit test that refuses quarantine tags in the never-quarantine list | 1.0 | any time |
-| Q7 | `ci: browsers job for the web library` | `webkit` + `firefox` projects, library specs, Persian spacing. **The only PR that defines the `firefox` project**; L7 adds its RTL specs to it, and P2.13's exit depends on it. | 1.0 | W2 (and before P2.13) |
+| Q7 | `ci: browsers job for the web library` | `webkit` + `firefox` projects, library specs, Persian spacing. **The only PR that defines the `firefox` project**; L7 adds its RTL specs to it, and P2.13's exit depends on it. Waits for W2's library specs and for the `ci.yml` job (2026-11-22). | 1.0 | W2 (and before P2.13) |
 | Q8 | `test(a11y): keyboard checklist and region focus specs` | UX §8.3 items 1–12, F6, the helper extended to Electron windows | 1.5 | P2.7a, P2.9b |
 | Q9 | `test(visual): Linux baselines and update-snapshots workflow` | the `classic` and page-matrix baselines, ≤ 40 images | 1.0 | P2.9c-1 |
 | Q10 | `test(security): ZAP baseline against staging` | `security-scan.yml` (`workflow_dispatch`, read-only, staging URL from an environment variable, refuses non-staging hosts) | 1.0 | P4.2 |

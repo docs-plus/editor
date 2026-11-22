@@ -9,6 +9,35 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Test infrastructure: seeded fixtures and the nightly streak tracker
+
+Test strategy Q1 and Q5 (`2026-11-16-test-release-strategy.md` §1.6, §3).
+Scripts and tests only: no app, server or workflow change, and the editor
+chunk is unchanged (0 B).
+
+#### Added
+
+- **Fixtures:** `bun scripts/fixtures/generate.ts --set <name> --seed <n>
+  --out <dir>` builds the §3.2 sets from a seed it prints first
+  (`SEED=<n>` replays): `library-s`, `library-1k`, `library-10k` (written
+  through the storage engine), `doc-large`, `doc-near-cap` (1.9 MiB of Yjs
+  state), `doc-images`, `doc-rtl`, `doc-legacy`, `exif` and `hostile`. Each
+  set writes a `manifest.json`; `--list` names the sets still waiting on
+  unmerged work (comments, preferences, the web library, the asset store,
+  `.tinydoc`), and `--cache-key` prints a hash of the generator sources for
+  CI caching.
+- **Nightly streak:** `bun scripts/nightly-streak.ts` reads the scheduled
+  runs of `nightly.yml` (and `nightly-desktop.yml` once it exists) with
+  read-only `gh` calls and prints the §1.6 streak per gate as Markdown for
+  the pinned streak issue: green, red and void days, the one re-run per void
+  run, at most 2 void days per streak, and "not running yet" for a gate
+  whose job sets no nightly job carries.
+
+#### Changed
+
+- **Tests:** `generateLargeDocument` and `generateRandomDocument` take an
+  optional seeded `random`; callers that pass none keep `Math.random`.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

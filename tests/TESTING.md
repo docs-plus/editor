@@ -531,6 +531,33 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   per-job permissions, `persist-credentials: false` on checkout, and actions
   pinned to commit SHAs.
 
+## Generated fixtures and the nightly streak
+
+Large fixtures are generated from a seed at test time, never committed (test
+strategy §3, Q1). `bun scripts/fixtures/generate.ts --list` names the sets
+and the ones still waiting on unmerged work.
+
+```bash
+bun scripts/fixtures/generate.ts --set library-1k --seed 42 --out "$TMPDIR/fx"
+bun scripts/fixtures/generate.ts --set doc-rtl,hostile --out "$TMPDIR/fx"   # seed: --seed, then SEED, then 42
+bun scripts/fixtures/generate.ts --cache-key                               # actions/cache key: a hash of the generator sources
+```
+
+- The seed is printed first; `SEED=<n>` replays a run. Each set lands in
+  `<out>/<set>/` with a `manifest.json` (sha256 per file; a logical summary
+  for libraries, whose SQLite bytes vary run to run).
+- Libraries are written through the storage engine's own API. Images join
+  `library-1k` with the asset store (P2.6b).
+- Document generators take an optional seeded `random`
+  (`generateLargeDocument(n, { random })`); callers that pass none keep
+  `Math.random`.
+
+`bun scripts/nightly-streak.ts` prints the §1.6 streak per gate as Markdown,
+for the pinned streak issue (read-only `gh run list` / `gh run view`; the
+owner pastes the output). A gating job counts towards a gate when its name
+contains the gate's label (`T1–T8`, `T16–T18`, `T9–T15`, `T19`,
+`library-soak`); a label no job carries yet reports the gate as not running.
+
 ## Key Conventions
 
 - **Rich document content** — `generateLargeDocument` produces 3-5 paragraphs + mixed structured blocks per heading section by default. Pass `{ richContent: false }` for lightweight documents. Playground content includes tables, syntax-highlighted code blocks (multi-language), and highlighted text.
