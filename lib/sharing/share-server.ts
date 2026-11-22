@@ -8,12 +8,14 @@ import type {
   onAuthenticatePayload,
 } from "@hocuspocus/server";
 
+import { logAbuseEvent } from "@/lib/security/abuse-log";
 import { getPinnedClientIp } from "@/lib/security/client-ip";
 import {
   clientOutdatedRefusal,
   isClientOutdated,
 } from "@/lib/security/client-schema-gate";
 import { guardrailRefusal } from "@/lib/security/guardrail-refusal";
+import { withBusyRetry } from "@/lib/security/json-body";
 import { createFailedTokenLimiter } from "@/lib/sharing/failed-tokens";
 import {
   authenticateShare,
@@ -48,6 +50,7 @@ import {
 } from "@/lib/sharing/share-name";
 import {
   bootstrapSharesTable,
+  clearOldCreatorIpHashes,
   getShare,
   recordShareStored,
 } from "@/lib/sharing/share-store";
@@ -96,7 +99,13 @@ export type ShareServer = {
   onDisconnect(ip: string): void;
   /** Marks viewers in awareness: no cursor, `viewer: true` (details §8.2). */
   awareness: Extension;
+  /** Hourly upkeep, also run at start: clears old `created_ip_hash` values. */
+  sweep(): void;
+  /** Stops the sweep timer. */
+  stop(): void;
 };
+
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * Wires the share server into the Hocus process. Created only when
@@ -148,7 +157,6 @@ export function createShareServer(options: ShareServerOptions): ShareServer {
     limits: {
       maxTotalShares: MAX_TOTAL_SHARES,
       expiryMs,
-      ipHashRetentionMs: SHARE_IP_HASH_RETENTION_DAYS * DAY_MS,
       mutationsPerMinute: options.mutationsPerMinute,
       readsPerMinute: SHARE_READ_RATE_LIMIT_PER_MINUTE,
       creationsPerHourPerIp: SHARE_CREATION_RATE_LIMIT_PER_HOUR,
@@ -158,8 +166,25 @@ export function createShareServer(options: ShareServerOptions): ShareServer {
     },
   });
   const activeConnections = new Map<string, number>();
+  const ipHashRetentionMs = SHARE_IP_HASH_RETENTION_DAYS * DAY_MS;
+  const sweep = () => {
+    withBusyRetry(() => clearOldCreatorIpHashes(db, now() - ipHashRetentionMs));
+  };
+  sweep();
+  const sweepTimer = setInterval(() => {
+    try {
+      sweep();
+    } catch (err) {
+      logAbuseEvent("share_sweep_failed", {
+        error: err instanceof Error ? err.message : "unknown_error",
+      });
+    }
+  }, SWEEP_INTERVAL_MS);
+  sweepTimer.unref();
 
   return {
+    sweep,
+    stop: () => clearInterval(sweepTimer),
     http,
     info,
     checkConnect(documentName, headers, params) {

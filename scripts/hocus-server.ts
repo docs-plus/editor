@@ -376,6 +376,7 @@ async function shutdown(): Promise<void> {
   }
 
   await hocuspocus.hooks("onDestroy", { instance: hocuspocus });
+  shares?.stop();
   db.close();
   clientSchemaCounter.stop();
   process.exit(0);

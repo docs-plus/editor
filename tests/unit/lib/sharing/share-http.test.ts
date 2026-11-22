@@ -41,7 +41,6 @@ const INFO: ServerInfo = {
 const LIMITS: ShareHttpLimits = {
   maxTotalShares: 100,
   expiryMs: 30 * DAY_MS,
-  ipHashRetentionMs: 30 * DAY_MS,
   mutationsPerMinute: 1000,
   readsPerMinute: 1000,
   creationsPerHourPerIp: 100,

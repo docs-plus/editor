@@ -9,16 +9,24 @@ import {
   type ShareConnectionContext,
   type ShareServer,
 } from "@/lib/sharing/share-server";
-import { endShare, setShareViewOnly } from "@/lib/sharing/share-store";
+import {
+  endShare,
+  getShare,
+  setShareViewOnly,
+} from "@/lib/sharing/share-store";
 import { createShareDb, seedShare } from "@/tests/helpers/share-db";
 
 const IP = "203.0.113.30";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 let db: Database;
 let server: ShareServer;
+let nowMs: number;
 
 beforeEach(() => {
   db = createShareDb();
+  nowMs = Date.UTC(2026, 10, 22);
   server = createShareServer({
     db,
     mode: "on",
@@ -29,10 +37,14 @@ beforeEach(() => {
     maxFrameBytes: 1024,
     mutationsPerMinute: 100,
     closeDocument: () => {},
+    now: () => nowMs,
   });
 });
 
-afterEach(() => db.close());
+afterEach(() => {
+  server.stop();
+  db.close();
+});
 
 /** A `connected` payload whose connection records its close. */
 function connectedTo(shareId: string, context: ShareConnectionContext) {
@@ -72,5 +84,15 @@ describe("share connections re-check the row once connected (L3)", () => {
     const { payload, closes } = connectedTo(shareId, { shareReadOnly: false });
     server.onConnected(payload);
     expect(closes).toHaveLength(0);
+  });
+});
+
+describe("created_ip_hash retention (L4)", () => {
+  it("the sweep clears hashes older than 30 days, with no create needed", () => {
+    const old = seedShare(db, nowMs - 31 * DAY_MS);
+    const fresh = seedShare(db, nowMs - DAY_MS);
+    server.sweep();
+    expect(getShare(db, old.shareId)?.created_ip_hash).toBeNull();
+    expect(getShare(db, fresh.shareId)?.created_ip_hash).toBe("ip-hash");
   });
 });

@@ -21,7 +21,6 @@ import {
   shareDocumentName,
 } from "@/lib/sharing/share-name";
 import {
-  clearOldCreatorIpHashes,
   countActiveShares,
   createShareRow,
   endShare,
@@ -81,7 +80,6 @@ export type ServerInfo = {
 export type ShareHttpLimits = {
   maxTotalShares: number;
   expiryMs: number;
-  ipHashRetentionMs: number;
   mutationsPerMinute: number;
   readsPerMinute: number;
   creationsPerHourPerIp: number;
@@ -444,7 +442,6 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
         },
         at,
       );
-      clearOldCreatorIpHashes(db, at - limits.ipHashRetentionMs);
       return true;
     });
     if (created === HASH_IN_USE) return error(request, 409, HASH_IN_USE);
