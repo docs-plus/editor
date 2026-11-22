@@ -895,17 +895,19 @@ test.describe("selection bubble", () => {
   ] as const) {
     test(`Esc during ${how} cancels the pending bubble`, async ({ page }) => {
       await openDoc(page);
+      // The bubble's chunk is in: a bubble view mounting after the Esc
+      // shows a standing selection (by design), which is another case.
+      await selectText(page, "Select some");
+      await expectBubbleOpen(page);
+      await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        editor.commands.setTextSelection(editor.state.selection.from);
+      });
+      await expect(bubble(page)).toHaveCount(0);
       if (keys === "mouse") {
         await dragSelect(page, "some words");
       } else {
-        await selectText(page, "Select some");
-        await expectBubbleOpen(page);
-        await page.evaluate(() => {
-          const editor = window.__tiptap_editor;
-          if (!editor) throw new Error("editor missing");
-          editor.commands.setTextSelection(editor.state.selection.from);
-        });
-        await expect(bubble(page)).toHaveCount(0);
         for (let i = 0; i < 4; i += 1) {
           await page.keyboard.press(keys, { delay: 30 });
         }
