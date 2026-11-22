@@ -288,6 +288,20 @@ of it the serial unit tests and the informational stress probe).
 (CI and the desktop shell), so the runbook recommends build concurrency
 **1** instead of 2.
 
+### Desktop storage: a power cut loses only derived rows
+
+The condition on D-A6's amendment (derived rows commit at
+`synchronous=NORMAL`).
+
+- **Tests:** `derive-crash-loss.test.ts` simulates a power cut after a
+  FULL append and a NORMAL derive, as a dropped last commit and as a torn
+  WAL tail. The append survives, the derived rows and `derived_seq` are
+  lost together, the document reads as stale, and the next derive
+  restores the rows. A control keeps the whole WAL and the derive.
+- **Docs:** the architecture spec's D-A6 amendment records the approval
+  and points to the test.
+
+**Deploy:** none.
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision
