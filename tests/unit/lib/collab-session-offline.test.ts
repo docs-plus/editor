@@ -328,6 +328,55 @@ describe("offline copy read slower than the hydrate timeout", () => {
   });
 });
 
+/**
+ * Phones and tablets §6.4 (M20): switching apps hides the page, and iOS can
+ * kill it without `pagehide`. The device copy's write must start in the
+ * `visibilitychange` task itself (microtasks only), never behind a timer.
+ */
+describe("flush when the page is hidden", () => {
+  afterEach(() => {
+    // Back to the prototype's getter ("visible").
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  function hide() {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("starts the pending write in the hidden task, before any timer", async () => {
+    const memory = offline.createMemoryBackend();
+    const writes: { name: string; beforeTimer: boolean }[] = [];
+    let timerRan = false;
+    const backend: offline.DocStoreBackend = {
+      ...memory,
+      putMerged: (doc, merge) => {
+        writes.push({ name: doc.name, beforeTimer: !timerRan });
+        return memory.putMerged(doc, merge);
+      },
+    };
+    store = new offline.LocalDocStore(backend, HOST, NOW);
+    const name = unique();
+    const session = acquireCollabSession(name);
+    await settle();
+    session.doc.getText("t").insert(0, "typed, then switched apps");
+    expect(writes).toEqual([]); // debounced: nothing written yet
+
+    setTimeout(() => {
+      timerRan = true;
+    }, 0);
+    hide();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(writes).toEqual([{ name, beforeTimer: true }]);
+    expect(await storedText(memory, name)).toBe("typed, then switched apps");
+    releaseCollabSession(name);
+  });
+});
+
 describe("offline copy of the first server sync", () => {
   async function openSynced() {
     const memory = offline.createMemoryBackend();

@@ -20,30 +20,9 @@ import {
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** A matchMedia stub driven by a fake viewport width. */
+/** The page frame's verdict, as `PageFrame` passes it (950px in classic). */
 let width = 1280;
-const queries = new Set<{
-  query: string;
-  listeners: Set<(event: { matches: boolean }) => void>;
-}>();
-
-function matches(query: string): boolean {
-  const max = /max-width:\s*(\d+)px/.exec(query);
-  if (max) return width <= Number(max[1]);
-  const min = /min-width:\s*(\d+)px/.exec(query);
-  return min ? width >= Number(min[1]) : false;
-}
-
-function setWidth(next: number) {
-  width = next;
-  for (const entry of queries) {
-    for (const listener of entry.listeners) {
-      listener({ matches: matches(entry.query) });
-    }
-  }
-}
-
-const originalMatchMedia = window.matchMedia;
+const isOverlay = () => width < 950;
 
 interface Seen {
   open: boolean;
@@ -56,7 +35,7 @@ const latest = new Proxy({} as Seen, {
 });
 
 function Probe() {
-  const [open, set, view] = useOutlineOpen();
+  const [open, set, view] = useOutlineOpen(isOverlay());
   renders.push({ open, set, view });
   return null;
 }
@@ -67,33 +46,19 @@ beforeEach(() => {
   localStorage.clear();
   renders.length = 0;
   width = 1280;
-  queries.clear();
-  window.matchMedia = ((query: string) => {
-    const entry = {
-      query,
-      listeners: new Set<(e: { matches: boolean }) => void>(),
-    };
-    queries.add(entry);
-    return {
-      get matches() {
-        return matches(query);
-      },
-      media: query,
-      addEventListener: (_: string, fn: (e: { matches: boolean }) => void) =>
-        entry.listeners.add(fn),
-      removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) =>
-        entry.listeners.delete(fn),
-    };
-  }) as unknown as typeof window.matchMedia;
   root = createRoot(document.createElement("div"));
 });
 
 afterEach(() => {
   act(() => root.unmount());
-  window.matchMedia = originalMatchMedia;
 });
 
 const mount = () => act(() => root.render(createElement(Probe)));
+/** The frame crossing its threshold re-renders the shell with the flag. */
+function setWidth(next: number) {
+  width = next;
+  root.render(createElement(Probe));
+}
 
 describe("useOutlineOpen (M6 + overlay)", () => {
   it("docked follows the remembered state", () => {

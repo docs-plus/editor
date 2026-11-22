@@ -8,6 +8,7 @@ import * as Y from "yjs";
 
 import { buildDocumentEditorExtensions } from "@/components/document-editor/document-editor-config";
 import { headingFoldPluginKey } from "@/extensions/heading-fold";
+import { moveSection } from "@/lib/editor-utils";
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 
@@ -152,6 +153,40 @@ describe("WriteGate", () => {
       Y.encodeStateAsUpdate(remote, Y.encodeStateVector(ydoc)),
     );
     expect(title()).toBe("Remote My Title");
+  });
+
+  it("reading mode: moving a section and regenerating write nothing", async () => {
+    const ydoc = seededDoc({
+      type: "doc",
+      content: [
+        heading(1, "Title", "t"),
+        heading(2, "First", "a"),
+        { type: "paragraph", content: [text("One")] },
+        heading(2, "Second", "b"),
+        { type: "paragraph", content: [text("Two")] },
+      ],
+    });
+    const updates = await open(ydoc, { canWrite: () => false });
+    const view = editor?.view;
+    if (!editor || !view) throw new Error("no editor");
+    const before = editor.state.doc.toJSON();
+    // The outline's drag (and the palette's Move) run moveSection.
+    let firstFrom = -1;
+    let firstTo = -1;
+    let end = -1;
+    editor.state.doc.forEach((node, offset) => {
+      if (node.attrs["data-toc-id"] === "a") firstFrom = offset;
+      if (node.attrs["data-toc-id"] === "b") firstTo = offset;
+      end = offset + node.nodeSize;
+    });
+    moveSection(view, firstFrom, firstTo, end);
+    // The Playground's Regenerate replaces the content with setContent.
+    editor.commands.setContent({
+      type: "doc",
+      content: [heading(1, "Regenerated")],
+    });
+    expect(updates).toHaveLength(0);
+    expect(editor.state.doc.toJSON()).toEqual(before);
   });
 
   it("lets meta-only transactions through", async () => {

@@ -41,9 +41,10 @@ export function scrollBlockIntoView(dom: HTMLElement, block: ScrollBlock) {
     document.addEventListener(type, cancel, options);
   }
   window.setTimeout(cancel, SCROLL_SETTLE_TIMEOUT_MS);
-  const reduce = window.matchMedia?.(
-    "(prefers-reduced-motion: reduce)",
-  ).matches;
+  // The OS setting, or the web's "Reduce motion: Always" (`data-motion`).
+  const reduce =
+    document.documentElement.dataset.motion === "reduce" ||
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   dom.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block });
 }
 

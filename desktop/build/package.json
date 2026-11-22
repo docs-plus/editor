@@ -1,0 +1,13 @@
+{
+  "name": "tinydocy-desktop-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "package": "electron-builder --config electron-builder.yml",
+    "check-fuses": "bun check-fuses.ts"
+  },
+  "devDependencies": {
+    "@electron/fuses": "1.8.0",
+    "electron-builder": "26.18.0"
+  }
+}
