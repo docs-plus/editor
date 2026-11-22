@@ -853,6 +853,13 @@ The image store's Phase 4 PRs (S-A1, S-A2 after P4.2, then the P4.3+ and P4.4+ a
 - the takedown runbook
 - the legal advice
 
+**Gate 4 follow-ups from the P4.2 security review (2026-11-22).** Tracked here, fixed or accepted before Gate 4. None blocks the dark merge of P4.1 and P4.2a–d.
+- [ ] **Soft per-IP share socket cap.** Concurrent attaches all pass `checkConnect` before `connected` counts them, and one socket can hold up to 100 pending documents, so `SHARE_WS_CONNECTIONS_PER_IP` can be overshot.
+- [ ] **One abuse line per 429.** The share API's `throttled()` logs every refused request, so a flood still writes one log line each.
+- [ ] **Disk on the shared host.** 2,000 shares × 2 MiB is about 4 GiB.
+- [ ] **Awareness spoofing (cosmetic).** An editor's awareness update can name other client ids, so it can set or clear fields on a viewer's awareness entry.
+- [ ] **Throttle restart criterion.** With production Throttle (15 attempts per 60 s per IP), 20 clients behind one IP reconnecting after a restart are banned (§6 "Capacity"). Share connections need their own or a raised Throttle allowance.
+
 Internal builds point at staging.
 
 **Gate 5 = the v1 public release go/no-go (§10):** desktop with sharing and comments, plus the web library.
