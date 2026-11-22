@@ -184,7 +184,7 @@ These are enforced by one test, `tests/unit/ci/import-boundaries.test.ts`. It re
 |---|---|
 | `desktop/shared` | anything outside itself |
 | `desktop/storage/engine` | `electron`, `node:*`, `bun:*`, React, `@tiptap/*` |
-| `desktop/main`, `desktop/storage` | React, `lib/**` (except `lib/security/content-security-policy.ts`, `lib/doc-migrations`, `lib/prefs/schema.ts`, the pure `lib/comments/validate.ts` and `lib/assets` sniffers, and `lib/schema-names.ts`, the name lists the import guard checks; P2.6) |
+| `desktop/main`, `desktop/storage` | React, `lib/**` (except `lib/security/content-security-policy.ts`, `lib/doc-migrations`, `lib/prefs/schema.ts`, the pure `lib/comments/validate.ts` and `lib/assets` sniffers, `lib/schema-names.ts`, the name lists the import guard checks (P2.6), and `lib/search/normalize.ts` plus `lib/library/tag-rules.ts`, which the engine uses to write `title_key`, `text_key` and `name_key` (format 2, P2.6d) |
 | `desktop/preload` | anything except `desktop/shared` and `electron` |
 | `lib/platform/desktop` | `desktop/{main,preload,storage}` |
 | `app`, `components`, `hooks`, `lib` | `desktop/**` except `desktop/shared` types; `lib/platform/desktop/**` except from `components/desktop/desktop-root.tsx` |
@@ -312,6 +312,13 @@ INDEX import_sources(source_hash)
 - `copy-worker.ts` runs the copy in a thread that the storage worker starts. The writer never waits on it.
 - On quit, the worker terminates the copy thread (6–9 ms measured), waits for it, deletes the partial file and keeps the previous copy. The next open sweeps any partial left behind. Soak `T4-copy` checks this on all three OSes: every typed edit stored, a clean shutdown, no partial, and the previous copy byte-identical.
 - **Upgrade path (option B):** once P2.5's main process exists, `VACUUM INTO` can run in an Electron `utilityProcess`, which `kill()` stops at once. That would give back `VACUUM INTO`'s compaction of free pages. The batched copy keeps every row and skips the library's free pages, so its size is close; T8 reports both.
+
+**Format 2 (P2.6d).** The schema, migration, relationship layer and engine transactions follow the [offline data-model revision](2026-11-22-offline-data-model-revision.md) §3 and §4, which wins over §5.3 above for the points it names. As built:
+- `format-2.ts` holds the one 1→2 rebuild step. A new library is created at format 1 (with `auto_vacuum = INCREMENTAL`) and runs the same step with no backup, so a fresh file and a migrated one have identical `sqlite_master` text (SQLite stores a renamed table as `CREATE TABLE "docs" (…)`).
+- `migrations.ts` runs rebuild steps in the revision's §3.1 order. It exposes a boundary hook that soak T24b kills at.
+- Operations live in `folders.ts`, `tags.ts`, `docs-copy.ts`, `derive.ts` and `queries.ts`. `repair.ts` is P2.6f's.
+- A document trashed on its own keeps its folder only in `trashed_from`, so `ON DELETE RESTRICT` never blocks a later purge of that folder.
+- The 32 MiB cap measures `size_bytes`. An update is delete-only when `Y.parseUpdateMeta` reports no clock range: `encodeStateVectorFromUpdate` skips clients that don't start at clock 0.
 
 **As built in P2.6.**
 - **Modules.** `index.ts` is `library-index.ts` (not a barrel). `library.ts` holds the open order, the registry and the lifecycle; `lock.ts`, `cloud-folder.ts`, `sql.ts`, `driver.ts` (the `SqliteDriver` seam and SQLite error mapping) and `host.ts` (an injected `StorageHost` for files, the pid check and the clock) keep the engine free of `node:*`. `jobs.ts` is two lines in the worker: idle jobs run between requests after 30 s without a write. `mirror.ts`, `filenames.ts` and `assets.ts` come with P2.10 and P2.6b.

@@ -263,6 +263,75 @@ note. `NEXT_PUBLIC_COMMENTS` (default off) and the browser's
   agreement (including offline catch-up and `comments_full` recovery)
   and view-only silence. The `perf` Playwright typing case with 300
   threads is written but skipped unless `PERF_COMMENTS=1`.
+
+### Desktop P2.6d: library format 2 and the relationship layer
+
+The desktop library moves to format 2, the offline data-model revision's
+schema (`docs/superpowers/specs/2026-11-22-offline-data-model-revision.md`,
+§3 and §4), in one forward step from format 1. Nothing outside the desktop
+storage worker uses it yet; P2.6e persists P2.7b's library port on it.
+
+#### Added
+
+- **Desktop:** `desktop/storage/engine/format-2.ts`, the 1→2 step:
+  - It rebuilds `folders`, `docs` and `tags` with foreign keys, CHECKs, the
+    folder Trash columns, `head_seq`/`derived_seq` staleness and normalized
+    `title_key`/`name_key`.
+  - It adds `links`, `doc_headings`, `blobs` and `doc_blobs`, the index each
+    named query needs, and triggers: `link_key` and `lineage` are frozen,
+    `head_seq` only rises, and a folder can't become its own ancestor.
+  - `updates` and `snapshots` are never rebuilt.
+- **Desktop:** the migration runner's rebuild mode (§3.1):
+  - a read-only preflight refuses bad format-1 rows and writes nothing;
+  - `foreign_keys` is turned off before `BEGIN` and asserted;
+  - the `updates` row count, bytes and hash are checked before and after;
+  - `foreign_key_check` runs before `COMMIT`;
+  - `foreign_keys` is back on, and asserted, in a `finally`.
+
+  New libraries start at format 1 and run the same step.
+- **Desktop:** engine operations (§4.2):
+  - folders: create, rename and move, with the depth limit;
+  - folder Trash, restore and purge by trash group; a restore whose old
+    parent has moved too deep for the subtree goes to the root;
+  - new and imported documents show in Recent at once;
+  - tags: create, rename, merge, add and remove by `tagNameKey`;
+  - duplicate, and backup restore that never changes identity;
+  - `derive.put`, with row caps, control stripping, freshness against
+    `head_seq` and worker-computed hashes;
+  - pins, Manual order, list views, the Trash list, lazy snippets and
+    prefix search on titles and headings.
+- **Desktop:** a `quick_check` that throws on a damaged file opens the
+  library read-only as `corrupt` instead of failing to open.
+- **Desktop:** a 32 MiB per-document cap (D-O3): growth is refused with
+  `document_too_large`, which isn't retryable, and deletions still pass.
+- **Desktop:** compaction checks that the new snapshot dominates what it
+  replaces (I10). New libraries use `auto_vacuum = INCREMENTAL`, and a
+  compaction that leaves more than 25% free pages gives them back.
+- **Desktop:** `secure_delete = FAST`, a WAL truncate after each purge, and
+  pre-migration copies deleted after 7 clean opens (SEC-005).
+- **Desktop:** the daily copy uses an explicit table order, checks
+  `foreign_key_check` and turns foreign keys back on.
+- **Tests:** the migration and engine-operation suites, the §3.5 query-plan
+  checks, and soak cases T20 (storage half), T23, T24 and T24b.
+
+#### Changed
+
+- **Desktop:** the title has one writer, the content (G4): the engine's
+  `renameDoc` and `moveDoc` are gone (`moveItems` replaces `moveDoc`).
+  `modified_at` changes only with content (D-O5).
+- **Platform:** `DOC_STORE_ERROR_CODES` gains `document_too_large`, which
+  isn't retryable. When an append is refused at the cap, the batcher halts:
+  no retry loop runs, and the refused batch and everything after it stay
+  queued, never dropped. Every `flush()` rejects with the refusal instead of
+  waiting, so close, re-open and quit never hang. `local-session` makes the
+  document read-only with `readOnlyReason: "document_too_large"`. The open
+  Y.Doc still holds every edit, and "Copy into a new tab" carries them.
+  Duplicate copies stored state, which doesn't have them. Any other
+  non-retryable refusal halts the same way, except a transient `forbidden`
+  during a worker restart.
+- **Docs:** the architecture spec allows `lib/search/normalize.ts` and
+  `lib/library/tag-rules.ts` into the storage code, and records how format 2
+  was built.
 ### CI: sharded e2e, a perf job, one gate check, docs-only skip
 
 The Playwright suite runs in parallel, so CI on a pull request or `main`

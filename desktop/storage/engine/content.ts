@@ -12,6 +12,7 @@ import * as Y from "yjs";
 
 import type { SqliteDriver } from "./driver";
 import { StorageError } from "./errors";
+import { titleKey } from "./format-2";
 import { bumpRev, scalar, transaction } from "./sql";
 
 /** The stored `updates.origin` values: `UPDATE_ORIGINS` in `lib/platform/doc-store.ts`. */
@@ -105,8 +106,45 @@ function validateAppend(input: AppendInput) {
 }
 
 /**
+ * The per-document hard cap on desktop (D-O3): 32 MiB, measured as
+ * `size_bytes` (the snapshot plus the rows not yet compacted). The
+ * renderer compacts at max(1 MiB, 25% of the snapshot), so history never
+ * holds a document much above its content. At the cap, appends that add
+ * content are refused (`document_too_large`, not retryable) and the editor
+ * goes read-only; a delete-only update still passes, as on the server.
+ */
+export const DOC_CAP_BYTES = 32 * 1024 * 1024;
+
+/**
+ * True when an update only deletes: the clock range it adds is empty.
+ * `parseUpdateMeta` reads the update's header (its from and to clocks);
+ * no document structure is parsed (principle 5). Not
+ * `encodeStateVectorFromUpdate`: that skips clients whose structs don't
+ * start at clock 0, so every follow-up insert would look delete-only.
+ */
+export function isDeleteOnly(update: Uint8Array): boolean {
+  return clockRange(update).size === 0;
+}
+
+/**
+ * Each client's clock after this update (`parseUpdateMeta(...).to`), from
+ * the update's header, whatever clock it starts at. A malformed update is
+ * `invalid_argument`.
+ */
+export function clockRange(update: Uint8Array): Map<number, number> {
+  try {
+    return Y.parseUpdateMeta(update).to;
+  } catch {
+    throw new StorageError("invalid_argument", "malformed update");
+  }
+}
+
+/**
  * One row, plus the document's list metadata, in one transaction. Returns
- * the row's seq once committed.
+ * the row's seq once committed. `head_seq` rises to it in the same
+ * transaction (staleness is structural: the derived rows are now behind).
+ * `modified_at` changes here only (D-O5). The renderer's title is still
+ * accepted for an open document; `title_key` follows it.
  */
 export function append(
   db: SqliteDriver,
@@ -116,12 +154,29 @@ export function append(
 ): number {
   validateAppend(input);
   return transaction(db, () => {
+    const current = db
+      .prepare("SELECT size_bytes, title FROM docs WHERE id = ?")
+      .get(docId);
+    if (
+      current &&
+      Number(current.size_bytes) + input.update.byteLength > DOC_CAP_BYTES &&
+      !isDeleteOnly(input.update)
+    )
+      throw new StorageError("document_too_large", "document is at its cap");
+    const title =
+      input.title === undefined
+        ? undefined
+        : input.title.slice(0, MAX_TITLE_LENGTH);
+    // The normalizer runs only when the title changed.
+    const key =
+      title === undefined || title === current?.title ? null : titleKey(title);
     const updated = db
       .prepare(
         `UPDATE docs SET
            modified_at = ?,
            size_bytes = size_bytes + ?,
            title = COALESCE(?, title),
+           title_key = COALESCE(?, title_key),
            snippet = COALESCE(?, snippet),
            schema = COALESCE(?, schema)
          WHERE id = ?`,
@@ -129,9 +184,8 @@ export function append(
       .run(
         now,
         input.update.byteLength,
-        input.title === undefined
-          ? null
-          : input.title.slice(0, MAX_TITLE_LENGTH),
+        title ?? null,
+        key,
         input.snippet === undefined
           ? null
           : input.snippet.slice(0, MAX_SNIPPET_LENGTH),
@@ -142,11 +196,13 @@ export function append(
       throw new StorageError("not_found", "no such document");
     // Title, snippet and modified time are on the sidebar (architecture §8.1).
     bumpRev(db);
-    return db
+    const seq = db
       .prepare(
         "INSERT INTO updates (doc_id, data, origin, created_at) VALUES (?, ?, ?, ?)",
       )
       .run(docId, input.update, input.origin, now).lastInsertRowid;
+    db.prepare("UPDATE docs SET head_seq = ? WHERE id = ?").run(seq, docId);
+    return seq;
   });
 }
 
@@ -175,6 +231,7 @@ export function compact(
         "upToSeq is past the document's rows",
       );
     if (upToSeq < snapshotUpto(db, docId)) return;
+    requireDominates(db, docId, state, upToSeq);
     db.prepare(
       `INSERT INTO snapshots (doc_id, data, upto_seq) VALUES (?, ?, ?)
        ON CONFLICT (doc_id) DO UPDATE SET data = excluded.data, upto_seq = excluded.upto_seq`,
@@ -189,6 +246,44 @@ export function compact(
        WHERE id = ?`,
     ).run(state.byteLength, docId, docId);
   });
+}
+
+/**
+ * I10 (offline revision §4.1): the new snapshot's state vector must
+ * dominate what it replaces, the old snapshot and every row `seq ≤
+ * upToSeq`, or the compaction would lose an update. Merges and reads state
+ * vectors only; no structure is parsed.
+ */
+function requireDominates(
+  db: SqliteDriver,
+  docId: string,
+  state: Uint8Array,
+  upToSeq: number,
+) {
+  const parts: Uint8Array[] = [];
+  const snapshot = db
+    .prepare("SELECT data FROM snapshots WHERE doc_id = ?")
+    .get(docId);
+  if (snapshot) parts.push(snapshot.data as Uint8Array);
+  for (const row of db
+    .prepare(
+      "SELECT data FROM updates WHERE doc_id = ? AND seq <= ? ORDER BY seq",
+    )
+    .all(docId, upToSeq))
+    parts.push(row.data as Uint8Array);
+  if (parts.length === 0) return;
+  // Clock ranges, not encodeStateVectorFromUpdate: that skips any client
+  // whose structs don't start at clock 0.
+  const replaced = clockRange(
+    parts.length === 1 ? (parts[0] as Uint8Array) : Y.mergeUpdates(parts),
+  );
+  const next = clockRange(state);
+  for (const [client, clock] of replaced)
+    if ((next.get(client) ?? 0) < clock)
+      throw new StorageError(
+        "invalid_argument",
+        "the snapshot would lose updates it replaces",
+      );
 }
 
 /**

@@ -23,6 +23,7 @@ export const STORAGE_ERROR_CODES = [
   "library_unavailable",
   "import_too_large",
   "unknown_schema",
+  "document_too_large",
 ] as const;
 
 export type StorageErrorCode = (typeof STORAGE_ERROR_CODES)[number];

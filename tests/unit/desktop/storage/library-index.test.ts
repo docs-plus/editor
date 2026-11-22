@@ -15,6 +15,8 @@ import {
   createClock,
   createTempDir,
   createTestHost,
+  mustFolder,
+  mustTag,
   openTestLibrary,
   type TestClock,
 } from "@/tests/helpers/storage-library";
@@ -54,23 +56,8 @@ describe("creating documents", () => {
     expect(a.linkKey).not.toBe(b.linkKey);
   });
 
-  test("keeps a lineage and link key only when given (backup restore)", async () => {
-    const lineage = crypto.randomUUID();
-    const linkKey = "a".repeat(32);
-    expect(library.createDoc({ lineage, linkKey })).toMatchObject({
-      lineage,
-      linkKey,
-    });
-    expect(codeOf(() => library.createDoc({ linkKey }))).toBe(
-      "invalid_argument",
-    );
-  });
-
-  test("refuses malformed ids, link keys and kinds", async () => {
+  test("refuses malformed ids and kinds", async () => {
     expect(codeOf(() => library.createDoc({ id: "../x" }))).toBe(
-      "invalid_argument",
-    );
-    expect(codeOf(() => library.createDoc({ linkKey: "XYZ" }))).toBe(
       "invalid_argument",
     );
     expect(codeOf(() => library.createDoc({ kind: "page" as "doc" }))).toBe(
@@ -87,9 +74,9 @@ describe("creating documents", () => {
 describe("the sidebar snapshot", () => {
   test("lists live folders, documents and tags; rev moves on every write", async () => {
     const start = library.sidebar().rev;
-    const folder = library.createFolder({ name: "Work" });
+    const folder = mustFolder(library, { name: "Work" });
     const doc = library.createDoc({ title: "Plan", folderId: folder.id });
-    const tag = library.createTag("urgent", "red");
+    const tag = mustTag(library, "urgent", "red");
     library.setDocTags(doc.id, [tag.id]);
     const snapshot = library.sidebar();
     expect(snapshot.rev).toBe(start + 4);
@@ -107,9 +94,13 @@ describe("the sidebar snapshot", () => {
     ]);
   });
 
-  test("tag names are unique regardless of case", async () => {
-    library.createTag("Urgent");
-    expect(codeOf(() => library.createTag("urgent"))).toBe("invalid_argument");
+  test("tag names are unique by tagNameKey: case and accents ignored", async () => {
+    const first = mustTag(library, "Café");
+    expect(library.createTag("cafe")).toMatchObject({
+      id: first.id,
+      created: false,
+    });
+    expect(library.createTag("   ")).toBeNull();
   });
 
   test("opening a document records opened_at", async () => {
@@ -119,25 +110,19 @@ describe("the sidebar snapshot", () => {
     expect(library.sidebar().docs[0]?.openedAt).toBe(clock.now);
   });
 
-  test("rename and move", async () => {
-    const folder = library.createFolder({ name: "A" });
+  test("moving a document into a folder", async () => {
+    const folder = mustFolder(library, { name: "A" });
     const doc = library.createDoc({ title: "x" });
-    library.renameDoc(doc.id, "  Renamed  ");
-    library.moveDoc(doc.id, folder.id, "m");
-    expect(library.sidebar().docs[0]).toMatchObject({
-      title: "Renamed",
-      folderId: folder.id,
-      sortKey: "m",
-    });
-    expect(codeOf(() => library.renameDoc(crypto.randomUUID(), "y"))).toBe(
-      "not_found",
-    );
+    expect(
+      library.moveItems([{ kind: "doc", id: doc.id }], folder.id),
+    ).toMatchObject({ ok: true, from: { [`doc:${doc.id}`]: null } });
+    expect(library.sidebar().docs[0]?.folderId).toBe(folder.id);
   });
 });
 
 describe("Trash and purge", () => {
   test("trash hides a document and restore brings it back to its folder", async () => {
-    const folder = library.createFolder({ name: "A" });
+    const folder = mustFolder(library, { name: "A" });
     const doc = library.createDoc({ folderId: folder.id });
     library.trashDoc(doc.id);
     expect(library.sidebar().docs).toEqual([]);
@@ -147,7 +132,7 @@ describe("Trash and purge", () => {
 
   test("purge cascades to rows, snapshot, tags, view and import source", async () => {
     const doc = library.createDoc();
-    const tag = library.createTag("t");
+    const tag = mustTag(library, "t");
     library.setDocTags(doc.id, [tag.id]);
     const ydoc = new Y.Doc();
     ydoc.getText("t").insert(0, "x");

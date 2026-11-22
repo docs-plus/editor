@@ -3,6 +3,8 @@
  * `node:path`. Bun implements these modules too, so unit tests use the same
  * host (with `now` or `isPidAlive` overridden where a test needs to).
  */
+
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -16,7 +18,19 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { StorageHost } from "./engine/host";
+import type { Hasher, StorageHost } from "./engine/host";
+
+function sha256(): Hasher {
+  const hash = createHash("sha256");
+  const hasher: Hasher = {
+    update(data) {
+      hash.update(data);
+      return hasher;
+    },
+    digest: () => hash.digest("hex"),
+  };
+  return hasher;
+}
 
 function isErrno(error: unknown, code: string): boolean {
   return (
@@ -86,6 +100,7 @@ export function createNodeHost(
         return isErrno(error, "EPERM");
       }
     },
+    sha256,
     ...overrides,
   };
 }

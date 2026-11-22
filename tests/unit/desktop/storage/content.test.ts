@@ -115,7 +115,8 @@ describe("load and append", () => {
     });
     const row = library.sidebar().docs[0];
     expect(row?.title).toBe("Hello");
-    expect(row?.snippet).toBe("hello world");
+    // Snippets leave the sidebar; Preview rows fetch them (§3.5).
+    expect(library.snippets([docId])).toEqual({ [docId]: "hello world" });
     expect(row?.modifiedAt).toBe(clock.now);
     expect(row?.sizeBytes).toBe(update.byteLength);
     expect(library.load(docId, "w1").schema).toBe(2);
