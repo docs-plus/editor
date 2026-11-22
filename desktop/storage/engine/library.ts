@@ -64,6 +64,7 @@ import {
   runFormatSteps,
 } from "./migrations";
 import * as queries from "./queries";
+import * as repair from "./repair";
 import { FORMAT_VERSION, SCHEMA_V1, YJS_ENCODING } from "./schema";
 import { readMeta, readRev, scalar, transaction, writeMeta } from "./sql";
 import * as tags from "./tags";
@@ -627,6 +628,36 @@ export class Library {
     const rev = tags.setDocTags(this.conn, docId, tagIds);
     this.changed("doc", docId);
     return rev;
+  }
+
+  /** Stamps `opened_at` (`load` does this too). */
+  markOpened(id: string): number {
+    this.assertWritable();
+    const rev = index.markOpened(this.conn, id, this.host.now());
+    this.changed("doc", id);
+    return rev;
+  }
+
+  // Repair (repair.ts, P2.6f)
+
+  /** Check mode: idempotent, read-mostly; violations are reported. */
+  repairCheck(): repair.RepairReport {
+    this.assertWritable();
+    return repair.checkLibrary(this.conn, this.host, this.host.now());
+  }
+
+  /**
+   * Settings › Storage › Rebuild index: resets `derived_seq` in chunks, one
+   * transaction each, so appends interleave. Returns how many were reset.
+   */
+  resetDerived(): number {
+    this.assertWritable();
+    let total = 0;
+    for (;;) {
+      const reset = repair.resetDerivedChunk(this.conn);
+      total += reset;
+      if (reset === 0) return total;
+    }
   }
 
   // Pins, Manual order, list views, Trash list, search (queries.ts)
