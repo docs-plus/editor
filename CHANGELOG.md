@@ -26,8 +26,14 @@ production behaves as before. The only visible difference is that
     `sync:` prefix (seam S6b);
   - no auto-create: a share document needs its row;
   - `MAX_TOTAL_SHARES` (2,000), counted apart from `MAX_TOTAL_DOCUMENTS`;
-  - per-IP and global hourly creation limits;
-  - `created_ip_hash` (an HMAC), cleared after 30 days.
+  - per-address (IPv4, IPv6 /64, and a larger shared budget per /48) and
+    global hourly creation limits;
+  - a share that stays `pending` for an hour stops counting toward the cap
+    and is ended as `expired` on first contact;
+  - each hash column is unique, so a create or reset that reuses a hash
+    answers `409 hash_in_use`;
+  - `created_ip_hash` (an HMAC), cleared 30 days after creation by an
+    hourly sweep.
 
   The client generates every secret. The server mints only `share_id` and
   stores three distinct 32-byte SHA-256 hashes (seam S1). The token wire
@@ -35,11 +41,18 @@ production behaves as before. The only visible difference is that
 - **Sharing (P4.2b):** `onAuthenticate` for `share:*`, active only with
   shares on. It looks up the row by `share_id`, compares with
   `timingSafeEqual`, and treats a view token as `readOnly`.
-  - An unknown share and a wrong token get the same refusal
-    (`share_unavailable`). Only token holders learn `sharing_stopped`,
-    `link_reset`, `expired`, `removed` or `view_only`.
-  - Failed tokens are counted per `share_id` and per IPv4 address, IPv6 /64
-    and /48; past the limit, a share pauses as `busy`.
+  - An unknown share, a wrong token and a share over its failed-token
+    limit get the same refusal (`share_unavailable`, byte for byte), and an
+    unknown share costs the same digest comparisons. Only token holders
+    learn `sharing_stopped`, `link_reset`, `expired`, `removed` or
+    `view_only`.
+  - Failed tokens are counted per IPv4 address, IPv6 /64 and /48 (past the
+    limit the address gets `busy`) and per existing `share_id` (past the
+    limit its edit and view tokens are refused too, never its owner
+    secret). Both tables evict their least recently used key when full,
+    so neither stops counting nor refuses an address it has not seen.
+  - A connection that joins while its share is stopped or made view-only
+    is closed once connected.
   - A share ends 30 days after its last stored edit.
   - Viewers are marked in awareness (`viewer: true`, no cursor).
   - Share connections have their own per-IP cap
@@ -57,7 +70,9 @@ production behaves as before. The only visible difference is that
   Each closes the share's live connections. `GET …/status` takes any token
   of the share. CORS is limited to `HOCUS_SHARE_ORIGINS`. A mutation from
   any other `Origin` is refused. Bodies are JSON only, small, and unknown
-  keys are refused. The endpoints are rate-limited.
+  keys are refused. The endpoints are rate-limited per address and per
+  IPv6 /48 (owner calls only per address), before the origin check.
+  `lineage` is a dashed UUID or 32 hex digits.
 - **Sharing (P4.2d):** `GET /api/info` returns `apiVersion` 1,
   `serverVersion`, the schemas, `maxDocBytes`, `maxFrameBytes`, `yjsFormat`
   and `features.shares`. Share connections and creates require client
