@@ -19,8 +19,8 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
 
 - **Phone:** the bar's Insert cell opens a bottom sheet
   (`components/smart-toolbar/phone/insert-sheet.tsx`): the "/" menu's items
-  as a two-column grid of 44px cells. Suggested (the remembered insert kinds)
-  comes first when there are any, then "Blocks" (the caret's block is empty)
+  as a two-column grid of 44px cells. Suggested (the "/" menu's own rows for the
+  recent kinds) comes first when there are any, then "Blocks" (the caret's block is empty)
   or "Turn into" (it has text), then Insert. Kinds that can't run here show
   their reason on a second line. Table and Embed open their step inside the
   sheet; Diagram lists the templates. A pick closes the sheet and puts the
@@ -46,8 +46,11 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
   pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
   above the home indicator.
 
-The editor chunk group gets 38 B smaller; its CSS is unchanged. The phone
-bar chunk grows 930 B gz, and the sheet body is a 3.6 KB gz chunk of its own.
+Measured against `main` at 1548d5e, with the "/" menu's P2 work merged in:
+the editor chunk group gets 25 B smaller (393,795 B gz) and its CSS is
+unchanged. The phone bar chunk grows 978 B gz (18,175 B), and the sheet body
+is a chunk of its own, 3,926 B gz. The app's CSS grows 374 B gz (16,367 B),
+157 B of it for the tablet words.
 
 ### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
 
