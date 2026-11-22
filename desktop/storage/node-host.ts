@@ -55,7 +55,10 @@ export function createNodeHost(
         throw error;
       }
     },
-    remove: (path) => rmSync(path, { force: true }),
+    // Windows reports a file busy while a handle closes or Defender scans
+    // it: retry briefly (at most ~60 ms) before giving up.
+    remove: (path) =>
+      rmSync(path, { force: true, maxRetries: 3, retryDelay: 10 }),
     rename: (from, to) => renameSync(from, to),
     readText(path) {
       try {
