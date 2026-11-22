@@ -1,7 +1,10 @@
 /**
  * `MemoryBlobStore`: a `BlobStore` in memory, for tests and the desktop dev
- * bridge. It keeps the same `blobs` and `doc_blobs` model as the desktop
- * worker and the web library (image store spec §3.2, §3.3).
+ * bridge. It keeps the same `blobs` and `doc_blobs` rows as the desktop
+ * worker and the web library (format 2, offline revision §3.2), with the
+ * same snake_case names, and never trusts a caller's hash: `put` recomputes
+ * it, as the worker does. `recount` never deletes a row, and `gc` respects
+ * the 30-day grace.
  */
 import type { AssetHex } from "@/lib/assets/asset-ref";
 import { sha256Hex } from "@/lib/assets/hash";
@@ -15,19 +18,24 @@ import {
   type DocBlobKind,
 } from "@/lib/platform/blob-store";
 
-type StoredBlob = {
-  bytes: Uint8Array;
+/** A `blobs` row (format 2, snake_case as on desktop and the web), plus the bytes. */
+type BlobRow = {
+  hash: AssetHex;
   mime: AssetMime;
+  size: number;
   width: number;
   height: number;
-  createdAt: number;
+  created_at: number;
   origin: BlobOrigin;
 };
 
-type DocBlobRow = { kind: DocBlobKind; droppedAt: number | null };
+type StoredBlob = BlobRow & { bytes: Uint8Array };
+
+/** A `doc_blobs` row, keyed by `doc_id` and `hash` in the maps below. */
+type DocBlobRow = { kind: DocBlobKind; dropped_at: number | null };
 
 export type MemoryBlobStoreOptions = {
-  /** Store time for `createdAt` and `droppedAt`. Default `Date.now`. */
+  /** Store time for `created_at` and `dropped_at`. Default `Date.now`. */
   now?: () => number;
   /** Default 30 days. */
   graceMs?: number;
@@ -61,7 +69,7 @@ export class MemoryBlobStore implements BlobStore {
     this.missing.add(hex);
   }
 
-  /** The rows of `docId`, for assertions. */
+  /** The `doc_blobs` rows of `docId`, for assertions. */
   rows(docId: string): ReadonlyMap<AssetHex, Readonly<DocBlobRow>> {
     return this.docBlobs.get(docId) ?? new Map();
   }
@@ -95,19 +103,21 @@ export class MemoryBlobStore implements BlobStore {
     if (!this.blobs.has(hex) || this.missing.has(hex)) {
       this.missing.delete(hex);
       this.blobs.set(hex, {
+        hash: hex,
         bytes: bytes.slice(),
         mime: check.mime,
+        size: bytes.byteLength,
         width: check.width,
         height: check.height,
-        createdAt: this.now(),
+        created_at: this.now(),
         origin,
       });
     }
     const rows = this.docBlobs.get(docId) ?? new Map<AssetHex, DocBlobRow>();
     this.docBlobs.set(docId, rows);
     const row = rows.get(hex);
-    if (row) row.droppedAt = null;
-    else rows.set(hex, { kind: "provisional", droppedAt: null });
+    if (row) row.dropped_at = null;
+    else rows.set(hex, { kind: "provisional", dropped_at: null });
     return { hex };
   }
 
@@ -132,9 +142,10 @@ export class MemoryBlobStore implements BlobStore {
     const rows = this.docBlobs.get(docId) ?? new Map<AssetHex, DocBlobRow>();
     this.docBlobs.set(docId, rows);
     for (const [hex, row] of rows) {
-      if (!keep.has(hex) && row.droppedAt === null) row.droppedAt = now;
+      if (!keep.has(hex) && row.dropped_at === null) row.dropped_at = now;
     }
-    for (const hex of keep) rows.set(hex, { kind: "current", droppedAt: null });
+    for (const hex of keep)
+      rows.set(hex, { kind: "current", dropped_at: null });
   }
 
   async gc(now: number): Promise<{ deleted: number; bytes: number }> {
@@ -146,17 +157,17 @@ export class MemoryBlobStore implements BlobStore {
         .filter((row) => row !== undefined);
       const collectable =
         rows.length === 0
-          ? now - blob.createdAt >= this.graceMs
+          ? now - blob.created_at >= this.graceMs
           : rows.every(
               (row) =>
-                row.droppedAt !== null && now - row.droppedAt >= this.graceMs,
+                row.dropped_at !== null && now - row.dropped_at >= this.graceMs,
             );
       if (!collectable) continue;
       this.blobs.delete(hex);
       this.missing.delete(hex);
       for (const docRows of this.docBlobs.values()) docRows.delete(hex);
       deleted += 1;
-      bytes += blob.bytes.byteLength;
+      bytes += blob.size;
     }
     return { deleted, bytes };
   }

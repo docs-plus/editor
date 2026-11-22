@@ -17,8 +17,12 @@
  * - **GC never deletes a referenced blob** (I10). A blob is collectable only
  *   when every `doc_blobs` row for it was dropped at least
  *   `ASSET_GC_GRACE_MS` ago, or, with no rows at all, it was created that
- *   long ago. A row with `droppedAt === null` (current or provisional)
+ *   long ago. A row with `dropped_at` NULL (current or provisional)
  *   always keeps the blob.
+ *
+ * Stores keep format 2's `blobs` and `doc_blobs` tables (offline revision
+ * §3.2) with their snake_case columns; A1 adds no tables. `recount` and
+ * purges only set `dropped_at`; rows go only with their blob, in `gc`.
  *
  * Types only, plus the error class, so the storage worker and the IPC
  * contract can mirror it.
@@ -31,8 +35,8 @@ export type { AssetHex };
 /** How a blob first arrived (`blobs.origin`). */
 export type BlobOrigin = "insert" | "migration" | "import" | "fetched";
 
-/** `doc_blobs.kind`. `version` rows arrive with Live versions (P4.8). */
-export type DocBlobKind = "provisional" | "current";
+/** `doc_blobs.kind`, as format 2's CHECK. `version` rows arrive with Live versions (P4.8). */
+export type DocBlobKind = "provisional" | "current" | "version";
 
 /** 30 days (`ASSET_GC_GRACE_DAYS`): outlives every copy that can restore a ref (§3.4). */
 export const ASSET_GC_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -40,7 +44,7 @@ export const ASSET_GC_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 export interface BlobStore {
   /**
    * Verifies and stores `bytes`, and adds a provisional `doc_blobs` row for
-   * `docId` (or clears its `droppedAt`). Storing bytes already present is a
+   * `docId` (or clears its `dropped_at`). Storing bytes already present is a
    * dedupe, not an error. Resolves with the recomputed digest once durable.
    */
   put(
@@ -61,9 +65,9 @@ export interface BlobStore {
   has(hexes: readonly AssetHex[]): Promise<AssetHex[]>;
   /**
    * `hexes` is the FULL set the document's current state references (§3.4).
-   * In one transaction: those rows become `current` with `droppedAt = null`;
+   * In one transaction: those rows become `current` with `dropped_at = NULL`;
    * every other current or provisional row of the document gets
-   * `droppedAt = now` (if it was null). Permanently deleting a document is
+   * `dropped_at = now` (if it was NULL). Permanently deleting a document is
    * `recount(docId, [])`.
    */
   recount(docId: string, hexes: readonly AssetHex[]): Promise<void>;

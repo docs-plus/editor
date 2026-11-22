@@ -57,7 +57,7 @@ describe("MemoryBlobStore switches", () => {
     expect(store.url(hex)).toBeNull();
     expect(store.rows("d").get(hex)).toEqual({
       kind: "provisional",
-      droppedAt: null,
+      dropped_at: null,
     });
     // Fetching the bytes again (a share) repairs it.
     await store.put("d", contractImage(1), "image/png", "fetched");
@@ -70,7 +70,7 @@ describe("MemoryBlobStore switches", () => {
     await store.recount("d", [hex]);
     expect(store.rows("d").get(hex)).toEqual({
       kind: "current",
-      droppedAt: null,
+      dropped_at: null,
     });
   });
 });
