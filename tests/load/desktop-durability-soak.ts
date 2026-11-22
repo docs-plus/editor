@@ -8,7 +8,7 @@
  * the two drivers read each other's files. The shape follows spike S2's
  * kill harness.
  *
- *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8
+ *   bun tests/load/desktop-durability-soak.ts --case=all|contract|T1|T2|T3|T4|T4-copy|T5|T6|T8|T21
  *     [--kills=200] [--out=soak-out] [--verbose]
  *
  * T7 (slow-hydrate overwrite) is a web-library case: it tests the session
@@ -48,6 +48,7 @@ import {
   type OpenLibraryOptions,
 } from "@/desktop/storage/engine/library";
 import { LOCK_FILE } from "@/desktop/storage/engine/lock";
+import { updatesInvariant } from "@/desktop/storage/engine/migrations";
 import { createNodeHost } from "@/desktop/storage/node-host";
 import {
   STEP_ROWS,
@@ -62,6 +63,8 @@ import {
   seededRandom,
   TEXT,
 } from "@/desktop/storage-harness/gen";
+import { writeFormat1Library } from "@/tests/helpers/format-1-library";
+import { caseT21 } from "@/tests/load/desktop-soak-t21";
 
 const ROOT = join(import.meta.dir, "../..");
 const HARNESS = join(ROOT, "desktop/storage-harness");
@@ -144,12 +147,12 @@ function seedLibrary(dir: string, padBytes: number): string {
   const { id } = library.createDoc({ title: "Soak" });
   if (padBytes > 0) {
     library.load(id, "seed");
-    const seq = library.append(id, "seed", {
-      origin: "local",
-      update: padUpdate(padBytes),
-    });
+    // One update for both: a second padUpdate() is another client, and the
+    // compaction would lose the first (I10 refuses it).
+    const update = padUpdate(padBytes);
+    const seq = library.append(id, "seed", { origin: "local", update });
     const doc = new Y.Doc();
-    Y.applyUpdate(doc, padUpdate(padBytes));
+    Y.applyUpdate(doc, update);
     library.compact(id, "seed", Y.encodeStateAsUpdate(doc), seq);
     library.close(id, "seed");
   }
@@ -226,14 +229,20 @@ async function runHarness(
 // ── contract: the engine DocStore cases inside the Electron worker ──────
 
 async function caseContract(): Promise<CaseResult> {
-  const run = await runHarness(["--mode=contract"]);
-  const ok = run.lines.filter((l) => l.startsWith("CASE_OK")).length;
-  const failed = run.lines.filter((l) => l.startsWith("CASE_FAIL"));
+  const run = await runHarness(["--mode=contract"], () => {}, 300_000);
+  const count = (prefix: string) =>
+    run.lines.filter((l) => l.startsWith(`${prefix} `)).length;
+  const ok = count("CASE_OK");
+  // P2.7b's LibraryIndex contract through RpcLibraryIndex (P2.6e).
+  const libraryOk = count("LIBRARY_CASE_OK");
+  const failed = run.lines.filter(
+    (l) => l.startsWith("CASE_FAIL") || l.startsWith("LIBRARY_CASE_FAIL"),
+  );
   return {
     name: "contract",
-    pass: run.exitCode === 0 && failed.length === 0 && ok > 0,
-    summary: `P2.1's DocStore contract: ${ok} cases passed on node:sqlite in the Electron worker`,
-    details: { ok, exitCode: run.exitCode },
+    pass: run.exitCode === 0 && failed.length === 0 && ok > 0 && libraryOk > 0,
+    summary: `on node:sqlite in the Electron worker: P2.1's DocStore contract ${ok} cases passed; P2.7b's LibraryIndex contract (RpcLibraryIndex) ${libraryOk} cases passed`,
+    details: { ok, libraryOk, exitCode: run.exitCode },
     failures: [
       ...failed,
       ...(run.exitCode === 0 ? [] : [run.stderr.slice(0, 2000)]),
@@ -528,7 +537,7 @@ async function caseT5(kills: number): Promise<CaseResult> {
   return {
     name: "T5",
     pass: failures.length === 0,
-    summary: `${kills} kills during a 3-step migration (${Math.round(fullMs)} ms); stopped at v1–v4: ${JSON.stringify(reached)}; each step all-or-nothing, every resume reached v${T5_TARGET}`,
+    summary: `${kills} kills during a 3-step migration (${Math.round(fullMs)} ms); stopped at v2–v5: ${JSON.stringify(reached)}; each step all-or-nothing, every resume reached v${T5_TARGET}`,
     details: { kills, fullMs, reached },
     failures,
   };
@@ -602,11 +611,11 @@ async function caseT8(): Promise<CaseResult> {
   // Seed: 1,000 documents of about 200 KB in 30 folders, with tags.
   const folders = Array.from(
     { length: 30 },
-    (_, i) => library.createFolder({ name: `Folder ${i}` }).id,
+    (_, i) => library.createFolder({ name: `Folder ${i}` })?.id ?? null,
   );
   const tags = Array.from(
     { length: 20 },
-    (_, i) => library.createTag(`tag-${i}`).id,
+    (_, i) => library.createTag(`tag-${i}`)?.id ?? "",
   );
   const template = new Y.Doc();
   template.getText(PAD).insert(0, "p".repeat(docBytes));
@@ -984,6 +993,355 @@ async function caseQuitDuringCopy(runs: number): Promise<CaseResult> {
   };
 }
 
+// ── T24: the 1→2 migration on a 200 MB library (offline revision §5.3) ──
+
+function invariantAt(dir: string): string {
+  const driver = openBunSqlite(join(dir, LIBRARY_FILE), { readOnly: false });
+  try {
+    return updatesInvariant(driver, createNodeHost());
+  } finally {
+    driver.close();
+  }
+}
+
+/** Format, a v2-only column, and foreign_key_check, read straight from the file. */
+function fileFormat(dir: string) {
+  const db = new Database(join(dir, LIBRARY_FILE));
+  const version = (
+    db.query("SELECT value FROM meta WHERE key = 'format_version'").get() as {
+      value: string;
+    }
+  ).value;
+  const v2 =
+    db
+      .query("SELECT 1 FROM pragma_table_info('docs') WHERE name = 'head_seq'")
+      .get() !== null;
+  const fk = db.query("PRAGMA foreign_key_check").all().length;
+  db.close();
+  return { version, v2, fk };
+}
+
+async function caseT24(): Promise<CaseResult> {
+  const docs = Number(args["t24-docs"] ?? 1000);
+  const dir = mkdtempSync(join(tmpdir(), "soak-t24-"));
+  const failures: string[] = [];
+  writeFormat1Library(dir, {
+    docs,
+    docBytes: 200 * 1024,
+    folders: 30,
+    rowsPerDoc: 5,
+  });
+  const before = invariantAt(dir);
+  const bytes = statSync(join(dir, LIBRARY_FILE)).size;
+  const run = await runHarness(
+    ["--mode=migrate-v2", `--dir=${dir}`],
+    () => {},
+    300_000,
+  );
+  const line = run.lines.find((l) => l.startsWith("MIGRATED_V2 "));
+  const result = line ? JSON.parse(line.slice(12)) : null;
+  if (!result) failures.push(`no result: ${run.stderr.slice(0, 500)}`);
+  else {
+    if (result.formatVersion !== 2 || result.readOnly)
+      failures.push(`ended at v${result.formatVersion} ${result.readOnly}`);
+    if (result.foreignKeys !== 1)
+      failures.push("foreign_keys is off after the step");
+  }
+  const after = fileFormat(dir);
+  if (!after.v2 || after.version !== "2")
+    failures.push("the file isn't format 2");
+  if (after.fk > 0) failures.push(`${after.fk} foreign_key_check rows`);
+  if (invariantAt(dir) !== before)
+    failures.push("the updates invariant changed");
+  const backups = createNodeHost()
+    .list(dir)
+    .filter((f) => f.startsWith("library.pre-v1-"));
+  if (backups.length !== 1) failures.push(`${backups.length} backups`);
+  const wal = join(dir, `${LIBRARY_FILE}-wal`);
+  const walBytes = existsSync(wal) ? statSync(wal).size : 0;
+  const budget =
+    process.platform === "darwin" ? 10_000 : Number.POSITIVE_INFINITY;
+  if (result && result.ms > budget * 1.5)
+    failures.push(
+      `took ${Math.round(result.ms)} ms, budget ${budget} ms (× 1.5)`,
+    );
+  removeDir(dir);
+  return {
+    name: "T24",
+    pass: failures.length === 0,
+    summary: `${docs} documents, ${(bytes / 1048576).toFixed(0)} MB: 1→2 in ${result ? Math.round(result.ms) : "?"} ms on node:sqlite (Mac budget 10 s; Windows reported); one backup; updates invariant equal; foreign_key_check clean; WAL ${walBytes} B after`,
+    details: { docs, bytes, result, walBytes },
+    failures,
+  };
+}
+
+// ── T24b: a kill at every statement boundary of the step ──────────────
+
+async function caseT24b(): Promise<CaseResult> {
+  const failures: string[] = [];
+  const seed = (dir: string) =>
+    writeFormat1Library(dir, { docs: 60, docBytes: 2048 });
+  // Calibrate: how many boundaries one clean run passes.
+  const calibration = mkdtempSync(join(tmpdir(), "soak-t24b-"));
+  seed(calibration);
+  const clean = await runHarness(["--mode=migrate-v2", `--dir=${calibration}`]);
+  const boundaries = clean.lines.filter((l) =>
+    l.startsWith("BOUNDARY "),
+  ).length;
+  removeDir(calibration);
+  if (boundaries === 0)
+    failures.push(`calibration: ${clean.stderr.slice(0, 500)}`);
+  const outcomes: Record<string, number> = {};
+  /** Every document's text, read straight from the file's rows. */
+  const textsAt = (dir: string) => {
+    const db = new Database(join(dir, LIBRARY_FILE), { readonly: true });
+    const ids = db.query("SELECT id FROM docs ORDER BY id").all() as {
+      id: string;
+    }[];
+    const texts = ids.map(({ id }) => {
+      const doc = new Y.Doc();
+      const snap = db
+        .query("SELECT data FROM snapshots WHERE doc_id = ?")
+        .get(id) as { data: Uint8Array } | null;
+      if (snap) Y.applyUpdate(doc, snap.data);
+      for (const row of db
+        .query("SELECT data FROM updates WHERE doc_id = ? ORDER BY seq")
+        .all(id) as { data: Uint8Array }[])
+        Y.applyUpdate(doc, row.data);
+      return `${id}:${doc.getText("t").toString()}`;
+    });
+    db.close();
+    return texts.join("\n");
+  };
+  for (let k = 1; k <= boundaries; k += 1) {
+    const dir = mkdtempSync(join(tmpdir(), "soak-t24b-"));
+    seed(dir);
+    const before = invariantAt(dir);
+    const texts = textsAt(dir);
+    const run = await runHarness([
+      "--mode=migrate-v2",
+      `--dir=${dir}`,
+      `--kill-at=${k}`,
+    ]);
+    const name =
+      run.lines.filter((l) => l.startsWith("BOUNDARY ")).at(-1) ?? "none";
+    const state = fileFormat(dir);
+    const shape =
+      state.version === "1" && !state.v2
+        ? "v1"
+        : state.version === "2" && state.v2
+          ? "v2"
+          : "mixed";
+    outcomes[shape] = (outcomes[shape] ?? 0) + 1;
+    if (shape === "mixed")
+      failures.push(
+        `kill at ${name}: format ${state.version}, v2 columns ${state.v2}`,
+      );
+    if (state.fk > 0)
+      failures.push(`kill at ${name}: ${state.fk} foreign_key_check rows`);
+    if (invariantAt(dir) !== before)
+      failures.push(`kill at ${name}: updates changed`);
+    // The next open finishes the job.
+    const library = openEngine(dir);
+    if (library.status.formatVersion !== 2 || library.status.readOnly)
+      failures.push(
+        `kill at ${name}: reopen reached v${library.status.formatVersion} ${library.status.readOnly}`,
+      );
+    library.shutdown();
+    if (invariantAt(dir) !== before)
+      failures.push(`kill at ${name}: updates changed after the reopen`);
+    if (textsAt(dir) !== texts)
+      failures.push(`kill at ${name}: a document's content changed`);
+    removeDir(dir);
+  }
+  // A v1 file with seeded orphans is refused, and nothing is written.
+  const orphans = mkdtempSync(join(tmpdir(), "soak-t24b-"));
+  seed(orphans);
+  const db = new Database(join(orphans, LIBRARY_FILE));
+  db.exec("UPDATE docs SET folder_id = 'missing' WHERE rowid IN (1, 2)");
+  db.close();
+  const refused = await runHarness(["--mode=migrate-v2", `--dir=${orphans}`]);
+  const refusedLine =
+    refused.lines.find((l) => l.startsWith("MIGRATED_V2 ")) ?? "";
+  if (!refusedLine.includes('"readOnly":"migration_failed"'))
+    failures.push(`orphans: ${refusedLine || refused.stderr.slice(0, 300)}`);
+  if (fileFormat(orphans).v2) failures.push("orphans: the step wrote anyway");
+  removeDir(orphans);
+  return {
+    name: "T24b",
+    pass: failures.length === 0,
+    summary: `killed at each of ${boundaries} statement boundaries: left v1 intact ${outcomes.v1 ?? 0}×, v2 complete ${outcomes.v2 ?? 0}×, mixed ${outcomes.mixed ?? 0}×; every reopen finished the step with the updates invariant equal; a v1 file with orphans was refused by preflight with nothing written`,
+    details: { boundaries, outcomes },
+    failures,
+  };
+}
+
+// ── T23: write amplification over a year on a long document ──────────
+
+/** A long document: `headings` sections of paragraphs, real Yjs items. */
+function buildLongDoc(headings: number, paragraphBytes: number): Y.Doc {
+  const doc = new Y.Doc();
+  const fragment = doc.getXmlFragment("default");
+  const blocks: Y.XmlElement[] = [];
+  for (let h = 0; h < headings; h += 1) {
+    const heading = new Y.XmlElement("heading");
+    heading.setAttribute("level", String(1 + (h % 3)));
+    heading.setAttribute("data-toc-id", `h${h}`);
+    heading.insert(0, [new Y.XmlText(`Section ${h}`)]);
+    const paragraph = new Y.XmlElement("paragraph");
+    const text = new Y.XmlText();
+    text.insert(0, `Paragraph ${h} `.padEnd(paragraphBytes, "lorem ipsum "));
+    paragraph.insert(0, [text]);
+    blocks.push(heading, paragraph);
+  }
+  fragment.insert(0, blocks);
+  return doc;
+}
+
+async function caseT23(): Promise<CaseResult> {
+  const days = Number(args["t23-days"] ?? 365);
+  const dir = mkdtempSync(join(tmpdir(), "soak-t23-"));
+  const failures: string[] = [];
+  const clock = { now: Date.UTC(2026, 0, 1) };
+  const library = Library.open({
+    dir,
+    host: createNodeHost({ now: () => clock.now }),
+    openSqlite: openBunSqlite,
+    fullfsync: false,
+  });
+  const { id } = library.createDoc({ title: "long" });
+  library.load(id, "w");
+  const doc = buildLongDoc(5000, 1500);
+  let acked = library.append(id, "w", {
+    origin: "local",
+    update: Y.encodeStateAsUpdate(doc),
+  });
+  library.compact(id, "w", Y.encodeStateAsUpdate(doc), acked);
+  const random = seededRandom(23);
+  const fragment = doc.getXmlFragment("default");
+  let rows = 0;
+  let rowBytes = 0;
+  let compactions = 0;
+  let maxSeen = 0;
+  for (let day = 0; day < days; day += 1) {
+    for (let batch = 0; batch < 20; batch += 1) {
+      let update: Uint8Array = new Uint8Array();
+      doc.once("update", (u: Uint8Array) => {
+        update = u;
+      });
+      doc.transact(() => {
+        for (let edit = 0; edit < 10; edit += 1) {
+          const block = fragment.get(
+            1 + 2 * Math.floor(random() * 5000),
+          ) as Y.XmlElement;
+          const text = block.get(0) as Y.XmlText;
+          if (random() < 0.5 && text.length > 50)
+            text.delete(Math.floor(random() * (text.length - 40)), 30);
+          else
+            text.insert(Math.floor(random() * text.length), "edit ".repeat(6));
+        }
+      });
+      acked = library.append(id, "w", { origin: "local", update });
+      rows += 1;
+      rowBytes += update.byteLength;
+      clock.now += 60_000;
+      // The batcher's trigger (§5.1): 500 rows, or max(1 MiB, 25% of the snapshot).
+      const snapshotBytes = library.stats().bytes;
+      if (rows > 500 || rowBytes > Math.max(1048576, 0.25 * snapshotBytes)) {
+        library.compact(id, "w", Y.encodeStateAsUpdate(doc), acked);
+        compactions += 1;
+        rows = 0;
+        rowBytes = 0;
+      }
+      maxSeen = Math.max(maxSeen, statSync(join(dir, LIBRARY_FILE)).size);
+    }
+    clock.now = Date.UTC(2026, 0, 2 + day);
+  }
+  library.compact(id, "w", Y.encodeStateAsUpdate(doc), acked);
+  const live = (() => {
+    const fresh = new Y.Doc();
+    Y.applyUpdate(fresh, Y.encodeStateAsUpdate(doc));
+    return Y.encodeStateAsUpdate(fresh).byteLength;
+  })();
+  const raw = new Database(join(dir, LIBRARY_FILE), { readonly: true });
+  const pageSize = (
+    raw.query("PRAGMA page_size").get() as { page_size: number }
+  ).page_size;
+  const pages = (raw.query("PRAGMA page_count").get() as { page_count: number })
+    .page_count;
+  const free = (
+    raw.query("PRAGMA freelist_count").get() as { freelist_count: number }
+  ).freelist_count;
+  raw.close();
+  const file = pages * pageSize;
+  const wal = join(dir, `${LIBRARY_FILE}-wal`);
+  const walBytes = existsSync(wal) ? statSync(wal).size : 0;
+  library.shutdown();
+  const used = file - free * pageSize;
+  if (used > 3 * live)
+    failures.push(`file minus free pages ${used} B > 3× live state ${live} B`);
+  removeDir(dir);
+  return {
+    name: "T23",
+    pass: failures.length === 0,
+    summary: `${days} days × 200 edits on a ${(live / 1048576).toFixed(1)} MB document (5,000 headings): ${compactions} compactions; file ${(file / 1048576).toFixed(1)} MB, free ${((free * pageSize) / 1048576).toFixed(1)} MB, WAL ${(walBytes / 1048576).toFixed(1)} MB, live state ${(live / 1048576).toFixed(1)} MB; file minus free pages = ${(used / live).toFixed(2)}× live (mark ≤ 3×)`,
+    details: {
+      days,
+      live,
+      file,
+      free: free * pageSize,
+      walBytes,
+      compactions,
+      maxSeen,
+    },
+    failures,
+  };
+}
+
+// ── T20 / T20b, storage half: an 8 MiB document, then the 32 MiB cap ──
+
+async function caseT20(): Promise<CaseResult> {
+  const dir = mkdtempSync(join(tmpdir(), "soak-t20-"));
+  const failures: string[] = [];
+  const library = openEngine(dir);
+  const { id } = library.createDoc({ title: "long-8m" });
+  library.load(id, "seed");
+  const doc = buildLongDoc(5000, 1600);
+  const state = Y.encodeStateAsUpdate(doc);
+  const seq = library.append(id, "seed", { origin: "local", update: state });
+  library.close(id, "seed");
+  library.shutdown();
+  void seq;
+  const run = await runHarness(
+    ["--mode=long-doc", `--dir=${dir}`, `--doc=${id}`, "--grow"],
+    () => {},
+    300_000,
+  );
+  const line = run.lines.find((l) => l.startsWith("LONGDOC "));
+  const result = line ? JSON.parse(line.slice(8)) : null;
+  if (!result) failures.push(`no result: ${run.stderr.slice(0, 500)}`);
+  else {
+    if (!result.refused)
+      failures.push("the 32 MiB cap never refused an append");
+    if (!result.deleteOk) failures.push("a deletion at the cap was refused");
+    const openBudget = process.platform === "darwin" ? 2000 : 3000;
+    if (result.loadMs + result.applyMs > openBudget * 1.5)
+      failures.push(
+        `open ${Math.round(result.loadMs + result.applyMs)} ms, provisional mark ${openBudget} ms (× 1.5)`,
+      );
+  }
+  removeDir(dir);
+  return {
+    name: "T20",
+    pass: failures.length === 0,
+    summary: result
+      ? `long-8m (${(result.bytes / 1048576).toFixed(1)} MB, 5,000 headings): worker load ${Math.round(result.loadMs)} ms + apply ${Math.round(result.applyMs)} ms; compaction with the I10 check ${Math.round(result.compactMs)} ms (provisional mark 320 ms, reported); T20b: grew to the cap (${(result.appended / 1048576).toFixed(0)} MB appended), then refused, a deletion still passed; main RSS ${(result.rss / 1048576).toFixed(0)} MB. Typing marks wait for B0.`
+      : "no result",
+    details: result ?? {},
+    failures,
+  };
+}
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 const CASES: Record<string, () => Promise<CaseResult>> = {
@@ -998,6 +1356,11 @@ const CASES: Record<string, () => Promise<CaseResult>> = {
   T5: () => caseT5(Number(args["migration-kills"] ?? 40)),
   T6: caseT6,
   T8: caseT8,
+  T20: caseT20,
+  T23: caseT23,
+  T24: caseT24,
+  T24b: caseT24b,
+  T21: () => caseT21({ runHarness, removeDir, args }),
 };
 
 const selected =

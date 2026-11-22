@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
+import { BOOT_SCRIPT } from "@/lib/prefs/boot-script";
+import { PREF_ATTRIBUTES } from "@/lib/prefs/schema";
 import { THEME_COLOR, THEME_COLOR_DARK } from "@/lib/site-config";
-import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { importFresh, resetModules } from "@/tests/helpers/import-fresh";
 
 type ThemeModule = typeof import("@/lib/theme");
@@ -42,7 +43,7 @@ function stubColorScheme(initialDark: boolean) {
 let media: ReturnType<typeof stubColorScheme> | null = null;
 const spies: { mockRestore(): void }[] = [];
 
-const runBoot = () => new Function(THEME_BOOT_SCRIPT)();
+const runBoot = () => new Function(BOOT_SCRIPT)();
 const isDark = () => document.documentElement.classList.contains("dark");
 const themeMeta = () =>
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -65,6 +66,10 @@ afterEach(() => {
   media?.restore();
   media = null;
   document.documentElement.classList.remove("dark");
+  // The boot script marks itself done (one applier per load).
+  for (const name of PREF_ATTRIBUTES) {
+    document.documentElement.removeAttribute(name);
+  }
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
     meta.remove();
   }
@@ -142,6 +147,7 @@ describe("theme boot script", () => {
     media = stubColorScheme(true);
     runBoot();
     document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-prefs");
     for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
       meta.remove();
     }

@@ -41,9 +41,7 @@ body {
   background: transparent;
 }
 
-.tiptap.ProseMirror {
-  font-family: Arial, sans-serif;
-}
+// The document's font, size and width: `styles/_page.scss`.
 
 // Landscape notches: the shell keeps its content beside them (the tab
 // strip pads the top itself, so its colour runs under the status bar).
@@ -100,7 +98,6 @@ body {
 }
 
 .document-editor-content {
-  max-width: 648px;
   width: 100%;
   margin: 0.75rem auto;
   min-height: calc(100% - 1.5rem);

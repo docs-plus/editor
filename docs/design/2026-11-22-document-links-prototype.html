@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document links prototype</title>
+<!--
+  Throwaway clickable prototype for the LK1 linking-UX review (2026-11-22):
+  docs/superpowers/specs/2026-11-16-search-linking-design.md §4–§8 and the
+  "Proposed, pending owner approval (2026-11-22)" amendments in that spec.
+  Not app code. Tokens are app/globals.css, document-editor.scss (--hl-*) and
+  paragraph-node.scss (--link-text-color) values. The document is static HTML
+  with a drawn caret; the app uses Tiptap and @docs.plus/extension-hyperlink.
+  Scripting hook for screenshots: window.__proto.set({...}).
+-->
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" integrity="sha384-hJnF5AwidE18GSWTAGHv3ByzzvfNZ1Tcx5y1UUV3WkauuMCEzBJBMSwSt/PUPXnM" crossorigin="anonymous"></script>
+<style>
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --border: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --focus-ring: oklch(0.439 0 0);
+  --primary: oklch(0.555 0.163 48.998);
+  --primary-foreground: oklch(0.987 0.022 95.277);
+  --destructive: oklch(0.577 0.245 27.325);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --page-bg: oklch(0.985 0.002 247);
+  --selection: oklch(0.88 0.06 250);
+  --link-text-color: #1155cc;
+  --radius: 0.45rem;
+  --shadow: 0 20px 25px -5px rgba(0,0,0,.08), 0 8px 10px -6px rgba(0,0,0,.08);
+  --pill-bg: oklch(0.205 0 0);
+  --pill-fg: oklch(0.985 0 0);
+  --tc-red: #dc2626; --tc-green: #15803d; --hl-yellow-bg: #fef08a; --hl-blue-bg: #bfdbfe;
+  --banner: oklch(0.96 0.03 85);
+  --review: oklch(0.55 0.15 300);
+}
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --ring: oklch(0.556 0 0);
+  --focus-ring: oklch(0.87 0 0);
+  --primary: oklch(0.473 0.137 46.201);
+  --destructive: oklch(0.704 0.191 22.216);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --page-bg: oklch(0.17 0 0);
+  --selection: oklch(0.42 0.08 250);
+  --link-text-color: #93c5fd;
+  --shadow: 0 20px 25px -5px rgba(0,0,0,.5), 0 8px 10px -6px rgba(0,0,0,.4);
+  --pill-bg: oklch(0.92 0 0);
+  --pill-fg: oklch(0.145 0 0);
+  --tc-red: #f87171; --tc-green: #4ade80; --hl-yellow-bg: #574f12; --hl-blue-bg: #1e3a5f;
+  --banner: oklch(0.3 0.04 85);
+  --review: oklch(0.75 0.14 300);
+}
+/* The editor maps the package skin onto shadcn tokens (document-editor.scss 194–201). */
+.device {
+  --hl-bg: var(--popover); --hl-fg: var(--popover-foreground); --hl-muted: var(--muted-foreground);
+  --hl-border: var(--border); --hl-hover: var(--accent); --hl-accent: #2563eb; --hl-accent-fg: #fff;
+  --hl-radius: 10px; --hl-radius-sm: 8px; --hl-hovercard-width: 20rem;
+}
+.dark .device { --hl-accent: #60a5fa; --hl-accent-fg: #0b1220; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page-bg); color: var(--foreground);
+}
+[data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after { transition: none !important; animation: none !important; }
+button { font: inherit; color: inherit; }
+svg.lucide { width: 16px; height: 16px; stroke-width: 2; flex: none; }
+[dir="rtl"] .flip-rtl svg, [dir="rtl"] svg.flip-rtl { transform: scaleX(-1); }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+kbd { font: 11px ui-monospace, SFMono-Regular, monospace; direction: ltr; unicode-bidi: isolate; padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--muted); }
+
+/* ── Controls (review chrome, not product UI) ───────────── */
+.controls {
+  position: sticky; top: 0; z-index: 100; background: var(--card); border-block-end: 1px solid var(--border);
+  padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px;
+}
+.controls h1 { font-size: 13px; margin: 0; margin-inline-end: 8px; font-weight: 600; }
+.ctl { display: inline-flex; align-items: center; gap: 4px; }
+.ctl > span { color: var(--muted-foreground); }
+.ctl.dec > span { color: var(--review); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 3px 8px; cursor: pointer; font-size: 12px; }
+.seg button[aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.controls select { font: inherit; font-size: 12px; padding: 2px 4px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 6px; }
+.controls .reset { border: 1px solid var(--border); background: transparent; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.hint { flex-basis: 100%; color: var(--muted-foreground); font-size: 12px; }
+
+/* ── Device and app shell ───────────────────────────────── */
+.stage-wrap { display: flex; justify-content: center; padding: 16px 0; }
+.device {
+  position: relative; width: min(var(--w, 1440px), 100%); height: var(--h, 860px);
+  background: var(--background); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.titlebar { flex: none; height: 40px; display: flex; align-items: center; gap: 6px; padding-inline: 12px; background: var(--sidebar); border-block-end: 1px solid var(--border); }
+.lights { display: flex; gap: 6px; margin-inline-end: 10px; }
+.lights i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); display: block; }
+.navbtn { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; display: grid; place-items: center; cursor: pointer; }
+.navbtn:hover:not(:disabled) { background: var(--accent); }
+.navbtn:disabled { opacity: .35; cursor: default; }
+.tabs { display: flex; gap: 4px; margin-inline-start: 8px; min-width: 0; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 7px; font-size: 13px; color: var(--muted-foreground); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: transparent; cursor: pointer; }
+.tab.on { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
+.tab svg { width: 14px; height: 14px; }
+.shell { flex: 1; min-height: 0; display: flex; }
+.lib { width: 248px; flex: none; background: var(--sidebar); border-inline-end: 1px solid var(--sidebar-border); padding: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.device[data-narrow] .lib { display: none; }
+.lib-search { display: flex; align-items: center; gap: 8px; height: 30px; padding-inline: 8px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); color: var(--muted-foreground); }
+.lib-search span { flex: 1; }
+.lib-search svg { width: 14px; height: 14px; }
+.lib-row { display: flex; align-items: center; gap: 6px; height: 28px; padding-inline: 8px; border-radius: 6px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row svg { width: 15px; height: 15px; color: var(--muted-foreground); }
+.lib-row.sel { background: var(--sidebar-accent); font-weight: 500; }
+.lib-row.l1 { padding-inline-start: 22px; } .lib-row.l2 { padding-inline-start: 36px; }
+.lib-sep { height: 1px; background: var(--sidebar-border); margin: 6px 4px; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.toolbar { flex: none; height: 44px; display: flex; align-items: center; gap: 2px; padding-inline: 10px; border-block-end: 1px solid var(--border); background: var(--background); }
+.tb { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.tb:hover { background: var(--muted); }
+.tb[aria-pressed="true"] { background: var(--muted); }
+.toolbar .sep { width: 1px; height: 20px; background: var(--border); margin-inline: 6px; }
+.toolbar .grow { flex: 1; }
+.modeseg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; font-size: 12px; }
+.modeseg button { border: 0; background: transparent; padding: 4px 10px; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+.modeseg button svg { width: 14px; height: 14px; }
+.modeseg button[aria-pressed="true"] { background: var(--muted); font-weight: 600; }
+.scroller { position: relative; flex: 1; overflow: auto; background: var(--page-bg); }
+.page { max-width: 760px; margin: 24px auto 0; background: var(--background); border: 1px solid var(--border); border-radius: 10px; padding: 40px 56px 0; min-height: calc(100% - 24px); }
+.device[data-narrow] .page { margin: 0; border-radius: 0; border: 0; padding: 28px 24px 0; max-width: none; }
+.page .tail { height: 55vh; }
+.page.wide { max-width: 1080px; }
+.gallery table { table-layout: fixed; }
+.banner { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: -16px 0 20px; border-radius: 8px; background: var(--banner); font-size: 13px; }
+.banner .grow { flex: 1; }
+.btn { border: 1px solid var(--border); background: var(--background); border-radius: 7px; padding: 4px 10px; cursor: pointer; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { background: var(--accent); }
+.btn.primary { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.btn svg { width: 14px; height: 14px; }
+
+/* ── Document ───────────────────────────────────────────── */
+.doc { font-size: 16px; line-height: 1.65; }
+.doc h1 { font-size: 30px; line-height: 1.25; margin: 0 0 18px; }
+.doc h2 { font-size: 21px; line-height: 1.3; margin: 30px 0 10px; scroll-margin-top: 16px; }
+.doc h2[tabindex]:focus-visible, .doc h2.arrived { outline: 2px solid var(--focus-ring); outline-offset: 4px; border-radius: 3px; }
+.doc p { margin: 0 0 12px; }
+.doc ul { margin: 0 0 12px; padding-inline-start: 22px; }
+.doc table { border-collapse: collapse; margin: 6px 0 14px; width: 100%; font-size: 15px; }
+.doc td, .doc th { border: 1px solid var(--border); padding: 6px 10px; text-align: start; }
+.doc th { background: var(--muted); font-weight: 600; }
+.doc .big { font-size: 22px; }
+.doc .c-red { color: var(--tc-red); }
+.doc .c-green { color: var(--tc-green); }
+.doc mark { background: var(--hl-yellow-bg); color: inherit; padding: 0 1px; }
+.doc mark.blue { background: var(--hl-blue-bg); }
+.doc .sel { background: var(--selection); }
+.doc .placeholder { color: var(--muted-foreground); }
+/* Links: paragraph-node.scss */
+.doc a { color: var(--link-text-color); text-decoration: underline; text-underline-offset: 0.15em; cursor: text; }
+:root[data-mod] .doc a, .device[data-mode="read"] .doc a { cursor: pointer; }
+/* Proposed doc-links.css: icon is currentColor in the package's 1em box and 0.25em gap. */
+/* Glue (probe 2026-11-22, headless Chromium, 201 widths × LTR/RTL): the icon span is display:inline + white-space:nowrap
+   with a word joiner (U+2060) after the svg, so a line never breaks between the icon and the first word (0 splits).
+   inline-block (the package default), the word joiner alone, or nowrap alone split at 18–29% of widths. */
+.doc a .doc-link-icon { display: inline; white-space: nowrap; color: currentColor; pointer-events: none; }
+/* The gap sits on the svg, not the inline span: an inline span's end margin detaches from the icon when bidi reorders an LTR title inside RTL text. */
+.doc a .doc-link-icon > svg { display: inline-block; width: 1em; height: 1em; margin-inline-end: 0.25em; vertical-align: -0.125em; stroke-width: 2; }
+.device[data-noglue] .doc a .doc-link-icon { display: inline-block; white-space: normal; }
+.doc a.is-broken, .doc a.is-broken span:not(.doc-link-icon) { text-decoration-line: underline; text-decoration-style: dashed; text-decoration-thickness: max(1px, 0.07em); }
+.device[data-iso] .doc a.doc-link { unicode-bidi: isolate; }
+.doc a.caret-in { background: color-mix(in oklab, var(--link-text-color) 12%, transparent); border-radius: 2px; }
+.caret { display: inline-block; width: 2px; height: 1.15em; margin-inline: -1px; vertical-align: -0.2em; background: var(--foreground); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Linked from (LK4 preview) ──────────────────────────── */
+.lf { margin: 36px 0 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.lf h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.lf-toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px 6px; margin-inline-start: -6px; border-radius: 6px; cursor: pointer; color: var(--muted-foreground); font-weight: 600; font-size: 14px; }
+.lf-toggle:hover { background: var(--muted); color: var(--foreground); }
+.lf-toggle svg { width: 15px; height: 15px; }
+.lf ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.doc .lf-row { display: block; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; cursor: pointer; }
+.doc .lf-row:hover, .doc .lf-row:focus-visible { background: var(--muted); }
+.doc .lf-row:hover .lf-src b { text-decoration: underline; }
+.lf-src { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.lf-src svg { width: 14px; height: 14px; color: var(--muted-foreground); }
+.lf-src .h { color: var(--muted-foreground); }
+.lf-ctx { font-size: 13px; color: var(--muted-foreground); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lf-ctx b { color: var(--foreground); font-weight: 600; }
+
+/* ── Floating layer ─────────────────────────────────────── */
+.layer { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+.layer > * { pointer-events: auto; }
+.pop { position: absolute; transform-origin: top center; animation: pop-in 120ms ease-out; }
+.pop.leaving { animation: pop-out 80ms ease-in forwards; }
+@keyframes pop-in { from { opacity: 0; transform: scale(.96); } }
+@keyframes pop-out { to { opacity: 0; transform: scale(.96); } }
+.tag-preview { position: absolute; inset-block-start: calc(100% + 4px); inset-inline-start: 2px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--review); white-space: nowrap; }
+
+/* Stock preview popover skin (@docs.plus/extension-hyperlink styles.css) */
+.hl-stock { display: flex; align-items: center; gap: 6px; padding: 8px; background: var(--hl-bg); color: var(--hl-fg); border: 1px solid var(--hl-border); border-radius: var(--hl-radius); box-shadow: var(--shadow); font-size: 14px; line-height: 1.4; }
+.hl-stock a { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; color: var(--hl-accent); text-decoration: none; font-weight: 500; direction: ltr; }
+.hl-stock button { display: flex; align-items: center; justify-content: center; padding: 5px; background: transparent; border: 0; border-radius: var(--hl-radius-sm); cursor: pointer; }
+.hl-stock button:hover { background: var(--hl-hover); }
+.hl-stock button svg { width: 18px; height: 18px; }
+.hl-stock .copy { margin-inline-start: auto; }
+
+/* Proposed document-link preview (Decision 4). Same shell as the stock popover. */
+.dlp { width: 22rem; max-width: calc(100% - 16px); padding: 6px; background: var(--hl-bg); color: var(--hl-fg); border: 1px solid var(--hl-border); border-radius: var(--hl-radius); box-shadow: var(--shadow); font-size: 14px; line-height: 1.4; }
+.dlp-main { display: flex; gap: 10px; align-items: flex-start; padding: 6px 6px 8px; }
+.dlp-icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--hl-muted); }
+.dlp-icon svg { width: 18px; height: 18px; }
+.dlp-text { min-width: 0; flex: 1; }
+.dlp-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dlp-title .h { font-weight: 500; color: var(--hl-muted); }
+.dlp-path { color: var(--hl-muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dlp-copy { color: var(--hl-fg); }
+.dlp-actions { display: flex; align-items: center; gap: 2px; padding-top: 6px; border-top: 1px solid var(--hl-border); }
+.dlp-actions .grow { flex: 1; }
+.act { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; background: transparent; border-radius: var(--hl-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.act:hover { background: var(--hl-hover); }
+.act.icon { width: 30px; padding: 0; justify-content: center; color: var(--hl-muted); }
+.act.icon:hover { color: var(--hl-fg); }
+.act svg { width: 16px; height: 16px; }
+.act.danger { color: var(--destructive); }
+.act[data-copied] { color: var(--tc-green); }
+
+/* Hovercard (LK4 preview): package frame .hyperlink-hovercard at 20rem, custom render */
+.hc { width: var(--hl-hovercard-width); max-width: calc(100% - 16px); overflow: hidden; background: var(--hl-bg); color: var(--hl-fg); border: 1px solid var(--hl-border); border-radius: var(--hl-radius); box-shadow: var(--shadow); font-size: 13px; line-height: 20px; }
+.hc-body { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
+.hc-title { font-size: 14px; font-weight: 600; display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.hc-title .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-title .h { color: var(--hl-muted); font-weight: 500; white-space: nowrap; }
+.hc-snip { margin: 0; color: var(--hl-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hc-meta { color: var(--hl-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hc-state { display: flex; gap: 8px; align-items: flex-start; }
+.hc-state svg { width: 16px; height: 16px; margin-top: 2px; color: var(--hl-muted); }
+.hc-foot { display: flex; align-items: center; gap: 2px; min-height: 40px; padding: 4px; padding-inline-start: 6px; border-top: 1px solid var(--hl-border); }
+.hc-foot .grow { flex: 1; }
+
+/* Link picker (LK2 preview): the ⌘K popover with Documents */
+.picker { width: 27rem; max-width: calc(100% - 16px); background: var(--hl-bg); color: var(--hl-fg); border: 1px solid var(--hl-border); border-radius: var(--hl-radius); box-shadow: var(--shadow); font-size: 14px; }
+.pk-input { display: flex; align-items: center; gap: 8px; margin: 8px; padding: 6px 8px; border: 1px solid var(--hl-accent); box-shadow: 0 0 0 1px var(--hl-accent); border-radius: var(--hl-radius-sm); }
+.pk-input svg { color: var(--hl-muted); width: 18px; height: 18px; }
+.pk-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; }
+.pk-list { max-height: 300px; overflow: auto; padding: 0 4px 4px; }
+.pk-group { font-size: 11.5px; font-weight: 600; color: var(--hl-muted); padding: 8px 8px 4px; }
+.pk-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 8px; border-radius: 7px; cursor: pointer; }
+.pk-row[aria-selected="true"] { background: var(--hl-hover); }
+.pk-row svg { width: 16px; height: 16px; color: var(--hl-muted); }
+.pk-row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-row .t b { font-weight: 700; }
+.pk-row .path { color: var(--hl-muted); font-size: 12.5px; white-space: nowrap; }
+.pk-row .chev { color: var(--hl-muted); }
+.pk-row.note, .pk-row.loading { cursor: default; color: var(--hl-muted); font-size: 13px; }
+.pk-row.loading .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hl-border); border-top-color: var(--hl-muted); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pk-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 2px; font-size: 12.5px; color: var(--hl-muted); }
+.pk-head button { border: 0; background: transparent; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; color: var(--hl-fg); font-weight: 600; padding: 2px 4px; border-radius: 6px; }
+.pk-head button:hover { background: var(--hl-hover); }
+.pk-foot { display: flex; gap: 14px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--hl-border); font-size: 12px; color: var(--hl-muted); }
+.pk-foot .note { margin-inline-start: auto; }
+
+/* Pills, dialogs, review strip */
+.pills { position: absolute; inset-block-end: 44px; inset-inline-start: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 40; }
+[dir="rtl"] .pills { transform: translateX(50%); }
+.pill { display: flex; align-items: center; gap: 10px; max-width: min(560px, calc(100vw - 32px)); padding: 8px 10px 8px 14px; padding-inline: 14px 10px; border-radius: 10px; background: var(--pill-bg); color: var(--pill-fg); font-size: 13px; box-shadow: var(--shadow); animation: pop-in 120ms ease-out; }
+.pill svg { width: 16px; height: 16px; }
+.pill button { border: 0; background: color-mix(in oklab, var(--pill-fg) 14%, transparent); color: inherit; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-weight: 600; font-size: 12px; white-space: nowrap; }
+.scrim { position: absolute; inset: 0; background: oklch(0 0 0 / .35); display: grid; place-items: center; z-index: 45; }
+.dialog { width: min(460px, calc(100% - 32px)); background: var(--popover); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 20px; animation: pop-in 120ms ease-out; }
+.dialog h2 { margin: 0 0 8px; font-size: 17px; }
+.dialog p { margin: 0 0 10px; color: var(--muted-foreground); font-size: 13.5px; }
+.dialog .lk1-line { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 8px; background: var(--muted); color: var(--foreground); font-size: 13.5px; outline: 2px dashed var(--review); outline-offset: 2px; }
+.dialog .lk1-line svg { margin-top: 2px; }
+.dialog .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.strip { flex: none; display: flex; gap: 18px; align-items: center; height: 30px; padding-inline: 12px; border-top: 1px dashed var(--review); font-size: 11.5px; color: var(--muted-foreground); background: var(--sidebar); overflow: hidden; white-space: nowrap; }
+.strip b { color: var(--review); font-weight: 600; }
+.strip .v { color: var(--foreground); overflow: hidden; text-overflow: ellipsis; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* State gallery (review sheet) */
+.gallery { font-size: 14px; }
+.gallery h1 { font-size: 24px; margin: 0 0 4px; }
+.gallery > p { color: var(--muted-foreground); margin: 0 0 16px; }
+.gallery table { border-collapse: collapse; width: 100%; }
+.gallery th, .gallery td { text-align: start; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.gallery th { font-size: 12px; color: var(--muted-foreground); font-weight: 600; }
+.gallery td.name { font: 12px ui-monospace, monospace; color: var(--muted-foreground); }
+.gallery .static .dlp { width: 100%; box-shadow: none; }
+.gallery .doc { font-size: 15px; }
+.gallery .sname { font-weight: 600; }
+.gallery .sdesc { color: var(--muted-foreground); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="controls" role="group" aria-label="Prototype controls">
+  <h1>Document links: LK1 UX review</h1>
+  <div class="ctl"><span>Screen</span>
+    <select id="scene" aria-label="Screen">
+      <option value="text">1. In text</option>
+      <option value="states">2. Link states (§4.6)</option>
+      <option value="preview">3. Preview popover (click / Mod-K)</option>
+      <option value="follow">4. After following</option>
+      <option value="removed">4b. Section removed</option>
+      <option value="trash">4c. Open a link to Trash</option>
+      <option value="back">5. Back</option>
+      <option value="hint">6. First-time hint</option>
+      <option value="consent">6b. Consent window line</option>
+      <option value="picker">7. Link picker (LK2 preview)</option>
+      <option value="hover">8. Hovercard (LK4 preview)</option>
+      <option value="keyboard">8b. Keyboard path: Mod-K dialog</option>
+      <option value="linked">9. Linked from (LK4 preview)</option>
+    </select>
+  </div>
+  <div class="ctl"><span>Theme</span><div class="seg" data-k="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+  <div class="ctl"><span>Direction</span><div class="seg" data-k="dir"><button data-v="ltr">LTR</button><button data-v="rtl">RTL</button></div></div>
+  <div class="ctl"><span>Width</span><div class="seg" data-k="width"><button data-v="1440">1440</button><button data-v="820">820</button></div></div>
+  <div class="ctl"><span>Mode</span><div class="seg" data-k="mode"><button data-v="edit">Editing</button><button data-v="read">Reading</button></div></div>
+  <div class="ctl"><span>Motion</span><div class="seg" data-k="motion"><button data-v="full">Full</button><button data-v="reduce">Reduced</button></div></div>
+  <button class="reset" id="reset">Reset</button>
+  <div class="ctl dec"><span>D1</span><div class="seg" data-k="d1"><button data-v="B">B: one "not available"</button><button data-v="A">A: deleted + not in library</button></div></div>
+  <div class="ctl dec"><span>D2 Trash icon</span><div class="seg" data-k="d2"><button data-v="minus">FileMinus</button><button data-v="trash">Trash2</button></div></div>
+  <div class="ctl dec"><span>D3 here# icon</span><div class="seg" data-k="d3"><button data-v="hash">Hash</button><button data-v="file">FileText</button></div></div>
+  <div class="ctl dec"><span>D4 popover</span><div class="seg" data-k="d4"><button data-v="custom">Document preview</button><button data-v="stock">Stock</button></div></div>
+  <div class="ctl dec"><span>D7 closed-doc headings</span><div class="seg" data-k="d7"><button data-v="lazy">Lazy load on ⇥</button><button data-v="whole">Whole document only</button></div></div>
+  <div class="ctl"><span>Icon glue</span><div class="seg" data-k="glue"><button data-v="on">Word joiner</button><button data-v="off">Off (inline-block, LK1 today)</button></div></div>
+  <div class="ctl"><span>RTL anchor isolate</span><div class="seg" data-k="iso"><button data-v="off">Off</button><button data-v="on">On</button></div></div>
+  <p class="hint">Purple labels are owner decisions; the first option is the recommendation. Try: a plain click on a link while editing (preview), ⌘/Ctrl-click or Alt+Enter (follow), ⌘⇧-click (new tab), Reading mode then hover a document link (card) or Tab to it and press ⌘K (dialog), ⌘[ or Alt+← (Back), the toolbar link button (picker; ⇥ or → for headings). The dashed strip at the bottom of the frame is a review aid that shows what a screen reader hears; it is not product UI.</p>
+</div>
+<div class="stage-wrap"><div class="device" id="device"></div></div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const icon = (name, cls = "") => `<i data-lucide="${name}" class="${cls}" aria-hidden="true"></i>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/* ── Copy: one table, mirroring spec §8 (with the proposed 2026-11-22 rows) ── */
+const COPY = {
+  inTrash: (t) => `“${t}” is in Trash.`,
+  deleted: "This document was deleted.",
+  notInLibrary: "This links to a document that isn't in your library.",
+  notAvailable: "This links to a document that isn't in your library. It may have been deleted.",
+  newer: "This link needs a newer version of TinyDocy.",
+  sectionRemoved: "The section this link pointed to was removed.",
+  arrival: (t, h) => (h ? `Opened ${t}, at ${h}.` : `Opened ${t}.`),
+  newTab: (t) => `Opened ${t} in a new tab.`,
+  firstHint: "Link text is part of the document. If you share it, people see the text but can't open your documents.",
+  consent: (n) => `This document links to ${n} of your documents. People you share with will see the link text but can't open them.`,
+  linkedFrom: (n) => `Linked from ${n} documents`,
+  selfNote: "This document isn't listed. Its headings are under In this document.",
+  loadingHeadings: "Loading headings…",
+  wholeOnly: "Headings are listed only for this document.",
+  trashBanner: (t) => `“${t}” is in Trash.`,
+};
+
+/* ── Library ──────────────────────────────────────────── */
+const DOCS = {
+  board: { title: "Board notes", fa: "یادداشت‌های هیئت‌مدیره", path: ["Library", "Work", "Board"], edited: "Today" },
+  budget: {
+    title: "Q4 budget", path: ["Library", "Work", "Finance"], edited: "12 Nov",
+    headings: { overview: "Overview", approvals: "Approvals", travel: "Travel", assumptions: "Assumptions" },
+    snippet: "Spending for October to December across the four teams, with travel, hiring and tools broken out. Totals stay frozen until the board signs off.",
+  },
+  archive: { title: "Q4 budget 2025 (archive)", path: ["Library", "Archive"], edited: "3 Jan 2026", headings: { summary: "Summary", actuals: "Actuals" }, snippet: "Last year's numbers, kept for comparison." },
+  roadmap: { title: "Roadmap 2027", path: ["Library", "Work", "Product"], edited: "9 Nov", headings: { themes: "Themes", milestones: "Milestones" }, snippet: "Three themes for next year and the milestones that prove them." },
+  offsite: { title: "Team offsite", path: ["Library", "Work", "Team"], edited: "10 Nov", headings: { logistics: "Logistics" } },
+  sync: { title: "Weekly sync 14 Nov", path: ["Library", "Work", "Board"], edited: "14 Nov", headings: { finance: "Finance" } },
+  hiring: { title: "Hiring plan", path: ["Library", "Work", "Team"], edited: "2 Nov", snippet: "Two roles for the first quarter, pending the budget." },
+};
+const PICKABLE = ["budget", "archive", "roadmap", "offsite", "sync"]; // board is this document; hiring is in Trash; templates never listed
+
+/* Links in Board notes. kind: doc | here | web | deleted | notinlib | unknown */
+const LINKS = {
+  L1: { kind: "doc", doc: "budget", text: "Q4 budget draft" },
+  L2: { kind: "doc", doc: "budget", h: "travel", text: "Q4 budget › Travel" },
+  L3: { kind: "here", h: "assumptions", text: "budget assumptions", fa: "فرضیات بودجه" },
+  L4: { kind: "doc", doc: "hiring", text: "Hiring plan" },
+  L4b: { kind: "doc", doc: "hiring", text: "Hiring plan" },
+  L5: { kind: "deleted", text: "old vendor list", fa: "فهرست قدیمی فروشندگان" },
+  L6: { kind: "notinlib", text: "partner contract", fa: "قرارداد شریک" },
+  L7: { kind: "unknown", text: "link from a newer version", fa: "پیوندی از نسخهٔ جدیدتر" },
+  L8: { kind: "web", url: "https://example.com/pricing", text: "example.com/pricing" },
+  L9: { kind: "doc", doc: "roadmap", h: "launch", text: "Roadmap 2027 › Launch" },
+  L10: { kind: "doc", doc: "budget", text: "Q4 budget", style: "c-red" },
+  L11: { kind: "doc", doc: "budget", h: "travel", text: "Travel", style: "big" },
+  L12: { kind: "doc", doc: "budget", text: "Q4 budget" },
+  L13: { kind: "deleted", text: "old vendor list", style: "c-green", fa: "فهرست قدیمی فروشندگان" },
+  L14: { kind: "doc", doc: "roadmap", h: "milestones", text: "Roadmap 2027 › Milestones" },
+  L15: { kind: "doc", doc: "budget", h: "travel", text: "Q4 budget › Travel" },
+  L16: { kind: "deleted", text: "old vendor list", fa: "فهرست قدیمی فروشندگان" },
+  L17: { kind: "doc", doc: "budget", h: "travel", text: "بودجهٔ Q4 › سفر" },
+  L18: { kind: "deleted", text: "فهرست قدیمی فروشندگان" },
+  L19: { kind: "doc", doc: "budget", h: "travel", text: "Q4 budget › Travel" }, // English-in-RTL summary
+  L20: { kind: "notinlib", text: "partner contract" },
+  N1: { kind: "doc", doc: "budget", text: "budget" }, // inserted by the picker
+};
+const BOARD_HEADINGS = { decisions: "Decisions", styled: "Links in styled text", assumptions: "Budget assumptions", followups: "Follow-ups" };
+const BOARD_HEADINGS_FA = { decisions: "تصمیم‌ها", styled: "پیوند در متن قالب‌دار", assumptions: "فرضیات بودجه", followups: "پیگیری‌ها" };
+
+/* ── State ────────────────────────────────────────────── */
+const DEFAULTS = {
+  theme: "light", dir: "ltr", width: "1440", mode: "edit", motion: "full",
+  d1: "B", d2: "minus", d3: "hash", d4: "custom", d7: "lazy", iso: "off", glue: "on",
+  scene: "text",
+};
+const TRANSIENT = () => ({
+  doc: "board", tabs: ["board"], history: [], forward: [], trashed: ["hiring"], removed: [], renamedText: {},
+  caret: null, focusLink: null, popover: null, picker: null, pills: [], announce: "", gesture: "",
+  inserted: false, hintShown: false, consent: false, lfOpen: false, arrivedHeading: null, scrollTo: null, scrollTop: 0,
+});
+const S = Object.assign({}, DEFAULTS, TRANSIENT());
+let modHeld = false;
+const isRtl = () => S.dir === "rtl";
+const docTitle = (id) => (id === "board" && isRtl() ? DOCS.board.fa : DOCS[id].title);
+const headingName = (doc, h) => (doc === "board" ? (isRtl() ? BOARD_HEADINGS_FA : BOARD_HEADINGS)[h] : DOCS[doc].headings?.[h]);
+const shortPath = (p) => (p.length > 2 ? "… › " + p[p.length - 1] : p.join(" › "));
+
+/* The resolver: link → state, from the index snapshot (here: DOCS + S.trashed). */
+function stateOf(id) {
+  const l = LINKS[id];
+  switch (l.kind) {
+    case "web": return "web";
+    case "here": return "here";
+    case "unknown": return "unknown_form";
+    case "deleted": return S.d1 === "B" ? "not_available" : "deleted";
+    case "notinlib": return S.d1 === "B" ? "not_available" : "not_in_library";
+    default: return S.trashed.includes(l.doc) ? "in_trash" : "resolves";
+  }
+}
+const BROKEN = new Set(["deleted", "not_in_library", "not_available", "unknown_form"]);
+function stateIcon(st) {
+  return {
+    resolves: "file-text", here: S.d3 === "hash" ? "hash" : "file-text",
+    in_trash: S.d2 === "minus" ? "file-minus" : "trash-2", deleted: "file-x",
+    not_in_library: "file-question", not_available: "file-question", unknown_form: "file-question",
+  }[st];
+}
+/* Non-resolving icons are role=img with a label, so the state prefixes the accessible name. */
+const STATE_LABEL = { in_trash: "In Trash", deleted: "Deleted", not_in_library: "Not in your library", not_available: "Not in your library", unknown_form: "Needs a newer version" };
+const linkText = (id) => S.renamedText[id] || (isRtl() && LINKS[id].fa) || LINKS[id].text;
+
+function A(id) {
+  const l = LINKS[id];
+  const text = linkText(id);
+  if (S.removed.includes(id)) return l.style ? `<span class="${l.style}">${esc(text)}</span>` : esc(text);
+  const st = stateOf(id);
+  const caret = S.caret === id ? `<span class="caret" aria-hidden="true"></span>` : "";
+  const inner = l.style ? `<span class="${l.style}">${esc(text)}</span>` : esc(text);
+  if (st === "web") return `<a href="${l.url}" data-link="${id}" ${S.mode === "edit" ? 'tabindex="-1"' : ""} class="web-link${S.caret === id ? " caret-in" : ""}">${inner}${caret}</a>`;
+  const label = STATE_LABEL[st];
+  const ic = `<span class="doc-link-icon" data-link-state="${st}" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${icon(stateIcon(st))}${S.glue === "on" ? "&#8288;" : ""}</span>`;
+  return `<a href="#" data-link="${id}" ${S.mode === "edit" ? 'tabindex="-1"' : ""} class="doc-link${BROKEN.has(st) ? " is-broken" : ""}${S.caret === id ? " caret-in" : ""}">${ic}${inner}${caret}</a>`;
+}
+function accName(id) {
+  const st = stateOf(id);
+  return (STATE_LABEL[st] ? STATE_LABEL[st] + " " : "") + linkText(id);
+}
+
+/* ── Documents ────────────────────────────────────────── */
+const H = (doc, id) => `<h2 id="h-${id}" data-toc="${id}" dir="auto" ${S.arrivedHeading === id && S.mode === "read" ? 'tabindex="-1"' : ""}>${esc(headingName(doc, id))}${S.arrivedHeading === id && S.mode === "edit" ? '<span class="caret" aria-hidden="true"></span>' : ""}</h2>`;
+function boardBody() {
+  const sel = S.inserted ? A("N1") : `<span class="sel" id="sel-word">budget</span>`;
+  if (isRtl()) return `
+    <h1 dir="auto">${esc(DOCS.board.fa)}</h1>
+    ${H("board", "decisions")}
+    <p dir="auto">توافق کردیم ${A("L1")} را ثابت نگه داریم. قواعد سفر در ${A("L2")} آمده و ${A("L3")} در پایین همین سند توضیح می‌دهد چرا. ${A("L4")} تا دی‌ماه منتظر می‌ماند. ${A("L5")} و ${A("L6")} دیگر در دسترس نیستند. کسی ${A("L7")} را اینجا چسبانده است. برای قیمت‌ها ${A("L8")} را ببینید.</p>
+    ${H("board", "styled")}
+    <p dir="auto">پیوند رنگی: ${A("L10")}. پیوند بزرگ: ${A("L11")}. <mark>پیش از جمعه ${A("L12")} و ${A("L13")} را بخوانید.</mark></p>
+    <ul dir="auto"><li>مسئول: ${A("L14")}</li><li>${A("L9")}</li><li>${A("L4b")}</li></ul>
+    <table dir="auto"><tr><th>مورد</th><th>پیوند</th></tr><tr><td>سفر</td><td>${A("L15")}</td></tr><tr><td>فروشندگان</td><td>${A("L16")}</td></tr></table>
+    <h2 dir="auto">Summary (English in a right-to-left document)</h2>
+    <p dir="auto">Travel follows ${A("L19")}; the ${A("L20")} is gone.</p>
+    ${H("board", "assumptions")}
+    <p dir="auto">تورم را سه درصد و نرخ ارز را ثابت فرض کرده‌ایم. هر تغییری در این دو عدد کل بودجه را جابه‌جا می‌کند.</p>
+    ${H("board", "followups")}
+    <p dir="auto">خلاصهٔ ${sel} را تا جمعه برای همه بفرستید.</p>`;
+  return `
+    <h1>Board notes</h1>
+    ${H("board", "decisions")}
+    <p>We agreed to hold the ${A("L1")} flat. Travel rules are in ${A("L2")}, and the ${A("L3")} below explain why. The ${A("L4")} waits until January. The ${A("L5")} and the ${A("L6")} are gone. Someone pasted a ${A("L7")}. For pricing, see ${A("L8")}.</p>
+    ${H("board", "styled")}
+    <p>Coloured: ${A("L10")}. Larger: ${A("L11")}. <mark>Before Friday, read the ${A("L12")} and the ${A("L13")}.</mark></p>
+    <ul><li>Owner: see ${A("L14")}</li><li>${A("L9")}</li><li>${A("L4b")}</li></ul>
+    <table><tr><th>Item</th><th>Link</th></tr><tr><td>Travel</td><td>${A("L15")}</td></tr><tr><td>Vendors</td><td>${A("L16")}</td></tr></table>
+    <h2 dir="auto">خلاصه</h2>
+    <p dir="auto">جزئیات سفر در ${A("L17")} آمده و ${A("L18")} دیگر در دسترس نیست.</p>
+    ${H("board", "assumptions")}
+    <p>We assume 3% inflation and a fixed exchange rate. Any change to either number moves the whole budget.</p>
+    ${H("board", "followups")}
+    <p>Send the final ${sel} summary to everyone by Friday.</p>`;
+}
+const LIPSUM = {
+  overview: ["Four teams share one budget this quarter. Each line below is a ceiling, not a target, and anything unspent returns to the pool in January.", "The biggest change from last quarter is tools: we consolidate three subscriptions into one and save about a fifth of that line."],
+  approvals: ["Anything over the team ceiling needs two approvals: the team lead and finance. Requests go in the shared tracker, never by email.", "Approvals made before 1 October still stand."],
+  travel: ["Book economy for flights under six hours. Trains beat flights for anything under four hours door to door.", "Hotels: the city rate card applies. Ask finance before booking anything above it, and attach the receipt to the trip within a week.", "Team offsites count against the team's travel line, not the shared events budget."],
+  assumptions: ["Inflation 3%, exchange rate fixed at the 1 October rate, and no new headcount before January."],
+};
+function budgetBody() {
+  return `<h1>Q4 budget</h1>
+    <p dir="auto">${DOCS.budget.snippet}</p>
+    ${["overview", "approvals", "travel", "assumptions"].map((h) => H("budget", h) + LIPSUM[h].map((t) => `<p dir="auto">${t}</p>`).join("")).join("")}
+    ${linkedFrom()}`;
+}
+function linkedFrom() {
+  const rows = [
+    { doc: "board", h: "decisions", ctx: `…We agreed to hold the <b>Q4 budget draft</b> flat. Travel rules are in <b>Q4 budget › Travel</b>, and the budget assumptions below…` },
+    { doc: "offsite", h: "logistics", ctx: `…flights and hotels follow <b>Q4 budget › Travel</b>. Book by 20 November so the rate card still applies…` },
+    { doc: "sync", h: "finance", ctx: `…numbers are from the <b>Q4 budget</b>, before the tools change…` },
+  ];
+  const open = S.lfOpen;
+  return `<section class="lf" role="region" aria-labelledby="lf-h" id="linked-from">
+    <span class="tag-preview" style="position:static;display:block;margin-bottom:4px">LK4 preview</span>
+    <h2 id="lf-h"><button class="lf-toggle" aria-expanded="${open}" aria-controls="lf-list" data-act="lf-toggle">${icon(open ? "chevron-down" : "chevron-right", open ? "" : "flip-rtl")}${COPY.linkedFrom(rows.length)}</button></h2>
+    <ul id="lf-list" ${open ? "" : "hidden"}>${rows.map((r) => `<li><a class="lf-row" href="#" data-lf="${r.doc}:${r.h}"><span class="lf-src">${icon("file-text")}<b><bdi dir="auto">${esc(docTitle(r.doc))}</bdi></b><span class="h">› ${esc(headingName(r.doc, r.h))}</span></span><span class="lf-ctx"><bdi dir="auto">${r.ctx}</bdi></span></a></li>`).join("")}</ul>
+  </section>`;
+}
+function roadmapBody() {
+  return `<h1>Roadmap 2027</h1><p dir="auto">${DOCS.roadmap.snippet}</p>
+    ${H("roadmap", "themes")}<p dir="auto">Faster capture, calmer collaboration, and a library that works offline first.</p><p dir="auto">Each theme has one owner and one measure; anything that serves none of them waits.</p>
+    ${H("roadmap", "milestones")}<p dir="auto">Q1: desktop beta. Q2: web library. Q3: shared Live documents.</p>`;
+}
+function hiringBody() {
+  return `<div class="banner" role="status">${icon("file-minus")}<span class="grow">${esc(COPY.trashBanner("Hiring plan"))}</span><button class="btn" data-act="restore-banner">${icon("undo-2", "flip-rtl")}Restore</button></div>
+    <h1>Hiring plan</h1><p dir="auto">${DOCS.hiring.snippet}</p><h2 dir="auto">Roles</h2><p dir="auto">A designer in January and a support engineer in March.</p>`;
+}
+function genericBody(id) {
+  const d = DOCS[id];
+  return `<h1>${esc(d.title)}</h1><p dir="auto">${esc(d.snippet || "")}</p>${Object.keys(d.headings || {}).map((h) => H(id, h) + `<p dir="auto">Notes for ${esc(d.headings[h].toLowerCase())}.</p>`).join("")}`;
+}
+function galleryBody() {
+  const rows = [
+    ["resolves", "L1", "Resolves", "Normal link. Hover: the §4.5 card. Click while editing: the preview."],
+    ["resolves", "L2", "Heading in another document", "Opens the document at the heading (goToHeading, block start)."],
+    ["here", "L3", "Section of this document (here#)", "Moves in place; one history step. Decision 3: Hash."],
+    ["resolves", "L9", "Heading gone", "Looks like a normal link (the resolver can't know). Opens at the top with the pill."],
+    ["in_trash", "L4", "In Trash", "Decision 2. Opens read-only with the Trash banner and Restore."],
+  ];
+  if (S.d1 === "B") rows.push(["not_available", "L5", "Not available (Decision 1B: deleted or not in library)", "Dashed underline. No title, no key."]);
+  else rows.push(["deleted", "L5", "Deleted (Decision 1A)", "Dashed underline. Needs a deleted_keys table to tell apart after a purge."], ["not_in_library", "L6", "Not in your library (Decision 1A)", "Dashed underline. No title, no key."]);
+  rows.push(["unknown_form", "L7", "Needs a newer version", "Dashed underline. The node is never modified."], ["web", "L8", "Web link", "No icon, no hovercard. The stock popover, unchanged."]);
+  return `<div class="gallery"><span class="tag-preview" style="position:static;display:block">Review sheet</span><h1>Link states</h1>
+    <p>Each state as it renders in text, its accessible name, and the preview a click (editing) or Mod-K shows. Change D1–D4 above to compare.</p>
+    <table><thead><tr><th style="width:24%">State</th><th style="width:22%">In text</th><th style="width:18%">Accessible name</th><th>Preview popover</th></tr></thead><tbody>
+    ${rows.map(([st, id, name, desc]) => `<tr><td><div class="sname">${name}</div><div class="sdesc">${desc}</div></td><td class="doc">${A(id)}</td><td class="name">link “${esc(accName(id))}”</td><td class="static">${popoverInner(id, false)}</td></tr>`).join("")}
+    </tbody></table></div>`;
+}
+const BODIES = { board: boardBody, budget: budgetBody, roadmap: roadmapBody, hiring: hiringBody };
+
+/* ── Popover contents ────────────────────────────────── */
+function actionsFor(id, st) {
+  const editable = S.mode === "edit";
+  const l = LINKS[id];
+  const remove = editable ? `<button class="act icon" data-act="remove" data-id="${id}" aria-label="Remove Link" title="Remove Link">${icon("unlink")}</button>` : "";
+  const copy = `<button class="act icon" data-act="copy" data-id="${id}" aria-label="Copy Link" title="Copy Link">${icon("copy")}</button>`;
+  if (st === "resolves" || st === "here") return `<button class="act" data-act="open" data-id="${id}">${icon("arrow-up-right", "flip-rtl")}Open</button><span class="grow"></span>${copy}${remove}`;
+  if (st === "in_trash") return `<button class="act" data-act="open" data-id="${id}">${icon("arrow-up-right", "flip-rtl")}Open</button><button class="act" data-act="restore" data-id="${l.doc}">${icon("undo-2", "flip-rtl")}Restore</button><span class="grow"></span>${copy}${remove}`;
+  if (st === "unknown_form") return "";
+  return editable ? `<span class="grow"></span><button class="act danger" data-act="remove" data-id="${id}">${icon("unlink")}Remove Link</button>` : "";
+}
+function stockPopover(id) {
+  const l = LINKS[id];
+  const href = l.kind === "web" ? l.url : l.kind === "here" ? `tinydocy:here#5b0e7c2a-${"4d1f-4a8e-9c3b-1f7a2e6d90ab"}` : `tinydocy:doc/9f2c1e7b4a6d48e0b3c5a1f2d7e8c90${l.kind === "unknown" ? "x" : "4"}${l.h ? "#c3a1e2f0-7b6d-4e58-a91c-2d4f6b8e0a17" : ""}`;
+  return `<div class="hl-stock" role="dialog" aria-label="Link">${l.kind === "web" ? "" : icon("link")}<a href="#" title="${href}">${esc(href)}</a><button aria-label="Edit link" title="Edit link">${icon("pencil")}</button><button aria-label="Remove link" title="Remove link" data-act="remove" data-id="${id}">${icon("unlink")}</button><button class="copy" aria-label="Copy link" title="Copy link" data-act="copy" data-id="${id}">${icon("copy")}</button></div>`;
+}
+function popoverInner(id, floating = true) {
+  const l = LINKS[id];
+  const st = stateOf(id);
+  if (st === "web" || S.d4 === "stock") return stockPopover(id);
+  let main;
+  if (st === "resolves" || st === "in_trash") {
+    const d = DOCS[l.doc];
+    const h = l.h && d.headings?.[l.h];
+    const title = `<span class="t">${esc(d.title)}</span>${h ? ` <span class="h">› ${esc(h)}</span>` : ""}`;
+    const sub = st === "in_trash" ? `<div class="dlp-copy">${esc(COPY.inTrash(d.title))}</div>` : `<div class="dlp-path" title="${esc(d.path.join(" › "))}">${esc(shortPath(d.path))} · Edited ${d.edited}</div>`;
+    main = `<div class="dlp-title"><bdi dir="auto">${title}</bdi></div>${sub}`;
+  } else if (st === "here") {
+    main = `<div class="dlp-title"><bdi dir="auto">${esc(headingName("board", l.h))}</bdi></div><div class="dlp-path">In this document</div>`;
+  } else {
+    const copy = { deleted: COPY.deleted, not_in_library: COPY.notInLibrary, not_available: COPY.notAvailable, unknown_form: COPY.newer }[st];
+    main = `<div class="dlp-copy">${esc(copy)}</div>`;
+  }
+  const actions = actionsFor(id, st);
+  const name = st === "resolves" || st === "in_trash" ? `Link to ${DOCS[l.doc].title}` : st === "here" ? `Link to ${headingName("board", l.h)}` : "Document link";
+  return `<div class="dlp" role="dialog" aria-label="${esc(name)}"><div class="dlp-main"><span class="dlp-icon">${icon(stateIcon(st))}</span><div class="dlp-text">${main}</div></div>${actions ? `<div class="dlp-actions">${actions}</div>` : ""}</div>`;
+}
+function hovercardInner(id) {
+  const l = LINKS[id];
+  const st = stateOf(id);
+  const editable = S.mode === "edit" || S.mode === "read"; // reading mode is a view of an editable document
+  if (st === "resolves") {
+    const d = DOCS[l.doc];
+    const h = l.h && d.headings?.[l.h];
+    const differs = !l.h && linkText(id) !== d.title;
+    return `<div class="hc" role="dialog" aria-label="${esc(d.title)}"><div class="hc-body">
+      <div class="hc-title"><bdi dir="auto" class="t">${esc(d.title)}</bdi>${h ? `<span class="h">› ${esc(h)}</span>` : ""}</div>
+      <p class="hc-snip"><bdi dir="auto">${esc(d.snippet || "")}</bdi></p>
+      <div class="hc-meta" title="${esc(d.path.join(" › "))}">${esc(shortPath(d.path))} · Edited ${d.edited}</div></div>
+      <div class="hc-foot">${differs && editable ? `<button class="act" data-act="use-title" data-id="${id}">${icon("type")}Use Current Title</button>` : ""}<span class="grow"></span>
+      <button class="act icon" data-act="open" data-id="${id}" aria-label="Open" title="Open">${icon("arrow-up-right", "flip-rtl")}</button>
+      <button class="act icon" data-act="open-tab" data-id="${id}" aria-label="Open in New Tab" title="Open in New Tab">${icon("square-plus")}</button>
+      <button class="act icon" data-act="copy" data-id="${id}" aria-label="Copy Link" title="Copy Link">${icon("copy")}</button></div></div>`;
+  }
+  const copy = { in_trash: COPY.inTrash(DOCS[l.doc]?.title || ""), deleted: COPY.deleted, not_in_library: COPY.notInLibrary, not_available: COPY.notAvailable, unknown_form: COPY.newer, here: headingName("board", l.h) }[st];
+  const foot = st === "in_trash" ? `<span class="grow"></span><button class="act" data-act="open" data-id="${id}">Open</button><button class="act" data-act="restore" data-id="${l.doc}">${icon("undo-2", "flip-rtl")}Restore</button>`
+    : BROKEN.has(st) && st !== "unknown_form" && editable ? `<span class="grow"></span><button class="act danger" data-act="remove" data-id="${id}">${icon("unlink")}Remove Link</button>` : "";
+  return `<div class="hc" role="dialog" aria-label="Document link"><div class="hc-body"><div class="hc-state">${icon(stateIcon(st))}<span>${esc(copy)}</span></div></div>${foot ? `<div class="hc-foot">${foot}</div>` : ""}</div>`;
+}
+
+/* ── Link picker (LK2 preview) ───────────────────────── */
+const norm = (s) => s.normalize("NFC").toLowerCase();
+function matches(title, q) {
+  const words = norm(title).split(/\s+/);
+  return norm(q).split(/\s+/).filter(Boolean).every((qw) => words.some((w) => w.startsWith(qw)) || norm(title).includes(qw));
+}
+function boldMatch(title, q) {
+  let out = esc(title);
+  norm(q).split(/\s+/).filter(Boolean).forEach((qw) => {
+    const i = norm(title).indexOf(qw);
+    if (i >= 0) out = esc(title.slice(0, i)) + "<b>" + esc(title.slice(i, i + qw.length)) + "</b>" + esc(title.slice(i + qw.length));
+  });
+  return out;
+}
+function pickerItems() {
+  const P = S.picker; const q = P.query.trim(); const items = [];
+  if (P.step === "headings") {
+    if (P.loading) return [{ type: "loading" }];
+    items.push({ type: "whole", doc: P.parent });
+    Object.keys(DOCS[P.parent].headings || {}).forEach((h) => items.push({ type: "heading", doc: P.parent, h }));
+    return items;
+  }
+  if (/^(https?:\/\/|www\.)|^[\w-]+\.[a-z]{2,}(\/|$)/i.test(q)) items.push({ type: "url", url: q });
+  const docs = PICKABLE.filter((id) => q && matches(DOCS[id].title, q));
+  if (docs.length) { items.push({ type: "group", label: "Documents" }); docs.forEach((id) => items.push({ type: "doc", doc: id })); }
+  if (q && matches(docTitle("board"), q)) items.push({ type: "note", text: COPY.selfNote });
+  const here = Object.keys(BOARD_HEADINGS).filter((h) => q && matches(headingName("board", h), q));
+  if (here.length) { items.push({ type: "group", label: "In this document" }); here.forEach((h) => items.push({ type: "here", h })); }
+  return items;
+}
+const selectable = (it) => !["group", "note", "loading"].includes(it.type);
+function pickerHtml() {
+  const P = S.picker; const items = pickerItems();
+  const sel = items.filter(selectable);
+  P.active = Math.min(P.active, Math.max(0, sel.length - 1));
+  let n = -1;
+  const rows = items.map((it) => {
+    if (it.type === "group") return `<div class="pk-group" role="presentation">${it.label}</div>`;
+    if (it.type === "note") return `<div class="pk-row note" role="presentation">${icon("info")}<span class="t" style="white-space:normal">${esc(it.text)}</span></div>`;
+    if (it.type === "loading") return `<div class="pk-row loading" role="status"><span class="spin"></span><span class="t">${COPY.loadingHeadings}</span></div>`;
+    n++;
+    const on = n === P.active;
+    const attrs = `role="option" id="pk-${n}" aria-selected="${on}" data-pk="${n}"`;
+    if (it.type === "url") return `<div class="pk-row" ${attrs}>${icon("link")}<span class="t">Link to <b>${esc(it.url)}</b></span></div>`;
+    if (it.type === "doc") {
+      const canStep = S.d7 === "lazy";
+      return `<div class="pk-row" ${attrs}>${icon("file-text")}<span class="t"><bdi dir="auto">${boldMatch(DOCS[it.doc].title, P.query)}</bdi></span><span class="path" title="${esc(DOCS[it.doc].path.join(" › "))}">${esc(shortPath(DOCS[it.doc].path))}</span>${canStep ? icon("chevron-right", "chev flip-rtl") : ""}</div>`;
+    }
+    if (it.type === "here") return `<div class="pk-row" ${attrs}>${icon("hash")}<span class="t"><bdi dir="auto">${boldMatch(headingName("board", it.h), P.query)}</bdi></span></div>`;
+    if (it.type === "whole") return `<div class="pk-row" ${attrs}>${icon("file-text")}<span class="t">Whole document</span></div>`;
+    return `<div class="pk-row" ${attrs}>${icon("hash")}<span class="t"><bdi dir="auto">${esc(DOCS[it.doc].headings[it.h])}</bdi></span></div>`;
+  }).join("");
+  const head = P.step === "headings" ? `<div class="pk-head"><button data-act="pk-back" aria-label="Back to documents">${icon("chevron-left", "flip-rtl")}<bdi dir="auto">${esc(DOCS[P.parent].title)}</bdi></button><span>headings</span></div>` : "";
+  const foot = P.step === "headings"
+    ? `<span><kbd>↵</kbd> Link</span><span><kbd>⇧⇥</kbd> Back</span><span><kbd>esc</kbd> Cancel</span>`
+    : `<span><kbd>↵</kbd> Link</span>${S.d7 === "lazy" ? `<span><kbd>⇥</kbd> Headings</span>` : ""}<span><kbd>esc</kbd> Cancel</span>${P.note ? `<span class="note">${esc(P.note)}</span>` : ""}`;
+  return `<div class="picker pop" id="picker" role="dialog" aria-label="Link"><span class="tag-preview">LK2 preview</span>
+    <div class="pk-input">${icon("search")}<input id="pk-q" role="combobox" aria-expanded="true" aria-controls="pk-list" aria-autocomplete="list" aria-activedescendant="pk-${P.active}" placeholder="Paste a link or search documents" value="${esc(P.query)}" ${P.step === "headings" ? "readonly" : ""}></div>
+    ${head}<div class="pk-list" id="pk-list" role="listbox" aria-label="${P.step === "headings" ? "Headings" : "Link targets"}">${rows || `<div class="pk-row note">${icon("info")}<span class="t">Type a title or paste a link.</span></div>`}</div>
+    <div class="pk-foot">${foot}</div></div>`;
+}
+
+/* ── Render ───────────────────────────────────────────── */
+function render() {
+  const root = document.documentElement;
+  root.classList.toggle("dark", S.theme === "dark");
+  document.body.dataset.motion = S.motion;
+  document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(S[seg.dataset.k] === b.dataset.v))));
+  $("#scene").value = S.scene;
+  const dev = $("#device");
+  const oldScroller = $(".scroller", dev);
+  if (oldScroller && S.scrollTo == null) S.scrollTop = oldScroller.scrollTop;
+  dev.style.setProperty("--w", S.width + "px");
+  dev.style.setProperty("--h", S.h || (S.width === "820" ? "1000px" : "860px"));
+  dev.dir = S.dir;
+  dev.dataset.mode = S.mode;
+  dev.toggleAttribute("data-narrow", S.width === "820");
+  dev.toggleAttribute("data-iso", S.iso === "on");
+  dev.toggleAttribute("data-noglue", S.glue !== "on");
+  const gallery = S.scene === "states";
+  const body = gallery ? galleryBody() : (BODIES[S.doc] || (() => genericBody(S.doc)))();
+  const readOnly = S.doc === "hiring";
+  dev.innerHTML = `
+    <div class="titlebar">
+      <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+      <button class="navbtn flip-rtl" data-act="back" aria-label="Back" title="Back (⌘[)" ${S.history.length ? "" : "disabled"}>${icon("chevron-left")}</button>
+      <button class="navbtn flip-rtl" data-act="forward" aria-label="Forward" title="Forward (⌘])" ${S.forward.length ? "" : "disabled"}>${icon("chevron-right")}</button>
+      <div class="tabs" role="tablist">${S.tabs.map((t, i) => `<button class="tab${i === 0 ? " on" : ""}" role="tab" aria-selected="${i === 0}">${icon(gallery && i === 0 ? "list-checks" : "file-text")}<bdi dir="auto">${esc(gallery && i === 0 ? "Link states" : docTitle(t))}</bdi></button>`).join("")}</div>
+    </div>
+    <div class="shell">
+      <nav class="lib" aria-label="Library">
+        <div class="lib-search">${icon("search")}<span>Search</span><kbd>⌘O</kbd></div>
+        <div class="lib-row">${icon("folder")}Work</div>
+        <div class="lib-row l1">${icon("folder")}Board</div>
+        ${["board", "sync"].map((d) => `<div class="lib-row l2${S.doc === d && !gallery ? " sel" : ""}">${icon("file-text")}<bdi dir="auto">${esc(docTitle(d))}</bdi></div>`).join("")}
+        <div class="lib-row l1">${icon("folder")}Finance</div>
+        <div class="lib-row l2${S.doc === "budget" && !gallery ? " sel" : ""}">${icon("file-text")}Q4 budget</div>
+        <div class="lib-row l1">${icon("folder")}Product</div>
+        <div class="lib-row l2${S.doc === "roadmap" && !gallery ? " sel" : ""}">${icon("file-text")}Roadmap 2027</div>
+        <div class="lib-row l1">${icon("folder")}Team</div>
+        <div class="lib-row l2">${icon("file-text")}Team offsite</div>
+        <div class="lib-row">${icon("folder")}Archive</div>
+        <div class="lib-sep"></div>
+        <div class="lib-row${S.doc === "hiring" && !gallery ? " sel" : ""}">${icon("trash-2")}Trash${S.trashed.length ? ` (${S.trashed.length})` : ""}</div>
+      </nav>
+      <main class="main">
+        <div class="toolbar" role="toolbar" aria-label="Formatting">
+          ${S.width === "820" ? `<button class="tb" aria-label="Library">${icon("panel-left", "flip-rtl")}</button><span class="sep"></span>` : ""}
+          <button class="tb flip-rtl" aria-label="Undo">${icon("undo-2")}</button><button class="tb flip-rtl" aria-label="Redo">${icon("redo-2")}</button><span class="sep"></span>
+          <button class="tb" aria-label="Bold">${icon("bold")}</button><button class="tb" aria-label="Italic">${icon("italic")}</button>
+          <button class="tb" aria-label="Link (⌘K)" title="Link (⌘K)" data-act="picker" aria-pressed="${!!S.picker}">${icon("link")}</button>
+          <span class="grow"></span>
+          <div class="modeseg" role="group" aria-label="Mode"><button data-act="mode" data-v="edit" aria-pressed="${S.mode === "edit"}">${icon("pencil")}Editing</button><button data-act="mode" data-v="read" aria-pressed="${S.mode === "read"}">${icon("book-open")}Reading</button></div>
+        </div>
+        <div class="scroller" id="scroller"><div class="page${gallery ? " wide" : ""}"><article class="doc" ${readOnly ? 'aria-readonly="true"' : ""}>${body}</article><div class="tail"></div></div></div>
+      </main>
+    </div>
+    <div class="strip" aria-hidden="true"><b>Review aid</b><span>Screen reader:</span><span class="v">${esc(S.announce || "—")}</span><span>Gesture:</span><span class="v">${esc(S.gesture || "—")}</span></div>
+    <div class="sr-only" aria-live="polite" id="live">${esc(S.announce)}</div>
+    <div class="layer" id="layer"></div>`;
+  window.lucide && lucide.createIcons();
+  const sc = $("#scroller");
+  if (typeof S.scrollTo === "number") { sc.scrollTop = S.scrollTo; S.scrollTo = null; }
+  else if (S.scrollTo) {
+    const el = S.scrollTo === "top" ? null : $(S.scrollTo, sc);
+    sc.scrollTop = el ? el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 16 : 0;
+    S.scrollTo = null;
+  } else sc.scrollTop = S.scrollTop;
+  sc.addEventListener("scroll", () => { S.scrollTop = sc.scrollTop; placeFloating(); }, { passive: true });
+  renderLayer();
+  if (S.arrivedHeading && S.mode === "read") { const h = $("#h-" + S.arrivedHeading, sc); h && h.focus({ preventScroll: true }); }
+  if (S.focusLink && S.mode === "read") { const a = $(`[data-link="${S.focusLink}"]`, sc); a && a.focus({ preventScroll: true, focusVisible: true }); }
+}
+function renderLayer() {
+  const layer = $("#layer");
+  if (!layer) return;
+  let html = "";
+  if (S.popover) {
+    const inner = S.popover.type === "hover" ? hovercardInner(S.popover.id) : popoverInner(S.popover.id);
+    const tag = S.popover.type === "hover" ? `<span class="tag-preview">LK4 preview: hovercard (pointer only)</span>` : S.popover.via === "keyboard" ? `<span class="tag-preview">Keyboard path: Mod-K</span>` : "";
+    html += `<div class="pop" id="float" data-for="${S.popover.id}">${tag}${inner}</div>`;
+  }
+  if (S.picker) html += pickerHtml();
+  if (S.pills.length) html += `<div class="pills">${S.pills.map((p, i) => `<div class="pill" role="${p.role || "status"}">${icon(p.icon || "info")}<span>${esc(p.text)}</span>${p.ok ? `<button data-act="pill-ok" data-i="${i}">OK</button>` : ""}</div>`).join("")}</div>`;
+  if (S.consent) html += `<div class="scrim"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="cw-h"><span class="tag-preview" style="position:static;display:block;margin-bottom:6px">P4.4 consent window (mock). Only the dashed line is LK1's.</span>
+    <h2 id="cw-h">Share “${esc(docTitle("board"))}” as a Live document?</h2>
+    <p>People with the link can open and edit it. (P4.4 copy goes here.)</p>
+    <div class="lk1-line">${icon("link")}<span>${esc(COPY.consent(3))}</span></div>
+    <div class="row"><button class="btn" data-act="consent-close">Cancel</button><button class="btn primary" data-act="consent-close">Share</button></div></div></div>`;
+  const hadPickerFocus = document.activeElement?.id === "pk-q";
+  layer.innerHTML = html;
+  window.lucide && lucide.createIcons();
+  placeFloating();
+  if (hadPickerFocus) $("#pk-q")?.focus();
+}
+function placeFloating() {
+  const dev = $("#device"); const sc = $("#scroller");
+  if (!dev || !sc) return;
+  const dr = dev.getBoundingClientRect();
+  const place = (el, anchor) => {
+    if (!el || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth;
+    let x = isRtl() ? r.right - dr.left - w : r.left - dr.left;
+    x = Math.max(8, Math.min(x, dr.width - w - 8));
+    let y = r.bottom - dr.top + 8;
+    if (y + el.offsetHeight > dr.height - 36) y = r.top - dr.top - el.offsetHeight - 8;
+    el.style.left = x + "px"; el.style.top = y + "px";
+  };
+  const f = $("#float");
+  if (f) place(f, $(`.doc [data-link="${f.dataset.for}"]`, sc));
+  const p = $("#picker");
+  if (p) place(p, $("#sel-word", sc) || $('[data-link="N1"]', sc));
+}
+
+/* ── Behaviour ────────────────────────────────────────── */
+function set(p) { Object.assign(S, p); render(); }
+function announce(text, gesture) { S.announce = text; if (gesture) S.gesture = gesture; }
+let pillTimer = 0;
+function pill(text, icon = "info", ms = 4000) {
+  S.pills = [{ text, icon }];
+  clearTimeout(pillTimer);
+  if (ms) pillTimer = setTimeout(() => { S.pills = S.pills.filter((p) => p.text !== text); renderLayer(); }, ms);
+}
+function closeFloating(returnFocus = true) {
+  const f = $("#float");
+  const id = S.popover?.id;
+  S.popover = null;
+  if (f && S.motion !== "reduce") { f.classList.add("leaving"); setTimeout(() => renderLayer(), 80); } else renderLayer();
+  if (returnFocus && id) {
+    if (S.mode === "edit") { S.caret = id; render(); } else { const a = $(`.doc [data-link="${id}"]`); a && a.focus(); }
+  }
+}
+function follow(id, { newTab = false, gesture = "" } = {}) {
+  const l = LINKS[id]; const st = stateOf(id);
+  if (BROKEN.has(st)) { S.popover = { type: "preview", id }; S.gesture = `${gesture} → no navigation (${st}); preview shown`; render(); return; }
+  if (st === "web") { S.gesture = `${gesture} → navigate(${l.url}, newTab: ${newTab}) → browser`; announce(""); render(); return; }
+  if (l.kind === "here") {
+    S.history.push({ doc: S.doc, link: id, scrollTop: S.scrollTop }); S.forward = [];
+    Object.assign(S, { popover: null, caret: null, arrivedHeading: l.h, scrollTo: "#h-" + l.h });
+    announce(`At ${headingName("board", l.h)}.`, `${gesture} → goToHeading in place (one history step)`); render(); return;
+  }
+  const title = DOCS[l.doc].title;
+  if (newTab) {
+    if (!S.tabs.includes(l.doc)) S.tabs.push(l.doc);
+    announce(COPY.newTab(title), `${gesture} → navigate(newTab: true)`); pill(COPY.newTab(title), "square-plus");
+    S.popover = null; render(); return;
+  }
+  S.history.push({ doc: S.doc, link: id, scrollTop: S.scrollTop }); S.forward = [];
+  const h = l.h && DOCS[l.doc].headings?.[l.h];
+  Object.assign(S, { doc: l.doc, tabs: [l.doc, ...S.tabs.slice(1)], popover: null, caret: null, focusLink: null, picker: null, lfOpen: false });
+  if (h) { S.arrivedHeading = l.h; S.scrollTo = "#h-" + l.h; announce(COPY.arrival(title, h), `${gesture} → navigate(this tab) → goToHeading("${h}", "start")`); }
+  else if (l.h) { S.arrivedHeading = null; S.scrollTo = "top"; announce(COPY.arrival(title) + " " + COPY.sectionRemoved, `${gesture} → navigate(this tab); heading missing after first sync`); pill(COPY.sectionRemoved, "info", 6000); render(); return; }
+  else { S.arrivedHeading = null; S.scrollTo = "top"; announce(COPY.arrival(title), `${gesture} → navigate(this tab)`); }
+  if (st === "in_trash") S.gesture += "; opens read-only with the Trash banner";
+  pill(S.announce, "corner-down-right", 3000);
+  render();
+}
+function back() {
+  const e = S.history.pop(); if (!e) return;
+  S.forward.push({ doc: S.doc, scrollTop: S.scrollTop });
+  Object.assign(S, { doc: e.doc, tabs: [e.doc, ...S.tabs.slice(1)], arrivedHeading: null, popover: null, pills: [], scrollTo: e.scrollTop });
+  if (S.mode === "edit") { S.caret = e.link; S.focusLink = null; } else { S.caret = null; S.focusLink = e.link; }
+  announce(`Back to ${docTitle(e.doc)}.`, "Back (⌘[) → caret restored in the link");
+  render();
+}
+function openPicker() {
+  S.picker = { query: isRtl() ? "budget" : "budget", step: "list", active: 0, parent: null, loading: false, note: "" };
+  S.popover = null; render(); setTimeout(() => $("#pk-q")?.focus(), 0);
+}
+function pickerStep(dir) {
+  const P = S.picker; const it = pickerItems().filter(selectable)[P.active];
+  if (dir > 0 && P.step === "list" && it?.type === "doc") {
+    if (S.d7 !== "lazy") { P.note = COPY.wholeOnly; renderLayer(); return; }
+    Object.assign(P, { step: "headings", parent: it.doc, active: 0, loading: true });
+    renderLayer(); setTimeout(() => { if (S.picker) { S.picker.loading = false; renderLayer(); } }, 150);
+  } else if (dir < 0 && P.step === "headings") { Object.assign(P, { step: "list", active: 0, parent: null }); renderLayer(); }
+}
+function pickerCommit() {
+  const it = pickerItems().filter(selectable)[S.picker.active]; if (!it) return;
+  const L = LINKS.N1;
+  Object.assign(L, it.type === "here" ? { kind: "here", h: it.h, doc: undefined } : it.type === "url" ? { kind: "web", url: it.url } : { kind: "doc", doc: it.doc, h: it.h });
+  S.picker = null; S.inserted = true; S.caret = "N1";
+  announce("Link inserted.", "↵ in picker → one undo step");
+  if (!S.hintShown) { S.hintShown = true; S.pills = [{ text: COPY.firstHint, icon: "info", ok: true }]; }
+  render();
+}
+
+/* Clicks */
+document.addEventListener("click", (e) => {
+  const seg = e.target.closest(".controls .seg button");
+  if (seg) { const k = seg.parentElement.dataset.k; S[k] = seg.dataset.v; render(); return; }
+  if (e.target.closest("#reset")) { Object.assign(S, DEFAULTS, TRANSIENT()); applyScene("text"); return; }
+  const act = e.target.closest("[data-act]");
+  if (act && $("#device").contains(act)) {
+    e.preventDefault();
+    const a = act.dataset.act, id = act.dataset.id;
+    if (a === "back") back();
+    else if (a === "forward") { const f = S.forward.pop(); if (f) { S.history.push({ doc: S.doc, scrollTop: S.scrollTop }); set({ doc: f.doc, scrollTo: f.scrollTop }); } }
+    else if (a === "mode") { set({ mode: act.dataset.v, caret: null, popover: null }); }
+    else if (a === "picker") S.picker ? set({ picker: null }) : openPicker();
+    else if (a === "open") follow(id, { gesture: "Open button" });
+    else if (a === "open-tab") follow(id, { newTab: true, gesture: "Open in New Tab" });
+    else if (a === "copy") { act.dataset.copied = ""; announce("Link copied.", "Copy Link → copies the tinydocy href to the clipboard"); setTimeout(() => render(), 900); }
+    else if (a === "remove") { S.removed.push(id); S.popover = null; announce("Link removed.", "Remove Link → one undo step"); render(); }
+    else if (a === "restore" || a === "restore-banner") { S.trashed = S.trashed.filter((d) => d !== (id || "hiring")); S.popover = null; announce("Restored Hiring plan.", "Restore → icon swaps instantly"); if (S.doc === "hiring") S.doc = "hiring"; render(); }
+    else if (a === "use-title") { S.renamedText[id] = DOCS[LINKS[id].doc].title; S.popover = null; announce("Link text replaced with the current title.", "Use Current Title → one undo step"); render(); }
+    else if (a === "lf-toggle") { S.lfOpen = !S.lfOpen; render(); $(".lf-toggle")?.focus(); }
+    else if (a === "pill-ok") { S.pills = []; renderLayer(); }
+    else if (a === "consent-close") { S.consent = false; renderLayer(); }
+    else if (a === "pk-back") pickerStep(-1);
+    return;
+  }
+  const lf = e.target.closest("[data-lf]");
+  if (lf) { e.preventDefault(); const [doc, h] = lf.dataset.lf.split(":"); S.history.push({ doc: S.doc, scrollTop: S.scrollTop }); Object.assign(S, { doc, tabs: [doc], arrivedHeading: h, scrollTo: "#h-" + h, lfOpen: false }); announce(COPY.arrival(docTitle(doc), headingName(doc, h)), "Linked from row → open at that section"); pill(S.announce, "corner-down-right", 3000); render(); return; }
+  const pk = e.target.closest("[data-pk]");
+  if (pk) { S.picker.active = +pk.dataset.pk; pickerCommit(); return; }
+  const link = e.target.closest(".doc [data-link]");
+  if (link && !e.target.closest(".static")) {
+    e.preventDefault();
+    const id = link.dataset.link; const mod = e.metaKey || e.ctrlKey;
+    const g = `${mod && e.shiftKey ? "⌘⇧-click" : mod ? "⌘-click" : "click"} (${S.mode === "edit" ? "editing" : "reading"})`;
+    if (mod && e.shiftKey) follow(id, { newTab: true, gesture: g });
+    else if (mod || S.mode === "read") follow(id, { gesture: g });
+    else { S.caret = id; S.popover = { type: "preview", id }; S.gesture = `${g} → caret placed; preview popover`; announce(""); render(); }
+    return;
+  }
+  if (S.popover && !e.target.closest("#float")) closeFloating(false);
+  if (S.picker && !e.target.closest("#picker") && $("#device").contains(e.target)) set({ picker: null });
+});
+document.addEventListener("auxclick", (e) => {
+  const link = e.target.closest(".doc [data-link]");
+  if (link && e.button === 1) { e.preventDefault(); follow(link.dataset.link, { newTab: true, gesture: "middle click" }); }
+});
+$("#scene").addEventListener("change", (e) => applyScene(e.target.value));
+
+/* Hovercard: reading mode on hover; while editing, hover with Mod held. Document links only. */
+let hoverTimer = 0, leaveTimer = 0;
+document.addEventListener("pointerover", (e) => {
+  const link = e.target.closest(".doc a.doc-link");
+  if (e.target.closest("#float")) { clearTimeout(leaveTimer); return; }
+  if (!link || e.target.closest(".static")) return;
+  if (S.mode === "edit" && !modHeld) return;
+  clearTimeout(leaveTimer); clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => { S.popover = { type: "hover", id: link.dataset.link }; renderLayer(); }, 300);
+});
+document.addEventListener("pointerout", (e) => {
+  if (e.target.closest(".doc a.doc-link") || e.target.closest("#float")) {
+    clearTimeout(hoverTimer);
+    if (S.popover?.type === "hover") leaveTimer = setTimeout(() => { if (S.popover?.type === "hover") closeFloating(false); }, 200);
+  }
+});
+
+/* Keys */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Meta" || e.key === "Control") { modHeld = true; document.documentElement.dataset.mod = ""; }
+  const mod = e.metaKey || e.ctrlKey;
+  if (S.picker && e.target.id === "pk-q") {
+    const n = pickerItems().filter(selectable).length;
+    const fwd = isRtl() ? "ArrowLeft" : "ArrowRight", bwd = isRtl() ? "ArrowRight" : "ArrowLeft";
+    if (e.key === "ArrowDown") { e.preventDefault(); S.picker.active = (S.picker.active + 1) % Math.max(1, n); renderLayer(); $("#pk-q").focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); S.picker.active = (S.picker.active - 1 + n) % Math.max(1, n); renderLayer(); $("#pk-q").focus(); }
+    else if (e.key === "Tab") { e.preventDefault(); pickerStep(e.shiftKey ? -1 : 1); $("#pk-q").focus(); }
+    else if (e.key === fwd && (S.picker.step === "headings" || e.target.selectionStart === e.target.value.length)) { e.preventDefault(); pickerStep(1); $("#pk-q").focus(); }
+    else if (e.key === bwd && S.picker.step === "headings") { e.preventDefault(); pickerStep(-1); $("#pk-q").focus(); }
+    else if (e.key === "Enter") { e.preventDefault(); pickerCommit(); }
+    else if (e.key === "Escape") { e.preventDefault(); set({ picker: null }); }
+    return;
+  }
+  if (e.key === "Escape" && S.popover) { e.preventDefault(); closeFloating(true); return; }
+  if ((mod && e.key === "[") || (e.altKey && e.key === (isRtl() ? "ArrowRight" : "ArrowLeft"))) { e.preventDefault(); back(); return; }
+  const focused = document.activeElement?.closest?.(".doc [data-link]");
+  const target = focused?.dataset.link || (S.mode === "edit" ? S.caret : null);
+  if (mod && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if (target && !S.removed.includes(target)) { S.popover = { type: "preview", id: target, via: "keyboard" }; announce("", `⌘K on a link → preview dialog`); renderLayer(); setTimeout(() => $("#float button")?.focus(), 0); }
+    else openPicker();
+    return;
+  }
+  if (target && e.key === "Enter" && e.altKey && S.mode === "edit") { e.preventDefault(); follow(target, { gesture: "Alt+Enter (editing)" }); return; }
+  if (focused && e.key === "Enter") { e.preventDefault(); follow(target, { newTab: mod && e.shiftKey, gesture: mod && e.shiftKey ? "⌘⇧Enter" : "Enter (reading)" }); }
+});
+document.addEventListener("keyup", (e) => { if (e.key === "Meta" || e.key === "Control") { modHeld = false; delete document.documentElement.dataset.mod; } });
+window.addEventListener("blur", () => { modHeld = false; delete document.documentElement.dataset.mod; });
+window.addEventListener("resize", placeFloating);
+
+/* ── Scenes: presets for review and screenshots ───────── */
+function applyScene(scene) {
+  const keep = { theme: S.theme, dir: S.dir, width: S.width, motion: S.motion, d1: S.d1, d2: S.d2, d3: S.d3, d4: S.d4, d7: S.d7, iso: S.iso, glue: S.glue };
+  Object.assign(S, TRANSIENT(), keep, { scene, mode: "edit" });
+  clearTimeout(pillTimer);
+  switch (scene) {
+    case "preview": S.caret = "L2"; S.popover = { type: "preview", id: "L2" }; S.gesture = "click (editing) → caret placed; preview popover"; break;
+    case "follow": S.mode = "read"; render(); follow("L2", { gesture: "click (reading)" }); clearTimeout(pillTimer); return;
+    case "removed": S.mode = "read"; render(); follow("L9", { gesture: "click (reading)" }); clearTimeout(pillTimer); return;
+    case "trash": S.mode = "read"; render(); follow("L4", { gesture: "click (reading)" }); clearTimeout(pillTimer); S.pills = []; render(); return;
+    case "back": render(); follow("L2", { gesture: "⌘-click (editing)" }); back(); return;
+    case "hint": S.inserted = true; S.hintShown = true; S.caret = "N1"; S.scrollTo = "#h-followups"; S.pills = [{ text: COPY.firstHint, icon: "info", ok: true }]; announce("Link inserted.", "↵ in picker → one undo step"); break;
+    case "consent": S.consent = true; break;
+    case "picker": S.scrollTo = "#h-assumptions"; S.picker = { query: "budget", step: "list", active: 0, parent: null, loading: false, note: "" }; break;
+    case "hover": S.mode = "read"; S.popover = { type: "hover", id: "L1" }; S.gesture = "hover (reading) → hovercard after the delay"; break;
+    case "keyboard": S.mode = "read"; S.focusLink = "L1"; S.popover = { type: "preview", id: "L1", via: "keyboard" }; S.gesture = "Tab to link, ⌘K → preview dialog (keyboard equivalent of the card)"; break;
+    case "linked": S.doc = "budget"; S.tabs = ["budget"]; S.scrollTo = "#linked-from"; break;
+  }
+  render();
+}
+window.__proto = {
+  S, set, render, follow, back, applyScene, openPicker, pickerStep,
+  scene(name, opts = {}) { Object.assign(S, opts); applyScene(name); },
+};
+applyScene("text");
+</script>
+</body>
+</html>

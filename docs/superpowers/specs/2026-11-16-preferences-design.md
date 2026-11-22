@@ -659,6 +659,7 @@ CREATE TABLE doc_view (
 | IndexedDB `tinydocy-library.doc_view` | `{ width?, place? }` | Library only. W2's schema already reserves the store. `place` moves the library's continue position out of `tinydocy-continue`. The sandbox keeps `tinydocy-continue`. |
 | `tinydocy-user` | `{ name, color }` (legacy shape, now validated) | §5.12 |
 | `tinydocy-continue` | unchanged | Written only when `rememberPlace` is on. Turning it off deletes the key. |
+| `tinydocy-author` (P4.9) | the comment device secret: 22 base64url characters (128 bits) | Minted on first use (`lib/comments/author-id.ts`); never leaves the browser. Each comment stores the per-document author id derived from it (HMAC with the document's lineage, SEC-002), never the secret, and never in awareness. Not a preference: Forget and R=0 leave it, as they leave `tinydocy-user`. |
 
 - **The `page` slot stores a style name plus overrides.**
   - The effective value is `STYLES[style]` with the overrides merged over it.
@@ -749,6 +750,10 @@ All values are custom properties on `:root`, chosen by attributes. They are unre
 - **Code:**
   - `.tiptap code, .tiptap pre { letter-spacing: normal; word-spacing: normal; font-family: <code stack> }`.
   - Code never takes the page font or extra letter spacing.
+- **Right-to-left blocks (languages design §5.3, L4):**
+  - `.tiptap :dir(rtl) { letter-spacing: normal; }`, keeping `word-spacing: var(--page-word)`.
+  - Letter spacing breaks or is not interoperable for joined (Arabic-script) letters, and CSS can't select by script, so every RTL block turns it off, Hebrew included. Word spacing still applies.
+  - `:dir()` matches blocks that `dir="auto"` resolved to RTL.
 - **Full width:**
   - Text blocks (`p`, `ul`, `ol`, `blockquote`, `h1`–`h6`, task lists) get `max-inline-size: calc(46 * var(--page-size))`, aligned to the start edge.
   - Tables, images, Mermaid and code blocks use the full width.
@@ -821,7 +826,7 @@ Desktop and the web library are new installs on new storage, so they get the new
 | `appearance` (`tinydocy-theme`) | kept | **stored** (today) |
 | Page settings, `a11y`, `spellcheck`, `smartQuotes`, `outline`, `simpleToolbar` (`tinydocy-ui`) | kept | **session only**, with the "not saved" line. `simpleToolbar` changes from "disabled with a reason" to session-only, so all settings behave the same way. |
 | `rememberPlace` / `tinydocy-continue` | kept | forced off (today) |
-| `identity`, `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
+| `identity` (and the comment device secret, `tinydocy-author`), `usageStats`, formats, folds, `activeTabId` | kept | unaffected (today) |
 | Library `doc_view` | kept | the library origin is expected to keep R = 1. If 0, per-document width is session-only too. |
 
 - Desktop builds don't carry the flag. Desktop "Forget my formatting choices" clears the renderer's `tinydocy-choices` exactly as on the web.
@@ -931,6 +936,13 @@ Desktop and the web library are new installs on new storage, so they get the new
   - The desktop static export bundles them. Desktop CSP `font-src 'self'` covers them.
 - **Fallback metrics.** Each family gets a fallback `@font-face` with `size-adjust` and `ascent-override` tuned against its stack, so swapping causes little reflow.
 - **Licences.** OFL texts are added to About › Third-party notices (desktop) and the web licences page, generated from the packages.
+- **Script fallbacks (languages design §5.2, L4).** None of the families above covers Arabic script or Hebrew, so four OFL faces join the stacks:
+  - **Vazirmatn** (Arabic subset) in the Default, Sans, Legible and Mono stacks;
+  - **Noto Naskh Arabic** in the Serif stack;
+  - **Noto Sans Hebrew** in the Default, Sans, Legible and Mono stacks;
+  - **Noto Serif Hebrew** in the Serif stack.
+
+  Each is a `@font-face` with a `unicode-range` (Arabic U+0600–06FF, U+0750–077F, U+08A0–08FF, U+FB50–FDFF, U+FE70–FEFF; Hebrew U+0590–05FF, U+FB1D–FB4F), listed **after** the page font, so it downloads only when such text renders. They are bundled, cached and offline the same way as the faces above. **`classic` keeps today's stack** (no visible change); the fallbacks join every new style.
 
 ### 5.14 Bundle impact
 
@@ -943,6 +955,15 @@ Desktop and the web library are new installs on new storage, so they get the new
 | Global CSS | about +3 KB gz (variables, styles, `classic`, high-contrast set, `@font-face`) | — |
 | HTML | boot script about +0.9 KB per response | — |
 | Fonts | 0 until chosen | — |
+
+**Measured in P2.9c-1 (#161, against `main` at `84a9458`, gzipped)** — the first-load targets set in review (coordinator, 2026-11-22) and the results:
+
+| | Target | Measured | Notes |
+|---|---|---|---|
+| Editor chunk group | ≤ +150 B (the D23 smart-quotes line) | **+109 B** (394,127 B) | |
+| First-load JS | ≤ +600 B | **+537 B** | `PageFrame` only. The store, schema and applier are a lazy runtime loaded on idle (2,183 B). |
+| First-load CSS | ≤ +400 B | **+475 B, approved** | Over by 75 B for the increased-contrast set (about 230 B), which stays eager. OS "Increase contrast" users must never see a frame at normal contrast, so accessibility outranks 230 B (coordinator ruling, 2026-11-22). The knobs, the text rules, reading mode and motion are in `_page-text.scss` (724 B), which loads next to the editor. |
+| HTML | — | +1,413 B | The boot script is 2,445 B (1,212 B gzipped), including the inline knob values. |
 
 ### 5.15 Tests
 
@@ -972,9 +993,13 @@ Desktop and the web library are new installs on new storage, so they get the new
   11. **Outline docking** at the table's thresholds ± 1 px, with the files sidebar open.
   12. **Spellcheck off:** `spellcheck` is false on `.ProseMirror`.
   13. **Reading mode:** no Yjs update is emitted while toggling and scrolling.
-- **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and `firefox`, checking joining, diacritics and caret movement. If a browser breaks joining, letter spacing is scoped with `:lang()`.
+- **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and the `firefox` project (defined once by test strategy Q7; languages L7 adds its RTL specs there), checking joining, diacritics and caret movement. Letter spacing is already off in RTL blocks (§5.4), so this checks that word spacing and the fallback faces keep letters joined.
 - **`perf`:**
-  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds.
+  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds. *Amended in P2.9c-1 (#161):*
+    - The fixture is the 500-heading document, because the server refuses the 1,000-heading one (2 MiB cap).
+    - "One layout" holds for the engine itself, measured with every block rendered.
+    - On the real page, `content-visibility: auto` (off-screen blocks) adds at most one relevance pass in the same frame after any geometry change.
+    - A theme flip, which moves nothing, stays at one.
   - Typing latency is unchanged.
   - `check-editor-chunk-size` passes.
 - **Electron:**

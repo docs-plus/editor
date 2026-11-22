@@ -1,0 +1,131 @@
+@use "sass:map";
+@use "page-scopes" as *;
+
+// Page preferences, the part the first paint needs (preferences design
+// §5.4): the Default page card's width (the skeleton shares it, so nothing
+// moves on load), the frame and its docking threshold, and increased
+// contrast. The boot script sets the `<html>` attributes this maps. The
+// knobs, the document text's rules, reading mode and the motion override
+// load with the editor (`_page-text.scss`).
+//
+// The custom properties are unregistered on purpose: an `em` resolves where
+// a property is used, and a frame (`PageFrame`) can override the measure
+// for its document.
+
+// `lib/prefs/page-metrics.ts` holds the same table.
+$measures: (
+  narrow: 30,
+  standard: 33,
+  wide: 46,
+);
+
+/* =====================
+     VARIABLES: the Default style. Its knobs (`data-text-size`,
+     `data-page-width`) map in `_page-text.scss`, which the editor waits
+     for; before P2.9c-2 adds controls, no one has a knob set.
+     ===================== */
+:root {
+  --page-size: 1rem;
+  --page-measure: #{map.get($measures, standard)};
+}
+
+/* =====================
+     CARD AND SKELETON: one width, so nothing moves on load
+     ===================== */
+#{$classic} :is(.document-editor-content, .skeleton-page) {
+  max-width: 648px;
+}
+
+#{$paged} :is(.document-editor-content, .skeleton-page) {
+  // The measure in em of the text size, plus the 3 rem padding each side.
+  max-width: calc(var(--page-measure) * var(--page-size) + 6rem);
+  font-size: var(--page-size);
+}
+
+// The skeleton's outline column shows only where the live outline docks:
+// at least the card plus 302 px (§5.9), as `PageFrame` computes. The card
+// is in em, which a media query takes from the browser's own text size, as
+// the frame does; the 270 px outline and its gutter stay px. Known gaps:
+// - only the Default page's own size and width get the rule (the only
+//   ones reachable before P2.9c-2 adds controls, which adds the rest);
+// - the frame measures the main area, this the viewport, which differ only
+//   beside a files sidebar (library hosts).
+// `classic` keeps today's skeleton.
+// Standard at 16 px: 33 em of 1 rem plus 6 rem of padding.
+@media (max-width: calc(#{map.get($measures, standard) + 6}em + 301.98px)) {
+  :root:not([data-page-style="classic"], [data-text-size], [data-page-width])
+    .skeleton-toc {
+    display: none;
+  }
+}
+
+/* =====================
+     INCREASED CONTRAST
+     `data-contrast="more"` is the web override, or the OS setting outside
+     `classic` (the boot script and the runtime decide; forced colours
+     replace colours anyway).
+     ===================== */
+:root[data-contrast="more"] {
+  --foreground: oklch(0 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --border: oklch(0.5 0 0);
+  --input: oklch(0.5 0 0);
+  --focus-ring: oklch(0 0 0);
+  --tt-border-color-tint: oklch(0.5 0 0);
+
+  &.dark {
+    --foreground: oklch(1 0 0);
+    --card-foreground: oklch(1 0 0);
+    --popover-foreground: oklch(1 0 0);
+    --muted-foreground: oklch(0.85 0 0);
+    --border: oklch(0.65 0 0);
+    --input: oklch(0.65 0 0);
+    --focus-ring: oklch(1 0 0);
+    --tt-border-color-tint: oklch(0.65 0 0);
+  }
+
+  :focus-visible {
+    outline-width: 3px;
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: auto;
+    backdrop-filter: none;
+  }
+
+  .tiptap.ProseMirror a {
+    text-decoration-thickness: 2px;
+  }
+}
+
+/* =====================
+     PAGE FRAME AND READING MODE
+     The frame (`PageFrame`) wraps the editor or its skeleton in the app
+     shell and takes the place the editor had, so nothing moves.
+     ===================== */
+.page-frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  // §5.9: the outline docks when the frame is at least the card plus its
+  // 302 px (270 px outline and gutter). From the same variables as the
+  // card, on the frame, so a document's own width counts; `PageFrame`
+  // reads it (registered below, so it computes to px).
+  --page-dock-min: calc(var(--page-measure) * var(--page-size) + 6rem + 302px);
+}
+
+// Today's 648 px card: 950 px, as before.
+:root[data-page-style="classic"] .page-frame {
+  --page-dock-min: 950px;
+}
+
+@property --page-dock-min {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}

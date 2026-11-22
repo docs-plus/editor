@@ -22,9 +22,9 @@
  *   they must not write back to the index synchronously.
  *
  * Which document is active is per-window state, never in the index.
- * Folders and pins are the `LibraryIndex` extension below (P2.7a); tags,
- * purge and the large-library search fallback join with P2.7b, P2.8 and
- * SR1.
+ * Folders and pins (P2.7a), and tags, list preferences, Manual order and
+ * the Trash list (P2.7b) are the `LibraryIndex` extension below; purge and
+ * the large-library search fallback join with P2.8 and SR1.
  */
 
 /** One document in the index. */
@@ -41,6 +41,25 @@ export interface DocumentEntry {
   readonly pinKey?: string;
   /** `LibraryIndex` only: when it was last opened, if ever. */
   readonly openedAt?: number;
+  /**
+   * `LibraryIndex` only: the last content change (`docs.modified_at`). Only
+   * content edits change it (title included, since the title is the first
+   * heading); moves, pins, tags and opening don't (owner decision D-O5).
+   */
+  readonly modifiedAt?: number;
+  /**
+   * `LibraryIndex` only: the start of the body as plain text, sent by the
+   * renderer with each save like the title (`docs.snippet`, details §6.3).
+   */
+  readonly snippet?: string;
+  /** `LibraryIndex` only: its tags (`doc_tags`), in no particular order. */
+  readonly tagIds?: readonly string[];
+  /**
+   * `LibraryIndex` only: its place in its folder's Manual order
+   * (`docs.sort_key`, string order). Absent: after the keyed ones, oldest
+   * first (`compareManual` in `lib/library/list-rows.ts`).
+   */
+  readonly sortKey?: string;
 }
 
 export interface DocumentIndexSnapshot {
@@ -95,6 +114,14 @@ export interface DocumentIndex {
   subscribe(listener: DocumentIndexListener): () => void;
   /** Lists a new, empty document; null when refused (not ready, full). */
   create(init?: { title?: string }): DocumentEntry | null;
+  /**
+   * Sets the title. On a `LibraryIndex` this edits the document's title
+   * heading through a session (the open window's, or a headless one for a
+   * closed document) and never writes the stored title column, which then
+   * follows from the next save: the title has one writer (offline
+   * data-model revision §4.2, gap G4). The web sandbox's tab list writes
+   * its own title directly.
+   */
   rename(id: string, title: string): void;
   /** Moves `id` to position `toIndex` of `snapshot().items`. */
   move(id: string, toIndex: number): void;
@@ -120,11 +147,79 @@ export interface FolderEntry {
   readonly createdAt: number;
 }
 
+/** A tag (`tags`, D7). Tags stay on this computer, never in the Y.Doc. */
+export interface TagEntry {
+  readonly id: string;
+  /** Unique by `tagNameKey` (`lib/library/tag-rules.ts`). */
+  readonly name: string;
+  /** One of the 8 fixed colours (P2.9b); null: none. */
+  readonly color: string | null;
+}
+
+/** What a list is sorted by (details §6.3). */
+export type ListSortField =
+  | "title"
+  | "modified"
+  | "created"
+  | "opened"
+  | "manual";
+
+/**
+ * A list's saved choices (details §6.3): per folder in `folders.sort`,
+ * `view` and `"group"`; for the places with no folder row (the Library
+ * root, Recent, Pinned, a tag) in the engine's `meta`. Unset fields take
+ * the place's defaults (`lib/library/list-view.ts`).
+ */
+export interface ListViewPrefs {
+  readonly sort: ListSortField;
+  readonly descending: boolean;
+  /** List: one line per document. Preview: the title plus a 2-line snippet. */
+  readonly view: "list" | "preview";
+  /** By folder: only in lists that span folders (Recent, Pinned, a tag). */
+  readonly group: "none" | "date" | "folder";
+}
+
+/**
+ * Something in the Trash, for the Trash list (`trashed_at`, `trash_group`,
+ * `trashed_from`). A folder is one unit with everything that went with it.
+ */
+export type TrashedItem =
+  | {
+      readonly kind: "doc";
+      readonly id: string;
+      readonly title: string;
+      readonly trashedAt: number;
+      /** The folder it was in; null at the root. */
+      readonly folderId: string | null;
+    }
+  | {
+      readonly kind: "folder";
+      readonly id: string;
+      readonly name: string;
+      readonly trashedAt: number;
+      readonly parentId: string | null;
+      readonly docCount: number;
+      /** The subtree's one `trash_group` (`TrashedFolder.trashGroup`). */
+      readonly trashGroup: string;
+    };
+
 export interface LibraryIndexSnapshot extends DocumentIndexSnapshot {
   /** Live folders (not in the Trash), in no particular order. */
   readonly folders: readonly FolderEntry[];
   /** Documents in the Trash, counted alone or inside trashed folders. */
   readonly trashCount: number;
+  /** In no particular order. */
+  readonly tags: readonly TagEntry[];
+  /**
+   * Saved list choices by place key (`listPlaceKey`: `library`, `recent`,
+   * `pinned`, `trash`, `folder:<id>`, `tag:<id>`). Only what was set.
+   */
+  readonly listViews: Readonly<Record<string, Partial<ListViewPrefs>>>;
+  /**
+   * What the Trash list shows: documents trashed alone and trashed folders
+   * (their documents are inside them), newest first.
+   */
+  readonly trash: readonly TrashedItem[];
 }
 
 export type LibraryIndexListener = (
@@ -162,9 +257,16 @@ export type MoveResult =
 export interface TrashedFolder {
   readonly id: string;
   readonly name: string;
+  /** Where it was (`trashed_from`); restore falls back to the root. */
   readonly parentId: string | null;
   /** Documents that went with it, at any depth. */
   readonly docCount: number;
+  /**
+   * One new `trash_group` shared by the folder, its live subfolders and
+   * their documents; restoring the folder restores exactly that group.
+   * Items trashed earlier on their own keep their own group.
+   */
+  readonly trashGroup: string;
 }
 
 /**
@@ -173,6 +275,20 @@ export interface TrashedFolder {
  * - `gone`: it can no longer be restored.
  */
 export type FolderRestoreResult = "restored" | "restored_to_root" | "gone";
+
+/**
+ * - `exists`: another tag has that name (`tagNameKey`); nothing changed.
+ *   The caller may offer to merge into `tagId` (details §3).
+ * - `invalid`: the name is empty once cleaned.
+ * - `not_found`, `not_ready`: as for moves.
+ */
+export type TagRenameResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: "exists"; readonly tagId: string }
+  | {
+      readonly ok: false;
+      readonly reason: "invalid" | "not_found" | "not_ready";
+    };
 
 /**
  * The document library (desktop and the web library, D3): a `DocumentIndex`
@@ -188,7 +304,14 @@ export type FolderRestoreResult = "restored" | "restored_to_root" | "gone";
  * - A trashed folder takes its subfolders and documents with it; they leave
  *   `items` and `folders` and count in `trashCount`.
  * - `restore` brings a document back to its folder, or to the root when
- *   that folder is gone.
+ *   that folder is gone or in the Trash. `restoreFolder` does the same
+ *   for a folder, and brings back its whole `trash_group` and nothing else.
+ * - Tag names are unique by `tagNameKey`, at most `TAG_NAME_MAX` characters,
+ *   and a document has at most `MAX_TAGS_PER_DOC` tags
+ *   (`lib/library/tag-rules.ts`; the engine checks the same key, not only
+ *   `COLLATE NOCASE`, which folds ASCII alone).
+ * - Tag, list-preference and Manual-order operations apply to the snapshot
+ *   before they return and notify synchronously.
  */
 export interface LibraryIndex extends DocumentIndex {
   snapshot(): LibraryIndexSnapshot;
@@ -198,7 +321,11 @@ export interface LibraryIndex extends DocumentIndex {
     title?: string;
     folderId?: string | null;
   }): DocumentEntry | null;
-  /** Null when refused: not ready, unknown parent, or too deep. */
+  /**
+   * Null when refused: not ready, unknown parent, or too deep. Sibling
+   * folders may share a name (owner decision D-O6): no operation refuses
+   * a folder name.
+   */
   createFolder(init: {
     name: string;
     parentId?: string | null;
@@ -218,4 +345,29 @@ export interface LibraryIndex extends DocumentIndex {
   markOpened(id: string): void;
   trashFolder(id: string): Promise<TrashedFolder | null>;
   restoreFolder(id: string): Promise<FolderRestoreResult | null>;
+  /**
+   * Saves list choices for a place (`listPlaceKey`), merged into what was
+   * saved. Desktop: a folder's go to its `folders` row, the rest to `meta`.
+   */
+  setListView(place: string, prefs: Partial<ListViewPrefs>): void;
+  /**
+   * Moves a document to `toIndex` in its folder's Manual order
+   * (`docs.sort_key`); the tree keeps sorting by title.
+   */
+  moveInFolder(id: string, toIndex: number): void;
+  /**
+   * The tag with this name, created when none has it (`tagNameKey`); null
+   * when the cleaned name is empty or the index isn't ready.
+   */
+  createTag(name: string): TagEntry | null;
+  /** False when refused: unknown, or the document has `MAX_TAGS_PER_DOC`. */
+  addTag(docId: string, tagId: string): boolean;
+  removeTag(docId: string, tagId: string): void;
+  /** Renames everywhere at once; refuses a name another tag has. */
+  renameTag(id: string, name: string): TagRenameResult;
+  /**
+   * Gives every document tagged `fromId` the tag `intoId` and deletes
+   * `fromId`; false when either is unknown or they are the same.
+   */
+  mergeTags(fromId: string, intoId: string): boolean;
 }

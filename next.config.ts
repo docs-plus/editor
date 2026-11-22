@@ -6,7 +6,6 @@ import { PHASE_PRODUCTION_BUILD } from "next/constants";
 
 import { GA_MEASUREMENT_ID } from "./lib/analytics-config";
 import { buildContentSecurityPolicy } from "./lib/security/content-security-policy";
-import { listParked, PARKING_DIR } from "./scripts/desktop-export";
 
 function resolveBuildId(): string {
   const fromEnv = process.env.NEXT_PUBLIC_BUILD_ID?.trim();
@@ -31,37 +30,39 @@ function resolveBuildId(): string {
 // architecture §3.1 step 1). `bun run build:desktop` sets it.
 const isDesktop = process.env.NEXT_PUBLIC_APP_TARGET === "desktop";
 
-// A desktop export that was killed can leave web-only files parked; a web
-// build now would ship without its sitemap, manifest or privacy page.
-const parked = isDesktop ? [] : listParked(process.cwd());
-if (parked.length > 0) {
-  throw new Error(
-    `${parked.join(", ")} are parked in ${PARKING_DIR}/ by an interrupted desktop export. Run \`bun run build:desktop\` once (it puts them back first), or move them back into app/.`,
-  );
-}
-
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
     // Always defined, so the bundler inlines it and drops the other target's
     // branches; an unset NEXT_PUBLIC_* stays a runtime lookup.
     NEXT_PUBLIC_APP_TARGET: process.env.NEXT_PUBLIC_APP_TARGET ?? "web",
+    // "dev" only for a desktop-target `next dev` over the dev storage host
+    // (the `local` project); defined so release builds drop that branch.
+    NEXT_PUBLIC_DESKTOP_BRIDGE: process.env.NEXT_PUBLIC_DESKTOP_BRIDGE ?? "",
   },
-  // Web-only route handlers are `route.web.ts(x)`, which the desktop
-  // extensions don't match; `*.desktop.tsx` is the desktop-only
-  // counterpart. Web-only pages and metadata files are parked instead
-  // (scripts/desktop-export.ts).
+  // Desktop routes are an allowlist: only `*.desktop.tsx` files (the root
+  // page, and re-exports of the layout, error page and /about). Every plain
+  // web page, route handler and metadata file (sitemap, manifest, Open
+  // Graph image) is invisible to it, so nothing is moved for the export;
+  // the web never matches `.desktop.tsx`. A plain `page.tsx` beside a
+  // `page.desktop.tsx` would win, so the two lists can't overlap. The list
+  // also leaves out Next's other convention files on desktop (`not-found`,
+  // `global-error`, `instrumentation`, `proxy`): add a `.desktop.tsx` one
+  // if desktop needs it.
   pageExtensions: isDesktop
-    ? ["desktop.tsx", "tsx", "ts"]
+    ? ["desktop.tsx", "desktop.ts"]
     : ["web.tsx", "web.ts", "tsx", "ts"],
-  // The export type-checks a tree with web-only files parked, which the
-  // route types `next dev` generated (.next/dev/types) still import.
-  // `bun run typecheck` checks every file, desktop ones included.
-  ...(isDesktop ? { typescript: { ignoreBuildErrors: true } } : {}),
   // Next 16.4+ rewrites AGENTS.md when it detects a coding agent; that file
   // holds curated repo conventions, so keep it hand-maintained.
   agentRules: false,
   poweredByHeader: false,
+  // cmdk's unused `Command.Dialog` would carry Radix Dialog into the
+  // palette chunk (contract A7: palette plus cmdk within 20 KB gz).
+  turbopack: {
+    resolveAlias: {
+      "@radix-ui/react-dialog": "./lib/cmdk-radix-dialog-stub.ts",
+    },
+  },
   // A static export has no server to send headers; the desktop shell sets
   // its own CSP (P2.5).
   ...(isDesktop ? {} : { headers: webHeaders }),
@@ -98,11 +99,15 @@ async function webHeaders() {
 }
 
 // Desktop is a static export loaded from app://tinydocy. Only the build
-// exports: under `next dev` (the `local` Playwright project) the web
-// metadata files aren't parked, and `output: "export"` would make each of
-// them a 500 that every page links.
+// exports: `next dev` (the `local` Playwright project) serves as usual.
 export default function config(phase: string): NextConfig {
-  return isDesktop && phase === PHASE_PRODUCTION_BUILD
-    ? { ...nextConfig, output: "export" }
-    : nextConfig;
+  if (!isDesktop || phase !== PHASE_PRODUCTION_BUILD) return nextConfig;
+  // The dev bridge is for `next dev` only; NODE_ENV alone can't keep it out
+  // of a build (Bun), and the export check would only catch it afterwards.
+  if (process.env.NEXT_PUBLIC_DESKTOP_BRIDGE === "dev") {
+    throw new Error(
+      "NEXT_PUBLIC_DESKTOP_BRIDGE=dev is for a desktop-target next dev only; unset it to build the desktop renderer.",
+    );
+  }
+  return { ...nextConfig, output: "export" };
 }

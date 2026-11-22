@@ -61,6 +61,40 @@ export function isNewFolderKey(event: Key, mac: boolean): boolean {
   );
 }
 
+/**
+ * Filter list (P2.7b): ⌘F / Ctrl+F, bound on the list itself so Find
+ * (P2.11) stays the editor's.
+ */
+export function isFilterKey(event: Key, mac: boolean): boolean {
+  return (
+    primary(event, mac) &&
+    !event.shiftKey &&
+    !event.altKey &&
+    letter(event, "f")
+  );
+}
+
+/** Select all in the list or folder: ⌘A / Ctrl+A. */
+export function isSelectAllKey(event: Key, mac: boolean): boolean {
+  return (
+    primary(event, mac) &&
+    !event.shiftKey &&
+    !event.altKey &&
+    letter(event, "a")
+  );
+}
+
+/**
+ * Move Up / Move Down in a Manual-sorted list (details §6.1): ⌥⌘↑ / ⌥⌘↓,
+ * Ctrl+Alt+↑ / ↓ off macOS.
+ */
+export function manualMoveKey(event: Key, mac: boolean): "up" | "down" | null {
+  if (!primary(event, mac) || !event.altKey || event.shiftKey) return null;
+  if (event.key === "ArrowUp") return "up";
+  if (event.key === "ArrowDown") return "down";
+  return null;
+}
+
 /** Shift+F10 or the Menu key. */
 export function isContextMenuKey(event: Key): boolean {
   return (
