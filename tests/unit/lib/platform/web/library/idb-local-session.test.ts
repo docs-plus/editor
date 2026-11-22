@@ -14,7 +14,15 @@ import {
   RETRY_BASE_MS,
 } from "@/lib/platform/batcher";
 import { createLocalSession } from "@/lib/platform/local-session";
-import { createFakeLibrary, injectQuotaFault } from "@/tests/helpers/fake-idb";
+import { IdbDocStore } from "@/lib/platform/web/library/idb-doc-store";
+import type { LibraryEvent } from "@/lib/platform/web/library/library-db";
+import { createLibraryDoc } from "@/lib/platform/web/library/library-docs";
+import { STORES } from "@/lib/platform/web/library/library-schema";
+import {
+  createFakeBrowser,
+  createFakeLibrary,
+  injectQuotaFault,
+} from "@/tests/helpers/fake-idb";
 import { FakeClock } from "@/tests/helpers/platform-fakes";
 
 /** Waits in real time: IndexedDB commits on its own task queue. */
@@ -70,5 +78,89 @@ describe("local-session over IdbDocStore", () => {
     expect(doc.getText("t").toString()).toBe("first second");
     handle.release();
     await library.dispose();
+  });
+});
+
+/**
+ * The contract W4 must honour after an upgrade in another tab (web library
+ * §2.2 As built): `IdbDocStore` has no reopen path, so a reload is the only
+ * recovery, and only a session drain registered as a close hook writes the
+ * batches the batcher still holds before the connection closes.
+ */
+describe("an upgrade in another tab, with local-session over IdbDocStore", () => {
+  async function setUp() {
+    const browser = createFakeBrowser();
+    const events: LibraryEvent[] = [];
+    const library = await browser.open({ onEvent: (e) => events.push(e) });
+    await createLibraryDoc(library, { id: "doc" });
+    const clock = new FakeClock();
+    const health: BatcherHealth[] = [];
+    const session = createLocalSession({
+      store: new IdbDocStore({ library }),
+      clock,
+      scheduleIdle: (fn) => clock.setTimeout(fn, 0),
+      onHealth: (_docId, next) => health.push(next),
+    });
+    const handle = session.open("doc");
+    await until(() => handle.getState().ready);
+    /** Opens version 2, as a newer bundle's tab; resolves once it is in. */
+    const upgrade = () =>
+      new Promise<IDBDatabase>((resolve, reject) => {
+        const request = browser.factory.open("tinydocy-library", 2);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    const rowCount = (db: IDBDatabase) =>
+      new Promise<number>((resolve) => {
+        const request = db
+          .transaction(STORES.updates, "readonly")
+          .objectStore(STORES.updates)
+          .count();
+        request.onsuccess = () => resolve(request.result);
+      });
+    return {
+      library,
+      events,
+      clock,
+      health,
+      session,
+      handle,
+      upgrade,
+      rowCount,
+    };
+  }
+
+  it("writes a queued batch first when W4 registers the session drain as a close hook", async () => {
+    const { library, events, session, handle, upgrade, rowCount } =
+      await setUp();
+    library.addCloseHook(() => session.flush());
+    // Queued in the batcher: its idle timer never fires (the clock is fake).
+    handle.doc.getText("t").insert(0, "typed just before the upgrade");
+
+    const newer = await upgrade();
+    expect(library.closed).toBe(true);
+    expect(events).toEqual(["library_reload"]);
+    expect(await rowCount(newer)).toBe(1);
+    newer.close();
+    handle.release();
+  });
+
+  it("without that hook, leaves the batch queued and failing until the reload", async () => {
+    const { library, events, clock, health, handle, upgrade, rowCount } =
+      await setUp();
+    handle.doc.getText("t").insert(0, "typed just before the upgrade");
+
+    const newer = await upgrade();
+    expect(library.closed).toBe(true);
+    expect(events).toEqual(["library_reload"]);
+    expect(await rowCount(newer)).toBe(0);
+
+    // The batch is still held, and every retry fails retryably: W4's
+    // beforeunload guard stays armed until the reload.
+    await clock.advance(BATCH_IDLE_MS);
+    await until(() => health.at(-1)?.failing?.code === "library_unavailable");
+    expect(health.at(-1)?.failing?.retryable).toBe(true);
+    newer.close();
+    handle.release();
   });
 });
