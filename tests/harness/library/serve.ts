@@ -8,6 +8,9 @@
  * The page bundle comes from `Bun.build`; the stylesheet is `app/globals.css`
  * compiled by the same `@tailwindcss/postcss` plugin Next uses, so shadcn
  * components look as they do in the app.
+ *
+ * `LIBRARY_HARNESS_PROD=1` builds minified production React, for the list
+ * speed targets (development React overstates first paint several times).
  */
 import path from "node:path";
 
@@ -17,14 +20,17 @@ import postcss from "postcss";
 const ROOT = path.resolve(import.meta.dir, "../../..");
 const HERE = import.meta.dir;
 const PORT = Number(process.env.LIBRARY_HARNESS_PORT ?? 3871);
+const PROD = process.env.LIBRARY_HARNESS_PROD === "1";
 
 async function buildScript(): Promise<string> {
   const result = await Bun.build({
     entrypoints: [path.join(HERE, "main.tsx")],
     target: "browser",
-    minify: false,
+    minify: PROD,
     define: {
-      "process.env.NODE_ENV": JSON.stringify("development"),
+      "process.env.NODE_ENV": JSON.stringify(
+        PROD ? "production" : "development",
+      ),
       "process.env.NEXT_PUBLIC_APP_TARGET": JSON.stringify("desktop"),
     },
   });
@@ -86,4 +92,6 @@ const server = Bun.serve({
   },
 });
 
-console.log(`library harness on http://${server.hostname}:${server.port}/`);
+console.log(
+  `library harness (${PROD ? "production" : "development"}) on http://${server.hostname}:${server.port}/`,
+);
