@@ -105,8 +105,10 @@ module.exports = {
         // dry-run logs what it would delete and changes nothing; on backs
         // the database up to backups/ (dated copies kept 14 days, the first
         // one forever), then deletes; off skips.
-        // Switch to on in a pull request after reviewing dry-run logs.
-        PURGE_MODE: "dry-run",
+        // On since 2026-11-22, after four daily dry runs (2026-11-19..22)
+        // each listed the same 2 idle documents. Set dry-run or off here to
+        // stop purging.
+        PURGE_MODE: "on",
       },
       cron_restart: "17 3 * * *",
       autorestart: false,
