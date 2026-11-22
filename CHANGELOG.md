@@ -13,13 +13,13 @@ since the previous tag.
 
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A20):
-Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. Measured with
-P2–P4 under it (`feat/phone-insert-sheet` at `60bc13b`, 393,995 B gz) the
-editor chunk group is 394,246 B gz (+251 B; +228 B against `main` at
-`84a9458`): the per-item lift that Turn into's text styles need lives in
-the eager registry (about +200 B), pending a ruling. The bubble chunk is
-14,161 B gz (9,798 B on `main`), the menu chunk that holds Turn into
-5,778 B gz (3,173 B) and the colour chunk 6,583 B gz.
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. The editor chunk
+group does not grow: 394,020 B gz against 394,018 B on `main` at `84a9458`
+(+2 B, hash churn; 393,995 B with P2–P4 under it at `60bc13b`). The
+per-item lift behind the text styles is injected from the lazy chunks. The
+bubble chunk is 14,411 B gz (9,798 B on `main`), the menu chunk that holds
+Turn into 6,077 B gz (3,173 B), the colour chunk 6,583 B gz and the "/"
+chunk 7,674 B gz (7,300 B with P2–P4).
 
 #### Added
 
@@ -37,7 +37,9 @@ the eager registry (about +200 B), pending a ruling. The bubble chunk is
   wherever they run (Turn into, the palette, the "/" menu, the phone's
   Style rows, the shortcuts); unselected items and lines stay in their list
   or quote, and a range across a paragraph and a list converts every
-  block.
+  block. The lift loads with the bubble (on idle), the menus, "/", the
+  phone bar or the palette; before any of them, a style shortcut in a list
+  restyles in place, as before.
 - **Turn into:** after select all it converts everything but the title
   ("The title stays a heading."); Code block and Quote lift list items and
   quote lines first; Code block over formatting says "Formatting
