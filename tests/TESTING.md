@@ -629,7 +629,9 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   spec files into four shards by duration (longest first, into the
   least-loaded shard; a new spec counts as the median), from per-file
   seconds that `Playwright (Chromium)` publishes as the `e2e-timings`
-  artifact on green pushes to `main` only. The `Changed files` job reads them
+  artifact on green pushes to `main` only, each file averaged half and half
+  with the timings that run packed by (one run's noise, such as a spec
+  taking twice as long on a slow runner, moves the plan only halfway). The `Changed files` job reads them
   once, so every shard packs the same plan; without usable timings (none
   yet, expired after 30 days, or invalid) every shard uses Playwright's own
   `--shard=N/4`. Each browser job logs its runner's CPU before the suites.

@@ -9,6 +9,24 @@ since the previous tag.
 
 ## [Unreleased]
 
+### CI: shard timings averaged across runs
+
+One run's per-file times are noisy (`mobile-bar.spec.ts` took 116 s in one
+run and 263 s in the next), and a plan packed from a single run inherits
+that noise, so a shard could carry 16% more than planned.
+
+#### Changed
+
+- **CI:** when a green push to `main` publishes `e2e-timings`, each file's
+  time is averaged with the timings that run packed by (an exponential
+  moving average, half weight to the newest run). A new spec keeps its own
+  time and a deleted one is dropped; without usable previous timings the
+  run's own are written, as before.
+- **Tests:** `e2e-shards.test.ts` covers the average; `ci-workflow.test.ts`
+  pins that the publish step reads the timings the run packed by.
+
+**Deploy:** none.
+
 ### CI: four shards, two perf jobs and parallel unit tests
 
 The suite has grown to 627 browser tests (about 3,500 s), so three packed

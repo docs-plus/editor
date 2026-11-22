@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   packShards,
   parseTimings,
+  smoothTimings,
   timingsFromReport,
 } from "../../../scripts/e2e-shards";
 
@@ -136,5 +137,40 @@ describe("timingsFromReport", () => {
       "a.spec.ts": 3,
       "c.spec.ts": 0.3,
     });
+  });
+});
+
+describe("smoothTimings", () => {
+  it.each([
+    {
+      name: "averages a file timed in both runs",
+      current: { a: 263 },
+      previous: { a: 116 },
+      expected: { a: 189.5 },
+    },
+    {
+      name: "keeps a new file's own time",
+      current: { a: 10, fresh: 42 },
+      previous: { a: 20 },
+      expected: { a: 15, fresh: 42 },
+    },
+    {
+      name: "drops a file the new run did not time",
+      current: { a: 10 },
+      previous: { a: 10, deleted: 300 },
+      expected: { a: 10 },
+    },
+    {
+      name: "converges on a steady time",
+      current: { a: 100 },
+      previous: { a: 100 },
+      expected: { a: 100 },
+    },
+  ])("$name", ({ current, previous, expected }) => {
+    expect(smoothTimings(current, previous)).toEqual(expected);
+  });
+
+  it("weights the newest run as asked", () => {
+    expect(smoothTimings({ a: 100 }, { a: 0 }, 0.25)).toEqual({ a: 25 });
   });
 });
