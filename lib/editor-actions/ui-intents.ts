@@ -21,7 +21,13 @@ export type UiIntent =
    * the Save dialog at the 20-format cap). The listener returns `true` at
    * once and opens its menu in the next frame, after the palette closes.
    */
-  | { type: "formats.remove" };
+  | { type: "formats.remove" }
+  /**
+   * Open the draft card for a new comment on the selection (comments
+   * design §11.1; the card is P4.10's). Emitted only where the document
+   * takes comments (`setCommentGate`).
+   */
+  | { type: "comment.add" };
 
 /**
  * Return `true` only for an intent this listener handled. D1, D2 and E all

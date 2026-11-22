@@ -70,6 +70,20 @@ describe("activity-store", () => {
     );
   });
 
+  it("does not count shares against MAX_TOTAL_DOCUMENTS", () => {
+    db = new Database(":memory:");
+    seedDocumentsTable();
+    const insertDoc = db.prepare(
+      "INSERT INTO documents (name, data) VALUES (?, ?)",
+    );
+    insertDoc.run("11111111-1111-1111-1111-111111111111", new Uint8Array());
+    insertDoc.run(
+      "share:7f3a1c2e-1111-4111-8111-111111111111",
+      new Uint8Array(),
+    );
+    expect(countNonSystemDocuments(db)).toBe(1);
+  });
+
   it("purges stale docs and matching activity rows while skipping system docs", () => {
     db = new Database(":memory:");
     seedDocumentsTable();

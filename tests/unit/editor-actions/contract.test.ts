@@ -13,6 +13,7 @@ import {
   type ActionButtonProps,
 } from "@/components/smart-toolbar";
 import { editorActions } from "@/lib/editor-actions";
+import { commentActions } from "@/lib/editor-actions/comment-actions";
 import { coreActions } from "@/lib/editor-actions/core-actions";
 import {
   availability,
@@ -76,6 +77,8 @@ const TRACK_PREFIXES = {
   ],
   d2: ["color.", "size.", "insert.", "memory."],
   e: ["palette.", "repeat.", "formats.", "template."],
+  /** Comments P4.9 (amendment A19). */
+  comments: ["comment."],
 } as const;
 
 const ownsId = (prefixes: readonly string[], id: string) =>
@@ -240,6 +243,7 @@ describe("registry (PR D1)", () => {
       [coreActions, TRACK_PREFIXES.d1],
       [surfaceActions, TRACK_PREFIXES.d2],
       [v11Actions, TRACK_PREFIXES.e],
+      [commentActions, TRACK_PREFIXES.comments],
     ] as const;
     for (const [actions, prefixes] of tracks) {
       for (const action of actions) {
@@ -469,6 +473,11 @@ describe("memory layer (PR D2)", () => {
       mermaidTemplate: "choices",
       outlineOpen: "ui",
       toolbarDensity: "ui",
+      page: "ui",
+      a11y: "ui",
+      spellcheck: "ui",
+      smartQuotes: "ui",
+      rememberPlace: "ui",
     });
   });
 

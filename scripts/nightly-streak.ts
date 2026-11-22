@@ -62,6 +62,11 @@ export const SETUP_STEPS: readonly string[] = [
   "Upload results",
   "Upload server log",
   "Upload server log and report",
+  "Upload test results",
+  "Upload the installers",
+  // Moving the exported renderer between jobs of the desktop shell workflow.
+  "Upload out/",
+  "Download out/",
 ];
 
 /** GitHub's cleanup steps (`Post Checkout`, `Post Set up Bun`, …). */

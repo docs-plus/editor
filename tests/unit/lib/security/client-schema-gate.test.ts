@@ -97,10 +97,11 @@ describe("isClientOutdated", () => {
 });
 
 it("buckets relative to CLIENT_SCHEMA", () => {
-  expect(CLIENT_SCHEMA).toBe(2);
-  expect([null, "abc", "1", "2", "3"].map(classifyClientSchema)).toEqual([
+  expect(CLIENT_SCHEMA).toBe(3);
+  expect([null, "abc", "1", "2", "3", "4"].map(classifyClientSchema)).toEqual([
     "missing",
     "invalid",
+    "low",
     "low",
     "ok",
     "ok",
@@ -160,7 +161,7 @@ describe("createClientSchemaCounter", () => {
     });
     counter.record(new URLSearchParams("schema=abc&build=a b"), false);
     counter.record(new URLSearchParams("schema=1&build=v1"), true);
-    counter.record(new URLSearchParams("schema=2&build=v2"), false);
+    counter.record(new URLSearchParams("schema=3&build=v2"), false);
     counter.flush();
     counter.flush();
     expect(lines).toHaveLength(1);
