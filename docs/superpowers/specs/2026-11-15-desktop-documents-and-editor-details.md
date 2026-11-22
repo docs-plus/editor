@@ -67,11 +67,12 @@ These came out of the staff feasibility review. Each one was checked against the
    | "Type / for blocks" placeholder | OB2 | 10 B |
    | Phone keyboards: prose and code `autocorrect` / `autocapitalize` / `spellcheck` attributes (D41, v8) | M19 | 40 B |
    | Undo-gesture handler, **only if spike M18 shows native undo mutates the DOM** (D41, v8) | M19 | 80 B, conditional |
-   | **Total** | | **1,855 B, or 1,935 B with the undo handler** |
+   | Markdown paste hook: the `clipboardTextParser` prop and the idle load of the lazy rule (E2) | P2.12 | 152 B (measured 152 B; **pending owner approval**, requested in #156) |
+   | **Total** | | **2,007 B, or 2,087 B with the undo handler** |
 
    - **Headroom:** 4,385 B real when D23 was decided (the 24,064 B budget less `main` at 19,679 B). By P2.2, `main` had shrunk to +15,284 B (08b7663), so P2.2 set the fence at +16,864 B (15,284 + 1,580) in `scripts/check-editor-chunk-size.ts`; after P2.2 1,286 B remain for the other lines. P2.1c added its 275 B line and raised the fence by exactly that, to +17,139 B (15,284 + 1,855); its bytes sit with the lazy editor chunk so that first load stays flat (−32 B).
    - **Phones (D41):** M27's hardware-keyboard listener (shortcut glyphs) stays **out** of the editor chunk.
-   - **Fencing:** P2.2 lowers `EDITOR_CHUNK_BUDGET_BYTES` to the size on `main` plus the ledger total, so unrelated work can't spend these bytes. Raising it needs an amendment to this rule. While D41's conditional 80 B undo line is unconfirmed, the fence is `main` + 1,855 B (1,580 B, plus P2.1c's 275 B line). If spike M18 confirms the line, the fence rises to `main` + 1,935 B with no further approval (pre-approved by D41).
+   - **Fencing:** P2.2 lowers `EDITOR_CHUNK_BUDGET_BYTES` to the size on `main` plus the ledger total, so unrelated work can't spend these bytes. Raising it needs an amendment to this rule. While D41's conditional 80 B undo line is unconfirmed, the fence is `main` + 2,007 B (1,580 B, plus P2.1c's 275 B line and P2.12's 152 B line). If spike M18 confirms the line, the fence rises to `main` + 2,087 B with no further approval (pre-approved by D41).
    - **A PR that would go over its line** stops for a budget review. A line's unused bytes don't move to another line without an amendment.
    - **Cut order if the ledger is over:** LK3, then « » by script, then the i18n core, then P2.13 last.
    - **LK3 measures `slash-trigger` first** (with `SlashMenuHost` it must stay under 1,000 B gz, AGENTS.md) before adding its own bytes.

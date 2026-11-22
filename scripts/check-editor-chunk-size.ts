@@ -30,11 +30,11 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * The D23 editor-chunk ledger (desktop details spec §1 rule 5): every line
  * the desktop, library and v1 feature work may add to this chunk, each
  * measured in its PR. While D41's conditional 80 B undo line is
- * unconfirmed the total is 1,855 B (1,580 B, plus P2.1c's 275 B sandbox
- * DocSession line, K14); if spike M18 confirms it, this becomes 1,935 B
- * with no further approval.
+ * unconfirmed the total is 2,007 B (1,580 B, plus P2.1c's 275 B sandbox
+ * DocSession line, K14, plus P2.12's 152 B Markdown paste hook); if spike
+ * M18 confirms it, this becomes 2,087 B with no further approval.
  */
-export const EDITOR_CHUNK_LEDGER_BYTES = 1_855;
+export const EDITOR_CHUNK_LEDGER_BYTES = 2_007;
 /**
  * The fence (D23): `main` plus the ledger, so unrelated work can't spend
  * the ledger's bytes. Raising it needs an amendment to that rule.
