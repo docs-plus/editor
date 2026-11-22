@@ -109,6 +109,8 @@ export type ShareHttpOptions = {
   /** HMAC key for `created_ip_hash`; empty means a random key per process. */
   ipHashKey: string;
   now?: () => number;
+  /** Keys each HTTP limiter tracks; `RATE_LIMIT_MAX_KEYS` by default. */
+  maxKeys?: number;
 };
 
 export type ShareHttp = {
@@ -256,12 +258,14 @@ function createAddressLimiter(
   limit: number,
   windowMs: number,
   now: () => number,
+  maxKeys?: number,
 ): AddressLimiter {
-  const own = createSlidingWindowLimiter({ limit, windowMs, now });
+  const own = createSlidingWindowLimiter({ limit, windowMs, now, maxKeys });
   const prefix = createSlidingWindowLimiter({
     limit: limit * PREFIX_48_BUDGET_FACTOR,
     windowMs,
     now,
+    maxKeys,
   });
   return {
     check(ip, { prefix48 = true } = {}) {
@@ -297,17 +301,11 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
   const { db, limits } = options;
   const allowedOrigins = new Set(options.allowedOrigins);
   const ipHashKey = options.ipHashKey || randomBytes(32).toString("hex");
-  const mutations = createAddressLimiter(
-    limits.mutationsPerMinute,
-    MINUTE_MS,
-    now,
-  );
-  const reads = createAddressLimiter(limits.readsPerMinute, MINUTE_MS, now);
-  const creationsPerIp = createAddressLimiter(
-    limits.creationsPerHourPerIp,
-    HOUR_MS,
-    now,
-  );
+  const addressLimiter = (limit: number, windowMs: number) =>
+    createAddressLimiter(limit, windowMs, now, options.maxKeys);
+  const mutations = addressLimiter(limits.mutationsPerMinute, MINUTE_MS);
+  const reads = addressLimiter(limits.readsPerMinute, MINUTE_MS);
+  const creationsPerIp = addressLimiter(limits.creationsPerHourPerIp, HOUR_MS);
   const creations = createSlidingWindowLimiter({
     limit: limits.creationsPerHour,
     windowMs: HOUR_MS,
@@ -370,17 +368,20 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     );
   }
 
+  /** The caller's address is over a limit: retry in a minute. */
+  function busy(request: Request): Response {
+    return respond(
+      request,
+      429,
+      { error: SHARE_BUSY, retryAfter: 60 },
+      { "Retry-After": "60" },
+    );
+  }
+
   /** Maps a refused share auth to a response; null when auth passed. */
   function refusal(request: Request, result: ShareAuthResult): Response | null {
     if (result.ok) return null;
-    if (result.reason === SHARE_BUSY) {
-      return respond(
-        request,
-        429,
-        { error: SHARE_BUSY, retryAfter: 60 },
-        { "Retry-After": "60" },
-      );
-    }
+    if (result.reason === SHARE_BUSY) return busy(request);
     if (isEndReason(result.reason)) return error(request, 410, result.reason);
     return error(request, 404, "not_found");
   }
@@ -585,11 +586,16 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
 
       const isRead = route.kind === "info" || route.kind === "status";
       // Owner calls skip the /48 budget, so neighbours cannot lock an owner
-      // out; wrong owner secrets still count per /48 as failed tokens.
+      // out. An address whose wrong secrets are over the failed-token limit
+      // (per /64 and /48) is refused first, so one /48 cannot rotate
+      // through its /64s to fill the per-address key table.
       const ownerCall =
         route.kind === "stop" ||
         route.kind === "reset" ||
         route.kind === "view-only";
+      if (ownerCall && options.auth.failedTokens.isAddressBlocked(ip)) {
+        return busy(request);
+      }
       // Before the origin check, so refused origins cannot flood the log.
       const decision = (isRead ? reads : mutations).check(ip, {
         prefix48: !ownerCall,

@@ -419,6 +419,44 @@ describe("HTTP rate limits per IPv6 /48", () => {
     );
     expect(stop.status).toBe(200);
   });
+
+  it("owner routes cannot fill the key table from one /48's /64s", async () => {
+    const http = createHttp({
+      maxKeys: 20,
+      auth: {
+        db,
+        mode: "on",
+        expiryMs: LIMITS.expiryMs,
+        failedTokens: createFailedTokenLimiter({ perShare: 30, perPrefix: 5 }),
+      },
+    });
+    const { shareId, secrets } = await createShare(http);
+    for (let n = 0; n < 200; n++) {
+      await http.handle(
+        new Request(`${BASE}/api/shares/${mintShareId()}`, {
+          method: "DELETE",
+          headers: bearer(makeShareSecrets().ownerToken),
+        }),
+        `2001:db8:a:${n}::/64`,
+      );
+    }
+    expect(
+      (
+        await http.handle(
+          post("/api/shares", createBody(makeShareSecrets())),
+          "198.51.100.77",
+        )
+      ).status,
+    ).toBe(201);
+    const stop = await http.handle(
+      new Request(`${BASE}/api/shares/${shareId}`, {
+        method: "DELETE",
+        headers: bearer(secrets.ownerToken),
+      }),
+      "2001:db8:b:1::/64",
+    );
+    expect(stop.status).toBe(200);
+  });
 });
 
 describe("CORS and CSRF", () => {
