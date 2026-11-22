@@ -259,7 +259,7 @@ The first version of this document designed full-text search: a renderer text ex
 >   - `createSchemaGuard` sits in `document-editor.tsx`, so it covers every session type.
 >   - The hyperlink extension binds `Alt-Enter` and exports `openPreviewPopover` and `focusPreviewFromKeyboard`.
 >   - LK1's `LinkHost` has no `extensions` field yet, and `lib/links/` exists only on `claude/feat-lk1-doc-links` (#154).
->   - The desktop spec (P4.2d) already reserves `CLIENT_SCHEMA` 3 for share documents.
+>   - The desktop spec (its "Schema floor for shares" row and P4.2 (d)) already requires `CLIENT_SCHEMA` 3 for share documents from day one.
 
 **What it is.** A smart chip is an inline pill, as in Google Docs. It shows a document's icon and its **current** title, and updates when the document is renamed. Broken or missing targets get their own state. You can insert one from the "/" menu, from the ⌘K picker, by pasting a `tinydocy:` link, or by converting an existing link.
 
@@ -272,7 +272,7 @@ The first version of this document designed full-text search: a renderer text ex
 **Where chips exist: library documents only** (desktop, the web library, and later `share:*`).
 - The sandbox editor has no host, so it never knows `docChip`.
 - The sandbox Hocus never allowlists `docChip` for sandbox names, and `SCHEMA_NODE_NAMES` stays unchanged. A hostile update therefore can't freeze `playground`: ingress refuses it with `schema_rejected`.
-- Shares get `docChip` through P4.2f-1's per-kind allowlist and the share floor at schema 3, which is already planned.
+- Shares get `docChip` through the share schema floor at `CLIENT_SCHEMA` 3, which is already planned (desktop spec, P4.2 (d)): share documents accept only the nodes and marks that `minDesktopSchema` knows. P4.2f-1's per-kind root allowlist is unaffected, because a chip lives in the `default` root.
 - **Rollout order** follows the schema rollout runbook (`textColor`, `fontSize`): clients learn the name first, and the server allows it later, here in P4.2.
 
 **v1 scope**
@@ -454,7 +454,7 @@ LK1's `DASHED_LINK_STATES` drives both links and chips.
 - **Schema:**
   - The sandbox is untouched: no change to `SCHEMA_NODE_NAMES`, `CLIENT_SCHEMA` or the floor.
   - Commit a second schema snapshot for the host editor.
-  - `CLIENT_SCHEMA` 3 is redefined as "knows asset refs **and** `docChip`". The first bundle that sends 3 must render chips, and P4.2 adds `docChip` to the share-kind allowlist.
+  - `CLIENT_SCHEMA` 3 is redefined as "knows asset refs **and** `docChip`". The first bundle that sends 3 must render chips, and P4.2 (d) adds `docChip` to the node names the share floor accepts.
 - **Offline storage:**
   - The sandbox offline cache (`~s2:`) never holds chips, so it needs no `~s3`.
   - Local documents get the `DOC_SCHEMA` handling in C8.
@@ -495,7 +495,7 @@ LK1's `DASHED_LINK_STATES` drives both links and chips.
 - **LK1/LK2 session:** the node, node view, CSS, picker, paste, conversion, announcements, `extract-links` and consent, the host schema snapshot, and every test above.
 - **Bubble session:** `insert.docLink` through the action registry, plus a keep-trigger option on `runSlashPick` for the single undo step.
 - **P2.8a export:** the chip mapping in the headless schema, the Markdown writer and HTML.
-- **SE (P4.2):** the share-kind allowlist and the definition of schema 3.
+- **SE (P4.2):** `docChip` in the share schema floor and the definition of schema 3.
 
 #### Owner decisions
 
