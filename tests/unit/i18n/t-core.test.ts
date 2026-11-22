@@ -90,15 +90,30 @@ describe("registry render boundary", () => {
     );
   });
 
-  it("looks labels, keywords and reasons up by id and English text", () => {
+  it("looks labels and keywords up by action id", () => {
     setUiLocale("fa");
     addMessages({
       "action.mark.bold.label": "پررنگ",
       "action.mark.bold.keywords": "ضخیم, سیاه",
-      "reason:This document is read-only.": "این سند فقط\u200Cخواندنی است.",
     });
     expect(actionLabel(action)).toBe("پررنگ");
     expect(actionKeywords(action)).toEqual(["ضخیم", "سیاه"]);
+  });
+
+  it("splits keywords on the Arabic-script and CJK commas too", () => {
+    setUiLocale("fa");
+    addMessages({ "action.mark.bold.keywords": "ضخیم، سیاه" });
+    expect(actionKeywords(action)).toEqual(["ضخیم", "سیاه"]);
+    setUiLocale("ja");
+    addMessages({ "action.mark.bold.keywords": "太字、強調，ボールド" });
+    expect(actionKeywords(action)).toEqual(["太字", "強調", "ボールド"]);
+  });
+
+  it("looks reasons up by English text", () => {
+    setUiLocale("fa");
+    addMessages({
+      "reason:This document is read-only.": "این سند فقط‌خواندنی است.",
+    });
     expect(reasonText("This document is read-only.")).toBe(
       "این سند فقط\u200Cخواندنی است.",
     );

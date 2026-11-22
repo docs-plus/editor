@@ -7,12 +7,16 @@
  * Keys (written by `scripts/i18n/extract.ts` into `locales/en/actions.json`
  * and, from L2a, `reasons.json`):
  * - `action.<id>.label`
- * - `action.<id>.keywords`: comma-separated search words
+ * - `action.<id>.keywords`: comma-separated search words (an ASCII comma,
+ *   or the Arabic `،` and CJK `、` `，` a translator naturally types)
  * - `reason:<English text>`
  *
  * Not imported by the app yet: L1a adds the about 6 render sites.
  */
 import { lookup } from "@/lib/i18n/t-core";
+
+/** Keyword separators: ASCII, Arabic-script and CJK commas. */
+const KEYWORD_SEPARATOR = /[,،、，]/;
 
 interface LabelledAction {
   readonly id: string;
@@ -29,7 +33,7 @@ export function actionKeywords(action: LabelledAction): readonly string[] {
   const translated = lookup(`action.${action.id}.keywords`);
   if (translated === undefined) return action.keywords ?? [];
   return translated
-    .split(",")
+    .split(KEYWORD_SEPARATOR)
     .map((word) => word.trim())
     .filter(Boolean);
 }
