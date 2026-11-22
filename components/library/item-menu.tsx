@@ -142,22 +142,57 @@ export function ItemMenu({
   item,
   anchor,
   pinned,
+  extra,
   onClose,
 }: {
   item: LibraryItemRef;
   anchor: MenuAnchor;
   pinned: boolean;
+  /** The list's own entries, put before Move to Trash. */
+  extra?: readonly ItemMenuEntry[];
   /** `keepFocus`: the chosen entry moves focus itself. */
   onClose: (keepFocus: boolean) => void;
 }) {
   const { snapshot, actions } = useLibrary();
-  const [open, setOpen] = useState(true);
-  const chosen = useRef<ItemMenuEntry | null>(null);
-  const settled = useRef(false);
   const entries = itemMenuEntries(item, snapshot, actions, {
     pinnedRow: pinned,
     mac: isMac(),
   });
+  if (extra && extra.length > 0) {
+    // Before the separator that precedes Move to Trash.
+    entries.splice(entries.length - 2, 0, ...extra);
+  }
+  return (
+    <EntryMenu
+      entries={entries}
+      anchor={anchor}
+      movesFocus={(entry) => MOVES_FOCUS.has(entry.id)}
+      onClose={onClose}
+    />
+  );
+}
+
+/**
+ * A menu of entries at a row or a pointer position; Item, Trash and tag
+ * rows share it. Choosing runs the entry a frame after the menu lets go of
+ * focus.
+ */
+export function EntryMenu({
+  entries,
+  anchor,
+  movesFocus,
+  onClose,
+}: {
+  entries: readonly (ItemMenuEntry | null)[];
+  anchor: MenuAnchor;
+  /** The entry moves focus itself, so closing must not restore it. */
+  movesFocus: (entry: ItemMenuEntry) => boolean;
+  /** `keepFocus`: the chosen entry moves focus itself. */
+  onClose: (keepFocus: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const chosen = useRef<ItemMenuEntry | null>(null);
+  const settled = useRef(false);
   // The menu closes on a choice and on Esc or an outside click, in either
   // order: settle once, a frame later, so the menu has let go of focus.
   const settle = () => {
@@ -166,7 +201,7 @@ export function ItemMenu({
     setOpen(false);
     requestAnimationFrame(() => {
       const entry = chosen.current;
-      onClose(entry ? MOVES_FOCUS.has(entry.id) : false);
+      onClose(entry ? movesFocus(entry) : false);
       entry?.run();
     });
   };

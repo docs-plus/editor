@@ -12,7 +12,8 @@
  *   precached /offline page.
  * - /_next/static/*: cache-first (content-addressed). A stored stylesheet
  *   also stores the /_next/static files it references (icons, fonts), so
- *   its masks still draw offline.
+ *   its masks still draw offline. Files a first visit loaded before the
+ *   worker controlled it are stored when the page posts them.
  * - Everything else is never touched (see classifyRequest).
  */
 import {
@@ -25,10 +26,12 @@ import {
   STATIC_CACHE_MAX_ENTRIES,
 } from "./sw-config";
 import {
+  CACHE_LOADED_MESSAGE,
   classifyRequest,
   extractCssAssets,
   extractStaticAssets,
   isCacheableResponse,
+  loadedStaticPaths,
 } from "./sw-routing";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -62,6 +65,15 @@ self.addEventListener("fetch", (event) => {
   const route = classifyRequest(event.request, self.location.origin);
   if (route === "navigation") event.respondWith(handleNavigation(event));
   else if (route === "static") event.respondWith(handleStatic(event));
+});
+
+// A first visit loads its chunks (the editor among them) before this worker
+// controls the page, so they never pass through handleStatic. The page
+// posts what it loaded once controlled (service-worker-registration.tsx).
+self.addEventListener("message", (event) => {
+  if (KILL_SWITCH || event.data?.type !== CACHE_LOADED_MESSAGE) return;
+  const paths = loadedStaticPaths(event.data.urls, self.location.origin);
+  if (paths.length > 0) event.waitUntil(cacheLoaded(paths));
 });
 
 async function activate(): Promise<void> {
@@ -149,6 +161,27 @@ async function handleStatic(event: FetchEvent): Promise<Response> {
     );
   }
   return response;
+}
+
+/**
+ * Stores the files among `paths` the static cache lacks. They come from
+ * the browser's HTTP cache, so this costs no network on a warm load. Best
+ * effort: a file that fails is fetched again when next requested.
+ */
+async function cacheLoaded(paths: string[]): Promise<void> {
+  const cache = await caches.open(STATIC_CACHE);
+  const missing: string[] = [];
+  for (const path of paths) {
+    if (!(await cache.match(path))) missing.push(path);
+  }
+  await Promise.allSettled(
+    missing.map(async (path) => {
+      const response = await fetch(path);
+      if (isCacheableResponse(response)) await cache.put(path, response);
+    }),
+  );
+  await cacheCssAssets(cache, missing);
+  await trimCache(cache, STATIC_CACHE_MAX_ENTRIES);
 }
 
 async function snapshotPage(pathname: string): Promise<void> {
