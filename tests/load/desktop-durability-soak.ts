@@ -63,10 +63,7 @@ import {
   seededRandom,
   TEXT,
 } from "@/desktop/storage-harness/gen";
-import {
-  docId as v1DocId,
-  writeFormat1Library,
-} from "@/tests/helpers/format-1-library";
+import { writeFormat1Library } from "@/tests/helpers/format-1-library";
 import { caseT21 } from "@/tests/load/desktop-soak-t21";
 
 const ROOT = join(import.meta.dir, "../..");
@@ -150,12 +147,12 @@ function seedLibrary(dir: string, padBytes: number): string {
   const { id } = library.createDoc({ title: "Soak" });
   if (padBytes > 0) {
     library.load(id, "seed");
-    const seq = library.append(id, "seed", {
-      origin: "local",
-      update: padUpdate(padBytes),
-    });
+    // One update for both: a second padUpdate() is another client, and the
+    // compaction would lose the first (I10 refuses it).
+    const update = padUpdate(padBytes);
+    const seq = library.append(id, "seed", { origin: "local", update });
     const doc = new Y.Doc();
-    Y.applyUpdate(doc, padUpdate(padBytes));
+    Y.applyUpdate(doc, update);
     library.compact(id, "seed", Y.encodeStateAsUpdate(doc), seq);
     library.close(id, "seed");
   }
@@ -1095,10 +1092,32 @@ async function caseT24b(): Promise<CaseResult> {
   if (boundaries === 0)
     failures.push(`calibration: ${clean.stderr.slice(0, 500)}`);
   const outcomes: Record<string, number> = {};
+  /** Every document's text, read straight from the file's rows. */
+  const textsAt = (dir: string) => {
+    const db = new Database(join(dir, LIBRARY_FILE), { readonly: true });
+    const ids = db.query("SELECT id FROM docs ORDER BY id").all() as {
+      id: string;
+    }[];
+    const texts = ids.map(({ id }) => {
+      const doc = new Y.Doc();
+      const snap = db
+        .query("SELECT data FROM snapshots WHERE doc_id = ?")
+        .get(id) as { data: Uint8Array } | null;
+      if (snap) Y.applyUpdate(doc, snap.data);
+      for (const row of db
+        .query("SELECT data FROM updates WHERE doc_id = ? ORDER BY seq")
+        .all(id) as { data: Uint8Array }[])
+        Y.applyUpdate(doc, row.data);
+      return `${id}:${doc.getText("t").toString()}`;
+    });
+    db.close();
+    return texts.join("\n");
+  };
   for (let k = 1; k <= boundaries; k += 1) {
     const dir = mkdtempSync(join(tmpdir(), "soak-t24b-"));
     seed(dir);
     const before = invariantAt(dir);
+    const texts = textsAt(dir);
     const run = await runHarness([
       "--mode=migrate-v2",
       `--dir=${dir}`,
@@ -1128,11 +1147,11 @@ async function caseT24b(): Promise<CaseResult> {
       failures.push(
         `kill at ${name}: reopen reached v${library.status.formatVersion} ${library.status.readOnly}`,
       );
-    const text = textOf(library, v1DocId(5)).padLength;
-    void text;
     library.shutdown();
     if (invariantAt(dir) !== before)
       failures.push(`kill at ${name}: updates changed after the reopen`);
+    if (textsAt(dir) !== texts)
+      failures.push(`kill at ${name}: a document's content changed`);
     removeDir(dir);
   }
   // A v1 file with seeded orphans is refused, and nothing is written.

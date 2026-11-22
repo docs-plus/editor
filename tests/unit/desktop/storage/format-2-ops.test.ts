@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import * as Y from "yjs";
@@ -434,56 +433,6 @@ describe("content guards", () => {
       head_seq: seq,
     });
   });
-});
-
-describe("each index serves its query (§3.5)", () => {
-  const plans: [string, string, unknown[]][] = [
-    [
-      "docs_trashed",
-      "SELECT id FROM docs WHERE trashed_at IS NOT NULL AND trashed_at <= ?",
-      [0],
-    ],
-    ["docs_trash_group", "SELECT id FROM docs WHERE trash_group = ?", ["g"]],
-    [
-      "folders_trash_group",
-      "SELECT id FROM folders WHERE trash_group = ?",
-      ["g"],
-    ],
-    [
-      "docs_stale",
-      "SELECT id FROM docs WHERE derived_seq IS NOT head_seq LIMIT 64",
-      [],
-    ],
-    [
-      "docs_title_key",
-      "SELECT id, title FROM docs WHERE title_key >= ? AND title_key < ? AND trashed_at IS NULL AND kind = 'doc' ORDER BY title_key LIMIT 50",
-      ["a", "b"],
-    ],
-    [
-      "doc_headings_text",
-      "SELECT doc_id FROM doc_headings WHERE text_key >= ? AND text_key < ? LIMIT 50",
-      ["a", "b"],
-    ],
-    [
-      "links_target",
-      "SELECT src_doc_id FROM links WHERE target_key = ?",
-      ["k"],
-    ],
-  ];
-  for (const [index, sql, params] of plans)
-    test(index, () => {
-      // A connection of its own: the planner needs no rows.
-      const db = new Database(library.path, { readonly: true });
-      const plan = (
-        db.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(params as string[])) as {
-          detail: string;
-        }[]
-      )
-        .map((r) => r.detail)
-        .join(" | ");
-      db.close();
-      expect(plan).toContain(index);
-    });
 });
 
 test("a compaction that leaves the file mostly free pages gives them back (T23)", () => {

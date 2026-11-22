@@ -8,10 +8,13 @@
  * - One append in flight per document; batches go in order.
  * - A failed append stays queued and is retried in order with backoff, never
  *   skipped (details spec §1 rule 3): a gap would strand every later update.
- * - Except at the document's size cap (`document_too_large`, D-O3): the
- *   batcher halts. No retry loop runs, and the refused batch and everything
- *   after it stay queued and are never dropped. The session goes read-only;
- *   the Y.Doc still holds every edit, so Duplicate or Export can carry them.
+ * - A refusal no retry can fix (any non-retryable code but `forbidden`,
+ *   which a worker restart causes briefly; above all `document_too_large`,
+ *   D-O3) halts the batcher: no retry loop runs, the refused batch and
+ *   everything after it stay queued and are never dropped, and every
+ *   `flush()` rejects with the refusal instead of waiting forever. The
+ *   session goes read-only; the open Y.Doc still holds every edit, and
+ *   "Copy into a new tab" carries it (stored state doesn't have it).
  * - It counts rows since the snapshot and asks for compaction past 500 rows
  *   or 1 MiB; `compact()` captures the seq and the state in one task, with
  *   no append in flight.
@@ -88,8 +91,10 @@ type Batch = {
   schemaTo?: number;
   firstAt: number;
   sending: boolean;
-  waiters: (() => void)[];
+  waiters: Waiter[];
 };
+
+type Waiter = { resolve(): void; reject(error: DocStoreError): void };
 
 export class Batcher {
   private readonly store: DocStore;
@@ -170,13 +175,20 @@ export class Batcher {
     this.kick();
   }
 
-  /** Sends everything queued now; resolves once all of it is acked. */
+  /**
+   * Sends everything queued now; resolves once all of it is acked. Rejects
+   * with the refusal when the batcher is (or becomes) halted.
+   */
   flush(): Promise<void> {
     const target = this.queue.at(-1);
     if (!target || this.disposed) return Promise.resolve();
+    if (this.halted && this.health.failing)
+      return Promise.reject(this.health.failing);
     this.urgent = true;
     this.clearTimer();
-    const done = new Promise<void>((resolve) => target.waiters.push(resolve));
+    const done = new Promise<void>((resolve, reject) =>
+      target.waiters.push({ resolve, reject }),
+    );
     this.kick();
     return done;
   }
@@ -284,7 +296,7 @@ export class Batcher {
       failing: null,
       behind: this.unacked > SAVING_BEHIND_BYTES,
     });
-    for (const resolve of batch.waiters) resolve();
+    for (const waiter of batch.waiters) waiter.resolve();
     this.wakeIdle();
     if (
       !this.compactAsked &&
@@ -305,9 +317,15 @@ export class Batcher {
     this.updateHealth({ failing });
     this.wakeIdle();
     if (this.disposed) return;
-    // The size cap won't lift by retrying: stop, and keep every batch.
-    if (failing.code === "document_too_large") {
+    // A refusal no retry can fix: stop, keep every batch, and answer every
+    // flush with it. `forbidden` is the exception: a worker restart causes
+    // it until main replays its registry.
+    if (!failing.retryable && failing.code !== "forbidden") {
       this.halted = true;
+      for (const queued of this.queue) {
+        for (const waiter of queued.waiters) waiter.reject(failing);
+        queued.waiters = [];
+      }
       return;
     }
     const backoff = Math.min(RETRY_BASE_MS * 2 ** this.retries, RETRY_MAX_MS);

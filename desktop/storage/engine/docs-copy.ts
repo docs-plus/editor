@@ -7,7 +7,7 @@
  */
 import * as Y from "yjs";
 
-import { load, stateOf } from "./content";
+import { DOC_CAP_BYTES, load, stateOf } from "./content";
 import type { SqliteDriver } from "./driver";
 import { StorageError } from "./errors";
 import {
@@ -26,6 +26,8 @@ function writeState(
   state: Uint8Array,
   now: number,
 ) {
+  if (state.byteLength > DOC_CAP_BYTES)
+    throw new StorageError("document_too_large", "over the 32 MiB cap");
   const seq = db
     .prepare(
       "INSERT INTO updates (doc_id, data, origin, created_at) VALUES (?, ?, 'restore', ?)",
@@ -122,8 +124,17 @@ export function restoreDocFromBackup(
     throw new StorageError("invalid_argument", "bad link key");
   if (state.byteLength === 0)
     throw new StorageError("invalid_argument", "empty state");
-  // A state that doesn't decode is refused before anything is written.
-  Y.encodeStateVectorFromUpdate(state);
+  // A state that doesn't apply cleanly is refused before anything is written.
+  try {
+    const scratch = new Y.Doc();
+    Y.applyUpdate(scratch, state);
+    scratch.destroy();
+  } catch {
+    throw new StorageError(
+      "invalid_argument",
+      "the backup state doesn't apply",
+    );
+  }
   let id = row.id;
   let linkKey = row.linkKey;
   let duplicateOf: string | null = null;
@@ -160,6 +171,12 @@ export function restoreDocFromBackup(
       now,
     );
     writeState(db, id, state, now);
+    // A purged document with this id left image rows marked dropped; the
+    // restored one references the same images, so the GC grace must not
+    // run out on them (I11). The image recount settles them later.
+    db.prepare(
+      "UPDATE doc_blobs SET dropped_at = NULL WHERE doc_id = ? AND kind <> 'version'",
+    ).run(id);
   });
   return { id, linkKey, duplicateOf, rev };
 }

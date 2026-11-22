@@ -123,7 +123,20 @@ export const DOC_CAP_BYTES = 32 * 1024 * 1024;
  * start at clock 0, so every follow-up insert would look delete-only.
  */
 export function isDeleteOnly(update: Uint8Array): boolean {
-  return Y.parseUpdateMeta(update).to.size === 0;
+  return clockRange(update).size === 0;
+}
+
+/**
+ * Each client's clock after this update (`parseUpdateMeta(...).to`), from
+ * the update's header, whatever clock it starts at. A malformed update is
+ * `invalid_argument`.
+ */
+export function clockRange(update: Uint8Array): Map<number, number> {
+  try {
+    return Y.parseUpdateMeta(update).to;
+  } catch {
+    throw new StorageError("invalid_argument", "malformed update");
+  }
 }
 
 /**
@@ -141,13 +154,22 @@ export function append(
 ): number {
   validateAppend(input);
   return transaction(db, () => {
-    const size = scalar(db, "SELECT size_bytes FROM docs WHERE id = ?", docId);
+    const current = db
+      .prepare("SELECT size_bytes, title FROM docs WHERE id = ?")
+      .get(docId);
     if (
-      typeof size === "number" &&
-      size + input.update.byteLength > DOC_CAP_BYTES &&
+      current &&
+      Number(current.size_bytes) + input.update.byteLength > DOC_CAP_BYTES &&
       !isDeleteOnly(input.update)
     )
       throw new StorageError("document_too_large", "document is at its cap");
+    const title =
+      input.title === undefined
+        ? undefined
+        : input.title.slice(0, MAX_TITLE_LENGTH);
+    // The normalizer runs only when the title changed.
+    const key =
+      title === undefined || title === current?.title ? null : titleKey(title);
     const updated = db
       .prepare(
         `UPDATE docs SET
@@ -162,12 +184,8 @@ export function append(
       .run(
         now,
         input.update.byteLength,
-        input.title === undefined
-          ? null
-          : input.title.slice(0, MAX_TITLE_LENGTH),
-        input.title === undefined
-          ? null
-          : titleKey(input.title.slice(0, MAX_TITLE_LENGTH)),
+        title ?? null,
+        key,
         input.snippet === undefined
           ? null
           : input.snippet.slice(0, MAX_SNIPPET_LENGTH),
@@ -254,12 +272,12 @@ function requireDominates(
     .all(docId, upToSeq))
     parts.push(row.data as Uint8Array);
   if (parts.length === 0) return;
-  const replaced = Y.decodeStateVector(
-    Y.encodeStateVectorFromUpdate(
-      parts.length === 1 ? (parts[0] as Uint8Array) : Y.mergeUpdates(parts),
-    ),
+  // Clock ranges, not encodeStateVectorFromUpdate: that skips any client
+  // whose structs don't start at clock 0.
+  const replaced = clockRange(
+    parts.length === 1 ? (parts[0] as Uint8Array) : Y.mergeUpdates(parts),
   );
-  const next = Y.decodeStateVector(Y.encodeStateVectorFromUpdate(state));
+  const next = clockRange(state);
   for (const [client, clock] of replaced)
     if ((next.get(client) ?? 0) < clock)
       throw new StorageError(
