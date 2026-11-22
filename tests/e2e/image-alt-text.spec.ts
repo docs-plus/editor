@@ -153,6 +153,36 @@ test.describe("Alt text… (image toolbar)", () => {
     await page.screenshot({ path: path.join(SHOTS, "0-replace-url.png") });
   });
 
+  for (const [name, setup] of [
+    [
+      "dark",
+      // The test page's other `tinydocy-*` keys make the theme default light.
+      (page: Page) =>
+        page.addInitScript(() =>
+          localStorage.setItem("tinydocy-theme", "dark"),
+        ),
+    ],
+    [
+      "phone",
+      (page: Page) => page.setViewportSize({ width: 375, height: 812 }),
+    ],
+  ] as const) {
+    test(`the dialog in ${name} (screenshot for review)`, async ({ page }) => {
+      await setup(page);
+      await openWithImage(page);
+      const dialog = await openAltText(page);
+      await dialog.getByRole("textbox").fill("Bar chart of weekly signups");
+      await settled(page);
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: path.join(SHOTS, `4-dialog-${name}.png`) });
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".tiptap img").first()).toHaveAttribute(
+        "alt",
+        "Bar chart of weekly signups",
+      );
+    });
+  }
+
   test("shows the current alt text, and Escape closes without saving", async ({
     page,
   }) => {
@@ -168,6 +198,7 @@ test.describe("Alt text… (image toolbar)", () => {
     await input.fill("Discarded");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".tiptap")).toBeFocused();
     await expect(page.locator(".tiptap img").first()).toHaveAttribute(
       "alt",
       "First",

@@ -6,77 +6,14 @@
  *
  * No app path inserts assets yet (P2.6b, W11), so the spec bundles the
  * pipeline with `Bun.build` and serves it from a route: no dev server.
- * Also runs under `--project=webkit` (JPEG output, no WebP encoder).
+ * Also runs under `--project=webkit` (JPEG output, no WebP encoder). The
+ * main-thread timing check is `image-asset-encoder-perf.spec.ts` (`perf`).
  */
 import { createHash } from "node:crypto";
-import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { buildExifApp1 } from "../helpers/image-bytes";
-import type { HarnessResult } from "./helpers/asset-encoder-harness";
-
-const ROOT = path.resolve(import.meta.dirname, "../..");
-// https: Web Crypto (`crypto.subtle`) exists only in secure contexts.
-const ORIGIN = "https://asset-encoder.test";
-
-let harnessJs = "";
-let workerJs = "";
-
-async function bundle(entry: string): Promise<string> {
-  const result = await Bun.build({
-    entrypoints: [path.join(ROOT, entry)],
-    target: "browser",
-    format: "esm",
-    define: { "process.env.NEXT_PUBLIC_MAX_EMBED_IMAGE_BYTES": "undefined" },
-  });
-  if (!result.success) throw new AggregateError(result.logs, "bundle failed");
-  return result.outputs[0].text();
-}
-
-test.beforeAll(async () => {
-  [harnessJs, workerJs] = await Promise.all([
-    bundle("tests/e2e/helpers/asset-encoder-harness.ts"),
-    bundle("lib/assets/encode-worker.ts"),
-  ]);
-});
-
-async function openHarness(page: Page): Promise<void> {
-  const files: Record<string, [string, string]> = {
-    "/": [
-      '<!doctype html><script type="module" src="/harness.js"></script>',
-      "text/html",
-    ],
-    "/harness.js": [harnessJs, "text/javascript"],
-    "/encode-worker.js": [workerJs, "text/javascript"],
-  };
-  await page.route(`${ORIGIN}/**`, (route) => {
-    const file = files[new URL(route.request().url()).pathname];
-    return file
-      ? route.fulfill({ body: file[0], contentType: file[1] })
-      : route.fulfill({ status: 404 });
-  });
-  await page.goto(`${ORIGIN}/`);
-  await page.waitForFunction(() => typeof window.__prepareAsset === "function");
-}
-
-/** Orientation 6 (rotate 90° clockwise) and GPS: a phone held upright. */
-const PHONE_EXIF = [
-  ...buildExifApp1({ orientation: 6, gps: { lat: 52.37, lon: 4.89 } }),
-];
-
-async function prepare(
-  page: Page,
-  mode: "worker" | "main",
-): Promise<HarnessResult & { bytes: Buffer }> {
-  const size = await page.evaluate(
-    (exif) => window.__makePhoto(exif),
-    PHONE_EXIF,
-  );
-  expect(size).toBeGreaterThan(2 * 1024 * 1024);
-  const result = await page.evaluate((m) => window.__prepareAsset(m), mode);
-  return { ...result, bytes: Buffer.from(result.base64, "base64") };
-}
+import { openHarness, preparePhoto } from "./helpers/asset-encoder-page";
 
 function hasSegment(bytes: Buffer, marker: number): boolean {
   return bytes.some((b, i) => b === 0xff && bytes[i + 1] === marker);
@@ -93,7 +30,7 @@ test.describe("image store encoder (real engine)", () => {
   }) => {
     test.setTimeout(60_000);
     await openHarness(page);
-    const result = await prepare(page, "worker");
+    const result = await preparePhoto(page, "worker");
     console.log(
       `[${browserName}] ${result.mime} ${result.width}×${result.height}, ` +
         `${result.bytes.length} B, ${Math.round(result.totalMs)} ms, ` +
@@ -121,11 +58,7 @@ test.describe("image store encoder (real engine)", () => {
       createHash("sha256").update(result.bytes).digest("hex"),
     );
     expect(result.usedWorker).toBe(true);
-    if (browserName === "chromium") {
-      expect(result.usedFallback).toBe(false);
-      // Encoding off the main thread: typing keeps getting frames.
-      expect(result.longestGapMs).toBeLessThan(50);
-    }
+    if (browserName === "chromium") expect(result.usedFallback).toBe(false);
   });
 
   test("falls back to the main-thread canvas with the same result", async ({
@@ -133,7 +66,7 @@ test.describe("image store encoder (real engine)", () => {
   }) => {
     test.setTimeout(60_000);
     await openHarness(page);
-    const result = await prepare(page, "main");
+    const result = await preparePhoto(page, "main");
     console.log(
       `[main thread] ${result.mime} ${Math.round(result.totalMs)} ms, ` +
         `longest main-thread gap ${Math.round(result.longestGapMs)} ms`,
