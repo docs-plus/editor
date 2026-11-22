@@ -154,7 +154,7 @@ CI= E2E_BASE_URL=http://localhost:6230 E2E_HOCUS_URL=ws://127.0.0.1:4230 bun pla
 | U9 | `CHUNK_MARKERS`, `interceptChunk` | `tests/e2e/helpers/lazy-chunk.ts` | the 404 and hold cases |
 | U10 | `listenerCounts` and the heap reading | `tests/e2e/palette-leaks.spec.ts` (inline today) | extracted to `tests/e2e/helpers/leak-metrics.ts` if no earlier plan did it |
 | U11 | `createCollabEditor` | `tests/helpers/collab-editor.ts` | undo tests with the real Yjs undo manager |
-| U12 | `useKeyboardInset` | `hooks/use-keyboard-inset.ts` | placement above the phone keyboard |
+| U12 | `useKeyboardInset` | `lib/keyboard-inset.ts` (was `hooks/use-keyboard-inset.ts` before M20) | placement above the phone keyboard |
 
 ## Decisions on spec ambiguities (owner can overrule)
 

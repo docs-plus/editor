@@ -17,17 +17,18 @@ import { Worker } from "node:worker_threads";
 
 import { app, BrowserWindow, protocol } from "electron";
 
+import { APP_HOST, APP_ORIGIN, APP_SCHEME } from "../shared/app-identity";
+import { resolveExportFile } from "../shared/export-paths";
+
 type Check = "sqlite" | "wal" | "worker" | "protocol";
 
 const TIMEOUT_MS = 60_000;
-const SCHEME = "app";
-const ORIGIN = `${SCHEME}://smoke`;
-
-// The scheme must be privileged before `ready` (P2.5 retargets this check to
-// the D-A11 origin and the real export).
+// The D-A11 origin, served with the shell's own path rules
+// (desktop/shared/export-paths.ts); the scheme must be privileged before
+// `ready`.
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: SCHEME,
+    scheme: APP_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
 ]);
@@ -118,25 +119,26 @@ const checkWorker = (db: DatabaseSync, dbPath: string) =>
 
 const checkProtocol = () =>
   run("protocol", async () => {
-    const page = readFileSync(path.join(appDir, "..", "fixture", "index.html"));
-    protocol.handle(SCHEME, (request) => {
+    const fixtureDir = path.join(appDir, "..", "fixture");
+    const isFile = (rel: string) => rel === "index.html";
+    protocol.handle(APP_SCHEME, (request) => {
       const url = new URL(request.url);
-      if (url.host !== "smoke" || url.pathname !== "/index.html") {
-        return new Response("not found", { status: 404 });
-      }
-      return new Response(page, {
-        headers: { "content-type": "text/html; charset=utf-8" },
+      const found =
+        url.host === APP_HOST ? resolveExportFile(url.pathname, isFile) : null;
+      if (!found) return new Response("not found", { status: 404 });
+      return new Response(readFileSync(path.join(fixtureDir, found.file)), {
+        headers: { "content-type": found.contentType },
       });
     });
     const win = new BrowserWindow({
       show: false,
       webPreferences: { sandbox: true, contextIsolation: true },
     });
-    await win.loadURL(`${ORIGIN}/index.html`);
+    await win.loadURL(`${APP_ORIGIN}/`);
     const title = await win.webContents.executeJavaScript("document.title");
     win.destroy();
     if (title !== "smoke") throw new Error(`document.title is ${title}`);
-    pass("protocol", `${ORIGIN} served the fixture`);
+    pass("protocol", `${APP_ORIGIN} served the fixture`);
   });
 
 const main = async () => {

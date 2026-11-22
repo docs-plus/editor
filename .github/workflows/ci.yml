@@ -1,8 +1,9 @@
 name: CI
 
 # Runs on every pull request, in the merge queue and on pushes to main:
-#   changes   decides whether the pull request needs the browser suites,
-#             and fetches the shard timings from the latest green main run
+#   changes   decides whether the pull request needs the browser suites
+#             (not while it is a draft, nor for docs-only changes), and
+#             fetches the shard timings from the latest green main run
 #   checks    Biome, ESLint, typecheck, unit tests, production build
 #   e2e       the Playwright chromium and library projects in 3 shards,
 #             against `next dev` + Hocuspocus and the library's Bun harness
@@ -20,7 +21,10 @@ name: CI
 # Read-only token and no secrets: pull requests from forks run the same way.
 
 on:
+  # ready_for_review: a draft gets checks only, so marking it ready must
+  # start the full run.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   push:
     branches: [main]
@@ -51,6 +55,7 @@ jobs:
       actions: read
     outputs:
       e2e: ${{ steps.decide.outputs.e2e }}
+      skip-reason: ${{ steps.decide.outputs.skip-reason }}
       timings: ${{ steps.timings.outputs.timings }}
     steps:
       # Pull requests only: pushes to main, the merge queue and manual runs
@@ -67,25 +72,35 @@ jobs:
             > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
 
-      # Skips the browser suites only when every changed path is under docs/
-      # or a Markdown file, and none is under desktop/ (the web build can
-      # still change). tests/unit/ci/ci-workflow.test.ts runs this script.
+      # Skips the browser suites on pull requests only: while one is a draft
+      # (marking it ready runs them), or when every changed path is under
+      # docs/ or a Markdown file and none is under desktop/ (the web build
+      # can still change). tests/unit/ci/ci-workflow.test.ts runs this script.
       - name: Decide
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           FILES: ${{ runner.temp }}/changed-files.txt
         run: |
-          if [ "$EVENT" != pull_request ] || [ ! -s "$FILES" ]; then
+          reason=""
+          if [ "$EVENT" != pull_request ]; then
+            e2e=true
+          elif [ "$DRAFT" = true ]; then
+            e2e=false
+            reason=draft
+          elif [ ! -s "$FILES" ]; then
             e2e=true
           elif grep -qvE '^(docs/.*|.*\.md)$' "$FILES" ||
             grep -qE '^desktop/' "$FILES"; then
             e2e=true
           else
             e2e=false
+            reason=docs-only
           fi
           echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
-          echo "Browser suites: $e2e"
+          echo "skip-reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Browser suites: $e2e${reason:+ ($reason)}"
 
       # Per-file seconds from the latest green push run on main (published
       # by "Playwright (Chromium)" there; pull requests never write them).
@@ -395,7 +410,8 @@ jobs:
 
   # The required check. It always runs, because a skipped required check
   # counts as passing: it passes only if every shard and perf passed, or if
-  # `changes` skipped them for a docs-only pull request.
+  # `changes` skipped them for a draft or docs-only pull request. Anywhere
+  # else (a ready pull request, the merge queue, main) a skip fails it.
   e2e-gate:
     name: Playwright (Chromium)
     needs: [changes, e2e, perf]
@@ -442,19 +458,27 @@ jobs:
       - name: Verdict
         if: always()
         env:
+          EVENT: ${{ github.event_name }}
           RUN_E2E: ${{ needs.changes.outputs.e2e }}
+          REASON: ${{ needs.changes.outputs.skip-reason }}
           CHANGES: ${{ needs.changes.result }}
           SHARDS: ${{ needs.e2e.result }}
           PERF: ${{ needs.perf.result }}
         run: |
-          echo "changes=$CHANGES e2e=$RUN_E2E shards=$SHARDS perf=$PERF"
+          echo "event=$EVENT changes=$CHANGES e2e=$RUN_E2E ($REASON) shards=$SHARDS perf=$PERF"
           if [ "$CHANGES" != success ]; then
             echo "::error::Changed files job: $CHANGES"; exit 1
           fi
-          if [ "$RUN_E2E" = false ] && [ "$SHARDS" = skipped ] &&
-            [ "$PERF" = skipped ]; then
-            echo "::notice::Docs-only pull request: browser suites skipped"
-            exit 0
+          if [ "$EVENT" = pull_request ] && [ "$RUN_E2E" = false ] &&
+            [ "$SHARDS" = skipped ] && [ "$PERF" = skipped ]; then
+            case "$REASON" in
+              draft)
+                echo "::notice::Draft pull request: browser suites run once it is marked ready for review"
+                exit 0 ;;
+              docs-only)
+                echo "::notice::Docs-only pull request: browser suites skipped"
+                exit 0 ;;
+            esac
           fi
           if [ "$SHARDS" != success ] || [ "$PERF" != success ]; then
             echo "::error::Playwright shards: $SHARDS, perf: $PERF"; exit 1

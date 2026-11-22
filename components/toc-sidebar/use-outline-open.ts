@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import {
   OUTLINE_OPEN_CHOICE,
   readChoice,
@@ -12,9 +11,6 @@ import {
 export type SetOutlineOpen = (
   next: boolean | ((open: boolean) => boolean),
 ) => void;
-
-/** Below this viewport width the outline overlays the page (spec §4.6). */
-export const OUTLINE_OVERLAY_BELOW = 950;
 
 /** "docked" sits beside the page; "overlay" slides over it. */
 export type OutlineMode = "docked" | "overlay";
@@ -33,13 +29,16 @@ export interface OutlineView {
  * and keeps the pinned `setOutlineOpen` signature (contract §5.2); the
  * third element adds the mode (contract §10 A6).
  *
- * Below 950px the outline is an overlay (D2 Decision 5): its open state is
+ * When the page frame is too narrow to dock it (`overlay`, preferences
+ * design §5.9; 950px in `classic`), the outline is an overlay (D2
+ * Decision 5): its open state is
  * transient, starts closed, resets on every mode change and is never
  * written, so a remembered "open" never covers the page on load. Crossing
  * back to docked shows the remembered state again.
  */
-export function useOutlineOpen(): [boolean, SetOutlineOpen, OutlineView] {
-  const overlay = useIsBreakpoint("max", OUTLINE_OVERLAY_BELOW);
+export function useOutlineOpen(
+  overlay: boolean,
+): [boolean, SetOutlineOpen, OutlineView] {
   const [docked, setDocked] = useState(OUTLINE_OPEN_CHOICE.fallback);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const dockedRef = useRef(docked);

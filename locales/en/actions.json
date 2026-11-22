@@ -13,6 +13,7 @@
   "action.color.text.apply.label": "Text colour",
   "action.color.text.unset.keywords": "remove colour, clear colour",
   "action.color.text.unset.label": "Default text colour",
+  "action.comment.add.label": "Comment",
   "action.format.clear.keywords": "remove, reset, plain",
   "action.format.clear.label": "Clear formatting",
   "action.formats.apply.label": "Apply format",
