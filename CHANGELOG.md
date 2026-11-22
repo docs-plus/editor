@@ -9,6 +9,29 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.5 follow-up: link and deep-link hardening
+
+Follow-up to the security review of #135. Required before any public
+desktop release (N2).
+
+#### Changed
+
+- **Desktop:** main denies every `window.open` and never opens one in the
+  browser, so an embed or ad frame can't open a tab (N2). The app's own
+  links go through a new bridge call, `shell.openLink`, which main accepts
+  from the app's top frame only, `https` only, at most 3 per window per
+  10 s. DesktopRoot's link router sends `window.open` and new-window link
+  clicks outside the editor to it.
+- **Desktop:** a deep link's existence check is a read-only `exists`
+  storage op, so it never holds a document a window is opening (N3); the
+  checks are throttled before storage is asked (N4).
+- **Desktop:** the sync URL baked into `connect-src` must have a DNS name
+  or IP literal host; `*.example.com` and other wildcards are refused (N6).
+- **Tests:** unit tests for the Bluetooth, HID, serial and USB refusals,
+  the always-denied `window.open`, and the release fuses pinned in
+  `electron-builder.yml` (SEC-001). `codesign --verify` on the installed
+  Mac app is now a hard check.
+
 ### Desktop P2.5: the Electron shell
 
 The desktop app now has a shell: an Electron main process, a sandboxed
