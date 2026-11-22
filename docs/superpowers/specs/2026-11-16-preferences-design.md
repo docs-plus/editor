@@ -974,7 +974,11 @@ Desktop and the web library are new installs on new storage, so they get the new
   13. **Reading mode:** no Yjs update is emitted while toggling and scrolling.
 - **Cross-browser:** a Persian document at every spacing and letter-spacing step on `chromium`, `webkit` and `firefox`, checking joining, diacritics and caret movement. If a browser breaks joining, letter spacing is scoped with `:lang()`.
 - **`perf`:**
-  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds.
+  - Text size and spacing changes on the 1,000-heading fixture cause one layout and zero HeadingScale decoration rebuilds. *Amended in P2.9c-1 (#161):*
+    - The fixture is the 500-heading document, because the server refuses the 1,000-heading one (2 MiB cap).
+    - "One layout" holds for the engine itself, measured with every block rendered.
+    - On the real page, `content-visibility: auto` (off-screen blocks) adds at most one relevance pass in the same frame after any geometry change.
+    - A theme flip, which moves nothing, stays at one.
   - Typing latency is unchanged.
   - `check-editor-chunk-size` passes.
 - **Electron:**
