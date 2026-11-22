@@ -3,18 +3,13 @@
 import type { Editor } from "@tiptap/react";
 import {
   type CSSProperties,
-  type ReactNode,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 
-import type { InsertStepKind } from "@/components/smart-toolbar/insert/insert-step";
-import {
-  lazySurface,
-  loadInsertStep,
-} from "@/components/smart-toolbar/lazy-surface";
+import { lazySurface } from "@/components/smart-toolbar/lazy-surface";
 import {
   Sheet,
   SheetClose,
@@ -24,246 +19,49 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { editorActions } from "@/lib/editor-actions";
-import { availability, runAction } from "@/lib/editor-actions/registry";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
-import { computeContext } from "@/lib/editor-context/snapshot";
-import { ArrowLeftIcon, ChevronRightIcon, PlusIcon } from "@/lib/icons";
-import {
-  INSERT_KIND_CHOICE,
-  readChoice,
-  TABLE_SIZE_CHOICE,
-} from "@/lib/remembered-choice";
-import { buildSlashItems, type SlashItem } from "@/lib/slash-menu/slash-items";
+import { PlusIcon } from "@/lib/icons";
 
-import { Section } from "./format-sheet";
-import { insertSheetGroups, suggestedKinds } from "./insert-sheet-items";
+import type { InsertSheetStep as Step } from "./insert-sheet-body";
 
 /**
- * The table grid and the embed form, from the insert step chunk the row's
- * Insert menu uses (owner decision O1): never in the phone chunk itself.
+ * The sheet's body (its cells and steps): its own chunk (spec §8.3).
+ * Fetched when the browser is idle after the bar mounts and again on the
+ * Insert cell's press, so the sheet opens with its cells in place; a
+ * failed fetch says so in the sheet, with Retry.
  */
-const InsertStep = lazySurface(
-  () => loadInsertStep().then((module) => module.InsertStep),
+const loadInsertSheetBody = () => import("./insert-sheet-body");
+const preloadInsertSheetBody = () => {
+  loadInsertSheetBody().catch(() => undefined);
+};
+const InsertSheetBody = lazySurface(
+  () => loadInsertSheetBody().then((module) => module.InsertSheetBody),
   undefined,
-  ({ step }) => (step === "table" ? "the table picker" : "the embed form"),
+  "the insert sheet",
 );
 
-/** A step inside the sheet: the insert steps, or the diagram templates. */
-type Step = InsertStepKind | "diagram";
-
-/** Each step is titled by its kind's registry label. */
-const STEP_ACTION: Record<Step, string> = {
-  table: "insert.table",
-  embed: "insert.embed",
-  diagram: "insert.mermaid",
-};
-
-/** Kinds that open their step instead of running at once. */
-const STEP_OF: Readonly<Record<string, InsertStepKind>> = {
-  "insert.table": "table",
-  "insert.embed": "embed",
-};
-
-/** The sheet's model, built once per open from the live document. */
-function buildModel(editor: Editor) {
-  const items = buildSlashItems(
-    computeContext(editor),
-    editorActions.list(),
-    readChoice(TABLE_SIZE_CHOICE).last,
-  );
-  const emptyBlock = editor.state.selection.$from.parent.content.size === 0;
-  return insertSheetGroups(items, {
-    emptyBlock,
-    kinds: suggestedKinds(readChoice(INSERT_KIND_CHOICE)),
-  });
+/** Runs `run` when the browser is idle (Safari has no idle callback). */
+function whenIdle(run: () => void): () => void {
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(run, { timeout: 4000 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(run, 1500);
+  return () => window.clearTimeout(id);
 }
 
 /**
- * One 44px cell: icon and label, start-aligned, with the table's size as a
- * note and, when it cannot run here, its reason on a second line (dp:207)
- * (also its description, `ToolbarButton`).
+ * With the keyboard up, where the sheet may go: its bottom on the
+ * keyboard, its top inside the visual viewport, which iOS can pan down the
+ * layout viewport (`offsetTop`) while the keyboard is up.
  */
-function InsertCell({
-  item,
-  steps,
-  suggested,
-  onPick,
-}: {
-  item: SlashItem;
-  /** Opens a step (▸), so the cell shows a chevron. */
-  steps?: boolean;
-  /** The Suggested copy of a kind that also has its own section's cell. */
-  suggested?: boolean;
-  onPick: (item: SlashItem) => void;
-}) {
-  const Icon = item.icon;
-  return (
-    <ToolbarButton
-      type="button"
-      size="sm"
-      className="st-insert-cell"
-      data-action-id={item.actionId}
-      data-suggested={suggested ? "" : undefined}
-      disabled={item.reason !== undefined}
-      disabledReason={item.reason}
-      onClick={() => onPick(item)}
-    >
-      {Icon ? (
-        <Icon aria-hidden="true" />
-      ) : (
-        <span aria-hidden="true" className="size-4 shrink-0" />
-      )}
-      <span className="st-insert-cell-text">
-        <span className="st-insert-cell-label">{item.label}</span>
-        {item.reason ? (
-          <span aria-hidden="true" className="st-insert-reason">
-            {item.reason}
-          </span>
-        ) : null}
-      </span>
-      {item.note && !item.reason ? (
-        <span className="st-insert-note">{item.note}</span>
-      ) : null}
-      {steps ? (
-        <ChevronRightIcon
-          aria-hidden="true"
-          className="st-insert-chevron rtl:-scale-x-100"
-        />
-      ) : null}
-    </ToolbarButton>
-  );
-}
-
-/** The cells of one section, two columns of 44px. */
-function CellGrid({
-  items,
-  suggested,
-  onPick,
-  children,
-}: {
-  items: readonly SlashItem[];
-  suggested?: boolean;
-  onPick: (item: SlashItem) => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="st-sheet-list">
-      {items.map((item) => (
-        <InsertCell
-          key={item.key}
-          item={item}
-          steps={item.actionId in STEP_OF}
-          suggested={suggested}
-          onPick={onPick}
-        />
-      ))}
-      {children}
-    </div>
-  );
-}
-
-/** The "Diagram ▸" cell, standing for the menu's Diagrams section. */
-function diagramCell(templates: readonly SlashItem[]): SlashItem | null {
-  const action = editorActions.get("insert.mermaid");
-  if (!templates.length || !action) return null;
+function keyboardStyle(inset: number): CSSProperties | undefined {
+  if (!inset) return undefined;
+  const visible = window.visualViewport?.height ?? window.innerHeight - inset;
   return {
-    key: "diagram",
-    actionId: "insert.mermaid",
-    label: action.label,
-    keywords: [],
-    icon: action.icon,
-    section: "Insert",
-  };
-}
-
-function InsertSheetBody({
-  editor,
-  step,
-  onStep,
-  onDone,
-}: {
-  editor: Editor;
-  step: Step | null;
-  onStep: (step: Step | null) => void;
-  /** Closes the sheet after a pick: focus goes back to the document. */
-  onDone: () => void;
-}) {
-  // Once per open (the body unmounts when the sheet closes), and again
-  // after a refusal, so the refused cell shows its reason.
-  const [{ groups, diagrams }, setModel] = useState(() => buildModel(editor));
-  const [refused, setRefused] = useState<string | null>(null);
-  const diagram = diagramCell(diagrams);
-
-  const pick = (item: SlashItem) => {
-    const kind = STEP_OF[item.actionId];
-    if (kind) return onStep(kind);
-    if (item.key === "diagram") return onStep("diagram");
-    const action = editorActions.get(item.actionId);
-    if (!action) return;
-    // The page is inert while the sheet is open, so the action's own
-    // focus stays put; the close hands focus back to the editor.
-    if (runAction(editor, action, item.arg)) return onDone();
-    // Cells are what could run when the sheet opened: the document changed
-    // since (a collaborator's edit). The sheet stays, says why on its own
-    // status line (the bar's pill is under it) and redraws its cells.
-    const enabled = availability(action, computeContext(editor));
-    if (enabled === true) return onDone();
-    setRefused(`${item.label}: ${enabled.reason}`);
-    setModel(buildModel(editor));
-  };
-
-  if (step) {
-    return (
-      <div className="st-sheet-body" data-insert-step={step}>
-        <div className="st-insert-step-head">
-          <ToolbarButton
-            type="button"
-            size="sm"
-            className="st-insert-back"
-            onClick={() => onStep(null)}
-          >
-            <ArrowLeftIcon aria-hidden="true" className="rtl:-scale-x-100" />
-            <span>Back</span>
-          </ToolbarButton>
-          <h3 className="st-sheet-heading">
-            {editorActions.get(STEP_ACTION[step])?.label}
-          </h3>
-        </div>
-        {step === "diagram" ? (
-          <CellGrid items={diagrams} onPick={pick} />
-        ) : (
-          <InsertStep
-            step={step}
-            editor={editor}
-            tableSize={readChoice(TABLE_SIZE_CHOICE).last}
-            onDone={onDone}
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="st-sheet-body">
-      <p role="status" className="st-insert-refused">
-        {refused}
-      </p>
-      {groups.map((group) => (
-        <Section key={group.key} title={group.title}>
-          <CellGrid
-            items={group.items}
-            suggested={group.key === "suggested"}
-            onPick={pick}
-          >
-            {group.key === "insert" && diagram ? (
-              <InsertCell item={diagram} steps onPick={pick} />
-            ) : null}
-          </CellGrid>
-        </Section>
-      ))}
-    </div>
-  );
+    "--keyboard-inset": `${inset}px`,
+    "--visible-height": `${visible}px`,
+  } as CSSProperties;
 }
 
 export interface InsertSheetProps {
@@ -300,8 +98,11 @@ export function InsertSheet({
 }: InsertSheetProps) {
   const [step, setStep] = useState<Step | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   /** Set by a pick: focus goes to the editor, not back to the cell. */
   const pickedRef = useRef(false);
+
+  useEffect(() => whenIdle(preloadInsertSheetBody), []);
 
   useEffect(() => {
     let frame = 0;
@@ -354,6 +155,19 @@ export function InsertSheet({
     editor.view.dispatch(editor.state.tr.scrollIntoView());
   }, [editor, onOpenChange]);
 
+  /**
+   * The first cell (Suggested's when present, spec §14); a step's own
+   * control (the embed field, the table grid) focuses itself. Until the
+   * body is in, the default; the body then focuses its first cell.
+   */
+  const initialFocus = useCallback(
+    () =>
+      popupRef.current?.querySelector<HTMLElement>(
+        "[data-insert-step] :is(input, .st-table-cell[tabindex='0']), .st-insert-cell",
+      ) ?? true,
+    [],
+  );
+
   /** Back to the Insert cell, unless a pick has focused the editor. */
   const finalFocus = useCallback(() => {
     if (!pickedRef.current) return triggerRef.current ?? true;
@@ -382,6 +196,8 @@ export function InsertSheet({
               aria-label="Insert"
               tooltip="Insert"
               aria-haspopup="dialog"
+              onPointerDown={preloadInsertSheetBody}
+              onFocus={preloadInsertSheetBody}
             />
           }
         >
@@ -389,16 +205,14 @@ export function InsertSheet({
         </SheetTrigger>
       ) : null}
       <SheetContent
+        ref={popupRef}
         data-insert-sheet=""
         data-toolbar-popup=""
         data-keyboard={keyboardInset ? "" : undefined}
+        initialFocus={initialFocus}
         finalFocus={finalFocus}
         className="st-insert-sheet max-h-[75dvh]"
-        style={
-          keyboardInset
-            ? ({ "--keyboard-inset": `${keyboardInset}px` } as CSSProperties)
-            : undefined
-        }
+        style={keyboardStyle(keyboardInset)}
       >
         <SheetHeader>
           <SheetTitle className="flex-1">Insert</SheetTitle>

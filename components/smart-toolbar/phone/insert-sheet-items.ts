@@ -50,16 +50,44 @@ function itemOfKind(items: readonly SlashItem[], kind: InsertKind) {
   );
 }
 
+/** The key of the "Diagram ▸" cell, which opens the templates step. */
+export const DIAGRAM_CELL = "diagram";
+
 export function insertSheetGroups(
   items: readonly SlashItem[],
-  { emptyBlock, kinds }: { emptyBlock: boolean; kinds: readonly InsertKind[] },
+  {
+    emptyBlock,
+    kinds,
+    insertOrder = [],
+    diagram = null,
+  }: {
+    emptyBlock: boolean;
+    kinds: readonly InsertKind[];
+    /** The registry's insert ids in order, to seat the Diagram ▸ cell. */
+    insertOrder?: readonly string[];
+    /**
+     * The Diagram ▸ cell (label and icon of `insert.mermaid`), shown in
+     * place of the templates when there are any.
+     */
+    diagram?: SlashItem | null;
+  },
 ): { groups: InsertSheetGroup[]; diagrams: SlashItem[] } {
   const shown = items.filter((item) => !item.searchOnly);
   const blocks = shown.filter(
     (item) => item.section === "Text" || item.section === "Lists",
   );
-  const inserts = shown.filter((item) => item.section === "Insert");
   const diagrams = shown.filter((item) => item.section === "Diagrams");
+  const inserts = shown.filter((item) => item.section === "Insert");
+  // At `insert.mermaid`'s own place, where the one Diagram cell sits before
+  // the templates load: the Insert section never reorders.
+  if (diagrams.length && diagram) {
+    const rank = (item: SlashItem) => insertOrder.indexOf(item.actionId);
+    const at = inserts.findIndex((item) => rank(item) > rank(diagram));
+    inserts.splice(at < 0 ? inserts.length : at, 0, {
+      ...diagram,
+      key: DIAGRAM_CELL,
+    });
+  }
   const suggested: SlashItem[] = [];
   for (const kind of kinds) {
     const found = itemOfKind(shown, kind);

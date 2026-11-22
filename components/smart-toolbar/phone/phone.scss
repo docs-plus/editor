@@ -433,11 +433,11 @@ ul.st-sheet-list {
 }
 
 // With the keyboard up (the embed step's link field), the sheet rides on
-// it like the bar, no taller than what the keyboard leaves, and has no
-// home indicator to clear.
+// it like the bar, no taller than the visual viewport (which iOS may pan,
+// `insert-sheet.tsx`), and has no home indicator to clear.
 .st-insert-sheet[data-keyboard] {
   bottom: var(--keyboard-inset);
-  max-height: calc(100dvh - var(--keyboard-inset) - 0.5rem);
+  max-height: calc(var(--visible-height) - 0.5rem);
   padding-bottom: 0;
 }
 

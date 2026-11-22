@@ -109,4 +109,33 @@ describe("insertSheetGroups", () => {
       "insert.table",
     ]);
   });
+
+  it("seats Diagram ▸ at insert.mermaid's place, as the one Diagram cell", () => {
+    const diagram = {
+      key: "insert.mermaid",
+      actionId: "insert.mermaid",
+      label: "Diagram",
+      keywords: [],
+      section: "Insert" as const,
+    };
+    const { groups } = insertSheetGroups(ITEMS, {
+      emptyBlock: true,
+      kinds: [],
+      diagram,
+      insertOrder: [
+        "insert.image",
+        "insert.table",
+        "insert.quote",
+        "insert.mermaid",
+        "insert.divider",
+      ],
+    });
+    expect(keys(groups[1].items)).toEqual([
+      "insert.image",
+      "insert.table",
+      "insert.quote",
+      "diagram",
+      "insert.divider",
+    ]);
+  });
 });

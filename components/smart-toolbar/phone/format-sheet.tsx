@@ -91,8 +91,7 @@ const LANGUAGE_ACTION: Partial<
   Record<ContextKind, "code.language" | "mermaid.language">
 > = { code: "code.language", mermaid: "mermaid.language" };
 
-/** A titled sheet section (a region named by its heading). */
-export function Section({
+function Section({
   title,
   children,
   className = "st-sheet-section",
@@ -129,15 +128,17 @@ function PhoneActions({
  * Style first (spec §13.1, F16): the current style is pressed
  * (`aria-pressed`, the registry's `isActive`). H4–H6 sit behind More
  * headings, a disclosure that starts open when the current style is one
- * of them, so the pressed row is always in view.
+ * of them, so the pressed row is in view; once toggled, it stays as the
+ * writer left it.
  */
 function StyleSection({ editor }: { editor: Editor }) {
   const h4 = useActionView("style.heading4", editor);
   const h5 = useActionView("style.heading5", editor);
   const h6 = useActionView("style.heading6", editor);
   const deep = Boolean(h4?.active || h5?.active || h6?.active);
-  const [more, setMore] = useState(deep);
-  const open = more || deep;
+  // Follows the current style until the writer toggles it; then theirs.
+  const [more, setMore] = useState<boolean | null>(null);
+  const open = more ?? deep;
   const moreId = useId();
   return (
     <Section title="Style">

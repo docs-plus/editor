@@ -368,12 +368,17 @@ test("the sheet leads with Style: the current one pressed, More headings, lists 
   // Reopened on an H5, the pressed row is in view: open at once.
   await dialog.getByRole("button", { name: "Done" }).tap();
   await openSheet(page);
-  await expect(
-    sheet(page).getByRole("button", { name: "More headings" }),
-  ).toHaveAttribute("aria-expanded", "true");
+  const reopened = sheet(page).getByRole("button", { name: "More headings" });
+  await expect(reopened).toHaveAttribute("aria-expanded", "true");
   await expect(
     sheet(page).getByRole("button", { name: "Heading 5" }),
   ).toHaveAttribute("aria-pressed", "true");
+  // It still closes when the writer says so.
+  await reopened.tap();
+  await expect(reopened).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    sheet(page).getByRole("button", { name: "Heading 5" }),
+  ).toBeHidden();
   // Lists from Style.
   await sheet(page).getByRole("button", { name: "Normal text" }).tap();
   await sheet(page).getByRole("button", { name: "Bullet list" }).tap();
@@ -1589,7 +1594,7 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     page.getByRole("dialog", { name: "Insert" });
   /** The sheet's section titles, top to bottom. */
   const sectionTitles = (page: Page) =>
-    insertSheet(page).locator("section > h3").allTextContents();
+    insertSheet(page).locator(".st-sheet-section > h3").allTextContents();
 
   /** Appends a paragraph (empty unless `text`) with the caret at its end. */
   async function caretInNewParagraph(page: Page, text = "") {
@@ -1690,7 +1695,7 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
       "Insert",
     ]);
     const suggested = insertSheet(page)
-      .getByRole("region", { name: "Suggested" })
+      .getByRole("group", { name: "Suggested" })
       .getByRole("button", { name: "Code block" });
     await expect(suggested).toBeVisible();
     // The Suggested copy is told apart from the Insert section's cell.
@@ -1744,31 +1749,100 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     await insertSheet(page).getByRole("button", { name: "Embed" }).tap();
     const field = insertSheet(page).getByRole("textbox", { name: "Media URL" });
     await expect(field).toBeFocused();
-    // Chromium has no on-screen keyboard: stand in a shrunken visualViewport.
-    const KEYBOARD = 360;
-    await page.evaluate((keyboard) => {
-      const vv = window.visualViewport;
-      if (!vv) throw new Error("no visualViewport");
-      Object.defineProperty(vv, "height", {
-        configurable: true,
-        get: () => window.innerHeight - keyboard,
-      });
-      vv.dispatchEvent(new Event("resize"));
-    }, KEYBOARD);
-    const visibleBottom = PHONE.height - KEYBOARD;
-    await expect
-      .poll(async () => {
-        const box = await insertSheet(page).boundingBox();
-        return box ? Math.round(box.y + box.height) : null;
-      })
-      .toBe(visibleBottom);
-    const sheetBox = await insertSheet(page).boundingBox();
-    expect(sheetBox?.y ?? -1).toBeGreaterThanOrEqual(0);
-    const fieldBox = await field.boundingBox();
-    expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
-      visibleBottom,
+    // Chromium has no on-screen keyboard: stand in a shrunken
+    // visualViewport, first at the top of the page, then panned down the
+    // layout viewport (iOS, `offsetTop`) with little room left.
+    const emulate = (keyboard: number, offsetTop: number) =>
+      page.evaluate(
+        ([kb, top]) => {
+          const vv = window.visualViewport;
+          if (!vv) throw new Error("no visualViewport");
+          Object.defineProperty(vv, "height", {
+            configurable: true,
+            get: () => window.innerHeight - kb - top,
+          });
+          Object.defineProperty(vv, "offsetTop", {
+            configurable: true,
+            get: () => top,
+          });
+          vv.dispatchEvent(new Event("resize"));
+        },
+        [keyboard, offsetTop] as const,
+      );
+    const expectInView = async (keyboard: number, offsetTop: number) => {
+      const visibleBottom = PHONE.height - keyboard;
+      await expect
+        .poll(async () => {
+          const box = await insertSheet(page).boundingBox();
+          return box ? Math.round(box.y + box.height) : null;
+        })
+        .toBe(visibleBottom);
+      const sheetBox = await insertSheet(page).boundingBox();
+      expect(sheetBox?.y ?? -1).toBeGreaterThanOrEqual(offsetTop);
+      const fieldBox = await field.boundingBox();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        visibleBottom,
+      );
+      expect(fieldBox?.y ?? -1).toBeGreaterThanOrEqual(offsetTop);
+    };
+    await emulate(360, 0);
+    await expectInView(360, 0);
+    // 120px visible, 364px down the page: the sheet fits in that band.
+    await emulate(360, 364);
+    await expectInView(360, 364);
+  });
+
+  test("opening focuses the first cell: Suggested's when present", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Normal text" }),
+    ).toBeFocused();
+    // The Diagram cell keeps insert.mermaid's place, before Divider.
+    const order = await insertSheet(page)
+      .getByRole("group", { name: "Insert" })
+      .getByRole("button")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("data-action-id")));
+    expect(order.indexOf("insert.mermaid")).toBe(
+      order.indexOf("insert.divider") - 1,
     );
-    expect(fieldBox?.y ?? -1).toBeGreaterThanOrEqual(sheetBox?.y ?? 0);
+    await insertSheet(page).getByRole("button", { name: "Divider" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(
+      insertSheet(page)
+        .getByRole("group", { name: "Suggested" })
+        .getByRole("button", { name: "Divider" }),
+    ).toBeFocused();
+  });
+
+  test("the page is never left inert: after “/embed” then Done, and after read-only", async ({
+    page,
+  }) => {
+    const inert = () =>
+      page.evaluate(
+        () => document.querySelector<HTMLElement>(".app-shell")?.inert,
+      );
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await page.keyboard.type("/embed");
+    await page.getByRole("option", { name: /^Embed/ }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    expect(await inert()).toBe(true);
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    expect(await inert()).toBe(false);
+
+    await openInsertSheet(page);
+    expect(await inert()).toBe(true);
+    await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
+    await expect(insertSheet(page)).toBeHidden();
+    expect(await inert()).toBe(false);
+    await page.evaluate(() => window.__tiptap_editor?.setEditable(true));
   });
 
   test("a pick refused since the sheet opened says why in the sheet", async ({
