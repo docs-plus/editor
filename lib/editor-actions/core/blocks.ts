@@ -1,5 +1,4 @@
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Selection, Transaction } from "@tiptap/pm/state";
 import { liftTarget } from "@tiptap/pm/transform";
 
@@ -119,43 +118,41 @@ function startsInTitle(selection: Selection): boolean {
   return selection.$from.index(0) === 0;
 }
 
-const WRAPS = new Set(["listItem", "taskItem", "blockquote"]);
-const CELLS = new Set(["tableCell", "tableHeader"]);
+/** A textblock directly in one of these is lifted by a text style. */
+const WRAPS = /^(listItem|taskItem|blockquote)$/;
 
-/** Whether the textblock at `pos` is in a list or quote (a table cell's never is). */
-function isWrapped(doc: PMNode, pos: number): boolean {
-  const $pos = doc.resolve(pos);
-  let wrapped = false;
-  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    const name = $pos.node(depth).type.name;
-    if (CELLS.has(name)) return false;
-    if (WRAPS.has(name)) wrapped = true;
-  }
-  return wrapped;
-}
-
-/** The selected textblocks in a list or quote, last first. */
+/** The selected textblocks directly in a list item or quote, last first. */
 export function wrappedBlocks(tr: Transaction): number[] {
   const found: number[] = [];
-  tr.doc.nodesBetween(tr.selection.from, tr.selection.to, (node, pos) => {
-    if (!node.isTextblock) return true;
-    if (isWrapped(tr.doc, pos)) found.unshift(pos);
-    return false;
-  });
+  tr.doc.nodesBetween(
+    tr.selection.from,
+    tr.selection.to,
+    (node, pos, parent) => {
+      if (node.isTextblock && WRAPS.test(parent?.type.name ?? "")) {
+        found.unshift(pos);
+      }
+      return !node.isTextblock;
+    },
+  );
   return found;
 }
 
 /**
- * Lifts each selected textblock out of its lists and quotes to the top
- * level, one block at a time and last first, so unselected siblings (and
- * their children) stay where they are (spec §7.2).
+ * Lifts each selected textblock out of its list items and quotes, one
+ * block at a time and last first, so unselected siblings (and their
+ * children) stay where they are (spec §7.2). A table cell is isolating:
+ * nothing lifts out of one.
  */
 export function liftWrapped(tr: Transaction): boolean {
-  for (const start of wrappedBlocks(tr)) {
-    let pos = start;
-    while (isWrapped(tr.doc, pos)) {
-      const $from = tr.doc.resolve(pos + 1);
-      const range = $from.blockRange(tr.doc.resolve($from.end()));
+  for (let pos of wrappedBlocks(tr)) {
+    for (
+      let $pos = tr.doc.resolve(pos);
+      WRAPS.test($pos.parent.type.name);
+      $pos = tr.doc.resolve(pos)
+    ) {
+      const range = $pos.blockRange(
+        tr.doc.resolve(pos + ($pos.nodeAfter?.nodeSize ?? 0)),
+      );
       const target = range && liftTarget(range);
       if (!range || target === null) break;
       const steps = tr.steps.length;
