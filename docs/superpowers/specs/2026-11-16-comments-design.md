@@ -5,7 +5,14 @@
 > **Plan v8 (2026-11-16):** **D39** widens D9: comments also work in the personal web library's documents, as on desktop (§6.3). **D36** makes phones and tablets fully supported in v1: the phone bottom sheet and the 640–767 px sheet over the right (§11.2), built in M26 ([phones and tablets design](2026-11-16-phones-tablets-design.md)). The view-link token is the S1 derived `auth_view` (plan §6).
 
 
-- **Status:** Draft for owner review (2026-11-16). Nothing is built yet.
+> **Built in P4.9 (2026-11-22), amending this design where the anchor fuzz disagreed:**
+> - **The fallback pair (§5.2, §5.3):** a re-anchor keeps the pair the thread had before its *first* re-anchor as `ps`/`pe`, not the pair it replaces; Re-attach still keeps the current pair. With "the pair it replaces", undoing two structural edits lost the thread (321 of 31,584 fuzz threads); now 5 untrimmed threads do. When undo deletes a character the current pair sticks to and brings back every character of the earlier pair, the earlier pair wins.
+> - **What a local edit checks (§5.3):** every thread in the *textblocks* a change touches, not only threads it overlaps, because the sync plugin diffs a block's text as strings and in repeated text deletes other, equal characters than ProseMirror did; a structural change checks the top-level blocks it spans, and `ReplaceAroundStep` (type change, wrap, lift) counts as structural. Re-anchors are made on the mapped range's text characters, never on a block boundary.
+> - **The author id (§6.1)** lives under its own key, `tinydocy-author`, not inside `tinydocy-user`, so the editor chunk carries no identity code for it; it is minted on the first comment write and never broadcast.
+> - **The feature switch:** `canComment()` reads `NEXT_PUBLIC_COMMENTS` (`on`, default off) until the server reports `features.comments` (P4.2f-2).
+> - **Residuals (§13), measured:** see §13's last bullet.
+
+- **Status:** Draft for owner review (2026-11-16). P4.9 (comments core) is built; the rest is not.
 - **Why now:** the owner decided **D9 = comments ship with live sharing**, in the single combined release (**D6 = one release**). This document is the complete design for that.
 - **Decides:**
   - the comments data model and anchoring
@@ -250,7 +257,7 @@ The lazy chunk keeps `ranges: Map<tid, {from, to}>`, the current highlight range
 
 **"Own" is honest, not secure.**
 - `lib/user-identity.ts` stores only `{ name, color }`. It gains `id`: 128 random bits, base64url, created once.
-  - On the web it lives in `tinydocy-user`.
+  - On the web it lives in `tinydocy-author` (P4.9; first planned inside `tinydocy-user`).
   - On desktop it lives in `meta`, as P4.0 already moves identity there.
 - The id is visible in the Y.Doc. Anyone holding an edit link can copy it and act as that author.
 - The UI uses it only to prevent accidents. The panel footer says **"Names aren't verified."**, the same words as the People list.
@@ -674,6 +681,7 @@ Nothing comment-related goes into awareness: no drafts and no typing state. P4.2
 - **"Own" is a convention.** Anyone with an edit link can delete or resolve anything an edit holder can, and can pretend to be another author by copying their id.
 - **A leaked edit link can delete every comment.** Versions bring them back only through the additive restore option (C8). If that option is cut, deleted discussion is gone for good.
 - **Comments are as public as the link.** Anyone with a view link reads every comment, including resolved ones. The consent window's copy says so.
+- **Anchor residuals, measured by the P4.9 fuzz** (50,000 cases, 769,424 threads): a thread resolves to other text than ProseMirror's mapping for 20 threads (0.003%) and fully deleted text still resolves for 213 (0.03%), both after the sync plugin's string diff deleted other, equal characters than ProseMirror did; after undoing everything, 214 untrimmed threads (0.03%) and 8.7% of threads whose text was partly deleted before a structural edit come back on part of their original text. The fuzz bounds these rates in CI.
 - **Resolved comments are kept** until deleted. Deleted comments leave small Yjs tombstones (the key, not the text, once garbage collected).
 
 ---
