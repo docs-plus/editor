@@ -15,7 +15,7 @@ The pieces desktop and the web library need to link one document to
 another (search-linking design §4.1–§4.7, §5, D25). Nothing in the web
 sandbox uses them: the editor gains a `linkHost` pass-through that the web
 never sets, and with no host a `tinydocy:` link is never written, pasted or
-opened. Editor chunk group +41 B gz of the D23 ledger's 60 B line; web CSS
+opened. Editor chunk group +32 B gz of the D23 ledger's 60 B line; web CSS
 unchanged.
 
 #### Added

@@ -35,8 +35,8 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * spike M18 confirms it, this becomes 2,133 B with no further approval.
  *
  * Spent so far, as measured in each PR (gzipped, against `main` then):
- * - LK1 `linkHost` pass-through and the no-host `tinydocy:` deny: +41 B of
- *   its 60 B line (903b5c8 → +15,932 B; LK1 → +15,973 B).
+ * - LK1 `linkHost` pass-through and the no-host `tinydocy:` deny: +32 B of
+ *   its 60 B line (84a9458 → +16,130 B; LK1 → +16,162 B).
  */
 export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
