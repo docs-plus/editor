@@ -135,6 +135,55 @@ describe("Turn into (spec §7.2)", () => {
     expect(await notice()).toBe("Formatting removed");
   });
 
+  it("Heading 2 inside one table cell converts that cell's text, as on main", async () => {
+    make(h(1, "Title"), {
+      type: "table",
+      content: [{ type: "tableRow", content: [cell("Cell")] }],
+    });
+    editor.commands.setTextSelection(posInside(editor, "Cell"));
+    expect(turnInto(editor, action("style.heading2"))).toBe(true);
+    expect(shape()).toEqual(["h1:Title", "table[heading:Cell]"]);
+    expect(await notice()).not.toBe("Table cells keep their type.");
+  });
+
+  it("a range with a list inside a cell keeps that list as it is", () => {
+    make(
+      h(1, "Title"),
+      p(t("Before")),
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [list("In cell")],
+              },
+            ],
+          },
+        ],
+      },
+      p(t("After")),
+    );
+    const from = posInside(editor, "Before");
+    const to = posInside(editor, "After") + 2;
+    editor.commands.setTextSelection({ from, to });
+    expect(turnInto(editor, action("style.heading3"))).toBe(true);
+    expect(shape()).toEqual([
+      "h1:Title",
+      "h3:Before",
+      "table[paragraph:In cell]",
+      "h3:After",
+    ]);
+    // The cell's list is still a list.
+    let listInCell = false;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "bulletList") listInCell = true;
+    });
+    expect(listInCell).toBe(true);
+  });
+
   it("table cells keep their type; the rest converts", async () => {
     make(
       h(1, "Title"),

@@ -199,6 +199,60 @@ describe("text style", () => {
     });
   }
 
+  it("turns a parent item into Text; its sub-items follow as a list", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(p("Alpha"), bulletList(listItem(p("Child")))),
+          listItem(p("Beta")),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Alpha"));
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(shape()).toEqual([
+      "h1:Title",
+      "paragraph:Alpha",
+      "bulletList[Child]",
+      "bulletList[Beta]",
+    ]);
+  });
+
+  it("turns a middle child into a top-level Heading 2, in order", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        bulletList(
+          listItem(
+            p("Parent"),
+            bulletList(listItem(p("First")), listItem(p("Second"))),
+          ),
+        ),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "First"));
+    expect(setTextStyle(editor, "heading-2")).toBe(true);
+    const out = shape();
+    expect(out[0]).toBe("h1:Title");
+    expect(out[1]).toBe("bulletList[Parent]");
+    expect(out[2]).toBe("h2:First");
+    // Nothing is left inside a list item as a heading.
+    expect(out.slice(3).join()).toContain("Second");
+  });
+
+  it("lifts a nested task item to the top level", () => {
+    editor = createTestEditor({
+      content: doc(
+        h1("Title"),
+        taskList(taskItem(p("Outer"), taskList(taskItem(p("Inner"))))),
+      ).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "Inner"));
+    expect(setTextStyle(editor, "paragraph")).toBe(true);
+    expect(shape()).toEqual(["h1:Title", "taskList[Outer]", "paragraph:Inner"]);
+  });
+
   it("names a list item List and a quote Quote (the row's face)", () => {
     editor = createTestEditor({
       content: doc(

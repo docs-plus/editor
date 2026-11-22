@@ -121,10 +121,10 @@ function startsInTitle(selection: Selection): boolean {
 /**
  * Turns the selected list items and quote lines into a text style, lifted
  * out one by one (spec §7.2), or returns `undefined` when the selection has
- * none. Injected by `lib/editor-actions/style-lift.ts`, which every lazy
- * chunk that offers text styles imports (bubble, menus, "/", phone,
- * palette), so the editor chunk keeps none of it; until one loads, a style
- * shortcut in a list keeps the plain `setTextStyle`.
+ * none. Injected by `lib/editor-actions/style-lift.ts`, which the lazy
+ * bubble (idle), menu, phone and palette chunks import (not "/", for its
+ * 7 KB budget), so the editor chunk keeps none of it; until one loads, a
+ * style shortcut or a "/" pick in a list keeps the plain `setTextStyle`.
  */
 type StyleLift = (
   editor: Editor,

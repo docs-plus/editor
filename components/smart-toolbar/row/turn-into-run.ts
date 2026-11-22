@@ -1,4 +1,3 @@
-import type { Node as PMNode } from "@tiptap/pm/model";
 import {
   type EditorState,
   TextSelection,
@@ -11,7 +10,11 @@ import { suggestedCodeLanguage } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
 import { TITLE_STYLE_REASON } from "@/lib/editor-actions/core/blocks";
 import { availability, runAction } from "@/lib/editor-actions/registry";
-import { liftWrapped, wrappedBlocks } from "@/lib/editor-actions/style-lift";
+import {
+  inCell,
+  liftWrapped,
+  wrappedBlocks,
+} from "@/lib/editor-actions/style-lift";
 import type { AnyAction } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { INSERT_KIND_CHOICE, rememberChoice } from "@/lib/remembered-choice";
@@ -31,8 +34,6 @@ const TITLE_REASONS = new Set([
   "Not available in the title.",
 ]);
 
-const CELLS = new Set(["tableCell", "tableHeader"]);
-
 /** A range that starts in the title and runs on past it (⌘A). */
 export function spansPastTitle(state: EditorState): boolean {
   const { selection } = state;
@@ -47,24 +48,25 @@ export function spansPastTitle(state: EditorState): boolean {
 export const isTitleReason = (reason: string | undefined) =>
   reason !== undefined && TITLE_REASONS.has(reason);
 
-function inCell(doc: PMNode, pos: number): boolean {
-  const $pos = doc.resolve(pos);
-  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    if (CELLS.has($pos.node(depth).type.name)) return true;
-  }
-  return false;
-}
-
-/** Whether the selection has a text node with any mark, or a table cell. */
+/**
+ * Whether the selection has a text node with any mark, and whether it
+ * mixes textblocks in table cells with others (the cells path). A caret or
+ * range inside one cell is not mixed: the cell converts, as on `main`.
+ */
 function scan(state: EditorState): { marks: boolean; cells: boolean } {
-  const found = { marks: false, cells: false };
+  let marks = false;
+  let inside = false;
+  let outside = false;
   const { from, to } = state.selection;
-  state.doc.nodesBetween(from, to, (node) => {
-    if (node.isText && node.marks.length > 0) found.marks = true;
-    if (CELLS.has(node.type.name)) found.cells = true;
-    return !(found.marks && found.cells);
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isText && node.marks.length > 0) marks = true;
+    if (node.isTextblock) {
+      if (inCell(state.doc, pos)) inside = true;
+      else outside = true;
+    }
+    return true;
   });
-  return found;
+  return { marks, cells: inside && outside };
 }
 
 /** A text style's node and level for `style.*` ids (`style.heading2`). */
@@ -135,7 +137,7 @@ export function turnInto(editor: Editor, action: AnyAction): boolean {
         .chain()
         .focus()
         .command(({ tr }) => {
-          liftWrapped(tr);
+          liftWrapped(tr, true);
           setStyleOutsideCells(tr, action.id);
           return true;
         })
