@@ -31,6 +31,7 @@ import {
   MAX_BUILD_ID_LENGTH,
   MAX_DOC_BYTES,
   MAX_DOC_SCHEMA,
+  MAX_LINK_LENGTH,
   MAX_SNIPPET_LENGTH,
   MAX_TITLE_LENGTH,
 } from "./limits";
@@ -98,6 +99,15 @@ export const calls = {
   "doc.close": { req: docId, res: null },
   /** Resolves after every request this window sent before it is durable. */
   "doc.flush": { req: obj({}), res: null },
+  /**
+   * Opens an `https` link in the system browser (N2). Main accepts it from
+   * the app's top frame only and rate-limits it; `window.open` itself is
+   * always denied, so an embed can never open a tab.
+   */
+  "shell.openLink": {
+    req: obj({ url: str(MAX_LINK_LENGTH) }),
+    res: {} as { opened: boolean },
+  },
   /** Creates an empty document (the library's `createDoc`); P2.7 grows `index.*`. */
   "index.create": {
     req: obj({ title: opt(str(MAX_TITLE_LENGTH)) }),

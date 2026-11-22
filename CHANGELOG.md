@@ -208,6 +208,85 @@ visible heading and `role="group"` with the same label, and every row keeps a
 there). Nothing is added or removed. Page width follows with the preferences
 work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
 
+### Desktop P2.6f: repair and rebuild the library
+
+Repair and rebuild for the format-2 library (offline data-model revision
+§4.5), in `desktop/storage/engine/repair.ts`. Every entry point is
+idempotent: a second run changes nothing.
+
+#### Added
+
+- **Desktop:** check mode (`checkLibrary`, `Library.repairCheck`), in one
+  transaction:
+  - raises `head_seq` to the newest row or snapshot, never lowering it (I6);
+  - recomputes `size_bytes` as the snapshot plus the remaining rows (I9),
+    moving `rev` only when it fixes something;
+  - reports I1–I4 violations as lines (`foreign_key_check`, folder depth
+    and cycles, trash columns without `trashed_at`, live items under a
+    trashed folder) and fixes none of them;
+  - counts `doc_blobs` rows of purged documents with no `dropped_at`, and
+    never deletes them.
+- **Desktop:** Rebuild index (`resetDerivedChunk`, `Library.resetDerived`)
+  clears `derived_seq` and both derived hashes on up to 500 documents per
+  transaction, so appends interleave. It clears the hashes because
+  `derive.put` skips a side whose hash is unchanged, and damaged rows would
+  otherwise stay.
+- **Desktop:** after a failed `quick_check` (SEC-009), `rebuildIntoNewFile`
+  reads the damaged file read-only and builds a new format-2 file next to
+  it. The damaged file is never changed.
+  - The schema comes from `SCHEMA_V1` and the same format steps a new
+    library runs.
+  - Rows are copied table by table in the explicit format-2 order, in
+    batches. A damaged page is stepped over: rowid tables find the first
+    readable rowid after it, keyed tables resume at the next document.
+  - The damaged file is never written to: with no `-wal` or `-journal`
+    beside it, it is opened immutable, so no `-shm` appears on any OS.
+  - `meta` is copied except `format_version`.
+  - The `updates` sequence is carried, so a seq is never reused.
+  - Rows whose parent was lost are settled: a lost folder sends its items to
+    the root, and other orphans are dropped and counted as skipped.
+  - Derivation is reset, and `foreign_key_check` and `integrity_check` are
+    reported on the new file.
+- **Tests:** a seeded property test (P1, 6 seeds × 220 operations) runs
+  create, append, compact, Trash, restore, purge, folder Trash, restore and
+  purge, duplicate, tags, moves, image rows and `derive.put` with a stub
+  deriver. It checks I1–I9 with an independent checker and asserts that
+  check mode is a no-op throughout. P2 damages `links`, `doc_headings` and
+  `derived_seq`, rebuilds, drains, and gets the same rows back. The rebuild
+  tests corrupt a page of `updates` or `links` in a copy of a library.
+  - The engine half of T22 drains 1,000 stale documents with the stub
+    deriver (0.27 to 0.47 s on an Apple silicon Mac). The real T22 waits for LK4a's queue.
+  - The repair sweep found that `restoreFolder` could nest a folder deeper
+    than 4, and that a malformed file made open throw instead of opening
+    read-only as `corrupt`. P2.6d fixes both, and the folder case runs here
+    as an ordinary test.
+
+
+
+### P2.12 part 2: plain-text Markdown pastes as formatting
+
+Pasting plain text that is Markdown (a README, a notes app, a chat
+assistant's answer) now gives headings, lists, quotes, code blocks, rules,
+tables, links and images, through the same paste pipeline as an HTML paste
+(details spec E2). ⌘⇧V still pastes plain text. Inline bold, italic, strike
+and code already converted through Tiptap's own paste rules. Editor chunk
+group +152 B gz on its D23 line (measured +152 B on `main` at `1548d5e`,
++129 B at `84a9458`).
+
+#### Added
+
+- **Markdown paste** (`extensions/markdown-paste/`): the editor's
+  `clipboardTextParser` prop (`EDITOR_PROPS`) hands plain text to the rule
+  in `lib/markdown`, which loads as a lazy chunk in the editor's post-sync
+  idle callback (also on desktop, where a hydrated local document counts as
+  synced). Until it has loaded, and always for ⌘⇧V, text pastes as plain
+  text, as before.
+
+#### Changed
+
+- **Editor budget:** the D23 ledger gains P2.12's 152 B line (2,205 B, or
+  2,285 B with M19's conditional line), owner-approved 2026-11-22.
+
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and
@@ -259,6 +338,154 @@ of it.
   characters and characters without spaces in the document, or in the
   selection when given one, using `Intl.Segmenter` (a ZWNJ stays inside a
   Persian word; an emoji sequence is one character).
+
+### CI: shards packed by duration
+
+Playwright's own `--shard` splits by test count, so the specs with slow
+tests shared the middle shard, which ran 1.5–2.5 min longer than the others
+(median slowest shard 8m38s over six runs). Shards are now packed by each
+spec file's measured time.
+
+#### Changed
+
+- **CI:** `scripts/e2e-shards.ts` packs the `chromium` and `library` spec
+  files into the three shards by duration (longest first, into the
+  least-loaded shard) and hands each shard its files with `--test-list`.
+  The per-file times come from the `e2e-timings` artifact that `Playwright
+  (Chromium)` publishes on green pushes to `main` only; `Changed files`
+  reads it once per run, so every shard packs the same plan. With no usable
+  timings the shards use Playwright's `--shard`, as before.
+- **CI:** each browser job logs its runner's CPU model, which explains most
+  of the remaining shard-to-shard spread.
+- **Tests:** `tests/unit/ci/e2e-shards.test.ts` covers the packer, the
+  timings parser and the report reader; `ci-workflow.test.ts` pins that only
+  a green push to `main` publishes timings and that all shards read the same
+  ones.
+
+**Deploy:** none. The first green push to `main` after this merges
+publishes the first timings; until then the shards split as before.
+
+### CI: the desktop shell can be a required check
+
+`desktop-shell.yml` ran only on pull requests that touched the shell, so a
+required check from it would have waited forever on every other pull
+request and in the merge queue.
+
+#### Changed
+
+- **CI:** `desktop-shell.yml` runs on every pull request (no paths filter;
+  `ready_for_review` included) and in the merge queue. A `Changed files` job
+  builds on a pull request only when it is ready for review and touches the
+  shell's paths (the same list as before); the merge queue, nightly
+  (`workflow_call`) and manual runs always build.
+- **CI:** `Desktop shell (gate)` always runs and passes only if the renderer
+  and every package leg passed, or if they were skipped on a pull request
+  for a draft or for no shell changes. In the merge queue, nightly and
+  manual runs a skip fails it.
+- **Tests:** `tests/unit/ci/desktop-shell-workflow.test.ts` pins the
+  triggers and the gate, and runs its decision and verdict scripts; the
+  nightly streak classifies the new steps as setup steps, so the gate never
+  turns a void nightly run red.
+
+**Deploy:** none. **Owner (once, after merge):** add `Desktop shell (gate)`
+to the required checks of ruleset **Protect main**
+(`docs/operations/deploy-runbook.md`, "Requiring the desktop shell").
+
+### Desktop P2.11: find and replace in the document
+
+⌘F (Ctrl+F) opens a find bar over the document, on the web and in the
+desktop app (spec `2026-11-15-desktop-local-first-design.md` §8.4 row P2.11,
+details spec E1). P2.11 has no ledger line, and the editor chunk group does
+not grow (393,776 B gz, −44 B against `main` at `903b5c8`). The keys add
+766 B gz to first-load JS (320,081 → 320,847 B, summed over the JS chunks
+`index.html` loads, the same tree built with Find off and on, on `main` at
+`7b9fdc7`), and the bar is a lazy chunk of about 7 KB gz fetched when the
+browser is first idle.
+
+#### Added
+
+- **Find:** ⌘F / Ctrl+F opens the bar, seeded with a short selection.
+  Enter / Shift+Enter, ⌘G / ⌘⇧G, Ctrl+G and F3 / Shift+F3 step through the
+  hits; Esc closes and selects the current hit once you have moved to one
+  (typed, changed an option, stepped or replaced); a bar reopened on the
+  remembered query and dismissed leaves the caret where it was. Match case
+  and Whole word are toggles. Only the document's text is searched, never
+  the outline or other sidebar text. A key a focused list has already
+  handled, or one pressed in another text field (a node view's included),
+  another editable area or a dialog, is left alone.
+- **Replace:** from the bar's ▸ toggle; ⌥⌘F (macOS) and Ctrl+H (Windows and
+  Linux) open it in the desktop app only, since the browser owns Ctrl+H.
+  Replace moves past the replacement and keeps the replaced text's marks
+  (never a caret toggle's), and replacing a block's whole text with nothing
+  keeps the block. Replace all is one undo step. The toggle is hidden in a
+  read-only document.
+- **Replace limits (abuse guard):** the replacement field stops at 1,000
+  characters, and Replace all refuses ("Too large to replace") when it
+  would add more than 256 KiB (counted in UTF-8, erring high). That keeps
+  one click's growth far below the server's 2 MiB limit, past which the
+  document turns read-only with the change unsaved.
+- **Right-to-left and Persian or Arabic text:** without Match case, Arabic
+  ي/ك match Persian ی/ک, Persian and Arabic-Indic digits match ASCII, and
+  harakat and tatweel are ignored. Whole word keeps ZWNJ inside a word.
+  Highlights follow the text's own direction.
+- **Fast on large documents:** hits are painted with the CSS Custom
+  Highlight API (no plugin, no decoration, no change to the editor's DOM),
+  so typing, IME composition and a collaborator's edits are never redrawn
+  for Find. Rule 6 of the details spec is amended to allow such
+  paint-only layers when they add no editor bytes (coordinator decision,
+  2026-11-22). An edit, local or remote,
+  rescans only the textblocks it touched, and hits whose text did not
+  change keep their painted ranges, which the browser moves with the text.
+  Chromium updates every live range in a text node on each edit, so a
+  block with more than 25 hits paints the 25 around the current hit; the
+  window follows each step, and every hit is still counted (coordinator
+  decision, 2026-11-22). The first CI run of `find-perf.spec.ts` showed a
+  200 cap adding +25 ms per key in one paragraph of 5,000 hits. Measured
+  at 3× CPU throttle, the median it adds is +0.2 ms at a cap of 1,
+  +1 ms at 25, +4 ms at 50, +9 ms at 100 and +20 to +34 ms at 200
+  (budget +4 ms; the table is in the details spec, rule 6). At most
+  10,000 hits are kept ("10,000+"); Replace all replaces every one.
+- **Browsers without the Highlight API** (Firefox before 140, Safari
+  before 17.2): Find still works. It paints no hits, but the bar shows the
+  count, and each move to a hit (typing, Enter, ⌘G, a replace) selects it
+  in the editor without taking focus, so it shows as the blurred
+  selection. Typing in the document never moves that selection.
+- **Config:** Find is on for the web and the desktop app (owner decision,
+  2026-11-22): ⌘F / Ctrl+F, ⌘G and F3 open and step Find on the document
+  page instead of the browser's find bar. `NEXT_PUBLIC_FIND=0` turns it off
+  for any build and leaves the key listener out. A unit test pins the
+  default.
+
+#### Deploy
+
+- Find turns on at tiny.docs.plus with the next deploy. `NEXT_PUBLIC_FIND`
+  is a build-time value and Find is now on by default, so there is nothing
+  to change on the host. To keep the browser's own find bar instead, add
+  `NEXT_PUBLIC_FIND=0` to the host's `.env.production` before that deploy
+  (or later, then redeploy).
+
+### Desktop P2.5 follow-up: link and deep-link hardening
+
+Follow-up to the security review of #135. Required before any public
+desktop release (N2).
+
+#### Changed
+
+- **Desktop:** main denies every `window.open` and never opens one in the
+  browser, so an embed or ad frame can't open a tab (N2). The app's own
+  links go through a new bridge call, `shell.openLink`, which main accepts
+  from the app's top frame only, `https` only, at most 3 per window per
+  10 s. DesktopRoot's link router sends `window.open` and new-window link
+  clicks outside the editor to it.
+- **Desktop:** a deep link's existence check is a read-only `exists`
+  storage op, so it never holds a document a window is opening (N3); the
+  checks are throttled before storage is asked (N4).
+- **Desktop:** the sync URL baked into `connect-src` must have a DNS name
+  or IP literal host; `*.example.com` and other wildcards are refused (N6).
+- **Tests:** unit tests for the Bluetooth, HID, serial and USB refusals,
+  the always-denied `window.open`, and the release fuses pinned in
+  `electron-builder.yml` (SEC-001). `codesign --verify` on the installed
+  Mac app is now a hard check.
 ### CI: draft pull requests run the checks job only
 
 About a dozen agent sessions keep draft pull requests open, and each CI run

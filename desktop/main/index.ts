@@ -25,20 +25,21 @@ import { DEEP_LINK_SCHEME } from "../shared/app-identity";
 import { StorageClient } from "../storage/client";
 import { installAppProtocol, registerAppScheme } from "./app-protocol";
 import {
+  DEEP_LINK_PROBES,
   DEEP_LINK_WINDOW_MS,
   DEEP_LINK_WINDOWS,
   type DocExists,
   openDocFromLink,
 } from "./deep-link-open";
 import { diagnostics } from "./diagnostics";
-import { createDocHandlers, errorCodeOf, ownerOf } from "./doc-handlers";
+import { createDocHandlers, ownerOf } from "./doc-handlers";
 import { installIpc } from "./ipc";
 import { type LaunchIntent, parseLaunchArgs, userArgs } from "./launch-args";
 import { installMenu } from "./menu";
 import { QuitCoordinator } from "./quit-coordinator";
 import { FixedWindowLimiter } from "./rate-limit";
 import { OpenDocRegistry } from "./registry";
-import { hardenSession } from "./session-hardening";
+import { hardenSession, openExternally } from "./session-hardening";
 import { installSpellcheckGuard } from "./spellcheck";
 import { StorageSupervisor } from "./storage-supervisor";
 import { testHooks } from "./test-hooks";
@@ -59,9 +60,6 @@ function libraryDir(): string {
     return join(process.env.LOCALAPPDATA, "TinyDocy", "library");
   return join(app.getPath("userData"), "library");
 }
-
-/** The storage owner that checks a deep link's document exists. */
-const PROBE_OWNER = "deep-link-probe";
 
 /** Set by the build (`desktop/build/build.ts`) from the renderer's build env. */
 const SYNC_URL = process.env.TINYDOCY_SYNC_URL ?? "ws://127.0.0.1:1234";
@@ -193,6 +191,11 @@ function start(): void {
     call: storage.call,
     focusWindow: (windowId) => windows.focus(windowId),
     windowDoc: (windowId) => windows.docOf(windowId),
+    openLink: (windowId, url) => {
+      const contents = windows.get(windowId)?.webContents;
+      // The IPC sender check already proved the top app frame sent it.
+      return contents ? openExternally(contents.id, url, true) : false;
+    },
     onFlushed: (windowId, requestId) =>
       quit.confirmFlushed(windowId, requestId),
   });
@@ -204,27 +207,24 @@ function start(): void {
   };
 
   /**
-   * Does the library have this document? A probe owner claims and releases
-   * it (no new worker op). `already_open` means it exists; any other
-   * failure means storage can't tell.
+   * Does the library have this document? A read-only storage check: nothing
+   * is claimed, so it can never make a window's own doc.open fail with
+   * already_open (N3). A failure means storage can't tell.
    */
   const docExists = async (docId: string): Promise<DocExists> => {
     try {
-      await storage.call("claim", { docId, owner: PROBE_OWNER });
-      await storage
-        .call("close", { docId, owner: PROBE_OWNER })
-        .catch(() => undefined);
-      return "yes";
-    } catch (error) {
-      const code = errorCodeOf(error);
-      if (code === "not_found") return "no";
-      if (code === "already_open") return "yes";
+      return (await storage.call("exists", { docId })) ? "yes" : "no";
+    } catch {
       return "unknown";
     }
   };
 
   const deepLinkLimiter = new FixedWindowLimiter(
     DEEP_LINK_WINDOWS,
+    DEEP_LINK_WINDOW_MS,
+  );
+  const deepLinkProbeLimiter = new FixedWindowLimiter(
+    DEEP_LINK_PROBES,
     DEEP_LINK_WINDOW_MS,
   );
 
@@ -236,6 +236,7 @@ function start(): void {
       create: (id) => windows.create(id),
       discard: (windowId) => windows.get(windowId)?.destroy(),
       docExists,
+      probeLimiter: deepLinkProbeLimiter,
       limiter: deepLinkLimiter,
       log: (event, fields) => diagnostics.log(event, fields),
     });

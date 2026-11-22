@@ -45,6 +45,8 @@ export type StorageOps = {
   };
   /** Main replays its registry after a worker restart. */
   claim: { args: { docId: string; owner: string }; result: null };
+  /** Read-only: does the document exist? (deep links; nothing is claimed) */
+  exists: { args: { docId: string }; result: boolean };
   close: { args: { docId: string; owner: string }; result: null };
   releaseOwner: { args: { owner: string }; result: null };
   /** Resolves after every request sent before it: all durable. */
@@ -191,6 +193,8 @@ function run(library: Library, request: StorageRequest): unknown {
     case "claim":
       library.claim(request.args.docId, request.args.owner);
       return null;
+    case "exists":
+      return library.exists(request.args.docId);
     case "close":
       library.close(request.args.docId, request.args.owner);
       return null;

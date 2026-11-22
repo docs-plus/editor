@@ -26,6 +26,7 @@ export default defineConfig({
         "**/library-lists*.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
+        "**/find-perf.spec.ts",
         "**/page-engine-perf.spec.ts",
 
         "**/image-asset-encoder-perf.spec.ts",
@@ -69,6 +70,7 @@ export default defineConfig({
       testMatch: [
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
+        "**/find-perf.spec.ts",
         "**/page-engine-perf.spec.ts",
 
         "**/image-asset-encoder-perf.spec.ts",
