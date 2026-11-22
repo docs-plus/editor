@@ -525,6 +525,17 @@ describe("exportMarkdown", () => {
     expect(markdown).toBe('---\ntitle: "T"\ntags: []\n---\n\n# T\n\nBody\n');
   });
 
+  it("keeps an image store `asset:` ref as it is (image store §5.4)", () => {
+    const src = `asset:sha256-${"0123456789abcdef".repeat(4)}`;
+    const doc: JSONContent = {
+      type: "doc",
+      content: [TITLE, { type: "image", attrs: { src, alt: "Chart" } }],
+    };
+    const { markdown, imported } = roundTrip(doc);
+    expect(markdown).toContain(`![Chart](${src})`);
+    expect(canonical(imported.doc)).toEqual(canonical(doc));
+  });
+
   it("reads only the document fragment, never other shared types", () => {
     const ydoc = jsonToYDoc(paragraphs("Body"));
     ydoc.getMap("comments").set("c1", "secret comment");
