@@ -114,6 +114,79 @@ request and in the merge queue.
 **Deploy:** none. **Owner (once, after merge):** add `Desktop shell (gate)`
 to the required checks of ruleset **Protect main**
 (`docs/operations/deploy-runbook.md`, "Requiring the desktop shell").
+
+### Desktop P2.11: find and replace in the document
+
+⌘F (Ctrl+F) opens a find bar over the document, on the web and in the
+desktop app (spec `2026-11-15-desktop-local-first-design.md` §8.4 row P2.11,
+details spec E1). P2.11 has no ledger line, and the editor chunk group does
+not grow (393,776 B gz, −44 B against `main` at `903b5c8`). The keys add
+766 B gz to first-load JS (320,081 → 320,847 B, summed over the JS chunks
+`index.html` loads, the same tree built with Find off and on, on `main` at
+`7b9fdc7`), and the bar is a lazy chunk of about 7 KB gz fetched when the
+browser is first idle.
+
+#### Added
+
+- **Find:** ⌘F / Ctrl+F opens the bar, seeded with a short selection.
+  Enter / Shift+Enter, ⌘G / ⌘⇧G, Ctrl+G and F3 / Shift+F3 step through the
+  hits; Esc closes and selects the current hit once you have moved to one
+  (typed, changed an option, stepped or replaced); a bar reopened on the
+  remembered query and dismissed leaves the caret where it was. Match case
+  and Whole word are toggles. Only the document's text is searched, never
+  the outline or other sidebar text. A key a focused list has already
+  handled, or one pressed in another text field (a node view's included),
+  another editable area or a dialog, is left alone.
+- **Replace:** from the bar's ▸ toggle; ⌥⌘F (macOS) and Ctrl+H (Windows and
+  Linux) open it in the desktop app only, since the browser owns Ctrl+H.
+  Replace moves past the replacement and keeps the replaced text's marks
+  (never a caret toggle's), and replacing a block's whole text with nothing
+  keeps the block. Replace all is one undo step. The toggle is hidden in a
+  read-only document.
+- **Replace limits (abuse guard):** the replacement field stops at 1,000
+  characters, and Replace all refuses ("Too large to replace") when it
+  would add more than 256 KiB (counted in UTF-8, erring high). That keeps
+  one click's growth far below the server's 2 MiB limit, past which the
+  document turns read-only with the change unsaved.
+- **Right-to-left and Persian or Arabic text:** without Match case, Arabic
+  ي/ك match Persian ی/ک, Persian and Arabic-Indic digits match ASCII, and
+  harakat and tatweel are ignored. Whole word keeps ZWNJ inside a word.
+  Highlights follow the text's own direction.
+- **Fast on large documents:** hits are painted with the CSS Custom
+  Highlight API (no plugin, no decoration, no change to the editor's DOM),
+  so typing, IME composition and a collaborator's edits are never redrawn
+  for Find. Rule 6 of the details spec is amended to allow such
+  paint-only layers when they add no editor bytes (coordinator decision,
+  2026-11-22). An edit, local or remote,
+  rescans only the textblocks it touched, and hits whose text did not
+  change keep their painted ranges, which the browser moves with the text.
+  Chromium updates every live range in a text node on each edit, so a
+  block with more than 25 hits paints the 25 around the current hit; the
+  window follows each step, and every hit is still counted (coordinator
+  decision, 2026-11-22). The first CI run of `find-perf.spec.ts` showed a
+  200 cap adding +25 ms per key in one paragraph of 5,000 hits. Measured
+  at 3× CPU throttle, the median it adds is +0.2 ms at a cap of 1,
+  +1 ms at 25, +4 ms at 50, +9 ms at 100 and +20 to +34 ms at 200
+  (budget +4 ms; the table is in the details spec, rule 6). At most
+  10,000 hits are kept ("10,000+"); Replace all replaces every one.
+- **Browsers without the Highlight API** (Firefox before 140, Safari
+  before 17.2): Find still works. It paints no hits, but the bar shows the
+  count, and each move to a hit (typing, Enter, ⌘G, a replace) selects it
+  in the editor without taking focus, so it shows as the blurred
+  selection. Typing in the document never moves that selection.
+- **Config:** Find is on for the web and the desktop app (owner decision,
+  2026-11-22): ⌘F / Ctrl+F, ⌘G and F3 open and step Find on the document
+  page instead of the browser's find bar. `NEXT_PUBLIC_FIND=0` turns it off
+  for any build and leaves the key listener out. A unit test pins the
+  default.
+
+#### Deploy
+
+- Find turns on at tiny.docs.plus with the next deploy. `NEXT_PUBLIC_FIND`
+  is a build-time value and Find is now on by default, so there is nothing
+  to change on the host. To keep the browser's own find bar instead, add
+  `NEXT_PUBLIC_FIND=0` to the host's `.env.production` before that deploy
+  (or later, then redeploy).
 ### CI: draft pull requests run the checks job only
 
 About a dozen agent sessions keep draft pull requests open, and each CI run

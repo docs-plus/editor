@@ -8,6 +8,7 @@ import {
   SkeletonDocument,
   SkeletonEditorBody,
 } from "@/components/app-skeleton";
+import { FindLoader } from "@/components/find/find-loader";
 import { PageFrame } from "@/components/prefs/page-frame";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { TabBar } from "@/components/tab-bar";
@@ -185,6 +186,10 @@ export function EditorApp({ intro }: EditorAppProps) {
           />
         )}
       </PageFrame>
+      {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. The
+          check is `FIND_ENABLED` inlined here, so a build with Find off
+          leaves the loader out (an imported constant would not). */}
+      {process.env.NEXT_PUBLIC_FIND !== "0" ? <FindLoader /> : null}
     </div>
   );
 }
