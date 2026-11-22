@@ -473,6 +473,19 @@ describe("keyboard selection settle (O7 b)", () => {
     await until(() => controller.visible);
   });
 
+  test("a selection landing after a fast arrow's keyup still settles", async () => {
+    key("keydown", { key: "Shift", shiftKey: true });
+    key("keydown", { key: "ArrowRight", shiftKey: true });
+    key("keyup", { key: "ArrowRight", shiftKey: true });
+    select(1, 4);
+    await Bun.sleep(BUBBLE_SHOW_DELAY_MS + 150);
+    expect(controller.visible).toBe(false);
+    key("keyup", { key: "Shift" });
+    await Bun.sleep(400);
+    expect(controller.visible).toBe(false);
+    await until(() => controller.visible);
+  });
+
   test("Ctrl+A selected inside PM's keydown handler still settles", async () => {
     key("keydown", { key: "a", ctrlKey: true });
     await Bun.sleep(400);

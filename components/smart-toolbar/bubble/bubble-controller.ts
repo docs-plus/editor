@@ -289,13 +289,15 @@ export function createBubbleController(
     keyboardSelecting = isKeyboardSelection(event);
   };
 
-  // On the window: Shift may be released outside the editor. A key with no
-  // pending settle (a no-op Shift+Arrow) leaves nothing to settle.
+  // On the window: Shift may be released outside the editor. While Shift is
+  // held the flag stays: Chromium can fire `selectionchange` after a fast
+  // arrow's keyup. Releasing Shift with nothing pending (a no-op
+  // Shift+Arrow) leaves nothing to settle.
   const onKeyUp = (event: KeyboardEvent) => {
     repeating = false;
     if (event.key === "Shift" || !event.shiftKey) shiftHeld = false;
     if (settling) armSettle();
-    else keyboardSelecting = false;
+    else if (!shiftHeld) keyboardSelecting = false;
   };
 
   // Keys released while the window was away never report their keyup.
