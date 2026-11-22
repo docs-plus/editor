@@ -9,6 +9,64 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Selection bubble P0: a plugin-free controller and a first-line anchor
+
+The selection bubble no longer registers a ProseMirror plugin from its lazy
+chunk, and it anchors to the line it belongs to (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §12.1, v1 contract A18). The
+editor chunk group is unchanged (393,465 B gz, −1 B against `main` at
+`29f6faf`, 1,287 B under the P2.2 fence), and the
+bubble chunk shrinks from 12,238 B to 9,798 B gz (−2,440 B).
+
+#### Changed
+
+- **Bubble:** a `BubbleController` per editor shows, hides and positions the
+  bubble instead of Tiptap's `BubbleMenu`, so the bubble chunk landing no
+  longer rebuilds all 29 plugin views. The DOM contract is unchanged: one
+  `[data-smart-bubble]` root, appended to the scroll container on show and
+  removed on hide.
+- **Bubble:** it anchors to the first selected line that shows, not to the
+  box between the selection's two ends: a selection that wraps onto the
+  next line is centred on its selected part of the first line, not the
+  middle of the column, and one that starts at the end of a paragraph
+  anchors to the next line's text, never to a whole block. Below the text,
+  it stays in view when the selection runs past the bottom of the window.
+- **Bubble:** Esc on a bubble item plays the 90 ms exit fade before the
+  bubble goes; a re-shown bubble never flashes at its old position.
+
+#### Fixed
+
+- **Bubble:** select all (⌘A / Ctrl+A) shows the bubble, under the first
+  visible line; a whitespace-only selection shows none.
+
+### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
+
+A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
+up to 9 s on a Windows runner. That included the quit flush, so a quit during
+a copy could drop the final batch of edits. The copy now runs in its own
+thread and can be stopped.
+
+#### Changed
+
+- **Desktop:** the daily copy (`desktop/storage/engine/copy-library.ts`)
+  - copies the library in batches of at most 256 rows or about 4 MiB, from
+    one read-only snapshot, inside one transaction;
+  - creates the schema verbatim and copies `sqlite_sequence`,
+    `user_version` and `application_id`;
+  - checks row counts and `integrity_check` before the copy is renamed into
+    place, then runs a passive WAL checkpoint;
+  - on failure, keeps the previous copies and records `daily_copy_failed`.
+- **Desktop:** the storage worker runs that copy in a second thread
+  (`desktop/storage/copy-worker.ts`), so saves never wait on it. On quit it
+  stops the copy in milliseconds and deletes the partial file; the previous
+  copy stays. Opening the library sweeps any partial copy left behind.
+- **Tests:** soak case `T4-copy` quits during a copy on all three OSes. T8
+  compares the copy's time and size with `VACUUM INTO`'s on the year-end
+  library. A unit test restores a copy and runs the `DocStore` contract on it.
+- **Docs:** the architecture spec records the quit budget (3 s flush, then
+  2 s worker shutdown), the batched copy, and `utilityProcess` as the
+  upgrade path once P2.5 exists.
+
 ### Desktop P2.6: the library storage worker
 
 The SQLite engine behind the desktop library, where documents, folders and
