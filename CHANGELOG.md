@@ -16,7 +16,7 @@ D4, PR A1). Library documents will store `asset:sha256-<hex>` refs instead of
 data URLs; desktop storage (P2.6b) and the web library (W11) build on this.
 No web code path produces a ref yet, and the public sandbox is unchanged:
 its editor imports none of this. The editor chunk group and first-load JS
-are byte for byte the same as `main` at `1548d5e` (+0 B gz; A1 has no D23
+are byte for byte the same as `main` at `84a9458` (+0 B gz; A1 has no D23
 ledger line).
 
 #### Added
