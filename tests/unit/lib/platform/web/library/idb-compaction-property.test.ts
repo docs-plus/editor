@@ -5,8 +5,10 @@
  * step, a fresh `load()` must hold exactly the union of every acked update.
  *
  * Seeded and printed (test strategy L2). `LIBRARY_PROPERTY_RUNS` sets the
- * run count: 2,000 by default (every PR), 50,000 nightly.
- * `LIBRARY_PROPERTY_SEED` replays one failing run.
+ * run count: 2,000 by default (every PR), 50,000 in the nightly
+ * `library-property` job. Seeds run from `LIBRARY_PROPERTY_BASE_SEED`,
+ * which is 1 by default, so a PR run is the same every time; the nightly
+ * job passes its run id. `LIBRARY_PROPERTY_SEED` replays one failing run.
  */
 import { describe, expect, it } from "bun:test";
 
@@ -16,8 +18,14 @@ import type { DocStore } from "@/lib/platform/doc-store";
 import { createFakeLibrary } from "@/tests/helpers/fake-idb";
 
 const RUNS = Number(process.env.LIBRARY_PROPERTY_RUNS ?? 2000);
+const BASE_SEED = Number(process.env.LIBRARY_PROPERTY_BASE_SEED ?? 1);
 const FIXED_SEED = process.env.LIBRARY_PROPERTY_SEED;
 const STEPS = 14;
+/**
+ * 2,000 runs take about 21 s at a load average near 90; a hang should fail
+ * well before the old 10-minute cap. Large nightly counts scale it up.
+ */
+const TIMEOUT_MS = Math.max(120_000, RUNS * 30);
 
 /** mulberry32: small, fast and good enough for choosing actions. */
 function rng(seed: number): () => number {
@@ -112,18 +120,25 @@ async function runOnce(seed: number): Promise<void> {
 }
 
 describe("IdbDocStore compaction with several writers (property)", () => {
-  it(`load() equals the union of acked updates (${FIXED_SEED ? 1 : RUNS} runs)`, async () => {
-    const base = FIXED_SEED ? Number(FIXED_SEED) : Date.now() >>> 0;
-    const runs = FIXED_SEED ? 1 : RUNS;
-    for (let run = 0; run < runs; run++) {
-      const seed = (base + run) >>> 0;
-      try {
-        await runOnce(seed);
-      } catch (error) {
-        throw new Error(
-          `failed with LIBRARY_PROPERTY_SEED=${seed}: ${String(error)}`,
-        );
+  it(
+    `load() equals the union of acked updates (${FIXED_SEED ? 1 : RUNS} runs)`,
+    async () => {
+      const base = FIXED_SEED ? Number(FIXED_SEED) : BASE_SEED >>> 0;
+      const runs = FIXED_SEED ? 1 : RUNS;
+      if (!FIXED_SEED && base !== 1) {
+        console.info(`LIBRARY_PROPERTY_BASE_SEED=${base} (${runs} runs)`);
       }
-    }
-  }, 600_000);
+      for (let run = 0; run < runs; run++) {
+        const seed = (base + run) >>> 0;
+        try {
+          await runOnce(seed);
+        } catch (error) {
+          throw new Error(
+            `failed with LIBRARY_PROPERTY_SEED=${seed}: ${String(error)}`,
+          );
+        }
+      }
+    },
+    TIMEOUT_MS,
+  );
 });

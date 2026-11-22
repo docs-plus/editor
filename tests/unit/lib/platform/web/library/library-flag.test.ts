@@ -50,12 +50,29 @@ describe("NEXT_PUBLIC_LIBRARY (web library §2.8)", () => {
   });
 
   it("is imported by nothing the web app ships yet (W4 adds the route)", () => {
-    const importers = ["app", "components", "hooks", "extensions"]
+    const LIBRARY_DIR = "lib/platform/web/library";
+    // `lib/` and `scripts/` too: a shared module importing the library
+    // would carry it into the app transitively.
+    const importers = [
+      "app",
+      "components",
+      "hooks",
+      "extensions",
+      "lib",
+      "scripts",
+    ]
       .flatMap((dir) => sourceFiles(path.join(ROOT, dir)))
-      .filter((file) =>
-        readFileSync(file, "utf8").includes("lib/platform/web/library"),
-      )
-      .map((file) => path.relative(ROOT, file));
+      .map((file) => path.relative(ROOT, file))
+      .filter((file) => !file.startsWith(`${LIBRARY_DIR}/`))
+      .filter((file) => {
+        const source = readFileSync(path.join(ROOT, file), "utf8");
+        if (source.includes(LIBRARY_DIR)) return true;
+        // A relative import from a neighbour (`./library/…`).
+        return (
+          file.startsWith("lib/platform/web/") &&
+          /from\s+["']\.\/library[/"']/.test(source)
+        );
+      });
     expect(importers).toEqual([]);
   });
 
