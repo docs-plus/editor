@@ -100,6 +100,12 @@ export class LibraryDb {
     readonly readOnly: boolean,
     private readonly keyRange: typeof IDBKeyRange,
     private readonly onEvent: (event: LibraryEvent) => void,
+    /**
+     * `meta.eviction_sentinel` as read at open (the `library_id`), or null
+     * when missing. W6 compares it with the `localStorage` marker
+     * (`eviction.ts`).
+     */
+    readonly evictionSentinel: string | null = null,
   ) {
     // Never rejects: hooks are settled and a throwing listener is caught.
     db.onversionchange = () => void this.handleVersionChange();
@@ -286,19 +292,28 @@ function openRequest(
   });
 }
 
-function readFormatVersion(db: IDBDatabase): Promise<unknown> {
+/** The `meta` values `openLibraryDb` reads before handing the library out. */
+type OpenMeta = { format: unknown; sentinel: unknown };
+
+function readOpenMeta(db: IDBDatabase): Promise<OpenMeta> {
   return new Promise((resolve, reject) => {
     if (!db.objectStoreNames.contains(STORES.meta)) {
-      resolve(undefined);
+      resolve({ format: undefined, sentinel: undefined });
       return;
     }
-    const request = db
+    const meta = db
       .transaction(STORES.meta, "readonly")
-      .objectStore(STORES.meta)
-      .get(META_KEYS.formatVersion);
-    request.onsuccess = () =>
-      resolve((request.result as MetaRow | undefined)?.value);
-    request.onerror = () => reject(request.error);
+      .objectStore(STORES.meta);
+    const format = meta.get(META_KEYS.formatVersion);
+    const sentinel = meta.get(META_KEYS.evictionSentinel);
+    // Requests complete in order: `format` is done here too.
+    sentinel.onsuccess = () =>
+      resolve({
+        format: (format.result as MetaRow | undefined)?.value,
+        sentinel: (sentinel.result as MetaRow | undefined)?.value,
+      });
+    sentinel.onerror = () => reject(sentinel.error);
+    format.onerror = () => reject(format.error);
   });
 }
 
@@ -353,11 +368,16 @@ export async function openLibraryDb(
     upgradedMeanwhile = true;
     db.close();
   };
+  let sentinel: string | null = null;
   try {
-    const format = await readFormatVersion(db);
-    if (typeof format === "number" && format > LIBRARY_FORMAT_VERSION) {
+    const meta = await readOpenMeta(db);
+    if (
+      typeof meta.format === "number" &&
+      meta.format > LIBRARY_FORMAT_VERSION
+    ) {
       tooNew = true;
     }
+    if (typeof meta.sentinel === "string") sentinel = meta.sentinel;
   } catch (error) {
     db.close();
     if (!upgradedMeanwhile) {
@@ -366,7 +386,7 @@ export async function openLibraryDb(
   }
 
   if (tooNew) onEvent("library_too_new");
-  const library = new LibraryDb(db, tooNew, keyRange, onEvent);
+  const library = new LibraryDb(db, tooNew, keyRange, onEvent, sentinel);
   // Never rejects (see `handleVersionChange`).
   if (upgradedMeanwhile) void library.handleVersionChange();
   return library;

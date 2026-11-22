@@ -4,6 +4,7 @@
  * `IdbDocumentIndex` takes it over with the rest of the index operations.
  */
 import { DocStoreError } from "@/lib/platform/doc-store";
+import { normalizeSearchText } from "@/lib/search/normalize";
 
 import type { LibraryDb } from "./library-db";
 import {
@@ -12,6 +13,7 @@ import {
   META_KEYS,
   type MetaRow,
   STORES,
+  staleFlag,
 } from "./library-schema";
 
 export type CreateLibraryDocInput = {
@@ -68,9 +70,11 @@ export function createLibraryDoc(
     return Promise.reject(new DocStoreError("invalid_argument", "bad schema"));
   }
   const folderId = input.folderId ?? null;
+  const title = input.title ?? "";
   const row: DocRow = {
     id: input.id ?? crypto.randomUUID(),
-    title: input.title ?? "",
+    title,
+    title_key: normalizeSearchText(title),
     folder_id: folderId,
     sort_key: input.sortKey ?? "",
     pin_key: null,
@@ -89,6 +93,13 @@ export function createLibraryDoc(
     md_at: null,
     link_key: input.linkKey ?? mintLinkKey(),
     kind: input.kind ?? "doc",
+    // Nothing written, nothing derived: stale until the queue derives it
+    // (desktop `mintDoc`, offline data-model revision §4.2).
+    head_seq: 0,
+    derived_seq: null,
+    links_hash: null,
+    headings_hash: null,
+    stale: staleFlag(0, null),
     list_key: listKey(folderId, null),
   };
   return library.run<CreatedLibraryDoc>(

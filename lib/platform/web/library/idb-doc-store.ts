@@ -35,12 +35,14 @@ import {
   type LoadedDoc,
   UPDATE_ORIGINS,
 } from "@/lib/platform/doc-store";
+import { normalizeSearchText } from "@/lib/search/normalize";
 
 import type { LibraryDb } from "./library-db";
 import {
   type DocRow,
   type SnapshotRow,
   STORES,
+  staleFlag,
   type UpdateRow,
 } from "./library-schema";
 
@@ -203,25 +205,35 @@ export class IdbDocStore implements DocStore {
           addRequest.onsuccess = () => done(addRequest.result as number);
           const docs = tx.objectStore(STORES.docs);
           const docRequest = docs.get(docId);
+          // Requests complete in order, so the row's seq is known here.
           docRequest.onsuccess = guard(() => {
             const doc = docRequest.result as DocRow | undefined;
             if (!doc) {
               fail(notFound());
               return;
             }
+            const title =
+              record.title === undefined
+                ? doc.title
+                : record.title.slice(0, MAX_TITLE_LENGTH);
+            // The derived rows are now behind (offline data-model §4.2).
+            const headSeq = Math.max(doc.head_seq, addRequest.result as number);
             docs.put({
               ...doc,
               modified_at: now,
               size_bytes: doc.size_bytes + data.byteLength,
-              title:
-                record.title === undefined
-                  ? doc.title
-                  : record.title.slice(0, MAX_TITLE_LENGTH),
+              title,
+              title_key:
+                title === doc.title
+                  ? doc.title_key
+                  : normalizeSearchText(title),
               snippet:
                 record.snippet === undefined
                   ? doc.snippet
                   : record.snippet.slice(0, MAX_SNIPPET_LENGTH),
               schema: record.schemaTo ?? doc.schema,
+              head_seq: headSeq,
+              stale: staleFlag(headSeq, doc.derived_seq),
             } satisfies DocRow);
           });
         },
@@ -242,6 +254,8 @@ export class IdbDocStore implements DocStore {
    * again, so a dropped `foreign` costs a repeat merge, never content. One
    * gap remains: a foreign snapshot that only deletes adds no inserts, so it
    * counts as covered at once, and dropping it brings that text back.
+   *
+   * It never touches `head_seq` (offline data-model revision §4.2).
    */
   compact(
     docId: string,
