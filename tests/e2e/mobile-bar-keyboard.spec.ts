@@ -1,10 +1,12 @@
 /**
  * The on-screen keyboard, measured once for the page (phones and tablets
- * design §4.6, PR M20): `--keyboard-inset` on `<html>`, bottom sheets ride
- * it, one `visualViewport` listener set that leaves with its last
- * subscriber, and the caret back in view after a rotation. Chromium has no
- * on-screen keyboard, so a shrunken `visualViewport` stands in for it; the
- * real keyboards are the owner's device checks (M18).
+ * design §4.6, PR M20): `--keyboard-inset` on `<html>`, one
+ * `visualViewport` listener set that leaves with its last subscriber, the
+ * Aa sheet (no field) kept on the screen bottom, and the caret back in view
+ * after a rotation. Sheets with a field ride the keyboard; none ships yet,
+ * so `tests/unit/components/sheet-keyboard.test.tsx` pins that path.
+ * Chromium has no on-screen keyboard, so a shrunken `visualViewport` stands
+ * in for it; the real keyboards are the owner's device checks (M18).
  */
 import { type CDPSession, expect, type Page, test } from "@playwright/test";
 
@@ -77,77 +79,133 @@ const sheetBox = async (page: Page) => {
   return { top: Math.round(box.y), bottom: Math.round(box.y + box.height) };
 };
 
-test("a bottom sheet rides the keyboard and fits the visual viewport", async ({
+test("the Aa sheet stays on the screen bottom when the keyboard comes up", async ({
   page,
 }) => {
   await openDoc(page);
   await openSheet(page);
-  // Keyboard down: the sheet sits on the bottom edge, as before.
   expect((await sheetBox(page)).bottom).toBe(PHONE.height);
 
   await showKeyboard(page, KEYBOARD);
+  // The bar still subscribes, so the page variable follows the keyboard...
   await expect.poll(() => htmlVar(page, "--keyboard-inset")).toBe("300px");
-  expect(await htmlVar(page, "--visual-viewport-height")).toBe("544px");
-  await expect
-    .poll(async () => (await sheetBox(page)).bottom)
-    .toBe(PHONE.height - KEYBOARD);
-  expect((await sheetBox(page)).top).toBeGreaterThanOrEqual(0);
+  // ...but the Aa sheet holds no field and does not ride it.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(resolve)),
+  );
+  expect((await sheetBox(page)).bottom).toBe(PHONE.height);
+  expect(await sheet(page).evaluate((el) => getComputedStyle(el).bottom)).toBe(
+    "0px",
+  );
+});
 
-  // iOS scrolls the visual viewport to the field: the sheet follows it and
-  // stays inside it.
-  await showKeyboard(page, KEYBOARD, 100);
-  await expect.poll(() => htmlVar(page, "--keyboard-inset")).toBe("200px");
+test("the Aa sheet opened with the keyboard up never leaves the screen bottom", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await page.evaluate(() => window.__tiptap_editor?.commands.focus("end"));
+  await showKeyboard(page, KEYBOARD);
+  await expect.poll(() => htmlVar(page, "--keyboard-inset")).toBe("300px");
+  // Record the popup's computed `bottom` on every frame from the moment it
+  // mounts (the box itself is moved by the slide-in transform).
+  await page.evaluate(() => {
+    const w = window as { __m20Bottoms?: string[] };
+    w.__m20Bottoms = [];
+    const sample = () => {
+      const popup = document.querySelector<HTMLElement>(
+        '[data-slot="sheet-content"]',
+      );
+      if (popup) w.__m20Bottoms?.push(getComputedStyle(popup).bottom);
+      if ((w.__m20Bottoms?.length ?? 0) < 30) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await openSheet(page);
   await expect
-    .poll(async () => (await sheetBox(page)).bottom)
-    .toBe(PHONE.height - 200);
-  expect((await sheetBox(page)).top).toBeGreaterThanOrEqual(100);
+    .poll(() =>
+      page.evaluate(
+        () => (window as { __m20Bottoms?: string[] }).__m20Bottoms?.length,
+      ),
+    )
+    .toBe(30);
+  const bottoms = await page.evaluate(
+    () => (window as { __m20Bottoms?: string[] }).__m20Bottoms ?? [],
+  );
+  expect(new Set(bottoms)).toEqual(new Set(["0px"]));
+  expect((await sheetBox(page)).bottom).toBe(PHONE.height);
 });
 
 test.describe("one listener set (leak spec)", () => {
   test.skip(({ browserName }) => browserName !== "chromium", "CDP only");
 
-  async function viewportListeners(cdp: CDPSession) {
-    const { result } = await cdp.send("Runtime.evaluate", {
-      expression: "window.visualViewport",
-      objectGroup: "keyboard-inset",
-    });
-    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", {
-      objectId: result.objectId as string,
-    });
+  type Counts = { resize: number; scroll: number; focusout: number };
+
+  /** Listeners on `visualViewport` and `document`, by type (minifier-proof). */
+  async function listenerCounts(cdp: CDPSession): Promise<Counts> {
+    const count = async (expression: string, types: string[]) => {
+      const { result } = await cdp.send("Runtime.evaluate", {
+        expression,
+        objectGroup: "keyboard-inset",
+      });
+      const { listeners } = await cdp.send("DOMDebugger.getEventListeners", {
+        objectId: result.objectId as string,
+      });
+      return types.map(
+        (type) => listeners.filter((listener) => listener.type === type).length,
+      );
+    };
+    const [resize, scroll] = await count("window.visualViewport", [
+      "resize",
+      "scroll",
+    ]);
+    const [focusout] = await count("document", ["focusout"]);
     await cdp.send("Runtime.releaseObjectGroup", {
       objectGroup: "keyboard-inset",
     });
-    // The store's own pair (`next dev` keeps source names); Floating UI's
-    // autoUpdate adds its own while a popover of the row toolbar is open.
-    return listeners
-      .filter((listener) => listener.handler?.description?.includes("settle"))
-      .map((listener) => listener.type)
-      .sort();
+    return { resize, scroll, focusout };
   }
+
+  /** The store's one set on top of `base`. */
+  const plusStore = (base: Counts): Counts => ({
+    resize: base.resize + 1,
+    scroll: base.scroll + 1,
+    focusout: base.focusout + 1,
+  });
 
   test("is shared by the bar and the sheet, and leaves with them", async ({
     page,
   }) => {
     await openDoc(page);
     const cdp = await page.context().newCDPSession(page);
-    expect(await viewportListeners(cdp)).toEqual(["resize", "scroll"]);
+    // Wider than 768px the row toolbar replaces the bar: nothing subscribes.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(bar(page)).toBeHidden();
+    await expect.poll(() => htmlVar(page, "--keyboard-inset")).toBe("");
+    const base = await listenerCounts(cdp);
+    await page.setViewportSize(PHONE);
+    await expect(bar(page)).toBeVisible();
+    await expect.poll(() => listenerCounts(cdp)).toEqual(plusStore(base));
     await openSheet(page);
-    expect(await viewportListeners(cdp)).toEqual(["resize", "scroll"]);
+    expect(await listenerCounts(cdp)).toEqual(plusStore(base));
     await page.keyboard.press("Escape");
     await expect(sheet(page)).toBeHidden();
+    // Focus returns to Aa; left on the bar, it moves to a row-toolbar button
+    // at 1024px, whose tooltip (Floating UI autoUpdate) adds its own
+    // viewport pair. Back to writing, as after a real Done.
+    await expect(
+      bar(page).getByRole("button", { name: "Text format" }),
+    ).toBeFocused();
+    await page.evaluate(() => window.__tiptap_editor?.commands.focus());
 
     for (let i = 0; i < 5; i++) {
-      // Wider than 768px: the row toolbar replaces the bar.
       await page.setViewportSize({ width: 1024, height: 768 });
       await expect(bar(page)).toBeHidden();
-      await expect.poll(() => viewportListeners(cdp)).toEqual([]);
+      await expect.poll(() => listenerCounts(cdp)).toEqual(base);
       expect(await htmlVar(page, "--keyboard-inset")).toBe("");
       expect(await htmlVar(page, "--visual-viewport-height")).toBe("");
       await page.setViewportSize(PHONE);
       await expect(bar(page)).toBeVisible();
-      await expect
-        .poll(() => viewportListeners(cdp))
-        .toEqual(["resize", "scroll"]);
+      await expect.poll(() => listenerCounts(cdp)).toEqual(plusStore(base));
     }
   });
 });
@@ -263,9 +321,7 @@ test("scrolling the caret back adds no undo step and no Yjs update", async ({
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`screenshots: the sheet on the keyboard (${theme})`, async ({
-    page,
-  }) => {
+  test(`screenshots: the Aa sheet (${theme})`, async ({ page }) => {
     test.skip(
       !process.env.M20_SCREENS,
       "design evidence: M20_SCREENS=1 writes docs/design screenshots",
@@ -275,17 +331,6 @@ for (const theme of ["light", "dark"] as const) {
     await openSheet(page);
     await page.screenshot({
       path: `${SCREENS}/sheet-keyboard-down-${theme}.png`,
-    });
-    await showKeyboard(page, KEYBOARD);
-    await expect
-      .poll(async () => (await sheetBox(page)).bottom)
-      .toBe(PHONE.height - KEYBOARD);
-    // Paint the stand-in keyboard, so the picture shows what it covers.
-    await page.addStyleTag({
-      content: `html::after { content: "on-screen keyboard (stand-in)"; position: fixed; inset: auto 0 0 0; height: ${KEYBOARD}px; display: grid; place-items: center; background: #8e8e93; color: #fff; font: 14px system-ui; z-index: 2147483647; }`,
-    });
-    await page.screenshot({
-      path: `${SCREENS}/sheet-keyboard-up-${theme}.png`,
     });
   });
 }
