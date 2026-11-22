@@ -4,6 +4,7 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  type ReactNode,
   lazy,
   Profiler,
   Suspense,
@@ -62,7 +63,6 @@ import {
   FilterBar,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
-import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
@@ -105,6 +105,12 @@ interface DocumentEditorProps {
    * object for the editor's life: a new one rebuilds the extensions.
    */
   linkHost?: LinkHost;
+  /**
+   * The connection and identity chip, chosen by the composition root (the
+   * web sandbox passes `CollabStatusGroup`); shown only with a provider. The
+   * editor never imports it: it reads `collab-session` (architecture §3.3).
+   */
+  statusChip?: ReactNode;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -171,6 +177,7 @@ function DocumentEditorContent({
   onPlaygroundRegenerate,
   readOnly,
   linkHost,
+  statusChip,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -463,14 +470,23 @@ function DocumentEditorContent({
           />
         )}
         {/* Its connection state opens the shared socket: only with a provider. */}
-        {provider && <CollabStatusGroup />}
+        {provider && statusChip}
       </EditorContext.Provider>
     </main>
   );
 }
 
-export function DocumentEditor(props: DocumentEditorProps = {}) {
-  const docId = props.documentId ?? "default";
+export function DocumentEditor({
+  documentId,
+  onTitleChange,
+  initialContent,
+  playgroundRegenerateTrigger,
+  onPlaygroundRegenerate,
+  readOnly,
+  statusChip,
+  linkHost,
+}: DocumentEditorProps = {}) {
+  const docId = documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
     useYjsDocument(docId);
 
@@ -487,14 +503,18 @@ export function DocumentEditor(props: DocumentEditorProps = {}) {
   }
 
   return (
-    // Every prop passes through as given (`linkHost` and later ones need
-    // no plumbing here).
     <DocumentEditorContent
-      {...props}
       ydoc={ydoc}
       awareness={awareness}
       provider={provider}
       documentId={docId}
+      onTitleChange={onTitleChange}
+      initialContent={initialContent}
+      playgroundRegenerateTrigger={playgroundRegenerateTrigger}
+      onPlaygroundRegenerate={onPlaygroundRegenerate}
+      readOnly={readOnly}
+      statusChip={statusChip}
+      linkHost={linkHost}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />
