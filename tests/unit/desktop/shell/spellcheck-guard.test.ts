@@ -31,6 +31,10 @@ mock.module("electron", () => ({
     isReady: () => ready,
   },
   session: { defaultSession },
+  // Bun keeps the export names of the first `electron` mock in the shared
+  // test process, so every mock of it exports the same names
+  // (device-refusals.test.ts needs `shell`).
+  shell: { openExternal: async () => {} },
 }));
 
 test("installs on session-created before ready, and configures each session", async () => {
