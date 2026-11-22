@@ -897,6 +897,39 @@ test.describe("Style ▾ turn into (spec §7.4, BQ10, BQ11)", () => {
   });
 });
 
+test.describe("⋯ More formatting in RTL", () => {
+  test("every row's label starts at the same inline start", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "More formatting").click();
+    const menu = page.getByRole("menu", { name: "More formatting" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const edges = await menu.evaluate((el) =>
+      ["Superscript", "Subscript", "Inline code", "Clear formatting"].map(
+        (name) => {
+          const item = [...el.querySelectorAll('[role^="menuitem"]')].find(
+            (node) => node.textContent?.includes(name),
+          );
+          const label = [...(item?.querySelectorAll("span") ?? [])].find(
+            (span) => span.textContent === name,
+          );
+          return Math.round(label?.getBoundingClientRect().right ?? -1);
+        },
+      ),
+    );
+    // In RTL a label starts at its right edge: all the same.
+    expect(new Set(edges).size, JSON.stringify(edges)).toBe(1);
+  });
+});
+
 test.describe("context slot fit and focus (WCAG 1.4.12, 2.4.11)", () => {
   test("no slot kind overflows its fixed width with text spacing", async ({
     page,
