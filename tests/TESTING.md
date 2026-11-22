@@ -262,7 +262,7 @@ it again after typing, before requiring all 220 keystroke samples.
 
 `performance.spec.ts` asserts the typing budget: p95 with the toolbar mounted must stay within `PERF_MAX_REGRESSION` of the same run with the toolbar off (`window.__TOOLBAR_OFF`, dev only). Each keystroke's synchronous handling is timed from its keydown `timeStamp` to a microtask queued by a bubble-phase `input` listener on `window`, after ProseMirror, Yjs and the toolbar's transaction listener have run; deferred renders are gated by the toolbar commit budget instead. Event Timing has a 16 ms floor, `requestAnimationFrame` quantizes to ~16.7 ms, and a task such as a `MessageChannel` message is starved under CPU throttle until typing stops, so none of them can time a keystroke. Every trial of a heading count types into the same generated document (the generator is random, and trials in different documents differed more than the two arms did). Each arm waits for its own end state (toolbar mounted, or gone), then after the click that focuses the editor waits until the main thread is idle (two `requestIdleCallback` periods of at least 40 ms in a row), so both arms start from a quiet page. There is no forced GC before typing: it put the next major GC near the same keystroke in every trial, a cluster of slow keys right at the p95 rank. One discarded warm-up trial per arm runs before the measured rounds. It types 220 keystrokes and drops the first 20 (warm-up) before taking p95 over 200, so first-use JIT and layout cost do not land in one arm; the guard still requires exactly 220 recorded keystrokes. Nightly or manual runs can pass `PERF_HEADINGS=50,500` (against Hocus at the Makefile's 2 MiB cap, see Document size cap above).
 
-The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as CI and `make test-e2e` do) times typing only after the parallel suite has finished, so other workers never compete for the CPU. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
+The spec, and `toolbar-perf.spec.ts`, run in their own Playwright project, `perf` (one worker, `dependencies: ["chromium"]`), and the `chromium` project ignores them. Selecting both (`--project=chromium --project=perf`, as `make test-e2e` does) times typing only after the parallel suite has finished, so other workers never compete for the CPU; CI runs `perf` on a runner of its own instead. Run it alone with `bun playwright test --project=perf --no-deps` (`make test-perf`).
 
 ### Multi-User Performance Tests (`performance-collab.spec.ts`)
 
@@ -486,20 +486,38 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+`.github/workflows/ci.yml` runs on every pull request, in the merge queue (`merge_group`) and on pushes to `main`:
 
 | Job | Runs |
 |---|---|
-| Lint, typecheck, unit tests, build | `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test --exclude 'tests/unit/stress/**'`, `bun run build` |
-| Playwright (Chromium) | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --project=perf --retries=1` (`perf` starts after `chromium`, on one worker) |
+| Changed files | Pull requests only: lists the changed paths (`gh api .../pulls/N/files`) and decides whether the browser suites run |
+| Lint, typecheck, unit tests, build | `bun audit`, `bun run check`, `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, editor chunk size |
+| Playwright shard 1/3, 2/3, 3/3 | `make dev`, a warm-up request per page, then `CI= bun playwright test --project=chromium --shard=N/3 --retries=1` with a blob report |
+| Playwright perf (typing budget) | the same servers on a runner of its own, then `CI= bun playwright test --project=perf --no-deps --retries=1` (one worker) |
+| Playwright (Chromium) | the required check: merges the blob reports (`bun playwright merge-reports --reporter=github,html`), then passes only if every shard and perf passed, or they were skipped for a docs-only pull request |
 
+- **Required checks:** the `main` ruleset requires `Lint, typecheck, unit
+  tests, build` and `Playwright (Chromium)`; keep both names, and every
+  shard and perf job behind the second. `tests/unit/ci/ci-workflow.test.ts`
+  checks the job names, the shards, the gate's `needs` and runs the docs-only
+  and verdict scripts. Merge queue setup: `docs/operations/deploy-runbook.md`.
+- **Docs-only pull requests:** when every changed path is under `docs/` or is
+  a Markdown file, and none is under `desktop/`, the shards and perf are
+  skipped and `Playwright (Chromium)` passes with a notice. Pushes to `main`,
+  the merge queue and manual runs always run every suite.
+- **Shards:** Playwright splits the `chromium` project by spec file. To run
+  one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
+- **Cancelling:** a newer push to a pull request cancels its older run; a run
+  on `main` is never cancelled once started, so each one can deploy.
 - **Stress probe:** `bun run test:stress` runs as a separate step with
   `continue-on-error`. It measures transaction time, so a slow shared runner
   can miss its threshold without the code being wrong.
 - **Retries:** a test that passes on retry is listed as "flaky" in the
   Playwright summary; treat that as a bug to fix, not a pass.
-- **On failure:** `test-results/` and the dev-server log are uploaded as the
-  `e2e-results` artifact.
+- **On failure:** each failing test is annotated at its file and line, the
+  merged HTML report is uploaded as `playwright-report`, and each failed
+  job's `test-results/` and dev-server log as `e2e-results-shard-N` or
+  `e2e-results-perf`.
 - **Nightly, not per PR:** `.github/workflows/nightly.yml` runs the `pwa`
   project against a production build, the Yjs soak, the quick multi- and
   single-user soaks, the load harness (both scenarios) and the two schema
@@ -512,7 +530,13 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
 - **Workflow rules:** `tests/unit/ci/workflow-permissions.test.ts` checks every
   workflow file. Each workflow needs a read-only default token, explicit
   per-job permissions, `persist-credentials: false` on checkout, and actions
-  pinned to commit SHAs.
+  pinned to commit SHAs. Every job in a workflow that runs on `pull_request`
+  or `merge_group` must have explicit read-only permissions.
+- **`CHANGELOG.md` merges:** `.gitattributes` sets `merge=union`, so merging
+  `origin/main` into a branch keeps both sides' Unreleased entries instead of
+  conflicting. The merged text can lose the blank line between two entries
+  and keeps both copies of a line that both sides edited: read the section
+  before committing the merge.
 
 ## Key Conventions
 
