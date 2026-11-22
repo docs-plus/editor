@@ -291,12 +291,12 @@ test("opening a document already open in another window focuses that window", as
 
 test("bad argv on the first launch is refused, and the app still starts", async () => {
   const dir = mkdtempSync(join(tmpdir(), "tinydocy-argv-"));
-  // A URL-like argument goes last: on Windows, Electron itself exits if
-  // anything follows one (next test).
+  // At most one URL-like argument, and last: on Windows, Electron itself
+  // exits when a path follows one (next test).
   const run = await runOnce([
     join(dir, "missing.md"),
     join(dir, "notes.txt"),
-    "tinydocy://evil/x",
+    "javascript:alert(1)",
   ]);
   if (run.code !== 0) console.log(run.stderr.slice(-2000));
   expect(run.code).toBe(0);
@@ -310,8 +310,10 @@ test("bad argv on the first launch is refused, and the app still starts", async 
 test("Windows: Electron refuses any argument after a URL before the app runs", async () => {
   test.skip(process.platform !== "win32", "Electron's guard is Windows-only");
   // CVE-2018-1000006: a protocol URL followed by more arguments could
-  // smuggle switches. Electron exits before main.cjs loads.
-  const run = await runOnce(["tinydocy://evil/x", "--inspect=9229"]);
+  // smuggle more input. Electron exits before main.cjs loads (measured:
+  // a URL then a path; a URL then a switch it lets through).
+  const dir = mkdtempSync(join(tmpdir(), "tinydocy-argv-"));
+  const run = await runOnce(["tinydocy://evil/x", join(dir, "missing.md")]);
   expect(run.code).not.toBe(0);
   expect(run.events.some((e) => e.event === "main_start")).toBe(false);
 });
@@ -403,13 +405,10 @@ test("the editor runs under the strict CSP, and no spellcheck dictionary is down
   console.log(`[csp] ${process.platform}`, JSON.stringify(violations));
   // Remote images stay placeholders until the user loads them (D10).
   expect(violations.filter((v) => !/^img-src https?:$/.test(v))).toEqual([]);
-  const downloads = events.filter((e) =>
-    e.event.startsWith("spellcheck_download"),
-  );
-  console.log(`[spellcheck] ${process.platform}`, JSON.stringify(downloads));
-  expect(
-    downloads.filter((e) => e.event === "spellcheck_download_success"),
-  ).toEqual([]);
+  const spellcheck = events.filter((e) => e.event.startsWith("spellcheck_"));
+  console.log(`[spellcheck] ${process.platform}`, JSON.stringify(spellcheck));
+  // Not even an attempt (#100), and no configuration step failed.
+  expect(spellcheck).toEqual([]);
 });
 
 test("#106: quit with unsynced edits and a vetoing beforeunload exits within budget", async () => {

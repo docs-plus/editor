@@ -130,13 +130,20 @@ function configureSpellcheck(ses: Electron.Session): void {
     // locale's Hunspell dictionary from Google (measured on ubuntu-24.04).
     // No languages means no dictionary to fetch, and the download URL is a
     // closed loopback port, so even a request never leaves the machine.
-    try {
-      ses.setSpellCheckerEnabled(false);
-      ses.setSpellCheckerLanguages([]);
-      ses.setSpellCheckerDictionaryDownloadURL("http://127.0.0.1:9/");
-    } catch {
-      diagnostics.log("spellcheck_config_failed");
-    }
+    // Each step on its own, containment first, so one failure can't skip
+    // the others; a failure is logged and fails the electron spec.
+    const step = (name: string, run: () => void) => {
+      try {
+        run();
+      } catch {
+        diagnostics.log("spellcheck_config_failed", { step: name });
+      }
+    };
+    step("download_url", () =>
+      ses.setSpellCheckerDictionaryDownloadURL("http://127.0.0.1:9/"),
+    );
+    step("languages", () => ses.setSpellCheckerLanguages([]));
+    step("enabled", () => ses.setSpellCheckerEnabled(false));
   }
   // Evidence for #100.
   ses.on("spellcheck-dictionary-download-begin", () =>
