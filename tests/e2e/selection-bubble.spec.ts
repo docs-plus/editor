@@ -1337,6 +1337,28 @@ test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
     });
   }
 
+  test("select all then Turn into converts all but the title, and says so", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await selectText(page, "Plain words");
+    await page.keyboard.press("ControlOrMeta+a");
+    await expectBubbleOpen(page);
+    await expect(styleButton(page)).toHaveAttribute("data-face", "Mixed");
+    await styleButton(page).click();
+    const menu = page.getByRole("menu", { name: "Turn into" });
+    const h2 = menu.getByRole("menuitemradio", { name: "Heading 2" });
+    // Not refused for the title: the range skips it.
+    await expect(h2).not.toHaveAttribute("aria-disabled", "true");
+    await h2.click();
+    await expect.poll(() => blockOf(page, "Title")).toBe("heading1");
+    await expect.poll(() => blockOf(page, "Plain words")).toBe("heading2");
+    await expect.poll(() => blockOf(page, "Listed words")).toBe("heading2");
+    await expect(page.locator('[data-status-pill="desktop"]')).toContainText(
+      "The title stays a heading.",
+    );
+  });
+
   test("RTL: the inline-end arrow opens More headings; Esc goes back one level at a time", async ({
     page,
   }) => {

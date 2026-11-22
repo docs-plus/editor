@@ -135,7 +135,7 @@ function isWrapped(doc: PMNode, pos: number): boolean {
 }
 
 /** The selected textblocks in a list or quote, last first. */
-function wrappedBlocks(tr: Transaction): number[] {
+export function wrappedBlocks(tr: Transaction): number[] {
   const found: number[] = [];
   tr.doc.nodesBetween(tr.selection.from, tr.selection.to, (node, pos) => {
     if (!node.isTextblock) return true;
@@ -150,7 +150,7 @@ function wrappedBlocks(tr: Transaction): number[] {
  * level, one block at a time and last first, so unselected siblings (and
  * their children) stay where they are (spec §7.2).
  */
-function liftWrapped(tr: Transaction): boolean {
+export function liftWrapped(tr: Transaction): boolean {
   for (const start of wrappedBlocks(tr)) {
     let pos = start;
     while (isWrapped(tr.doc, pos)) {

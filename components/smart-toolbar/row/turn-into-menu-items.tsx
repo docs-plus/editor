@@ -20,7 +20,6 @@ import {
   ariaKeyShortcuts,
   formatKeyCombo,
 } from "@/lib/editor-actions/key-combo";
-import { runAction } from "@/lib/editor-actions/registry";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
 import { HeadingIcon, TypeIcon } from "@/lib/icons";
@@ -28,6 +27,12 @@ import { isMac } from "@/lib/shortcuts";
 
 import { type StyleFace, styleFace } from "../bubble/style-face";
 import { lazySurface } from "../lazy-surface";
+import {
+  isTitleReason,
+  liftsInto,
+  spansPastTitle,
+  turnInto,
+} from "./turn-into-run";
 
 /*
  * Style ▾ ("Turn into", spec §7.4, BQ10, BQ11): one body for the bubble's
@@ -136,8 +141,8 @@ interface TurnIntoItemProps {
 
 /**
  * One block type as a radio row. No Markdown chips (spec §7.4): they teach
- * in the "/" menu. A pick is one undo step through `runAction` (the
- * registry's text styles unwrap a list item or quote, ruling a).
+ * in the "/" menu. A pick is one undo step (`turnInto`: the registry's run,
+ * plus the title skip, Code block's lift and the pills of spec §7.2).
  */
 function TurnIntoItem({
   id,
@@ -149,7 +154,15 @@ function TurnIntoItem({
   const reasonId = useId();
   const action = editorActions.get(id);
   if (!action || !view) return null;
-  const own = view.enabled === true ? undefined : view.enabled.reason;
+  const refused = view.enabled === true ? undefined : view.enabled.reason;
+  // ⌘A: a range past the title converts the rest; a list item or quote
+  // line lifts out for Code block and Quote (spec §7.2).
+  const own =
+    refused !== undefined &&
+    ((isTitleReason(refused) && spansPastTitle(editor.state)) ||
+      liftsInto(editor, id))
+      ? undefined
+      : refused;
   const disabled = titleReasonId !== undefined || own !== undefined;
   const Icon = action.icon ?? ICONS[id];
   const mac = isMac();
@@ -169,7 +182,7 @@ function TurnIntoItem({
       onClick={() => {
         if (disabled) return;
         onPicked();
-        runAction(editor, action);
+        turnInto(editor, action);
       }}
     >
       {Icon ? <Icon aria-hidden="true" /> : <span aria-hidden="true" />}
