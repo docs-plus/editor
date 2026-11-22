@@ -315,26 +315,7 @@ function placeGhost(
 export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const listbox = `slash-menu-${useId().replace(/[^\w-]/g, "")}`;
   // Once per open: the menu unmounts when it closes.
-  const [{ items, fresh }] = useState(() => {
-    const recent = recentInsertKinds();
-    const built = buildSlashItems(
-      computeContext(editor),
-      editorActions.list(),
-      readChoice(TABLE_SIZE_CHOICE).last,
-      recent,
-    );
-    return {
-      items: built,
-      /** Keys of the rows that show "New" (none while none are declared). */
-      fresh: new Set(
-        HAS_NEW_BADGES
-          ? built
-              .filter((item) => isNewItem(item, localDay(), recent))
-              .map((item) => item.key)
-          : [],
-      ),
-    };
-  });
+  const [{ items, fresh }] = useState(() => slashItemsFor(editor));
   const [coarse] = useState(isCoarse);
   const matches = useMemo(
     () => matchSlashItems(items, state.query),
@@ -744,19 +725,27 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
 
 /** For the `+` on an empty line (bubble chunk), through a dynamic import. */
 export { typePlusSlash } from "@/lib/slash-menu/plus-origin";
-/*
- * The phone Insert sheet's item helpers: its loader fetches this chunk and
- * hands them over (`setSlashHelpers`), so they keep one static importer
- * and stay inside this module. Imported by the sheet directly too,
- * Turbopack kept them a separate module of the "/" group, 264 B gz over
- * the 7 KB budget (spec §8.3, A21).
+/**
+ * The "/" items for the caret and the keys that show "New" (none while
+ * none are declared), built once per open. The phone Insert sheet uses them
+ * too (spec §8.3, A21): its loader fetches this chunk and hands this over
+ * (`setSlashHelpers`), so the "/" helpers keep one static importer and stay
+ * inside this module. Imported by the sheet directly too, Turbopack kept
+ * them a separate module of the "/" group, 264 B gz past its 7 KB budget.
  */
-export {
-  HAS_NEW_BADGES,
-  isNewItem,
-  localDay,
-} from "@/lib/slash-menu/slash-badges";
-export {
-  buildSlashItems,
-  recentInsertKinds,
-} from "@/lib/slash-menu/slash-items";
+export function slashItemsFor(editor: Editor): {
+  items: SlashItem[];
+  fresh: ReadonlySet<string>;
+} {
+  const recent = recentInsertKinds();
+  const items = buildSlashItems(
+    computeContext(editor),
+    editorActions.list(),
+    readChoice(TABLE_SIZE_CHOICE).last,
+    recent,
+  );
+  const fresh = HAS_NEW_BADGES
+    ? items.filter((item) => isNewItem(item, localDay(), recent))
+    : [];
+  return { items, fresh: new Set(fresh.map((item) => item.key)) };
+}

@@ -32,14 +32,7 @@ import { DIAGRAM_CELL, insertSheetGroups } from "./insert-sheet-items";
  * second importer would keep them a separate module of the "/" group and
  * push it past its 7 KB budget (A21).
  */
-type SlashHelpers = Pick<
-  typeof SlashMenuModule,
-  | "buildSlashItems"
-  | "HAS_NEW_BADGES"
-  | "isNewItem"
-  | "localDay"
-  | "recentInsertKinds"
->;
+type SlashHelpers = Pick<typeof SlashMenuModule, "slashItemsFor">;
 let slash: SlashHelpers;
 
 /** Called by the loader before the body renders. */
@@ -100,27 +93,14 @@ function diagramItem(): SlashItem | null {
  * keys that show "New" as they do there (none while none are declared).
  */
 function buildModel(editor: Editor) {
-  const actions = editorActions.list();
-  const recent = slash.recentInsertKinds();
-  const items = slash.buildSlashItems(
-    computeContext(editor),
-    actions,
-    readChoice(TABLE_SIZE_CHOICE).last,
-    recent,
-  );
+  const { items, fresh } = slash.slashItemsFor(editor);
   return {
     ...insertSheetGroups(items, {
       emptyBlock: editor.state.selection.$from.parent.content.size === 0,
-      insertOrder: actions.map((action) => action.id),
+      insertOrder: editorActions.list().map((action) => action.id),
       diagram: diagramItem(),
     }),
-    fresh: new Set(
-      slash.HAS_NEW_BADGES
-        ? items
-            .filter((item) => slash.isNewItem(item, slash.localDay(), recent))
-            .map((item) => item.key)
-        : [],
-    ),
+    fresh,
   };
 }
 
@@ -166,9 +146,7 @@ function InsertCell({
       <span className="st-insert-cell-text">
         <span className="st-insert-cell-label">
           {item.label}
-          {slash.HAS_NEW_BADGES && fresh ? (
-            <span className="sr-only">, new</span>
-          ) : null}
+          {fresh ? <span className="sr-only">, new</span> : null}
         </span>
         {item.reason ? (
           <span aria-hidden="true" className="st-insert-reason">
@@ -176,7 +154,7 @@ function InsertCell({
           </span>
         ) : null}
       </span>
-      {slash.HAS_NEW_BADGES && fresh ? (
+      {fresh ? (
         <span aria-hidden="true" data-slash-new="" className="st-insert-new">
           New
         </span>
