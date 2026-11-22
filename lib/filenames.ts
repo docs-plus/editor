@@ -146,14 +146,21 @@ export function uniqueName(
   const dot = folder ? -1 : name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const extension = dot > 0 ? name.slice(dot) : "";
+  let fitted = "";
+  let fittedFor = -1;
   for (let n = 2; ; n += 1) {
     const suffix = ` (${n})${extension}`;
-    const candidate =
-      fitStem(
+    // The cut depends only on the suffix's length (ASCII digits), so a
+    // run of collisions re-cuts the stem once per extra digit, not per try.
+    if (suffix.length !== fittedFor) {
+      fitted = fitStem(
         stem,
         maxChars - suffix.length,
         MAX_NAME_BYTES - utf8Bytes(suffix),
-      ) + suffix;
+      );
+      fittedFor = suffix.length;
+    }
+    const candidate = fitted + suffix;
     if (!taken.has(nameKey(candidate))) return candidate;
   }
 }

@@ -18,18 +18,25 @@ const LONE_SURROGATE =
 
 const utf8Bytes = (value: string) => new TextEncoder().encode(value).length;
 
-/** Every rule a single path component must follow on all three systems. */
+/** Every rule a single path component breaks, on any of the three systems. */
+function componentProblems(name: string): string[] {
+  const problems: string[] = [];
+  const check = (ok: boolean, rule: string) => {
+    if (!ok) problems.push(`${JSON.stringify(name)}: ${rule}`);
+  };
+  check(name.length > 0, "empty");
+  check(!FORBIDDEN.test(name), "forbidden character");
+  check(!LONE_SURROGATE.test(name), "lone surrogate");
+  check(!/^[.\s]/u.test(name), "leading dot or space");
+  check(!/[.\s]$/u.test(name), "trailing dot or space");
+  check(!RESERVED.test(name.split(".")[0].trimEnd()), "reserved name");
+  check(utf8Bytes(name) <= MAX_NAME_BYTES, "over 255 bytes");
+  check(name === name.normalize("NFC"), "not NFC");
+  return problems;
+}
+
 function expectSafeComponent(name: string) {
-  expect(name.length).toBeGreaterThan(0);
-  expect(name).not.toMatch(FORBIDDEN);
-  expect(name).not.toMatch(LONE_SURROGATE);
-  expect(name).not.toMatch(/^[.\s]/);
-  expect(name).not.toMatch(/[.\s]$/);
-  expect(name).not.toBe(".");
-  expect(name).not.toBe("..");
-  expect(RESERVED.test(name.split(".")[0].trimEnd())).toBe(false);
-  expect(utf8Bytes(name)).toBeLessThanOrEqual(MAX_NAME_BYTES);
-  expect(name).toBe(name.normalize("NFC"));
+  expect(componentProblems(name)).toEqual([]);
 }
 
 describe("cleanFileStem", () => {
@@ -226,23 +233,30 @@ function* randomTitles(count: number): Generator<string> {
 
 describe("hostile titles (property)", () => {
   it("always give a safe component, path and unique name", () => {
+    // Plain checks, one assertion at the end: 1,000 titles would otherwise
+    // run tens of thousands of expect() calls.
+    const problems: string[] = [];
     const taken = new Set<string>();
     for (const title of randomTitles(1_000)) {
       const stem = cleanFileStem(title);
-      expectSafeComponent(stem);
-      expect(cleanFileStem(stem)).toBe(stem);
+      problems.push(...componentProblems(stem));
+      if (cleanFileStem(stem) !== stem)
+        problems.push(`not idempotent: ${stem}`);
 
       const name = uniqueName(
         fileName(title, { extension: "md", shortId: "z9" }),
         taken,
       );
-      expectSafeComponent(name);
-      expect(taken.has(nameKey(name))).toBe(false);
+      problems.push(...componentProblems(name));
+      if (taken.has(nameKey(name))) problems.push(`collision: ${name}`);
       taken.add(nameKey(name));
 
       const path = documentPath([title, title], title, { extension: "md" });
-      expect(path.length).toBeLessThanOrEqual(MAX_PATH_CHARS);
-      for (const part of path.split("/")) expectSafeComponent(part);
+      if (path.length > MAX_PATH_CHARS) problems.push(`path too long: ${path}`);
+      for (const part of path.split("/")) {
+        problems.push(...componentProblems(part));
+      }
     }
+    expect(problems).toEqual([]);
   });
 });
