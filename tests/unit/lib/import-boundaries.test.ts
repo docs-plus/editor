@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dir, "../../..");
-const transpiler = new Bun.Transpiler({ loader: "tsx" });
+const transpilers = {
+  ts: new Bun.Transpiler({ loader: "ts" }),
+  tsx: new Bun.Transpiler({ loader: "tsx" }),
+};
+/** Only scripts: style sheets and assets have no imports to follow. */
+const SCRIPT = /\.(tsx?|m?js)$/;
 
 /**
  * Project files and packages reachable from `entry` through static (runtime)
@@ -17,8 +22,9 @@ function staticImports(entry: string): {
   const seen = new Set<string>();
   const packages = new Set<string>();
   const visit = (file: string) => {
-    if (seen.has(file)) return;
+    if (seen.has(file) || !SCRIPT.test(file)) return;
     seen.add(file);
+    const transpiler = file.endsWith(".ts") ? transpilers.ts : transpilers.tsx;
     const { imports } = transpiler.scan(readFileSync(file, "utf8"));
     for (const { path: spec, kind } of imports) {
       if (kind !== "import-statement") continue;
@@ -82,4 +88,30 @@ describe("import boundaries", () => {
       expect([...packages]).not.toContain("@hocuspocus/provider");
     });
   }
+});
+
+// P2.12 has no line in the editor-chunk ledger (details spec §1 rule 5), so
+// block move and the Markdown parser stay out of the editor's static graph:
+// whatever wires them in must load them lazily.
+const EDITOR_ENTRY = "components/document-editor/document-editor.tsx";
+
+describe("editor chunk boundary (P2.12)", () => {
+  it(`${EDITOR_ENTRY} statically loads neither block move nor lib/markdown`, () => {
+    const { files } = staticImports(EDITOR_ENTRY);
+    // The walk reaches the editor's extensions (it is not vacuous).
+    expect(files).toContain(
+      "components/document-editor/document-editor-config.ts",
+    );
+    expect(files).toContain("extensions/title-document/title-document.ts");
+    for (const file of files) {
+      expect(file.startsWith("extensions/block-move/")).toBe(false);
+      expect(file.startsWith("lib/markdown/")).toBe(false);
+    }
+  });
+
+  it("lib/markdown/parse.ts loads no DOM, React or editor code (IM1's worker)", () => {
+    const { files, packages } = staticImports("lib/markdown/parse.ts");
+    expect([...files]).toEqual(["lib/markdown/parse.ts"]);
+    expect([...packages].sort()).toEqual(["@tiptap/pm/model"]);
+  });
 });
