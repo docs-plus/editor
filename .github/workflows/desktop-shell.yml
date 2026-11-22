@@ -5,12 +5,14 @@ name: Desktop shell
 #
 # 1. `renderer` exports `out/` once, on Linux (#103: Windows writes the
 #    wrong segment-prefetch layout), and hands the same bytes to each OS.
-# 2. `package` (macOS, Windows, Linux) bundles main, preload and the storage
-#    worker, stages them with the renderer, builds the installers with the
-#    Node stub on PATH, installs them, reads the fuses back out of the
-#    installed binary, starts the installed app once and quits it, then runs
-#    the `electron` specs against it. The quit timings land in the job
-#    summary and the artifacts.
+# 2. `package` (macOS, Windows, Linux), with the Node stub on PATH:
+#    - release flavor (what ships: no test hooks, inspect fuse off): builds
+#      and installs the installers, reads the fuses back out of the
+#      installed binary, starts it with its default userData, proves a deep
+#      link plus --inspect=9229 opens no inspector, and closes it;
+#    - test flavor (never shipped: test hooks in, inspect fuse on): an
+#      unpacked build that the self-test and the `electron` specs drive.
+#    The quit timings land in the job summary and the artifacts.
 #
 # Runs on pull requests that touch the shell, nightly through `nightly.yml`
 # (workflow_call), and on demand. Not a required check yet. Read-only
@@ -154,8 +156,14 @@ jobs:
             bun build --compile "$RUNNER_TEMP/node-stub.ts" --outfile "$RUNNER_TEMP/no-node/node.exe"
           fi
 
-      - name: Bundle and stage
-        run: bun desktop/build/build.ts
+      # --- Release flavor: what ships. No test hooks (SEC-006), the inspect
+      # fuse off (SEC-001). Its connect-src is the production server, while
+      # the renderer was exported for loopback, so the CSP blocks every
+      # sync attempt and nothing reaches production.
+      - name: Bundle and stage (release)
+        env:
+          NEXT_PUBLIC_HOCUS_URL: wss://ws.tiny.docs.plus
+        run: bun desktop/build/build.ts --flavor release
 
       - name: Build the installers
         working-directory: desktop/build
@@ -180,8 +188,8 @@ jobs:
           cp -R "$RUNNER_TEMP/dmg/TinyDocy.app" /Applications/
           hdiutil detach "$RUNNER_TEMP/dmg"
           codesign --verify --deep --verbose=2 /Applications/TinyDocy.app || true
-          echo "TINYDOCY_EXECUTABLE=/Applications/TinyDocy.app/Contents/MacOS/TinyDocy" >> "$GITHUB_ENV"
-          echo "FUSE_TARGET=/Applications/TinyDocy.app" >> "$GITHUB_ENV"
+          echo "RELEASE_EXECUTABLE=/Applications/TinyDocy.app/Contents/MacOS/TinyDocy" >> "$GITHUB_ENV"
+          echo "RELEASE_FUSE_TARGET=/Applications/TinyDocy.app" >> "$GITHUB_ENV"
 
       - name: Install (Windows)
         if: runner.os == 'Windows'
@@ -193,8 +201,8 @@ jobs:
           $exe = Get-ChildItem "$env:LOCALAPPDATA/Programs" -Recurse -Filter TinyDocy.exe | Select-Object -First 1
           if (-not $exe) { throw "TinyDocy.exe is not installed" }
           Write-Output "installed at $($exe.FullName)"
-          "TINYDOCY_EXECUTABLE=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          "FUSE_TARGET=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "RELEASE_EXECUTABLE=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "RELEASE_FUSE_TARGET=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Install (Linux)
         if: runner.os == 'Linux'
@@ -204,28 +212,31 @@ jobs:
           # the installed binary.
           bin=$(readlink -f /usr/bin/tinydocy)
           test -f "$bin" && test -x "$bin"
-          echo "TINYDOCY_EXECUTABLE=$bin" >> "$GITHUB_ENV"
-          echo "FUSE_TARGET=$bin" >> "$GITHUB_ENV"
+          echo "RELEASE_EXECUTABLE=$bin" >> "$GITHUB_ENV"
+          echo "RELEASE_FUSE_TARGET=$bin" >> "$GITHUB_ENV"
           grep -E '^(MimeType|StartupWMClass)=' /usr/share/applications/tinydocy.desktop
           # Chromium's sandbox needs unprivileged user namespaces
           # (electron/electron#42510); the .deb's AppArmor profile covers
           # real desktops.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Check the fuses in the installed binary
-        run: bun desktop/build/check-fuses.ts "$FUSE_TARGET"
+      - name: Check the fuses in the installed binary (inspect off)
+        run: bun desktop/build/check-fuses.ts "$RELEASE_FUSE_TARGET" --inspect off
 
-      - name: Start the installed app once and quit
+      # Start with the default userData, open the library, hand a deep link
+      # plus --inspect=9229 to a second instance, prove nothing listens on
+      # 9229, then close gracefully.
+      - name: Smoke the installed release app (no inspector)
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+            xvfb-run -a bun desktop/build/release-smoke.ts "$RELEASE_EXECUTABLE"
           else
-            bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+            bun desktop/build/release-smoke.ts "$RELEASE_EXECUTABLE"
           fi
 
       # The installer doesn't register tinydocy://; the app does on its first
-      # start (setAsDefaultProtocolClient). Electron on Windows exits when
-      # anything follows a URL argument, so the command must end with "%1".
+      # start (setAsDefaultProtocolClient). The link must come last and
+      # after "--", so it can never be read as a switch (SEC-001).
       - name: Check the tinydocy:// handler (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -233,18 +244,65 @@ jobs:
           $cmd = (Get-ItemProperty 'HKCU:\Software\Classes\tinydocy\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
           Write-Output "tinydocy:// handler: $cmd"
           if (-not $cmd) { throw "tinydocy:// is not registered" }
-          if (-not $cmd.StartsWith('"' + $env:TINYDOCY_EXECUTABLE + '"', [StringComparison]::OrdinalIgnoreCase)) { throw "the handler does not run the installed app" }
-          if (-not $cmd.EndsWith('"%1"')) { throw "the handler passes more than the URL" }
+          if (-not $cmd.StartsWith('"' + $env:RELEASE_EXECUTABLE + '"', [StringComparison]::OrdinalIgnoreCase)) { throw "the handler does not run the installed app" }
+          if (-not $cmd.EndsWith('"--" "%1"')) { throw 'the handler must end with "--" "%1"' }
 
-      # No FUSE on the runner: the AppImage runtime extracts and runs.
-      - name: Start the AppImage once and quit (Linux)
+      # No FUSE on the runner: run the AppImage's extracted AppRun, with a
+      # fresh default userData so the library check isn't the .deb's.
+      - name: Smoke the release AppImage (Linux)
         if: runner.os == 'Linux'
         run: |
           image=$(ls "$PWD"/dist/desktop-release/*.AppImage | head -1)
           chmod +x "$image"
-          xvfb-run -a bun desktop/build/self-test.ts "$image" APPIMAGE_EXTRACT_AND_RUN=1
+          rm -rf "$HOME/.config/TinyDocy"
+          (cd "$RUNNER_TEMP" && "$image" --appimage-extract > /dev/null)
+          xvfb-run -a bun desktop/build/release-smoke.ts "$RUNNER_TEMP/squashfs-root/AppRun"
 
-      - name: Electron specs (installed app)
+      # --- Test flavor: the same code with the test hooks compiled in, and
+      # an unpacked build with the inspect fuse on, because Playwright's
+      # _electron attaches through the inspector. Never shipped.
+      - name: Bundle and stage (test)
+        env:
+          NEXT_PUBLIC_HOCUS_URL: ws://127.0.0.1:1234
+        run: bun desktop/build/build.ts --flavor test
+
+      - name: Build the unpacked test app
+        working-directory: desktop/build
+        run: |
+          case "$RUNNER_OS" in
+            macOS) arch="--mac --arm64" ;;
+            Windows) arch="--win --x64" ;;
+            Linux) arch="--linux --x64" ;;
+          esac
+          bun electron-builder --config electron-builder.yml $arch --dir --publish never \
+            -c.directories.output=../../dist/desktop-test \
+            -c.electronFuses.enableNodeCliInspectArguments=true 2>&1 | tee "$RUNNER_TEMP/builder-test.log"
+          if grep -q "node was called" "$RUNNER_TEMP/builder-test.log"; then
+            echo "::error::electron-builder called node"
+            exit 1
+          fi
+          root="$(cd ../.. && pwd)/dist/desktop-test"
+          case "$RUNNER_OS" in
+            macOS) app="$root/mac-arm64/TinyDocy.app"; bin="$app/Contents/MacOS/TinyDocy" ;;
+            Windows) bin="$(cygpath -w "$root/win-unpacked/TinyDocy.exe")"; app="$bin" ;;
+            Linux) bin="$root/linux-unpacked/tinydocy"; app="$bin" ;;
+          esac
+          test -e "$app"
+          echo "TINYDOCY_EXECUTABLE=$bin" >> "$GITHUB_ENV"
+          echo "TEST_FUSE_TARGET=$app" >> "$GITHUB_ENV"
+
+      - name: Check the fuses in the test app (inspect on)
+        run: bun desktop/build/check-fuses.ts "$TEST_FUSE_TARGET" --inspect on
+
+      - name: Start the test app once and quit
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+          else
+            bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
+          fi
+
+      - name: Electron specs (test app)
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a bun playwright test -c playwright.electron.config.ts

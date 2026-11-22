@@ -282,7 +282,11 @@ function start(): void {
     installIpc(handlers, windows);
     const storageReady = storage.start();
     if (app.isPackaged && process.platform === "win32")
-      app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+      // `"…\TinyDocy.exe" "--" "%1"`: the link is always last and after
+      // `--`, so it can never be read as a switch (SEC-001).
+      app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME, process.execPath, [
+        "--",
+      ]);
 
     // The first launch's own arguments, plus any macOS open-file /
     // open-url that arrived before ready, decide the first window(s); a

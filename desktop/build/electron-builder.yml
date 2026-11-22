@@ -19,9 +19,10 @@ npmRebuild: false
 publish: null
 
 # Electron fuses (plan §7), flipped in the packaged binary and read back by
-# check-fuses.ts in CI. EnableNodeCliInspectArguments stays on in the
-# internal build: Playwright's _electron attaches through the inspector.
-# Release builds (P3.1) turn it off and run the electron specs before that.
+# check-fuses.ts in CI. EnableNodeCliInspectArguments is off in every
+# installer (SEC-001). Only the test flavor's unpacked build turns it on
+# (-c.electronFuses.enableNodeCliInspectArguments=true), because
+# Playwright's _electron attaches through the inspector.
 electronFuses:
   # Flipping fuses edits the binary; an unsigned arm64 Mac app must be
   # ad-hoc signed again or the kernel kills it at launch.
@@ -29,7 +30,7 @@ electronFuses:
   runAsNode: false
   enableCookieEncryption: true
   enableNodeOptionsEnvironmentVariable: false
-  enableNodeCliInspectArguments: true
+  enableNodeCliInspectArguments: false
   enableEmbeddedAsarIntegrityValidation: true
   onlyLoadAppFromAsar: true
   loadBrowserProcessSpecificV8Snapshot: false

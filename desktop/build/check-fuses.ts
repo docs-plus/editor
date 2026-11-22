@@ -4,7 +4,12 @@
  * exit criterion "CI asserts the fuses"). Reads the binary, not the config,
  * so a builder that silently skipped flipping is caught.
  *
- *   bun desktop/build/check-fuses.ts <TinyDocy.app | TinyDocy.exe | tinydocy>
+ *   bun desktop/build/check-fuses.ts <TinyDocy.app | TinyDocy.exe | tinydocy> [--inspect on|off]
+ *
+ * `--inspect` is the expected `EnableNodeCliInspectArguments` (SEC-001):
+ * `off` (the default) for every installer; `on` only for the test flavor's
+ * unpacked build, which Playwright's `_electron` drives through the
+ * inspector.
  */
 import { existsSync } from "node:fs";
 
@@ -14,12 +19,18 @@ import { FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
 const ENABLE = 0x31;
 const DISABLE = 0x30;
 
+const inspectAt = process.argv.indexOf("--inspect");
+const inspectArg = inspectAt > 0 ? process.argv[inspectAt + 1] : "off";
+if (inspectArg !== "on" && inspectArg !== "off") {
+  console.error("[fuses] --inspect takes on or off");
+  process.exit(2);
+}
+
 export const EXPECTED_FUSES: Record<keyof typeof FuseV1Options, boolean> = {
   RunAsNode: false,
   EnableCookieEncryption: true,
   EnableNodeOptionsEnvironmentVariable: false,
-  // On in the internal build: Playwright attaches through the inspector.
-  EnableNodeCliInspectArguments: true,
+  EnableNodeCliInspectArguments: inspectArg === "on",
   EnableEmbeddedAsarIntegrityValidation: true,
   OnlyLoadAppFromAsar: true,
   LoadBrowserProcessSpecificV8Snapshot: false,
