@@ -36,6 +36,22 @@ takes about 7.5 minutes instead of about 27 (median of the last five green
 **Deploy:** none. Each CI run now uses about seven jobs instead of two; the
 merge queue's build concurrency (runbook) is set with that in mind.
 
+### Hover-preview pixel test no longer races the swatch's leave timer
+
+`action-preview.spec.ts`'s "previews exactly what applying renders" cases
+(the table header ones most often) failed about 40% of runs locally and on
+both attempts of some CI runs. Moving the pointer off the swatch schedules the
+preview's clear after the 80 ms dwell; applying had already removed the
+preview, so the test drew its own "applied" render before that clear ran,
+and the clear erased it mid-capture (the blurred selection's tint then showed,
+about 900 pixels). Test only; no app or Deploy change.
+
+#### Fixed
+
+- **Tests:** before drawing the applied render, the test waits for a page
+  timer of the same dwell (`PREVIEW_DWELL_MS`), which fires after the
+  pending clear. 40 repeats: no pixel failures (11 of 24 before).
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
