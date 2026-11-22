@@ -305,7 +305,7 @@ The first version of this document designed full-text search: a renderer text ex
 | Duplicated | Links still point to the original. The duplicate gets a new key. `here#` links inside the duplicate point into the duplicate. | — |
 | Shared (Live) | Resolves for you. The consent window adds: "This document links to 3 of your documents. People you share with will see the link text but can't open them." | Unresolved, unless Q3 (b) |
 | Heading deleted | Opens the document at the top with the pill "The section this link pointed to was removed." | — |
-| Opened in the public sandbox (never by design, but possible through pasted HTML) | The `tinydocy:` scheme isn't registered there, so the mark is refused, or the text pastes plain | — |
+| Opened in the public sandbox (never by design, but possible through pasted HTML or a collaborator's Yjs update) | The web editor links only to `https:`, `http:` and `mailto:` (§4.8). A pasted `tinydocy:` link keeps its text and loses the link; a command never writes one; one that arrives through Yjs renders with no live `href` and never opens. | — |
 | Imported into another library | Through Export all, resolves if the target came along (keys carried in `library.json`). A single `.tinydoc` import gets a new key (v7), so links to it don't resolve. Otherwise unresolved. | — |
 
 ### 4.5 Link previews (hovercard)
@@ -382,7 +382,8 @@ The `linkIcon` resolver (sync) decides the link's icon from the renderer's index
 ### 4.8 The public sandbox
 
 - **No document links:** the sandbox has no library and no keys.
-- `tinydocy:here#` heading links and the **In this document** section of ⌘K are cheap and need no index. They are **in v1 for the sandbox too, if** LK1's pass-through measures within its 60 B gz ledger line. Otherwise they are later. Flagged in §12.
+- **Links are https, http and mailto only.** The web editor's `isAllowedUri` (`isWebLink` in `document-editor-config.ts`) refuses every other scheme, `tinydocy:` included, because the sandbox has no link host. `LinkPolicyHyperlink` applies the same option where the extension skips it: a pasted `<a href>` with any other scheme keeps its text and loses the link, a command never writes one, and one that arrives through Yjs (a collaborator, an older document) renders with no `href`, so neither Mod-click, middle-click nor the browser's "Open link" can follow it. With a host (desktop, the web library), the host's `isAllowedUri` replaces this policy at all three points, and allows `tinydocy:` only when it parses (§4.6).
+- `tinydocy:here#` heading links and the **In this document** section of ⌘K are cheap and need no index. They are **in v1 for the sandbox too, if** LK1's pass-through measures within its 60 B gz ledger line, and the sandbox's policy then allows `tinydocy:here#` (it allows no `tinydocy:` link today). Otherwise they are later. Flagged in §12.
 
 ### 4.9 Import contract and "Link imported notes" (LK5)
 

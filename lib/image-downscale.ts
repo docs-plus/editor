@@ -155,7 +155,7 @@ export interface ImageEncoder<T extends EncodedImage> extends Dimensions {
   encode: (attempt: EncodeAttempt) => Promise<T | null>;
 }
 
-function throwIfAborted(signal: AbortSignal | undefined) {
+export function throwIfAborted(signal: AbortSignal | undefined) {
   if (signal?.aborted) throw new Error("Upload cancelled");
 }
 
@@ -257,7 +257,7 @@ async function withoutEncoderMetadata(blob: Blob): Promise<Blob> {
   return stripped ? new Blob([stripped], { type: blob.type }) : blob;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
@@ -278,7 +278,7 @@ function canvasToBlob(
 let webpSupport: Promise<boolean> | null = null;
 
 /** Browsers that can't encode WebP silently return PNG from `toBlob`. */
-function supportsWebpEncoding(): Promise<boolean> {
+export function supportsWebpEncoding(): Promise<boolean> {
   webpSupport ??= (async () => {
     const canvas = document.createElement("canvas");
     canvas.width = 1;
@@ -289,7 +289,7 @@ function supportsWebpEncoding(): Promise<boolean> {
   return webpSupport;
 }
 
-function createCanvasEncoder(
+export function createCanvasEncoder(
   image: HTMLImageElement,
   outputType: "image/webp" | "image/jpeg",
 ): ImageEncoder<Blob> & { dispose: () => void } {
