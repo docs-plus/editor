@@ -298,11 +298,11 @@ The first version of this document designed full-text search: a renderer text ex
   - "Library › Finance · Edited 12 Nov"
   - actions: **Open**, **Open in New Tab**, **Copy Link**, and **Use Current Title** (only when it differs and the document is editable)
 - **Hovercard CSS** loads with the library chunk, not the editor chunk.
-- **The card's design** (anatomy, states, focus, phone, RTL, motion and anti-slop acceptance criteria) is §4.5a, *proposed, pending owner approval (2026-11-22)*. Per the owner's review, its hover card and dialog show only Open, Copy Link and ⋯; the other actions above live in ⋯ (L2).
+- **The card's design** (anatomy, states, focus, phone, RTL, motion and anti-slop acceptance criteria) is §4.5a, *approved by the owner (2026-11-22)*. Per the owner's review, its hover card and dialog show only Open, Copy Link and ⋯; the other actions above live in ⋯ (L2).
 
 ### 4.5a Link card (hover and preview)
 
-> **Status: proposed, pending owner approval (2026-11-22), revised the same day after the owner's review.** The owner approved smart chips (§4.2a, PR #167) and the linking design (PR #163) and asked for a more mature card, without "AI slop" design. This section is the final design after three directions (Quiet utility, Native document, Editorial) were judged by a design critic, an accessibility reviewer and the Head of Engineering. Quiet utility won all three verdicts; the grafts and must-fixes from the other two are applied below.
+> **Status: approved by the owner, 2026-11-22 ("approve"), after a same-day revision for the owner's review (icons back, secondary actions in ⋯).** The owner approved smart chips (§4.2a, PR #167) and the linking design (PR #163) and asked for a more mature card, without "AI slop" design. This section is the final design after three directions (Quiet utility, Native document, Editorial) were judged by a design critic, an accessibility reviewer and the Head of Engineering. Quiet utility won all three verdicts; the grafts and must-fixes from the other two are applied below.
 > - **Owner feedback on the first version (2026-11-22):** "we need the icon, icons get feels better to the enduser, just ensure we do not make soo complicated with lot's of buttons and functions … we can add 3 dots menu and put those not necessery functionalities in the 3 dot menu". Applied here: the state icon leads the title row again, the actions carry icons, and the hover card and the dialog both show only **Open, Copy Link and ⋯**. Everything else is in ⋯ (decision L2).
 > - **Prototype:** [`docs/design/2026-11-22-link-card-prototype.html`](../../design/2026-11-22-link-card-prototype.html). It is fully self-contained (Inter and the twelve lucide icons are inlined, from `lucide-react` 1.72.0, the app's version). It shows every state on every surface in light and dark, the ⋯ menu open, the Copy Link tooltip, right to left, a 390px phone, a 320px frame, reduced motion, a working "Try it" paragraph (hover timing, Mod-K, the ⋯ menu's keys), and two computed panels: **Anti-slop checklist** and **Accessibility** (role, name and state of each element).
 > - **Screenshots:** [`docs/design/2026-11-22-link-card/`](../../design/2026-11-22-link-card/), including `compare-*.jpg` side by sides of the #163 and #167 cards and this one.
@@ -467,6 +467,8 @@ These sections on `main` predate the approved #163 and #167 text. When this sect
 - **§7 Hovercard bullet:** replace with the Keyboard and ARIA rules above.
 
 #### Owner decisions
+
+> **Approved by the owner, 2026-11-22: "approve".** L1–L6 are decided as each row's recommendation says.
 
 | # | Decision | Recommendation |
 |---|---|---|
