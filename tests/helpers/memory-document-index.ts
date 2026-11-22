@@ -526,6 +526,25 @@ export class MemoryDocumentIndex implements LibraryIndex {
     return true;
   }
 
+  /**
+   * A second, loaded instance with this one's state, standing in for
+   * "reopen over the same backend" in the contract's durability cases. It
+   * shares nothing afterwards (there is no backend to share).
+   */
+  reopen(): MemoryDocumentIndex {
+    const copy = new MemoryDocumentIndex({
+      items: this.items,
+      folders: this.folders,
+      tags: this.tags,
+    });
+    copy.listViews = { ...this.listViews };
+    for (const [id, trashed] of this.trashBin) copy.trashBin.set(id, trashed);
+    for (const [id, unit] of this.folderUnits) copy.folderUnits.set(id, unit);
+    copy.lastTrashedAt = this.lastTrashedAt;
+    copy.load();
+    return copy;
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.listeners.clear();
