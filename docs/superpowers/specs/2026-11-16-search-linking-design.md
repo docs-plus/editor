@@ -298,6 +298,159 @@ The first version of this document designed full-text search: a renderer text ex
   - "Library › Finance · Edited 12 Nov"
   - actions: **Open**, **Open in New Tab**, **Copy Link**, and **Use Current Title** (only when it differs and the document is editable)
 - **Hovercard CSS** loads with the library chunk, not the editor chunk.
+- **The card's design** (anatomy, states, focus, phone, RTL, motion and anti-slop acceptance criteria) is §4.5a, *proposed, pending owner approval (2026-11-22)*.
+
+### 4.5a Link card (hover and preview)
+
+> **Status: proposed, pending owner approval (2026-11-22).** The owner approved smart chips (§4.2a, PR #167) and the linking design (PR #163) and asked for a more mature card, without "AI slop" design. This section is the final design after three directions (Quiet utility, Native document, Editorial) were judged by a design critic, an accessibility reviewer and the Head of Engineering. Quiet utility won all three verdicts; the grafts and must-fixes from the other two are applied below.
+> - **Prototype:** [`docs/design/2026-11-22-link-card-prototype.html`](../../design/2026-11-22-link-card-prototype.html). It is fully self-contained (Inter and the five lucide icons are inlined). It shows every state on every surface in light and dark, right to left, phone, reduced motion, a working "Try it" paragraph, and two computed panels: **Anti-slop checklist** and **Accessibility** (role, name and state of each element).
+> - **Screenshots:** [`docs/design/2026-11-22-link-card/`](../../design/2026-11-22-link-card/), including `compare-*.jpg` side by sides of the #163 and #167 cards and this one.
+> - **Applies to** document links (`tinydocy:` marks) and smart chips (`docChip`), on the hover card, the preview dialog and the phone sheet.
+
+**One body, three shells.** The hover card (pointer), the preview dialog (click, Mod-K, Alt+Enter) and the phone long-press sheet render the same card body. Only the wrapper, the action layout and focus differ. The width never changes between hover and click.
+
+#### Anatomy
+
+| Slot | Content | Type | Spacing |
+|---|---|---|---|
+| Frame | — | Inter (`--font-sans`) | 20rem wide (`--hl-hovercard-width: 20rem`), `max-width: calc(100vw - 1rem)`; 1px `--border`; `--radius` (7.2px); `--popover` / `--popover-foreground`; **shadow-md**, the only elevation; opens 6px below the anchor, aligned to its inline start |
+| Body | — | — | padding 10px top, 12px sides, 12px bottom; every text row starts on the 12px inset |
+| 1 Title | the current title; with a heading link, "› Heading" on the same line | 14/20, weight 500. "› Heading" 14/20, weight 400, `--muted-foreground` | — |
+| 2 Meta | [In Trash] · folder path · Edited date | 12/16, `--muted-foreground`; "In Trash" weight 500 in `--popover-foreground` | 2px above; 6px gap around each `·` |
+| 3 Snippet | `docs.snippet`, 2-line clamp | 13/19, weight 400, `--popover-foreground` | 8px above |
+| 4 Actions | ghost text buttons | 12/16, weight 500; the first action `--popover-foreground`, the rest `--muted-foreground`; hover `--accent` | 1px `--border` hairline above; 6px padding and gap; buttons 28px tall, 6px side padding, `--radius-md` (5.76px) |
+
+- **No icon in the card body.** The state icon (`FileText`, `Hash`, `FileMinus`, `FileQuestion`) stays on the anchor. The only icon in the card is ⋯ (`Ellipsis`, 16px, in a 28×28 button).
+- **State is told by words and weight,** never by colour, pills or badges.
+- **The raw link and the `link_key` never appear,** on any surface or in any state.
+
+#### Content rules
+
+- **Title.** With no heading: a 2-line clamp, `overflow-wrap: anywhere`. With a heading: one line. The title and "› Heading" share one `<bdi dir="auto">` (a flex row: the title span `min-width: 4em`, ellipsis; the heading span `flex: none; max-width: calc(100% - 4em)`), so **the title gives way first** and the heading, where the link lands, stays whole. The separator is always U+203A "›"; it is Bidi_Mirrored, so it shows as "‹" when the run resolves RTL. Never swap the glyph in code.
+- **Folder path.** No "Library" root. One or two folders are shown whole; deeper paths keep the first and the last folder: "Operations › … › Q4 reviews". The path is one `<bdi dir="auto">` and the only segment that may be ellipsised, and only when a single folder name is longer than the line; the `·` separators and the date sit outside it.
+- **Date.** "Edited 12 Nov"; the year only when it isn't the current one ("Edited 2 Oct 2025"); `font-variant-numeric: tabular-nums`.
+- **Snippet.** Shown only for local, non-shared documents. **Never in a Live document or any shared view (D24).** Each text block takes its own direction (`dir="auto"`) but aligns to the card's start edge (`text-align: match-parent`), so an English line in an RTL card keeps its full stop at the end.
+
+#### States and actions
+
+| State | Title row | Meta | Snippet | Hover card actions | Preview dialog actions | Dialog initial focus |
+|---|---|---|---|---|---|---|
+| Resolves | title | path · date | yes | Open, Copy Link, ⋯ | Open, Copy Link / Turn into Chip (or Link), Remove Link | Open |
+| Heading link | title › Heading | path · date | yes (`docs.snippet` until §4.5's heading-source question is decided) | same | same | Open |
+| `here#` | the heading | "In this document" | no | Go to Section, Copy Link, ⋯ | Go to Section, Copy Link / Turn into …, Remove Link | Go to Section |
+| In Trash | title | **In Trash** · path · date | yes | Open, Restore, ⋯ | Open, Restore / Turn into …, Remove Link | Open |
+| Not available | "This document isn't on this device." (14/20, 500) | "It may have been deleted." (12/16 muted) | no | Remove Link (editable only, neutral) | Remove Link (editable only, neutral) | **the dialog itself** |
+| Loading (cold start) | the stored `label` | one static skeleton bar (8px, `--border`, radius 4px) plus a visually hidden "Loading details" | no | Open, Copy Link, ⋯ | Open, Copy Link / Turn into …, Remove Link | Open |
+| Newer version | "This link needs a newer version of TinyDocy." | — | no | none | none | the dialog itself |
+| Your Live document | title | path · date | **no** | Open, Copy Link, ⋯ | Open, Copy Link / Turn into …, Remove Link | Open |
+| Reading mode or read-only | title | path · date | yes | Open, Copy Link (no ⋯) | Open, Copy Link | Open |
+| Shared view (exists only if Q3 is reversed; today collaborators see Not available) | title | path · date | **no** | Open, Copy Link (no ⋯) | Open, Copy Link | Open |
+
+- "/" in the dialog column separates the two rows. **The dialog shows the editable second group as a second row under its own hairline** (spec §4.2a's visible second group, one Tab stop away for keyboard users). Measured in the prototype, the worst case, Go to Section · Copy Link · Turn into Chip · Remove Link, needs 354px against the 306px a 20rem footer offers, so the dialog always uses two rows rather than wrapping in some states only: buttons never move between states.
+- **The hover card keeps two text actions and ⋯** ("More link actions"), which holds Turn into Link (or Chip) and Remove Link. The hover card is pointer-only, so the extra click costs nothing for keyboard users.
+- **Remove Link is never the primary action,** never red, and never takes focus by default.
+- **Loading:** Open is enabled and **deferred**, not disabled and not `aria-disabled`. A press is queued and runs once the target resolves (or the card swaps to Not available). The card has `aria-busy="true"` until the metadata arrives. Dialog focus lands on Open, as in every other state.
+- **Turn into Link in your Live document** opens §4.2a's consent dialog the first time ("Write this title into the document?", [Cancel] [Turn into Link], focus on Cancel), from ⋯ and from the dialog row alike. Hiding the action behind ⋯ never skips consent.
+- **Restore and Go to Section** come from §4.5 and §8; they are not new actions.
+
+#### Keyboard, pointer and timing (WCAG 1.4.13)
+
+- **One hovercard system: the extension's.** The card body is rendered through `@docs.plus/extension-hyperlink`'s `hovercard.render`, `openPreviewPopover` and `focusPreviewFromKeyboard` (§4.2a, §4.5). No second base-ui PreviewCard. The extension owns hover, persistence, Esc and the hover bridge.
+- **Timing.** Target: open after 300 ms on the anchor; close 200 ms after the pointer has left both the anchor and the card. Extension 2.3.0 hard-codes its own values (fetch after a 150 ms dwell, open no sooner than 500 ms, close 300 ms after leaving), which also meet 1.4.13. LK4 either uses an upstream timing option, if the extension adds one, or keeps 2.3.0's values; it never adds a second timer in the app. See owner decision L4.
+- **Hoverable:** crossing the 6px gap never closes the card. In 2.3.0 the bridge is the close grace: the 300 ms timer that starts when the pointer leaves the anchor is cancelled when it enters the card. A pseudo-element on the frame cannot do it, because `.hyperlink-hovercard` clips with `overflow: hidden`. If the 200 ms target ships, its grace must still cover crossing the gap. **Persistent:** it stays while the pointer is on the anchor or the card. **Dismissible:** Esc closes it without moving the pointer or focus. It **never opens on focus.**
+- **The hover card is in the accessibility tree but out of the tab order** (its buttons have `tabindex="-1"`). It is never `aria-hidden`, so voice-control users can click its buttons by name. The keyboard path is the preview dialog.
+- **Preview dialog:** click, Mod-K or Alt+Enter on the anchor. Focus goes to the first action (table above) or to the dialog container (`tabIndex=-1`) for Not available and Newer version. The ring shows only on `:focus-visible`, so a mouse click shows none. Tab moves through the actions in order. **Esc closes it and returns focus to `view.dom` with the selection unchanged** (reading mode: to the anchor).
+- **Not available focus:** the extension and base-ui both focus the first tabbable element by default, which here is Remove Link. Set initial focus to the popup container on the desktop dialog (`focusPreviewFromKeyboard` path) and on the phone sheet (base-ui `initialFocus`).
+
+#### ARIA
+
+| Element | Role | Accessible name | State |
+|---|---|---|---|
+| Text link anchor | `link` | its text | `aria-haspopup="dialog"`, `aria-expanded` (true while the dialog is open); the state suffix from §4.6 via `aria-describedby` |
+| Chip anchor | as §4.2a | label plus the hidden suffix (", document", ", document, in Trash", …) | `aria-haspopup="dialog"`, `aria-expanded` |
+| Hover card | `group` | `aria-labelledby` the title (or the message) | buttons `tabindex="-1"` |
+| Preview dialog | `dialog` | `aria-labelledby` the title (or the message) | `aria-modal="false"` (anchored, non-blocking); `aria-busy="true"` while loading |
+| Action rows | `group` | "Open and copy", "Edit link" | — |
+| ⋯ | `button` | "More link actions" | `aria-haspopup="menu"`, `aria-expanded` |
+| ⋯ menu | `menu` / `menuitem` | "More link actions" / the action | shadcn DropdownMenu |
+| Phone sheet | `dialog` | `aria-labelledby` the title | `aria-modal="true"`, background `inert`, focus contained, returned to the anchor on close |
+| Live consent | `alertdialog` | "Write this title into the document?" | `aria-modal="true"`, focus on Cancel |
+
+- **The open anchor gets its own treatment, not the focus ring.** While the dialog is open a chip uses the `--doc-chip-hover` fill and a text link a 2px underline, both from `aria-expanded="true"`. `--focus-ring` is reserved for the element that has focus, so two identical rings never show at once.
+- **Separators** (`·`, the "›" glyph) are `aria-hidden`; the heading is read after a hidden ", ".
+- **Targets:** footer buttons are 28px tall with 6px gaps; ⋯ is 28×28 (WCAG 2.5.8 asks for 24). Phone rows are 44px.
+
+#### Phone
+
+- A long-press on a chip or link opens the **same body** as a bottom sheet (`components/ui/sheet`): `--radius-xl` (10.08px) top corners, shadow-lg (the app's sheet token), 1px top border, a flat scrim (`oklch(0 0 0 / 0.2)` light, `/ 0.5` dark, **no blur**), no grip.
+- Type steps up one size: title 16/24, meta 13/18, snippet 15/21, message 16/24.
+- Actions are 44px full-width text rows (16/24), two groups (Open, Copy Link | Turn into …, Remove Link) separated by one inset hairline. No per-row hairlines, no icons. Rings only on `:focus-visible`, so a touch never shows one.
+- Bottom padding 20px plus `env(safe-area-inset-bottom)`.
+
+#### Right to left
+
+- The card follows the **document's** direction and mirrors: text, meta and actions start at the right edge, ⋯ sits at the left. Labels stay in the interface language (see L5).
+- Every user string (title, heading, folders, snippet) is isolated; the title and heading share one isolate, so an English title in an RTL document reads "Q4 budget › Approval limits", and a Persian one reads with the mirrored "‹".
+
+#### Motion
+
+- The extension's popover motion, unchanged: 120 ms ease-out, opacity 0 → 1 with a 2px shift. `prefers-reduced-motion: reduce`: no transition, the card appears at once.
+- The loading bar is static. No shimmer, no scale, no spring.
+
+#### Implementation (LK4)
+
+- `components/document-editor/document-editor.scss`: map `--hl-shadow` to the shadow-md value (`0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)`) beside the existing `--hl-radius` mapping. Today the extension's 20px two-layer default would still draw. This is a CSS line for every hyperlink popover and no JavaScript; if the CSS ledger objects, scope it to `.hyperlink-hovercard` in the lazy links CSS instead.
+- Draw the edge once: the shell's `--hl-border` (→ `--border`) or PopoverContent's `ring-1 ring-foreground/10`, never both.
+- **Frames the extension owns.** `hovercard.render` and `openPreviewPopover` own the hover card and preview frames. LK4 first checks which of the ARIA table's frame attributes (`role`, `aria-labelledby`, `aria-modal`, `aria-busy`) 2.3.0 already sets or lets the host set, and upstreams the rest instead of patching the frame from the app.
+- The card's JavaScript and CSS, and the extension's `hovercard.css`, live in the lazy links or library chunk. **0 B change to the editor chunk group** (size check), and opening the card makes **no network request**.
+
+#### Acceptance criteria
+
+**Anti-slop (design review fails the PR on any one):**
+1. No gradients.
+2. No glassmorphism, `backdrop-filter`, blur or frosted panels; the phone scrim is flat.
+3. No purple or indigo accent; only the app's tokens (greys, `--link-text-color`, the approved `--doc-chip-*`).
+4. No emoji.
+5. At most one icon per meaning: no header icon, no icons on actions, no repeated state icon in the card.
+6. One subtle elevation token per surface (shadow-md on the card and menu, shadow-lg on the sheet); no coloured or stacked glow.
+7. Radius matches the app: 7.2px card and menu, 5.76px buttons and rows, 10.08px sheet top.
+8. No filler or marketing copy, no "✨", no exclamation marks; every string is in §8 or this section.
+9. Nothing centred: everything starts on the 12px inset.
+10. No padding bloat: body 10/12/12px, footer 6px; a resolved hover card measures 149px tall at 320px wide.
+11. No hero-card look: no banner, image well, header icon or nested boxes.
+12. No status pills: In Trash is a word in weight 500.
+13. No animated shimmer.
+14. Typography carries the hierarchy: 14/20 500 title, 12/16 muted meta, 13/19 snippet, 12/16 500 actions.
+15. Pro-tool density: compare GitHub and Linear hovercards and Quick Look.
+16. Every pixel justified: each hairline separates a group, the footer padding holds the focus ring.
+
+**Behaviour and tests:**
+- A regression test (desktop and phone) asserts that `document.activeElement` is never Remove Link when a Not available card opens, by keyboard, click or long-press.
+- Loading: Open is focusable and not `aria-disabled`; pressing it before the metadata arrives opens the target once it resolves; `aria-busy` clears when the metadata arrives.
+- Hover: no card before the open delay; the card survives crossing the gap; it closes after leaving both; Esc closes it; focus never opens it.
+- Mod-K and Alt+Enter focus the first action; Esc returns focus to `view.dom` with the selection unchanged.
+- Live and shared views never render the snippet; shared and read-only views render no ⋯ and no edit row.
+- **Design-review gate before merge:** in-app screenshots at 1440, 1100 and 820 px, light and dark, an RTL document and a CJK title, covering hover, dialog, sheet (a real long-press on a touch viewport) and every state above, checked against the prototype.
+
+#### Amends on merge
+
+These sections on `main` predate the approved #163 and #167 text. When this section is approved, update them to match (they are not edited here, to avoid a three-way conflict with those PRs):
+- **§4.5 Card:** drop the "Library ›" root; the action list becomes the table above (Open in New Tab and Use Current Title per L2).
+- **§4.6 and §8:** In Trash uses `FileMinus`, not `Trash2` (approved Q5). Deleted and Not in this library are one **Not available** state, `FileQuestion`, "This document isn't on this device. It may have been deleted." (approved Q4 (b)). The In Trash card shows "In Trash" in the meta line instead of "“Q4 budget” is in Trash." (L3).
+- **§4.2a Visual and Keys:** the anchor's open state uses `aria-expanded` with the chip hover fill (text link: 2px underline) instead of the 2px `--focus-ring` outline, and anchors carry `aria-haspopup="dialog"` and `aria-expanded`.
+- **§7 Hovercard bullet:** replace with the Keyboard and ARIA rules above.
+
+#### Owner decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **L1** | Approve this card for links and chips | **Yes.** |
+| **L2** | §4.5's Open in New Tab and Use Current Title, outside the approved action list | **Keep them only in ⋯,** on both surfaces (prototype board "⋯ menu, §4.5 extras"). ⌘⇧-click and middle click already open a new tab. |
+| **L3** | In Trash as a meta-line word ("In Trash · Product · Edited 3 Nov") instead of the sentence "“Q4 budget” is in Trash." | **The meta line.** The title stays the title, and the state reads without a second headline. |
+| **L4** | Hover timing | **300 ms open, 200 ms close, as an upstream option of the extension;** until it exists, the extension's 500 / 300 ms. Never a second timer in the app. |
+| **L5** | Card direction in an RTL document with an English interface | **Mirror the card with the document,** labels in the interface language. The alternative, following the interface direction, puts the card's start edge away from the anchor. |
+| **L6** | Snippet colour | **`--popover-foreground`** (accessibility review). The muted alternative reads quieter at about 4.7:1 on the light popover; choose it only if, at real size in the app, the snippet competes with the title. |
+
 
 ### 4.6 Broken and unresolved states
 
