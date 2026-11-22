@@ -1,11 +1,17 @@
 import { supportsHighlights } from "@/extensions/find/highlight-support";
 
 /**
- * Find in the document (P2.11, details spec E1). `NEXT_PUBLIC_FIND=0`
- * turns it off: ⌘F / Ctrl+F then opens the browser's own find bar again.
- * The literal comparison is inlined at build time.
+ * Find in the document (P2.11, details spec E1). On in the desktop app;
+ * off on the web until the owner decides to take ⌘F from the browser there
+ * (#158). `NEXT_PUBLIC_FIND=1` turns it on for any build and `0` turns it
+ * off for any build, when ⌘F / Ctrl+F opens the browser's own find bar.
+ * Both comparisons are inlined at build time, so a build with Find off
+ * leaves its key listener out.
  */
-export const FIND_ENABLED = process.env.NEXT_PUBLIC_FIND !== "0";
+export const FIND_ENABLED =
+  process.env.NEXT_PUBLIC_FIND === "1" ||
+  (process.env.NEXT_PUBLIC_FIND !== "0" &&
+    process.env.NEXT_PUBLIC_APP_TARGET === "desktop");
 
 /**
  * Find takes ⌘F only where it can paint its hits (the CSS Custom

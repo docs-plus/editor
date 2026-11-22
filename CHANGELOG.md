@@ -63,16 +63,11 @@ of 7,030 B gz fetched when the browser is first idle.
 - **Browsers without the Highlight API** (Firefox before 140, Safari
   before 17.2) keep their own find bar: Find doesn't take ⌘F there, rather
   than step through hits it can't show.
-- **Config:** `NEXT_PUBLIC_FIND=0` turns Find off (⌘F opens the browser's
-  find bar again) and leaves its key listener out of the build. On by
-  default, since row E1 is shared with the web; a unit test pins it.
-
-#### Deploy
-
-- Owner decision before merge: Find is on by default, so the merge deploy
-  takes ⌘F / Ctrl+F (and ⌘G, Ctrl+G, F3) from the browser on
-  tiny.docs.plus. To keep the browser's own find bar on the web, build with
-  `NEXT_PUBLIC_FIND=0` in `.env.production`.
+- **Config:** Find lands dark on the web: it is on in the desktop app
+  and off in web builds, where ⌘F stays the browser's and the key listener
+  is left out of the build. `NEXT_PUBLIC_FIND=1` turns it on for any build
+  and `0` turns it off for any build. `make dev` (and so CI's e2e) runs
+  with `NEXT_PUBLIC_FIND=1`. A unit test pins the defaults.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 

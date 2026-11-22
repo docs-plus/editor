@@ -42,6 +42,7 @@ function withHighlightApi() {
 
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_FIND;
+  delete process.env.NEXT_PUBLIC_APP_TARGET;
   resetModules();
   document.body.replaceChildren();
   if (cssDescriptor) Object.defineProperty(globalThis, "CSS", cssDescriptor);
@@ -113,24 +114,35 @@ describe("matchFindShortcut", () => {
 });
 
 describe("FIND_ENABLED", () => {
-  it("is on by default (the row is shared with the web)", async () => {
-    const { FIND_ENABLED } = await importFresh<typeof FindKeys>(
-      "@/components/find/find-keys",
-    );
-    expect(FIND_ENABLED).toBe(true);
+  const load = async () =>
+    (await importFresh<typeof FindKeys>("@/components/find/find-keys"))
+      .FIND_ENABLED;
+
+  it("is off on the web by default (the browser keeps ⌘F until the owner decides)", async () => {
+    expect(await load()).toBe(false);
   });
 
-  it("is off under NEXT_PUBLIC_FIND=0", async () => {
+  it("is on in the desktop app by default", async () => {
+    process.env.NEXT_PUBLIC_APP_TARGET = "desktop";
+    expect(await load()).toBe(true);
+  });
+
+  it("is on on the web under NEXT_PUBLIC_FIND=1", async () => {
+    process.env.NEXT_PUBLIC_FIND = "1";
+    expect(await load()).toBe(true);
+  });
+
+  it("is off everywhere under NEXT_PUBLIC_FIND=0", async () => {
     process.env.NEXT_PUBLIC_FIND = "0";
-    const { FIND_ENABLED } = await importFresh<typeof FindKeys>(
-      "@/components/find/find-keys",
-    );
-    expect(FIND_ENABLED).toBe(false);
+    expect(await load()).toBe(false);
+    process.env.NEXT_PUBLIC_APP_TARGET = "desktop";
+    expect(await load()).toBe(false);
   });
 });
 
 describe("findAvailable", () => {
   it("is off where the CSS Custom Highlight API is missing (the browser's find bar stays)", async () => {
+    process.env.NEXT_PUBLIC_FIND = "1";
     const { findAvailable } = await importFresh<typeof FindKeys>(
       "@/components/find/find-keys",
     );
