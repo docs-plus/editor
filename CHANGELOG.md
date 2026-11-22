@@ -9,22 +9,18 @@ since the previous tag.
 
 ## [Unreleased]
 
-### Image store A1: the shared asset core, and Alt text… on images
+### Image store A1: the shared asset core
 
 The shared core of the image store (spec `2026-11-16-image-store-design.md`,
 D4, PR A1). Library documents will store `asset:sha256-<hex>` refs instead of
 data URLs; desktop storage (P2.6b) and the web library (W11) build on this.
-No web code path produces a ref yet: the public sandbox keeps inline images,
-as with A0. The editor chunk group grows by 491 B gz against `main` at
-`903b5c8`, within A1's 600 B allowance. First-load JS is unchanged (−5 B).
-Everything else is in one 3.4 KB gz lazy chunk.
+No web code path produces a ref yet, and the public sandbox is unchanged:
+its editor imports none of this. The editor chunk group and first-load JS
+are byte for byte the same as `main` at `1548d5e` (+0 B gz; A1 has no D23
+ledger line).
 
 #### Added
 
-- **Images:** an "Alt text…" action in the image toolbar's overflow menu.
-  It opens a small dialog that edits the image's alt text, saves on Enter or
-  Save, and closes on Escape. Saving is one undo step. Inserts still use an
-  empty alt and never prompt.
 - **Image store:** `lib/assets/`:
   - `asset-ref` (format, parse, `findAssetRefs`, `rewriteAssetRefs` for
     exports);
@@ -35,32 +31,33 @@ Everything else is in one 3.4 KB gz lazy chunk.
     metadata stripping, JPEG always re-encoded, a 2 MB / 2560 px cap);
   - an encode worker (`createImageBitmap` + `OffscreenCanvas`) that falls
     back to the main-thread canvas. A 12 MP photo encodes with the main
-    thread's longest gap at 11 ms (Chromium) and 13 ms (WebKit), against
-    84 ms and 136 ms on the main thread;
+    thread's longest gap at 11 ms, against 79 ms on the main thread
+    (Chromium);
   - the resolver, and a reference-counted object-URL cache released through
     `AbortSignal`.
-- **Platform:** the `BlobStore` port (`lib/platform/blob-store.ts`),
-  `MemoryBlobStore`, and a contract suite for P2.6b and W11
+- **Platform:** the `BlobStore` port (`lib/platform/blob-store.ts`) over
+  format 2's `blobs` and `doc_blobs` tables (no new tables), `MemoryBlobStore`,
+  and a framework-free contract suite for P2.6b and W11
   (`tests/helpers/blob-store-contract.ts`), including the GC property test:
   no referenced or restorable blob is ever collected.
-- **Editor:** `asset:` images render in documents that have an image store
-  (the kit's new `assets` option; no host sets it yet), through the §6.2
-  fallback until HyperMultimedia 2.4 (U1). The upstream request is written up
-  in `docs/research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md`.
+- **Editor:** `AssetHyperMultimediaKit` (`extensions/hyper-multimedia/asset-kit.ts`)
+  for hosts with an image store (P2.6b, W11). It renders `asset:` images
+  through the §6.2 fallback until HyperMultimedia 2.4 (U1), drops pasted
+  `asset:` images with a notice when the document has no image store, adds
+  Alt text… to the image toolbar, and keeps `<img alt>` in step with alt
+  changes, including undo and collaborators' edits. Everything but its
+  routing is one lazy chunk. The upstream request is written up in
+  `docs/research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md`.
+- **Headless:** `extensions/hyper-multimedia/asset-image-parse.ts`, the
+  `asset:` image parse rules with no runtime imports, for the headless
+  schema (P2.8a).
 
 #### Changed
 
 - **Schema:** `CLIENT_SCHEMA` is 3 ("knows asset refs"). The server's floor
   stays 2, so schema-2 bundles still connect and are counted as `low` in the
-  per-minute `client_schema` log line.
-- **Sandbox:** pasting or dropping a library image into a document without an
-  image store drops it and says "Library images can't be pasted here."
+  per-minute `client_schema` log line. No deploy step.
 
-#### Fixed
-
-- **Images:** an image's `alt` attribute follows alt text changes, including
-  undo and a collaborator's edit. The media kit kept the old value until the
-  image was redrawn.
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

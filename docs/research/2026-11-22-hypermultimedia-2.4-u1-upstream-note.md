@@ -2,7 +2,7 @@
 
 - **Status:** Ready to file in the docs.plus repo, `extensions/extension-hypermultimedia`. **Not filed.**
 - **Package:** `@docs.plus/extension-hypermultimedia` 2.3.0 → 2.4.0 (minor: everything is opt-in).
-- **For:** TinyDocy's image store ([spec §6.1](../superpowers/specs/2026-11-16-image-store-design.md#61-upstream-docsplusextension-hypermultimedia-240-docsplus-repo)). TinyDocy runs a local fallback until this ships (spec §6.2, PR A1). That fallback is `extensions/hyper-multimedia/asset-image.ts` and `asset-image-view.ts`, pinned by `tests/unit/extensions/asset-image.test.ts`, and it gets deleted once 2.4 lands.
+- **For:** TinyDocy's image store ([spec §6.1](../superpowers/specs/2026-11-16-image-store-design.md#61-upstream-docsplusextension-hypermultimedia-240-docsplus-repo)). TinyDocy runs a local fallback until this ships (spec §6.2, PR A1). That fallback is `extensions/hyper-multimedia/asset-image.ts` and `asset-image-view.ts`, used by `AssetHyperMultimediaKit` (`asset-kit.ts`) and pinned by `tests/unit/extensions/asset-image.test.ts`. It gets deleted once 2.4 lands.
 
 ---
 
@@ -85,11 +85,12 @@ Without `resolveSrc` and `isHostSrc`, nothing changes. The existing 2.3 tests pa
 
 ## What TinyDocy changes when 2.4 lands
 
-- `extensions/hyper-multimedia/hyper-multimedia-kit.ts`: configure the kit with:
+- `extensions/hyper-multimedia/asset-kit.ts`: configure the kit with:
   - `isHostSrc: (s) => parseAssetRef(s) !== null`
   - `resolveSrc`, created once per editor and reading the document scope from the `assets` getter, so the extensions array never changes identity
 - Delete `asset-image.ts` (`withAssetSrc`, `assetParseRules`, `assetRefreshPlugin`) and `asset-image-view.ts`, and re-export the upstream `refreshMediaSrc`.
-- The sandbox paste policy (dropping `asset:` images without an asset scope, plus the notice) moves to a small `transformPasted` plugin, because upstream `parseHTML` accepts host srcs everywhere.
+- The paste policy (dropping `asset:` images without an asset scope, plus the notice) moves to a small `transformPasted` plugin in the asset kit, because upstream `parseHTML` accepts host srcs everywhere.
+- The sandbox kit (`hyper-multimedia-kit.ts`) keeps not passing `isHostSrc`, so it goes on dropping `asset:` images, as today.
 - Keep `imageActions` (Alt text…). Drop its Download and Copy overrides once upstream uses `currentSrc`.
 - Delete the alt-sync wrapper in `withAssetSrc` once upstream applies `alt` on update (behaviour 6).
 - Delete the pins in `tests/unit/extensions/asset-image.test.ts` that describe 2.3 internals. Keep the behaviour tests, pointed at the upstream hooks.
