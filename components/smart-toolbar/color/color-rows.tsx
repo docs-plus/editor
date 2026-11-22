@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { colorLabel } from "@/lib/editor-actions/surface-actions";
 import { BanIcon, CheckIcon } from "@/lib/icons";
-import { MAX_RECENT_COLORS, type RecentColor } from "@/lib/remembered-choice";
+import type { RecentColor } from "@/lib/remembered-choice";
 import { cn } from "@/lib/utils";
 
 import {
@@ -340,8 +340,9 @@ export function ColorRows({
 }) {
   const state = useColorState(editor);
   // M3 is frozen while the menu is open: applying never reshuffles it.
+  // It keeps at most five (`MAX_RECENT_COLORS`), so all of them show.
   const [recentRow] = useState<Swatch[]>(() =>
-    recent.slice(0, MAX_RECENT_COLORS).map((entry) => ({ ...entry }) as Swatch),
+    recent.map((entry) => ({ ...entry }) as Swatch),
   );
   const [active, setActive] = useState(() => initialPos(focusKind, state));
   const [openMore, setOpenMore] = useState<Kind | null>(null);
