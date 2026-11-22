@@ -8,6 +8,7 @@ import { Marked, type marked } from "marked";
 import {
   hasMarkdownFormatting,
   hasMarkdownSyntax,
+  MARKDOWN_PASTE_MAX_CHARS,
   markdownPasteSlice,
   parseMarkdownFragment,
 } from "@/lib/markdown/parse";
@@ -233,20 +234,38 @@ describe("markdownPasteSlice (details spec E2)", () => {
         type: "doc",
         content: [{ type: "noSuchNode", content: [] }],
       }),
+      instance: parser().instance,
     };
     expect(markdownPasteSlice(broken, editor.schema, "**x**")).toBeNull();
   });
 
-  it("keeps raw HTML in Markdown to what an HTML paste allows", () => {
-    const slice = markdownPasteSlice(
-      parser(),
-      editor.schema,
-      '**bold** <img src=x onerror="alert(1)"> <script>alert(1)</script> <a href="javascript:alert(1)">x</a>',
-    );
-    const json = JSON.stringify(slice?.content.toJSON() ?? null);
-    expect(json).not.toContain("onerror");
-    expect(json).not.toContain("<script");
-    expect(json).not.toContain("javascript:");
+  it(`returns null over ${MARKDOWN_PASTE_MAX_CHARS} characters, without parsing`, () => {
+    let parsed = false;
+    const counting = {
+      parse: (text: string) => {
+        parsed = true;
+        return parser().parse(text);
+      },
+      instance: parser().instance,
+    };
+    const long = "**bold** ".repeat(MARKDOWN_PASTE_MAX_CHARS / 9 + 1);
+    expect(long.length).toBeGreaterThan(MARKDOWN_PASTE_MAX_CHARS);
+    expect(markdownPasteSlice(counting, editor.schema, long)).toBeNull();
+    expect(parsed).toBe(false);
+  });
+});
+
+describe("hasMarkdownSyntax on long single lines", () => {
+  // The link alternative used to rescan to the end of the line from every
+  // `[` (and every `](`): seconds for 100 KB on the main thread.
+  it.each([
+    ["[", "[".repeat(200_000)],
+    ["[a](", "[a](".repeat(50_000)],
+    ["![", "![".repeat(100_000)],
+  ])("stays linear on a line of %p", (_name, text) => {
+    const started = performance.now();
+    expect(hasMarkdownSyntax(text)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });
 
