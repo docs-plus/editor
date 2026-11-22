@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { UPDATE_ORIGINS_MIRROR } from "@/desktop/shared/doc-origins";
+import {
+  RENDERER_ORIGINS,
+  UPDATE_ORIGINS_MIRROR,
+} from "@/desktop/shared/doc-origins";
 import { ERROR_CODES, fail, isErrorCode } from "@/desktop/shared/errors";
 import {
   arr,
@@ -201,6 +204,25 @@ describe("contract", () => {
       false,
     );
     expect(g({ docId, record, owner: "w1" })).toBe(false);
+  });
+
+  test("SEC-011: a renderer appends only local and migration, and schemaTo only on migration", () => {
+    const docId = crypto.randomUUID();
+    const g = calls["doc.append"].req;
+    const update = new Uint8Array(2);
+    expect(g({ docId, record: { origin: "local", update } })).toBe(true);
+    expect(g({ docId, record: { origin: "migration", update } })).toBe(true);
+    expect(
+      g({ docId, record: { origin: "migration", update, schemaTo: 2 } }),
+    ).toBe(true);
+    expect(g({ docId, record: { origin: "restore", update } })).toBe(false);
+    expect(g({ docId, record: { origin: "remote", update } })).toBe(false);
+    expect(g({ docId, record: { origin: "local", update, schemaTo: 2 } })).toBe(
+      false,
+    );
+    expect([...RENDERER_ORIGINS]).toEqual(["local", "migration"]);
+    for (const origin of RENDERER_ORIGINS)
+      expect(UPDATE_ORIGINS_MIRROR).toContain(origin);
   });
 
   test("the origins mirror lib/platform/doc-store.ts", () => {

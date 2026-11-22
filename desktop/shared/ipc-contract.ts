@@ -12,7 +12,7 @@
  * Channels this PR serves (P2.5). Later PRs add `index.*`, `dialog.*`,
  * `prefs.*` and `asset.*` here, each with its guard.
  */
-import { UPDATE_ORIGINS_MIRROR } from "./doc-origins";
+import { RENDERER_ORIGINS } from "./doc-origins";
 import type { ErrorCode, IpcResult } from "./errors";
 import {
   arr,
@@ -47,13 +47,23 @@ export const IPC_BUILD: string =
 
 const docId = obj({ docId: uuid });
 
-const appendRecord = obj({
-  origin: oneOf(UPDATE_ORIGINS_MIRROR),
+const appendRecordShape = obj({
+  origin: oneOf(RENDERER_ORIGINS),
   update: bytes(MAX_BATCH_BYTES),
   title: opt(str(MAX_TITLE_LENGTH)),
   snippet: opt(str(MAX_SNIPPET_LENGTH)),
   schemaTo: opt(int(0, MAX_DOC_SCHEMA)),
 });
+
+/**
+ * One renderer append: an origin the renderer produces (SEC-011), and a
+ * `schemaTo` only on a migration batch, the only kind `local-session`
+ * gives one (`batcher.push("migration", …, schemaTo)`).
+ */
+const appendRecord = ((value: unknown) =>
+  appendRecordShape(value) &&
+  (value.schemaTo === undefined ||
+    value.origin === "migration")) as typeof appendRecordShape;
 
 /** renderer → main (`ipcRenderer.invoke`). `res` documents the result type. */
 export const calls = {
