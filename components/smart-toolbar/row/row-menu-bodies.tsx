@@ -1,10 +1,12 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import {
   DropdownMenuCheckboxItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuReason,
@@ -110,19 +112,9 @@ export function AlignMenuItems({
   );
 }
 
-/** Toggles shown as checkbox items, then plain commands (spec §4.1 ⋯). */
+/** Text group: toggles as checkbox items, then plain commands (spec §9.2). */
 const TOGGLES = ["mark.superscript", "mark.subscript", "mark.inlineCode"];
-/**
- * Later tracks' ids are listed here and skipped until they land
- * (contract §3.2): Paint format and All actions… (E), Forget my choices
- * (D2).
- */
-const COMMANDS = [
-  "format.clear",
-  "repeat.copy",
-  "memory.forget",
-  "palette.open",
-];
+const TEXT_COMMANDS = ["format.clear", "repeat.copy"];
 
 const THEME_LABELS: Record<ThemePreference, string> = {
   system: "System",
@@ -172,6 +164,10 @@ function AppearanceMenu() {
   );
 }
 
+/** The check in the 16 px leading slot, where other rows keep their icon. */
+const LEADING_CHECK =
+  "*:data-[slot=dropdown-menu-checkbox-item-indicator]:right-auto *:data-[slot=dropdown-menu-checkbox-item-indicator]:left-1.5";
+
 const SIMPLE_TOOLBAR = "view.simpleToolbar";
 
 /**
@@ -191,6 +187,7 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
   return (
     <DropdownMenuCheckboxItem
       inset
+      className={LEADING_CHECK}
       checked={density === "simple"}
       closeOnClick
       disabled={reason !== undefined}
@@ -206,10 +203,29 @@ function DensityMenuItem({ editor }: { editor: Editor }) {
   );
 }
 
+/** A labelled group (spec §9.2): `role="group"` with a visible heading. */
+function MenuGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenuGroup aria-label={label}>
+      <DropdownMenuLabel>{label}</DropdownMenuLabel>
+      {children}
+    </DropdownMenuGroup>
+  );
+}
+
+const hasAction = (id: string) => editorActions.has(id);
+
 /**
- * ⋯ More formatting: superscript, subscript, inline code, clear
- * formatting, then D2's and E's entries once registered, then the view
- * settings: Simplified toolbar and Appearance.
+ * ⋯ More formatting (spec §9.2): Text (superscript, subscript, inline code,
+ * clear formatting, paint format), View (Simplified toolbar, Appearance),
+ * Help (All actions…), then Forget my choices on its own. Every row keeps
+ * the 16 px leading slot, so the labels line up.
  */
 export function OverflowMenuItems({
   editor,
@@ -218,31 +234,46 @@ export function OverflowMenuItems({
   editor: Editor;
   onPicked: () => void;
 }) {
-  const commands = COMMANDS.filter((id) => editorActions.has(id));
+  const plain = (id: string) => (
+    <ActionMenuItem
+      key={id}
+      id={id}
+      editor={editor}
+      checkColumn
+      onPicked={onPicked}
+    />
+  );
   return (
     <>
-      {TOGGLES.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkbox
-          onPicked={onPicked}
-        />
-      ))}
+      <MenuGroup label="Text">
+        {TOGGLES.map((id) => (
+          <ActionMenuItem
+            key={id}
+            id={id}
+            editor={editor}
+            checkbox
+            onPicked={onPicked}
+          />
+        ))}
+        {TEXT_COMMANDS.filter(hasAction).map(plain)}
+      </MenuGroup>
       <DropdownMenuSeparator />
-      {commands.map((id) => (
-        <ActionMenuItem
-          key={id}
-          id={id}
-          editor={editor}
-          checkColumn
-          onPicked={onPicked}
-        />
-      ))}
-      <DropdownMenuSeparator />
-      <DensityMenuItem editor={editor} />
-      <AppearanceMenu />
+      <MenuGroup label="View">
+        <DensityMenuItem editor={editor} />
+        <AppearanceMenu />
+      </MenuGroup>
+      {hasAction("palette.open") ? (
+        <>
+          <DropdownMenuSeparator />
+          <MenuGroup label="Help">{plain("palette.open")}</MenuGroup>
+        </>
+      ) : null}
+      {hasAction("memory.forget") ? (
+        <>
+          <DropdownMenuSeparator />
+          {plain("memory.forget")}
+        </>
+      ) : null}
     </>
   );
 }

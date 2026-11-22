@@ -9,6 +9,16 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Row ⋯ menu in three labelled groups (BQ4)
+
+The row's ⋯ menu is now Text (Superscript, Subscript, Inline code, Clear
+formatting, Paint format), View (Simplified toolbar, Appearance) and Help
+(All actions…), with "Forget my choices…" alone at the end. Each group has a
+visible heading and `role="group"` with the same label, and every row keeps a
+16 px leading slot so the labels line up (Simplified toolbar shows its check
+there). Nothing is added or removed. Page width follows with the preferences
+work.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for

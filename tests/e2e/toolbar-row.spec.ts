@@ -482,6 +482,56 @@ test.describe("menu focus", () => {
   });
 });
 
+test.describe("more menu groups", () => {
+  test("Text, View and Help groups, then Forget my choices alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    await toolbarButton(page, "More formatting").click();
+    const more = page.getByRole("menu", { name: "More formatting" });
+    await expect(more).toBeVisible();
+    const groups = more.getByRole("group");
+    await expect(groups).toHaveCount(3);
+    const names = await groups.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("aria-label")),
+    );
+    expect(names).toEqual(["Text", "View", "Help"]);
+    const labelsOf = (name: string) =>
+      more
+        .getByRole("group", { name, exact: true })
+        .locator('[role^="menuitem"]')
+        .evaluateAll((els) =>
+          els.map(
+            (el) =>
+              el.querySelector("span:not([data-slot])")?.textContent?.trim() ??
+              "",
+          ),
+        );
+    expect(await labelsOf("Text")).toEqual([
+      "Superscript",
+      "Subscript",
+      "Inline code",
+      "Clear formatting",
+      "Paint format",
+    ]);
+    expect(await labelsOf("View")).toEqual([
+      "Simplified toolbar",
+      "Appearance",
+    ]);
+    expect(await labelsOf("Help")).toEqual(["All actions…"]);
+    // The last item is outside every group.
+    const last = more.locator('[role^="menuitem"]').last();
+    await expect(last).toContainText("Forget my choices");
+    expect(
+      await last.evaluate((el) => el.closest('[role="group"]') === null),
+    ).toBe(true);
+    for (const heading of ["Text", "View", "Help"]) {
+      await expect(more.getByText(heading, { exact: true })).toBeVisible();
+    }
+  });
+});
+
 test.describe("context slot", () => {
   test("follows the selection and hides from AT when empty", async ({
     page,
