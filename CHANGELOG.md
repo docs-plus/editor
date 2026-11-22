@@ -14,12 +14,14 @@ since the previous tag.
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A20):
 Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. The editor chunk
-group does not grow: 394,020 B gz against 394,018 B on `main` at `84a9458`
-(+2 B, hash churn; 393,995 B with P2–P4 under it at `60bc13b`). The
+group does not grow: 394,021 B gz against 394,018 B on `main` at `84a9458`
+(+3 B of chunk-name churn; 393,995 B with P2–P4 under it at `60bc13b`). The
 per-item lift behind the text styles is injected from the lazy chunks. The
-bubble chunk is 14,411 B gz (9,798 B on `main`), the menu chunk that holds
-Turn into 6,077 B gz (3,173 B), the colour chunk 6,583 B gz and the "/"
-chunk 7,674 B gz (7,300 B with P2–P4).
+"/" chunk is back under its 7 KB budget, 7,087 B gz by its own test
+(`SLASH_BUDGET=1`; 7,334 B on the P4 tip): the phone Insert sheet now gets
+the "/" items at load instead of importing them. The bubble chunk is
+14,411 B gz (9,798 B on `main`), the menu chunk that holds Turn into
+6,077 B gz (3,173 B) and the colour chunk 6,583 B gz.
 
 #### Added
 
@@ -37,9 +39,9 @@ chunk 7,674 B gz (7,300 B with P2–P4).
   wherever they run (Turn into, the palette, the "/" menu, the phone's
   Style rows, the shortcuts); unselected items and lines stay in their list
   or quote, and a range across a paragraph and a list converts every
-  block. The lift loads with the bubble (on idle), the menus, "/", the
-  phone bar or the palette; before any of them, a style shortcut in a list
-  restyles in place, as before.
+  block. The lift loads with the bubble (on idle), the menus, the phone
+  bar or the palette; before any of them, a style shortcut or a "/" pick
+  in a list restyles in place, as before.
 - **Turn into:** after select all it converts everything but the title
   ("The title stays a heading."); Code block and Quote lift list items and
   quote lines first; Code block over formatting says "Formatting
@@ -84,6 +86,12 @@ chunk 7,674 B gz (7,300 B with P2–P4).
   (`prefers-reduced-motion` or `data-motion="reduce"`).
 
 #### Fixed
+
+- **RTL:** the "/" menu's Markdown hint caps sit at the row's inline end
+  again (they had drifted next to the labels); the row ⋯ menu's rows line
+  up; menu shortcut glyphs read left to right; the phone Insert sheet keeps
+  a note ("3 × 3") next to its label, so it no longer reads as the next
+  column's.
 
 - **Bubble:** clicking 🔗 and pasting or typing a URL at once no longer
   replaces the selected words: focus moves to the link field in the click
