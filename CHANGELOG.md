@@ -9,9 +9,10 @@ since the previous tag.
 
 ## [Unreleased]
 
-### Docs: smart chips for document links (proposed)
+### Docs: smart chips for document links
 
-A design proposal, pending owner approval. Nothing in the app changes.
+A design, approved by the owner on 2026-11-22 (C1–C9). Nothing in the app
+changes.
 
 #### Added
 
@@ -26,6 +27,18 @@ A design proposal, pending owner approval. Nothing in the app changes.
   `docs/design/2026-11-22-smart-chips-prototype.html`, with an Accessibility
   panel showing each element's role, name and state, and 39 headless
   screenshots in `docs/design/2026-11-22-smart-chips/`.
+
+#### Changed
+
+- **Polish round (2026-11-22):** one accessibility-first pass, C1–C9
+  unchanged. The states follow the approved linking decisions Q4–Q7: one
+  Not available state, `FileMinus` for In Trash, and a card that is the Q7
+  preview, whose default focus never lands on Remove Link. The suffix is
+  inline (IME-safe, exact names), chip paint fits a 15/1.15 line, the card
+  and picker reflow at 320 px, and paste never writes the key. It also adds
+  reading-mode preview keys, undo-step and announcement rules, and the tests
+  that go with them. The screenshots are re-taken (57 numbered, Chromium,
+  Firefox and WebKit) with 11 before/after pairs.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
