@@ -191,6 +191,65 @@ describe("openLibraryDb: versions and old tabs (§2.4)", () => {
     expect(library.closed).toBe(true);
   });
 
+  it("still closes, and never rejects, when a close hook throws synchronously", async () => {
+    const browser = createFakeBrowser();
+    const events: LibraryEvent[] = [];
+    const library = await browser.open({ onEvent: (e) => events.push(e) });
+    library.addCloseHook(() => {
+      throw new Error("hook failed before returning a promise");
+    });
+    await expect(library.handleVersionChange()).resolves.toBeUndefined();
+    expect(library.closed).toBe(true);
+    expect(events).toEqual(["library_reload"]);
+  });
+
+  it("closes after CLOSE_HOOK_TIMEOUT_MS when a close hook never settles", async () => {
+    const browser = createFakeBrowser();
+    const events: LibraryEvent[] = [];
+    const library = await browser.open({
+      closeHookTimeoutMs: 20,
+      onEvent: (e) => events.push(e),
+    });
+    library.addCloseHook(() => new Promise<void>(() => {}));
+    const newer = rawOpen(browser.factory, 2);
+    await until(() => library.closed);
+    expect(library.closed).toBe(true);
+    expect(events).toEqual(["library_reload"]);
+    // The other tab's upgrade went through.
+    (await newer).close();
+  });
+
+  it("ends the blocked notice when a blocked open then fails", async () => {
+    const browser = createFakeBrowser();
+    const request = {} as {
+      onblocked?: () => void;
+      onerror?: () => void;
+      error?: DOMException;
+    };
+    const factory = {
+      open: () => {
+        setTimeout(() => {
+          request.onblocked?.();
+          request.error = new DOMException("aborted", "AbortError");
+          request.onerror?.();
+        }, 0);
+        return request;
+      },
+    } as unknown as IDBFactory;
+    const events: LibraryEvent[] = [];
+    await expect(
+      openLibraryDb({
+        factory,
+        keyRange: browser.keyRange,
+        onEvent: (e) => events.push(e),
+      }),
+    ).rejects.toMatchObject({ code: "library_unavailable" });
+    expect(events).toEqual([
+      "library_upgrade_blocked",
+      "library_upgrade_unblocked",
+    ]);
+  });
+
   it("flushes issued writes, closes and asks for a reload when another tab upgrades", async () => {
     const browser = createFakeBrowser();
     const events: LibraryEvent[] = [];

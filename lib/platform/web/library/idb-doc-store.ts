@@ -362,6 +362,11 @@ export class IdbDocStore implements DocStore {
     this.unregisterCloseHook = null;
   }
 
+  /**
+   * Waits for every transaction this store already issued to settle. It
+   * doesn't cover batches the batcher still holds: those are the session's
+   * to drain (§2.2 As built).
+   */
   async flush(): Promise<void> {
     await Promise.allSettled([...this.writes]);
   }

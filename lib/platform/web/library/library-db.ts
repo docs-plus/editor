@@ -10,12 +10,17 @@
  *   Once that tab lets go and the open succeeds, `library_upgrade_unblocked`
  *   clears it.
  * - `onversionchange`: a newer bundle in another tab wants to upgrade. The
- *   close hooks run first: `IdbDocStore`'s waits only for the transactions
- *   it already issued, so batches still queued in the batcher are covered
- *   only when the composition root (W4) registers the session's flush as a
- *   hook too. Then the connection closes for good and `library_reload` asks
- *   for a reload. Writes after that reject with `library_unavailable`,
- *   which is retryable, so the batcher keeps them until the reload.
+ *   close hooks run first, for at most `CLOSE_HOOK_TIMEOUT_MS`:
+ *   `IdbDocStore`'s waits only for the transactions it already issued, so
+ *   batches still queued in the batcher are covered only when the
+ *   composition root (W4) registers the session's drain as a hook too.
+ *   Then the connection closes for good and `library_reload` asks for a
+ *   reload. There is no reopen: a reload is the only recovery. Writes after
+ *   that reject with `library_unavailable`, which is retryable, so the
+ *   batcher keeps them, and the `beforeunload` guard stays armed, until the
+ *   reload.
+ * - `onblocked` then a failed open: `library_upgrade_unblocked` still ends
+ *   the notice, and the open rejects with `library_unavailable`.
  * - A database or `format_version` newer than this bundle knows opens
  *   read-only (`library_too_new`): reads work, writes reject.
  * - No IndexedDB, or an `open()` that fails: `library_unavailable`. There
@@ -54,9 +59,19 @@ export type OpenLibraryOptions = {
   name?: string;
   /** Default {@link LIBRARY_DB_VERSION}; tests open a later one to upgrade. */
   version?: number;
+  /** Default {@link CLOSE_HOOK_TIMEOUT_MS}. */
+  closeHookTimeoutMs?: number;
   now?: () => number;
   onEvent?: (event: LibraryEvent) => void;
 };
+
+/**
+ * How long an upgrade in another tab waits for this tab's close hooks. A
+ * drain stuck in a retry backoff (quota: 2 s → 60 s) must not hold the
+ * other tab's upgrade forever; what didn't drain stays queued in memory
+ * until the reload (§2.2 As built).
+ */
+export const CLOSE_HOOK_TIMEOUT_MS = 5_000;
 
 /** `strict` for content and index writes, `relaxed` for caches (§2.3). */
 export type WriteDurability = "strict" | "relaxed";
@@ -100,6 +115,7 @@ export class LibraryDb {
     readonly readOnly: boolean,
     private readonly keyRange: typeof IDBKeyRange,
     private readonly onEvent: (event: LibraryEvent) => void,
+    private readonly closeHookTimeoutMs: number = CLOSE_HOOK_TIMEOUT_MS,
     /**
      * `meta.eviction_sentinel` as read at open (the `library_id`), or null
      * when missing. W6 compares it with the `localStorage` marker
@@ -107,7 +123,7 @@ export class LibraryDb {
      */
     readonly evictionSentinel: string | null = null,
   ) {
-    // Never rejects: hooks are settled and a throwing listener is caught.
+    // Never rejects: hooks are settled, a throwing listener is caught.
     db.onversionchange = () => void this.handleVersionChange();
     // The browser closed it (site data cleared, say): writes now reject.
     db.onclose = () => {
@@ -121,7 +137,10 @@ export class LibraryDb {
 
   /**
    * Registers work to finish before an upgrade in another tab closes this
-   * connection (a store's queued writes). Returns the unregister function.
+   * connection. `IdbDocStore` registers its `flush()`, which covers only
+   * transactions it already issued; the composition root (W4) must register
+   * the session's batcher drain for batches still queued. Hooks get
+   * {@link CLOSE_HOOK_TIMEOUT_MS} together. Returns the unregister function.
    */
   addCloseHook(hook: () => Promise<void>): () => void {
     this.closeHooks.add(hook);
@@ -223,12 +242,21 @@ export class LibraryDb {
   }
 
   /**
-   * @internal Runs the close hooks, closes and asks for a reload (another
-   * tab upgrades). Never rejects, so callers may leave it floating.
+   * @internal Runs the close hooks (at most {@link CLOSE_HOOK_TIMEOUT_MS}),
+   * closes and asks for a reload (another tab upgrades). Never rejects,
+   * even when a hook throws synchronously, so callers may leave it
+   * floating.
    */
   async handleVersionChange(): Promise<void> {
     if (this.closedFlag) return;
-    await Promise.allSettled([...this.closeHooks].map((hook) => hook()));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.allSettled([...this.closeHooks].map(async (hook) => hook())),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, this.closeHookTimeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
     this.close();
     try {
       this.onEvent("library_reload");
@@ -288,7 +316,11 @@ function openRequest(
       if (blocked) onEvent("library_upgrade_unblocked");
       resolve(request.result);
     };
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      // The notice ends either way; `library_unavailable` follows.
+      if (blocked) onEvent("library_upgrade_unblocked");
+      reject(request.error);
+    };
   });
 }
 
@@ -386,7 +418,14 @@ export async function openLibraryDb(
   }
 
   if (tooNew) onEvent("library_too_new");
-  const library = new LibraryDb(db, tooNew, keyRange, onEvent, sentinel);
+  const library = new LibraryDb(
+    db,
+    tooNew,
+    keyRange,
+    onEvent,
+    options.closeHookTimeoutMs,
+    sentinel,
+  );
   // Never rejects (see `handleVersionChange`).
   if (upgradedMeanwhile) void library.handleVersionChange();
   return library;
