@@ -57,6 +57,18 @@ describe("CI workflow", () => {
     );
   });
 
+  it("starts a full run when a draft is marked ready for review", () => {
+    const pullRequest = workflow.on.pull_request as { types?: string[] };
+    expect(pullRequest.types).toEqual(
+      expect.arrayContaining([
+        "opened",
+        "synchronize",
+        "reopened",
+        "ready_for_review",
+      ]),
+    );
+  });
+
   it("cancels superseded runs on pull requests only, never on main", () => {
     expect(workflow.concurrency["cancel-in-progress"]).toBe(
       `\${{ github.event_name == 'pull_request' }}`,
@@ -121,45 +133,140 @@ describe("Verdict step", () => {
   ) as Job;
   const script = runOf(gate, "Verdict");
 
-  const verdict = (
-    CHANGES: string,
-    RUN_E2E: string,
-    SHARDS: string,
-    PERF: string,
-  ) =>
+  interface VerdictCase {
+    label: string;
+    event: string;
+    changes: string;
+    e2e: string;
+    reason: string;
+    shards: string;
+    perf: string;
+    exit: number;
+  }
+
+  const verdict = (c: VerdictCase) =>
     Bun.spawnSync(["bash", "-e", "-c", script], {
-      env: { PATH: process.env.PATH ?? "", CHANGES, RUN_E2E, SHARDS, PERF },
+      env: {
+        PATH: process.env.PATH ?? "",
+        EVENT: c.event,
+        CHANGES: c.changes,
+        RUN_E2E: c.e2e,
+        REASON: c.reason,
+        SHARDS: c.shards,
+        PERF: c.perf,
+      },
     }).exitCode;
 
-  // [label, changes result, e2e output, shards result, perf result, exit]
-  const cases: [string, string, string, string, string, number][] = [
-    ["all passed", "success", "true", "success", "success", 0],
-    ["docs only", "success", "false", "skipped", "skipped", 0],
-    ["a shard failed", "success", "true", "failure", "success", 1],
-    ["perf failed", "success", "true", "success", "failure", 1],
-    ["shards cancelled", "success", "true", "cancelled", "success", 1],
-    [
-      "suites skipped though required",
-      "success",
-      "true",
-      "skipped",
-      "skipped",
-      1,
-    ],
-    ["changes job failed", "failure", "", "skipped", "skipped", 1],
+  const ran = { e2e: "true", reason: "", shards: "success", perf: "success" };
+  const skipped = { shards: "skipped", perf: "skipped" };
+  const pr = { event: "pull_request", changes: "success" };
+  const cases: VerdictCase[] = [
+    { label: "all passed", ...pr, ...ran, exit: 0 },
+    {
+      label: "all passed in the merge queue",
+      ...ran,
+      ...pr,
+      event: "merge_group",
+      exit: 0,
+    },
+    { label: "all passed on main", ...ran, ...pr, event: "push", exit: 0 },
+    {
+      label: "draft skips",
+      ...pr,
+      e2e: "false",
+      reason: "draft",
+      ...skipped,
+      exit: 0,
+    },
+    {
+      label: "docs-only skips",
+      ...pr,
+      e2e: "false",
+      reason: "docs-only",
+      ...skipped,
+      exit: 0,
+    },
+    { label: "a shard failed", ...pr, ...ran, shards: "failure", exit: 1 },
+    { label: "perf failed", ...pr, ...ran, perf: "failure", exit: 1 },
+    { label: "shards cancelled", ...pr, ...ran, shards: "cancelled", exit: 1 },
+    { label: "ready pull request skipped", ...pr, ...ran, ...skipped, exit: 1 },
+    {
+      label: "skip with no reason",
+      ...pr,
+      e2e: "false",
+      reason: "",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "skip with an unknown reason",
+      ...pr,
+      e2e: "false",
+      reason: "other",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "draft skip in the merge queue",
+      ...pr,
+      event: "merge_group",
+      e2e: "false",
+      reason: "draft",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "draft skip on main",
+      ...pr,
+      event: "push",
+      e2e: "false",
+      reason: "draft",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "docs-only skip on main",
+      ...pr,
+      event: "push",
+      e2e: "false",
+      reason: "docs-only",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "skipped in a manual run",
+      ...pr,
+      event: "workflow_dispatch",
+      e2e: "false",
+      reason: "draft",
+      ...skipped,
+      exit: 1,
+    },
+    {
+      label: "changes job failed",
+      ...pr,
+      changes: "failure",
+      e2e: "",
+      reason: "",
+      ...skipped,
+      exit: 1,
+    },
   ];
 
-  it.each(cases)("%s", (_label, changes, runE2e, shards, perf, exitCode) => {
-    expect(verdict(changes, runE2e, shards, perf)).toBe(exitCode);
+  it.each(cases)("$label", (c) => {
+    expect(verdict(c)).toBe(c.exit);
   });
 });
 
-describe("docs-only decision", () => {
+describe("browser suites decision", () => {
   const script = runOf(jobs.changes, "Decide");
   const dir = mkdtempSync(path.join(tmpdir(), "ci-decide-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const RUN = "e2e=true skip-reason=";
+  const DOCS_ONLY = "e2e=false skip-reason=docs-only";
+  const DRAFT = "e2e=false skip-reason=draft";
 
-  const decide = (files: string[], event = "pull_request") => {
+  const decide = (files: string[], event = "pull_request", draft = "false") => {
     const list = path.join(dir, "files.txt");
     const output = path.join(dir, "output.txt");
     writeFileSync(list, files.map((file) => `${file}\n`).join(""));
@@ -168,38 +275,52 @@ describe("docs-only decision", () => {
       env: {
         PATH: process.env.PATH ?? "",
         EVENT: event,
+        DRAFT: draft,
         FILES: list,
         GITHUB_OUTPUT: output,
       },
     });
     expect(result.exitCode).toBe(0);
-    return readFileSync(output, "utf8").trim();
+    return readFileSync(output, "utf8").trim().split("\n").join(" ");
   };
 
   it("skips for docs and Markdown only", () => {
-    expect(decide(["docs/operations/deploy-runbook.md"])).toBe("e2e=false");
+    expect(decide(["docs/operations/deploy-runbook.md"])).toBe(DOCS_ONLY);
     expect(decide(["CHANGELOG.md", "tests/TESTING.md", "README.md"])).toBe(
-      "e2e=false",
+      DOCS_ONLY,
     );
-    expect(decide(["docs/superpowers/specs/diagram.png"])).toBe("e2e=false");
+    expect(decide(["docs/superpowers/specs/diagram.png"])).toBe(DOCS_ONLY);
   });
 
   it("runs when any other file changes", () => {
-    expect(decide(["CHANGELOG.md", "lib/utils.ts"])).toBe("e2e=true");
-    expect(decide([".github/workflows/ci.yml"])).toBe("e2e=true");
-    expect(decide(["docs.ts"])).toBe("e2e=true");
-    expect(decide(["README.mdx"])).toBe("e2e=true");
+    expect(decide(["CHANGELOG.md", "lib/utils.ts"])).toBe(RUN);
+    expect(decide([".github/workflows/ci.yml"])).toBe(RUN);
+    expect(decide(["docs.ts"])).toBe(RUN);
+    expect(decide(["README.mdx"])).toBe(RUN);
   });
 
   it("runs for desktop changes, Markdown included", () => {
-    expect(decide(["desktop/main/index.ts"])).toBe("e2e=true");
-    expect(decide(["desktop/README.md"])).toBe("e2e=true");
+    expect(decide(["desktop/main/index.ts"])).toBe(RUN);
+    expect(decide(["desktop/README.md"])).toBe(RUN);
+  });
+
+  it("skips for a draft, whatever it changes", () => {
+    expect(decide(["lib/utils.ts"], "pull_request", "true")).toBe(DRAFT);
+    expect(decide(["desktop/main/index.ts"], "pull_request", "true")).toBe(
+      DRAFT,
+    );
+    expect(decide([], "pull_request", "true")).toBe(DRAFT);
+  });
+
+  it("never skips outside pull requests, even with a draft flag", () => {
+    expect(decide(["lib/utils.ts"], "merge_group", "true")).toBe(RUN);
+    expect(decide(["lib/utils.ts"], "push", "true")).toBe(RUN);
   });
 
   it("runs for an empty list and outside pull requests", () => {
-    expect(decide([])).toBe("e2e=true");
-    expect(decide(["docs/x.md"], "push")).toBe("e2e=true");
-    expect(decide(["docs/x.md"], "merge_group")).toBe("e2e=true");
-    expect(decide(["docs/x.md"], "workflow_dispatch")).toBe("e2e=true");
+    expect(decide([])).toBe(RUN);
+    expect(decide(["docs/x.md"], "push")).toBe(RUN);
+    expect(decide(["docs/x.md"], "merge_group")).toBe(RUN);
+    expect(decide(["docs/x.md"], "workflow_dispatch")).toBe(RUN);
   });
 });
