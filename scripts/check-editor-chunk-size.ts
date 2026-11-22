@@ -30,18 +30,11 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * The D23 editor-chunk ledger (desktop details spec §1 rule 5): every line
  * the desktop, library and v1 feature work may add to this chunk, each
  * measured in its PR. While D41's conditional 80 B undo line is
- * unconfirmed the total is 1,855 B (1,580 B, plus P2.1c's 275 B sandbox
- * DocSession line, K14); if spike M18 confirms it, this becomes 1,935 B
- * with no further approval.
- *
- * Measured spend outside the table: the web link allowlist (security fix,
- * `isWebLink` and `LinkPolicyHyperlink`) adds 162 B gz against main 1548d5e
- * (clean builds, same `NEXT_PUBLIC_BUILD_ID`, CSS unchanged). It may be
- * counted against LK1's 60 B `linkHost` line, which LK1 measures at +41 B:
- * together 203 B, 143 B over that line. The constant below is unchanged;
- * the overage is the coordinator's call.
+ * unconfirmed the total is 2,053 B (1,580 B, plus P2.1c's 275 B sandbox
+ * DocSession line, K14, and #134's 198 B status-chip boundary line); if
+ * spike M18 confirms it, this becomes 2,133 B with no further approval.
  */
-export const EDITOR_CHUNK_LEDGER_BYTES = 1_855;
+export const EDITOR_CHUNK_LEDGER_BYTES = 2_053;
 /**
  * The fence (D23): `main` plus the ledger, so unrelated work can't spend
  * the ledger's bytes. Raising it needs an amendment to that rule.
