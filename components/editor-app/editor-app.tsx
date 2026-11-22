@@ -29,9 +29,10 @@ const UNREACHABLE_AFTER_MS = 10_000;
  */
 const loadDocumentEditor = () =>
   Promise.all([
-    // The sandbox wrapper: the editor plus its DocSession, in one lazy chunk.
+    // The sandbox wrapper: the editor, its DocSession and its status chip,
+    // in one lazy chunk.
     import("@/components/editor-app/sandbox-document-editor"),
-    // The document text's page rules: only the editor shows them.
+    // The page rules the first paint doesn't need: the editor waits for them.
     import("@/components/prefs/page-text-styles"),
   ]).then(([module, styles]) =>
     styles.ready().then(() => module.SandboxDocumentEditor),

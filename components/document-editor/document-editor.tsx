@@ -4,6 +4,7 @@ import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
 import {
   type ComponentProps,
+  type ReactNode,
   lazy,
   Profiler,
   Suspense,
@@ -62,7 +63,6 @@ import {
   FilterBar,
   useHeadingFilter,
 } from "@/components/tiptap-ui/heading-filter";
-import { CollabStatusGroup } from "@/components/tiptap-ui/user-identity-button";
 import { TocSidebar } from "@/components/toc-sidebar/toc-sidebar";
 import { OutlinePanel } from "@/components/toc-sidebar/outline-panel";
 import { useOutlineOpen } from "@/components/toc-sidebar/use-outline-open";
@@ -104,6 +104,12 @@ interface DocumentEditorProps {
    * by the page frame (`PageFrame`, preferences design §5.9).
    */
   outlineOverlay?: boolean;
+  /**
+   * The connection and identity chip, chosen by the composition root (the
+   * web sandbox passes `CollabStatusGroup`); shown only with a provider. The
+   * editor never imports it: it reads `collab-session` (architecture §3.3).
+   */
+  statusChip?: ReactNode;
 }
 
 type DocumentEditorContentProps = DocumentEditorProps & {
@@ -170,6 +176,7 @@ function DocumentEditorContent({
   onPlaygroundRegenerate,
   readOnly,
   outlineOverlay = false,
+  statusChip,
   rejectedReason,
   serverSynced,
 }: DocumentEditorContentProps) {
@@ -463,7 +470,7 @@ function DocumentEditorContent({
           />
         )}
         {/* Its connection state opens the shared socket: only with a provider. */}
-        {provider && <CollabStatusGroup />}
+        {provider && statusChip}
       </EditorContext.Provider>
     </main>
   );
@@ -477,6 +484,7 @@ export function DocumentEditor({
   onPlaygroundRegenerate,
   readOnly,
   outlineOverlay,
+  statusChip,
 }: DocumentEditorProps = {}) {
   const docId = documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
@@ -506,6 +514,7 @@ export function DocumentEditor({
       onPlaygroundRegenerate={onPlaygroundRegenerate}
       readOnly={readOnly}
       outlineOverlay={outlineOverlay}
+      statusChip={statusChip}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />
