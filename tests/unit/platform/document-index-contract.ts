@@ -576,7 +576,7 @@ export function describeLibraryIndexContract(
         const one = index.create({ title: "One" });
         const two = index.create({ title: "Two" });
         if (!one || !two) throw new Error("create was refused");
-        expect(one.linkKey).toMatch(/^[0-9a-f]{32}$/);
+        expect(/^[0-9a-f]{32}$/.test(one.linkKey ?? "")).toBe(true);
         expect(two.linkKey).not.toBe(one.linkKey);
         expect(doc(one.id)?.linkKey).toBe(one.linkKey);
       });
