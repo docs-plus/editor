@@ -131,6 +131,13 @@ function templateItem(
   };
 }
 
+/**
+ * Whether a Markdown shortcut converts only after a space ("## ", "> ",
+ * "``` "): all of the menu's hints but the divider's "---", which
+ * converts on its last dash. The footer tip says it (spec §8.5).
+ */
+export const hintNeedsSpace = (hint: string): boolean => !/^-+$/.test(hint);
+
 /** Up to this many recent insert kinds lead the empty query (A19). */
 const MAX_SUGGESTED = 3;
 

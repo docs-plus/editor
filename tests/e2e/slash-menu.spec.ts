@@ -88,6 +88,8 @@ async function expectMenuAxeClean(page: Page) {
   await expectNoSeriousA11yViolations(page, [".tiptap"]);
 }
 const editorDom = (page: Page) => page.locator(".tiptap").first();
+const ghost = (page: Page) => page.locator("[data-slash-ghost]");
+const footerTip = (page: Page) => page.locator(`${MENU} [data-slash-tip]`);
 const options = (page: Page) => page.locator(`${MENU} [role="option"]`);
 
 /** The caret's block: type, heading level, text and caret offset. */
@@ -514,6 +516,125 @@ test.describe("slash menu", () => {
     });
     // A text style lifts the block out of the quote, as the row's does.
     expect(await html()).toMatch(/<h3[^>]*>quoted <\/h3>/);
+  });
+
+  test("the ghost hint shows at an empty line's end, not mid-line", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toHaveText("Type to search");
+    await expect(ghost(page)).toBeVisible();
+    // Just after the "/", on its line, in the muted colour.
+    const geometry = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      const el = document.querySelector<HTMLElement>("[data-slash-ghost]");
+      if (!view || !el) return null;
+      const caret = view.coordsAtPos(view.state.selection.from);
+      const box = el.getBoundingClientRect();
+      return {
+        dx: box.left - caret.left,
+        dy: box.top - caret.top,
+        hidden: el.getAttribute("aria-hidden"),
+      };
+    });
+    expect(geometry?.hidden).toBe("true");
+    expect(Math.abs(geometry?.dx ?? 99)).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry?.dy ?? 99)).toBeLessThanOrEqual(2);
+    await page.keyboard.type("h");
+    await expect(ghost(page)).toBeHidden();
+    await page.keyboard.press("Backspace");
+    await expect(ghost(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(ghost(page)).toHaveCount(0);
+
+    // Mid-line: the footer says it instead.
+    await typeAtEnd(page, "one two");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft");
+    await page.keyboard.type("/");
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeHidden();
+    await expect(footerTip(page)).toHaveText("Type to filter");
+  });
+
+  test("the footer tip follows the active row, and Close leaves '/' as text", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(menu(page)).toBeVisible();
+    expect((await menu(page).boundingBox())?.width).toBe(320);
+    await expect(footerTip(page)).toHaveText("↑ ↓ to move · ↵ to insert");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText("↑ ↓ to move · ↵ to insert");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText("Type # then space for Heading 1");
+    await page.keyboard.press("ArrowDown");
+    await expect(footerTip(page)).toHaveText(
+      "Type ## then space for Heading 2",
+    );
+    await page.keyboard.press("End");
+    await page.keyboard.type("div");
+    await expect(footerTip(page)).toHaveText("Type --- for Divider");
+
+    await menu(page).getByRole("button", { name: /Close/ }).click();
+    await expect(menu(page)).toHaveCount(0);
+    expect(await editorFocused(page)).toBe(true);
+    expect(await caretBlock(page)).toEqual({
+      type: "paragraph",
+      level: null,
+      text: "/div",
+      offset: 4,
+    });
+  });
+
+  test("a New badge shows before its date and not after first use", async ({
+    page,
+  }) => {
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    const until = [
+      tomorrow.getFullYear(),
+      String(tomorrow.getMonth() + 1).padStart(2, "0"),
+      String(tomorrow.getDate()).padStart(2, "0"),
+    ].join("-");
+    // Dev-only override of the (empty) shipped table.
+    await page.addInitScript((date) => {
+      (window as { __SLASH_NEW_UNTIL?: unknown }).__SLASH_NEW_UNTIL = {
+        "insert.divider": date,
+      };
+    }, until);
+    await openDoc(page);
+    await typeAtEnd(page, "/div");
+    const divider = options(page).filter({ hasText: "Divider" });
+    await expect(divider).toHaveAccessibleName(/^Divider, new/);
+    await expect(divider.locator("[data-slash-new]")).toHaveText("New");
+    await page.keyboard.press("Enter");
+    await typeAtEnd(page, "/div");
+    await expect(divider.first()).toHaveAccessibleName(/^Divider/);
+    await expect(menu(page).locator("[data-slash-new]")).toHaveCount(0);
+  });
+
+  test("in an RTL paragraph the list's right edge is at the '/'", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await typeAtEnd(page, "/");
+    await expect(menu(page)).toBeVisible();
+    const caretX = await page.evaluate(() => {
+      const view = window.__tiptap_editor?.view;
+      return view ? view.coordsAtPos(view.state.selection.from - 1).left : null;
+    });
+    const box = await menu(page).boundingBox();
+    if (caretX === null || !box) throw new Error("no geometry");
+    expect(Math.abs(box.x + box.width - caretX)).toBeLessThanOrEqual(2);
+    // The ghost extends toward the inline end (left) from the "/".
+    const ghostBox = await ghost(page).boundingBox();
+    expect(ghostBox && ghostBox.x + ghostBox.width).toBeLessThanOrEqual(
+      caretX + 2,
+    );
   });
 
   test("'/' then Enter is a line break until the writer types or arrows", async ({

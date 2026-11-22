@@ -27,8 +27,10 @@ import {
   TABLE_SIZE_CHOICE,
 } from "@/lib/remembered-choice";
 import { runSlashPick } from "@/lib/slash-menu/run-slash-pick";
+import { isNewItem, localDay } from "@/lib/slash-menu/slash-badges";
 import {
   buildSlashItems,
+  hintNeedsSpace,
   matchSlashItems,
   type SlashItem,
   type SlashSection,
@@ -59,8 +61,8 @@ export interface SlashMenuProps {
   announce: (message: string) => void;
 }
 
-const WIDTH = 288;
-/** Room for Text, Lists and the start of Insert at 32 px rows. */
+const WIDTH = 320;
+/** Room for Text, Lists and the start of Insert at 32 px rows (the footer adds its own). */
 const MAX_HEIGHT = 340;
 /** Below this, the list flips above the caret if there is more room. */
 const MIN_HEIGHT = 160;
@@ -81,6 +83,22 @@ const isCoarse = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
 
+/** The paragraph holding `pos` (the menu opens only in one). */
+function blockAt(editor: Editor, pos: number): HTMLElement | null {
+  const { node } = editor.view.domAtPos(pos);
+  const element = node instanceof HTMLElement ? node : node.parentElement;
+  return element?.closest("p") ?? element;
+}
+
+/** The block's own direction (the content's, not the interface's). */
+const isRtl = (block: HTMLElement | null) =>
+  block ? getComputedStyle(block).direction === "rtl" : false;
+
+/** Esc and Close: the menu closes and "/query" stays as typed text. */
+function dismiss(editor: Editor): void {
+  closeSlash(editor);
+}
+
 interface Placement {
   top: number;
   left: number;
@@ -98,17 +116,24 @@ interface Placement {
  * or under the keyboard): the list never floats apart from its caret.
  * `side` keeps the side chosen at open while it still fits, so typing
  * never flips the list. A list taller than its room ends halfway through
- * a row, so the cut row shows there is more. Viewport coordinates.
+ * a row, so the cut row shows there is more; the footer stays under it.
+ * In an RTL paragraph the list's right edge is at the "/", else its left
+ * edge. Viewport coordinates.
  */
 function place(
   editor: Editor,
   from: number,
   list: HTMLElement,
   side: boolean | null,
+  rtl: boolean,
 ): Placement | null {
-  // The empty-state note sits outside the listbox; measure it too.
+  // The empty-state note and the footer sit outside the listbox; measure
+  // them too.
   const note =
     list.parentElement?.querySelector<HTMLElement>("[data-slash-empty]");
+  const footer =
+    list.parentElement?.querySelector<HTMLElement>("[data-slash-footer]")
+      ?.offsetHeight ?? 0;
   const caret = editor.view.coordsAtPos(from);
   const frame = editor.view.dom
     .closest(".document-editor-wrapper")
@@ -133,27 +158,29 @@ function place(
   const below = bottom - caret.bottom - GAP;
   const above = caret.top - top - GAP;
   // Content plus the popup's 1 px borders.
-  const height = list.scrollHeight + (note?.offsetHeight ?? 0) + 2;
-  const wanted = Math.min(height, MAX_HEIGHT);
+  const height = list.scrollHeight + (note?.offsetHeight ?? 0) + footer + 2;
+  const cap = MAX_HEIGHT + footer;
+  const wanted = Math.min(height, cap);
   const fits = (room: number) => room >= Math.min(wanted, MIN_HEIGHT);
   const down =
     side !== null && fits(side ? below : above)
       ? side
       : fits(below) || below >= above;
-  let maxHeight = Math.max(Math.min(MAX_HEIGHT, down ? below : above), 0);
+  let maxHeight = Math.max(Math.min(cap, down ? below : above), 0);
   if (height > maxHeight) {
     // The middle of the first row that does not fit, or of the one before
     // it when that middle is out of room too (a heading sits between).
-    let cut = maxHeight;
+    const room = maxHeight - footer;
+    let cut = room;
     for (const row of list.querySelectorAll<HTMLElement>('[role="option"]')) {
       const middle = row.offsetTop + row.offsetHeight / 2;
-      if (row.offsetTop + row.offsetHeight > maxHeight) {
-        if (middle <= maxHeight) cut = middle;
+      if (row.offsetTop + row.offsetHeight > room) {
+        if (middle <= room) cut = middle;
         break;
       }
       cut = middle;
     }
-    maxHeight = cut;
+    maxHeight = cut + footer;
   }
   const narrow = window.innerWidth < NARROW;
   const width = narrow ? window.innerWidth - 2 * GUTTER : WIDTH;
@@ -163,7 +190,10 @@ function place(
       : caret.top - GAP - Math.min(height, maxHeight),
     left: narrow
       ? GUTTER
-      : Math.min(Math.max(caret.left, EDGE), window.innerWidth - width - EDGE),
+      : Math.min(
+          Math.max(rtl ? caret.left - width : caret.left, EDGE),
+          window.innerWidth - width - EDGE,
+        ),
     width,
     maxHeight,
     down,
@@ -218,9 +248,40 @@ function sections(items: readonly SlashItem[]) {
 }
 
 /** "Table, 3 by 3, 9 of 18": the visible note, spoken ("×" reads badly). */
-function optionMessage(item: SlashItem, index: number, count: number) {
+function optionMessage(
+  item: SlashItem,
+  index: number,
+  count: number,
+  isNew: boolean,
+) {
   const note = item.note ? `, ${item.note.replace(" × ", " by ")}` : "";
-  return `${item.label}${note}, ${index + 1} of ${count}`;
+  const badge = isNew ? ", new" : "";
+  return `${item.label}${badge}${note}, ${index + 1} of ${count}`;
+}
+
+/**
+ * The ghost hint, on the caret's line just after the "/" (before it, in
+ * an RTL paragraph), in the paragraph's own font. Viewport coordinates.
+ */
+function placeGhost(editor: Editor, from: number, ghost: HTMLElement) {
+  const at = editor.view.coordsAtPos(editor.state.selection.head);
+  const block = blockAt(editor, from);
+  const style = ghost.style;
+  if (block) {
+    const font = getComputedStyle(block);
+    style.fontFamily = font.fontFamily;
+    style.fontSize = font.fontSize;
+    style.fontWeight = font.fontWeight;
+    style.fontStyle = font.fontStyle;
+    style.letterSpacing = font.letterSpacing;
+  }
+  style.top = `${at.top}px`;
+  style.lineHeight = style.height = `${at.bottom - at.top}px`;
+  const rtl = isRtl(block);
+  style.left = rtl ? "" : `${at.left}px`;
+  style.right = rtl
+    ? `${document.documentElement.clientWidth - at.left}px`
+    : "";
 }
 
 /**
@@ -238,14 +299,26 @@ function optionMessage(item: SlashItem, index: number, count: number) {
 export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const listbox = `slash-menu-${useId().replace(/[^\w-]/g, "")}`;
   // Once per open: the menu unmounts when it closes.
-  const [items] = useState(() =>
-    buildSlashItems(
+  const [{ items, fresh }] = useState(() => {
+    const recent = readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind);
+    const built = buildSlashItems(
       computeContext(editor),
       editorActions.list(),
       readChoice(TABLE_SIZE_CHOICE).last,
-      readChoice(INSERT_KIND_CHOICE).recent.filter(isInsertKind),
-    ),
-  );
+      recent,
+    );
+    const today = localDay();
+    return {
+      items: built,
+      /** Keys of the rows that show "New". */
+      fresh: new Set(
+        built
+          .filter((item) => isNewItem(item, today, recent))
+          .map((item) => item.key),
+      ),
+    };
+  });
+  const [composing, setComposing] = useState(() => editor.view.composing);
   const [coarse] = useState(isCoarse);
   const matches = useMemo(
     () => matchSlashItems(items, state.query),
@@ -260,6 +333,14 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const active = matches[activeIndex] ?? null;
   const activeOption = active ? optionId(listbox, active) : null;
   const empty = matches.length ? "" : slashEmptyNote(items, state.query);
+  // The ghost: an empty query, nothing after the caret in its block, and
+  // no IME composition (spec §8.5).
+  const { $head } = editor.state.selection;
+  const ghostShown =
+    !state.query &&
+    !composing &&
+    $head.parentOffset === $head.parent.content.size;
+  const ghost = useRef<HTMLSpanElement>(null);
 
   // The best match leads each new query.
   const query = useRef(state.query);
@@ -279,7 +360,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       const key = slashKey(event, editor.view);
       const { matches: all, activeIndex: index, active: item } = latest.current;
       if (key === "Escape") {
-        closeSlash(editor);
+        dismiss(editor);
         return true;
       }
       // A hidden list (its caret scrolled away) takes only Esc.
@@ -312,6 +393,18 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     };
   }, [editor, listbox]);
 
+  useEffect(() => {
+    const dom = editor.view.dom;
+    const start = () => setComposing(true);
+    const end = () => setComposing(false);
+    dom.addEventListener("compositionstart", start);
+    dom.addEventListener("compositionend", end);
+    return () => {
+      dom.removeEventListener("compositionstart", start);
+      dom.removeEventListener("compositionend", end);
+    };
+  }, [editor]);
+
   // A finished word that matches nothing: the writer moved on.
   useEffect(() => {
     if (!matches.length && /\s$/.test(state.query)) closeSlash(editor);
@@ -324,7 +417,12 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const opened = useRef(false);
   useEffect(() => {
     let message = active
-      ? optionMessage(active, activeIndex, matches.length)
+      ? optionMessage(
+          active,
+          activeIndex,
+          matches.length,
+          fresh.has(active.key),
+        )
       : empty;
     if (!opened.current) {
       const count = `${matches.length} option${matches.length === 1 ? "" : "s"}`;
@@ -335,7 +433,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       announce(message);
     }, ANNOUNCE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [active, activeIndex, matches.length, empty, announce]);
+  }, [active, activeIndex, matches.length, empty, announce, fresh]);
 
   const popup = useRef<HTMLDivElement>(null);
   const side = useRef<boolean | null>(null);
@@ -368,7 +466,13 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       frame = 0;
       const from = slash();
       if (from === null || !list.current) return;
-      const next = place(editor, from, list.current, side.current);
+      const next = place(
+        editor,
+        from,
+        list.current,
+        side.current,
+        isRtl(blockAt(editor, from)),
+      );
       if (!next && follow) {
         editor.view.dispatch(editor.state.tr.scrollIntoView());
       }
@@ -377,6 +481,10 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       side.current = next?.down ?? side.current;
       anchor = caretInDocument(from);
       if (popup.current) Object.assign(popup.current.style, styleOf(next));
+      if (ghost.current) {
+        placeGhost(editor, from, ghost.current);
+        ghost.current.style.visibility = next ? "visible" : "hidden";
+      }
       setPlacement(next);
     };
     update();
@@ -417,7 +525,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       window.removeEventListener("resize", viewportChange);
       window.visualViewport?.removeEventListener("resize", viewportChange);
     };
-  }, [editor, state.from, state.query, matches.length]);
+  }, [editor, state.from, state.query, matches.length, ghostShown]);
 
   // Never pointing into a hidden list (its caret scrolled away).
   const visible = placement !== null;
@@ -442,106 +550,172 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       box.scrollTop = row.offsetTop + row.offsetHeight - box.clientHeight;
   }, [activeOption]);
 
+  const tip = active?.hint ? (
+    <>
+      Type{" "}
+      <code dir="ltr" className="font-mono text-foreground">
+        {active.hint}
+      </code>
+      {hintNeedsSpace(active.hint) ? " then space" : ""} for {active.label}
+    </>
+  ) : !state.query && !ghostShown ? (
+    "Type to filter"
+  ) : (
+    "↑ ↓ to move · ↵ to insert"
+  );
+
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: only keeps focus in the editor; nothing here is operable by itself
-    <div
-      ref={popup}
-      data-slash-menu=""
-      className="fixed z-50 flex flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-100"
-      style={styleOf(placement)}
-      // Rows never take focus; the editor keeps it (and the keyboard).
-      onMouseDown={(event) => event.preventDefault()}
-    >
-      {empty ? (
-        <p
-          data-slash-empty=""
-          className="px-3 py-2 text-sm text-muted-foreground"
+    <>
+      {ghostShown ? (
+        <span
+          ref={ghost}
+          data-slash-ghost=""
+          aria-hidden="true"
+          className="pointer-events-none fixed z-50 whitespace-pre text-muted-foreground"
+          style={{ visibility: "hidden" }}
         >
-          {empty}
-        </p>
+          Type to search
+        </span>
       ) : null}
-      {/* Empty without a match: only options and groups belong in it. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: only keeps focus in the editor; nothing here is operable by itself */}
       <div
-        ref={list}
-        id={listbox}
-        role="listbox"
-        aria-label="Blocks"
-        className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:hidden"
+        ref={popup}
+        data-slash-menu=""
+        className="fixed z-50 flex flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-md motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-100"
+        style={styleOf(placement)}
+        // Rows never take focus; the editor keeps it (and the keyboard).
+        onMouseDown={(event) => event.preventDefault()}
       >
-        {sections(matches).map(({ section, items: rows }) => (
-          <div
-            key={section}
-            role="group"
-            aria-labelledby={`${listbox}-${section}`}
-            className="not-first:mt-1"
+        {empty ? (
+          <p
+            data-slash-empty=""
+            className="px-3 py-2 text-sm text-muted-foreground"
           >
+            {empty}
+          </p>
+        ) : null}
+        {/* Empty without a match: only options and groups belong in it. */}
+        <div
+          ref={list}
+          id={listbox}
+          role="listbox"
+          aria-label="Blocks"
+          className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:hidden"
+        >
+          {sections(matches).map(({ section, items: rows }) => (
             <div
-              id={`${listbox}-${section}`}
-              className="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+              key={section}
+              role="group"
+              aria-labelledby={`${listbox}-${section}`}
+              className="not-first:mt-1"
             >
-              {section}
+              <div
+                id={`${listbox}-${section}`}
+                className="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+              >
+                {section}
+              </div>
+              {rows.map((item) => {
+                const id = optionId(listbox, item);
+                const selected = id === activeOption;
+                const Icon = item.icon;
+                return (
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: keys reach the menu through the editor (aria-activedescendant)
+                  // biome-ignore lint/a11y/useFocusableInteractive: options never take focus; the editor points at them (aria-activedescendant)
+                  <div
+                    key={item.key}
+                    id={id}
+                    role="option"
+                    aria-selected={selected}
+                    aria-label={
+                      fresh.has(item.key) ? `${item.label}, new` : undefined
+                    }
+                    data-key={item.key}
+                    data-selected={selected ? "true" : undefined}
+                    className={cn(
+                      "relative flex cursor-default items-center gap-2 rounded-md px-2 text-sm select-none",
+                      coarse ? "min-h-11" : "min-h-8",
+                      "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
+                      // Never colour alone (WCAG 1.4.11): a focus-ring bar,
+                      // and Highlight in forced colours.
+                      "data-[selected=true]:before:absolute data-[selected=true]:before:inset-y-1 data-[selected=true]:before:start-0 data-[selected=true]:before:w-0.5 data-[selected=true]:before:rounded-full data-[selected=true]:before:bg-focus-ring data-[selected=true]:before:content-['']",
+                      "forced-colors:data-[selected=true]:forced-color-adjust-none forced-colors:data-[selected=true]:bg-[Highlight] forced-colors:data-[selected=true]:text-[HighlightText] forced-colors:data-[selected=true]:before:bg-[HighlightText]",
+                    )}
+                    onMouseMove={() => {
+                      if (!selected) setActiveKey(item.key);
+                    }}
+                    onClick={() => runSlashPick(editor, item)}
+                  >
+                    {Icon ? (
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                    ) : (
+                      <span aria-hidden="true" className="size-4 shrink-0" />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                    {fresh.has(item.key) ? (
+                      <span
+                        aria-hidden="true"
+                        data-slash-new=""
+                        className="shrink-0 rounded-sm bg-primary/10 px-1 text-xs leading-4 font-medium text-primary in-data-[selected=true]:text-accent-foreground"
+                      >
+                        New
+                      </span>
+                    ) : null}
+                    {item.note ? (
+                      <span
+                        aria-hidden="true"
+                        className="ms-auto shrink-0 ps-3 text-xs text-muted-foreground tabular-nums in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]"
+                      >
+                        {item.note}
+                      </span>
+                    ) : null}
+                    {item.hint ? (
+                      // Typed syntax, as a key cap (sans notes stay plain).
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "shrink-0 rounded-sm border px-1 font-mono text-xs leading-4 text-muted-foreground in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]",
+                          item.note ? "ms-2" : "ms-auto",
+                        )}
+                      >
+                        {item.hint}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-            {rows.map((item) => {
-              const id = optionId(listbox, item);
-              const selected = id === activeOption;
-              const Icon = item.icon;
-              return (
-                // biome-ignore lint/a11y/useKeyWithClickEvents: keys reach the menu through the editor (aria-activedescendant)
-                // biome-ignore lint/a11y/useFocusableInteractive: options never take focus; the editor points at them (aria-activedescendant)
-                <div
-                  key={item.key}
-                  id={id}
-                  role="option"
-                  aria-selected={selected}
-                  data-key={item.key}
-                  data-selected={selected ? "true" : undefined}
-                  className={cn(
-                    "relative flex cursor-default items-center gap-2 rounded-md px-2 text-sm select-none",
-                    coarse ? "min-h-11" : "min-h-8",
-                    "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
-                    // Never colour alone (WCAG 1.4.11): a focus-ring bar,
-                    // and Highlight in forced colours.
-                    "data-[selected=true]:before:absolute data-[selected=true]:before:inset-y-1 data-[selected=true]:before:start-0 data-[selected=true]:before:w-0.5 data-[selected=true]:before:rounded-full data-[selected=true]:before:bg-focus-ring data-[selected=true]:before:content-['']",
-                    "forced-colors:data-[selected=true]:forced-color-adjust-none forced-colors:data-[selected=true]:bg-[Highlight] forced-colors:data-[selected=true]:text-[HighlightText] forced-colors:data-[selected=true]:before:bg-[HighlightText]",
-                  )}
-                  onMouseMove={() => {
-                    if (!selected) setActiveKey(item.key);
-                  }}
-                  onClick={() => runSlashPick(editor, item)}
-                >
-                  {Icon ? (
-                    <Icon aria-hidden="true" className="size-4 shrink-0" />
-                  ) : (
-                    <span aria-hidden="true" className="size-4 shrink-0" />
-                  )}
-                  <span className="truncate">{item.label}</span>
-                  {item.note ? (
-                    <span
-                      aria-hidden="true"
-                      className="ms-auto shrink-0 ps-3 text-xs text-muted-foreground tabular-nums in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]"
-                    >
-                      {item.note}
-                    </span>
-                  ) : null}
-                  {item.hint ? (
-                    // Typed syntax, as a key cap (sans notes stay plain).
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "shrink-0 rounded-sm border px-1 font-mono text-xs leading-4 text-muted-foreground in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]",
-                        item.note ? "ms-2" : "ms-auto",
-                      )}
-                    >
-                      {item.hint}
-                    </span>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+          ))}
+        </div>
+        <div
+          data-slash-footer=""
+          className="flex shrink-0 items-center gap-2 border-t px-2 py-1 text-xs text-muted-foreground"
+        >
+          {coarse ? null : (
+            <span data-slash-tip="" className="min-w-0 truncate">
+              {tip}
+            </span>
+          )}
+          <button
+            type="button"
+            // Pointer only: keys have Esc, and focus stays in the editor.
+            tabIndex={-1}
+            className={cn(
+              "ms-auto flex shrink-0 items-center gap-1.5 rounded-md hover:bg-accent hover:text-accent-foreground",
+              coarse ? "min-h-11 px-3 text-sm" : "min-h-6 px-1.5",
+            )}
+            onClick={() => dismiss(editor)}
+          >
+            Close
+            {coarse ? null : (
+              <kbd className="rounded-sm border px-1 font-mono leading-4">
+                esc
+              </kbd>
+            )}
+          </button>
+        </div>
       </div>
-    </div>,
+    </>,
     document.body,
   );
 }
