@@ -11,11 +11,17 @@ import {
  * rules are unit tested without a browser.
  */
 
-/** B · I · U, text colour, link. Every one is also a row control. */
+/**
+ * B · I · U · S · ‹› · Tx, text colour, link (spec §7.1). Every one is
+ * also in the row: a button, or an item of ⋯ More formatting.
+ */
 export const BUBBLE_ACTION_IDS = [
   "mark.bold",
   "mark.italic",
   "mark.underline",
+  "mark.strike",
+  "mark.inlineCode",
+  "format.clear",
   "color.text.apply",
   "mark.link",
 ] as const;
@@ -162,6 +168,16 @@ export interface BubbleRect {
 }
 
 export type BubblePlacement = "top" | "bottom";
+
+/** Delay before a non-empty selection shows the bubble (`updateDelay`, :378). */
+export const BUBBLE_SHOW_DELAY_MS = 250;
+/** Debounce for repositioning on resize and scroll (`resizeDelay`, :379). */
+export const BUBBLE_RESIZE_DELAY_MS = 60;
+/**
+ * A keyboard selection shows once Shift is up and the selection has been
+ * still this long, never on auto-repeat (spec §7.2, O7 b).
+ */
+export const KEYBOARD_SETTLE_MS = 300;
 
 /** Gap between the selection and the bubble, as the plugin's `offset`. */
 export const BUBBLE_OFFSET = 8;

@@ -306,6 +306,7 @@ test("the sheet applies style, size, colours, align and more, then returns focus
     dialog.getByRole("spinbutton", { name: "Font size" }),
   ).toHaveAttribute("aria-disabled", "true");
   await expect(dialog).toBeVisible();
+  // The sheet's controls, and the pill a colour pick shows (Undo, P1.4).
   expect(
     await smallTargets(
       page,
@@ -318,6 +319,103 @@ test("the sheet applies style, size, colours, align and more, then returns focus
   await expect(
     bar(page).getByRole("button", { name: "Text format" }),
   ).toBeFocused();
+});
+
+test("the sheet leads with Style: the current one pressed, More headings, lists and quote", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await openSheet(page);
+  const dialog = sheet(page);
+  // Style first, then Colours (spec §13.1, F16).
+  const titles = await dialog.locator("section > h3").allTextContents();
+  expect(titles.slice(0, 2)).toEqual(["Style", "Colours"]);
+  const style = dialog.getByRole("region", { name: "Style" });
+  const names = await style
+    .getByRole("button")
+    .evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => el.getAttribute("aria-label") ?? el.textContent),
+    );
+  expect(names).toEqual([
+    "Text",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+    "More headings",
+    "Bullet list",
+    "Numbered list",
+    "Task list",
+    "Quote",
+  ]);
+  await expect(
+    style.getByRole("button", { name: "Text", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // More headings discloses H4–H6 in place.
+  const more = style.getByRole("button", { name: "More headings" });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  const moreBox = await more.boundingBox();
+  expect(moreBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(moreBox?.width ?? 0).toBeGreaterThanOrEqual(44);
+  await more.tap();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  await style.getByRole("button", { name: "Heading 5" }).tap();
+  await expect.poll(async () => (await lastBlock(page)).level).toBe(5);
+  await expect(
+    style.getByRole("button", { name: "Heading 5" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // Reopened on an H5, the pressed row is in view: open at once.
+  await dialog.getByRole("button", { name: "Done" }).tap();
+  await openSheet(page);
+  const reopened = sheet(page).getByRole("button", { name: "More headings" });
+  await expect(reopened).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    sheet(page).getByRole("button", { name: "Heading 5" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  // It still closes when the writer says so.
+  await reopened.tap();
+  await expect(reopened).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    sheet(page).getByRole("button", { name: "Heading 5" }),
+  ).toBeHidden();
+  // Lists from Style.
+  await sheet(page).getByRole("button", { name: "Text", exact: true }).tap();
+  await sheet(page).getByRole("button", { name: "Bullet list" }).tap();
+  await expect
+    .poll(async () => (await lastBlock(page)).type)
+    .toBe("bulletList");
+  expect(
+    await smallTargets(page, "[data-format-sheet] section button"),
+  ).toEqual([]);
+});
+
+test("the sheet's bottom: 16px plus the safe area, a fade while it scrolls; the scrim closes it", async ({
+  page,
+}) => {
+  await openDoc(page);
+  await selectNewParagraph(page);
+  await openSheet(page);
+  const body = sheet(page).locator(".st-sheet-body");
+  const fade = await body.evaluate((el) => {
+    const after = getComputedStyle(el, "::after");
+    return {
+      height: after.height,
+      position: after.position,
+      bottom: after.bottom,
+      scrolls: el.scrollHeight > el.clientHeight,
+    };
+  });
+  expect(fade).toEqual({
+    height: "16px",
+    position: "sticky",
+    bottom: "0px",
+    scrolls: true,
+  });
+  // The scrim (a tap above the sheet) closes it.
+  await page.touchscreen.tap(195, 40);
+  await expect(sheet(page)).toBeHidden();
 });
 
 test("the title locks the style rows with a reason", async ({ page }) => {
@@ -775,8 +873,9 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await expect(brush).toHaveAttribute("aria-disabled", "true");
     // Unavailable but still tappable (Playwright skips aria-disabled).
     await brush.tap({ force: true });
+    // Spec §7.2: inline code takes no other mark.
     await expect(page.locator("[data-status-pill]")).toHaveText(
-      "Code has no formatting.",
+      "Inline code can't take other formatting.",
     );
   });
 
@@ -848,13 +947,12 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await openSheet(page);
     const text = sheet(page).getByRole("group", { name: "Text colour" });
     const swatches = text.getByRole("button");
-    // The sheet's grid fills its width, so its lines hold more swatches
-    // than the popover's six.
+    // Six 44px swatches a line on touch (spec §7.3).
     const perLine = await swatches.evaluateAll((els) => {
       const top = els[0].getBoundingClientRect().top;
       return els.filter((el) => el.getBoundingClientRect().top === top).length;
     });
-    expect(perLine).toBeGreaterThan(6);
+    expect(perLine).toBe(6);
     expect(await swatches.count()).toBeGreaterThan(perLine);
     await swatches.nth(2).focus();
     await page.keyboard.press("ArrowLeft");
@@ -1489,5 +1587,445 @@ test.describe("selection cells at 375px (design pass §6)", () => {
     ).toBeLessThanOrEqual(1);
     // The remembered colours show as bars under the colour icons.
     await expect(selectionBar(page).locator(".st-face-bar")).toHaveCount(2);
+  });
+});
+
+test.describe("the Insert sheet (spec §8.3, O6)", () => {
+  const insertSheet = (page: Page) =>
+    page.getByRole("dialog", { name: "Insert" });
+  /** The sheet's section titles, top to bottom. */
+  const sectionTitles = (page: Page) =>
+    insertSheet(page).locator(".st-sheet-section > h3").allTextContents();
+
+  /** Appends a paragraph (empty unless `text`) with the caret at its end. */
+  async function caretInNewParagraph(page: Page, text = "") {
+    await page.evaluate((value) => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      const end = editor.state.doc.content.size;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(end, {
+          type: "paragraph",
+          content: value ? [{ type: "text", text: value }] : undefined,
+        })
+        .run();
+      editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    }, text);
+  }
+
+  async function openInsertSheet(page: Page) {
+    await bar(page).getByRole("button", { name: "Insert" }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await insertSheet(page)
+      .getByRole("button", { name: "Divider" })
+      .first()
+      .waitFor();
+    await insertSheet(page).evaluate((el) =>
+      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
+  }
+
+  /** The type and level of the block holding the caret. */
+  const caretBlock = (page: Page) =>
+    page.evaluate(() => {
+      const { $from } = window.__tiptap_editor?.state.selection ?? {};
+      const node = $from?.parent;
+      return {
+        type: node?.type.name ?? null,
+        level: (node?.attrs.level as number | undefined) ?? null,
+        text: node?.textContent ?? null,
+        grand: $from
+          ? $from.node(Math.max($from.depth - 1, 0)).type.name
+          : null,
+      };
+    });
+
+  test("Aa sheet Style: every label but Text's starts at one x", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDoc(page);
+    await caretInNewParagraph(page, "words");
+    await bar(page).getByRole("button", { name: "Text format" }).tap();
+    const sheet = page.locator("[data-format-sheet]");
+    await expect(
+      sheet.getByRole("button", { name: "Heading 1" }),
+    ).toBeVisible();
+    const style = sheet.locator("section", { hasText: "Style" }).first();
+    const geometry = await style.evaluate((el) => {
+      const labels: Record<string, number> = {};
+      for (const button of el.querySelectorAll("button")) {
+        const span = [...button.querySelectorAll("span")].find((node) =>
+          /^(Text|Heading \d|More headings|Bullet list|Numbered list|Task list|Quote)$/.test(
+            node.textContent ?? "",
+          ),
+        );
+        if (!span) continue;
+        const left = span.getBoundingClientRect().left;
+        const cell = button.getBoundingClientRect().left;
+        labels[span.textContent ?? ""] = Math.round(left - cell);
+      }
+      return { labels };
+    });
+    // Text has no icon in the registry, as on `main` (an icon there grows
+    // the editor chunk), so its label starts at the cell's padding; every
+    // other label sits at the same offset in its cell, icon slot and gap
+    // alike, More headings included.
+    const { Text: _text, ...withIcons } = geometry.labels;
+    expect(
+      new Set(Object.values(withIcons)).size,
+      JSON.stringify(geometry.labels),
+    ).toBe(1);
+    expect(Object.keys(withIcons)).toContain("More headings");
+  });
+
+  test("RTL at 390: Table's size note stays with its label, inside its cell", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    const table = insertSheet(page).getByRole("button", { name: /^Table/ });
+    const boxes = await table.evaluate((el) => {
+      const box = (selector: string) => {
+        const r = (
+          el.querySelector(selector) as HTMLElement
+        ).getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      };
+      const cell = el.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(
+        el.querySelector(".st-insert-cell-label") as Node,
+      );
+      const text = range.getBoundingClientRect();
+      return {
+        cell: { left: cell.left, right: cell.right },
+        note: box(".st-insert-note"),
+        chevron: box(".st-insert-chevron"),
+        label: { left: text.left, right: text.right },
+      };
+    });
+    // The note follows its label (to its left in RTL), not the column gap
+    // where it read as the next column's; the ‹ stays at the inline end.
+    expect(boxes.note.right).toBeLessThanOrEqual(boxes.label.left);
+    expect(boxes.label.left - boxes.note.right).toBeLessThan(16);
+    expect(boxes.chevron.left).toBeLessThan(boxes.cell.left + 24);
+    // Inside the cell, by the cell's own inline-end padding.
+    expect(boxes.chevron.left).toBeGreaterThanOrEqual(boxes.cell.left + 11);
+    expect(boxes.note.left).toBeGreaterThan(boxes.chevron.right);
+  });
+
+  test("an empty block opens Blocks; a block with text opens Turn into", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    const cell = bar(page).getByRole("button", { name: "Insert" });
+    await expect(cell).toHaveAttribute("aria-haspopup", "dialog");
+    await openInsertSheet(page);
+    // Nothing inserted yet: no Suggested section.
+    expect(await sectionTitles(page)).toEqual(["Blocks", "Insert"]);
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Heading 1" }),
+    ).toBeVisible();
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(cell).toBeFocused();
+
+    await caretInNewParagraph(page, "some words");
+    await openInsertSheet(page);
+    expect(await sectionTitles(page)).toEqual(["Turn into", "Insert"]);
+  });
+
+  test("a pick closes the sheet and the caret lands in the new block", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page, "turn me");
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Heading 2" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.type("!");
+    expect(await caretBlock(page)).toMatchObject({
+      type: "heading",
+      level: 2,
+      text: "turn me!",
+    });
+
+    // Insert kinds go after the caret's block; the kind is then Suggested.
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Code block" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    await page.keyboard.type("x");
+    expect(await caretBlock(page)).toMatchObject({
+      type: "codeBlock",
+      text: "x",
+    });
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    expect(await sectionTitles(page)).toEqual([
+      "Suggested",
+      "Blocks",
+      "Insert",
+    ]);
+    const suggested = insertSheet(page)
+      .getByRole("group", { name: "Suggested" })
+      .getByRole("button", { name: "Code block" });
+    await expect(suggested).toBeVisible();
+    // The Suggested copy is told apart from the Insert section's cell.
+    await expect(suggested).toHaveAttribute("data-suggested", "");
+    await expect(
+      insertSheet(page).locator(
+        '[data-action-id="insert.codeBlock"]:not([data-suggested])',
+      ),
+    ).toHaveCount(1);
+  });
+
+  test("Table opens its grid inside the sheet; a pick puts the caret in the table", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Table" }).tap();
+    const cell = insertSheet(page).getByRole("button", {
+      name: "2 by 2 table",
+    });
+    await expect(cell).toBeVisible();
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Back" }),
+    ).toBeVisible();
+    await cell.tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await expect(page.locator(".tiptap")).toBeFocused();
+    expect(await caretBlock(page)).toMatchObject({ grand: "tableHeader" });
+  });
+
+  test("“/embed” on a phone opens the sheet at the embed step", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await page.keyboard.type("/embed");
+    await page.getByRole("option", { name: /^Embed/ }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await expect(
+      insertSheet(page).getByRole("textbox", { name: "Media URL" }),
+    ).toBeVisible();
+  });
+
+  test("the embed step rides above the keyboard, its field in view", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Embed" }).tap();
+    const field = insertSheet(page).getByRole("textbox", { name: "Media URL" });
+    await expect(field).toBeFocused();
+    // Chromium has no on-screen keyboard: stand in a shrunken
+    // visualViewport, first at the top of the page, then panned down the
+    // layout viewport (iOS, `offsetTop`) with little room left.
+    const emulate = (keyboard: number, offsetTop: number) =>
+      page.evaluate(
+        ([kb, top]) => {
+          const vv = window.visualViewport;
+          if (!vv) throw new Error("no visualViewport");
+          Object.defineProperty(vv, "height", {
+            configurable: true,
+            get: () => window.innerHeight - kb - top,
+          });
+          Object.defineProperty(vv, "offsetTop", {
+            configurable: true,
+            get: () => top,
+          });
+          vv.dispatchEvent(new Event("resize"));
+        },
+        [keyboard, offsetTop] as const,
+      );
+    const expectInView = async (keyboard: number, offsetTop: number) => {
+      const visibleBottom = PHONE.height - keyboard;
+      await expect
+        .poll(async () => {
+          const box = await insertSheet(page).boundingBox();
+          return box ? Math.round(box.y + box.height) : null;
+        })
+        .toBe(visibleBottom);
+      const sheetBox = await insertSheet(page).boundingBox();
+      expect(sheetBox?.y ?? -1).toBeGreaterThanOrEqual(offsetTop);
+      const fieldBox = await field.boundingBox();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        visibleBottom,
+      );
+      expect(fieldBox?.y ?? -1).toBeGreaterThanOrEqual(offsetTop);
+    };
+    await emulate(360, 0);
+    await expectInView(360, 0);
+    // 120px visible, 364px down the page: the sheet fits in that band.
+    await emulate(360, 364);
+    await expectInView(360, 364);
+  });
+
+  test("opening focuses the first cell: Suggested's when present", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(
+      insertSheet(page).getByRole("button", { name: "Text", exact: true }),
+    ).toBeFocused();
+    // The Diagram cell keeps insert.mermaid's place, before Divider.
+    const order = await insertSheet(page)
+      .getByRole("group", { name: "Insert" })
+      .getByRole("button")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("data-action-id")));
+    expect(order.indexOf("insert.mermaid")).toBe(
+      order.indexOf("insert.divider") - 1,
+    );
+    await insertSheet(page).getByRole("button", { name: "Divider" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(
+      insertSheet(page)
+        .getByRole("group", { name: "Suggested" })
+        .getByRole("button", { name: "Divider" }),
+    ).toBeFocused();
+  });
+
+  test("the page is never left inert: after “/embed” then Done, and after read-only", async ({
+    page,
+  }) => {
+    const inert = () =>
+      page.evaluate(
+        () => document.querySelector<HTMLElement>(".app-shell")?.inert,
+      );
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await page.keyboard.type("/embed");
+    await page.getByRole("option", { name: /^Embed/ }).tap();
+    await expect(insertSheet(page)).toBeVisible();
+    expect(await inert()).toBe(true);
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    await expect(insertSheet(page)).toBeHidden();
+    expect(await inert()).toBe(false);
+
+    await openInsertSheet(page);
+    expect(await inert()).toBe(true);
+    await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
+    await expect(insertSheet(page)).toBeHidden();
+    expect(await inert()).toBe(false);
+    await page.evaluate(() => window.__tiptap_editor?.setEditable(true));
+  });
+
+  test("“New” badges agree with the “/” menu: none while none are declared", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await expect(insertSheet(page).locator("[data-slash-new]")).toHaveCount(0);
+    await insertSheet(page).getByRole("button", { name: "Done" }).tap();
+    // The same development override the "/" menu's tests use.
+    await page.evaluate(() => {
+      (
+        globalThis as { __SLASH_NEW_UNTIL?: Record<string, string> }
+      ).__SLASH_NEW_UNTIL = { "insert.divider": "2099-12-31" };
+    });
+    await openInsertSheet(page);
+    const divider = insertSheet(page).locator(
+      '[data-action-id="insert.divider"]:not([data-suggested])',
+    );
+    await expect(divider.locator("[data-slash-new]")).toHaveText("New");
+    await expect(divider).toHaveAccessibleName(/^Divider\s*, new$/);
+    await expect(insertSheet(page).locator("[data-slash-new]")).toHaveCount(1);
+  });
+
+  test("a pick refused since the sheet opened says why in the sheet", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page, "quoted later");
+    await openInsertSheet(page);
+    // A collaborator's edit meanwhile: the block is now in a quote.
+    await page.evaluate(() => {
+      window.__tiptap_editor?.commands.setBlockquote();
+    });
+    const quote = insertSheet(page).getByRole("button", { name: "Quote" });
+    await quote.tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await expect(insertSheet(page).getByRole("status")).toHaveText(
+      "Quote: Already in a quote.",
+    );
+    // Its cell now shows the reason, and stays where it was.
+    await expect(quote).toHaveAttribute("aria-disabled", "true");
+    await expect(quote).toContainText("Already in a quote.");
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`axe: the Insert sheet (${theme})`, async ({ page }) => {
+      await setTheme(page, theme);
+      await openDoc(page);
+      await caretInNewParagraph(page);
+      await openInsertSheet(page);
+      await expectNoSeriousA11yViolations(page, ["[data-insert-sheet]"]);
+      expect(await smallTargets(page, "[data-insert-sheet] button")).toEqual(
+        [],
+      );
+    });
+  }
+
+  test.describe("at 320px", () => {
+    test.use({ viewport: { width: 320, height: 568 } });
+
+    test("two columns of 44px cells, no horizontal scroll", async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await caretInNewParagraph(page);
+      await openInsertSheet(page);
+      expect(await smallTargets(page, "[data-insert-sheet] button")).toEqual(
+        [],
+      );
+      const columns = await insertSheet(page)
+        .getByRole("button", { name: "Heading 1" })
+        .evaluate(
+          (el) =>
+            getComputedStyle(
+              el.parentElement as Element,
+            ).gridTemplateColumns.split(" ").length,
+        );
+      expect(columns).toBe(2);
+      const overflow = await insertSheet(page).evaluate((el) => {
+        const body = el.querySelector(".st-sheet-body");
+        return {
+          sheet: el.scrollWidth - el.clientWidth,
+          body: body ? body.scrollWidth - body.clientWidth : 0,
+          page: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+      expect(overflow).toEqual({ sheet: 0, body: 0, page: 0 });
+      // The table grid fits too.
+      await insertSheet(page).getByRole("button", { name: "Table" }).tap();
+      await insertSheet(page)
+        .getByRole("button", { name: "2 by 2 table" })
+        .waitFor();
+      expect(
+        await insertSheet(page).evaluate(
+          (el) => el.scrollWidth - el.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+    });
   });
 });

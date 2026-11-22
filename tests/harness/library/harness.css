@@ -144,6 +144,27 @@ body {
   font: inherit;
   font-weight: 600;
 }
+.h-editor .ProseMirror {
+  outline: none;
+  line-height: 1.6;
+}
+/* The app's link colour and yellow highlight (paragraph-node.scss,
+   HIGHLIGHT_PALETTE), so the matrix measures what the editor shows. */
+.h-editor .ProseMirror a {
+  color: var(--h-link);
+}
+/* The matrix's coloured link text, per theme, as the app's text colours
+   adapt to it. */
+:root {
+  --h-tint: #b42318;
+  --h-link: #1155cc;
+  --h-highlight: #fef08a;
+}
+.dark {
+  --h-tint: #fda29b;
+  --h-link: #93c5fd;
+  --h-highlight: #574f12;
+}
 .h-main:has(> .h-list) {
   padding: 0;
   overflow: hidden;

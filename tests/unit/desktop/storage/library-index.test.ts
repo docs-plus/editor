@@ -56,6 +56,45 @@ describe("creating documents", () => {
     expect(a.linkKey).not.toBe(b.linkKey);
   });
 
+  test("keeps a caller's 32-hex link key and refuses a malformed one", async () => {
+    const linkKey = "0123456789abcdef0123456789abcdef";
+    expect(library.createDoc({ linkKey }).linkKey).toBe(linkKey);
+    for (const bad of [
+      "ABCDEF0123456789abcdef0123456789",
+      "abc",
+      `${linkKey}0`,
+    ])
+      expect(codeOf(() => library.createDoc({ linkKey: bad }))).toBe(
+        "invalid_argument",
+      );
+  });
+
+  test("the sidebar and the Trash list carry each document's link key, in trashed subfolders too", async () => {
+    const folder = mustFolder(library, { name: "f" });
+    const sub = mustFolder(library, { name: "s", parentId: folder.id });
+    const kept = library.createDoc({ title: "Kept" });
+    const alone = library.createDoc({ title: "Alone" });
+    const inside = library.createDoc({ title: "Inside", folderId: folder.id });
+    const deep = library.createDoc({ title: "Deep", folderId: sub.id });
+    library.createDoc({ kind: "template", title: "T", folderId: sub.id });
+    expect(library.sidebar().docs.find((d) => d.id === kept.id)?.linkKey).toBe(
+      kept.linkKey,
+    );
+    library.trashDoc(alone.id);
+    library.trashFolder(folder.id);
+    const { trashed } = library.trashList();
+    expect(trashed.map((d) => [d.id, d.title, d.linkKey]).sort()).toEqual(
+      [
+        [alone.id, "Alone", alone.linkKey],
+        [inside.id, "Inside", inside.linkKey],
+        [deep.id, "Deep", deep.linkKey],
+      ].sort(),
+    );
+    expect(trashed.every((d) => d.createdAt > 0 && d.modifiedAt > 0)).toBe(
+      true,
+    );
+  });
+
   test("refuses malformed ids and kinds", async () => {
     expect(codeOf(() => library.createDoc({ id: "../x" }))).toBe(
       "invalid_argument",

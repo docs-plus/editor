@@ -51,7 +51,7 @@ import {
 import * as derive from "./derive";
 import * as docsCopy from "./docs-copy";
 import type { OpenSqlite, SqliteDriver, SqlRow } from "./driver";
-import { storageErrorFrom } from "./driver";
+import { checkpointTruncate, storageErrorFrom } from "./driver";
 import { StorageError } from "./errors";
 import * as folders from "./folders";
 import type { StorageHost } from "./host";
@@ -190,6 +190,28 @@ export function quickCheck(db: SqliteDriver): string {
   return messages.length === 1 && messages[0] === "ok"
     ? "ok"
     : messages.slice(0, 5).join("; ");
+}
+
+const SYNC_LEVELS = ["OFF", "NORMAL", "FULL", "EXTRA"] as const;
+
+/**
+ * Runs `body` (one transaction) with `synchronous = NORMAL`, then puts the
+ * connection's level back. For derived rows only (soak T21): they are a
+ * cache, so a power cut that loses them and their `derived_seq` together
+ * leaves the document stale, to be derived again, while skipping the fsync
+ * (F_FULLFSYNC on macOS, FlushFileBuffers on Windows: 4–10 ms) keeps a read
+ * queued behind a derive from waiting for the disk. WAL keeps the commit
+ * consistent, and the next FULL commit syncs it.
+ */
+function withoutSync<T>(db: SqliteDriver, body: () => T): T {
+  const level = SYNC_LEVELS[Number(scalar(db, "PRAGMA synchronous"))] ?? "FULL";
+  if (level === "OFF" || level === "NORMAL") return body();
+  db.exec("PRAGMA synchronous = NORMAL");
+  try {
+    return body();
+  } finally {
+    db.exec(`PRAGMA synchronous = ${level}`);
+  }
 }
 
 export class Library {
@@ -616,7 +638,7 @@ export class Library {
    */
   private afterPurge() {
     this.wrote();
-    this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    checkpointTruncate(this.conn);
   }
 
   // Tags (tags.ts)
@@ -764,12 +786,14 @@ export class Library {
     rows: derive.DerivedRows,
   ): derive.DeriveResult {
     this.assertWritable();
-    const result = derive.putDerived(
-      this.conn,
-      () => this.host.sha256(),
-      docId,
-      atSeq,
-      rows,
+    const result = withoutSync(this.conn, () =>
+      derive.putDerived(
+        this.conn,
+        () => this.host.sha256(),
+        docId,
+        atSeq,
+        rows,
+      ),
     );
     if (result === "ok") this.changed("doc", docId);
     return result;
@@ -891,7 +915,7 @@ export class Library {
       this.changed("doc", id);
       purged += 1;
     }
-    if (purged > 0) this.conn.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (purged > 0) checkpointTruncate(this.conn);
     return purged;
   }
 
@@ -997,7 +1021,7 @@ export class Library {
     try {
       if (!this.status.readOnly) {
         writeMeta(db, "unclean_exit", "0");
-        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        checkpointTruncate(db);
       }
     } finally {
       this.db = null;

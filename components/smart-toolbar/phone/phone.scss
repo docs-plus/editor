@@ -143,6 +143,17 @@
   }
 }
 
+// The status pill's action (Undo after a colour pick or a removed
+// format) is a 24px `xs` button; on touch it is a 44×44 target like every
+// other phone control. Here, not in the pill: the phone pill lives in
+// this lazy chunk's bar, and the desktop pill keeps its size.
+@media (pointer: coarse) {
+  [data-status-pill="phone"] button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .st-phone-aa {
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -159,7 +170,10 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
   background-color: transparent;
 }
 
-.st-format-sheet {
+// Both sheets clear the home indicator and the side notches; the body's
+// 16px fade (below) is the rest of their `16px + safe area` bottom pad.
+.st-format-sheet,
+.st-insert-sheet {
   padding: 0 var(--safe-area-right) var(--safe-area-bottom)
     var(--safe-area-left);
 }
@@ -177,12 +191,27 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
   flex-direction: column;
   gap: 0.75rem;
   min-height: 0;
-  padding: 0.25rem 1rem 1rem;
+  padding: 0.25rem 1rem 0;
   overflow-y: auto;
   // A safety net only: every row fits (labels truncate), so the sheet
   // never scrolls sideways at 320px.
   overflow-x: hidden;
   overscroll-behavior: contain;
+
+  // The 16px bottom pad, drawn as a fade that sticks to the bottom edge
+  // while more is below (spec §13.1): content scrolls out under it. At the
+  // end of the scroll, or when nothing scrolls, it covers only itself.
+  &::after {
+    content: "";
+    position: sticky;
+    bottom: 0;
+    flex: none;
+    height: 1rem;
+    // In place of the flex gap before it.
+    margin-top: -0.75rem;
+    background: linear-gradient(to bottom, transparent, var(--background));
+    pointer-events: none;
+  }
 }
 
 .st-sheet-section {
@@ -217,11 +246,8 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
     color: var(--muted-foreground);
   }
 
-  // Swatches fill the sheet's width, each at least 44px.
-  .st-color-swatches {
-    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-    gap: 6px;
-  }
+  // Its swatch grid is the colour panel's own: six 44px swatches a line
+  // on touch (spec §7.3, `color/color-panel.scss`).
 }
 
 .st-sheet-list {
@@ -243,6 +269,61 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+// Style's More headings ▸ (`format-sheet.tsx`): a full-width disclosure
+// row between H1–H3 and the lists; its chevron turns down while open.
+.st-sheet-list .st-sheet-disclosure {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  // The rows' gap, border and type (`Button` size sm), so the label lines
+  // up with theirs and reads the same.
+  gap: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 0.375rem);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+
+  &:hover {
+    background-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+
+  > span {
+    flex: 1 1 auto;
+    text-align: start;
+  }
+
+  .st-sheet-disclosure-chevron {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.6;
+    transition: rotate 150ms ease;
+  }
+
+  &[aria-expanded="true"] .st-sheet-disclosure-chevron {
+    rotate: 90deg;
+  }
+
+  // Mirrored in RTL (it points left), so it turns the other way to point down.
+  &[aria-expanded="true"]:dir(rtl) .st-sheet-disclosure-chevron {
+    rotate: -90deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-sheet-list .st-sheet-disclosure .st-sheet-disclosure-chevron {
+    transition: none;
   }
 }
 
@@ -319,4 +400,104 @@ ul.st-sheet-list {
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+// ── Insert sheet (`phone/insert-sheet.tsx`, spec §8.3) ────────────────────
+// Cells reuse `.st-sheet-list` (two columns, 44px, start-aligned); a cell
+// that cannot run here grows a second line with its reason.
+.st-insert-cell {
+  height: auto;
+  padding-block: 0.375rem;
+  text-align: start;
+}
+
+// The text only takes its own width, so a note ("3 × 3") follows its
+// label: pushed to the cell's inline end it met the next column's text and
+// read as that cell's in RTL. The ▸ alone keeps the inline end.
+.st-sheet-list .st-insert-cell > .st-insert-cell-text {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+}
+
+.st-insert-cell-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.st-insert-reason {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--muted-foreground);
+  white-space: normal;
+}
+
+.st-sheet-list .st-insert-cell > .st-insert-note {
+  flex: none;
+  min-width: auto;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+// "New", as on its "/" row (`slash-badges.ts`); only while one is declared.
+.st-sheet-list .st-insert-cell > .st-insert-new {
+  flex: none;
+  min-width: auto;
+  padding-inline: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.125rem;
+  background: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+.st-insert-chevron {
+  flex: none;
+  margin-inline-start: auto;
+  opacity: 0.6;
+}
+
+// With the keyboard up (the embed step's link field), the sheet rides on
+// it like the bar, no taller than the visual viewport (which iOS may pan,
+// `insert-sheet.tsx`), and has no home indicator to clear.
+.st-insert-sheet[data-keyboard] {
+  bottom: var(--keyboard-inset);
+  max-height: calc(var(--visible-height) - 0.5rem);
+  padding-bottom: 0;
+}
+
+// Why a pick was refused (the document changed since the sheet opened).
+// Always rendered, so the live region exists before it speaks; empty, it
+// cancels the gap after it and takes no room.
+.st-insert-refused {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--foreground);
+
+  &:empty {
+    margin-block-end: -0.75rem;
+  }
+}
+
+.st-insert-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .st-insert-back {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 0.5rem 0.75rem;
+  }
+}
+
+// The table grid and the embed form, centred in the sheet's width.
+[data-insert-step="table"] .st-table-grid {
+  align-self: center;
+}
+
+[data-insert-step="embed"] form button {
+  min-height: 44px;
 }

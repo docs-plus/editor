@@ -10,12 +10,13 @@
  */
 import { constants, Database } from "bun:sqlite";
 
-import type {
-  OpenSqlite,
-  SqliteDriver,
-  SqliteStatement,
-  SqlRow,
-  SqlValue,
+import {
+  applyBusyTimeout,
+  type OpenSqlite,
+  type SqliteDriver,
+  type SqliteStatement,
+  type SqlRow,
+  type SqlValue,
 } from "@/desktop/storage/engine/driver";
 
 export const openBunSqlite: OpenSqlite = (path, { readOnly }) => {
@@ -59,5 +60,5 @@ export const openBunSqlite: OpenSqlite = (path, { readOnly }) => {
       db.close();
     },
   };
-  return driver;
+  return applyBusyTimeout(driver);
 };

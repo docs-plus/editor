@@ -1,7 +1,13 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import {
+  type BrowserContext,
+  expect,
+  type Locator,
+  type Page,
+  test,
+} from "@playwright/test";
 
 import { setTheme } from "./helpers/a11y";
 import { EditorPage } from "./helpers/editor-page";
@@ -189,7 +195,7 @@ test.describe("sorted row", () => {
     // Names of value menus change with the value; positions never do.
     const shape = (names: string[]) =>
       names.map((name) =>
-        /^(Normal text|Heading \d|Title|Mixed|Align .*|Justify)$/.test(name)
+        /^(Text|Heading \d|Title|Mixed|Align .*|Justify)$/.test(name)
           ? "<value>"
           : name,
       );
@@ -320,7 +326,7 @@ test.describe("alignment items", () => {
     await page.setViewportSize({ width: 860, height: 900 });
     await openDoc(page);
     await caretIn(page, "Plain");
-    await toolbarButton(page, "Paragraph").click();
+    await toolbarButton(page, "Layout").click();
     const indent = page.getByRole("menuitem", { name: /^Indent/ });
     await expect(indent).toBeVisible();
     const boxes = await alignItemBoxes(page);
@@ -352,7 +358,7 @@ test.describe("alignment items", () => {
     await page.setViewportSize({ width: 860, height: 900 });
     await openDoc(page);
     await caretIn(page, "Plain");
-    await toolbarButton(page, "Paragraph").click();
+    await toolbarButton(page, "Layout").click();
     await expect(
       page.getByRole("menuitemradio", { name: "Align center", exact: true }),
     ).toHaveAttribute("aria-keyshortcuts", "Control+Shift+E");
@@ -479,6 +485,128 @@ test.describe("menu focus", () => {
     expect(
       await more.evaluate((menu) => menu.contains(document.activeElement)),
     ).toBe(true);
+  });
+});
+
+test.describe("more menu groups", () => {
+  const openMore = async (page: Page) => {
+    await toolbarButton(page, "More formatting").click();
+    const more = page.getByRole("menu", { name: "More formatting" });
+    await expect(more).toBeVisible();
+    return more;
+  };
+  const idsIn = (group: Locator) =>
+    group
+      .locator('[role^="menuitem"]')
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute("data-action-id") ?? el.textContent),
+      );
+
+  test("Text, View and Help groups, then Forget my choices alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    const more = await openMore(page);
+    const groups = more.getByRole("group");
+    await expect(groups).toHaveCount(3);
+    // Named by the visible heading (aria-labelledby from the group label).
+    for (const [index, name] of ["Text", "View", "Help"].entries()) {
+      await expect(groups.nth(index)).toHaveAccessibleName(name);
+    }
+    expect(await idsIn(more.getByRole("group", { name: "Text" }))).toEqual([
+      "mark.superscript",
+      "mark.subscript",
+      "mark.inlineCode",
+      "format.clear",
+      "repeat.copy",
+    ]);
+    const view = more.getByRole("group", { name: "View" });
+    expect(await idsIn(view)).toEqual(["view.simpleToolbar", "Appearance"]);
+    await expect(view.getByRole("menuitemcheckbox")).toHaveAccessibleName(
+      "Simplified toolbar",
+    );
+    await expect(view.getByRole("menuitem")).toHaveAccessibleName("Appearance");
+    // Help and Forget are asserted unconditionally: this app always
+    // registers palette.open and memory.forget.
+    const help = more.getByRole("group", { name: "Help" });
+    expect(await idsIn(help)).toEqual(["palette.open"]);
+    await expect(help.getByRole("menuitem")).toHaveAccessibleName(
+      /All actions/,
+    );
+    const last = more.locator('[role^="menuitem"]').last();
+    await expect(last).toHaveAttribute("data-action-id", "memory.forget");
+    await expect(last).toHaveAccessibleName(/Forget my choices/);
+    expect(
+      await last.evaluate((el) => el.closest('[role="group"]') === null),
+    ).toBe(true);
+    for (const heading of ["Text", "View", "Help"]) {
+      await expect(more.getByText(heading, { exact: true })).toBeVisible();
+    }
+  });
+
+  test("ArrowDown crosses the groups and never lands on a heading", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    const more = await openMore(page);
+    const total = await more.locator('[role^="menuitem"]').count();
+    const seen: string[] = [];
+    const roles: (string | null)[] = [];
+    await page.keyboard.press("ArrowDown");
+    for (let i = 0; i < total; i++) {
+      const current = await page.evaluate(() => {
+        const el = document.activeElement;
+        return {
+          id: el?.getAttribute("data-action-id") ?? el?.textContent ?? "",
+          role: el?.getAttribute("role") ?? null,
+        };
+      });
+      seen.push(current.id);
+      roles.push(current.role);
+      await page.keyboard.press("ArrowDown");
+    }
+    expect(seen.slice(0, 5)).toEqual([
+      "mark.superscript",
+      "mark.subscript",
+      "mark.inlineCode",
+      "format.clear",
+      "repeat.copy",
+    ]);
+    expect(seen.slice(5)).toEqual([
+      "view.simpleToolbar",
+      "Appearance",
+      "palette.open",
+      "memory.forget",
+    ]);
+    expect(roles.every((role) => role?.startsWith("menuitem"))).toBe(true);
+  });
+
+  test("Simplified toolbar flips aria-checked with Enter and Space", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain paragraph");
+    const item = (menu: Locator) =>
+      menu.getByRole("menuitemcheckbox", { name: "Simplified toolbar" });
+    for (const [key, expected] of [
+      ["Enter", "true"],
+      ["Space", "false"],
+    ] as const) {
+      const more = await openMore(page);
+      await expect(item(more)).toHaveAttribute(
+        "aria-checked",
+        expected === "true" ? "false" : "true",
+      );
+      await item(more).focus();
+      await page.keyboard.press(key);
+      await expect(more).toHaveCount(0);
+      const reopened = await openMore(page);
+      await expect(item(reopened)).toHaveAttribute("aria-checked", expected);
+      await page.keyboard.press("Escape");
+      await expect(reopened).toHaveCount(0);
+    }
   });
 });
 
@@ -693,10 +821,210 @@ test.describe("formatting", () => {
     );
     await expect(indent).toBeFocused();
     expect(await registryIds()).toEqual(before);
-    await expect(toolbarButton(page, "Normal text")).toHaveAttribute(
+    await expect(toolbarButton(page, "Text")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
+  });
+});
+
+test.describe("Style ▾ turn into (spec §7.4, BQ10, BQ11)", () => {
+  /** The top-level block holding `needle`, by its node type. */
+  const blockOf = (page: Page, needle: string) =>
+    page.evaluate((target) => {
+      const doc = window.__tiptap_editor?.state.doc;
+      let type = "";
+      doc?.forEach((node) => {
+        if (!type && node.textContent.startsWith(target)) {
+          type = node.type.name;
+        }
+      });
+      return type;
+    }, needle);
+
+  test("the row face reads Text in a paragraph", async ({ page }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    const face = toolbarButton(page, "Text");
+    await expect(face).toBeVisible();
+    await expect(face).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  for (const [item, type] of [
+    ["Quote", "blockquote"],
+    ["Code block", "codeBlock"],
+  ] as const) {
+    test(`${item} converts a paragraph in one undo step`, async ({ page }) => {
+      await openDoc(page);
+      await caretIn(page, "Plain");
+      await toolbarButton(page, "Text").click();
+      const menu = page.getByRole("menu", { name: "Text style" });
+      // Shared body: no Markdown chips, a trailing check cell, and Your
+      // formats below the block types in the row only.
+      await expect(
+        menu.getByRole("menuitemradio", { name: "Text" }),
+      ).toHaveAttribute("aria-checked", "true");
+      await expect(menu.getByText("Your formats")).toBeVisible();
+      await menu.getByRole("menuitemradio", { name: item }).click();
+      await expect(page.getByRole("menu")).toHaveCount(0);
+      await expect.poll(() => blockOf(page, "Plain")).toBe(type);
+      await expect(page.locator(".tiptap")).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => blockOf(page, "Plain")).toBe("paragraph");
+    });
+  }
+
+  test("More headings holds H4–H6 and the title disables every row", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Text").click();
+    const menu = page.getByRole("menu", { name: "Text style" });
+    await expect(
+      menu.getByRole("menuitemradio", { name: "Heading 4" }),
+    ).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "More headings" }).hover();
+    await page.getByRole("menuitemradio", { name: "Heading 5" }).click();
+    await expect.poll(() => blockOf(page, "Plain")).toBe("heading");
+    await caretIn(page, "Title");
+    await toolbarButton(page, "Title").click();
+    const quote = page
+      .getByRole("menu", { name: "Text style" })
+      .getByRole("menuitemradio", { name: "Quote" });
+    await expect(quote).toHaveAttribute("aria-disabled", "true");
+    await expect(quote).toHaveAccessibleDescription("Title is always H1.");
+  });
+});
+
+test.describe("⋯ More formatting in RTL", () => {
+  test("every row's label starts at the same inline start", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "More formatting").click();
+    const menu = page.getByRole("menu", { name: "More formatting" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const edges = await menu.evaluate((el) =>
+      ["Superscript", "Subscript", "Inline code", "Clear formatting"].map(
+        (name) => {
+          const item = [...el.querySelectorAll('[role^="menuitem"]')].find(
+            (node) => node.textContent?.includes(name),
+          );
+          const label = [...(item?.querySelectorAll("span") ?? [])].find(
+            (span) => span.textContent === name,
+          );
+          return Math.round(label?.getBoundingClientRect().right ?? -1);
+        },
+      ),
+    );
+    // In RTL a label starts at its right edge: all the same.
+    expect(new Set(edges).size, JSON.stringify(edges)).toBe(1);
+  });
+});
+
+test.describe("menu row polish", () => {
+  test("RTL: ⋯ shortcuts end at the row's inline end, all in one line", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "More formatting").click();
+    const menu = page.getByRole("menu", { name: "More formatting" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const edges = await menu.evaluate((el) =>
+      [...el.querySelectorAll('[data-slot="dropdown-menu-shortcut"]')].map(
+        (node) => {
+          const item = node.closest('[role^="menuitem"]') as HTMLElement;
+          return {
+            shortcut: Math.round(node.getBoundingClientRect().left),
+            item: Math.round(item.getBoundingClientRect().left),
+          };
+        },
+      ),
+    );
+    expect(edges.length).toBeGreaterThan(2);
+    // Every shortcut's inline end (its left in RTL) at the same x, near the
+    // row's own left edge, not right after the label.
+    expect(new Set(edges.map((edge) => edge.shortcut)).size).toBe(1);
+    for (const edge of edges) {
+      expect(edge.shortcut - edge.item).toBeLessThan(40);
+    }
+  });
+
+  test("Text style: every label starts at one x, More headings too; digits line up", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretIn(page, "Plain");
+    await toolbarButton(page, "Text").click();
+    const menu = page.getByRole("menu", { name: "Text style" });
+    await expect(menu).toBeVisible();
+    await menu.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished)),
+    );
+    const geometry = await menu.evaluate((el) => {
+      const rows = [...el.querySelectorAll('[role^="menuitem"]')].filter(
+        (row) =>
+          /^(Text|Heading \d|More headings|Bullet list|Quote)/.test(
+            row.textContent ?? "",
+          ),
+      );
+      const labelLeft = (row: Element) => {
+        const span = [...row.querySelectorAll("span")].find((node) =>
+          /^(Text|Heading \d|More headings|Bullet list|Quote)$/.test(
+            node.textContent ?? "",
+          ),
+        );
+        return Math.round(span?.getBoundingClientRect().left ?? -1);
+      };
+      const box = (kbd: Element) => {
+        const r = kbd.getBoundingClientRect();
+        return { width: r.width, right: r.right };
+      };
+      // Text and Heading 1–3 share one combo shape (⌘⌥0 … ⌘⌥3, or
+      // Ctrl+Alt+0 … Ctrl+Alt+3 off macOS), so only their widths compare;
+      // the lists' Ctrl+Shift+8 is wider than Ctrl+Alt+0 on Linux.
+      const styleKbds = [
+        ...el.querySelectorAll('[data-action-id^="style."] kbd'),
+      ].map(box);
+      const allKbds = [...el.querySelectorAll("kbd")]
+        .filter((kbd) => (kbd.textContent ?? "") !== "")
+        .map(box);
+      return { labels: rows.map(labelLeft), styleKbds, allKbds };
+    });
+    expect(new Set(geometry.labels).size, JSON.stringify(geometry.labels)).toBe(
+      1,
+    );
+    const spread = (values: number[]) =>
+      Math.max(...values) - Math.min(...values);
+    // ⌘⌥0 … ⌘⌥3 ask for tabular digits, so the four are one width where the
+    // font has them; a font without tabular figures (CI's Linux fallback)
+    // still differs by a pixel, so allow up to 1.5 px. The shared inline end
+    // below is what keeps the digits in one column.
+    expect(geometry.styleKbds).toHaveLength(4);
+    expect(
+      spread(geometry.styleKbds.map((kbd) => kbd.width)),
+      JSON.stringify(geometry.styleKbds),
+    ).toBeLessThanOrEqual(1.5);
+    // Every shortcut ends at one inline end, so the digits line up.
+    expect(
+      spread(geometry.allKbds.map((kbd) => kbd.right)),
+      JSON.stringify(geometry.allKbds),
+    ).toBeLessThan(0.5);
   });
 });
 

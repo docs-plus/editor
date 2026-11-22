@@ -968,6 +968,8 @@ Forget my choices…
 | Colour named rows | colour chunk | 0 B |
 | `+` on the empty line | slash chunk, plus **a little eager JSX in `SlashMenuHost`**, which renders chunk code only while the menu is open | about +100–200 B (estimate), **inside** the 1,000 B slash cap; measure |
 | "/" Suggested, ghost hint, footer, badges | slash chunk; `INSERT_KIND_CHOICE.maxRecent` 0 → 3 is one constant | 0 to +4 B |
+
+**Lazy slash chunk budget (owner, 2026-11-22):** the quick-insert phase measured the slash chunk at 7,041 B gz (from 5,772 B), over its 6 KB test budget. The owner raised the budget to **7 KB (7,168 B gz)**. The growth by feature (gz): the `+`'s undo handling 336 B, the footer 269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor 66 B; "New" badges compile out while none is declared. A later lazy piece for Suggested and the footer was rejected: both must render on the first frame. The `+` itself mounts from the bubble chunk (0 eager bytes), not the slash host.
 | Phone Insert sheet | phone chunk; the table and embed steps load only through `lazySurface(loadInsertStep)` (A9 measured +1.5 KB when phone imported menus statically) | 0 B |
 | ⋯ regroup and Page width | menus chunk | 0 B |
 | Comment button | comments PR's own ledger line (150 B) | — |
@@ -1004,6 +1006,15 @@ Forget my choices…
 - **Coarse pointer** (O8 a):
   - No bubble, unchanged.
   - **The row's stand-ins get a visible word** at 768 px and wider on coarse pointers: `Aa Format ▾`, `¶ Layout ▾`, `⋯ Block ▾`. "Text" would collide with the Style value, and "Paragraph" reads as a block type (UX review). That follows the fixed-faces rule: one icon plus at most one fixed word (ux:46).
+  - **Decision, 2026-11-22: the owner chose option (b)** (P4 decision pack, `docs/design/2026-11-17-bubble-quick-insert/p4/tablet-decision/`).
+    - The words add 120 px. Below an 848 px window (an 832 px row), a code or table block has no room for them.
+    - The touch ladder therefore takes one more step there, on a coarse pointer only:
+      - **Redo** leaves the row and leads the ⋯ menu, on its own. ⌘⇧Z still redoes.
+      - **The list split** keeps only List ▾, so applying the last-used list type takes one more tap.
+    - As built:
+      - The words and the step are CSS in `app/globals.css`, outside the editor chunk group.
+      - The ⋯ menu reads the same media query when it opens, so a desktop ⋯ menu is unchanged.
+      - Each stand-in's accessible name begins with its word: "Format", "Layout", "Block: …" (WCAG 2.5.3).
 - **O8 b spike** (not built): on a real iPad, show the phone selection cells as a bar docked at the bottom while text is selected. Measure:
   - whether the iOS callout and the WebKit r241971 avoidance stay clear of it;
   - whether the hardware keyboard's shortcut bar collides with it.
@@ -1041,6 +1052,18 @@ Forget my choices…
   - We **don't add a second trigger character.** That costs eager bytes in `slash-trigger.ts`, and LK3's `[[` already claims the next slot. Instead, the `+` on desktop and the Insert cell on phones are the non-typed paths.
 - **Persian decimal "/":** the trigger opens only at a block's start or after a space (unchanged), so "۳/۵" never opens it.
 - **Labels** go through `actionLabel(action)` (rtl:159). The link field is `dir="auto"`.
+
+### 13.5 Decisions at the design review (owner, 2026-11-22)
+
+The owner reviewed P1–P4 as built, on the design review page (`docs/design/2026-11-17-bubble-quick-insert/review.html`). It showed 67 before/after pairs against `main` `7b9fdc7`, with seven open decisions. The answer, verbatim: **"Approve all as recommended"**. So:
+
+1. **P1–P4 ship together** as one integration PR through the merge queue. The bubble shows Comment (last, after a separator) only where `comment.add` is offered, which the web sandbox never offers. P5, the bubble's comment icon, is a follow-up (§17).
+2. **A colour pick closes the colour menu.** Enter, Space or a click applies the colour, closes the menu, returns focus to the text with the selection kept, and announces the pick ("Red text"). This **amends O4**, which kept the menu open.
+3. **The row's colour menu shows both columns**, Text and Highlight. That is accepted for v1, as a deviation from §7.3, which asked for only the column of the half pressed. The bubble's menu follows §7.3. Revisit if writers pick the wrong column.
+4. **Before the first lazy menu chunk loads**, the style shortcuts in a list item or quote (⌘⌥0, ⌘⌥1–6) behave as on `main` and don't unwrap the item. After that, every surface lifts only the selected items. The lift is injected from the lazy chunks, so the editor chunk stays at 0 B growth (contract A21).
+5. **Esc before the bubble's code has ever loaded** does not cancel a bubble still waiting out its 250 ms delay. Accepted, because a fix needs eager code.
+6. **Tablet option (b)** (§13.2), confirmed as built.
+7. **The Appearance submenu's chevron** points outward while a flipped submenu opens inward. `main` does the same. It is a follow-up (§17), not a blocker.
 
 ---
 
@@ -1128,6 +1151,12 @@ They can each run in a worktree once P0 lands. P1 owns the bubble folder.
 - **Phones:** the presence and footer pills over the text (F18). These belong to the shell; propose a phone placement in the phones spec.
 - **Phones at 320 px:** the tab strip shows the active title as one letter ("B…") (`phone320-dark-02-selection`). Shell follow-up.
 - **The Hyperlink hover card has no "Open" action** (§7.5). Request to `@docs.plus`.
+- **Submenu chevrons follow the side they open on** (§13.5, decision 7).
+  - Today ⋯ › Appearance draws its chevron toward the inline end, even when Floating UI flips the submenu to the other side near the window edge. `main` does the same, in both directions.
+  - Fix: read the submenu's resolved side (`data-side` on the popup) and flip the chevron to match, in the lazy menu chunk.
+  - Add an e2e test at a window narrow enough to flip it, in LTR and RTL.
+- **P5: the bubble's comment icon** (§7.6, §13.5 decision 1). `comment.add` is registered on `main` with no icon, inside the comments track's 150 B ledger line. The bubble's slot already renders it where comments are offered. P5 adds the icon on its own ledger line, alongside the comments track's draft card (P4.10).
+- **The phone Aa sheet's Text row has no icon**, as on `main`, while Heading 1–3 have one. The registry icon measured +7 B gz on the editor chunk, and installing it from lazy code moved lucide's `Type` into the editor group (about +950 B). Revisit with the next ledger line that has room.
 - **Task checkboxes are invisible on `main`**, from Tiptap 3.33 TaskItem's styler span. This was found by the icons session (sibling notes), not here; listed so P2's Insert screenshots don't mistake it for a new bug.
 
 ---

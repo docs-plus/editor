@@ -39,7 +39,7 @@ export type TextStyleValue = "title" | "paragraph" | `heading-${HeadingLevel}`;
 
 export const TEXT_STYLE_LABELS: Record<TextStyleValue | "mixed", string> = {
   title: "Title",
-  paragraph: "Normal text",
+  paragraph: "Text",
   "heading-1": "Heading 1",
   "heading-2": "Heading 2",
   "heading-3": "Heading 3",
@@ -119,9 +119,31 @@ function startsInTitle(selection: Selection): boolean {
 }
 
 /**
+ * Turns the selected list items and quote lines into a text style, lifted
+ * out one by one (spec §7.2), or returns `undefined` when the selection has
+ * none. Injected by `lib/editor-actions/style-lift.ts`, which the lazy
+ * bubble (idle), menu, phone and palette chunks import (not "/", for its
+ * 7 KB budget), so the editor chunk keeps none of it; until one loads, a
+ * style shortcut or a "/" pick in a list keeps the plain `setTextStyle`.
+ */
+type StyleLift = (
+  editor: Editor,
+  value: Exclude<TextStyleValue, "title">,
+) => boolean | undefined;
+
+let styleLift: StyleLift | null = null;
+
+/** Installs the lift (once is enough; installing again replaces it). */
+export function setStyleLift(lift: StyleLift): void {
+  styleLift = lift;
+}
+
+/**
  * Sets the text style of the selected blocks. Unlike `toggleHeading`,
  * picking the style every selected block already has does nothing; a mixed
- * range is converted. A range that starts in the title is refused.
+ * range is converted. Selected list items and quote lines go through the
+ * injected lift (`setStyleLift`) once a lazy chunk has installed it. A
+ * range that starts in the title is refused.
  */
 export function setTextStyle(
   editor: Editor | null,
@@ -130,6 +152,8 @@ export function setTextStyle(
   if (!editor?.isEditable) return false;
   const { selection } = editor.state;
   if (startsInTitle(selection)) return false;
+  const lifted = styleLift?.(editor, value);
+  if (lifted !== undefined) return lifted;
   if (textStyleOf(computeContext(editor)) === value) return false;
   const level =
     value === "paragraph"
@@ -189,7 +213,12 @@ function styleAction(
         : { reason: "Text styles can't go here." };
     },
     isActive: (ctx) => textStyleOf(ctx) === value,
-    value: (ctx) => TEXT_STYLE_LABELS[textStyleOf(ctx)],
+    value: (ctx) =>
+      ctx.inList
+        ? "List"
+        : ctx.inBlockquote
+          ? "Quote"
+          : TEXT_STYLE_LABELS[textStyleOf(ctx)],
     run: (editor) => setTextStyle(editor, value),
   };
 }

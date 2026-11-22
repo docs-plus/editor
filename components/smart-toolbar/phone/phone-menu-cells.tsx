@@ -9,7 +9,6 @@ import {
   useSlotTarget,
   useToolbarHold,
 } from "@/components/smart-toolbar/context-slot/use-slot-target";
-import { InsertMenu } from "@/components/smart-toolbar/insert-menu";
 import { menuBody } from "@/components/smart-toolbar/lazy-menu";
 import {
   ToolbarMenu,
@@ -92,8 +91,9 @@ function SlotCell({ editor }: { editor: Editor }) {
 }
 
 /**
- * The phone bar's last cells (spec §4.7): List ▾, Indent, the context
- * slot and Insert ▾.
+ * The phone bar's menu cells (spec §4.7): List ▾, Indent and the context
+ * slot. Insert follows them: its sheet (spec §8.3) is in the bar's own
+ * chunk (`phone/insert-sheet.tsx`).
  * They reuse the row's menu triggers, which the editor chunk already
  * holds (their items are in the menu chunk), so the editor shell renders
  * them and hands them to the lazy bar (`mobile-toolbar-content.tsx`). Importing the menus from the bar's own
@@ -106,7 +106,6 @@ export function PhoneMenuCells({ editor }: { editor: Editor }) {
       <ListCell editor={editor} />
       <ActionButton id="indent.indent" editor={editor} variant="phone" />
       <SlotCell editor={editor} />
-      <InsertMenu editor={editor} />
     </>
   );
 }

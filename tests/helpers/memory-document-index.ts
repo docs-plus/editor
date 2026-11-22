@@ -80,6 +80,12 @@ function inFolder(
   return sortKey === undefined ? placed : { ...placed, sortKey };
 }
 
+/** 128 random bits as 32 lowercase hex, like the engine's `link_key`. */
+function newLinkKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function pinKeyAt(position: number): string {
   return `p${String(position).padStart(6, "0")}`;
 }
@@ -162,6 +168,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
         title: init?.title ?? "Untitled",
         createdAt: now,
         modifiedAt: now,
+        linkKey: newLinkKey(),
       },
       folderId,
       appendedManualKey(this.siblings(folderId)),
@@ -582,6 +589,12 @@ export class MemoryDocumentIndex implements LibraryIndex {
     return count;
   }
 
+  private trashedEntries(): DocumentEntry[] {
+    const entries = [...this.trashBin.values()].map(({ entry }) => entry);
+    for (const unit of this.folderUnits.values()) entries.push(...unit.docs);
+    return entries;
+  }
+
   private trashList(): TrashedItem[] {
     const list: TrashedItem[] = [];
     for (const { entry, trashedAt } of this.trashBin.values()) {
@@ -618,6 +631,7 @@ export class MemoryDocumentIndex implements LibraryIndex {
       tags: [...this.tags],
       listViews: this.listViews,
       trash: this.trashList(),
+      trashed: this.trashedEntries(),
     };
   }
 

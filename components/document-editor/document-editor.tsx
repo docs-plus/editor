@@ -71,6 +71,7 @@ import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
 import { useToolbarDensity } from "@/hooks/use-toolbar-density";
 import { useYjsDocument } from "@/hooks/use-yjs-document";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
+import type { LinkHost } from "@/lib/links/link-host-types";
 import { createSchemaGuard, type SchemaGuardState } from "@/lib/schema-guard";
 import { stylesApplied } from "@/lib/styles-applied";
 import { setTheme } from "@/lib/theme";
@@ -100,6 +101,11 @@ interface DocumentEditorProps {
    * guard defers its Yjs repair until it clears. Reading mode sets it.
    */
   readOnly?: boolean;
+  /**
+   * Document links (search-linking §4.1), from `createLinkHost`. Keep one
+   * object for the editor's life: a new one rebuilds the extensions.
+   */
+  linkHost?: LinkHost;
   /**
    * The outline overlays the page instead of docking beside it. Decided
    * by the page frame (`PageFrame`, preferences design §5.9).
@@ -178,6 +184,7 @@ function DocumentEditorContent({
   playgroundRegenerateTrigger,
   onPlaygroundRegenerate,
   readOnly,
+  linkHost,
   outlineOverlay = false,
   statusChip,
   rejectedReason,
@@ -246,8 +253,9 @@ function DocumentEditorContent({
         onFilterChange: setFilterState,
         onTocUpdate: tocStore.set,
         onInvalidContent: schemaGuard.onInvalidContent,
+        linkHost,
       }),
-    [documentId, ydoc, awareness, tocStore, schemaGuard],
+    [documentId, ydoc, awareness, tocStore, schemaGuard, linkHost],
   );
 
   const editor = useEditor({
@@ -479,17 +487,8 @@ function DocumentEditorContent({
   );
 }
 
-export function DocumentEditor({
-  documentId,
-  onTitleChange,
-  initialContent,
-  playgroundRegenerateTrigger,
-  onPlaygroundRegenerate,
-  readOnly,
-  outlineOverlay,
-  statusChip,
-}: DocumentEditorProps = {}) {
-  const docId = documentId ?? "default";
+export function DocumentEditor(props: DocumentEditorProps = {}) {
+  const docId = props.documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
     useYjsDocument(docId);
 
@@ -506,18 +505,13 @@ export function DocumentEditor({
   }
 
   return (
+    // Every prop passes through as given; new ones need no plumbing here.
     <DocumentEditorContent
+      {...props}
       ydoc={ydoc}
       awareness={awareness}
       provider={provider}
       documentId={docId}
-      onTitleChange={onTitleChange}
-      initialContent={initialContent}
-      playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-      onPlaygroundRegenerate={onPlaygroundRegenerate}
-      readOnly={readOnly}
-      outlineOverlay={outlineOverlay}
-      statusChip={statusChip}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />

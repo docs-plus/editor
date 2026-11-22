@@ -16,7 +16,8 @@
 #   4. check both answer, and put the previous build back if Next.js does not;
 #   5. register the daily retention purge (editor-purge) with PM2 without
 #      purging: the run PM2 starts exits at once, so only the cron purges.
-# It only moves forward along main. Roll back with the runbook.
+# It only moves forward along main, and only to a commit whose .tool-versions
+# pins the Bun this host runs. Roll back with the runbook.
 # The body is one function, so bash has read all of it before the
 # fast-forward replaces this file. Changes to it apply from the next deploy.
 set -euo pipefail
@@ -70,6 +71,16 @@ fi
 if ! git merge-base --is-ancestor HEAD "$sha"; then
   echo "deploy: $sha is behind the deployed $(git rev-parse --short HEAD); roll back with the runbook" >&2
   exit 6
+fi
+# Build and run the commit only on the Bun its .tool-versions pins (the file
+# the build checkout gets). A host still on another Bun stops here, before
+# the build and the Hocus restart: upgrade Bun first (deploy runbook).
+local want have
+want="$(git show "$sha:.tool-versions" 2>/dev/null | awk '$1 == "bun" { print $2 }')" || want=""
+have="$(bun --version)"
+if [ -z "$want" ] || [ "$want" != "$have" ]; then
+  echo "deploy: $sha needs Bun ${want:-(no bun line in .tool-versions)}; this host has $have. Upgrade Bun first (docs/operations/deploy-runbook.md)" >&2
+  exit 11
 fi
 
 log "Building $(git log -1 --format='%h %s' "$sha") in $BUILD_DIR"

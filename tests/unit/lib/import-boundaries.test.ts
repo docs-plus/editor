@@ -34,8 +34,6 @@ function staticImports(
       if (kind !== "import-statement") continue;
       if (spec.startsWith("@/") || spec.startsWith(".")) {
         const resolved = Bun.resolveSync(spec, path.dirname(file));
-        // Stylesheets import nothing the rules care about.
-        if (/\.s?css$/.test(resolved)) continue;
         if (!resolved.includes("/node_modules/")) visit(resolved);
       } else {
         packages.add(spec);
@@ -226,6 +224,9 @@ describe("editor import boundaries", () => {
         expect(file).not.toBe("lib/collab-session.ts");
         expect(file.startsWith("lib/platform/web/")).toBe(false);
         expect(file.startsWith("lib/platform/desktop/")).toBe(false);
+        // Document links (search-linking §4.1, D23): the editor passes the
+        // host's link options through and imports only their type.
+        expect(file.startsWith("lib/links/")).toBe(false);
       }
     });
   }

@@ -6,6 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuReason,
+  DropdownMenuShortcut,
 } from "@/components/ui/dropdown-menu";
 import { useEditorContext } from "@/hooks/use-editor-context";
 import { editorActions } from "@/lib/editor-actions";
@@ -34,6 +35,27 @@ const DiagramTemplates = lazySurface(
   <DiagramItem />,
 );
 
+/**
+ * The "/" alias that finds this kind first in the "/" menu ("/table",
+ * "/code"): the label's first word. Shown at the row's end (spec §8.1);
+ * `surface-labels.test.ts` checks that it finds the kind.
+ */
+export const slashAlias = (action: AnyAction): string =>
+  `/${action.label.split(" ")[0].toLowerCase()}`;
+
+/** The alias at a row's end: typed syntax, so left to right. */
+function AliasHint({ action }: { action: AnyAction }) {
+  return (
+    <DropdownMenuShortcut
+      aria-hidden="true"
+      dir="ltr"
+      className="ps-4 font-mono tracking-normal"
+    >
+      {slashAlias(action)}
+    </DropdownMenuShortcut>
+  );
+}
+
 function DiagramItem() {
   const { editor } = useCurrentEditor();
   const action = editorActions.get("insert.mermaid");
@@ -45,6 +67,7 @@ function DiagramItem() {
     >
       {Icon ? <Icon aria-hidden="true" /> : null}
       <span>{action.label}</span>
+      <AliasHint action={action} />
     </DropdownMenuItem>
   ) : null;
 }
@@ -86,6 +109,7 @@ function InsertMenuItems({ editor }: { editor: Editor }) {
       >
         {Icon ? <Icon aria-hidden="true" /> : null}
         <span>{action.label}</span>
+        <AliasHint action={action} />
         {reason ? (
           <DropdownMenuReason id={`${action.id}-reason`} className="ps-5.5">
             {reason}

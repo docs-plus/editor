@@ -9,6 +9,234 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop storage: lock waits, and derived rows without the fsync
+
+Two Windows soak failures on #170 and #171, fixed in the engine.
+
+- **Desktop:** every SQLite connection waits up to 3 s for a lock
+  (`busy_timeout`) instead of failing at once. On Windows a scanner or a
+  process still letting go of a new file held it for a moment, and the
+  next write failed with "database is locked" (T4-copy). TRUNCATE
+  checkpoints still never wait, so a running daily copy can't stretch a
+  quit.
+- **Desktop:** derived rows (`derive.put`) commit at `synchronous=NORMAL`.
+  They are a cache: a power cut loses them and their `derived_seq`
+  together, and the document is derived again. Backlinks queued behind a
+  derive no longer wait for F_FULLFSYNC or FlushFileBuffers (T21: 4.9 ms →
+  0.9 ms median on an Apple silicon Mac). Everything else stays FULL; the
+  architecture spec's D-A6 records the amendment.
+- **Tests:** contention tests hold a lock from a second process (a write
+  and the daily copy wait it out; a reader never slows shutdown), and the
+  derive commit's `synchronous` trace is checked. T21 runs its harness 5
+  times on one seeded library and gates on the median of the runs, with
+  p95 over every round and the derive's SQL time reported.
+
+**Deploy:** none.
+
+### Selection bubble P1: Style ▾, strike, code, clear and a gap-free link field
+
+The selection bubble gains the rest of its v2 row (spec
+`2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A21):
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. With P2–P4, the
+editor chunk group grows 26 B: 394,545 B gz against 394,519 B on `main` at
+`2764fb5`. That is a D23 ledger line the owner approved on 2026-11-22
+(`EDITOR_CHUNK_LEDGER_BYTES` 2,205 → 2,231 B), covering the style-lift hook,
+List and Quote in the style value and the Insert sheet's nested load. The
+per-item lift behind the text styles is injected from the lazy chunks.
+Merging `main` `2764fb5` first measured +981 B: the lazy menus imported
+lucide's Type, which made Turbopack split the editor group's small modules
+into two files. The menus now draw their own copy of the icon
+(`components/smart-toolbar/type-icon.ts`). The
+"/" chunk is under its 7 KB budget, 7,099 B gz by its own test
+(`SLASH_BUDGET=1`; 7,334 B on the P4 tip): the phone Insert sheet now gets
+the "/" items at load instead of importing them. The bubble chunk is
+14,860 B gz (9,797 B on `main` at `2764fb5`) and the colour chunk
+6,580 B gz (3,639 B).
+
+#### Added
+
+- **Bubble:** Style ▾ shows the selection's block type as one word (Text,
+  H1–H6, Title, List, Quote, Code, Mixed), sized once to the longest word,
+  and opens Turn into away from the text. Strike, inline code and clear
+  formatting join B, I and U. A comment slot is reserved at the end and
+  renders nothing until the comments work registers `comment.add`.
+- **Turn into:** one menu body for the bubble and the row's Text style ▾:
+  Text, Heading 1–3, More headings ▸ (4–6), the three lists, Quote and Code
+  block, with icons, shortcuts and a trailing ✓, and no Markdown chips.
+  The row keeps Your formats below them.
+- **Text styles:** Text and the headings turn the selected list items or
+  quote lines into that block, lifted to the top level, in one undo step,
+  wherever they run (Turn into, the palette, the "/" menu, the phone's
+  Style rows, the shortcuts); unselected items and lines stay in their list
+  or quote, and a range across a paragraph and a list converts every
+  block. The lift loads with the bubble (on idle), the menus, the phone
+  bar or the palette; before any of them, a style shortcut or a "/" pick
+  in a list restyles in place, as before.
+- **Turn into:** after select all it converts everything but the title
+  ("The title stays a heading."); Code block and Quote lift list items and
+  quote lines first; Code block over formatting says "Formatting
+  removed"; a range with table cells converts around them ("Table cells
+  keep their type."). Each pill has Undo. Opened toward the text, it goes
+  past the selection's lines, never over them.
+- **Colour:** the bubble's and the row's colour menus are named rows:
+  Recent, then Text | Highlight side by side (Default and No highlight
+  first, five colours each, the rest under More colours ▸ and More
+  highlights ▸), with ✓ on the current value, typeahead and the hover
+  preview. From the bubble the menu opens below or above the selection,
+  never over it. Enter or Space picks and closes the menu (a change from
+  O4, spec §7.10), and the pick is announced with Undo.
+- **Phone:** the Aa sheet keeps the swatch grid, six per line, names the
+  current colours under it, and each tap shows a pill naming the colour
+  ("Teal text") with a 44px Undo.
+- **Bubble:** a keyboard selection (Shift+arrows, ⌘A) shows the bubble
+  300 ms after Shift is released and the selection is still, never while
+  Shift is held or a key repeats.
+- **Bubble:** Alt+F10 shows a bubble that is still waiting (its delay) at
+  once, with focus on Style ▾.
+- **Bubble:** applying inline code over linked or coloured text says "Link
+  and colour removed" (or "Link removed", "Colour removed") on the status
+  pill, with Undo.
+
+#### Changed
+
+- **Text style:** the paragraph style is named "Text" everywhere (the
+  registry label, so the row, the palette, the "/" menu and the phone
+  agree), and the row's face reads "List" or "Quote" inside a list or
+  quote, as the bubble's does.
+- **Bubble:** inside inline code, B, I, U, S, colour and link say "Inline
+  code can't take other formatting." instead of the generic refusal; the
+  Paint format brush says the same on inline code on every surface
+  (phone cells included), where it said "Code has no formatting."
+- **Bubble:** a lighter edge in light mode, its own darker-than-page
+  surface in dark mode (`oklch(0.24 0 0)`, edge `oklch(1 0 0 / 36%)`), focus
+  rings drawn inside each button, a dashed bar for a mixed mark, and a
+  `CanvasText` edge under forced colours.
+- **Bubble:** motion follows the O10 token: 120 ms scale-in from the anchor
+  side, 80 ms fade out, and none at all under reduced motion
+  (`prefers-reduced-motion` or `data-motion="reduce"`).
+
+#### Fixed
+
+- **RTL:** the "/" menu's Markdown hint caps sit at the row's inline end
+  again (they had drifted next to the labels); the row ⋯ menu's rows line
+  up; menu shortcut glyphs read left to right; the phone Insert sheet keeps
+  a note ("3 × 3") next to its label, so it no longer reads as the next
+  column's.
+
+- **Bubble:** clicking 🔗 and pasting or typing a URL at once no longer
+  replaces the selected words: focus moves to the link field in the click
+  itself, and the bubble hides in the same task.
+- **Bubble:** Esc while the bubble is still waiting to show (its delay or
+  a keyboard selection's settle) cancels it.
+
+### Phone Insert sheet, Style first in the Aa sheet, words on tablet stand-ins (P4)
+
+Phase P4 of the selection bubble and quick insert design (spec §8.3, §13.1,
+§13.2). Phones get an Insert sheet in place of the desktop dropdown, the Aa
+sheet leads with Style, and touch tablets name the row's unclear stand-ins.
+
+#### Added
+
+- **Phone:** the bar's Insert cell opens a bottom sheet
+  (`components/smart-toolbar/phone/insert-sheet.tsx`): the "/" menu's items
+  as a two-column grid of 44px cells. Suggested (the "/" menu's own rows for the
+  recent kinds) comes first when there are any, then "Blocks" (the caret's block is empty)
+  or "Turn into" (it has text), then Insert. Kinds that can't run here show
+  their reason on a second line. Table and Embed open their step inside the
+  sheet; Diagram lists the templates. A pick closes the sheet and puts the
+  caret in the new block, with the keyboard back. "/embed" on a phone opens
+  the sheet at the embed step. The sheet rides above the keyboard while the
+  link field has focus, and a pick refused since it opened (a
+  collaborator's edit) says why inside it. Its cells and steps are their own
+  lazy chunk, fetched when the browser is idle and on the cell's press.
+- **Touch tablets:** on a coarse pointer from 768px, the row's stand-ins
+  read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a), from first paint
+  (CSS in `app/globals.css`). Below an 848px window the row has no room for
+  their 120px in a code block or table, so (owner decision, option b) Redo
+  moves from the row to the top of ⋯ there, and the list button keeps only
+  List ▾. ⌘⇧Z still redoes. Desktop's ⋯ menu is unchanged.
+
+#### Changed
+
+- **Toolbar:** the stand-ins are named "Format" (was "More text
+  formatting"), "Layout" (was "Paragraph") and "Block: Section tools" and so
+  on (was "Section tools"), so each name begins with the word shown on it
+  (WCAG 2.5.3). The phone's slot cell takes the same name.
+- **Phone:** the Aa sheet starts with Style: Text and H1–H3, a More
+  headings disclosure for H4–H6 (open when the current style is one of
+  them, closable all the same), then the lists and Quote, the current style
+  pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
+  above the home indicator.
+
+Measured against `main` at 84a9458, with the "/" menu's P2 and the grouped ⋯
+menu's P3 work merged in: the editor chunk group gets 23 B smaller (393,995 B
+gz against 394,018 B). The phone bar chunk grows 978 B gz (18,175 B), and the
+sheet body is a chunk of its own, 3,926 B gz. The app's CSS grows 494 B gz
+(16,487 B): 138 B for the tablet words and 71 B for the touch step that
+moves Redo; the rest is P2 and P3.
+
+### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
+
+The "/" menu gains what the second reference set showed it lacked, and a
+pointer path to it (spec `2026-11-17-bubble-and-quick-insert-design.md`
+§8.2, §8.5; v1 contract A20). The editor chunk group is unchanged
+(393,817 B gz, −3 B against `main` at `1548d5e`); the slash chunk grows
+from 5,772 B to 7,041 B gz, and its test budget (`SLASH_BUDGET=1`) is
+raised from 6 KB to 7 KB (7,168 B) by the owner's decision of 2026-11-22.
+The growth by feature (gz): the `+`'s undo handling 336 B, the footer
+269 B, the "Type to search" hint 258 B, Suggested 154 B, the RTL anchor
+66 B; "New" badges compile out while none is declared. The bubble chunk, which now mounts the
+`+`, from 9,798 B to 10,930 B gz. The footer lives in `slash-menu.tsx`
+rather than its own `slash-footer.tsx` (the plan's file list): it shares
+the menu's state and placement, and a separate module would only add
+bytes.
+
+#### Added
+
+- **"/" menu:** a Suggested section leads with your last 3 inserted kinds
+  (table, image, divider…) that can go at the caret; each stays in its own
+  section too. A new writer sees no Suggested section; "Forget my choices"
+  clears it. A query hides it and puts a recent kind first among equal
+  matches.
+- **"/" menu:** "Type to search" sits after the "/" while the query is
+  empty and nothing follows the caret (never during IME composition); a
+  pinned footer teaches the active row's Markdown shortcut ("Type ## then
+  space for Heading 2") and has a Close button (Esc still works). On touch
+  the footer is only a 44 px Close. Hints stay left to right in RTL ("1.",
+  never ".1").
+- **"/" menu:** rows can carry a "New" badge until a date, hidden once you
+  have used that kind; none are declared yet.
+- **`+` on an empty line:** on a mouse or trackpad, a `+` in the start
+  margin of an empty paragraph (in line with the heading grips; the right
+  margin in RTL) types the "/" for you, so the ordinary "/" menu opens. It
+  shows beside the caret 300 ms after you stop typing, or under the
+  pointer after a 150 ms rest, never in the title, a list, a quote or a
+  table cell, and never on touch. The "/" it types is an ordinary one: a
+  query, a pick, Esc and undo work as after a typed "/". Only with the
+  query still empty, Esc removes it without an undo step and a pick
+  undoes to the empty line. It is mounted by
+  the lazy bubble chunk's desktop wrapper, so it appears once that chunk
+  has loaded (a deviation from the spec's §15 file split, which put it in
+  `SlashMenuHost`: that would have grown the editor chunk).
+- **Insert menu:** each row shows its "/" alias ("/table", "/code").
+
+#### Changed
+
+- **"/" menu:** 320 px wide (was 288); in an RTL paragraph its right edge
+  is at the "/".
+- **Placeholder:** an empty paragraph reads "Type / for blocks" (was
+  "Type something...").
+
+### Row ⋯ menu in three labelled groups (BQ4)
+
+The row's ⋯ menu is now Text (Superscript, Subscript, Inline code, Clear
+formatting, Paint format), View (Simplified toolbar, Appearance) and Help
+(All actions…), with "Forget my choices…" alone at the end. Each group has a
+visible heading and `role="group"` with the same label, and every row keeps a
+16 px leading slot so the labels line up (Simplified toolbar shows its check
+there). Nothing is added or removed. Page width follows with the preferences
+work. Editor chunk +1 B against `main` at `84a9458`, from chunk-name hashes only; no eager code.
+
 ### Desktop P2.6f: repair and rebuild the library
 
 Repair and rebuild for the format-2 library (offline data-model revision
@@ -87,6 +315,148 @@ group +152 B gz on its D23 line (measured +152 B on `main` at `1548d5e`,
 
 - **Editor budget:** the D23 ledger gains P2.12's 152 B line (2,205 B, or
   2,285 B with M19's conditional line), owner-approved 2026-11-22.
+
+### Bun 1.4.5 (security release)
+
+TinyDocy moves from Bun 1.4.4 to 1.4.5, released 2026-11-19. 1.4.5 is a
+security release covering HTTP/3, TLS, DNS, zlib and BoringSSL, and it moves
+`bun:sqlite` from SQLite 3.53.4 to 3.54.1 (on macOS, Bun 1.4.5 uses the
+system SQLite, 3.54.0 on the machine this was tested on). `bun.lock` is
+unchanged. Deploys now refuse to run on a host whose Bun is not the one the
+commit pins.
+
+#### Changed
+
+- **Runtime:** `.tool-versions`, `packageManager` and `engines` pin Bun
+  1.4.5. CI, the nightly and the desktop workflows read `.tool-versions`.
+- **Deploy:** `scripts/deploy.sh` compares the host's `bun --version` with
+  the Bun the commit's `.tool-versions` pins. If they differ, it exits 11
+  before it creates the build checkout, installs anything or restarts Hocus.
+  The deploy runbook has a new
+  [Upgrading Bun](docs/operations/deploy-runbook.md#upgrading-bun) section.
+
+#### Added
+
+- **Tooling:** `bun run test:fast` (`bun test --parallel`, which also
+  isolates each file) and `bun run typecheck:fast` (`bun check --no-script`
+  over the same four projects as `bun run typecheck`). They
+  are for local speed only. CI still gates on `bun run test` (serial) and
+  `bun run typecheck` (`tsc`), because `bun check` follows TypeScript 7
+  semantics.
+- **Tests:** `tests/unit/ci/deploy-bun-version.test.ts` runs the real
+  `deploy.sh` against a throwaway repository and checks that a version
+  mismatch or a missing pin stops it before the build.
+
+#### Security
+
+- Bun 1.4.5's fixes to HTTP/3, TLS, DNS, zlib and BoringSSL reach the Next.js
+  server, Hocus and the purge on the next deploy.
+- SQLite 3.54 refuses `ALTER TABLE` on columns named `rowid`, `oid` or
+  `_rowid_`. No code does that: `desktop/storage`, `lib` and `scripts` only
+  read `rowid` in `SELECT`s (`copy-library.ts`), and the only
+  `ALTER TABLE` (a test migration) adds a column named `extra`.
+- The desktop storage and `scripts/` tests (193), including the purge's
+  `VACUUM INTO` backups, which the test reopens and compares, pass on the
+  macOS system SQLite. CI covers Linux on SQLite 3.54.1.
+- Bun 1.4.5 validates custom root CAs more strictly. TinyDocy passes no
+  custom CA (`ca`, `NODE_EXTRA_CA_CERTS`, `rejectUnauthorized`) anywhere.
+
+#### Deploy
+
+- **Done 2026-11-22:** the owner installed Bun 1.4.5 on the host with the
+  pinned installer, before this merged:
+  ```bash
+  ssh <user>@<host> 'curl -fsSL https://bun.com/install | bash -s "bun-v1.4.5"'
+  ssh <user>@<host> '~/.bun/bin/bun --version'   # prints 1.4.5
+  ```
+  The running apps switch to 1.4.5 when a deploy next restarts them. Any
+  deploy does that, including this one. No other step is needed: the
+  automatic deploy of this merge is enough, or run `gh workflow run deploy.yml`.
+- The deploy that ships this change still runs the host's previous
+  `deploy.sh`, which has no version check. The check applies from the
+  deploy after it. From then on, a deploy on a host that is not on 1.4.5
+  fails with exit 11 and changes nothing on the host.
+- Every later Bun upgrade follows the runbook: merge the `.tool-versions`
+  change with automatic deploys off, upgrade the host, then deploy.
+
+### Links between documents LK1: the document links core
+
+The pieces desktop and the web library need to link one document to
+another (search-linking design §4.1–§4.7, §5, D25). Nothing in the web
+sandbox uses them: the editor gains a `linkHost` pass-through that the web
+never sets, so the web keeps #168's `isWebLink` policy. Editor chunk group
+−3 B gz against `main` 1e535b4 (its D23 ledger line is 60 B); web CSS
+unchanged.
+
+#### Added
+
+- **Links:** `lib/links/doc-link.ts` parses `tinydocy:doc/<link_key>`,
+  `tinydocy:doc/<link_key>#<heading>` and `tinydocy:here#<heading>`
+  strictly, tells a form from a later version apart from an invalid one,
+  and recognises our scheme behind whitespace, controls, zero-width and
+  bidi characters in any case, so none of them reaches an external opener.
+- **Links:** `createLinkHost` (`lib/links/link-host.ts`) builds the
+  Hyperlink options a host passes the editor, with one identity for its
+  life:
+  - `isAllowedUri`: document links that parse, and https, http and mailto
+    (`isWebLink`), applied by #168's `LinkPolicyHyperlink` to commands,
+    paste, rendering and opening. No `protocols`, so typing `tinydocy:`
+    never autolinks;
+  - `linkIcon`: one icon per state, in the link's own colour — FileText
+    (opens), Hash (`here#`), FileMinus (In Trash) and FileQuestion (Not
+    available, Not a valid link, Needs a newer version); the states that
+    don't open are `role="img"` with their label, and `refreshIcons`
+    redraws icons and labels after index changes
+    (`createIconRefresher` debounces it, 100 ms);
+  - `navigate`: ⌘-click opens in this tab, ⌘⇧-click or middle-click in a
+    new one, `here#` jumps in place, web links open as before after a
+    second allowlist check; a link that can't open shows its preview card,
+    or is announced from the keyboard. One announcement per follow.
+    `onFollow` gives the shell the source document and a Yjs relative
+    position for Back;
+  - `popovers`: a document link's preview shows its title and place
+    ("Library › folder", In Trash) or why it can't open, with Open, Copy
+    Link and Remove Link (never the default focus) — never the href or
+    key. Web links keep the package's preview;
+  - `openAtHeading` goes to the heading after a document opens, looking it
+    up again after the first sync before saying "The section this link
+    pointed to was removed."
+  - `lib/links/doc-links.css` dashes the underline of links that don't
+    open, inner styled runs included.
+- **Links:** `lib/links/extract-links.ts`, the links-only pass:
+  `deriveDocument` lists link rows (section, key, heading, text, context;
+  text capped at 200 characters; deduplicated on key, heading and section,
+  at most 2,000 per document) and heading rows in one walk, under 8 ms at
+  500 headings and 10,000 links. `toLinkRows` and `toHeadingRows` map them
+  to format 2's `links` and `doc_headings` columns; `linksHash` and
+  `DERIVE_VERSION` (1) tell when to derive again, and `trackLinkChanges`
+  marks a document dirty only when its links may have changed.
+- **Links:** `stripPrivateDocLinks` turns links to documents that aren't
+  shared into plain text in one transaction when a document is shared
+  (D-O8), keeping `here#` links; `countPrivateDocLinks` and
+  `consentLinksLine` give the consent line ("3 links to your other
+  documents will become plain text." with Keep Links).
+- **Platform:** `LibraryIndex` entries carry their `linkKey`, and the
+  snapshot lists `trashed` documents. `MemoryDocumentIndex` mints keys and
+  the contract suite covers both and the snapshot's identity.
+- **Desktop:** `RpcLibraryIndex` passes the same suite. `create` mints the
+  32-hex `link_key` with the id and sends it, and the engine's `createDoc`
+  keeps it (refusing a malformed one). `sidebar` returns each document's
+  `linkKey`, and `trashList` adds `trashed`: every document in the Trash,
+  alone or in a folder, with its key. No schema change.
+- **Editor:** `DocumentEditor` takes an optional, stable `linkHost` and
+  spreads it into the Hyperlink configuration; it imports only its type
+  (import-boundary rule). `DocumentEditor` passes its props through as
+  given, so new props need no plumbing.
+- **Links:** `lib/web-link.ts` holds `isWebLink`, shared by the editor
+  config and the link host so the two policies can't drift.
+- **Tests:** unit tests for every module (a navigate table, a no-host
+  safety test on the real editor, bare Y.Doc derive tests and a timing
+  budget), and a links view in the library harness (`?view=links`, with a
+  read-only toggle and `&matrix=1`) with Playwright specs for every state,
+  the gesture table in both modes, previews, `here#` jumps, the external
+  opener, and a visual matrix (icon colour, 4.5:1 contrast, dashed runs,
+  RTL) in light and dark.
 
 ### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 

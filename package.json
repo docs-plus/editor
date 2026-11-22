@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "packageManager": "bun@1.4.4",
+  "packageManager": "bun@1.4.5",
   "engines": {
-    "bun": ">=1.4.4"
+    "bun": ">=1.4.5"
   },
   "scripts": {
     "dev": "next dev",
@@ -15,12 +15,14 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.desktop-node.json && tsc --noEmit -p tsconfig.desktop-preload.json",
+    "typecheck:fast": "bun check --no-script && bun check --no-script -p tsconfig.sw.json && bun check --no-script -p tsconfig.desktop-node.json && bun check --no-script -p tsconfig.desktop-preload.json",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "prepare": "husky",
     "test": "bun test --path-ignore-patterns 'tests/unit/stress/**'",
+    "test:fast": "bun test --parallel --path-ignore-patterns 'tests/unit/stress/**'",
     "test:watch": "bun test --watch",
     "test:fuzz": "bun test tests/unit/fuzz",
     "test:e2e": "playwright test --project=chromium --project=perf",

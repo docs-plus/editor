@@ -44,6 +44,7 @@ import {
   toSessionRange,
 } from "@/extensions/repeat-formatting/relative-range";
 import { announce } from "@/lib/announce";
+import { INLINE_CODE_REASON } from "@/lib/editor-actions/inline-code-reason";
 import {
   applyPaint,
   cancelPaint,
@@ -282,7 +283,11 @@ export const v11Engine: V11Engine = {
         ctx.nodeSelectionType !== null
           ? { reason: "Select text to pick up its formatting." }
           : isCodeOnly(ctx)
-            ? { reason: REPEAT_REASONS.code }
+            ? {
+                reason: ctx.activeMarks.has("inlineCode")
+                  ? INLINE_CODE_REASON
+                  : REPEAT_REASONS.code,
+              }
             : true,
       // Arg "touch": the brush was tapped (its pill says tap it again).
       run: (editor, arg) => togglePaint(editor, arg === "touch"),

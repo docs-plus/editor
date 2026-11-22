@@ -6,7 +6,12 @@ import { mkdirSync } from "node:fs";
 
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import { BUBBLE_ACTION_IDS } from "@/components/smart-toolbar/bubble/bubble-rules";
+import {
+  BUBBLE_ACTION_IDS,
+  BUBBLE_RESIZE_DELAY_MS,
+  BUBBLE_SHOW_DELAY_MS,
+  KEYBOARD_SETTLE_MS,
+} from "@/components/smart-toolbar/bubble/bubble-rules";
 
 import {
   expectNoSeriousA11yViolations,
@@ -19,6 +24,24 @@ import { CHUNK_MARKERS, holdChunk, interceptChunk } from "./helpers/lazy-chunk";
 import { listenerCounts } from "./helpers/listener-counts";
 
 const SCREENS = ".superpowers/screens-r2-bubble";
+
+/*
+ * Named waits, from the bubble's own delays where it has one. A wait here
+ * proves something stays (or stays away) past a delay, so it cannot be a
+ * web-first assertion.
+ */
+/** Past the show delay (and the plugin's update debounce, also 250 ms). */
+const PAST_SHOW_MS = BUBBLE_SHOW_DELAY_MS + 150;
+/** Past a keyboard selection's settle and the show delay after it. */
+const PAST_SETTLE_MS = KEYBOARD_SETTLE_MS + BUBBLE_SHOW_DELAY_MS + 150;
+/** Past a reposition (scroll or resize) and its frame. */
+const PAST_REPOSITION_MS = BUBBLE_RESIZE_DELAY_MS + 200;
+/** The scale-in and focus ring before a screenshot or a box read. */
+const PAINT_SETTLE_MS = 200;
+/** What `EditorPage.setContent` gives before a mouse drag (see `openDoc`). */
+const CONTENT_SETTLE_MS = 200;
+/** Past collab-session's deferred release (1 s). */
+const PAST_RELEASE_MS = 1_100;
 
 const text = (value: string, marks?: unknown[]) => ({
   type: "text",
@@ -57,6 +80,9 @@ const bubbleToolbar = (page: Page) =>
   page.getByRole("toolbar", { name: "Selection formatting" });
 const row = (page: Page) =>
   page.getByRole("toolbar", { name: "Formatting", exact: true });
+/** Style ▾, named by its face ("Text", "H2 Heading 2"). */
+const styleButton = (page: Page) =>
+  bubbleToolbar(page).locator("button[data-face]");
 
 /**
  * Loads `doc` outside the undo history, as the app seeds a document: an
@@ -73,13 +99,13 @@ async function openDoc(page: Page, doc: object = DOC): Promise<EditorPage> {
   }, doc);
   // The settle time `EditorPage.setContent` gives: a mouse drag right after
   // the content lands opens no bubble in Chromium (not investigated here).
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(CONTENT_SETTLE_MS);
   return editorPage;
 }
 
 /** Selects `needle` (the `nth` match) with a focused editor, like a drag. */
 async function selectText(page: Page, needle: string, nth = 0) {
-  await page.evaluate(
+  const editable = await page.evaluate(
     ([target, index]) => {
       const editor = window.__tiptap_editor;
       if (!editor) throw new Error("editor missing");
@@ -100,9 +126,14 @@ async function selectText(page: Page, needle: string, nth = 0) {
         .focus()
         .setTextSelection({ from, to: from + (target as string).length })
         .run();
+      return editor.isEditable;
     },
     [needle, nth] as const,
   );
+  // Tiptap's `focus()` lands a frame later: a key pressed before that
+  // goes to the body (⌘A then selects nothing in the editor). A read-only
+  // editor takes no focus.
+  if (editable) await expect(page.locator(".tiptap")).toBeFocused();
 }
 
 /** Drag-selects `needle` with the mouse (a real pointer selection). */
@@ -180,7 +211,7 @@ async function expectBubbleOpen(page: Page) {
  * The focus outline (width + offset) fits inside every clipping ancestor, so
  * the 2px ring is never cut (PR A carry-over for the floating variant).
  */
-async function expectOutlineNotClipped(item: Locator) {
+async function expectOutlineNotClipped(item: Locator, minGrow = 2) {
   const clipped = await item.evaluate((el) => {
     const style = getComputedStyle(el);
     const grow =
@@ -213,12 +244,12 @@ async function expectOutlineNotClipped(item: Locator) {
     }
     return { grow, problems };
   });
-  expect(clipped.grow).toBeGreaterThanOrEqual(2);
+  expect(clipped.grow).toBeGreaterThanOrEqual(minGrow);
   expect(clipped.problems).toEqual([]);
 }
 
 test.describe("selection bubble", () => {
-  test("shows B, I, U, text colour, link and Paint format for a mouse selection", async ({
+  test("shows Style, B, I, U, S, code, clear, colour, link and Paint format for a mouse selection", async ({
     page,
   }) => {
     await openDoc(page);
@@ -227,17 +258,33 @@ test.describe("selection bubble", () => {
     const names = await bubbleToolbar(page)
       .getByRole("button")
       .evaluateAll((buttons) =>
-        buttons.map((b) => b.getAttribute("aria-label") ?? ""),
+        buttons.map(
+          (b) => b.getAttribute("aria-label") ?? b.textContent?.trim() ?? "",
+        ),
       );
+    // Spec §7.1: Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌 │ 💬 (unregistered).
     expect(names).toEqual([
+      "Turn into Text",
       "Bold",
       "Italic",
       "Underline",
+      "Strike",
+      "Inline code",
+      "Clear formatting",
       expect.stringMatching(/^Apply text colour: /),
       "More text colours",
       "Link",
       "Paint format",
     ]);
+    const style = styleButton(page);
+    await expect(style).toHaveAccessibleName("Turn into Text");
+    await expect(style).toHaveAttribute("aria-haspopup", "menu");
+    // The face is sized once to the longest face word, at least 64px.
+    const width = await style.evaluate(
+      (el) => el.getBoundingClientRect().width,
+    );
+    expect(width).toBeGreaterThanOrEqual(64);
+    expect(width).toBeLessThanOrEqual(96);
     // One Tab stop: the plugin's root is not focusable, not even by a click.
     await expect(bubble(page)).not.toHaveAttribute("tabindex");
     const box = await bubbleToolbar(page).boundingBox();
@@ -254,7 +301,7 @@ test.describe("selection bubble", () => {
   }) => {
     await openDoc(page);
     const hidden = async () => {
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(PAST_SHOW_MS);
       await expect(bubble(page)).toHaveCount(0);
     };
 
@@ -296,7 +343,7 @@ test.describe("selection bubble", () => {
     await selectText(page, "some");
     await expectBubbleOpen(page);
     await page.keyboard.press("Shift+ArrowRight");
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
 
     await page.keyboard.press("Escape");
@@ -305,7 +352,7 @@ test.describe("selection bubble", () => {
     await expect(bubble(page)).toHaveCount(0, { timeout: 500 });
     // Esc keeps the selection, and the bubble stays away until a new one.
     expect(await selectionRange(page)).not.toEqual({ from: 0, to: 0 });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
     await page.keyboard.press("Shift+ArrowRight");
     await expectBubbleOpen(page);
@@ -316,7 +363,7 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     // A shortcut keeps it.
     await page.keyboard.press("ControlOrMeta+b");
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
   });
 
@@ -329,12 +376,11 @@ test.describe("selection bubble", () => {
     const before = await selectionRange(page);
 
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Italic", exact: true }),
+      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
     ).toBeFocused();
     // One Esc, even with the item's focus tooltip open, as in the row.
     await escapeToEditor(page);
@@ -360,14 +406,15 @@ test.describe("selection bubble", () => {
     const chevron = bubbleToolbar(page).getByRole("button", {
       name: "More text colours",
     });
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 8; i += 1) await page.keyboard.press("ArrowRight");
     await expect(chevron).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog).toBeVisible();
     // The panel is a lazy chunk: wait until it has put focus on a swatch.
     await expect(dialog.locator("button:focus")).toHaveCount(1);
-    await page.keyboard.press("ArrowRight");
+    // Named rows (spec §7.3): ↓ from Default is Red.
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect
       .poll(() =>
@@ -383,11 +430,11 @@ test.describe("selection bubble", () => {
       )
       .not.toBeNull();
     // Past the plugin's 250 ms update debounce: still attached.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
-    if (await dialog.isVisible()) await page.keyboard.press("Escape");
+    // Enter picked and closed the menu; focus is back in the text (§7.10).
     await expect(dialog).toBeHidden();
-    await expect(chevron).toBeFocused();
+    await expect(page.locator(".tiptap")).toBeFocused();
     await expectBubbleOpen(page);
   });
 
@@ -403,8 +450,25 @@ test.describe("selection bubble", () => {
     await expect(
       row(page).locator('[data-action-id="history.undo"]'),
     ).toHaveAttribute("aria-disabled", "true");
-    // Every bubble action is also in the row at desktop width.
+    // Every bubble action is also in the row at desktop width: a button,
+    // or an item of ⋯ More formatting (inline code, clear formatting).
+    const overflow = row(page).getByRole("button", { name: "More formatting" });
+    const inOverflow = new Set(["mark.inlineCode", "format.clear"]);
     for (const id of BUBBLE_ACTION_IDS) {
+      if (inOverflow.has(id)) {
+        await overflow.click();
+        await expect(
+          page
+            .getByRole("menu", { name: "More formatting" })
+            .locator(`[data-action-id="${id}"]`),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        // Base UI hands focus back after the exit animation: wait for it,
+        // or it lands on ⋯ after the next selection focused the editor.
+        await expect(page.getByRole("menu")).toHaveCount(0);
+        await expect(overflow).toBeFocused();
+        continue;
+      }
       const inRow =
         id === "color.text.apply"
           ? row(page).getByRole("button", { name: /^Apply text colour: / })
@@ -416,7 +480,15 @@ test.describe("selection bubble", () => {
       await selectText(page, "some words");
       await expectBubbleOpen(page);
       const toolbar = surface === "bubble" ? bubbleToolbar(page) : row(page);
-      await toolbar.getByRole("button", { name }).click();
+      if (surface === "row" && name.source === "^Inline code$") {
+        await overflow.click();
+        await page
+          .getByRole("menu", { name: "More formatting" })
+          .getByRole("menuitemcheckbox", { name })
+          .click();
+      } else {
+        await toolbar.getByRole("button", { name }).click();
+      }
       const json = await page.evaluate(() =>
         JSON.stringify(window.__tiptap_editor?.getJSON().content?.[2]),
       );
@@ -427,6 +499,8 @@ test.describe("selection bubble", () => {
       /^Bold$/,
       /^Italic$/,
       /^Underline$/,
+      /^Strike$/,
+      /^Inline code$/,
       /^Apply text colour: /,
     ]) {
       const fromBubble = await docAfter("bubble", name);
@@ -449,7 +523,9 @@ test.describe("selection bubble", () => {
     }
   });
 
-  test("bubble buttons keep their 2px outline", async ({ page }) => {
+  test("bubble buttons draw their 2px ring inside, never clipped", async ({
+    page,
+  }) => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
@@ -459,7 +535,11 @@ test.describe("selection bubble", () => {
     for (let i = 0; i < count; i += 1) {
       const item = items.nth(i);
       await expect(item).toBeFocused();
-      await expectOutlineNotClipped(item);
+      // Spec §7.1: `outline-offset: -2px`, so a ring never crosses the 2px
+      // gap onto a neighbour.
+      await expect(item).toHaveCSS("outline-width", "2px");
+      await expect(item).toHaveCSS("outline-offset", "-2px");
+      await expectOutlineNotClipped(item, 0);
       await page.keyboard.press("ArrowRight");
     }
   });
@@ -507,9 +587,8 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
 
@@ -530,16 +609,15 @@ test.describe("selection bubble", () => {
     await expectBubbleOpen(page);
     const before = await selectionRange(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     await page.keyboard.press("End");
     await page.keyboard.press("Tab");
     await expect(bubble(page)).toHaveCount(0);
     await expect(page.locator(".ProseMirror")).toBeFocused();
     expect(await selectionRange(page)).toEqual(before);
     // It stays away on that focus, as after Esc, until a new selection.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
     await page.keyboard.press("Shift+ArrowRight");
     await expectBubbleOpen(page);
@@ -552,7 +630,7 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    for (let i = 0; i < 4; i += 1) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 8; i += 1) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog.locator("button:focus")).toHaveCount(1);
@@ -608,13 +686,14 @@ test.describe("selection bubble", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
+    await page.keyboard.press("ArrowRight");
     const bold = bubbleToolbar(page).getByRole("button", {
       name: "Bold",
       exact: true,
     });
     await expect(bold).toBeFocused();
     await page.keyboard.press("PageDown");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(PAST_SHOW_MS);
     expect(
       await page.evaluate(() => document.activeElement === document.body),
     ).toBe(false);
@@ -634,7 +713,7 @@ test.describe("selection bubble", () => {
         .getByRole("button", { name: "More text colours" })
         .click();
       await expect(dialog.locator("button:focus")).toHaveCount(1);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       const box = await dialog.boundingBox();
       const sel = await page.evaluate(() => {
         const editor = window.__tiptap_editor;
@@ -670,7 +749,7 @@ test.describe("selection bubble", () => {
       const line = editor.view.coordsAtPos(editor.state.selection.from);
       wrapper.scrollTop += line.top - window.innerHeight / 2 - 60;
     });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(PAST_REPOSITION_MS);
     await expect(bubble(page)).toHaveAttribute("data-placement", "top");
     expect(await overlaps()).toBe(false);
 
@@ -703,10 +782,23 @@ test.describe("selection bubble", () => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    const border = await bubbleToolbar(page).evaluate(
-      (el) => getComputedStyle(el).borderTopStyle,
+    const edge = await bubbleToolbar(page).evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { style: cs.borderTopStyle, color: cs.borderTopColor };
+    });
+    expect(edge.style).not.toBe("none");
+    // The edge is CanvasText (spec §7.1), never a dropped grey.
+    const canvasText = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.color = "CanvasText";
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+    expect(await resolveRgb(page, edge.color)).toEqual(
+      await resolveRgb(page, canvasText),
     );
-    expect(border).not.toBe("none");
     await page.keyboard.press("ControlOrMeta+b");
     const bold = bubbleToolbar(page).getByRole("button", {
       name: "Bold",
@@ -732,15 +824,203 @@ test.describe("selection bubble", () => {
     );
   });
 
-  test("reduced motion fades in without the rise", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
+  test("motion: 120 ms scale-in from the anchor side, none with reduced motion", async ({
+    page,
+  }) => {
     await openDoc(page);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    await expect(bubbleToolbar(page)).toHaveCSS(
-      "animation-name",
-      "st-bubble-fade-in",
+    const panel = bubbleToolbar(page);
+    await expect(panel).toHaveCSS("animation-name", "st-bubble-in");
+    await expect(panel).toHaveCSS("animation-duration", "0.12s");
+    await expect(panel).toHaveCSS("transform-origin", /% |px /);
+  });
+
+  for (const reduce of ["media", "attribute"] as const) {
+    test(`reduced motion (${reduce}): no animation in or out`, async ({
+      page,
+    }) => {
+      if (reduce === "media") {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+      }
+      await openDoc(page);
+      if (reduce === "attribute") {
+        await page.evaluate(() => {
+          document.documentElement.dataset.motion = "reduce";
+        });
+      }
+      await selectText(page, "some words");
+      await expectBubbleOpen(page);
+      // Spec §11.1: none, and Esc removes it at once.
+      expect(
+        await bubble(page).evaluate(
+          (el) => el.getAnimations({ subtree: true }).length,
+        ),
+      ).toBe(0);
+      await page.keyboard.press("Alt+F10");
+      await escapeToEditor(page);
+      await expect(bubble(page)).toHaveCount(0, { timeout: 50 });
+    });
+  }
+
+  test("a keyboard selection shows 300–450 ms after Shift is released, never while held", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    // In-page times: when Shift goes up and when the root is appended.
+    await page.evaluate(() => {
+      const times = { up: 0, shown: 0 };
+      (window as unknown as { __settle: typeof times }).__settle = times;
+      window.addEventListener(
+        "keyup",
+        (event) => {
+          if (event.key === "Shift") times.up = performance.now();
+        },
+        { capture: true },
+      );
+      const wrapper = document.querySelector(".document-editor-wrapper");
+      if (!wrapper) throw new Error("no wrapper");
+      new MutationObserver(() => {
+        if (
+          !times.shown &&
+          wrapper.querySelector(":scope > [data-smart-bubble]")
+        ) {
+          times.shown = performance.now();
+        }
+      }).observe(wrapper, { childList: true });
+    });
+    await page.keyboard.down("Shift");
+    // Each arrow held 30 ms, as a hand does: ProseMirror reads a native
+    // Shift+Arrow from `selectionchange`, which lands before a real keyup.
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press("ArrowRight", { delay: 30 });
+    }
+    // Held past the settle and the show delay: nothing yet.
+    await page.waitForTimeout(PAST_SETTLE_MS);
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.up("Shift");
+    await expectBubbleOpen(page);
+    const { up, shown } = await page.evaluate(
+      () =>
+        (window as unknown as { __settle: { up: number; shown: number } })
+          .__settle,
     );
+    expect(shown - up).toBeGreaterThanOrEqual(300);
+    expect(shown - up).toBeLessThanOrEqual(450);
+  });
+
+  for (const [how, keys] of [
+    ["the keyboard settle", "Shift+ArrowRight"],
+    ["the show delay", "mouse"],
+  ] as const) {
+    test(`Esc during ${how} cancels the pending bubble`, async ({ page }) => {
+      await openDoc(page);
+      // The bubble's chunk is in: a bubble view mounting after the Esc
+      // shows a standing selection (by design), which is another case.
+      await selectText(page, "Select some");
+      await expectBubbleOpen(page);
+      await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        editor.commands.setTextSelection(editor.state.selection.from);
+      });
+      await expect(bubble(page)).toHaveCount(0);
+      if (keys === "mouse") {
+        await dragSelect(page, "some words");
+      } else {
+        for (let i = 0; i < 4; i += 1) {
+          await page.keyboard.press(keys, { delay: 30 });
+        }
+      }
+      await page.keyboard.press("Escape");
+      // Past the settle and the show delay, which would have shown it.
+      await page.waitForTimeout(PAST_SETTLE_MS);
+      await expect(bubble(page)).toHaveCount(0);
+    });
+  }
+
+  test("Esc with nothing pending leaves the next selection's bubble alone", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    // A caret, no show waiting: this Esc refuses nothing.
+    await page.keyboard.press("Escape");
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+  });
+
+  test("Alt+F10 shows a pending bubble at once, focus on Style ▾", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // A caret before "Select", then a keyboard selection: the bubble is
+    // still waiting when Alt+F10 comes.
+    await selectText(page, "Select some");
+    await expectBubbleOpen(page);
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      if (!editor) throw new Error("editor missing");
+      editor.commands.setTextSelection(editor.state.selection.from);
+    });
+    await expect(bubble(page)).toHaveCount(0);
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press("Shift+ArrowRight");
+    }
+    // ProseMirror reads the native selection from `selectionchange`.
+    await expect
+      .poll(async () => {
+        const { from, to } = await selectionRange(page);
+        return (to ?? 0) - (from ?? 0);
+      })
+      .toBe(5);
+    // Still settling (300 ms after Shift goes up): no bubble yet.
+    await expect(bubble(page)).toHaveCount(0);
+    // Times, in the page, of the Alt+F10 keydown and focus entering it.
+    await page.evaluate(() => {
+      const times = { key: 0, focus: 0 };
+      (window as unknown as { __times: typeof times }).__times = times;
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "F10") times.key = performance.now();
+        },
+        { capture: true },
+      );
+      document.addEventListener("focusin", (event) => {
+        const target = event.target as Element;
+        if (!times.focus && target.closest("[data-smart-bubble]")) {
+          times.focus = performance.now();
+        }
+      });
+    });
+    await page.keyboard.press("Alt+F10");
+    await expect(styleButton(page)).toBeFocused();
+    const elapsed = await page.evaluate(() => {
+      const { key, focus } = (
+        window as unknown as { __times: { key: number; focus: number } }
+      ).__times;
+      return focus - key;
+    });
+    // Well inside the 250 ms show delay.
+    expect(elapsed).toBeLessThan(200);
+    await expect(styleButton(page)).toBeFocused();
+    await expect(bubble(page)).toHaveAttribute("data-state", "open");
   });
 
   test("read-only while the bubble popover is open", async ({ page }) => {
@@ -753,7 +1033,7 @@ test.describe("selection bubble", () => {
     const dialog = page.getByRole("dialog", { name: "Text colours" });
     await expect(dialog).toBeVisible();
     // The editor blurs into the popup: past the 250 ms debounce, still open.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
     await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
     await expect(bubble(page)).toHaveCount(0);
@@ -793,7 +1073,7 @@ test.describe("selection bubble", () => {
     release();
     await expectBubbleOpen(page);
     // Past the deferred removal (one frame) and the 250 ms update debounce.
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expectBubbleOpen(page);
   });
 
@@ -814,9 +1094,58 @@ test.describe("selection bubble", () => {
     await expect(
       bubbleToolbar(page).getByRole("button", { name: "Formats" }),
     ).toHaveCount(0);
-    // A separator before the brush, which is the last item.
+    // The brush ends the colour, link and paint group (spec §7.1); it is
+    // the last item wherever comments are off (the web sandbox sets no
+    // comment gate, so `comment.add` is registered but not offered).
     expect(
       await brush.evaluate((el) => {
+        const items = [
+          ...(el
+            .closest('[role="toolbar"]')
+            ?.querySelectorAll('button, [data-slot="toolbar-separator"]') ??
+            []),
+        ];
+        const at = items.indexOf(el);
+        return [
+          at === items.length - 1,
+          items[at - 1]?.getAttribute("data-action-id"),
+        ];
+      }),
+    ).toEqual([true, "mark.link"]);
+    // After the 120 ms scale-in (O10), which starts at 0.98.
+    await bubble(page).evaluate((el) =>
+      Promise.all(
+        el
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished),
+      ),
+    );
+    const box = await brush.boundingBox();
+    expect(box?.width).toBeCloseTo(28, 1);
+    expect(box?.height).toBeCloseTo(28, 1);
+  });
+
+  test("Comment ends the bubble, after a separator, only where comments are on", async ({
+    page,
+  }) => {
+    // The dev hook mounts comments with `canComment: () => true`, which
+    // sets the gate that offers `comment.add` (spec §7.6).
+    await page.addInitScript(() => {
+      (window as Window & { __COMMENTS_PERF?: boolean }).__COMMENTS_PERF = true;
+    });
+    await openDoc(page);
+    // The hook mounts from an async import, and its gate does not notify
+    // the toolbar: select only once it has landed.
+    await page.waitForFunction(() => window.__comments !== undefined);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    const comment = bubbleToolbar(page).locator(
+      '[data-action-id="comment.add"]',
+    );
+    await expect(comment).toBeVisible();
+    await expect(comment).toBeEnabled();
+    expect(
+      await comment.evaluate((el) => {
         const items = [
           ...(el
             .closest('[role="toolbar"]')
@@ -830,9 +1159,6 @@ test.describe("selection bubble", () => {
         ];
       }),
     ).toEqual([true, "toolbar-separator"]);
-    const box = await brush.boundingBox();
-    expect(box?.width).toBeCloseTo(28, 1);
-    expect(box?.height).toBeCloseTo(28, 1);
   });
 
   test("the brush is pressed at once before the engine lands, never 'loading'", async ({
@@ -860,7 +1186,7 @@ test.describe("selection bubble", () => {
     await engine.restore();
   });
 
-  test("the brush is disabled with the reason on inline code", async ({
+  test("inside inline code, marks, colour, link and paint say why; Tx and Style stay", async ({
     page,
   }) => {
     await openDoc(page);
@@ -870,11 +1196,34 @@ test.describe("selection bubble", () => {
     );
     await selectText(page, "some words");
     await expectBubbleOpen(page);
-    const brush = bubbleToolbar(page).getByRole("button", {
-      name: "Paint format",
-    });
-    await expect(brush).toHaveAttribute("aria-disabled", "true");
-    await expect(brush).toHaveAccessibleDescription("Code has no formatting.");
+    const toolbar = bubbleToolbar(page);
+    // Spec §7.2: `inlineCode` excludes every other mark.
+    for (const name of [
+      /^Bold$/,
+      /^Italic$/,
+      /^Underline$/,
+      /^Strike$/,
+      /^Apply text colour: /,
+      /^More text colours$/,
+      /^Link$/,
+      /^Paint format$/,
+    ]) {
+      const item = toolbar.getByRole("button", { name });
+      await expect(item, String(name)).toHaveAttribute("aria-disabled", "true");
+      await expect(item, String(name)).toHaveAccessibleDescription(
+        /Inline code/,
+      );
+    }
+    for (const name of [
+      /^Inline code$/,
+      /^Clear formatting$/,
+      /^Turn into Text$/,
+    ]) {
+      await expect(toolbar.getByRole("button", { name })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    }
   });
 
   for (const theme of ["light", "dark"] as const) {
@@ -886,7 +1235,7 @@ test.describe("selection bubble", () => {
       await openDoc(page);
       await selectText(page, "some words");
       await expectBubbleOpen(page);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-above-${theme}.png` });
 
       await bubbleToolbar(page)
@@ -894,13 +1243,13 @@ test.describe("selection bubble", () => {
         .click();
       const dialog = page.getByRole("dialog", { name: "Text colours" });
       await expect(dialog.locator("button:focus")).toHaveCount(1);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-popover-${theme}.png` });
       await page.keyboard.press("Escape");
 
       await selectUnderToolbar(page);
       await expect(bubble(page)).toHaveAttribute("data-placement", "bottom");
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(PAINT_SETTLE_MS);
       await page.screenshot({ path: `${SCREENS}/bubble-below-${theme}.png` });
     });
   }
@@ -919,7 +1268,7 @@ test("no bubble on a coarse pointer", async ({ browser }) => {
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
     await selectText(page, "some words");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
   } finally {
     await context.close();
@@ -953,6 +1302,365 @@ async function openTab(page: Page, id: string) {
     );
   });
 }
+
+const TURN_DOC = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+    paragraph(text("Plain words to turn")),
+    {
+      type: "bulletList",
+      content: [
+        { type: "listItem", content: [paragraph(text("Listed one"))] },
+        { type: "listItem", content: [paragraph(text("Listed words"))] },
+        { type: "listItem", content: [paragraph(text("Listed three"))] },
+      ],
+    },
+    {
+      type: "blockquote",
+      content: [
+        paragraph(text("Quoted words")),
+        paragraph(text("Quoted second")),
+      ],
+    },
+    { type: "heading", attrs: { level: 2 }, content: [text("Heading words")] },
+    paragraph(text("Tail paragraph")),
+  ],
+};
+
+/** The top-level block holding `needle`, with its first child's type. */
+const blockOf = (page: Page, needle: string) =>
+  page.evaluate((target) => {
+    let found = "";
+    window.__tiptap_editor?.state.doc.forEach((node) => {
+      if (!found && node.textContent.includes(target)) {
+        found = `${node.type.name}${node.attrs.level ? node.attrs.level : ""}`;
+      }
+    });
+    return found;
+  }, needle);
+
+/** Opens Style ▾ from the bubble and picks `item` ("Text", "Heading 2"). */
+async function turnInto(page: Page, needle: string, item: string) {
+  await selectText(page, needle);
+  await expectBubbleOpen(page);
+  await styleButton(page).click();
+  await page
+    .getByRole("menu", { name: "Turn into" })
+    .getByRole("menuitemradio", { name: item, exact: true })
+    .click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+test.describe("bubble Style ▾ placement (spec §10.4)", () => {
+  // A low window: Style ▾ (about 300px) has no room on either side.
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  for (const top of [180, 260, 330]) {
+    test(`Turn into never covers the selection's lines (line at ${top}px)`, async ({
+      page,
+    }) => {
+      await openDoc(page);
+      await selectText(page, "Filler paragraph number 12");
+      await expectBubbleOpen(page);
+      await page.evaluate((target) => {
+        const wrapper = document.querySelector(".document-editor-wrapper");
+        const editor = window.__tiptap_editor;
+        if (!wrapper || !editor) throw new Error("missing");
+        const line = editor.view.coordsAtPos(editor.state.selection.from);
+        wrapper.scrollTop += line.top - target;
+      }, top);
+      // The scroll repositions (and may flip) after its debounce.
+      await page.waitForTimeout(PAST_REPOSITION_MS);
+      await expectBubbleOpen(page);
+      await styleButton(page).click();
+      const menu = page.getByRole("menu", { name: "Turn into" });
+      await expect(menu).toBeVisible();
+      await menu.evaluate((el) =>
+        Promise.all(el.getAnimations().map((a) => a.finished)),
+      );
+      const box = await menu.boundingBox();
+      if (!box) throw new Error("no menu");
+      const band = await page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) throw new Error("editor missing");
+        const { from, to } = editor.state.selection;
+        return {
+          top: editor.view.coordsAtPos(from).top,
+          bottom: editor.view.coordsAtPos(to, -1).bottom,
+        };
+      });
+      expect(
+        box.y + box.height <= band.top || box.y >= band.bottom,
+        `menu ${JSON.stringify(box)} vs lines ${JSON.stringify(band)}`,
+      ).toBe(true);
+      // Capped to the room: all of it on screen, scrolling inside.
+      expect(box.y + box.height).toBeLessThanOrEqual(720);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+    });
+  }
+});
+
+test.describe("bubble Style ▾ (spec §7.2, §7.4)", () => {
+  test("the face follows the selection while the bubble is open", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await selectText(page, "Plain words");
+    await expectBubbleOpen(page);
+    await expect(styleButton(page)).toHaveAttribute("data-face", "Text");
+    await expect(styleButton(page)).toHaveAccessibleName("Turn into Text");
+    // A new selection in the list, the bubble still open.
+    await selectText(page, "Listed words");
+    await expect(styleButton(page)).toHaveAttribute("data-face", "List");
+    // The row's Text style ▾ agrees (ruling a: the registry's value).
+    await expect(
+      row(page).locator('[data-toolbar-group="style"] button'),
+    ).toHaveAccessibleName("List");
+    await selectText(page, "Heading words");
+    await expect(styleButton(page)).toHaveAccessibleName(
+      "Turn into H2 Heading 2",
+    );
+  });
+
+  for (const [needle, item, before, after, siblings] of [
+    [
+      "Listed words",
+      "Text",
+      "bulletList",
+      "paragraph",
+      ["Listed one", "Listed three"],
+    ],
+    ["Quoted words", "Heading 2", "blockquote", "heading2", ["Quoted second"]],
+    ["Heading words", "Bullet list", "heading2", "bulletList", []],
+  ] as const) {
+    test(`turn into ${item} from ${before} is one undo step`, async ({
+      page,
+    }) => {
+      await openDoc(page, TURN_DOC);
+      expect(await blockOf(page, needle)).toBe(before);
+      await turnInto(page, needle, item);
+      await expect.poll(() => blockOf(page, needle)).toBe(after);
+      // Only the selected item turns: its siblings stay in the list or quote.
+      for (const sibling of siblings) {
+        expect(await blockOf(page, sibling)).toBe(before);
+      }
+      await expect(page.locator(".tiptap")).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => blockOf(page, needle)).toBe(before);
+    });
+  }
+
+  test("turn into Heading 2 from an item's second paragraph keeps its first in the list", async ({
+    page,
+  }) => {
+    await openDoc(page, {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                paragraph(text("Intro line")),
+                paragraph(text("Second line")),
+              ],
+            },
+            { type: "listItem", content: [paragraph(text("Beta line"))] },
+          ],
+        },
+      ],
+    });
+    await turnInto(page, "Second line", "Heading 2");
+    const shape = () =>
+      page.evaluate(() => {
+        const out: string[] = [];
+        window.__tiptap_editor?.state.doc.forEach((node) => {
+          if (node.content.size > 0)
+            out.push(`${node.type.name}:${node.textContent}`);
+        });
+        return out;
+      });
+    await expect
+      .poll(shape)
+      .toEqual([
+        "heading:Title",
+        "bulletList:Intro line",
+        "heading:Second line",
+        "bulletList:Beta line",
+      ]);
+  });
+
+  test("select all then Turn into converts all but the title, and says so", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await selectText(page, "Plain words");
+    await page.keyboard.press("ControlOrMeta+a");
+    await expectBubbleOpen(page);
+    await expect(styleButton(page)).toHaveAttribute("data-face", "Mixed");
+    await styleButton(page).click();
+    const menu = page.getByRole("menu", { name: "Turn into" });
+    const h2 = menu.getByRole("menuitemradio", { name: "Heading 2" });
+    // Not refused for the title: the range skips it.
+    await expect(h2).not.toHaveAttribute("aria-disabled", "true");
+    await h2.click();
+    await expect.poll(() => blockOf(page, "Title")).toBe("heading1");
+    await expect.poll(() => blockOf(page, "Plain words")).toBe("heading2");
+    await expect.poll(() => blockOf(page, "Listed words")).toBe("heading2");
+    await expect(page.locator('[data-status-pill="desktop"]')).toContainText(
+      "The title stays a heading.",
+    );
+  });
+
+  test("RTL: the inline-end arrow opens More headings; Esc goes back one level at a time", async ({
+    page,
+  }) => {
+    await openDoc(page, TURN_DOC);
+    await page.evaluate(() =>
+      document.documentElement.setAttribute("dir", "rtl"),
+    );
+    await selectText(page, "Plain words");
+    await expectBubbleOpen(page);
+    await page.keyboard.press("Alt+F10");
+    await expect(styleButton(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    const menu = page.getByRole("menu", { name: "Turn into" });
+    await expect(menu).toBeVisible();
+    const more = menu.getByRole("menuitem", { name: "More headings" });
+    for (let i = 0; i < 6; i += 1) {
+      if (await more.evaluate((el) => el === document.activeElement)) break;
+      await page.keyboard.press("ArrowDown");
+    }
+    await expect(more).toBeFocused();
+    // In RTL the inline end is the left.
+    await page.keyboard.press("ArrowLeft");
+    await expect(
+      page.getByRole("menuitemradio", { name: "Heading 4" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(styleButton(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".tiptap")).toBeFocused();
+  });
+});
+
+/** The marks on the text node holding `needle`. */
+const marksOn = (page: Page, needle: string) =>
+  page.evaluate((target) => {
+    const names: string[] = [];
+    window.__tiptap_editor?.state.doc.descendants((node) => {
+      if (node.isText && node.text?.includes(target)) {
+        names.push(...node.marks.map((mark) => mark.type.name));
+      }
+    });
+    return names.sort();
+  }, needle);
+
+/** Pastes `text` as plain text through a real paste event on the editor. */
+const pasteText = (page: Page, value: string) =>
+  page.evaluate((text) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    window.__tiptap_editor?.view.dom.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, value);
+
+test.describe("bubble link handoff and pills (spec §7.2, §7.5)", () => {
+  test("click link and paste at once keeps the selected text", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page)
+      .getByRole("button", { name: "Link", exact: true })
+      .click();
+    // No wait: the field has focus in the click itself.
+    await page.keyboard.insertText("https://e.com");
+    await expect(page.locator(".tiptap")).toContainText(
+      "Select some words in this paragraph",
+    );
+    const field = page.locator(".hyperlink-create-popover input");
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue("https://e.com");
+    await expect(bubble(page)).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    await expect.poll(() => marksOn(page, "some words")).toEqual(["hyperlink"]);
+    await expect(page.locator(".tiptap")).toContainText(
+      "Select some words in this paragraph",
+    );
+  });
+
+  test("a URL pasted over a selection links it", async ({ page }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await pasteText(page, "https://example.org/page");
+    await expect.poll(() => marksOn(page, "some words")).toEqual(["hyperlink"]);
+  });
+
+  test("a media URL pasted over a selection does not link it", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    await pasteText(page, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(await marksOn(page, "some words")).not.toContain("hyperlink");
+  });
+
+  test("inline code over linked and coloured text says what it removed, with Undo", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    // Linked and coloured "some" only: a selection inside one link shows
+    // the link's own card, not the bubble.
+    await selectText(page, "some");
+    await page.evaluate(() =>
+      // Outside the undo history, so Undo reverts only the inline code
+      // (Yjs would otherwise merge both edits into one step).
+      window.__tiptap_editor
+        ?.chain()
+        .setMeta("addToHistory", false)
+        .setTextColor("red")
+        .setHyperlink({ href: "https://example.com" })
+        .run(),
+    );
+    // "some words", across the marked and the plain text node.
+    await page.evaluate(() => {
+      const editor = window.__tiptap_editor;
+      const from = editor?.state.selection.from ?? 0;
+      editor
+        ?.chain()
+        .focus()
+        .setTextSelection({ from, to: from + "some words".length })
+        .run();
+    });
+    await expectBubbleOpen(page);
+    await bubbleToolbar(page)
+      .getByRole("button", { name: "Inline code", exact: true })
+      .click();
+    await expect
+      .poll(() => marksOn(page, "some words"))
+      .toEqual(["inlineCode"]);
+    const pill = page.locator('[data-status-pill="desktop"]');
+    await expect(pill).toContainText("Link and colour removed");
+    await pill.getByRole("button", { name: "Undo" }).click();
+    await expect
+      .poll(() => marksOn(page, "some"))
+      .toEqual(["hyperlink", "textColor"]);
+  });
+});
 
 test.describe("selection bubble controller (spec §12.1)", () => {
   test("mounting the bubble chunk registers no plugin", async ({ page }) => {
@@ -1001,9 +1709,8 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     await page.keyboard.press("Alt+F10");
-    await expect(
-      bubbleToolbar(page).getByRole("button", { name: "Bold", exact: true }),
-    ).toBeFocused();
+    // Spec §14: Alt+F10 lands on Style ▾, the first item.
+    await expect(styleButton(page)).toBeFocused();
     // Times, in the page, of `data-closing` appearing and the root leaving.
     await page.evaluate(() => {
       const root = document.querySelector("[data-smart-bubble]");
@@ -1278,7 +1985,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     });
     await selectText(page, "     ");
     expect(await selectionRange(page)).not.toEqual({ from: 0, to: 0 });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(PAST_SHOW_MS);
     await expect(bubble(page)).toHaveCount(0);
   });
 
@@ -1310,7 +2017,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     await expect(bubble(page)).toHaveCount(0);
     const cdp = await page.context().newCDPSession(page);
     // Past collab-session's deferred release (1 s).
-    await page.waitForTimeout(1_100);
+    await page.waitForTimeout(PAST_RELEASE_MS);
     const before = await listenerCounts(cdp);
 
     for (let i = 0; i < 5; i += 1) {
@@ -1326,7 +2033,7 @@ test.describe("selection bubble controller (spec §12.1)", () => {
     expect(
       await page.evaluate(() => window.__tiptap_editor?.state.selection.empty),
     ).toBe(true);
-    await page.waitForTimeout(1_100);
+    await page.waitForTimeout(PAST_RELEASE_MS);
     const after = await listenerCounts(cdp);
     test.info().annotations.push({
       type: "document + window listeners",
@@ -1372,9 +2079,8 @@ test.describe("selection bubble controller (spec §12.1)", () => {
       await expectBubbleOpen(pageA);
       // Focus inside the bubble: its removal must hand focus back.
       await pageA.keyboard.press("Alt+F10");
-      await expect(
-        bubbleToolbar(pageA).getByRole("button", { name: "Bold", exact: true }),
-      ).toBeFocused();
+      // Spec §14: Alt+F10 lands on Style ▾, the first item.
+      await expect(styleButton(pageA)).toBeFocused();
       await pageB.evaluate(() => {
         const editor = window.__tiptap_editor;
         if (!editor) throw new Error("editor missing");

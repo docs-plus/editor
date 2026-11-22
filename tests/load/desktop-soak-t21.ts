@@ -7,7 +7,11 @@
  *   real worker (first paint belongs to P2.7). Mark: round trip ≤ 1.5 s on
  *   macOS and ≤ 2.5 s elsewhere, with the soak's 1.5× CI slack;
  * - backlinks for one document sent right behind a `putDerived` on another
- *   (≤ 5 ms end to end, with the same slack);
+ *   (≤ 5 ms end to end, with the same slack). The harness runs
+ *   `--t21-runs` times (default 5) on one seeded library; each run reports
+ *   its median over 30 rounds, and the mark applies to the median of those
+ *   (p95 over every round is reported). One run's median moved with the
+ *   runner: 7.4 then 10.0 ms on Windows for the same code;
  * - `searchTitles` against Quick Open's 16 ms budget (reported, not gated:
  *   Quick Open filters the renderer snapshot up to 5,000 documents and
  *   only falls back to this query above that, §5.2).
@@ -54,7 +58,9 @@ type T21Report = {
     aloneMs: number;
     behindPutMs: number;
     behindPutMaxMs: number;
+    behindPutSamples: number[];
     putDerivedMs: number;
+    putDerivedSqlMs: number;
   };
 };
 
@@ -81,6 +87,22 @@ const WORDS = [
 const SLACK = 1.5;
 const BACKLINKS_MS = 5;
 const QUICK_OPEN_MS = 16;
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? (sorted[mid] ?? 0)
+    : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+}
+
+/** Nearest-rank percentile, `p` in 0..1. */
+function percentile(values: readonly number[], p: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return (
+    sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] ?? 0
+  );
+}
 
 function sidebarBudgetMs(): number {
   return process.platform === "darwin" ? 1500 : 2500;
@@ -168,24 +190,46 @@ export async function caseT21(deps: T21Deps): Promise<CaseResult> {
   const seedStarted = performance.now();
   const seeded = seedLinkedLibrary(dir, docs, 20, 10);
   const seedMs = performance.now() - seedStarted;
-  const run = await deps.runHarness([
-    "--mode=t21",
-    `--dir=${dir}`,
-    `--link-key=${seeded.watched}`,
-    `--busy=${seeded.busy}`,
-    `--targets=${seeded.targets.join(",")}`,
-  ]);
+  const runs = Math.max(1, Number(deps.args["t21-runs"] ?? 5));
+  const reports: T21Report[] = [];
+  for (let i = 0; i < runs; i += 1) {
+    const run = await deps.runHarness([
+      "--mode=t21",
+      `--dir=${dir}`,
+      `--link-key=${seeded.watched}`,
+      `--busy=${seeded.busy}`,
+      `--targets=${seeded.targets.join(",")}`,
+    ]);
+    const line = run.lines.find((l) => l.startsWith("T21 "));
+    if (!line) {
+      deps.removeDir(dir);
+      return {
+        name: "T21",
+        pass: false,
+        summary: `the harness reported nothing on run ${i + 1}`,
+        details: { seedMs },
+        failures: [run.stderr.slice(0, 2000)],
+      };
+    }
+    reports.push(JSON.parse(line.slice(4)) as T21Report);
+  }
   deps.removeDir(dir);
-  const line = run.lines.find((l) => l.startsWith("T21 "));
-  if (!line)
-    return {
-      name: "T21",
-      pass: false,
-      summary: "the harness reported nothing",
-      details: { seedMs },
-      failures: [run.stderr.slice(0, 2000)],
-    };
-  const report = JSON.parse(line.slice(4)) as T21Report;
+  // The first run's sidebar and search numbers, as before; backlinks
+  // behind a putDerived from every run.
+  const report = reports[0] as T21Report;
+  const runMedians = reports.map((r) => r.backlinks.behindPutMs);
+  const behind = {
+    runMediansMs: runMedians,
+    p50Ms: median(runMedians),
+    p95Ms: percentile(
+      reports.flatMap((r) => r.backlinks.behindPutSamples),
+      0.95,
+    ),
+    maxMs: Math.max(...reports.map((r) => r.backlinks.behindPutMaxMs)),
+    putDerivedMs: median(reports.map((r) => r.backlinks.putDerivedMs)),
+    putDerivedSqlMs: median(reports.map((r) => r.backlinks.putDerivedSqlMs)),
+    aloneMs: median(reports.map((r) => r.backlinks.aloneMs)),
+  };
   const sidebarMark = sidebarBudgetMs() * SLACK;
   if (seeded.counts.links !== docs * 20 || seeded.counts.headings !== docs * 10)
     failures.push(`seeded ${JSON.stringify(seeded.counts)}`);
@@ -195,9 +239,9 @@ export async function caseT21(deps: T21Deps): Promise<CaseResult> {
     failures.push(
       `sidebar round trip ${report.sidebar.ipcMs.toFixed(0)} ms, mark ${sidebarBudgetMs()} ms (× ${SLACK} CI slack)`,
     );
-  if (!(report.backlinks.behindPutMs <= BACKLINKS_MS * SLACK))
+  if (!(behind.p50Ms <= BACKLINKS_MS * SLACK))
     failures.push(
-      `backlinks behind a putDerived ${report.backlinks.behindPutMs.toFixed(1)} ms, mark ${BACKLINKS_MS} ms (× ${SLACK} CI slack)`,
+      `backlinks behind a putDerived ${behind.p50Ms.toFixed(1)} ms (median of ${runs} runs: ${runMedians.map((ms) => ms.toFixed(1)).join(", ")}), mark ${BACKLINKS_MS} ms (× ${SLACK} CI slack)`,
     );
   if (report.backlinks.rows === 0)
     failures.push("the watched document has no backlinks");
@@ -208,9 +252,10 @@ export async function caseT21(deps: T21Deps): Promise<CaseResult> {
   return {
     name: "T21",
     pass: failures.length === 0,
-    summary: `${report.docs} documents, ${seeded.counts.links} links, ${seeded.counts.headings} headings (seeded in ${(seedMs / 1000).toFixed(0)} s): sidebar SQL ${report.sidebar.sqlMs.toFixed(0)} ms, IPC round trip ${report.sidebar.ipcMs.toFixed(0)} ms (first ${report.sidebar.ipcFirstMs.toFixed(0)} ms; mark ${sidebarBudgetMs()} ms; first paint is P2.7's); backlinks (${report.backlinks.rows} rows) ${report.backlinks.behindPutMs.toFixed(1)} ms behind a putDerived (max ${report.backlinks.behindPutMaxMs.toFixed(1)}, alone ${report.backlinks.aloneMs.toFixed(1)}, putDerived ${report.backlinks.putDerivedMs.toFixed(1)} ms; mark ${BACKLINKS_MS} ms); searchTitles ${report.searchTitles.ipcMs.toFixed(1)} ms round trip (max ${report.searchTitles.ipcMaxMs.toFixed(1)}, SQL max ${report.searchTitles.sqlMaxMs.toFixed(1)} ms): ${quickOpen} Quick Open's ${QUICK_OPEN_MS} ms`,
+    summary: `${report.docs} documents, ${seeded.counts.links} links, ${seeded.counts.headings} headings (seeded in ${(seedMs / 1000).toFixed(0)} s): sidebar SQL ${report.sidebar.sqlMs.toFixed(0)} ms, IPC round trip ${report.sidebar.ipcMs.toFixed(0)} ms (first ${report.sidebar.ipcFirstMs.toFixed(0)} ms; mark ${sidebarBudgetMs()} ms; first paint is P2.7's); backlinks (${report.backlinks.rows} rows) behind a putDerived: p50 ${behind.p50Ms.toFixed(1)} ms over ${runs} runs (${runMedians.map((ms) => ms.toFixed(1)).join(", ")}), p95 ${behind.p95Ms.toFixed(1)}, max ${behind.maxMs.toFixed(1)}, alone ${behind.aloneMs.toFixed(1)}, putDerived ${behind.putDerivedMs.toFixed(1)} ms round trip, ${behind.putDerivedSqlMs.toFixed(1)} ms SQL; mark ${BACKLINKS_MS} ms; searchTitles ${report.searchTitles.ipcMs.toFixed(1)} ms round trip (max ${report.searchTitles.ipcMaxMs.toFixed(1)}, SQL max ${report.searchTitles.sqlMaxMs.toFixed(1)} ms): ${quickOpen} Quick Open's ${QUICK_OPEN_MS} ms`,
     details: {
       ...report,
+      backlinksBehindPut: behind,
       seeded: seeded.counts,
       seedMs,
       sidebarMarkMs: sidebarMark,

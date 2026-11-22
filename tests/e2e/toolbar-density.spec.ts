@@ -122,7 +122,7 @@ test.describe("simplified toolbar", () => {
       ).toBeVisible();
     }
     await expect(
-      row(page).getByRole("button", { name: "More text formatting" }),
+      row(page).getByRole("button", { name: "Format", exact: true }),
     ).toBeHidden();
     await expect(
       row(page).getByRole("button", { name: /Switch to (dark|light) mode/ }),
@@ -288,11 +288,11 @@ test.describe("simplified toolbar", () => {
 
     // The row's one stop moved to the stand-in; Alt+F10 lands on it.
     await expect(
-      row(page).getByRole("button", { name: "Paragraph", exact: true }),
+      row(page).getByRole("button", { name: "Layout", exact: true }),
     ).toHaveAttribute("tabindex", "0");
     await page.keyboard.press("Alt+F10");
     await expect(
-      row(page).getByRole("button", { name: "Paragraph", exact: true }),
+      row(page).getByRole("button", { name: "Layout", exact: true }),
     ).toBeFocused();
     expect((await rowState(page)).stops).toBe(1);
   });

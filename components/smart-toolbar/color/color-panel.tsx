@@ -11,20 +11,25 @@ import {
   useState,
 } from "react";
 
-import { useActionView } from "@/hooks/use-editor-context";
+import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import { runAction } from "@/lib/editor-actions/registry";
 import { BanIcon, CheckIcon } from "@/lib/icons";
 import type { RecentColor } from "@/lib/remembered-choice";
-import { type ColorTheme, isLowContrastPair } from "@/lib/text-style-contrast";
-import {
-  HIGHLIGHT_TOKENS,
-  isTextColorToken,
-  TEXT_COLOR_TOKENS,
-} from "@/lib/text-style-tokens";
+import { HIGHLIGHT_TOKENS, TEXT_COLOR_TOKENS } from "@/lib/text-style-tokens";
 import { cn } from "@/lib/utils";
 
 import { isCoarsePointer } from "../coarse-pointer";
+import { ColorRows } from "./color-rows";
+import {
+  applySwatch,
+  type ColorState,
+  LOW_CONTRAST,
+  lowContrastNote,
+  markPointed,
+  swatchTitle,
+  useColorState,
+} from "./color-state";
 import { type Swatch, swatchName, swatchStyle } from "./swatch";
 import { useSwatchPreview } from "./swatch-preview";
 import "./color-panel.scss";
@@ -32,9 +37,60 @@ import "./color-panel.scss";
 // The trigger's selection avoidance rides in this chunk (`lazy-surface`).
 export { clearOfSelection } from "./clear-of-selection";
 
+export interface ColorPanelProps {
+  editor: Editor;
+  /** Snapshot of M3 taken when the popover opened. */
+  recent: readonly RecentColor[];
+  /** Which section takes initial focus. */
+  focusKind: "text" | "highlight";
+  /**
+   * Move focus to the active swatch on mount. False when a tap opened the
+   * popover, so the editor keeps focus and the phone keyboard stays up.
+   */
+  focusOnMount?: boolean;
+  /**
+   * "rows" (default): the named rows of every desktop surface, the bubble
+   * and the row (spec §7.3, O2). "grid": the phone Aa sheet's swatches.
+   */
+  layout?: "rows" | "grid";
+  /** Grid: a line under the swatches naming the current value (§7.3). */
+  caption?: "current";
+}
+
 /**
- * The colour popover body (spec §4.5): Recent (M3, frozen while open),
- * Text (default + 10) and Highlight (none + 10). Swatches are named
+ * The colour popover body. Desktop surfaces get the named rows
+ * (`color-rows.tsx`); the phone Aa sheet keeps the swatch grid, where a
+ * hover name cannot work, so each pick shows a pill naming it with Undo.
+ * Lazy chunk: loaded on first open.
+ */
+/**
+ * Names a pick in the polite live region and on the pill, with Undo
+ * (WCAG 4.1.3, spec §7.3 and §14): "Teal text".
+ */
+function announcePick(editor: Editor, swatch: Swatch): void {
+  announce(swatchName(swatch), {
+    done: true,
+    action: {
+      label: "Undo",
+      run: () => {
+        const undo = editorActions.get("history.undo");
+        if (undo) runAction(editor, undo);
+      },
+    },
+  });
+}
+
+export function ColorPanel({ layout = "rows", ...props }: ColorPanelProps) {
+  return layout === "rows" ? (
+    <ColorRows {...props} onPicked={announcePick} />
+  ) : (
+    <SwatchGrid {...props} />
+  );
+}
+
+/*
+ * The swatch grid (spec §4.5, phone Aa sheet): Recent (M3, frozen while
+ * open), Text (default + 10) and Highlight (none + 10). Swatches are named
  * `aria-pressed` buttons in a 2-D roving grid, never a radiogroup, so arrow
  * keys move without applying. ↑/↓ follow the visual lines: on touch each
  * section wraps at `COARSE_COLUMNS` 44px swatches so the popover fits a
@@ -49,8 +105,7 @@ export { clearOfSelection } from "./clear-of-selection";
  * (decorations only, `swatch-preview.ts`); the focus put on a swatch when
  * the popover opens previews nothing. The previewed swatch wears the
  * focus ring: a pointed swatch takes it, and focus elsewhere shows a
- * dashed one until an arrow key hands it back (`markPointed`). Lazy
- * chunk: loaded on first open.
+ * dashed one until an arrow key hands it back (`markPointed`).
  */
 
 /** Swatches per visual line on touch (6 × 44px + gaps fit 360px). */
@@ -65,9 +120,8 @@ interface Line {
 }
 
 /**
- * Swatches per visual line as rendered, so ↑/↓ follow what the user sees:
- * the Aa sheet's grid fills its width (`auto-fill`, design pass §6) and
- * ignores `--swatch-cols`. Falls back to `columns` when the layout is
+ * Swatches per visual line as rendered, so ↑/↓ follow what the user sees
+ * (six on touch, spec §7.3). Falls back to `columns` when the layout is
  * not resolved to pixel tracks.
  */
 function renderedColumns(grid: HTMLElement | null, columns: number): number {
@@ -100,19 +154,6 @@ interface Row {
   swatches: Swatch[];
 }
 
-export interface ColorPanelProps {
-  editor: Editor;
-  /** Snapshot of M3 taken when the popover opened. */
-  recent: readonly RecentColor[];
-  /** Which section takes initial focus. */
-  focusKind: "text" | "highlight";
-  /**
-   * Move focus to the active swatch on mount. False when a tap opened the
-   * popover, so the editor keeps focus and the phone keyboard stays up.
-   */
-  focusOnMount?: boolean;
-}
-
 const TEXT_ROW: Swatch[] = [
   { kind: "text", token: null },
   ...TEXT_COLOR_TOKENS.map((token) => ({ kind: "text" as const, token })),
@@ -122,81 +163,29 @@ const HIGHLIGHT_ROW: Swatch[] = [
   ...HIGHLIGHT_TOKENS.map((token) => ({ kind: "highlight" as const, token })),
 ];
 
-const tokenOf = (value: string | null) => value?.toLowerCase() ?? null;
+/** The caption's words for one kind; undefined is a mixed selection. */
+const MIXED = { text: "mixed text colours", highlight: "mixed highlights" };
 
-/** The token a view shows; null when none, mixed or not a palette token. */
-function paletteToken(value: string | null | undefined) {
-  return isTextColorToken(value) ? value : null;
+function captionName(kind: Swatch["kind"], token: string | null | undefined) {
+  if (token === undefined) return MIXED[kind];
+  return swatchName({ kind, token } as Swatch);
 }
 
-/** The theme is a class on <html> (`lib/theme.ts`); this chunk is client-only. */
-const currentTheme = (): ColorTheme =>
-  document.documentElement.classList.contains("dark") ? "dark" : "light";
-
-/** O3: true when a highlight swatch would put the current text below AA. */
-function isLowContrast(
-  swatch: Swatch,
-  text: string | null | undefined,
-  theme: ColorTheme,
-): boolean {
-  return (
-    swatch.kind === "highlight" &&
-    isLowContrastPair(paletteToken(text), swatch.token, theme)
-  );
+/** "Current: Red text, No highlight" (phone, spec §7.3). */
+function currentCaption({ current }: ColorState): string {
+  const text = captionName("text", current.text);
+  return `Current: ${text}, ${captionName("highlight", current.highlight)}`;
 }
 
-/** Tooltip: the disabled reason wins over the low-contrast note. */
-function swatchTitle(name: string, reason: string, low: boolean): string {
-  if (reason) return `${name}: ${reason}`;
-  return low ? `${name}: low contrast` : name;
-}
-
-const LOW_CONTRAST = "Low contrast with the current text colour";
-
-/**
- * The visible line under Highlight while any swatch is dotted: "Dotted:
- * hard to read with Red text" (design pass §11).
- */
-function lowContrastNote(text: string | null | undefined): string {
-  const token = paletteToken(text);
-  const name = token ? swatchName({ kind: "text", token }) : "default text";
-  return `Dotted: hard to read with ${name}`;
-}
-
-/**
- * Marks the swatch under a mouse or pen (`data-pointed`, null for none)
- * and the panel while one is (`data-pointing`), so the swatch being
- * previewed wears the focus ring and keyboard focus on another swatch
- * steps down to a dashed one (`color-panel.scss`). Straight on the DOM:
- * pointing never re-renders the panel.
- */
-function markPointed(panel: HTMLElement | null, swatch: Element | null) {
-  panel?.querySelector("[data-pointed]")?.removeAttribute("data-pointed");
-  swatch?.setAttribute("data-pointed", "");
-  panel?.toggleAttribute("data-pointing", swatch !== null);
-}
-
-function applySwatch(editor: Editor, swatch: Swatch): boolean {
-  const id =
-    swatch.kind === "text"
-      ? swatch.token
-        ? "color.text.apply"
-        : "color.text.unset"
-      : swatch.token
-        ? "color.highlight.apply"
-        : "color.highlight.unset";
-  const action = editorActions.get(id);
-  return action ? runAction(editor, action, swatch.token ?? undefined) : false;
-}
-
-export function ColorPanel({
+function SwatchGrid({
   editor,
   recent,
   focusKind,
   focusOnMount = true,
-}: ColorPanelProps) {
-  const textView = useActionView("color.text.apply", editor);
-  const highlightView = useActionView("color.highlight.apply", editor);
+  caption,
+}: Omit<ColorPanelProps, "layout">) {
+  const state = useColorState(editor);
+  const { reasons, isPressed, previewable } = state;
   // M3 is frozen while the popover is open: applying never reshuffles it.
   const [recentRow] = useState<Swatch[]>(() =>
     recent.map((entry) => ({ ...entry }) as Swatch),
@@ -207,28 +196,10 @@ export function ColorPanel({
     { label: "Highlight", swatches: HIGHLIGHT_ROW },
   ];
 
-  const currentText = textView?.mixed
-    ? undefined
-    : tokenOf(textView?.value ?? null);
-  const currentHighlight = highlightView?.mixed
-    ? undefined
-    : tokenOf(highlightView?.value ?? null);
-  const isPressed = (swatch: Swatch) =>
-    (swatch.kind === "text" ? currentText : currentHighlight) === swatch.token;
-  const reasons = {
-    text: textView && textView.enabled !== true ? textView.enabled.reason : "",
-    highlight:
-      highlightView && highlightView.enabled !== true
-        ? highlightView.enabled.reason
-        : "",
-  };
   const [columns] = useState(() =>
     isCoarsePointer() ? COARSE_COLUMNS : FINE_COLUMNS,
   );
-  const theme = currentTheme();
-  const anyLow = HIGHLIGHT_ROW.some((swatch) =>
-    isLowContrast(swatch, currentText, theme),
-  );
+  const anyLow = state.anyLow;
 
   const firstRow = rows.findIndex(
     (row) => row.label === (focusKind === "text" ? "Text colour" : "Highlight"),
@@ -242,9 +213,6 @@ export function ColorPanel({
   const gridRef = useRef<HTMLDivElement>(null);
   const idPrefix = useId();
   const preview = useSwatchPreview(editor);
-  /** The swatch to preview, or null when its kind cannot apply here. */
-  const previewable = (swatch: Swatch) =>
-    reasons[swatch.kind] ? null : swatch;
   const focusCell = useCallback((row: number, col: number) => {
     gridRef.current
       ?.querySelector<HTMLButtonElement>(
@@ -355,7 +323,7 @@ export function ColorPanel({
               const pressed = isPressed(swatch);
               const name = swatchName(swatch);
               const reason = reasons[swatch.kind];
-              const low = isLowContrast(swatch, currentText, theme);
+              const low = state.isLow(swatch);
               const describedBy = [
                 reason && `${idPrefix}-${swatch.kind}-reason`,
                 low && `${idPrefix}-${swatch.kind}-low`,
@@ -408,7 +376,9 @@ export function ColorPanel({
                     if (gridRef.current?.contains(document.activeElement)) {
                       focusCell(rowIndex, colIndex);
                     }
-                    if (!reason) applySwatch(editor, swatch);
+                    if (!reason && applySwatch(editor, swatch)) {
+                      announcePick(editor, swatch);
+                    }
                   }}
                 >
                   {swatch.token === null ? (
@@ -427,11 +397,14 @@ export function ColorPanel({
           </div>
           {row.label === "Highlight" && anyLow ? (
             <p className="w-0 min-w-full text-xs text-muted-foreground">
-              {lowContrastNote(currentText)}
+              {lowContrastNote(state.current.text)}
             </p>
           ) : null}
         </div>
       ))}
+      {caption === "current" ? (
+        <p className="st-color-caption">{currentCaption(state)}</p>
+      ) : null}
     </div>
   );
 }

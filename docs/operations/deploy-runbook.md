@@ -58,7 +58,10 @@ On the host, `scripts/deploy.sh`:
 
 1. Refuses anything but a full commit SHA. It also refuses a commit that is
    not on `origin/main`, a live checkout with local changes, or a commit
-   older than the one deployed. It only moves forward.
+   older than the one deployed. It only moves forward. It also refuses a
+   commit whose `.tool-versions` pins another Bun than the host's
+   `bun --version` (exit 11), before building or restarting anything; see
+   [Upgrading Bun](#upgrading-bun).
 2. Builds Next.js in a second checkout (`../editor-build`) while the site keeps
    serving. If the build fails, nothing is restarted.
 3. Fast-forwards the live checkout, runs `bun install --frozen-lockfile`,
@@ -343,6 +346,29 @@ last step.
    ```bash
    gh variable set AUTO_DEPLOY --body on
    ```
+
+## Upgrading Bun
+
+`.tool-versions` pins the Bun that CI tests with and the host runs. A deploy
+refuses a commit that pins another Bun than the host's (exit 11, nothing
+built or restarted), so a pull request that changes `.tool-versions` needs
+the host upgraded between its merge and its deploy:
+
+1. With automatic deploys on, turn them off, then merge the pull request.
+2. Install exactly the pinned version on the host. `bun upgrade` installs the
+   latest release, which may be newer than the pin, so use the installer with
+   the version tag:
+   ```bash
+   ssh <user>@<host> 'curl -fsSL https://bun.com/install | bash -s "bun-v1.4.5"'
+   ssh <user>@<host> '~/.bun/bin/bun --version'   # prints 1.4.5
+   ```
+   The running apps keep their old Bun until they restart.
+3. Deploy by hand (`gh workflow run deploy.yml`) and watch it. It restarts
+   both apps on the new Bun, and `editor-purge` uses it from its next run.
+4. Turn automatic deploys on again.
+
+If a deploy fails with exit 11, nothing changed on the host: install the Bun
+the message names, then deploy again.
 
 ## Rollback
 

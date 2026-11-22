@@ -7,12 +7,13 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 
-import type {
-  OpenSqlite,
-  SqliteDriver,
-  SqliteStatement,
-  SqlRow,
-  SqlValue,
+import {
+  applyBusyTimeout,
+  type OpenSqlite,
+  type SqliteDriver,
+  type SqliteStatement,
+  type SqlRow,
+  type SqlValue,
 } from "../engine/driver";
 
 type NodeSqlite = typeof import("node:sqlite");
@@ -54,11 +55,13 @@ function wrap(db: DatabaseSync): SqliteDriver {
 
 export const openNodeSqlite: OpenSqlite = (path, { readOnly }) => {
   const { DatabaseSync } = loadNodeSqlite();
-  return wrap(
-    new DatabaseSync(path, {
-      readOnly,
-      // The engine turns them on itself, the same on both drivers.
-      enableForeignKeyConstraints: false,
-    }),
+  return applyBusyTimeout(
+    wrap(
+      new DatabaseSync(path, {
+        readOnly,
+        // The engine turns them on itself, the same on both drivers.
+        enableForeignKeyConstraints: false,
+      }),
+    ),
   );
 };
