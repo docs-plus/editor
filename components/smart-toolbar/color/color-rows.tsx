@@ -174,6 +174,7 @@ function Pick({
       {...radio}
       aria-disabled={reason ? true : undefined}
       aria-describedby={describedBy || undefined}
+      data-low-contrast={low ? "" : undefined}
       tabIndex={tabIndex}
       onFocus={onFocus}
       onMouseDown={(event) => event.preventDefault()}

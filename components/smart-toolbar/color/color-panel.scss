@@ -332,7 +332,11 @@
   color: var(--muted-foreground);
 }
 
+// Wraps inside the column: it never widens the menu.
 .st-color-note {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
   padding: 0.25rem 0.375rem 0;
 }
 
