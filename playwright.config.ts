@@ -47,6 +47,7 @@ export default defineConfig({
         "**/collaboration.spec.ts",
         "**/editor-leak.spec.ts",
         "**/image-metadata.spec.ts",
+        "**/image-asset-encoder.spec.ts",
       ],
       testIgnore: ["**/toolbar-perf.spec.ts"],
       use: {
