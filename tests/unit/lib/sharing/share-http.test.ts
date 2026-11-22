@@ -368,6 +368,37 @@ describe("CORS and CSRF", () => {
 });
 
 describe("owner endpoints", () => {
+  it("a flood of wrong tokens never locks the owner out of stopping (M1)", async () => {
+    const http = createHttp({
+      auth: {
+        db,
+        mode: "on",
+        expiryMs: LIMITS.expiryMs,
+        failedTokens: createFailedTokenLimiter({ perShare: 3, perPrefix: 3 }),
+      },
+    });
+    const { shareId, secrets } = await createShare(http);
+    const stopWith = (token: string, ip: string) =>
+      http.handle(
+        new Request(`${BASE}/api/shares/${shareId}`, {
+          method: "DELETE",
+          headers: bearer(token),
+        }),
+        ip,
+      );
+    // Wrong tokens from more addresses than the per-share limit.
+    for (let i = 0; i < 10; i++) {
+      await stopWith(makeShareSecrets().ownerToken, `198.51.100.${i}`);
+    }
+    expect(
+      (await stopWith(makeShareSecrets().ownerToken, "198.51.100.200")).status,
+    ).toBe(429);
+
+    const response = await stopWith(secrets.ownerToken, IP);
+    expect(response.status).toBe(200);
+    expect(getShare(db, shareId)?.ended_reason).toBe("sharing_stopped");
+  });
+
   it("stop: needs the owner secret, ends the share and closes its connections", async () => {
     const http = createHttp();
     const { shareId, secrets } = await createShare(http);
@@ -458,7 +489,7 @@ describe("owner endpoints", () => {
     });
   });
 
-  it("pauses owner calls after too many wrong owner secrets", async () => {
+  it("pauses wrong owner secrets after too many of them", async () => {
     const http = createHttp({
       auth: {
         db,
@@ -467,7 +498,7 @@ describe("owner endpoints", () => {
         failedTokens: createFailedTokenLimiter({ perShare: 2, perPrefix: 100 }),
       },
     });
-    const { shareId, secrets } = await createShare(http);
+    const { shareId } = await createShare(http);
     const stop = (token: string) =>
       http.handle(
         new Request(`${BASE}/api/shares/${shareId}`, {
@@ -478,7 +509,8 @@ describe("owner endpoints", () => {
       );
     await stop(makeShareSecrets().ownerToken);
     await stop(makeShareSecrets().ownerToken);
-    expect((await stop(secrets.ownerToken)).status).toBe(429);
+    expect((await stop(makeShareSecrets().ownerToken)).status).toBe(429);
+    expect(getShare(db, shareId)?.status).toBe("pending");
   });
 
   it("rejects unknown routes and wrong methods", async () => {

@@ -284,9 +284,19 @@ describe("share authentication refusal matrix", () => {
         "connection",
       );
     }
+    // Wrong tokens now pause the share; a right token still gets in (M1).
+    expect(
+      authenticateShare(
+        ctx,
+        shareId,
+        makeShareSecrets().authEdit,
+        IP,
+        "connection",
+      ),
+    ).toEqual({ ok: false, reason: SHARE_BUSY });
     expect(
       authenticateShare(ctx, shareId, secrets.authEdit, IP, "connection"),
-    ).toEqual({ ok: false, reason: SHARE_BUSY });
+    ).toMatchObject({ ok: true, role: "edit" });
   });
 });
 
@@ -309,9 +319,9 @@ describe("failed-token keys", () => {
     for (let i = 0; i < 3; i++) {
       limiter.recordFailure(mintShareId(), `2001:db8:a:${i}::/64`);
     }
-    expect(limiter.isBlocked(mintShareId(), "2001:db8:a:ff::/64")).toBe(true);
-    expect(limiter.isBlocked(mintShareId(), "2001:db8:b:0::/64")).toBe(false);
+    expect(limiter.isAddressBlocked("2001:db8:a:ff::/64")).toBe(true);
+    expect(limiter.isAddressBlocked("2001:db8:b:0::/64")).toBe(false);
     t = 61_000;
-    expect(limiter.isBlocked(mintShareId(), "2001:db8:a:ff::/64")).toBe(false);
+    expect(limiter.isAddressBlocked("2001:db8:a:ff::/64")).toBe(false);
   });
 });

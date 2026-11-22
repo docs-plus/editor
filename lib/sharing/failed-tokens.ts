@@ -4,13 +4,17 @@ import { createTimestampWindows } from "@/lib/security/rate-limit";
 /**
  * Failed share tokens, counted per `share_id` and per client address
  * (plan §6 "Failed tokens"). Guessing a 128-bit secret is pointless, so
- * this protects the server, not the secret: past a limit, attempts are
- * refused before any lookup. IPs arrive pinned (`pinClientIp`): IPv6 is
- * already one key per /64, and each /64 also counts toward its /48.
+ * this protects the server, not the secret. An address over its limit is
+ * refused before any lookup; a share over its limit refuses only wrong
+ * tokens, so nobody can lock a token holder (or the owner) out of a share
+ * by flooding it. IPs arrive pinned (`pinClientIp`): IPv6 is already one
+ * key per /64, and each /64 also counts toward its /48.
  */
 export type FailedTokenLimiter = {
-  /** True when this share or this address is over its limit. */
-  isBlocked(shareId: string, ip: string): boolean;
+  /** True when this address (IPv4, IPv6 /64 or its /48) is over its limit. */
+  isAddressBlocked(ip: string): boolean;
+  /** True when this share had too many wrong tokens; asked only after a miss. */
+  isShareBlocked(shareId: string): boolean;
   recordFailure(shareId: string, ip: string): void;
 };
 
@@ -42,22 +46,25 @@ export function createFailedTokenLimiter(
     now,
     options.maxKeys ?? RATE_LIMIT_MAX_KEYS,
   );
-  const limits = (shareId: string, ip: string): Array<[string, number]> => [
-    [`share:${shareId}`, options.perShare],
-    ...addressKeys(ip).map((key): [string, number] => [key, options.perPrefix]),
-  ];
+  const overLimit = (key: string, limit: number) => {
+    const recent = windows.recent(key);
+    // A full key table fails closed, like every other limiter here.
+    return !recent || recent.length >= limit;
+  };
+  const shareKey = (shareId: string) => `share:${shareId}`;
 
   return {
-    isBlocked(shareId, ip) {
-      return limits(shareId, ip).some(([key, limit]) => {
-        const recent = windows.recent(key);
-        // A full key table fails closed, like every other limiter here.
-        return !recent || recent.length >= limit;
-      });
+    isAddressBlocked(ip) {
+      return addressKeys(ip).some((key) => overLimit(key, options.perPrefix));
+    },
+    isShareBlocked(shareId) {
+      return overLimit(shareKey(shareId), options.perShare);
     },
     recordFailure(shareId, ip) {
       const at = now();
-      for (const [key] of limits(shareId, ip)) windows.recent(key)?.push(at);
+      for (const key of [shareKey(shareId), ...addressKeys(ip)]) {
+        windows.recent(key)?.push(at);
+      }
     },
   };
 }

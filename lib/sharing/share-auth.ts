@@ -69,11 +69,13 @@ function matchRole(
 }
 
 /**
- * Checks `token` for `shareId`, in this order: the failed-token limits, the
- * row, the token (constant-time, against 32-byte SHA-256 hashes), and only
- * then the share's state. `credential` picks which tokens count: the
- * WebSocket takes `auth_edit` / `auth_view`, owner calls take the owner
- * secret, and the status read takes any of them.
+ * Checks `token` for `shareId`, in this order: the address's failed-token
+ * limit, the row, the token (constant-time, against 32-byte SHA-256
+ * hashes), and only then the share's state. The share's own failed-token
+ * limit applies to wrong tokens only, so a flood of them never locks out a
+ * token holder. `credential` picks which tokens count: the WebSocket takes
+ * `auth_edit` / `auth_view`, owner calls take the owner secret, and the
+ * status read takes any of them.
  */
 export function authenticateShare(
   context: ShareAuthContext,
@@ -83,14 +85,16 @@ export function authenticateShare(
   credential: Credential,
 ): ShareAuthResult {
   const now = context.now?.() ?? Date.now();
-  if (context.failedTokens.isBlocked(shareId, ip)) {
+  const { failedTokens } = context;
+  if (failedTokens.isAddressBlocked(ip)) {
     return { ok: false, reason: SHARE_BUSY };
   }
   const share = getShare(context.db, shareId);
   const role = share && token ? matchRole(share, token, credential) : null;
   if (!share || !role) {
-    context.failedTokens.recordFailure(shareId, ip);
-    return { ok: false, reason: SHARE_UNAVAILABLE };
+    const shareBlocked = failedTokens.isShareBlocked(shareId);
+    failedTokens.recordFailure(shareId, ip);
+    return { ok: false, reason: shareBlocked ? SHARE_BUSY : SHARE_UNAVAILABLE };
   }
   if (share.status === "ended") {
     return { ok: false, reason: share.ended_reason ?? "sharing_stopped" };
