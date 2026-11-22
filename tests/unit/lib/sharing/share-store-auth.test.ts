@@ -122,7 +122,26 @@ describe("shares table", () => {
     seedShare(db, nowMs - 31 * DAY_MS);
     const { shareId } = seedShare(db, nowMs);
     endShare(db, shareId, "sharing_stopped", nowMs);
-    expect(countActiveShares(db, nowMs - EXPIRY_MS)).toBe(1);
+    expect(countActiveShares(db, nowMs, EXPIRY_MS)).toBe(1);
+  });
+
+  it("stops counting a share left pending for over an hour (M3)", () => {
+    seedShare(db, nowMs - 61 * 60 * 1000);
+    const committed = seedShare(db, nowMs - 2 * DAY_MS);
+    recordShareStored(db, committed.shareId, 10, nowMs - DAY_MS);
+    seedShare(db, nowMs - 59 * 60 * 1000);
+    expect(countActiveShares(db, nowMs, EXPIRY_MS)).toBe(2);
+  });
+
+  it("ends a share left pending for over an hour on first contact (M3)", () => {
+    const { shareId, secrets } = seedShare(db, nowMs - 61 * 60 * 1000);
+    expect(
+      authenticateShare(context(), shareId, secrets.authEdit, IP, "connection"),
+    ).toEqual({ ok: false, reason: "expired" });
+    expect(getShare(db, shareId)?.ended_reason).toBe("expired");
+    // Its first store can no longer commit it past the cap.
+    recordShareStored(db, shareId, 10, nowMs);
+    expect(getShare(db, shareId)?.status).toBe("ended");
   });
 
   it("clears created_ip_hash after 30 days", () => {

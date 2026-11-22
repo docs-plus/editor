@@ -282,6 +282,36 @@ describe("POST /api/shares", () => {
     expect(await response.json()).toEqual({ error: "shares_full" });
   });
 
+  it("frees a slot when a share stays pending for over an hour (M3)", async () => {
+    let t = Date.UTC(2026, 10, 22);
+    const http = createHttp({
+      now: () => t,
+      limits: { ...LIMITS, maxTotalShares: 1 },
+    });
+    await createShare(http);
+    expect(
+      (
+        await http.handle(
+          post("/api/shares", createBody(makeShareSecrets())),
+          IP,
+        )
+      ).status,
+    ).toBe(503);
+    t += 61 * 60 * 1000;
+    await createShare(http);
+  });
+
+  it("limits creations per IPv6 /48 as well as per /64 (M3)", async () => {
+    const http = createHttp({
+      limits: { ...LIMITS, creationsPerHourPerIp: 1 },
+    });
+    const create = (ip: string) =>
+      http.handle(post("/api/shares", createBody(makeShareSecrets())), ip);
+    expect((await create("2001:db8:a:1::/64")).status).toBe(201);
+    expect((await create("2001:db8:a:2::/64")).status).toBe(429);
+    expect((await create("2001:db8:b:1::/64")).status).toBe(201);
+  });
+
   it("limits creations per IP and across the server per hour", async () => {
     const perIp = createHttp({
       limits: { ...LIMITS, creationsPerHourPerIp: 1 },

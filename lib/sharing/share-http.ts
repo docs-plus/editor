@@ -337,14 +337,14 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     return createHmac("sha256", ipHashKey).update(ip).digest("base64url");
   }
 
-  /** Global cap, then per-IP and global hourly creation limits. */
+  /** Global cap, then per-address (IPv4, IPv6 /64 and /48) and global hourly creation limits. */
   function creationRefused(request: Request, ip: string): Response | null {
     const at = now();
-    if (countActiveShares(db, at - limits.expiryMs) >= limits.maxTotalShares) {
+    if (countActiveShares(db, at, limits.expiryMs) >= limits.maxTotalShares) {
       logAbuseEvent("share_create_refused", { ip, reason: "shares_full" });
       return error(request, 503, "shares_full");
     }
-    const perIp = creationsPerIp.check(ip);
+    const perIp = checkAddress(creationsPerIp, ip);
     if (!perIp.allowed) {
       return throttled(request, perIp, ip, "share_create_throttled");
     }

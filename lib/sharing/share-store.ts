@@ -114,22 +114,44 @@ export function createShareRow(
   insertShare(db, share, nowMs);
 }
 
-/** Shares not ended and edited since `cutoffMs` (the `MAX_TOTAL_SHARES` count). */
-export function countActiveShares(db: Database, cutoffMs: number): number {
+/**
+ * A share that never had a stored edit expires this long after it was
+ * created. Its creator connects right away, so an hour is generous, and
+ * abandoned creates cannot hold `MAX_TOTAL_SHARES` slots for 30 days.
+ */
+export const PENDING_SHARE_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * The `MAX_TOTAL_SHARES` count: committed shares edited within `expiryMs`
+ * and pending shares created within `PENDING_SHARE_TTL_MS`.
+ */
+export function countActiveShares(
+  db: Database,
+  nowMs: number,
+  expiryMs: number,
+): number {
   const row = db
     .prepare(
-      "SELECT COUNT(*) AS count FROM shares WHERE status != 'ended' AND last_edit_at >= ?",
+      `SELECT COUNT(*) AS count FROM shares
+       WHERE (status = 'committed' AND last_edit_at >= ?)
+          OR (status = 'pending' AND created_at >= ?)`,
     )
-    .get(cutoffMs) as { count: number };
+    .get(nowMs - expiryMs, nowMs - PENDING_SHARE_TTL_MS) as { count: number };
   return row.count;
 }
 
-/** True when a share that has not ended went unedited past the expiry. */
+/**
+ * True when a share that has not ended is past its expiry: unedited for
+ * `expiryMs`, or still pending `PENDING_SHARE_TTL_MS` after it was created.
+ */
 export function isShareExpired(
   share: ShareRow,
   nowMs: number,
   expiryMs: number,
 ): boolean {
+  if (share.status === "pending") {
+    return share.created_at < nowMs - PENDING_SHARE_TTL_MS;
+  }
   return share.status !== "ended" && share.last_edit_at < nowMs - expiryMs;
 }
 
