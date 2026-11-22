@@ -392,11 +392,23 @@ test.describe("Find in the document", () => {
     await openFind(page);
     await page.keyboard.type("needle");
     await expect(page.locator(STATUS)).toHaveText("1 of 8");
-    const [bar, toolbar] = await Promise.all([
-      page.locator(BAR).boundingBox(),
-      page.locator('[role="toolbar"]').first().boundingBox(),
-    ]);
-    expect(bar && toolbar && bar.y + bar.height <= toolbar.y + 1).toBe(true);
+    // Polled: on a busy runner the phone bar's lazy stylesheet can dock it
+    // after the first measurement. The value is the gap from the find bar's
+    // bottom to the phone bar's top, so a failure shows how far off it is.
+    await expect
+      .poll(
+        async () => {
+          const [bar, toolbar] = await Promise.all([
+            page.locator(BAR).boundingBox(),
+            page.locator('[role="toolbar"]').first().boundingBox(),
+          ]);
+          return bar && toolbar
+            ? Math.round(toolbar.y - (bar.y + bar.height))
+            : null;
+        },
+        { message: "find bar bottom to phone bar top (px)" },
+      )
+      .toBeGreaterThanOrEqual(-1);
     if (screenshots) {
       await page.screenshot({ path: `${SCREENS}/find-phone.png` });
     }
