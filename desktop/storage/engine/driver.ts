@@ -11,7 +11,9 @@
  * - a BLOB is a `Uint8Array` the caller owns;
  * - parameters are positional `?` only;
  * - a failure carries the SQLite extended result code (see
- *   {@link sqliteResultCode}).
+ *   {@link sqliteResultCode});
+ * - every connection waits up to {@link BUSY_TIMEOUT_MS} for a lock (see
+ *   {@link applyBusyTimeout}).
  */
 import { StorageError, type StorageErrorCode } from "./errors";
 
@@ -34,6 +36,37 @@ export type OpenSqlite = (
   path: string,
   options: { readOnly: boolean },
 ) => SqliteDriver;
+
+/**
+ * How long any connection waits for a lock before `SQLITE_BUSY`. SQLite's
+ * default is 0: a lock held for a moment by another connection, or on
+ * Windows by a scanner or a process that is still letting go of the file,
+ * failed a call at once (soak T4-copy, "database is locked"). Long enough
+ * for those, short enough that a stuck lock still surfaces.
+ */
+export const BUSY_TIMEOUT_MS = 3000;
+
+/** Every driver calls this on each connection it opens. */
+export function applyBusyTimeout(db: SqliteDriver): SqliteDriver {
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  return db;
+}
+
+/**
+ * `wal_checkpoint(TRUNCATE)` without waiting. A TRUNCATE checkpoint calls
+ * the busy handler while readers hold old snapshots, so with a busy timeout
+ * it would wait for a running daily copy and stretch a quit past its
+ * budget. It never needs to: a blocked checkpoint is reported in its row
+ * (`busy = 1`) and the WAL is truncated by a later one.
+ */
+export function checkpointTruncate(db: SqliteDriver): void {
+  db.exec("PRAGMA busy_timeout = 0");
+  try {
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } finally {
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  }
+}
 
 /**
  * The SQLite extended result code of a driver error, or null when the error

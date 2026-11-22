@@ -653,6 +653,16 @@ async function t21() {
   const sqlBacklinks: number[] = [];
   for (let i = 0; i < 10; i += 1)
     sqlBacklinks.push((await timed(() => library.backlinks(linkKey)))[1]);
+  // The same putDerived in this thread: its SQL alone, without the worker.
+  const sqlDerive: number[] = [];
+  for (let i = 0; i < 10; i += 1)
+    sqlDerive.push(
+      (
+        await timed(() =>
+          library.putDerived(busy, 0, derivedRows(targets, 50, 20, 1000 + i)),
+        )
+      )[1],
+    );
   library.shutdown();
 
   const client = await StorageClient.start(workerPath(), { dir: dir() });
@@ -716,7 +726,10 @@ async function t21() {
         aloneMs: median(alone),
         behindPutMs: median(behind),
         behindPutMaxMs: Math.max(...behind),
+        // Every round, for p95 across the case's runs.
+        behindPutSamples: behind.map((ms) => Math.round(ms * 100) / 100),
         putDerivedMs: median(derive),
+        putDerivedSqlMs: median(sqlDerive),
       },
     })}`,
   );
