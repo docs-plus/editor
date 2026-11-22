@@ -55,9 +55,10 @@ idempotent: a second run changes nothing.
   tests corrupt a page of `updates` or `links` in a copy of a library.
   - The engine half of T22 drains 1,000 stale documents with the stub
     deriver (0.27 to 0.47 s on an Apple silicon Mac). The real T22 waits for LK4a's queue.
-  - A known engine gap is kept as a failing test: `restoreFolder` can nest
-    a folder deeper than 4 when its old parent moved deeper while it was in
-    the Trash.
+  - The repair sweep found that `restoreFolder` could nest a folder deeper
+    than 4, and that a malformed file made open throw instead of opening
+    read-only as `corrupt`. P2.6d fixes both, and the folder case runs here
+    as an ordinary test.
 
 ### Desktop P2.6d: library format 2 and the relationship layer
 

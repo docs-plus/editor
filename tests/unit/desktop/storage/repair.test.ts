@@ -294,9 +294,9 @@ describe("check mode", () => {
 });
 
 describe("folder depth after a restore (I2)", () => {
-  // restoreFolder has no depth check: a trashed subtree can come back under
-  // a parent that was moved deeper while it was in the Trash.
-  test.failing("restoring a folder never nests deeper than 4", () => {
+  // A trashed subtree whose old parent moved deeper while it was in the
+  // Trash comes back at the root instead (P2.6d).
+  test("restoring a folder never nests deeper than 4", () => {
     const p = mustFolder(library, { name: "P" });
     const a = mustFolder(library, { name: "A", parentId: p.id });
     const b = mustFolder(library, { name: "B", parentId: a.id });
