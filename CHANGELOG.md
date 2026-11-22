@@ -13,11 +13,13 @@ since the previous tag.
 
 The selection bubble gains the rest of its v2 row (spec
 `2026-11-17-bubble-and-quick-insert-design.md` §7, v1 contract A20):
-Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌. The editor chunk group does not grow
-(393,820 → 393,818 B gz, −2 B against `main` at `903b5c8`); the bubble
-chunk grows from 9,798 to 12,583 B gz and the menu chunk that holds Turn
-into from 3,173 to 4,474 B gz. The colour rows (Task 1.4) land from their
-own branch.
+Style ▾ │ B I U S ‹› Tx │ A▁▾ 🔗 🖌, and named colour rows. Measured with
+P2–P4 under it (`feat/phone-insert-sheet` at `60bc13b`, 393,995 B gz) the
+editor chunk group is 394,246 B gz (+251 B; +228 B against `main` at
+`84a9458`): the per-item lift that Turn into's text styles need lives in
+the eager registry (about +200 B), pending a ruling. The bubble chunk is
+14,161 B gz (9,798 B on `main`), the menu chunk that holds Turn into
+5,778 B gz (3,173 B) and the colour chunk 6,583 B gz.
 
 #### Added
 
@@ -30,9 +32,28 @@ own branch.
   Text, Heading 1–3, More headings ▸ (4–6), the three lists, Quote and Code
   block, with icons, shortcuts and a trailing ✓, and no Markdown chips.
   The row keeps Your formats below them.
-- **Text styles:** Text and the headings turn a list item or a quote into
-  that block, unwrapped, in one undo step, wherever they run: Turn into,
-  the palette, the "/" menu and the phone's Style rows.
+- **Text styles:** Text and the headings turn the selected list items or
+  quote lines into that block, lifted to the top level, in one undo step,
+  wherever they run (Turn into, the palette, the "/" menu, the phone's
+  Style rows, the shortcuts); unselected items and lines stay in their list
+  or quote, and a range across a paragraph and a list converts every
+  block.
+- **Turn into:** after select all it converts everything but the title
+  ("The title stays a heading."); Code block and Quote lift list items and
+  quote lines first; Code block over formatting says "Formatting
+  removed"; a range with table cells converts around them ("Table cells
+  keep their type."). Each pill has Undo. Opened toward the text, it goes
+  past the selection's lines, never over them.
+- **Colour:** the bubble's and the row's colour menus are named rows:
+  Recent, then Text | Highlight side by side (Default and No highlight
+  first, five colours each, the rest under More colours ▸ and More
+  highlights ▸), with ✓ on the current value, typeahead and the hover
+  preview. From the bubble the menu opens below or above the selection,
+  never over it. Enter or Space picks and closes the menu (a change from
+  O4, spec §7.10), and the pick is announced with Undo.
+- **Phone:** the Aa sheet keeps the swatch grid, six per line, names the
+  current colours under it, and each tap shows a pill naming the colour
+  ("Teal text") with a 44px Undo.
 - **Bubble:** a keyboard selection (Shift+arrows, ⌘A) shows the bubble
   300 ms after Shift is released and the selection is still, never while
   Shift is held or a key repeats.
@@ -44,8 +65,10 @@ own branch.
 
 #### Changed
 
-- **Row:** the Text style ▾ face reads "Text" instead of "Normal text",
-  and "List" or "Quote" inside a list or quote, as the bubble's does.
+- **Text style:** the paragraph style is named "Text" everywhere (the
+  registry label, so the row, the palette, the "/" menu and the phone
+  agree), and the row's face reads "List" or "Quote" inside a list or
+  quote, as the bubble's does.
 - **Bubble:** inside inline code, B, I, U, S, colour and link say "Inline
   code can't take other formatting." instead of the generic refusal; the
   Paint format brush says the same on inline code on every surface
@@ -63,6 +86,8 @@ own branch.
 - **Bubble:** clicking 🔗 and pasting or typing a URL at once no longer
   replaces the selected words: focus moves to the link field in the click
   itself, and the bubble hides in the same task.
+- **Bubble:** Esc while the bubble is still waiting to show (its delay or
+  a keyboard selection's settle) cancels it.
 
 ### Phone Insert sheet, Style first in the Aa sheet, words on tablet stand-ins (P4)
 
