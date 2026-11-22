@@ -335,7 +335,8 @@ test.describe("hover preview", () => {
   }) => {
     await openDoc(page);
     await selectText(page, "some words");
-    // The bubble's keyboard path (Alt+F10, then B I U → A▾).
+    // The bubble's keyboard path: Alt+F10 lands on Style ▾, then →
+    // through B I U S ‹› Tx to A▾ (spec §7.1).
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
     await page.keyboard.press("Alt+F10");
     const chevron = bubble(page).getByRole("button", {

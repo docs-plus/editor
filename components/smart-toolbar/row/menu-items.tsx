@@ -191,7 +191,7 @@ export function ActionMenuItem({
       {body}
     </DropdownMenuCheckboxItem>
   ) : (
-    <DropdownMenuItem {...common} className={checkColumn ? "pr-8" : undefined}>
+    <DropdownMenuItem {...common} className={checkColumn ? "pe-8" : undefined}>
       {body}
     </DropdownMenuItem>
   );
@@ -203,10 +203,8 @@ export function ActionMenuItem({
  * Outdent's and Indent's do in the T3 ¶ menu. The check, shortcut and
  * reason line are `order-1`: after the icon and label, in DOM order.
  */
-// `pr-1.5` beside `pe-1.5` until the logical `dropdown-menu.tsx` (P3)
-// lands: tailwind-merge drops the item's physical `pr-8` only for `pr-*`.
 const CHECK_BEFORE_SHORTCUT =
-  "pr-1.5 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
+  "pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
 
 /** One registry action as a radio item of a value menu. */
 export function ActionRadioItem({
@@ -254,7 +252,7 @@ export function ActionRadioItem({
     >
       {Icon ? <Icon aria-hidden="true" /> : null}
       <span>{label ?? action.label}</span>
-      <Shortcut combo={shortcut} mac={mac} className="order-1 ml-0" />
+      <Shortcut combo={shortcut} mac={mac} className="order-1 ms-0" />
       <Reason id={reasonId} reason={reason} indent={Icon !== undefined} />
     </DropdownMenuRadioItem>
   );
