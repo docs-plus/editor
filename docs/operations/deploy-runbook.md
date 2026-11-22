@@ -22,9 +22,14 @@ by a push; CI runs for pull requests, forks included, never deploy. GitHub
 runs the copy of `deploy.yml` on `main`, so a pull request cannot change what
 it does. Deploys by hand work whatever the variable says.
 
-CI on `main` cancels a run when a newer push arrives, so when several pull
-requests merge close together, only the last one's CI finishes and deploys.
-Deploys run one at a time, and a newer commit includes everything before it.
+CI on `main` never cancels a run once it has started, so every started run
+finishes and deploys its commit. Runs on `main` queue in commit order, and
+GitHub keeps only one waiting run: when several pull requests merge close
+together, the run already going finishes, the newest commit waits, and the
+commits in between are covered by the newest one's deploy (a newer commit
+includes everything before it). Deploys run one at a time, and
+`scripts/deploy.sh` never moves backwards. Pull request runs are still
+cancelled by a newer push to the same pull request.
 
 While automatic deploys are off, the Deploy runs that CI starts show as
 skipped. Turning them on does not deploy what merged in the meantime: deploy
@@ -151,6 +156,60 @@ says what a run may do:
   set `off` (or back to `dry-run`) the same way. For an immediate stop on
   the host, `bunx pm2@6.0.14 stop editor-purge`, which also stops its cron
   (the next deploy registers it again).
+
+## CI checks and the merge queue
+
+CI (`.github/workflows/ci.yml`) reports two checks that the `main` ruleset
+(**Protect main**) requires: `Lint, typecheck, unit tests, build` and
+`Playwright (Chromium)`. The ruleset matches them by name, so they must not
+change.
+
+### Turning the merge queue on (owner, once)
+
+Without the queue, a pull request is only known to pass against the `main` it
+last ran on. The merge queue runs CI (`merge_group` event) on `main` plus the
+pull requests ahead of it, and merges only what passed. CI already runs on
+`merge_group`; turning the queue on is a repository setting for an admin:
+
+1. Settings → Rules → Rulesets → **Protect main** → Add rule →
+   **Require merge queue**:
+   - Merge method: **Merge commit** (what `main` uses today).
+   - Build concurrency: **3** (GitHub's free plan runs 20 jobs at a time
+     across the organisation, and other pull requests need runners too).
+   - Merge limits: minimum **1**, maximum **5**; wait **5 minutes** to fill
+     a group, so pull requests queued together land as one push to `main`,
+     one CI run and one deploy.
+   - Only merge non-failing pull requests: on (**All green**).
+   - Status check timeout: **60 minutes**.
+2. In the same ruleset, keep **Require status checks to pass** with exactly
+   `Lint, typecheck, unit tests, build` and `Playwright (Chromium)` (source:
+   GitHub Actions).
+3. Save, then merge pull requests with **Merge when ready** (or
+   `gh pr merge <n> --auto --merge`) instead of the merge button.
+
+Or with the API (the PUT replaces the ruleset, so this adds the rule to the
+current one):
+
+```bash
+gh api repos/docs-plus/editor/rulesets/26847251 \
+  | jq '{name, target, enforcement, conditions, bypass_actors,
+         rules: (.rules + [{type: "merge_queue", parameters: {
+           merge_method: "MERGE", grouping_strategy: "ALLGREEN",
+           max_entries_to_build: 3, min_entries_to_merge: 1,
+           max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 5,
+           check_response_timeout_minutes: 60}}])}' \
+  | gh api -X PUT repos/docs-plus/editor/rulesets/26847251 --input -
+```
+
+Notes:
+
+- A merge queue run never deploys: its event is `merge_group` on a
+  `gh-readonly-queue/main/...` branch. The push that lands the group on `main`
+  runs CI again, and that run deploys.
+- Any workflow later added to the required checks needs a `merge_group:`
+  trigger too, or the queue waits for it until the timeout.
+- To turn the queue off, delete the rule from the ruleset; the checks stay
+  required.
 
 ## One-time setup
 

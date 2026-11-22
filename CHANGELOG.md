@@ -120,6 +120,30 @@ without purging; the next 03:17 run writes `db-first.sqlite` and does the
 first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
 pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
 
+### CI: `main` runs are never cancelled; merge queue support
+
+A merge on `main` no longer cancels the previous commit's CI run, which left
+that commit undeployed (29f6faf and e64ae84). CI also runs in the merge queue,
+so the owner can require it on `main`. No app change.
+
+#### Changed
+
+- **CI:** only pull request runs are cancelled by a newer push. A started run
+  on `main` always finishes and can deploy; runs queue in commit order, and
+  when several merges land together the newest commit's run waits and
+  deploys everything before it.
+- **CI:** a `merge_group` trigger. Merge queue runs never deploy (Deploy acts
+  only on CI runs from a push to `main`).
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the
+  no-cancel rule and the two required check names;
+  `workflow-permissions.test.ts` requires explicit read-only permissions on
+  every job of a `pull_request` or `merge_group` workflow.
+
+**Deploy:** none. **Owner (once):** to turn the merge queue on, add
+**Require merge queue** to the **Protect main** ruleset as
+`docs/operations/deploy-runbook.md` → *Turning the merge queue on*
+describes; the required checks keep their names.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
