@@ -54,6 +54,7 @@ const SERVER_ENTRIES = [
 const PLATFORM_ENTRIES = [
   "lib/platform/local-session.ts",
   "lib/platform/memory-doc-store.ts",
+  "lib/platform/memory-blob-store.ts",
 ];
 
 describe("platform import boundaries", () => {
@@ -80,6 +81,54 @@ describe("import boundaries", () => {
       const { files, packages } = staticImports(entry);
       expect([...files]).not.toContain("lib/tab-api.ts");
       expect([...packages]).not.toContain("@hocuspocus/provider");
+    });
+  }
+});
+
+// The image store (spec §9, A1): the editor chunk holds only the host-src
+// check and the §6.2 fallback's routing. The resolver, the object-URL cache, the strippers,
+// sniffing, hashing and the insert pipeline stay lazy chunks.
+const LAZY_ASSET_MODULES = [
+  "lib/assets/asset-ref.ts",
+  "lib/assets/asset-resolver.ts",
+  "lib/assets/object-url-cache.ts",
+  "lib/assets/strip-metadata.ts",
+  "lib/assets/sniff.ts",
+  "lib/assets/hash.ts",
+  "lib/assets/prepare-image-asset.ts",
+  "lib/assets/encode-client.ts",
+  "lib/assets/encode-image.ts",
+  "extensions/hyper-multimedia/alt-text-popover.ts",
+  "extensions/hyper-multimedia/asset-media-actions.ts",
+  "extensions/hyper-multimedia/asset-image-view.ts",
+  "extensions/hyper-multimedia/asset-image-lazy.ts",
+];
+
+// Asset modules the Hocus server and the storage worker may import: no DOM,
+// React, editor or platform code.
+const SERVER_SAFE_ASSET_MODULES = [
+  "lib/assets/asset-ref.ts",
+  "lib/assets/limits.ts",
+  "lib/assets/sniff.ts",
+  "lib/assets/hash.ts",
+  "lib/assets/strip-metadata.ts",
+];
+
+describe("image store import boundaries", () => {
+  it("the media kit loads no lazy asset module eagerly", () => {
+    const { files } = staticImports(
+      "extensions/hyper-multimedia/hyper-multimedia-kit.ts",
+    );
+    for (const lazy of LAZY_ASSET_MODULES)
+      expect([...files]).not.toContain(lazy);
+  });
+
+  for (const entry of SERVER_SAFE_ASSET_MODULES) {
+    it(`${entry} imports only other asset modules`, () => {
+      const { files, packages } = staticImports(entry);
+      expect([...packages]).toEqual([]);
+      for (const file of files)
+        expect(file.startsWith("lib/assets/")).toBe(true);
     });
   }
 });
