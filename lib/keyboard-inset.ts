@@ -60,6 +60,8 @@ let inset = 0;
 let viewportHeight = 0;
 let layoutWidth = 0;
 let frame = 0;
+/** Focus left editable content since the last settled frame. */
+let resetPending = false;
 
 /** Writes what changed and tells the subscribers if the inset did. */
 function apply(nextInset: number, nextHeight: number, force = false): void {
@@ -82,41 +84,52 @@ function measure(viewport: VisualViewport, force = false): void {
   );
 }
 
-function nextFrame(task: () => void): void {
-  cancelAnimationFrame(frame);
-  frame = requestAnimationFrame(task);
-}
-
 /**
- * Adds the one listener set. iOS can leave the visual viewport offset after
- * the keyboard closes, so focus leaving editable content resets the inset
- * to 0 after one frame. A changed layout width (rotation, iPad window
- * resize) is reported once the frame settles; pinch zoom and the keyboard
- * change only the visual viewport.
+ * Adds the one listener set. Every event schedules the same once-per-frame
+ * task, so a resize and a focusout in one frame never cancel each other.
+ * iOS can leave the visual viewport offset after the keyboard closes, so
+ * focus leaving editable content resets the inset to 0 in that frame, even
+ * if the viewport scrolled too. A changed layout width (rotation, iPad
+ * window resize) is reported once the frame settles, whichever event
+ * scheduled it; pinch zoom and the keyboard change only the visual
+ * viewport.
  */
 function attach(): () => void {
   const viewport = window.visualViewport;
   if (!viewport) return () => {};
   layoutWidth = window.innerWidth;
   const settle = () => {
-    measure(viewport);
+    frame = 0;
+    if (resetPending) {
+      resetPending = false;
+      // Inset 0 means the sheet reaches the layout bottom: the space it
+      // may take is the whole layout viewport.
+      apply(0, window.innerHeight);
+    } else {
+      measure(viewport);
+    }
     if (window.innerWidth === layoutWidth) return;
     layoutWidth = window.innerWidth;
     for (const listener of widthListeners) listener();
   };
-  const onChange = () => nextFrame(settle);
+  const schedule = () => {
+    if (frame === 0) frame = requestAnimationFrame(settle);
+  };
   const onFocusOut = (event: FocusEvent) => {
     if (isEditable(event.relatedTarget)) return;
-    nextFrame(() => apply(0, window.innerHeight));
+    resetPending = true;
+    schedule();
   };
   measure(viewport, true);
-  viewport.addEventListener("resize", onChange);
-  viewport.addEventListener("scroll", onChange);
+  viewport.addEventListener("resize", schedule);
+  viewport.addEventListener("scroll", schedule);
   document.addEventListener("focusout", onFocusOut);
   return () => {
     cancelAnimationFrame(frame);
-    viewport.removeEventListener("resize", onChange);
-    viewport.removeEventListener("scroll", onChange);
+    frame = 0;
+    resetPending = false;
+    viewport.removeEventListener("resize", schedule);
+    viewport.removeEventListener("scroll", schedule);
     document.removeEventListener("focusout", onFocusOut);
     const style = document.documentElement.style;
     style.removeProperty(KEYBOARD_INSET_VAR);
@@ -169,6 +182,20 @@ export function onViewportWidthChange(listener: () => void): () => void {
   return () => {
     widthListeners.delete(entry);
     release();
+  };
+}
+
+/**
+ * Remembers the layout width between calls: each call records
+ * `innerWidth` and says whether it moved since the previous call. The
+ * first call says false, so a first mount does nothing.
+ */
+export function createWidthMemo(): () => boolean {
+  let seen = 0;
+  return () => {
+    const previous = seen;
+    seen = window.innerWidth;
+    return previous !== 0 && previous !== seen;
   };
 }
 

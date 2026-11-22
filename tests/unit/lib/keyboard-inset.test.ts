@@ -4,6 +4,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import {
+  createWidthMemo,
   getKeyboardInset,
   KEYBOARD_INSET_VAR,
   keyboardInset,
@@ -307,5 +308,98 @@ describe("onViewportWidthChange (orientation change)", () => {
     } finally {
       stop();
     }
+  });
+});
+
+describe("the resize settle and the focusout reset share one frame", () => {
+  function editable() {
+    const el = document.createElement("div");
+    el.contentEditable = "true";
+    document.body.appendChild(el);
+    return el;
+  }
+
+  it("a focusout in the same frame as a rotation still reports the width", async () => {
+    viewport.height = 500;
+    let calls = 0;
+    const stopInset = subscribeKeyboardInset(() => {});
+    const stop = onViewportWidthChange(() => calls++);
+    const el = editable();
+    try {
+      setWidth(844);
+      viewport.dispatchEvent(new Event("resize"));
+      el.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, relatedTarget: null }),
+      );
+      await nextFrame();
+      expect(calls).toBe(1);
+      expect(getKeyboardInset()).toBe(0);
+      await nextFrame();
+      expect(calls).toBe(1);
+    } finally {
+      stop();
+      stopInset();
+      el.remove();
+    }
+  });
+
+  it("a visual viewport scroll in the same frame does not cancel the reset", async () => {
+    viewport.height = 500;
+    const stop = subscribeKeyboardInset(() => {});
+    const el = editable();
+    try {
+      expect(getKeyboardInset()).toBe(300);
+      el.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, relatedTarget: null }),
+      );
+      // iOS drift: the viewport stays offset after the keyboard closes.
+      viewport.offsetTop = 40;
+      viewport.dispatchEvent(new Event("scroll"));
+      await nextFrame();
+      expect(getKeyboardInset()).toBe(0);
+    } finally {
+      stop();
+      el.remove();
+    }
+  });
+
+  it("a pending reset does not survive the last unsubscribe", async () => {
+    viewport.height = 500;
+    const stop = subscribeKeyboardInset(() => {});
+    const el = editable();
+    el.dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, relatedTarget: null }),
+    );
+    stop();
+    await nextFrame();
+    expect(cssVar(KEYBOARD_INSET_VAR)).toBe("");
+    const again = subscribeKeyboardInset(() => {});
+    try {
+      viewport.dispatchEvent(new Event("resize"));
+      await nextFrame();
+      expect(getKeyboardInset()).toBe(300);
+    } finally {
+      again();
+      el.remove();
+    }
+  });
+});
+
+describe("createWidthMemo (the bar's mount and unmount scroll)", () => {
+  it("says nothing moved on the first call or on a same-width remount", () => {
+    const moved = createWidthMemo();
+    expect(moved()).toBe(false); // first mount
+    expect(moved()).toBe(false); // StrictMode cleanup
+    expect(moved()).toBe(false); // StrictMode remount, or an editor switch
+  });
+
+  it("says the width moved after a rotation across 768 px", () => {
+    const moved = createWidthMemo();
+    moved(); // the bar mounts in portrait
+    setWidth(844);
+    expect(moved()).toBe(true); // unmounts in landscape
+    setWidth(390);
+    expect(moved()).toBe(true); // mounts again in portrait
+    expect(moved()).toBe(false);
   });
 });
