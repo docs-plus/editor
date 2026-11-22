@@ -97,6 +97,19 @@ function selectedRange(state: EditorState, top: TopLevel) {
   return { start, end };
 }
 
+/**
+ * The empty last paragraph the trailing-node plugin keeps after a final
+ * list, table or rule. Moving past it would only make a new one, below.
+ */
+function isTrailingNode(doc: PMNode, index: number): boolean {
+  const node = doc.child(index);
+  return (
+    index === doc.childCount - 1 &&
+    node.type.name === "paragraph" &&
+    node.content.size === 0
+  );
+}
+
 interface MovePlan {
   from: number;
   to: number;
@@ -121,7 +134,9 @@ function planMove(
     return { from, to, insertAt: offsets[above] };
   }
   const below = end + 1;
-  if (below >= state.doc.childCount) return { reason: BLOCK_MOVE_REASONS.last };
+  if (below >= state.doc.childCount || isTrailingNode(state.doc, below)) {
+    return { reason: BLOCK_MOVE_REASONS.last };
+  }
   let belowEnd = below;
   while (
     belowEnd + 1 < state.doc.childCount &&

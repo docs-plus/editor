@@ -223,6 +223,23 @@ describe("moveBlock", () => {
       expect(plainEditor.state.doc.child(0).textContent).toBe("Title");
     });
 
+    it("refuses moving a list down past the trailing empty paragraph", () => {
+      const list: JSONContent = {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [p("item")] }],
+      };
+      plain = createTestEditor({ content: doc(p("A"), list) });
+      caretIn(plain, "item");
+      // The trailing node keeps an empty paragraph after a final list, so
+      // passing it would only make a new one: there is nowhere to go.
+      const count = plain.state.doc.childCount;
+      expect(canMoveBlock(plain.state, "down")).toEqual({
+        reason: BLOCK_MOVE_REASONS.last,
+      });
+      expect(moveBlock(plain, "down")).toBe(false);
+      expect(plain.state.doc.childCount).toBe(count);
+    });
+
     it("keeps a heading moved next to the title a body heading", () => {
       const { editor } = collab(doc(p("A"), h(2, "Sub")));
       caretIn(editor, "Sub");
