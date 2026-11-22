@@ -216,6 +216,19 @@ describe("comments chunk boundary", () => {
     expect([...files]).not.toContain("lib/comments/entry-check.ts");
     expect([...packages]).toEqual([]);
   });
+
+  it("extensions/comments/comments-host.ts loads only comments code", () => {
+    const { files, packages } = staticImports(
+      "extensions/comments/comments-host.ts",
+    );
+    for (const file of files) {
+      expect(
+        file.startsWith("lib/comments/") ||
+          file === "extensions/comments/comments-host.ts",
+      ).toBe(true);
+    }
+    expect([...packages]).toEqual([]);
+  });
 });
 
 describe("import boundaries", () => {

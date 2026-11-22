@@ -23,7 +23,6 @@ import {
   resolveAnchors,
   sameRange,
 } from "@/lib/comments/anchors";
-import { getAuthorId } from "@/lib/comments/author-id";
 import { cleanAuthorName } from "@/lib/comments/clean";
 import type { CommentsDeps } from "@/lib/comments/deps";
 import {
@@ -67,8 +66,9 @@ export interface CommentsControllerOptions {
   canManageAll?: () => boolean;
   /**
    * This window's name and colour (`getUserIdentity()`), read at each
-   * write; the colour is always a palette entry. `id` defaults to this
-   * browser's author id (`lib/comments/author-id.ts`).
+   * write; the colour is always a palette entry. `id` is this browser's
+   * author id in this document (`authorIdFor(lineage)`, SEC-002), resolved
+   * before attaching.
    */
   identity: () => CommentIdentity;
   /** Defaults to `requestAnimationFrame`; tests drive `flush()` instead. */
@@ -79,7 +79,7 @@ export interface CommentsControllerOptions {
 }
 
 export interface CommentIdentity {
-  id?: Id;
+  id: Id;
   name: string;
   color: string;
 }
@@ -87,7 +87,7 @@ export interface CommentIdentity {
 /** The author comments store: the name cleaned and cut to 40 (§4.2). */
 export function authorOf({ id, name, color }: CommentIdentity): Author {
   return {
-    id: id ?? getAuthorId(),
+    id,
     n: cleanAuthorName(name) || "Anonymous",
     k: color as Author["k"],
   };

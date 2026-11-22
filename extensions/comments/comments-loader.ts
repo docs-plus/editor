@@ -1,20 +1,13 @@
 import type { Editor } from "@tiptap/core";
-import type * as Y from "yjs";
 
 import { COMMENTS_DEPS } from "@/extensions/comments/comments-deps";
 import { setCommentGate } from "@/lib/editor-actions/comment-actions";
 import { getUserIdentity } from "@/lib/user-identity";
 
 import type { CommentsController } from "./comments-controller";
+import type { CommentsHost, MountCommentsOptions } from "./comments-host";
 
-export interface MountCommentsOptions {
-  /** The Y.Doc the editor's sync plugin is bound to. */
-  doc: Y.Doc;
-  /** `canComment()` (`lib/comments/permissions.ts`); read at each write. */
-  canComment: () => boolean;
-  /** The sharer, or the owner of a Local or library document. */
-  canManageAll?: () => boolean;
-}
+export type { MountCommentsOptions } from "./comments-host";
 
 export interface MountedComments {
   /** Loads the chunk and attaches once; `null` after unmount or a failed load. */
@@ -22,92 +15,45 @@ export interface MountedComments {
   unmount(): void;
 }
 
-/** The root map's name (`COMMENTS_ROOT`), a literal so nothing is shared. */
-const ROOT = "comments";
-
-const hasThread = (keys: Iterable<string>) => {
-  for (const key of keys) if (key.startsWith("t:")) return true;
-  return false;
-};
-
 /**
  * Turns comments on for one editor whose document takes them (comments
  * design §6.3: a Local, library or live document; never the web sandbox
- * or the Playground). The host that knows the document's kind and role
- * calls it; nothing on the web does yet, so comments stay dark there.
+ * or the Playground). The host that knows the document's kind, role and
+ * lineage calls it; nothing on the web does yet, so comments stay dark.
  *
- * Registers the `comment.add` gate at once. The comments chunk loads when
- * the browser is idle if the document has threads, when the first thread
- * arrives, or on `controller()` (the first Comment command, P4.10); a
- * chunk that fails to load leaves the editor as it was and retries on the
- * next call.
+ * Only this part is in the editor chunk: the `comment.add` gate, which
+ * registers at once, and the deps the lazy chunks get from it. The rest
+ * (`comments-host.ts`: when to load the controller, the author id) is a
+ * small lazy chunk fetched here; it loads the controller as before.
  */
 export function mountComments(
   editor: Editor,
-  { doc, canComment, canManageAll }: MountCommentsOptions,
+  options: MountCommentsOptions,
 ): MountedComments {
-  const unmarkGate = setCommentGate(editor, canComment);
-  const map = doc.getMap(ROOT);
-  let attached: CommentsController | null = null;
-  let loading: Promise<CommentsController | null> | null = null;
+  const unmarkGate = setCommentGate(editor, options.canComment);
+  let host: Promise<CommentsHost | null> | null = null;
   let unmounted = false;
-  let cancelIdle: (() => void) | null = null;
-  let observing = false;
-
-  const controller = () => {
-    if (unmounted) return Promise.resolve(null);
-    loading ??= import("./comments-controller")
-      .then(({ attachComments }) => {
-        if (unmounted || editor.isDestroyed) return null;
-        attached ??= attachComments({
-          editor,
-          doc,
-          deps: COMMENTS_DEPS,
-          canComment,
-          canManageAll,
-          identity: getUserIdentity,
-        });
-        return attached;
-      })
-      .catch(() => {
-        loading = null;
-        return null;
-      });
-    return loading;
-  };
-
-  const stopObserving = () => {
-    if (observing) map.unobserve(onFirstThread);
-    observing = false;
-  };
-
-  const onFirstThread = (event: Y.YMapEvent<unknown>) => {
-    if (!hasThread(event.keysChanged)) return;
-    stopObserving();
-    void controller();
-  };
-
-  if (!hasThread(map.keys())) {
-    map.observe(onFirstThread);
-    observing = true;
-  } else if (typeof requestIdleCallback === "function") {
-    // Within a second even on a busy main thread (the fallback's delay).
-    const id = requestIdleCallback(() => void controller(), { timeout: 1000 });
-    cancelIdle = () => cancelIdleCallback(id);
-  } else {
-    const id = window.setTimeout(() => void controller(), 1000);
-    cancelIdle = () => window.clearTimeout(id);
-  }
-
+  const load = () =>
+    (host ??= import("./comments-host").then(
+      ({ hostComments }) =>
+        unmounted
+          ? null
+          : hostComments(editor, options, {
+              deps: COMMENTS_DEPS,
+              identity: getUserIdentity,
+            }),
+      // Retried by the next `controller()`.
+      () => (host = null),
+    ));
+  void load();
   return {
-    controller,
+    controller: async () =>
+      unmounted ? null : ((await load())?.controller() ?? null),
     unmount() {
       if (unmounted) return;
       unmounted = true;
-      cancelIdle?.();
-      stopObserving();
-      attached?.destroy();
       unmarkGate();
+      void host?.then((mounted) => mounted?.unmount());
     },
   };
 }

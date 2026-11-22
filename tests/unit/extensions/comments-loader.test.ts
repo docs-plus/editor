@@ -11,6 +11,8 @@ import * as Y from "yjs";
 
 import { mountComments } from "@/extensions/comments/comments-loader";
 import { DecorationHost } from "@/extensions/decoration-host/decoration-host";
+import { authorIdFor, DEVICE_SECRET_KEY } from "@/lib/comments/author-id";
+import { listThreads } from "@/lib/comments/list-threads";
 import { SECTION_MOVE_META } from "@/lib/comments/reanchor";
 import { editorActions } from "@/lib/editor-actions";
 import { availability } from "@/lib/editor-actions/registry";
@@ -44,6 +46,15 @@ const DOC: JSONContent = {
     { type: "paragraph", content: [{ type: "text", text: "beta" }] },
   ],
 };
+
+const LINEAGE = "6f1c2a52-6c39-4a56-9a5e-0d8f8b1f0c11";
+
+/** Until the lazy host chunk has loaded (a dynamic import). */
+async function until(done: () => boolean) {
+  for (let tick = 0; tick < 100 && !done(); tick++) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
 
 let editor: Editor | null = null;
 afterEach(() => {
@@ -79,6 +90,7 @@ describe("comment.add", () => {
     let allowed = true;
     const mounted = mountComments(editor, {
       doc: new Y.Doc(),
+      lineage: LINEAGE,
       canComment: () => allowed,
     });
     const intents: string[] = [];
@@ -105,6 +117,7 @@ describe("comment.add", () => {
     editor = createTestEditor({ content: DOC });
     const mounted = mountComments(editor, {
       doc: new Y.Doc(),
+      lineage: LINEAGE,
       canComment: () => true,
     });
     editor.setEditable(false);
@@ -125,6 +138,7 @@ describe("mountComments", () => {
     });
     const mounted = mountComments(fixture.editor, {
       doc: fixture.client,
+      lineage: LINEAGE,
       canComment: () => true,
     });
     try {
@@ -145,7 +159,38 @@ describe("mountComments", () => {
     expect(await mounted.controller()).toBeNull();
   });
 
-  it("preloads a document's threads within a second, even on a busy thread", () => {
+  it("writes with this browser's author id for the document's lineage (SEC-002)", async () => {
+    const fixture = createCollabEditor({
+      extensions: [
+        DecorationHost.configure({ layers: [{ name: "comments", map: true }] }),
+      ],
+    });
+    const mounted = mountComments(fixture.editor, {
+      doc: fixture.client,
+      lineage: LINEAGE,
+      canComment: () => true,
+    });
+    try {
+      const controller = await mounted.controller();
+      fixture.editor.commands.setTextSelection({ from: 14, to: 19 });
+      const result = controller?.createFromSelection("Per document");
+      expect(result?.ok).toBe(true);
+      const [thread] = listThreads(fixture.client).threads;
+      expect(thread?.head.au.id).toBe(await authorIdFor(LINEAGE));
+      expect(thread?.head.au.id).not.toBe(await authorIdFor(`${LINEAGE}-2`));
+      // The device secret stays in this browser, never in the document.
+      const secret = localStorage.getItem(DEVICE_SECRET_KEY) ?? "";
+      expect(secret).not.toBe("");
+      expect(
+        JSON.stringify(fixture.client.getMap("comments").toJSON()),
+      ).not.toContain(secret);
+    } finally {
+      mounted.unmount();
+      fixture.destroy();
+    }
+  });
+
+  it("preloads a document's threads within a second, even on a busy thread", async () => {
     const fixture = createCollabEditor();
     const doc = new Y.Doc();
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(fixture.server));
@@ -167,12 +212,16 @@ describe("mountComments", () => {
     globalThis.cancelIdleCallback = () => {};
     const mounted = mountComments(fixture.editor, {
       doc: fixture.client,
+      lineage: LINEAGE,
       canComment: () => true,
     });
     try {
+      await until(() => options.length > 0);
       expect(options).toEqual([{ timeout: 1000 }]);
     } finally {
       mounted.unmount();
+      // The host unmounts once its chunk's promise settles.
+      await new Promise((resolve) => setTimeout(resolve, 0));
       globalThis.requestIdleCallback = real.request;
       globalThis.cancelIdleCallback = real.cancel;
       fixture.destroy();
