@@ -45,7 +45,10 @@ const nextConfig: NextConfig = {
   // web page, route handler and metadata file (sitemap, manifest, Open
   // Graph image) is invisible to it, so nothing is moved for the export;
   // the web never matches `.desktop.tsx`. A plain `page.tsx` beside a
-  // `page.desktop.tsx` would win, so the two lists can't overlap.
+  // `page.desktop.tsx` would win, so the two lists can't overlap. The list
+  // also leaves out Next's other convention files on desktop (`not-found`,
+  // `global-error`, `instrumentation`, `proxy`): add a `.desktop.tsx` one
+  // if desktop needs it.
   pageExtensions: isDesktop
     ? ["desktop.tsx", "desktop.ts"]
     : ["web.tsx", "web.ts", "tsx", "ts"],
@@ -91,7 +94,13 @@ async function webHeaders() {
 // Desktop is a static export loaded from app://tinydocy. Only the build
 // exports: `next dev` (the `local` Playwright project) serves as usual.
 export default function config(phase: string): NextConfig {
-  return isDesktop && phase === PHASE_PRODUCTION_BUILD
-    ? { ...nextConfig, output: "export" }
-    : nextConfig;
+  if (!isDesktop || phase !== PHASE_PRODUCTION_BUILD) return nextConfig;
+  // The dev bridge is for `next dev` only; NODE_ENV alone can't keep it out
+  // of a build (Bun), and the export check would only catch it afterwards.
+  if (process.env.NEXT_PUBLIC_DESKTOP_BRIDGE === "dev") {
+    throw new Error(
+      "NEXT_PUBLIC_DESKTOP_BRIDGE=dev is for a desktop-target next dev only; unset it to build the desktop renderer.",
+    );
+  }
+  return { ...nextConfig, output: "export" };
 }
