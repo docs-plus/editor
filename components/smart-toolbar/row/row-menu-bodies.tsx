@@ -217,7 +217,7 @@ function MenuGroup({
   children: ReactNode;
 }) {
   return (
-    <DropdownMenuGroup aria-label={label}>
+    <DropdownMenuGroup>
       <DropdownMenuLabel>{label}</DropdownMenuLabel>
       {children}
     </DropdownMenuGroup>
@@ -264,6 +264,7 @@ export function OverflowMenuItems({
       </MenuGroup>
       <DropdownMenuSeparator />
       <MenuGroup label="View">
+        {/* P2.9c-2 adds "Page width ▸" here, as the first item of View. */}
         <DensityMenuItem editor={editor} />
         <AppearanceMenu />
       </MenuGroup>

@@ -510,11 +510,10 @@ test.describe("more menu groups", () => {
     const more = await openMore(page);
     const groups = more.getByRole("group");
     await expect(groups).toHaveCount(3);
-    expect(
-      await groups.evaluateAll((els) =>
-        els.map((el) => el.getAttribute("aria-label")),
-      ),
-    ).toEqual(["Text", "View", "Help"]);
+    // Named by the visible heading (aria-labelledby from the group label).
+    for (const [index, name] of ["Text", "View", "Help"].entries()) {
+      await expect(groups.nth(index)).toHaveAccessibleName(name);
+    }
     expect(await idsIn(more.getByRole("group", { name: "Text" }))).toEqual([
       "mark.superscript",
       "mark.subscript",
