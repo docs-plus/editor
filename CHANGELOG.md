@@ -9,6 +9,42 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Phone Insert sheet, Style first in the Aa sheet, words on tablet stand-ins (P4)
+
+Phase P4 of the selection bubble and quick insert design (spec §8.3, §13.1,
+§13.2). Phones get an Insert sheet in place of the desktop dropdown, the Aa
+sheet leads with Style, and touch tablets name the row's unclear stand-ins.
+
+#### Added
+
+- **Phone:** the bar's Insert cell opens a bottom sheet
+  (`components/smart-toolbar/phone/insert-sheet.tsx`): the "/" menu's items
+  as a two-column grid of 44px cells. Suggested (the remembered insert kinds)
+  comes first when there are any, then "Blocks" (the caret's block is empty)
+  or "Turn into" (it has text), then Insert. Kinds that can't run here show
+  their reason on a second line. Table and Embed open their step inside the
+  sheet, from the lazy insert step chunk; Diagram lists the templates. A
+  pick closes the sheet and puts the caret in the new block, with the
+  keyboard back. "/embed" on a phone opens the sheet at the embed step.
+  The sheet rides above the keyboard while the link field has focus, and a
+  pick refused since it opened (a collaborator's edit) says why inside it.
+- **Touch tablets:** at 848px and wider on a coarse pointer, the row's
+  stand-ins read `T Format ▾`, `¶ Layout ▾` and `⫶ Block ▾` (O8 a). The
+  words are CSS only, from the lazy menu chunk, so they appear once the
+  browser is idle after the first sync. Below 848px the row has no room for
+  their 120px in every context, so they stay off.
+
+#### Changed
+
+- **Phone:** the Aa sheet starts with Style: Text and H1–H3, a More
+  headings disclosure for H4–H6 (open when the current style is one of
+  them), then the lists and Quote, the current style pressed. Colours
+  follow. Both sheets end in a 16px fade while they scroll, above the home
+  indicator.
+
+The editor chunk group gets 37 B smaller (the phone bar no longer renders
+the row's Insert menu); its CSS is unchanged.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
