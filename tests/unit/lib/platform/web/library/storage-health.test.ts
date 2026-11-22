@@ -25,6 +25,12 @@ const UA = {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
   iosChrome:
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1",
+  iosEdge:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 EdgiOS/131.2903.68 Mobile/15E148 Safari/605.1.15",
+  iosFirefox:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/133.0 Mobile/15E148 Safari/605.1.15",
+  ipadChrome:
+    "Mozilla/5.0 (iPad; CPU OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1",
 };
 
 describe("detectEngine", () => {
@@ -33,8 +39,14 @@ describe("detectEngine", () => {
     expect(detectEngine(UA.edge)).toBe("chromium");
     expect(detectEngine(UA.firefox)).toBe("firefox");
     expect(detectEngine(UA.safari)).toBe("webkit");
-    expect(detectEngine(UA.iosChrome)).toBe("chromium");
     expect(detectEngine("curl/8.0")).toBe("unknown");
+  });
+
+  it("names every iOS browser WebKit, whatever brand it shows", () => {
+    expect(detectEngine(UA.iosChrome)).toBe("webkit");
+    expect(detectEngine(UA.iosEdge)).toBe("webkit");
+    expect(detectEngine(UA.iosFirefox)).toBe("webkit");
+    expect(detectEngine(UA.ipadChrome)).toBe("webkit");
   });
 });
 
