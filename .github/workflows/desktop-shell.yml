@@ -195,8 +195,6 @@ jobs:
           Write-Output "installed at $($exe.FullName)"
           "TINYDOCY_EXECUTABLE=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           "FUSE_TARGET=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          $key = Get-ItemProperty 'HKCU:\Software\Classes\tinydocy\shell\open\command' -ErrorAction SilentlyContinue
-          Write-Output "tinydocy:// handler: $($key.'(default)')"
 
       - name: Install (Linux)
         if: runner.os == 'Linux'
@@ -224,6 +222,19 @@ jobs:
           else
             bun desktop/build/self-test.ts "$TINYDOCY_EXECUTABLE"
           fi
+
+      # The installer doesn't register tinydocy://; the app does on its first
+      # start (setAsDefaultProtocolClient). Electron on Windows exits when
+      # anything follows a URL argument, so the command must end with "%1".
+      - name: Check the tinydocy:// handler (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cmd = (Get-ItemProperty 'HKCU:\Software\Classes\tinydocy\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
+          Write-Output "tinydocy:// handler: $cmd"
+          if (-not $cmd) { throw "tinydocy:// is not registered" }
+          if (-not $cmd.StartsWith('"' + $env:TINYDOCY_EXECUTABLE + '"', [StringComparison]::OrdinalIgnoreCase)) { throw "the handler does not run the installed app" }
+          if (-not $cmd.EndsWith('"%1"')) { throw "the handler passes more than the URL" }
 
       # No FUSE on the runner: the AppImage runtime extracts and runs.
       - name: Start the AppImage once and quit (Linux)

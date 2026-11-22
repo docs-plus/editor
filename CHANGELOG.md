@@ -63,8 +63,10 @@ the storage worker. Nothing changes on the web.
 - **Desktop:** the D-A12 smoke serves its fixture on `app://tinydocy` with
   the shell's path rules. A test keeps every Electron pin at 45.3.2.
 - **Desktop:** Linux spellcheck stays off until dictionaries can be
-  delivered without a network download (#100). macOS and Windows use the
-  OS spellchecker.
+  delivered without a network download (#100). Turning it off alone still
+  let Chromium download a dictionary from Google, so Linux also sets no
+  spellcheck languages and a closed loopback download URL; a spec fails
+  on any spellcheck event. macOS and Windows use the OS spellchecker.
 
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 

@@ -426,7 +426,8 @@ stateDiagram-v2
 - **Re-entrancy:** `quitAndInstall` fires `before-quit` again, and the coordinator ignores it once it is past `Flushing`.
 - **No `beforeunload` on desktop.** It would silently block quitting (`editor-app.tsx:58-62`). P2.5 (#106): main answers every `will-prevent-unload` with "unload anyway", never closes windows during a quit (it exits after the flush), and asks each window to flush through `app.flushRequested`. The preload answers `app.flushed` once the page's flush listeners settle, or at once when the page has none, so a window with nothing in memory costs nothing.
 - **Closing one window** runs the same flush for that window alone (3 s), then destroys it; on Windows and Linux the last window's close then quits.
-- **Linux spellcheck (#100)** is off in P2.5: Chromium downloads Hunspell dictionaries from Google at startup, and no offline delivery is proven yet.
+- **Linux spellcheck (#100)** is off in P2.5: Chromium downloads Hunspell dictionaries from Google at startup, and no offline delivery is proven yet. `setSpellCheckerEnabled(false)` alone still started that download on `ubuntu-24.04`, so main also sets no languages and a closed loopback download URL (`session-hardening.ts`). Until #100 lands, nothing may call `setSpellCheckerLanguages` with a language on Linux (P2.9c's spellcheck preference included).
+- **Windows deep links:** Electron exits before the app runs when anything follows a URL argument (CVE-2018-1000006). The app registers `tinydocy://` on first start with the URL as the last argument (`"…\TinyDocy.exe" "%1"`); anything that launches the app with a link (P2.8 file opens included) must keep it last.
 
 ---
 
