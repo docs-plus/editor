@@ -41,7 +41,7 @@ import {
 
 /** One window's view of the library. */
 export type DevBridgeClient = {
-  create(docId: string): Promise<null>;
+  create(docId: string, schema?: number): Promise<null>;
   load(docId: string): Promise<unknown>;
   append(docId: string, record: AppendRecord): Promise<number>;
   compact(docId: string, state: Uint8Array, upToSeq: number): Promise<unknown>;
@@ -61,8 +61,8 @@ export function memoryBackend(
       const store = new MemoryDocStore({ library });
       const held = new Set<string>();
       return {
-        async create(docId) {
-          library.createDoc(docId);
+        async create(docId, schema) {
+          library.createDoc(docId, schema);
           return null;
         },
         async load(docId) {
@@ -122,6 +122,14 @@ function seq(value: unknown): number {
   return value as number;
 }
 
+function optionalSchema(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new BadRequest("schema");
+  }
+  return value as number;
+}
+
 function optionalText(value: unknown, max: number, name: string) {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.length > max) {
@@ -161,7 +169,7 @@ export function dispatch(
   const a = args as Args;
   switch (op) {
     case "create":
-      return client.create(docId(a));
+      return client.create(docId(a), optionalSchema(a.schema));
     case "load":
       return client.load(docId(a));
     case "append":

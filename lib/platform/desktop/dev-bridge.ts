@@ -18,15 +18,24 @@
  *   them again is main's registry replay (P2.5), not the dev bridge's.
  */
 import {
+  DEV_BRIDGE_MARKER,
   DEV_BRIDGE_PROTOCOL,
-  type DevBridgeOp,
   type DevBridgeReply,
   decodeFrame,
   encodeFrame,
 } from "@/lib/platform/desktop/dev-bridge-wire";
+import type { DocStoreCalls } from "@/lib/platform/desktop/rpc-doc-store";
 
-/** Marks the bridge's code, so the export check can keep it out of `out/`. */
-export const DEV_BRIDGE_MARKER = "tinydocy-dev-bridge-renderer";
+/** P2.6's calls, plus `create` (the dev stand-in for `DocumentIndex.create`). */
+export type DevBridgeCalls = DocStoreCalls & {
+  create: [{ docId: string; schema?: number }, null];
+};
+
+/** Assignable to `DocStoreCall`, so `createRpcDocStore(bridge.call)` works. */
+export type DevBridgeCall = <K extends keyof DevBridgeCalls>(
+  op: K,
+  args: DevBridgeCalls[K][0],
+) => Promise<DevBridgeCalls[K][1]>;
 
 export type DevBridgeOptions = {
   /** `ws://127.0.0.1:<port>` from the host's first line. */
@@ -34,10 +43,7 @@ export type DevBridgeOptions = {
   token: string;
 };
 
-export type DevBridge = {
-  call(op: DevBridgeOp, args: object): Promise<unknown>;
-  close(): void;
-};
+export type DevBridge = { call: DevBridgeCall; close(): void };
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -97,17 +103,15 @@ export function connectDevBridge(options: DevBridgeOptions): DevBridge {
     pending.clear();
   });
 
-  return {
-    async call(op, args) {
-      await opened;
-      if (closed) throw new BridgeError(`${DEV_BRIDGE_MARKER}: closed`);
-      const id = nextId++;
-      const frame = encodeFrame({ id, op, args });
-      return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        socket.send(frame);
-      });
-    },
-    close: () => socket.close(),
+  const call = async (op: string, args: unknown): Promise<unknown> => {
+    await opened;
+    if (closed) throw new BridgeError(`${DEV_BRIDGE_MARKER}: closed`);
+    const id = nextId++;
+    const frame = encodeFrame({ id, op, args } as never);
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      socket.send(frame);
+    });
   };
+  return { call: call as DevBridgeCall, close: () => socket.close() };
 }

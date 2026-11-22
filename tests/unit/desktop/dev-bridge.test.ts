@@ -247,8 +247,13 @@ describe("dev storage host", () => {
 
   it("refuses malformed requests with bad_request", async () => {
     const h = host();
-    const a = bridge(h);
+    // What a buggy or hostile renderer could send, past the types.
+    const untyped = bridge(h).call as (
+      op: string,
+      args: unknown,
+    ) => Promise<unknown>;
     for (const [op, args] of [
+      ["create", { docId: DOC, schema: -1 }],
       ["load", { docId: "../x" }],
       ["load", {}],
       [
@@ -258,7 +263,7 @@ describe("dev storage host", () => {
       ["append", { docId: DOC, record: { origin: "local", update: [1, 2] } }],
       ["compact", { docId: DOC, state: update("x"), upToSeq: -1 }],
     ] as const) {
-      expect((await rejection(a.call(op, args))).code).toBe("bad_request");
+      expect((await rejection(untyped(op, args))).code).toBe("bad_request");
     }
   });
 

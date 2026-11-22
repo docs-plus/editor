@@ -28,6 +28,12 @@ export const DEV_BRIDGE_OPS = [
 ] as const;
 export type DevBridgeOp = (typeof DEV_BRIDGE_OPS)[number];
 
+/**
+ * In the bridge's error messages, so it survives minification: the desktop
+ * export check fails if a release renderer contains it (architecture §11).
+ */
+export const DEV_BRIDGE_MARKER = "tinydocy-dev-bridge-renderer";
+
 /** The WebSocket subprotocol; the token follows the dot. */
 export const DEV_BRIDGE_PROTOCOL = "tinydocy-dev-bridge";
 
