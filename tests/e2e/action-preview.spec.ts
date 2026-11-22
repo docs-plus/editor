@@ -254,7 +254,7 @@ async function openPopover(
   const dialog = page.getByRole("dialog", {
     name: kind === "text" ? "Text colours" : "Highlight colours",
   });
-  await expect(dialog.locator(".st-swatch").first()).toBeVisible();
+  await expect(dialog.locator(".st-color-item").first()).toBeVisible();
   return dialog;
 }
 
@@ -295,7 +295,7 @@ test.describe("hover preview", () => {
     // Opening the popover previews nothing.
     await expect(previews(page)).toHaveCount(0);
 
-    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Red text" }).hover();
     await expect(previews(page)).toHaveText("some words");
     const red = await resolveRgb(page, TEXT_COLOR_PALETTE.red.light);
     const shown = await previewStyle(page, "color");
@@ -306,6 +306,28 @@ test.describe("hover preview", () => {
     await dialog.locator(".st-color-row-label").first().hover();
     await expect(previews(page)).toHaveCount(0);
     expect(await docJson(page)).toBe(before);
+  });
+
+  test("a More row previews on hover and on arrow keys, like the named rows", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await selectText(page, "some words");
+    const dialog = await openPopover(page, "highlight");
+    await dialog.getByRole("menuitem", { name: "More highlights" }).click();
+    const more = page.getByRole("menu", { name: "More highlights" });
+    await more.getByRole("menuitemradio", { name: "Teal highlight" }).hover();
+    await expect(previews(page)).toHaveAttribute("data-highlight", "teal");
+    await expect(previews(page)).toHaveText("some words");
+    // Focus went to the submenu's first row on open; ↓ previews the next.
+    await expect(page.locator(":focus")).toHaveAccessibleName("Gray highlight");
+    await page.keyboard.press("ArrowDown");
+    await expect(previews(page)).toHaveAttribute("data-highlight", "brown");
+    await page.keyboard.press("Escape");
+    await expect(more).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(previews(page)).toHaveCount(0);
   });
 
   test("opening with the keyboard previews nothing; arrows preview; Esc clears and returns focus", async ({
@@ -327,14 +349,20 @@ test.describe("hover preview", () => {
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
 
-    // "Default text" has focus; → is the first colour.
+    // "Default text" has focus; ↓ is the first colour, → crosses to the
+    // same row of Highlight (named rows, spec §7.3).
+    await page.keyboard.press("ArrowDown");
+    await expect(dialog.locator("button:focus")).toHaveAccessibleName(
+      "Red text",
+    );
+    await expect(previews(page)).toHaveAttribute("data-text-color", "red");
+    await page.keyboard.press("ArrowDown");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "orange");
     await page.keyboard.press("ArrowRight");
     await expect(dialog.locator("button:focus")).toHaveAccessibleName(
-      "Gray text",
+      "Green highlight",
     );
-    await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
-    await page.keyboard.press("ArrowRight");
-    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+    await expect(previews(page)).toHaveAttribute("data-highlight", "green");
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -349,11 +377,11 @@ test.describe("hover preview", () => {
     await selectText(page, "some words");
     const before = await docJson(page);
     const dialog = await openPopover(page, "text");
-    const swatch = dialog.getByRole("button", { name: "Red text" });
+    const swatch = dialog.getByRole("menuitemradio", { name: "Red text" });
     await swatch.hover();
     await expect(previews(page)).toHaveCount(1);
     await swatch.click();
-    await expect(swatch).toHaveAttribute("aria-pressed", "true");
+    await expect(swatch).toHaveAttribute("aria-checked", "true");
     await expect(previews(page)).toHaveCount(0);
     await expect(
       page.locator('.tiptap span[data-text-color="red"]:not(.tt-preview)'),
@@ -370,7 +398,7 @@ test.describe("hover preview", () => {
     await openDoc(page);
     await selectText(page, "blue words");
     let dialog = await openPopover(page, "text");
-    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Red text" }).hover();
     await expect(previews(page)).toHaveCount(1);
     expect(
       await resolveRgb(page, (await previewStyle(page, "color")) ?? ""),
@@ -380,7 +408,7 @@ test.describe("hover preview", () => {
 
     await selectText(page, "yellow words");
     dialog = await openPopover(page, "highlight");
-    await dialog.getByRole("button", { name: "Red highlight" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Red highlight" }).hover();
     await expect(previews(page)).toHaveCount(1);
     expect(
       await resolveRgb(
@@ -389,7 +417,7 @@ test.describe("hover preview", () => {
       ),
     ).toEqual(await resolveRgb(page, HIGHLIGHT_PALETTE.red.light));
 
-    await dialog.getByRole("button", { name: "No highlight" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "No highlight" }).hover();
     await expect(previews(page)).not.toHaveAttribute("data-highlight");
     const pageBackground = await page.evaluate(() =>
       getComputedStyle(document.body).getPropertyValue("--background").trim(),
@@ -421,7 +449,7 @@ test.describe("hover preview", () => {
           await openDoc(page, CONTEXT_DOC);
           await selectBlock(page, start);
           const dialog = await openPopover(page, kind);
-          const button = dialog.getByRole("button", { name: swatch });
+          const button = dialog.getByRole("menuitemradio", { name: swatch });
           await button.hover();
           await expect(previews(page).first()).toBeVisible();
           const clip = await blockClip(page, start);
@@ -431,7 +459,7 @@ test.describe("hover preview", () => {
           const previewed = await page.screenshot({ clip });
 
           await button.click();
-          await expect(button).toHaveAttribute("aria-pressed", "true");
+          await expect(button).toHaveAttribute("aria-checked", "true");
           await dialog.locator(".st-color-row-label").first().hover();
           await expect(previews(page)).toHaveCount(0);
           // The applied result under the same wrapper the preview used (it
@@ -473,7 +501,7 @@ test.describe("hover preview", () => {
       await openDoc(page, CODE_DOC);
       await selectBlock(page, "Run");
       const dialog = await openPopover(page, kind);
-      const button = dialog.getByRole("button", { name: swatch });
+      const button = dialog.getByRole("menuitemradio", { name: swatch });
       await button.hover();
       await expect
         .poll(() => previews(page).evaluateAll(textsOf))
@@ -512,7 +540,7 @@ test.describe("hover preview", () => {
       .getByRole("button", { name: "More text colours" })
       .click();
     const dialog = page.getByRole("dialog", { name: "Text colours" });
-    await dialog.getByRole("button", { name: "Green text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Green text" }).hover();
     await expect(previews(page)).toHaveAttribute("data-text-color", "green");
     // Past the bubble plugin's 250 ms update debounce.
     await page.waitForTimeout(400);
@@ -532,7 +560,7 @@ test.describe("hover preview", () => {
       window.__toolbarCommits = 0;
     });
     for (const name of ["Red text", "Blue text", "Green text", "Pink text"]) {
-      await dialog.getByRole("button", { name }).hover();
+      await dialog.getByRole("menuitemradio", { name }).hover();
       await expect(previews(page)).toHaveCount(1);
     }
     await dialog.locator(".st-color-row-label").first().hover();
@@ -556,25 +584,27 @@ test.describe("hover preview", () => {
       const focusRing = await ring(focused);
       expect(focusRing.style).toBe(STRONG);
 
-      // A mouse-opened popover: the pointer's swatch is the previewed one,
-      // so it takes the ring and the focused swatch drops to a dashed one.
-      const red = dialog.getByRole("button", { name: "Red text" });
-      await red.hover();
-      await expect(previews(page)).toHaveAttribute("data-text-color", "red");
-      await expect.poll(async () => (await ring(red)).style).toBe(STRONG);
-      expect((await ring(red)).color).toBe(focusRing.color);
+      // A mouse-opened popover: the pointer's row is the previewed one,
+      // so it takes the ring and the focused row drops to a dashed one.
+      const purple = dialog.getByRole("menuitemradio", {
+        name: "Purple text",
+      });
+      await purple.hover();
+      await expect(previews(page)).toHaveAttribute("data-text-color", "purple");
+      await expect.poll(async () => (await ring(purple)).style).toBe(STRONG);
+      expect((await ring(purple)).color).toBe(focusRing.color);
       await expect.poll(async () => (await ring(focused)).style).toBe(WEAK);
 
-      // Arrows take over: the focused swatch is previewed and strong
-      // again; Red, still under the pointer, shows no ring.
-      await page.keyboard.press("ArrowRight");
-      await expect(focused).toHaveAccessibleName("Gray text");
-      await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
+      // Arrows take over: the focused row is previewed and strong again;
+      // Purple, still under the pointer, shows no ring.
+      await page.keyboard.press("ArrowDown");
+      await expect(focused).toHaveAccessibleName("Red text");
+      await expect(previews(page)).toHaveAttribute("data-text-color", "red");
       await expect.poll(async () => (await ring(focused)).style).toBe(STRONG);
-      expect((await ring(red)).style).toBe("none");
+      expect((await ring(purple)).style).toBe("none");
 
-      // The pointer moves on: the swatch under it takes the ring back.
-      const blue = dialog.getByRole("button", { name: "Blue text" });
+      // The pointer moves on: the row under it takes the ring back.
+      const blue = dialog.getByRole("menuitemradio", { name: "Blue text" });
       await blue.hover();
       await expect(previews(page)).toHaveAttribute("data-text-color", "blue");
       await expect.poll(async () => (await ring(blue)).style).toBe(STRONG);
@@ -595,7 +625,7 @@ test.describe("hover preview", () => {
     // Read-only: no preview even when the popover is reachable.
     const dialog = await openPopover(page, "text");
     await page.evaluate(() => window.__tiptap_editor?.setEditable(false));
-    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Red text" }).hover();
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
   });
@@ -631,7 +661,7 @@ test.describe("hover preview at 1440", () => {
     ] as const) {
       await selectText(page, "some words");
       const dialog = await openPopover(page, kind);
-      await dialog.getByRole("button", { name: swatch }).hover();
+      await dialog.getByRole("menuitemradio", { name: swatch }).hover();
       await expect(previews(page)).toHaveText("some words");
       const popover = await settledBox(dialog);
       const selection = await settledBox(previews(page));
@@ -660,7 +690,7 @@ test.describe("hover preview at 1440", () => {
     await openDoc(page);
     await selectText(page, "Select some words in this paragraph");
     const dialog = await openPopover(page, "text");
-    await dialog.getByRole("button", { name: "Blue text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Blue text" }).hover();
     await expect(previews(page)).toHaveText(
       "Select some words in this paragraph",
     );
@@ -685,12 +715,12 @@ test.describe("hover preview on touch", () => {
     await selectText(page, "some words");
     await row(page).getByRole("button", { name: "More text colours" }).tap();
     const dialog = page.getByRole("dialog", { name: "Text colours" });
-    const swatch = dialog.getByRole("button", { name: "Red text" });
+    const swatch = dialog.getByRole("menuitemradio", { name: "Red text" });
     await expect(swatch).toBeVisible();
     // A tap marks no swatch: the ring is for a pointer that hovers.
-    const blue = dialog.getByRole("button", { name: "Blue text" });
+    const blue = dialog.getByRole("menuitemradio", { name: "Blue text" });
     await blue.tap();
-    await expect(blue).toHaveAttribute("aria-pressed", "true");
+    await expect(blue).toHaveAttribute("aria-checked", "true");
     await expect(dialog.locator("[data-pointed]")).toHaveCount(0);
     expect((await ring(blue)).style).toBe("none");
 
@@ -698,7 +728,7 @@ test.describe("hover preview on touch", () => {
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
     await swatch.tap();
-    await expect(swatch).toHaveAttribute("aria-pressed", "true");
+    await expect(swatch).toHaveAttribute("aria-checked", "true");
     await expect(previews(page)).toHaveCount(0);
   });
 
@@ -722,21 +752,21 @@ test.describe("hover preview on touch", () => {
     await page.waitForTimeout(DWELL);
     await expect(previews(page)).toHaveCount(0);
 
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowDown");
     await expect(dialog.locator("button:focus")).toHaveAccessibleName(
-      "Gray text",
+      "Red text",
     );
-    await expect(previews(page)).toHaveAttribute("data-text-color", "gray");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "red");
     await expect(previews(page)).toHaveText("some words");
-    await page.keyboard.press("ArrowRight");
-    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+    await page.keyboard.press("ArrowDown");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "orange");
 
     // A pointer (an iPad trackpad reports "mouse") neither previews nor
     // clears the keyboard's preview.
-    await dialog.getByRole("button", { name: "Red text" }).hover();
+    await dialog.getByRole("menuitemradio", { name: "Blue text" }).hover();
     await dialog.locator(".st-color-row-label").first().hover();
     await page.waitForTimeout(DWELL);
-    await expect(previews(page)).toHaveAttribute("data-text-color", "brown");
+    await expect(previews(page)).toHaveAttribute("data-text-color", "orange");
     expect(await docJson(page)).toBe(before);
 
     await page.keyboard.press("Escape");
@@ -832,7 +862,7 @@ test.describe("hover preview under the phone sheet on touch", () => {
     await expect(previews(page)).toHaveCount(0);
     expect(await scrimColor(page)).toBe(dimmed);
     await swatch.tap();
-    await expect(swatch).toHaveAttribute("aria-pressed", "true");
+    await expect(swatch).toHaveAttribute("aria-checked", "true");
     expect(await scrimColor(page)).toBe(dimmed);
   });
 });
@@ -875,7 +905,7 @@ test.describe("hover preview design-review screenshots", () => {
             await openDoc(page, CONTEXT_DOC);
             await selectBlock(page, start);
             const dialog = await openSwatches(page, kind);
-            const button = dialog.getByRole("button", { name: swatch });
+            const button = dialog.getByRole("menuitemradio", { name: swatch });
             await button.hover();
             await expect(previews(page).first()).toBeVisible();
             await page.screenshot({ path: `${name}.png` });

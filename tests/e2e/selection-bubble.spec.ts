@@ -385,7 +385,8 @@ test.describe("selection bubble", () => {
     await expect(dialog).toBeVisible();
     // The panel is a lazy chunk: wait until it has put focus on a swatch.
     await expect(dialog.locator("button:focus")).toHaveCount(1);
-    await page.keyboard.press("ArrowRight");
+    // Named rows (spec §7.3): ↓ from Default is Red.
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect
       .poll(() =>
