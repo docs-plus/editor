@@ -47,10 +47,12 @@
   }
 
   /* Folded sections print open; the fold widget does not print. `revert`
-     is the user-agent display, which equals each top-level block's own
-     (all `block` today: the e2e pins print against screen for a list,
-     table, image and diagram). Making the fold rule screen-only instead
-     would add 12 B gz to the editor CSS chunk (details spec §1 rule 5). */
+     is the user-agent display. It matches the block's own display because
+     every top-level node view's outer element is `block`: measured for
+     paragraphs, lists, tables, images (a captioned one too) and Mermaid,
+     and the media kit's layout presets all set `display: block`. The e2e
+     pins print against screen. A screen-only fold rule would add 12 B gz
+     to the editor CSS chunk (details spec §1 rule 5). */
   html .tiptap.ProseMirror .heading-fold-hidden {
     display: revert !important;
   }

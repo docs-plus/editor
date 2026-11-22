@@ -64,6 +64,16 @@ const PRINT_DOC = {
       type: "image",
       attrs: { src: `data:image/svg+xml,${IMAGE_SVG}`, alt: "Folded image" },
     },
+    // A caption gives the media kit's inner figure an inline
+    // `display:table`; the block the fold hides stays `block`.
+    {
+      type: "image",
+      attrs: {
+        src: `data:image/svg+xml,${IMAGE_SVG}`,
+        alt: "Captioned image",
+        caption: "A captioned figure",
+      },
+    },
     {
       type: "codeBlock",
       attrs: { language: "mermaid" },
@@ -240,6 +250,7 @@ test.describe("print stylesheet", () => {
       "bulletList",
       "table",
       "image",
+      "image",
       "codeBlock",
     ]);
     await foldSection(page, "Folded section");
@@ -248,6 +259,7 @@ test.describe("print stylesheet", () => {
     expect(await sectionDisplays(page, "Folded section")).toEqual(screen);
     await expect(page.getByText("Folded cell")).toBeVisible();
     await expect(page.getByRole("img", { name: "Folded image" })).toBeVisible();
+    await expect(page.getByText("A captioned figure")).toBeVisible();
   });
 
   test("print is light in the dark theme", async ({ page }) => {
