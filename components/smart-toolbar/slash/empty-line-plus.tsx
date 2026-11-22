@@ -162,7 +162,8 @@ export function EmptyLinePlus({
 
     const onKey = () => {
       settled = false;
-      if (!hovered) hide();
+      // Typing with nothing shown writes nothing.
+      if (shown.current && !hovered) hide();
       clearTimeout(typing);
       typing = window.setTimeout(() => {
         settled = true;
