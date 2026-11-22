@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
 import { editorActions } from "@/lib/editor-actions";
-import { ChevronDownIcon, TypeIcon } from "@/lib/icons";
+import { ChevronDownIcon } from "@/lib/icons";
 
 import { clearOfSelection } from "../color/clear-of-selection";
 import {
@@ -19,6 +19,7 @@ import {
   prefetchMenuBodies,
   useMenuGate,
 } from "../lazy-menu";
+import { TypeIcon } from "../type-icon";
 import type { BubblePlacement } from "./bubble-rules";
 import {
   STYLE_FACE_NAMES,

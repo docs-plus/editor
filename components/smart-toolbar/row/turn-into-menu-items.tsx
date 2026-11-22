@@ -22,11 +22,11 @@ import {
 } from "@/lib/editor-actions/key-combo";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
-import { TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 
 import { type StyleFace, styleFace } from "../bubble/style-face";
 import { lazySurface } from "../lazy-surface";
+import { TypeIcon } from "../type-icon";
 import {
   isTitleReason,
   liftsInto,
