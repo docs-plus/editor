@@ -11,7 +11,7 @@ import {
 import type { SurfaceProps } from "./types";
 
 /**
- * The bubble and its plugin are their own chunk; phones never fetch it.
+ * The bubble and its controller are their own chunk; phones never fetch it.
  * If it fails to load there is no bubble (every action is in the row)
  * until the next editor mounts this again.
  */
@@ -51,7 +51,7 @@ function mountedViewDom(editor: Editor): HTMLElement | null {
 
 /**
  * The scroll container the bubble is appended to and scrolls with. The
- * plugin reads it once, so the bubble waits until the view is mounted.
+ * controller reads it once, so the bubble waits until the view is mounted.
  */
 function useScrollTarget(editor: Editor | null): HTMLElement | null {
   const [target, setTarget] = useState<HTMLElement | null>(null);

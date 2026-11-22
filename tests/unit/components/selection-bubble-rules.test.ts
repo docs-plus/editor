@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { AllSelection, NodeSelection, TextSelection } from "@tiptap/pm/state";
 
 import {
   BUBBLE_ACTION_IDS,
   type BubbleView,
   chooseBubblePlacement,
   clearsBubbleSuppression,
+  firstLineRect,
   isBubbleDismissKey,
+  lastLineRect,
   POPOVER_CONTENT,
   shouldShowBubble,
 } from "@/components/smart-toolbar/bubble/bubble-rules";
@@ -223,6 +225,14 @@ describe("shouldShowBubble", () => {
     expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(false);
   });
 
+  it("shows for select all (an AllSelection)", () => {
+    editor = createTestEditor({ content: DOC });
+    editor.view.dispatch(
+      editor.state.tr.setSelection(new AllSelection(editor.state.doc)),
+    );
+    expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(true);
+  });
+
   it("hides inside a code block", () => {
     editor = createTestEditor({ content: DOC });
     const from = posOf(editor, "const");
@@ -261,6 +271,23 @@ describe("shouldShowBubble", () => {
     editor = createTestEditor({ content: DOC });
     select(editor, posOf(editor, "plain"), posOf(editor, "linked") + 3);
     expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(true);
+  });
+
+  it("hides for a whitespace-only selection", () => {
+    editor = createTestEditor({
+      content: {
+        type: "doc",
+        content: [
+          { type: "heading", attrs: { level: 1 }, content: [text("Title")] },
+          { type: "paragraph", content: [text("a   b")] },
+        ],
+      },
+    });
+    const from = posOf(editor, "a   b") + 1;
+    select(editor, from, from + 3);
+    const { from: f, to: t } = editor.state.selection;
+    expect(editor.state.doc.textBetween(f, t)).toBe("   ");
+    expect(shouldShowBubble(viewFor(editor), root(), false)).toBe(false);
   });
 
   it("hides for a range with no text (across block boundaries only)", () => {
@@ -370,6 +397,55 @@ describe("chooseBubblePlacement", () => {
         topLimit: 52,
       }),
     ).toBe("top");
+  });
+});
+
+const rect = (top: number, left: number, right: number, h = 20) => ({
+  top,
+  bottom: top + h,
+  left,
+  right,
+});
+
+describe("firstLineRect / lastLineRect", () => {
+  it("firstLineRect unions the rects on the first visible line", () => {
+    const band = { top: 0, bottom: 1000 };
+    expect(
+      firstLineRect(
+        [rect(100, 300, 500), rect(101, 500, 520), rect(130, 50, 400)],
+        band,
+      ),
+    ).toEqual({ top: 100, bottom: 121, left: 300, right: 520 });
+  });
+
+  it("firstLineRect skips lines above the band and zero-width rects", () => {
+    expect(
+      firstLineRect([rect(-40, 0, 300), rect(10, 40, 40), rect(30, 60, 90)], {
+        top: 0,
+        bottom: 800,
+      }),
+    ).toEqual({ top: 30, bottom: 50, left: 60, right: 90 });
+  });
+
+  it("firstLineRect is null when no line is in the band", () => {
+    expect(
+      firstLineRect([rect(900, 0, 10)], { top: 0, bottom: 800 }),
+    ).toBeNull();
+  });
+
+  it("lastLineRect unions the rects on the last visible line", () => {
+    expect(
+      lastLineRect(
+        [rect(100, 300, 500), rect(130, 50, 400), rect(131, 400, 420)],
+        { top: 0, bottom: 1000 },
+      ),
+    ).toEqual({ top: 130, bottom: 151, left: 50, right: 420 });
+  });
+
+  it("lastLineRect is null when no line is in the band", () => {
+    expect(
+      lastLineRect([rect(-90, 0, 10)], { top: 0, bottom: 800 }),
+    ).toBeNull();
   });
 });
 
