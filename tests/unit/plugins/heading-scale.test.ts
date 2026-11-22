@@ -42,6 +42,30 @@ describe("HeadingScale plugin decorations", () => {
     editor.destroy();
   });
 
+  it("sizes in twelfths of --hd-unit (the page text, or 16 px for pt)", () => {
+    const heading = (level: number) => ({
+      type: "heading",
+      attrs: { level },
+      content: [{ type: "text", text: `H${level}` }],
+    });
+    const editor = createTestEditor({
+      content: { type: "doc", content: [heading(1), heading(2), heading(4)] },
+    });
+    const styles = getScaleDecos(editor)
+      .find()
+      .map(
+        (deco) =>
+          (deco as unknown as { type: { attrs: { style: string } } }).type.attrs
+            .style,
+      );
+    expect(styles).toEqual([
+      "--hd-size: calc(20 * var(--hd-unit, 1em) / 12)",
+      "--hd-size: calc(16 * var(--hd-unit, 1em) / 12)",
+      "--hd-size: calc(12 * var(--hd-unit, 1em) / 12)",
+    ]);
+    editor.destroy();
+  });
+
   it("same rank count → same visual sizing: H1>H2>H4 vs H1>H3>H5", () => {
     const editor1 = createTestEditor({
       content: {

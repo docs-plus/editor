@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 
 import { isSystemDocumentId } from "@/lib/security/doc-id-validator";
+import { isShareNamespace } from "@/lib/sharing/share-name";
 
 const DEFAULT_BATCH_SIZE = 100;
 
@@ -99,13 +100,17 @@ export function upsertDocumentActivity(
   stmt.run(name, nowMs, sizeBytes);
 }
 
+/**
+ * Sandbox documents counted against `MAX_TOTAL_DOCUMENTS`: neither system
+ * documents nor shares, which `MAX_TOTAL_SHARES` caps on their own.
+ */
 export function countNonSystemDocuments(db: Database): number {
   const rows = db.prepare("SELECT name FROM documents").all() as Array<{
     name: string;
   }>;
   let count = 0;
   for (const row of rows) {
-    if (!isSystemDocumentId(row.name)) count++;
+    if (!isSystemDocumentId(row.name) && !isShareNamespace(row.name)) count++;
   }
   return count;
 }

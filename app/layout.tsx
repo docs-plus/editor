@@ -16,11 +16,13 @@ import {
   THEME_COLOR,
 } from "@/lib/site-config";
 import { INSTALL_PROMPT_CAPTURE_SCRIPT } from "@/lib/pwa/install-prompt";
-import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
+import { BOOT_SCRIPT } from "@/lib/prefs/boot-script";
 
 import "./globals.css";
 import "@/styles/_variables.scss";
 import "@/styles/_keyframe-animations.scss";
+import "@/styles/_page.scss";
+// After the page styles, so print rules come later in the cascade.
 import "@/styles/_print.scss";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -72,8 +74,8 @@ export default function RootLayout({
           script, painting one frame in the wrong theme.
         */}
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: applies the theme before the first frame
-          dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: applies the theme and page preferences before the first frame
+          dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }}
         />
       </head>
       <body className={inter.variable}>

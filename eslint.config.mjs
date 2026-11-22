@@ -8,7 +8,10 @@ const eslintConfig = defineConfig([
   globalIgnores([
     ".next/**",
     "out/**",
+    "dist/**",
     "build/**",
+    "playwright-report-electron/**",
+    "test-results-electron/**",
     "next-env.d.ts",
     "desktop/smoke/dist/**",
     "desktop/storage-harness/dist/**",

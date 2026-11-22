@@ -25,6 +25,20 @@ const PERF_ROUNDS = Number(process.env.PERF_ROUNDS ?? 7);
 const PERF_EXTRA_ROUNDS = Number(process.env.PERF_EXTRA_ROUNDS ?? PERF_ROUNDS);
 const PERF_CPU_THROTTLE = Number(process.env.PERF_CPU_THROTTLE ?? 4);
 const PERF_MAX_REGRESSION = Number(process.env.PERF_MAX_REGRESSION ?? 0.1);
+/**
+ * The comments case (comments design §8, "Typing"): off by default while
+ * comments are dark on the web. `PERF_COMMENTS=1` runs it; the page mounts
+ * comments through a dev-only hook (`comments-test-hooks.ts`), so it needs
+ * `next dev`, like the rest of this project.
+ */
+const PERF_COMMENTS = process.env.PERF_COMMENTS === "1";
+const PERF_COMMENTS_HEADINGS = Number(
+  process.env.PERF_COMMENTS_HEADINGS ?? 1000,
+);
+const PERF_COMMENTS_THREADS = Number(process.env.PERF_COMMENTS_THREADS ?? 300);
+const PERF_COMMENTS_MAX_REGRESSION = Number(
+  process.env.PERF_COMMENTS_MAX_REGRESSION ?? 0.05,
+);
 const KEYSTROKES = 220;
 /** Leading keystrokes dropped from each trial: first-use JIT and layout cost. */
 const WARMUP_KEYSTROKES = 20;
@@ -57,6 +71,8 @@ interface TrialOptions {
   toolbar: boolean;
   /** The same document for every trial of a test, so both arms type into it. */
   doc: JSONContent;
+  /** Mount comments and seed this many threads first (the comments case). */
+  threads?: number;
 }
 
 /** One fresh-context typing run; returns the p95 keystroke latency in ms. */
@@ -67,6 +83,11 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     if (!opts.toolbar) {
       await page.addInitScript(() => {
         window.__TOOLBAR_OFF = true;
+      });
+    }
+    if (opts.threads !== undefined) {
+      await page.addInitScript(() => {
+        window.__COMMENTS_PERF = true;
       });
     }
     await injectKeystrokeTimer(page);
@@ -83,6 +104,17 @@ async function runTrial(browser: Browser, opts: TrialOptions): Promise<number> {
     });
     if (opts.toolbar) await expect(toolbar).toBeVisible();
     else await expect(page.getByRole("toolbar")).toHaveCount(0);
+    if (opts.threads !== undefined) {
+      // Both arms load the controller; only the threads differ.
+      await page.waitForFunction(() => window.__comments !== undefined);
+      expect(await page.evaluate(() => window.__comments?.ready())).toBe(true);
+      const made = await page.evaluate(
+        (count) => window.__comments?.seed(count) ?? 0,
+        opts.threads,
+      );
+      expect(made, "threads seeded").toBe(opts.threads);
+      await editorPage.expectSavedToServer();
+    }
     const cdp = await context.newCDPSession(page);
     await cdp.send("Emulation.setCPUThrottlingRate", {
       rate: PERF_CPU_THROTTLE,
@@ -180,4 +212,43 @@ test.describe("typing latency", () => {
       ).toBeLessThanOrEqual(budget);
     });
   }
+});
+
+test.describe("typing latency with comments", () => {
+  test.describe.configure({ mode: "serial" });
+  test.skip(
+    !PERF_COMMENTS,
+    "comments are dark on the web; PERF_COMMENTS=1 runs this case",
+  );
+
+  test(`typing p95 with ${PERF_COMMENTS_THREADS} threads stays within ${PERF_COMMENTS_MAX_REGRESSION * 100}% (${PERF_COMMENTS_HEADINGS} headings, ${PERF_SHAPE})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(1_200_000);
+    const doc = generateLargeDocument(PERF_COMMENTS_HEADINGS, {
+      shape: PERF_SHAPE,
+    });
+    // "off": comments mounted, no threads; "on": the same with threads.
+    const trial = (arm: "off" | "on") =>
+      runTrial(browser, {
+        toolbar: true,
+        doc,
+        threads: arm === "on" ? PERF_COMMENTS_THREADS : 0,
+      });
+    for (const arm of ["off", "on"] as const) await trial(arm);
+    const p95: ArmP95 = { off: [], on: [] };
+    for (let round = 0; round < PERF_ROUNDS; round++) {
+      const order =
+        round % 2 === 0 ? (["off", "on"] as const) : (["on", "off"] as const);
+      for (const arm of order) p95[arm].push(await trial(arm));
+    }
+    const ratio = pairedRatio(p95);
+    console.log(
+      `perf comments: off=${p95.off.map((v) => v.toFixed(1))} on=${p95.on.map((v) => v.toFixed(1))} paired ratio=${ratio.toFixed(3)}`,
+    );
+    expect(
+      ratio,
+      `${PERF_COMMENTS_THREADS} threads vs none, typing p95, median of ${p95.on.length} paired rounds`,
+    ).toBeLessThanOrEqual(1 + PERF_COMMENTS_MAX_REGRESSION);
+  });
 });
