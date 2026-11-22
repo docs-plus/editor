@@ -271,8 +271,19 @@
   white-space: nowrap;
 }
 
-.st-color-more-icon:dir(rtl) {
-  scale: -1 1;
+// "▸", pointing to the inline end (the submenu's side) in both directions.
+.st-color-more-icon {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-inline: 0.25rem 0.3125rem;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  rotate: -45deg;
+
+  &:dir(rtl) {
+    rotate: 45deg;
+  }
 }
 
 // One chip language on every surface: a text colour is an "A" in the

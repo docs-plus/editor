@@ -18,7 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { colorLabel } from "@/lib/editor-actions/surface-actions";
-import { BanIcon, CheckIcon, ChevronRightIcon } from "@/lib/icons";
+import { BanIcon, CheckIcon } from "@/lib/icons";
 import { MAX_RECENT_COLORS, type RecentColor } from "@/lib/remembered-choice";
 import { cn } from "@/lib/utils";
 
@@ -277,7 +277,9 @@ function MoreRow({
         {checked >= 0 ? (
           <CheckIcon aria-hidden="true" className="st-color-check" />
         ) : null}
-        <ChevronRightIcon aria-hidden="true" className="st-color-more-icon" />
+        {/* A CSS chevron: an icon import shared with the editor chunk
+            would add a re-export to it (`color-panel.scss`). */}
+        <span aria-hidden="true" className="st-color-more-icon" />
       </PopoverTrigger>
       <PopoverContent
         ref={popupRef}
