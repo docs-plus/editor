@@ -27,6 +27,7 @@ import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
+import type { TagParseRule } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
 import DOMPurify from "dompurify";
@@ -89,6 +90,61 @@ const SubscriptByTarget = Subscript.extend({
     return {
       [SUBSCRIPT_SHORTCUT]: () => this.editor.commands.toggleSubscript(),
     };
+  },
+});
+
+/**
+ * The web editor's link policy: `https:`, `http:` and `mailto:` only, checked
+ * after removing whitespace as browsers do. The extension's own check is a
+ * denylist, so an `ms-msdt:` or `search-ms:` link would otherwise reach the
+ * OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
+ * rules; `LinkPolicyHyperlink` applies the same option to HTML paste and to
+ * rendering, so a host that passes its own `isAllowedUri` replaces it at all
+ * three. Parse and render call it with the href alone (never null).
+ */
+export const isWebLink = (href: string): boolean =>
+  /^(?:https?|mailto):/i.test(href.replace(/\s/g, ""));
+
+type LinkPolicy = (href: string) => boolean;
+
+/**
+ * Hyperlink with `isAllowedUri` also applied where the extension skips it:
+ * pasted `<a href>` off the policy loses its mark (the text stays), and a
+ * stored one (Yjs, older documents) renders with no `href` at all, so
+ * neither a click nor the browser's own middle-click or "Open link" can
+ * follow it. Pasted titles are dropped: a `title` is a tooltip a stranger
+ * chose ("Your bank: click to verify").
+ */
+export const LinkPolicyHyperlink = Hyperlink.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      title: { default: null, parseHTML: () => null },
+    };
+  },
+
+  parseHTML() {
+    const allowed = this.options.isAllowedUri as LinkPolicy;
+    // Both rules are tag rules: `.hyperlink-icon` (no getAttrs) and `a[href]`.
+    return ((this.parent?.() ?? []) as TagParseRule[]).map(
+      ({ getAttrs, ...rule }) =>
+        getAttrs
+          ? {
+              ...rule,
+              getAttrs: (node: HTMLElement) =>
+                allowed(node.getAttribute("href") ?? "") && getAttrs(node),
+            }
+          : rule,
+    );
+  },
+
+  renderHTML(props) {
+    const spec = this.parent?.(props) as [string, Record<string, unknown>, 0];
+    const { href } = spec[1];
+    if (!href || !(this.options.isAllowedUri as LinkPolicy)(`${href}`)) {
+      delete spec[1].href;
+    }
+    return spec;
   },
 });
 
@@ -209,7 +265,7 @@ export function buildDocumentEditorExtensions({
       // top-level type is `heading`; pin the trailing node to a paragraph.
       trailingNode: { node: "paragraph" },
     }),
-    Hyperlink.configure({
+    LinkPolicyHyperlink.configure({
       popovers: {
         previewHyperlink: previewHyperlinkPopover,
         editHyperlink: editHyperlinkPopover,
@@ -217,6 +273,7 @@ export function buildDocumentEditorExtensions({
       },
       // Let pasted media URLs become embeds instead of plain links.
       shouldAutoLink: (url) => !isMediaUrl(url),
+      isAllowedUri: isWebLink,
       // Public sandbox: links are user-generated content.
       HTMLAttributes: {
         target: null,
