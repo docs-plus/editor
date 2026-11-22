@@ -507,6 +507,16 @@ Each client gets a unique identity token (`load-client-{i}-{docId}`).
   the merge queue and manual runs always run every suite.
 - **Shards:** Playwright splits the `chromium` project by spec file. To run
   one shard locally: `CI= bun playwright test --project=chromium --shard=2/3`.
+- **Shard balance (do not split specs to rebalance):** Playwright 1.65's
+  `filterForShard` gives each shard a contiguous range of spec files in path
+  order, sized by test *count*, not duration. Splitting a heavy spec into
+  adjacent files leaves its tests at the same positions, so in the same shard
+  (simulated with real per-test times: shard totals unchanged at 796, 940 and
+  940 s). Renaming files to move them is a per-shard list that drifts as tests
+  are added, and `PWTEST_SHARD_WEIGHTS` is internal and undocumented. The
+  structural gap is about 50 s of wall time; larger gaps come from runner
+  speed (one 2.2 min gap had every test in the shard about 33% slower, no
+  retries). Balance is judged on the median of several runs.
 - **Cancelling:** a newer push to a pull request cancels its older run; a run
   on `main` is never cancelled once started, so each one can deploy.
 - **Parallel unit tests (shadow):** after the serial `Unit tests` gate, the
