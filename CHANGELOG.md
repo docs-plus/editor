@@ -58,6 +58,34 @@ use it: the web build is unchanged (every JS and CSS chunk identical to
   `tests/harness` out of Tailwind's sources; the library styles itself in
   plain CSS on the shadcn tokens, shipped only with the components.
 
+### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
+
+A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
+up to 9 s on a Windows runner. That included the quit flush, so a quit during
+a copy could drop the final batch of edits. The copy now runs in its own
+thread and can be stopped.
+
+#### Changed
+
+- **Desktop:** the daily copy (`desktop/storage/engine/copy-library.ts`)
+  - copies the library in batches of at most 256 rows or about 4 MiB, from
+    one read-only snapshot, inside one transaction;
+  - creates the schema verbatim and copies `sqlite_sequence`,
+    `user_version` and `application_id`;
+  - checks row counts and `integrity_check` before the copy is renamed into
+    place, then runs a passive WAL checkpoint;
+  - on failure, keeps the previous copies and records `daily_copy_failed`.
+- **Desktop:** the storage worker runs that copy in a second thread
+  (`desktop/storage/copy-worker.ts`), so saves never wait on it. On quit it
+  stops the copy in milliseconds and deletes the partial file; the previous
+  copy stays. Opening the library sweeps any partial copy left behind.
+- **Tests:** soak case `T4-copy` quits during a copy on all three OSes. T8
+  compares the copy's time and size with `VACUUM INTO`'s on the year-end
+  library. A unit test restores a copy and runs the `DocStore` contract on it.
+- **Docs:** the architecture spec records the quit budget (3 s flush, then
+  2 s worker shutdown), the batched copy, and `utilityProcess` as the
+  upgrade path once P2.5 exists.
+
 ### Desktop P2.6: the library storage worker
 
 The SQLite engine behind the desktop library, where documents, folders and
