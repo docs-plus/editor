@@ -9,15 +9,16 @@ since the previous tag.
 
 ## [Unreleased]
 
-### P2.12 part 1: print stylesheet, block move and the Markdown paste rule
+### P2.12 part 1: print stylesheet, block move, word count and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and
-duplicate commands and the Markdown paste rule are built and tested but not
-yet wired to a menu or to paste, and word count (E3) is not started, so P2.12
-stays open (details spec §5, "P2.12 status"). The editor chunk group is
-unchanged: 393,820 B gz, 0 B against `main` at `1548d5e` (every editor JS and
-CSS chunk identical; `1548d5e` changed no web code since `903b5c8`). An
-import-boundary test keeps both modules out of it.
+duplicate commands, the word count engine and the Markdown paste rule are
+built and tested but not yet wired to a menu or to paste, so P2.12 stays open
+(details spec §5, "P2.12 status"). The paste hook waits on a 152 B gz ledger
+line. The editor chunk group is unchanged: 393,820 B gz, 0 B against `main`
+at `1548d5e` (every editor JS and CSS chunk identical; `1548d5e` changed no
+web code since `903b5c8`). An import-boundary test keeps these modules out
+of it.
 
 #### Added
 
@@ -52,6 +53,13 @@ import-boundary test keeps both modules out of it.
     text over 256 KiB paste as plain text. The parser turned an HTML block
     into a level-1 heading against the title-first schema.
   - The syntax check stays linear on long lines (a 200 KB line of `[`).
+  - The caller passes `Fragment` and `Slice` (`MarkdownModel`), so the
+    rule can load as a lazy chunk of the editor without splitting the
+    editor's chunk group (+1,092 B gz when it imported them itself).
+- **Word count** (`lib/word-count.ts`, E3): `countWords` counts words,
+  characters and characters without spaces in the document, or in the
+  selection when given one, using `Intl.Segmenter` (a ZWNJ stays inside a
+  Persian word; an emoji sequence is one character).
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 

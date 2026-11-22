@@ -31,7 +31,7 @@ On 2026-11-22 production ran `ed2a7cd`.
 | P2.9c-1 | Page engine (`lib/prefs/`), no on-screen controls | In progress |
 | P2.9c-2, P2.9a, P2.9b | Page UI, window chrome, backups | After P2.9c-1 and P2.5 |
 | P2.11 | Find | In progress (workflow) |
-| P2.12 | Part 1 (#156): block move and duplicate, the Markdown paste rule, print stylesheet, all at 0 B of editor chunk. Open: the paste hook (needs a ledger line, so a budget review), word count (E3), the menu surfaces | Part 1 in review; row open |
+| P2.12 | Part 1 (#156): block move and duplicate, the Markdown paste rule, the word count engine (E3), print stylesheet, all at 0 B of editor chunk. Open: the paste hook (built on `feat/p2-12-markdown-paste-hook`, +152 B gz, waits on a ledger line), the one-time paste hint, the menu, ⋯ and sheet surfaces | Part 1 in review; row open |
 | A1 | Shared asset core (image store §9), on the §6.2 fallback until U1 | In progress |
 | W2 | Web library storage on IndexedDB, behind `NEXT_PUBLIC_LIBRARY=0` | In progress (workflow) |
 | L0 | Translation-ready foundation | In progress (workflow) |
