@@ -15,7 +15,7 @@ since the previous tag.
 composition root provides, instead of importing `collab-session`. The web
 provides the sandbox adapter, which wraps `collab-session` unchanged, so
 nothing changes for users. The adapter loads with the lazy editor chunk,
-not on first load (first load −28 B gz, editor chunk group +275 B gz). The
+not on first load (first load −32 B gz, editor chunk group +275 B gz). The
 desktop and library roots will provide `local-session`.
 
 #### Added
