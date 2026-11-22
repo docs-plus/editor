@@ -225,6 +225,8 @@ export function FormatSheetBody({
           recent={recent}
           focusKind="text"
           focusOnMount={false}
+          layout="grid"
+          caption="current"
         />
       </Section>
       <SlotSection editor={editor} onClose={onClose} />

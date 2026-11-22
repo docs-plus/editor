@@ -423,7 +423,7 @@ test("M1: a visible note under Highlight names the text colour while swatches ar
   );
   ({ dialog } = await openHighlightDialog(page));
   await expect(dialog.getByText(LOW_NOTE)).toBeVisible();
-  // The note wraps inside the swatch grid's width.
+  // The note wraps inside the Highlight column's width.
   expect(await settledWidth(dialog)).toBeCloseTo(width, 0);
 });
 
@@ -435,25 +435,31 @@ async function settledWidth(dialog: Locator) {
   return (await dialog.boundingBox())?.width ?? 0;
 }
 
-test("M2: a mouse pick moves the roving stop and focus to the swatch", async ({
+test("M2: a mouse pick closes the menu; reopening starts on the picked row", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openToolbarTestDoc(page);
   await selectWord(page);
-  const { highlights } = await openHighlightDialog(page);
-  const none = highlights.getByRole("button", { name: "No highlight" });
+  const { dialog, highlights } = await openHighlightDialog(page);
+  const none = highlights.getByRole("menuitemradio", { name: "No highlight" });
   await expect(none).toBeFocused();
-  const blue = highlights.getByRole("button", { name: "Blue highlight" });
+  const blue = highlights.getByRole("menuitemradio", {
+    name: "Blue highlight",
+  });
   await blue.click();
-  await expect(blue).toHaveAttribute("aria-pressed", "true");
+  // Spec §7.10: a pick closes every menu, focus back in the editor.
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".tiptap")).toBeFocused();
+  await openHighlightDialog(page);
+  await expect(blue).toHaveAttribute("aria-checked", "true");
   await expect(blue).toBeFocused();
   await expect(blue).toHaveAttribute("tabindex", "0");
   await expect(none).toHaveAttribute("tabindex", "-1");
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`M12: swatch borders are >=3:1 on the popover (${theme})`, async ({
+  test(`M12: chip borders are >=3:1 on the popover (${theme})`, async ({
     page,
   }) => {
     await setTheme(page, theme);
@@ -461,7 +467,9 @@ for (const theme of ["light", "dark"] as const) {
     await openToolbarTestDoc(page);
     await selectWord(page);
     const { dialog, highlights } = await openHighlightDialog(page);
-    const swatch = highlights.getByRole("button", { name: "Blue highlight" });
+    const swatch = highlights
+      .getByRole("menuitemradio", { name: "Blue highlight" })
+      .locator(".st-color-chip");
     await page.mouse.move(0, 0);
     const colours = await swatch.evaluate((el) => ({
       border: getComputedStyle(el).borderTopColor,

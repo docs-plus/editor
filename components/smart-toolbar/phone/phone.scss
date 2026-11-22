@@ -143,6 +143,17 @@
   }
 }
 
+// The status pill's action (Undo after a colour pick or a removed
+// format) is a 24px `xs` button; on touch it is a 44×44 target like every
+// other phone control. Here, not in the pill: the phone pill lives in
+// this lazy chunk's bar, and the desktop pill keeps its size.
+@media (pointer: coarse) {
+  [data-status-pill="phone"] button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .st-phone-aa {
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -217,11 +228,8 @@ body:has(.tt-preview) [data-slot="sheet-overlay"] {
     color: var(--muted-foreground);
   }
 
-  // Swatches fill the sheet's width, each at least 44px.
-  .st-color-swatches {
-    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-    gap: 6px;
-  }
+  // Its swatch grid is the colour panel's own: six 44px swatches a line
+  // on touch (spec §7.3, `color/color-panel.scss`).
 }
 
 .st-sheet-list {

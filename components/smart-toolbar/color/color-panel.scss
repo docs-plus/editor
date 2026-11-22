@@ -155,6 +155,218 @@
   forced-color-adjust: auto;
 }
 
+// Named rows (spec §7.3, `color-rows.tsx`): Recent chips, then Text |
+// Highlight side by side, each row an 18px chip, its name and ✓.
+.st-color-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.st-color-recent-chips {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.st-color-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(8.5rem, 1fr));
+}
+
+.st-color-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 0;
+
+  & + & {
+    border-inline-start: 1px solid var(--border);
+    padding-inline-start: 0.375rem;
+    margin-inline-start: 0.375rem;
+  }
+
+  > .st-color-row-label {
+    padding: 0 0.375rem 0.25rem;
+  }
+}
+
+.st-color-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--popover-foreground);
+  font-size: 0.875rem;
+  text-align: start;
+  cursor: pointer;
+
+  > svg {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  &:hover,
+  &[data-pointed],
+  &:focus-visible,
+  &[data-popup-open] {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  // As on the swatches: the previewed row wears the focus ring, and
+  // keyboard focus elsewhere steps down to a dashed one.
+  &:focus-visible,
+  &[data-pointed] {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+
+  :is(.st-color-rows, .st-color-more-popup)[data-pointing]
+    &:focus-visible:not([data-pointed]) {
+    outline-width: 1px;
+    outline-style: dashed;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &[aria-disabled="true"]:focus-visible,
+  &[aria-disabled="true"][data-pointed] {
+    opacity: 1;
+  }
+
+  @media (forced-colors: active) {
+    &:focus-visible,
+    &[data-pointed] {
+      outline-color: Highlight;
+    }
+  }
+}
+
+.st-color-named,
+.st-color-more {
+  width: 100%;
+}
+
+.st-color-recent-chip {
+  justify-content: center;
+  width: 1.75rem;
+  padding: 0;
+}
+
+.st-color-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "▸", pointing to the inline end (the submenu's side) in both directions.
+.st-color-more-icon {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-inline: 0.25rem 0.3125rem;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  rotate: -45deg;
+
+  // Not `:dir()`: the CSS pipeline lowers it to `:lang()`.
+  :where([dir="rtl"]) & {
+    rotate: 45deg;
+  }
+}
+
+// One chip language on every surface: a text colour is an "A" in the
+// colour, a highlight is the tile filled with it under a foreground "A",
+// none is ⊘. The tile sits on the popover, so pale highlights show in
+// both themes; its border is ≥ 3:1 on the popover (WCAG 1.4.11).
+.st-color-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 50%, transparent);
+  --chip-bg: var(--popover);
+  --chip-fg: var(--foreground);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+
+  svg {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  &[data-low-contrast] {
+    border-style: dotted;
+    border-color: color-mix(in srgb, var(--foreground) 60%, transparent);
+  }
+
+  // Forced colours: the chip's colours are its meaning, so keep them.
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+  }
+}
+
+.st-color-chip--text {
+  --chip-fg: var(--swatch-light, var(--foreground));
+
+  :is(.dark *) & {
+    --chip-fg: var(--swatch-dark, var(--foreground));
+  }
+}
+
+.st-color-chip--highlight {
+  --chip-bg: var(--swatch, var(--popover));
+}
+
+.st-color-note,
+.st-color-caption {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+// Wraps inside the column: it never widens the menu.
+.st-color-note {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  padding: 0.25rem 0.375rem 0;
+}
+
+// A menu placed past the selection (`clear-of-selection.ts`, spec §10.4)
+// may have little room left: it is capped to what the positioner leaves
+// and scrolls inside.
+.st-color-popover:has(.st-color-rows) {
+  max-height: var(--available-height);
+  overflow-y: auto;
+}
+
+// The More submenu (`color-rows.tsx`): a popover beside its row.
+.st-color-more-popup {
+  gap: 0.0625rem;
+  min-width: 9rem;
+  padding: 0.25rem;
+}
+
 // Hover preview of "Default text" and "No highlight" (`swatch-preview.ts`):
 // what the text shows once the mark is gone. The preview sits inside the
 // mark it previews away, so it reads these from the mark; outside one it
@@ -201,7 +413,20 @@
     min-height: 44px;
   }
 
+  // Six a line, 10px apart: 6 × 44 + 5 × 10 = 314px (spec §7.3). Where
+  // the sheet is narrower (320px phones), the gaps shrink, never the
+  // swatches, so nothing scrolls sideways.
   .st-color-swatches {
     --swatch-size: 44px;
+    row-gap: 10px;
+    column-gap: clamp(2px, (100% - 6 * 44px) / 5, 10px);
+  }
+
+  .st-color-item {
+    min-height: 44px;
+  }
+
+  .st-color-recent-chip {
+    min-width: 44px;
   }
 }

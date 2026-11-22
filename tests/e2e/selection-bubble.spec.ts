@@ -385,7 +385,8 @@ test.describe("selection bubble", () => {
     await expect(dialog).toBeVisible();
     // The panel is a lazy chunk: wait until it has put focus on a swatch.
     await expect(dialog.locator("button:focus")).toHaveCount(1);
-    await page.keyboard.press("ArrowRight");
+    // Named rows (spec §7.3): ↓ from Default is Red.
+    await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await expect
       .poll(() =>
@@ -403,9 +404,9 @@ test.describe("selection bubble", () => {
     // Past the plugin's 250 ms update debounce: still attached.
     await page.waitForTimeout(400);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
-    if (await dialog.isVisible()) await page.keyboard.press("Escape");
+    // Enter picked and closed the menu; focus is back in the text (§7.10).
     await expect(dialog).toBeHidden();
-    await expect(chevron).toBeFocused();
+    await expect(page.locator(".tiptap")).toBeFocused();
     await expectBubbleOpen(page);
   });
 

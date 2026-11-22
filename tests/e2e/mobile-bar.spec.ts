@@ -306,6 +306,7 @@ test("the sheet applies style, size, colours, align and more, then returns focus
     dialog.getByRole("spinbutton", { name: "Font size" }),
   ).toHaveAttribute("aria-disabled", "true");
   await expect(dialog).toBeVisible();
+  // The sheet's controls, and the pill a colour pick shows (Undo, P1.4).
   expect(
     await smallTargets(
       page,
@@ -849,13 +850,12 @@ test.describe("selection cells (PR E, spec §4.7)", () => {
     await openSheet(page);
     const text = sheet(page).getByRole("group", { name: "Text colour" });
     const swatches = text.getByRole("button");
-    // The sheet's grid fills its width, so its lines hold more swatches
-    // than the popover's six.
+    // Six 44px swatches a line on touch (spec §7.3).
     const perLine = await swatches.evaluateAll((els) => {
       const top = els[0].getBoundingClientRect().top;
       return els.filter((el) => el.getBoundingClientRect().top === top).length;
     });
-    expect(perLine).toBeGreaterThan(6);
+    expect(perLine).toBe(6);
     expect(await swatches.count()).toBeGreaterThan(perLine);
     await swatches.nth(2).focus();
     await page.keyboard.press("ArrowLeft");
