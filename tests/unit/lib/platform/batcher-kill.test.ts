@@ -14,13 +14,29 @@ import { BATCH_MAX_WAIT_MS } from "@/lib/platform/batcher";
 const CHILD = path.join(import.meta.dir, "fixtures/batcher-kill-child.ts");
 /** Timer lateness and IPC delay on a loaded CI runner. */
 const JITTER_MS = 250;
+/** Tokens that must be past the 1 s window before the kill, so the check means something. */
+const MIN_DUE = 10;
+/** The child must have typed this recently, so the kill lands mid-typing. */
+const TYPING_NOW_MS = 200;
+/** Gives up on a child too starved to type (a clear failure, not a hang). */
+const MAX_EXTRA_WAIT_MS = 6000;
 
 type ChildMessage =
   | { t: "ready" }
   | { t: "push"; token: string; at: number }
   | { t: "append"; id: number; update: string };
 
-async function typeThenKill(runMs: number, mode: "bursty" | "steady") {
+/** Tokens typed early enough that the batcher must have saved them by `now`. */
+const dueAt = (pushedAt: Map<string, number>, now: number) =>
+  [...pushedAt].filter(([, at]) => at <= now - BATCH_MAX_WAIT_MS - JITTER_MS);
+
+/**
+ * Lets the child type for at least `minRunMs`, then SIGKILLs it at the first
+ * moment when at least MIN_DUE tokens are past the 1 s window and it is still
+ * typing. The kill time follows what the child actually typed, never an
+ * assumed typing rate, so a slow runner only makes the run longer.
+ */
+async function typeThenKill(minRunMs: number, mode: "bursty" | "steady") {
   const pushedAt = new Map<string, number>();
   const saved = new Y.Doc();
   let seq = 0;
@@ -48,8 +64,27 @@ async function typeThenKill(runMs: number, mode: "bursty" | "steady") {
   });
 
   await ready;
-  await new Promise((r) => setTimeout(r, runMs));
-  const killAt = Date.now();
+  const started = Date.now();
+  let killAt = 0;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 20));
+    const now = Date.now();
+    const lastPush = Math.max(0, ...pushedAt.values());
+    if (
+      now - started >= minRunMs &&
+      dueAt(pushedAt, now).length >= MIN_DUE &&
+      now - lastPush <= TYPING_NOW_MS
+    ) {
+      killAt = now;
+      break;
+    }
+    if (now - started > minRunMs + MAX_EXTRA_WAIT_MS) {
+      child.kill("SIGKILL");
+      throw new Error(
+        `child typed ${pushedAt.size} tokens in ${now - started} ms; too few to test the bound`,
+      );
+    }
+  }
   child.kill("SIGKILL");
   await child.exited;
   return { pushedAt, saved: saved.getText("t").toString(), killAt };
@@ -66,16 +101,15 @@ describe("Batcher under SIGKILL", () => {
       ] as const;
       for (const [runMs, mode] of runs) {
         const { pushedAt, saved, killAt } = await typeThenKill(runMs, mode);
-        const due = [...pushedAt].filter(
-          ([, at]) => at <= killAt - BATCH_MAX_WAIT_MS - JITTER_MS,
-        );
-        expect(due.length).toBeGreaterThan(5);
+        const due = dueAt(pushedAt, killAt);
+        expect(due.length).toBeGreaterThanOrEqual(MIN_DUE);
         const lost = due.filter(([token]) => !saved.includes(token));
         expect(lost).toEqual([]);
         // Sanity: the kill really landed mid-typing.
         expect(pushedAt.size).toBeGreaterThan(due.length);
       }
     },
-    { timeout: 20_000 },
+    // Three runs of 2–3 s plus Bun start-up, which grows with runner load.
+    { timeout: 40_000 },
   );
 });

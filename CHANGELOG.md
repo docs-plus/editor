@@ -25,6 +25,193 @@ about 900 pixels). Test only; no app or Deploy change.
   timer of the same dwell (`PREVIEW_DWELL_MS`), which fires after the
   pending clear. 40 repeats: no pixel failures (11 of 24 before).
 
+### Desktop P2.1c: the editor opens documents through `DocSession`
+
+`use-yjs-document` now opens documents through the `DocSession` its
+composition root provides, instead of importing `collab-session`. The web
+provides the sandbox adapter, which wraps `collab-session` unchanged, so
+nothing changes for users. The adapter loads with the lazy editor chunk,
+not on first load (first load −32 B gz, editor chunk group +275 B gz). The
+desktop and library roots will provide `local-session`.
+
+#### Added
+
+- **Platform:** `lib/platform/doc-session-context.tsx`
+  (`DocSessionProvider`, `useDocSession`) and
+  `lib/platform/web/sandbox-doc-session.ts` (`sandboxDocSession`, the
+  sandbox `DocSession` over `collab-session`).
+- **Editor:** `components/editor-app/sandbox-document-editor.tsx`, the web
+  wrapper that `EditorApp` loads lazily in place of `DocumentEditor`: the
+  editor under the sandbox `DocSession`.
+- **Tests:** an import-boundary test that neither the hook nor any module in
+  `components/document-editor/` loads `collab-session` or a platform
+  adapter. One known path remains for P2.2: `CollabStatusGroup` is imported
+  statically and its connection status reads `collab-session`.
+
+#### Changed
+
+- **Editor:** `use-yjs-document` returns the same fields as before, now read
+  from the `DocSession` handle (`ydoc` and `awareness` are `undefined`, not
+  `null`, before the first open).
+- **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
+  (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
+  that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
+- **Tests:** the SIGKILL batcher test kills its child once at least 10
+  tokens are past the 1 s window and it is still typing, instead of at a
+  fixed time, so a slow CI runner makes the run longer rather than failing
+  its "enough typed" check.
+- **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
+  Reload button saves through `DocSession.flush()` (on the web, the same
+  device-copy flush as before) before reloading.
+
+### Desktop P2.7a: files sidebar, Quick Open and Move to…
+
+The library's files sidebar for desktop and the web library (D3), in
+`components/library/`, driven by a `LibraryIndex`. The web sandbox doesn't
+use it: the web build is unchanged (every JS and CSS chunk identical to
+`main`; first load and editor chunk +0 B).
+
+#### Added
+
+- **Platform:** `LibraryIndex` extends the `DocumentIndex` port with
+  folders (4 levels), all-or-none moves that refuse a folder into its own
+  subtree, pins in their own order, `markOpened`, and a folder trashed and
+  restored as one unit (to the root when its parent is gone).
+  `GlobalTabsIndex` stays a plain `DocumentIndex`. `MemoryDocumentIndex`
+  implements it, and the shared contract suite covers it for P2.6's
+  `IpcDocumentIndex` and W2's `IdbDocumentIndex`.
+- **Search:** `lib/search/normalize.ts`, the one metadata normalizer
+  (D-A8): case, Latin, Arabic and Hebrew marks, tatweel, Arabic yeh and kaf
+  to Persian, Persian and Arabic-Indic digits to ASCII, with an offset map
+  so highlights keep the original text. `lib/search/match.ts` matches word
+  prefixes before substrings.
+- **Library:** the files sidebar (Search, Recent, Pinned, the Library tree,
+  Trash), an APG tree with one tab stop, multi-select, type-ahead, F2
+  rename, Move to Trash (⌘⌫ / Delete) and file-operation undo (⌘Z, 20
+  steps), Shift+F10 row menus, and pointer drag and drop with
+  spring-loaded folders (700 ms, or Space). Move to… lists recent
+  destinations first and keeps refused folders visible with the reason.
+  Quick Open searches titles and folder names only (D24), shows the folder
+  path, offers Create when nothing matches, and opens in a new tab with
+  ⌘Enter. Right-to-left sidebars mirror, ← and → included. New Document
+  goes into the folder that has focus in the sidebar, else the root.
+  Document renames go through the host's `onRenameDocument`, so desktop and
+  the web library can edit the title heading (details spec §2.3).
+- **Focus:** `lib/region-focus.ts` moves between regions with F6 /
+  Shift+F6 and returns to the last focused element of each.
+- **Tests:** the `library` Playwright project runs the keyboard checklist,
+  folder refusals, drag and drop, RTL keys and axe on a Bun harness
+  (`tests/harness/library`, `bun run harness:library`); CI starts it in
+  the e2e job. Unit tests cover the normalizer, the matcher, folder and
+  drop rules, tree rows, keys, the undo stack and F6 regions; the import
+  boundary test keeps the library UI free of sandbox, desktop, editor and
+  test code.
+
+#### Changed
+
+- **Build:** `app/globals.css` leaves `components/library` and
+  `tests/harness` out of Tailwind's sources; the library styles itself in
+  plain CSS on the shadcn tokens, shipped only with the components.
+
+### Retention purge: on
+
+The daily `editor-purge` run now deletes. Four dry runs in production
+(2026-11-19 to 2026-11-22, 03:17) each listed the same 2 documents idle for
+more than 30 days (`staleTotal` 2), no closed documents past 7 days and no
+expired tombstones.
+
+#### Changed
+
+- **Ops:** `PURGE_MODE` is `on` for `editor-purge` in `ecosystem.config.cjs`.
+  Each run first backs the database up to `backups/` (`db-first.sqlite` kept
+  forever, dated copies 14 days) and deletes nothing if the backup fails.
+
+**Deploy:** nothing to do by hand. The automatic deploy registers the new env
+without purging; the next 03:17 run writes `db-first.sqlite` and does the
+first real purge. To stop it: set `PURGE_MODE` back to `dry-run` or `off` in a
+pull request, or `bunx pm2@6.0.14 stop editor-purge` on the host.
+
+### CI: `main` runs are never cancelled; merge queue support
+
+A merge on `main` no longer cancels the previous commit's CI run, which left
+that commit undeployed (29f6faf and e64ae84). CI also runs in the merge queue,
+so the owner can require it on `main`. No app change.
+
+#### Changed
+
+- **CI:** only pull request runs are cancelled by a newer push. A started run
+  on `main` always finishes and can deploy; runs queue in commit order, and
+  when several merges land together the newest commit's run waits and
+  deploys everything before it.
+- **CI:** a `merge_group` trigger. Merge queue runs never deploy (Deploy acts
+  only on CI runs from a push to `main`).
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` pins the triggers, the
+  no-cancel rule and the two required check names;
+  `workflow-permissions.test.ts` requires explicit read-only permissions on
+  every job of a `pull_request` or `merge_group` workflow.
+
+**Deploy:** none. **Owner (once):** to turn the merge queue on, add
+**Require merge queue** to the **Protect main** ruleset as
+`docs/operations/deploy-runbook.md` → *Turning the merge queue on*
+describes; the required checks keep their names.
+
+### Desktop: no partial daily copy left after a quit on Windows
+
+On Windows, a quit during a daily copy could leave
+`daily/library-<date>.sqlite.partial` behind. The copy thread was stopped
+with `terminate()`, which skips its cleanup, so its SQLite handle could still
+hold the file when shutdown tried to delete it. Windows won't delete an open
+file, and nothing retried.
+
+#### Fixed
+
+- **Desktop:** quit now asks the copy thread to stop. At its next batch the
+  thread rolls back, closes its connection and the read-only attach, and only
+  then exits; `terminate()` is the fallback after 500 ms. The partial file is
+  then deleted with retries for about 420 ms, inside the 2 s shutdown budget.
+  The previous copies are never touched.
+- **Desktop:** the storage host's deletes retry briefly on `EBUSY`. Opening a
+  library still succeeds when a partial can't be deleted yet; the next open
+  removes it.
+- **Tests:** T4-copy runs 30 times on `windows-latest`. Every quit must land
+  during a copy, and every copy must be stopped with its partial deleted.
+
+### Docs: Phase 2 status, and the runbook and AGENTS.md brought up to date
+
+Documentation only; no app or server change.
+
+#### Added
+
+- **Docs:** `docs/superpowers/plans/2026-11-22-phase-2-status.md`. It
+  records:
+  - where each Phase 2 row stands;
+  - the decisions made while executing it: the daily-copy design, the
+    editor-chunk ledger lines and the 0 B rule, the bubble redesign
+    rulings, landing dark;
+  - how work merges;
+  - what waits on the owner;
+  - the head-of-engineering estimates.
+
+  The design spec's Phase 2 heading links to it.
+
+#### Changed
+
+- **Docs:** the deploy runbook records that automatic deploys and the
+  retention purge are on in production, and that over a non-login SSH
+  command PM2 runs as `~/.bun/bin/bunx`.
+- **Docs:** `AGENTS.md` records:
+  - the desktop and local-first layering: the ports, contract suites,
+    storage worker, desktop export, library UI and landing dark;
+  - the editor-chunk budget rule;
+  - the batch-and-wait merge practice;
+  - the Node 14 `install_deps` shim on the host;
+  - the purge state.
+
 ### Selection bubble P0: a plugin-free controller and a first-line anchor
 
 The selection bubble no longer registers a ProseMirror plugin from its lazy
