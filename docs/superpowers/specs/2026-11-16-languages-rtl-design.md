@@ -6,7 +6,7 @@
 > - **D30:** the **L2 string-extraction sweep** is third in the pre-approved v1 cut order. If cut, new strings are linted instead (the "new strings through `t()`" rule stays, as §9.2 already says).
 > - **Staff integration review:** row 26 Language is hidden until L1b (v1.1). The `firefox` Playwright project is defined once, by test strategy **Q7**; **L7 adds the RTL specs to it** rather than creating it, and P2.13's exit depends on Q7. **L3 owns the one keymap module** (`APP_KEYMAP`, `matchShortcut` / `visualStep`, `formatKeyCombo`, `lib/shortcuts.ts`; UX spec §4.6), and `matchShortcut` also fixes ⌘⇧F, which today matches `event.key === "f"` on `window` and fails on Persian and Arabic layouts. L3 is v1.1 under D26, so whether the module and `matchShortcut` land ahead of the rest of L3 is **not decided**.
 
-- **Status:** Draft for owner review (2026-11-16). **L0 landed (2026-11-22):** the §9.3 amendments, the UX §9.4 copy rules and the `locales/glossary.md` seed, plus L1a groundwork that nothing in the app imports yet (0 B): `lib/i18n/` (`t-core`, `format`, `locale`, `isolate`, `registry-labels`), `scripts/i18n/` (`extract`, `check`, `pseudo`), `locales/en/actions.json`, the `i18n:*` scripts and the §8.1 unit tests. L1a still owns the wiring (§9).
+- **Status:** Draft for owner review (2026-11-16). **L0 landed (2026-11-22):** the §9.3 amendments, the UX §9.4 copy rules and the `locales/glossary.md` seed, plus L1a groundwork that nothing in the app imports yet (0 B): `lib/i18n/` (`t-core`, `dir`, `format`, `locale`, `isolate`, `registry-labels`), `scripts/i18n/` (`extract`, `check`, `pseudo`), `locales/en/actions.json`, the `i18n:*` scripts and the §8.1 unit tests. L1a still owns the wiring (§9).
 - **Decides:**
   - which interface languages v1 ships
   - how strings are written, stored, loaded and translated
@@ -125,9 +125,10 @@ Grep over `app/`, `components/`, `lib/`, `extensions/` and `hooks/` (`.ts`, `.ts
 
 ```
 lib/i18n/
-  t-core.ts          eager: lookup, {name} interpolation, current locale, dir. No plural code.
+  t-core.ts          eager: lookup, {name} interpolation, current locale, dir. No plural code. Client-only state: setUiLocale runs at boot, never on the Next.js server
+  dir.ts             eager: SOURCE_LOCALE and dirOf (from the likely script), the only locale code t-core imports
   format.ts          lazy: the ICU subset (plural, select, #, number, date), Intl caches
-  locale.ts          supported list, BCP 47 matching, dir per locale, native names
+  locale.ts          lazy: supported list, BCP 47 matching, native names, the pseudo-locale flag
   isolate.ts         <Bdi>, fsi() for plain text, stripBidiControls() for filenames
   intl.ts            date, relative time, number, list, collator helpers (lazy)
   registry-labels.ts actionLabel(action), actionKeywords(action): the render-boundary lookup
@@ -179,7 +180,7 @@ t("doc.moved", "Moved “{title}” to {folder}", { title, folder })            
 
 - **Plurals use CLDR categories through `Intl.PluralRules`**, never "1 vs many". Arabic has six categories (zero, one, two, few, many, other), Hebrew three (one, two, other), Persian two (one, other), Russian four, and French, Spanish and Portuguese include "many" ([CLDR plural rules](https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html)). `check.ts` reads `new Intl.PluralRules(locale).resolvedOptions().pluralCategories` and fails a catalog that leaves out a category its locale needs.
 - **Gender:** the interface never addresses or describes a person by gender, so v1 needs no gender `select`. Names are the only person references ("{name} is editing"), and translators write those in a gender-neutral form. Arabic and Hebrew reviewers confirm this works for every message that names a person; if not, a `select` on a neutral value is added later.
-- **Editor-chunk messages are simple.** `check.ts` rejects `plural` and `select` in the `core` namespace, so the editor chunk never needs `format.ts`.
+- **Editor-chunk messages are simple.** `check.ts` rejects `plural` and `select` in the `core` namespace, so the editor chunk never needs `format.ts`. It also rejects ICU apostrophe escapes (`''`, `'{`, `'}`) there, because `t-core` fills `{name}` without unescaping. A translation must sit in its own namespace's file, since a chunk loads only its namespace.
 
 ### 3.5 Shortcuts inside messages
 
@@ -212,7 +213,7 @@ t("doc.moved", "Moved “{title}” to {folder}", { title, folder })            
 - **Lazy surfaces.** Each lazy loader becomes `Promise.all([import(surface), loadNamespace(locale, ns)])` with **no waterfall**. The "/" menu, palette, colour panel, Page popover, Settings and comments loaders all follow this one helper, `lazyWithMessages(ns, importer)`.
 - **Offline.** Catalogs are bundler-imported, so they land under `/_next/static` with hashed names. The service worker caches them cache-first (AGENTS: PWA), so a language works offline after first use, and the desktop static export bundles all of them.
 - **SSR and hydration.** The server keeps rendering `lang="en" dir="ltr"` and the English skeleton (the SEO intro in the skeleton stays English, like the rest of the public SEO copy). The boot script sets `<html lang dir>` before first paint from the saved language, so a Persian interface never flashes LTR. React renders translated text only after the editor mounts (`ssr: false`), so there's no hydration mismatch. No `useState(() => load())` (AGENTS).
-- **Budget.** L1a measures `t-core.ts`, `registry-labels.ts` and the `lang`/`dir` handling against the editor chunk, and the PR records the bytes. Target **≤ 400 B gz** (LQ2). The ICU formatter, `Intl` helpers and catalogs never enter the editor chunk; a unit test checks the import graph from `document-editor.tsx`.
+- **Budget.** L1a measures `t-core.ts`, `registry-labels.ts` and the `lang`/`dir` handling against the editor chunk, and the PR records the bytes. Target **≤ 400 B gz** (LQ2). The ICU formatter, `Intl` helpers, `locale.ts` and catalogs never enter the editor chunk; a unit test checks the import graph from `document-editor.tsx` and pins `t-core` and `registry-labels` to `dir.ts` alone. L1a adds each new eager entry point it wires to that test. `setUiLocale` runs client-side at boot only (module state would leak across server requests).
 
 #### 3.7.1 Every editor-chunk byte this document adds
 
@@ -522,7 +523,7 @@ So RTL text falls back to whatever the OS has, which differs across Windows, mac
 | Test | Checks |
 |---|---|
 | `i18n/format.test.ts` | The ICU subset; plural categories for `ar` (6), `he` (3), `fa` (2), `ru` (4) and `fr` (3) against `Intl.PluralRules`; `=0` precedence; `#` formatting with locale digits |
-| `i18n/catalog-check.test.ts` | Runs `check.ts` on the real catalogs: syntax, placeholders, categories, banned literals, reserved combos, stale hashes, no `plural`/`select` in `core` |
+| `i18n/catalog-check.test.ts` | Runs `check.ts` on the real catalogs: syntax, placeholders, categories, banned literals, reserved combos, stale hashes, no `plural`/`select` or apostrophe escapes in `core`, each key in its own namespace file |
 | `i18n/editor-chunk-imports.test.ts` | Nothing reachable from `document-editor.tsx` imports `format.ts`, `intl.ts` or any catalog |
 | `i18n/locale-match.test.ts` | System resolution (`fa-AF` → `fa`, `zh-TW` without a catalog → English), `dir` per locale |
 | `i18n/isolate.test.ts` | FSI/PDI wrapping, `stripBidiControls` (including an RLO filename attack string), ZWNJ and ZWJ kept |

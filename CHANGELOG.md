@@ -19,24 +19,32 @@ unchanged (0 B).
 #### Added
 
 - **i18n:** `lib/i18n/` with the eager `t()` (`t-core.ts`: lookup, `{name}`,
-  interface locale and `dir`), the lazy ICU MessageFormat 1 subset
-  (`format.ts`: plural with CLDR categories, select, number, date, time,
-  rich tags; `selectordinal` and nested plurals refused), BCP 47 matching
-  and direction (`locale.ts`), bidi helpers (`isolate.ts`, including
-  `stripBidiControls` for filenames) and the registry render boundary
-  (`registry-labels.ts`). English stays in code and needs no catalog.
+  interface locale and `dir`; client-side state, set once at boot), the
+  eager direction helper (`dir.ts`: `dirOf` from the locale's likely
+  script, so `ku-Arab` is right to left), the lazy ICU MessageFormat 1
+  subset (`format.ts`: plural with CLDR categories, select, number, date,
+  time, rich tags; `selectordinal` and nested plurals refused; its `t()`
+  shows English when a translation fails to parse), BCP 47 matching and
+  native names (`locale.ts`, lazy only), bidi helpers (`isolate.ts`,
+  including `stripBidiControls` for filenames) and the registry render
+  boundary (`registry-labels.ts`; keywords split on `,` `،` `、` `，`).
+  English stays in code and needs no catalog.
 - **i18n:** `bun run i18n:extract` writes `locales/en/<ns>.json` from `t()`
   calls and the action registry's labels and keywords (88 messages today,
-  in `actions.json`); `bun run i18n:check` checks freshness, ICU syntax,
-  placeholders, plural categories, banned literals (⌘ ⌥ ⇧ ⌃, `Ctrl+`,
-  straight double quotes), `core` simplicity and reserved shortcuts
-  (Shift+Space); `bun run i18n:pseudo` builds `en-XA` and `ar-XB` into the
-  git-ignored `locales/pseudo/`.
+  in `actions.json`), skips `t(` in comments, and fails on imports of
+  `t-core` or `format` that would hide calls (relative paths, `t as x`,
+  `import *`, re-exports, dynamic imports); `bun run i18n:check` checks
+  freshness, ICU syntax, placeholders, plural categories, banned literals
+  (⌘ ⌥ ⇧ ⌃, `Ctrl+`, straight double quotes), `core` simplicity (no ICU
+  apostrophe escapes either), translations filed under their own
+  namespace and reserved shortcuts (Shift+Space); `bun run i18n:pseudo`
+  builds `en-XA` and `ar-XB` into the git-ignored `locales/pseudo/`.
 - **i18n:** `tests/unit/i18n/catalog-check.test.ts` runs the check in
   `bun run test`, so **changing an action's label or keywords in
   `lib/editor-actions` now needs `bun run i18n:extract`** in the same
   commit. `editor-chunk-imports.test.ts` keeps the formatter, `Intl`
-  helpers and catalogs out of the editor chunk.
+  helpers, `locale.ts` and catalogs out of the editor chunk, and pins
+  `t-core` and `registry-labels` to `dir.ts` alone.
 - **i18n:** `NEXT_PUBLIC_PSEUDO_LOCALES=1` lists the pseudo-locales; it is
   off by default, never set in production, and nothing reads it yet.
 - **Docs:** `locales/glossary.md` (fixed terms per language, seeded from UX
@@ -45,6 +53,7 @@ unchanged (0 B).
   §5.4 RTL letter spacing, §5.13 script fallback faces, §5.15 `firefox`;
   details E9 Arabic-script and Hebrew folding and §14 `ar-XB` gallery;
   comments §11.2 sides follow the interface; toolbar contract A19.
+
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
 `use-yjs-document` now opens documents through the `DocSession` its

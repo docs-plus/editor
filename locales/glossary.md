@@ -27,6 +27,14 @@ yet"; a draft must not invent one.
   keyboards print them. A reviewer may ask for an exception per language.
 - Digits and dates come from `Intl` for the locale. Never write digits by
   hand in a message.
+- `core.*` messages (the editor's own chrome) are plain text with `{name}`
+  values only: no ICU apostrophe escapes (`''`, `'{`, `'}`). Write a
+  typographic apostrophe (’) or a single plain one (“l’élément”, “Don't”).
+- Search keywords (`action.*.keywords`) are separated by commas; the
+  language's own comma (، 、 ，) works too.
+- Put each translation in the file of its key's namespace
+  (`library.trash.empty` goes in `library.json`); only that file is loaded
+  where the message shows.
 
 ## Never translated
 
