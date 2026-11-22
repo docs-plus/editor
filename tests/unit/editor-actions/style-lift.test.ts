@@ -77,4 +77,16 @@ describe("style lift injection (spec §7.2, A21)", () => {
     expect(blocks.setTextStyle(editor, "heading-2")).toBe(true);
     expect(types(editor)).toEqual(["heading", "heading"]);
   });
+
+  it("returns false, never throws, when a step fails", async () => {
+    const lift = await import("@/lib/editor-actions/style-lift");
+    editor = createTestEditor({
+      content: doc(h1("Title"), bulletList(listItem(p("One")))).toJSON(),
+    });
+    editor.commands.setTextSelection(posInside(editor, "One"));
+    editor.view.dispatch = () => {
+      throw new Error("step failed");
+    };
+    expect(lift.liftStyle(editor, "heading-2")).toBe(false);
+  });
 });

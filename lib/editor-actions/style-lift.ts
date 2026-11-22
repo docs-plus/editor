@@ -152,18 +152,24 @@ export function liftStyle(
   if (wrappedBlocks(tr).length === 0) return undefined;
   const level = value === "paragraph" ? 0 : Number(value.slice(8));
   const type = schema.nodes[level ? "heading" : "paragraph"];
-  if (!type || !liftWrapped(tr)) return false;
-  tr.setBlockType(
-    tr.selection.from,
-    tr.selection.to,
-    type,
-    level ? { level } : undefined,
-  );
-  editor.view.dispatch(tr.scrollIntoView());
-  // A caret moves to the end of its block; a range stays selected.
-  const next = editor.chain().focus();
-  (selection.empty ? next.selectTextblockEnd() : next).run();
-  return true;
+  if (!type) return false;
+  // A step that throws refuses the pick instead of reaching the UI.
+  try {
+    if (!liftWrapped(tr)) return false;
+    tr.setBlockType(
+      tr.selection.from,
+      tr.selection.to,
+      type,
+      level ? { level } : undefined,
+    );
+    editor.view.dispatch(tr.scrollIntoView());
+    // A caret moves to the end of its block; a range stays selected.
+    const next = editor.chain().focus();
+    (selection.empty ? next.selectTextblockEnd() : next).run();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 setStyleLift(liftStyle);
