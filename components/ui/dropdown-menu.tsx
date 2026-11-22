@@ -270,6 +270,8 @@ function DropdownMenuShortcut({
   return (
     <span
       data-slot="dropdown-menu-shortcut"
+      // Key glyphs read left to right in every script (rtl:184).
+      dir="ltr"
       className={cn(
         "ms-auto text-xs tracking-widest text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground",
         className,
