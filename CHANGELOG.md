@@ -45,6 +45,10 @@ desktop and library roots will provide `local-session`.
   the batcher's simulated-kill property test no longer depends on machine
   load (8 s at load average 50 before, 0.25 s now) and no longer flakes
   against the 5 s timeout.
+- **Tests:** the SIGKILL batcher test kills its child once at least 10
+  tokens are past the 1 s window and it is still typing, instead of at a
+  fixed time, so a slow CI runner makes the run longer rather than failing
+  its "enough typed" check.
 - **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
   Reload button saves through `DocSession.flush()` (on the web, the same
   device-copy flush as before) before reloading.
