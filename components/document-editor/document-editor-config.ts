@@ -231,6 +231,11 @@ export function buildDocumentEditorExtensions({
         rel: "noopener noreferrer nofollow ugc",
         class: null,
       },
+      // With no link host (the web sandbox), a `tinydocy:` link is never
+      // written or opened: the default would hand it to `window.open` and
+      // the OS (search-linking §4.4). Whitespace goes as browsers drop it;
+      // a host's own `isAllowedUri` replaces this.
+      isAllowedUri: (uri) => !/^\W*tinydocy:/i.test(uri.replace(/\s/g, "")),
       ...linkHost,
     }),
     InlineCode,

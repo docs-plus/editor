@@ -469,16 +469,8 @@ function DocumentEditorContent({
   );
 }
 
-export function DocumentEditor({
-  documentId,
-  onTitleChange,
-  initialContent,
-  playgroundRegenerateTrigger,
-  onPlaygroundRegenerate,
-  readOnly,
-  linkHost,
-}: DocumentEditorProps = {}) {
-  const docId = documentId ?? "default";
+export function DocumentEditor(props: DocumentEditorProps = {}) {
+  const docId = props.documentId ?? "default";
   const { ydoc, awareness, provider, synced, serverSynced, rejectedReason } =
     useYjsDocument(docId);
 
@@ -495,17 +487,14 @@ export function DocumentEditor({
   }
 
   return (
+    // Every prop passes through as given (`linkHost` and later ones need
+    // no plumbing here).
     <DocumentEditorContent
+      {...props}
       ydoc={ydoc}
       awareness={awareness}
       provider={provider}
       documentId={docId}
-      onTitleChange={onTitleChange}
-      initialContent={initialContent}
-      playgroundRegenerateTrigger={playgroundRegenerateTrigger}
-      onPlaygroundRegenerate={onPlaygroundRegenerate}
-      readOnly={readOnly}
-      linkHost={linkHost}
       rejectedReason={rejectedReason}
       serverSynced={serverSynced}
     />

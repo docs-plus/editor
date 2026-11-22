@@ -31,15 +31,24 @@ function hyperlinkOptions(linkHost?: LinkHost) {
 }
 
 describe("document editor linkHost", () => {
-  it("leaves the Hyperlink options alone without a host", () => {
+  it("without a host, refuses only document links", () => {
     const options = hyperlinkOptions();
     expect(options.navigate).toBeUndefined();
     expect(options.linkIcon).toBeUndefined();
-    expect(options.isAllowedUri).toBeUndefined();
     expect(options.protocols).toEqual([]);
-    expect(Object.keys(options).sort()).toEqual(
-      Object.keys(hyperlinkOptions(undefined)).sort(),
-    );
+    const allowed = options.isAllowedUri as (uri: string) => boolean;
+    for (const uri of [
+      "tinydocy:doc/0123456789abcdef0123456789abcdef",
+      "TINYDOCY:here#x",
+      " \ttinydocy:x",
+      "\u00a0tinydocy:x",
+      "\u0001tinydocy:x",
+    ]) {
+      expect(allowed(uri)).toBe(false);
+    }
+    for (const uri of ["https://example.com", "mailto:a@b.c", "#top"]) {
+      expect(allowed(uri)).toBe(true);
+    }
   });
 
   it("passes the host's link options through", () => {
