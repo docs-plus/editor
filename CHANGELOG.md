@@ -15,12 +15,13 @@ The data model, anchoring and re-anchoring for comments (spec
 `2026-11-16-comments-design.md` §4–§6, §8–§10), with no visible UI: the
 web sandbox and the Playground never take comments, and
 `canComment()` is off unless `NEXT_PUBLIC_COMMENTS=on`. The editor chunk
-group grows 140 B gz (P4.9's 150 B line in the D23 ledger, v1 contract
-A19); the lazy comments chunk is about 5.3 KB gz. `mountComments`, which
-nothing imports yet, is not in that figure: it measured +617 B gz with a
-throwaway import, and P4.10 needs a ledger decision for it. No schema or
-protocol change; no Deploy note. `NEXT_PUBLIC_COMMENTS` (default off) and
-the browser's `tinydocy-author` key are in the README's build-time table.
+group grows about 140 B gz (P4.9's 150 B line in the D23 ledger, v1
+contract A19); the lazy comments chunk is about 5.3 KB gz and its host
+chunk about 1.2 KB. `mountComments`, which nothing imports yet, is not in
+that figure: it measured +414 B gz with a throwaway import, and P4.10
+needs a ledger decision for it. No schema or protocol change; no Deploy
+note. `NEXT_PUBLIC_COMMENTS` (default off) and the browser's
+`tinydocy-author` device secret are in the README's build-time table.
 
 #### Added
 
@@ -39,6 +40,10 @@ the browser's `tinydocy-author` key are in the README's build-time table.
   collaborator's update, and one pass is one Yjs update.
   `mountComments` loads it for a document that takes comments; no page
   mounts it yet.
+- **Comments:** the author id is per document (SEC-002): HMAC-SHA-256 of
+  the document's lineage under a device secret that never leaves the
+  browser. `listThreads(ydoc)` lists a bare Y.Doc's threads, Detached
+  ones and orphaned keys for repair, without writing.
 - **Actions:** `comment.add`, which the bubble, palette and menus will
   call. It is offered only in an editor marked with `setCommentGate`, so
   it never appears on the web.
@@ -48,8 +53,8 @@ the browser's `tinydocy-author` key are in the README's build-time table.
   three-client convergence (headless, and through live editors and their
   controllers with undo, redo and held-back updates), client-server
   agreement (including offline catch-up and `comments_full` recovery)
-  and view-only silence. The `perf` Playwright typing case moves to
-  P4.10.
+  and view-only silence. The `perf` Playwright typing case with 300
+  threads is written but skipped unless `PERF_COMMENTS=1`.
 
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
