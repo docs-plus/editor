@@ -48,6 +48,29 @@ async function chartImage(page: Page): Promise<string> {
   });
 }
 
+/**
+ * Waits for the image toolbar's lazy chunk: it loads when the first image
+ * renders, and the toolbar shows the stock actions until then.
+ */
+async function imageActionsLoaded(page: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const storage = window.__tiptap_editor?.storage as unknown as Record<
+          string,
+          {
+            mediaActions?: (d: { id: string }[], c: object) => { id: string }[];
+          }
+        >;
+        const resolve = storage?.HyperMultimediaKit?.mediaActions;
+        return !!resolve?.([{ id: "replace" }], { nodeType: "image" }).some(
+          (action) => action.id === "alt-text",
+        );
+      }),
+    )
+    .toBe(true);
+}
+
 async function openWithImage(page: Page): Promise<void> {
   const editor = new EditorPage(page);
   await editor.goto();
@@ -68,6 +91,7 @@ async function openWithImage(page: Page): Promise<void> {
       { type: "image", attrs: { src, alt: "", width: 480, height: 270 } },
     ],
   });
+  await imageActionsLoaded(page);
 }
 
 async function openAltText(page: Page) {
