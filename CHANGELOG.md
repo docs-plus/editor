@@ -40,8 +40,11 @@ desktop and library roots will provide `local-session`.
 - **Build:** the D23 editor-chunk ledger gains P2.1c's measured 275 B line
   (K14's P2.1 allowance), and `EDITOR_CHUNK_LEDGER_BYTES` rises by exactly
   that, from 1,580 B to 1,855 B, so the fence is `main` + 1,855 B.
-- **Tests:** the batcher's simulated-kill property test has a 30 s timeout;
-  it ran past the 5 s default on a loaded machine.
+- **Tests:** `FakeClock.advance` (`tests/helpers/platform-fakes.ts`) drains
+  promise callbacks instead of waiting on real `setTimeout(0)` macrotasks, so
+  the batcher's simulated-kill property test no longer depends on machine
+  load (8 s at load average 50 before, 0.25 s now) and no longer flakes
+  against the 5 s timeout.
 - **Editor:** the read-only notice compares `ReadOnlyReason` strings, and its
   Reload button saves through `DocSession.flush()` (on the web, the same
   device-copy flush as before) before reloading.
