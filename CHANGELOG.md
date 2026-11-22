@@ -46,11 +46,12 @@ sheet leads with Style, and touch tablets name the row's unclear stand-ins.
   pressed. Colours follow. Both sheets end in a 16px fade while they scroll,
   above the home indicator.
 
-Measured against `main` at 1548d5e, with the "/" menu's P2 work merged in:
-the editor chunk group gets 25 B smaller (393,795 B gz) and its CSS is
-unchanged. The phone bar chunk grows 978 B gz (18,175 B), and the sheet body
-is a chunk of its own, 3,926 B gz. The app's CSS grows 374 B gz (16,367 B),
-157 B of it for the tablet words.
+Measured against `main` at 84a9458, with the "/" menu's P2 work merged in:
+the editor chunk group gets 23 B smaller (393,995 B gz against 394,018 B).
+The lazy chunks, measured against `main` at 1548d5e: the phone bar chunk
+grows 978 B gz (18,175 B), and the sheet body is a chunk of its own, 3,926 B
+gz. The app's CSS grows 374 B gz (16,367 B), 157 B of it for the tablet
+words.
 
 ### Quick insert P2: Suggested, the "/" hint and footer, and the `+` on empty lines
 
