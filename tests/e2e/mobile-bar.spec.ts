@@ -1642,7 +1642,7 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
       };
     });
 
-  test("Aa sheet Style: every label starts at one x, Text with its icon", async ({
+  test("Aa sheet Style: every label but Text's starts at one x", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1667,17 +1667,18 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
         const cell = button.getBoundingClientRect().left;
         labels[span.textContent ?? ""] = Math.round(left - cell);
       }
-      const text = [...el.querySelectorAll("button")].find(
-        (button) => button.textContent === "Text",
-      );
-      return { labels, textIcon: Boolean(text?.querySelector("svg")) };
+      return { labels };
     });
-    expect(geometry.textIcon).toBe(true);
-    // Each label at the same offset in its cell (icon slot and gap alike).
+    // Text has no icon in the registry, as on `main` (an icon there grows
+    // the editor chunk), so its label starts at the cell's padding; every
+    // other label sits at the same offset in its cell, icon slot and gap
+    // alike, More headings included.
+    const { Text: _text, ...withIcons } = geometry.labels;
     expect(
-      new Set(Object.values(geometry.labels)).size,
+      new Set(Object.values(withIcons)).size,
       JSON.stringify(geometry.labels),
     ).toBe(1);
+    expect(Object.keys(withIcons)).toContain("More headings");
   });
 
   test("RTL at 390: Table's size note stays with its label, inside its cell", async ({
