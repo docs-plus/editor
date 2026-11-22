@@ -119,7 +119,7 @@ export function DesktopRoot() {
   }
   if (!opened) return null;
   return (
-    <DocSessionProvider session={opened.session}>
+    <DocSessionProvider value={opened.session}>
       <DocumentEditor documentId={opened.docId} />
     </DocSessionProvider>
   );
