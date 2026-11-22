@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  DEEP_LINK_PROBES,
   DEEP_LINK_WINDOW_MS,
   DEEP_LINK_WINDOWS,
   type DocExists,
@@ -19,6 +20,7 @@ function setup(exists: DocExists | ((id: string) => DocExists) = "yes") {
   const discarded: number[] = [];
   const focused: number[] = [];
   const logs: string[] = [];
+  const probes: string[] = [];
   let nextId = 10;
   const deps = {
     registry,
@@ -34,8 +36,15 @@ function setup(exists: DocExists | ((id: string) => DocExists) = "yes") {
       ours.delete(id);
       discarded.push(id);
     },
-    docExists: async (id: string) =>
-      typeof exists === "function" ? exists(id) : exists,
+    docExists: async (id: string) => {
+      probes.push(id);
+      return typeof exists === "function" ? exists(id) : exists;
+    },
+    probeLimiter: new FixedWindowLimiter(
+      DEEP_LINK_PROBES,
+      DEEP_LINK_WINDOW_MS,
+      () => clock.t,
+    ),
     limiter: new FixedWindowLimiter(
       DEEP_LINK_WINDOWS,
       DEEP_LINK_WINDOW_MS,
@@ -43,10 +52,32 @@ function setup(exists: DocExists | ((id: string) => DocExists) = "yes") {
     ),
     log: (event: string) => logs.push(event),
   };
-  return { deps, registry, ours, created, discarded, focused, logs, clock };
+  return {
+    deps,
+    registry,
+    ours,
+    created,
+    discarded,
+    focused,
+    logs,
+    clock,
+    probes,
+  };
 }
 
 describe("openDocFromLink", () => {
+  test("throttles the existence checks themselves (N4)", async () => {
+    const { deps, probes, logs } = setup("no");
+    const ids = Array.from({ length: DEEP_LINK_PROBES + 5 }, () =>
+      crypto.randomUUID(),
+    );
+    const outcomes = [];
+    for (const id of ids) outcomes.push(await openDocFromLink(id, deps));
+    expect(probes).toHaveLength(DEEP_LINK_PROBES);
+    expect(outcomes.filter((o) => o === "throttled")).toHaveLength(5);
+    expect(logs.filter((l) => l === "deep_link_throttled")).toHaveLength(1);
+  });
+
   test("opens a window for an existing document and claims it", async () => {
     const { deps, created, registry } = setup("yes");
     expect(await openDocFromLink(DOC, deps)).toBe("opened");

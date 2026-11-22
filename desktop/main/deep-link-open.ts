@@ -3,8 +3,10 @@
  * §6.2). Electron-free; `index.ts` passes the window and storage functions.
  *
  * 1. A window already holds it: focus that window.
- * 2. Ask storage whether the document exists. Unknown, or the library
- *    can't answer: open nothing (a link can't make a window for nothing).
+ * 2. Throttle the existence checks themselves (`DEEP_LINK_PROBES` per
+ *    `DEEP_LINK_WINDOW_MS`), so a flood of links to unknown ids can't keep
+ *    the storage worker busy (N4). Then ask storage, read-only, whether the
+ *    document exists. Unknown, or the library can't answer: open nothing.
  * 3. Throttle: at most `DEEP_LINK_WINDOWS` new windows per
  *    `DEEP_LINK_WINDOW_MS` from links, so a flood of links can't open
  *    windows without end.
@@ -16,6 +18,8 @@ import type { FixedWindowLimiter } from "./rate-limit";
 import type { OpenDocRegistry } from "./registry";
 
 export const DEEP_LINK_WINDOWS = 5;
+/** Existence checks allowed per window of time (N4). */
+export const DEEP_LINK_PROBES = 20;
 export const DEEP_LINK_WINDOW_MS = 10_000;
 
 export type DocExists = "yes" | "no" | "unknown";
@@ -34,6 +38,9 @@ export type DeepLinkDeps = {
   create: (docId: string) => { id: number };
   discard: (windowId: number) => void;
   docExists: (docId: string) => Promise<DocExists>;
+  /** Before the storage check (N4). */
+  probeLimiter: FixedWindowLimiter;
+  /** Before a new window. */
   limiter: FixedWindowLimiter;
   log: (event: string, fields?: Record<string, number>) => void;
 };
@@ -52,6 +59,11 @@ export async function openDocFromLink(
 ): Promise<DeepLinkOutcome> {
   if (focusHolder(docId, deps)) return "focused";
 
+  const probe = deps.probeLimiter.take("deep_link_probe");
+  if (probe !== "ok") {
+    if (probe === "first_drop") deps.log("deep_link_throttled");
+    return "throttled";
+  }
   const exists = await deps.docExists(docId);
   if (exists === "no") {
     deps.log("deep_link_unknown_doc");
