@@ -255,7 +255,8 @@ it again after typing, before requiring all 220 keystroke samples.
 |----------|---------|-------------|
 | `PERF_HEADINGS` | `10,50` | Comma-separated heading counts to test |
 | `PERF_SHAPE` | `flat` | Document hierarchy: `flat` (all H2), `deep` (cycling H2–H6), `mixed` (random H2–H6) |
-| `PERF_ROUNDS` | `7` | A/B rounds per heading count (toolbar off vs on, alternating order); the median p95 of each arm is compared |
+| `PERF_ROUNDS` | `7` | A/B rounds per heading count (toolbar off vs on, alternating order). The verdict is the median of the per-round on/off p95 ratios: pairing within a round cancels the runner's drift across rounds |
+| `PERF_EXTRA_ROUNDS` | `PERF_ROUNDS` | Rounds added when the first `PERF_ROUNDS` exceed the budget; the verdict then uses all rounds, so a noisy draw gets a second look and a real regression still fails. `0` disables |
 | `PERF_CPU_THROTTLE` | `4` | CDP `Emulation.setCPUThrottlingRate` applied before typing |
 | `PERF_MAX_REGRESSION` | `0.10` | Allowed toolbar-on p95 overhead versus toolbar off in the same run |
 | `TOOLBAR_PERF_CPU_THROTTLE` | `1` | CDP CPU throttle for both arms of the arrow p95 in `toolbar-perf.spec.ts` (local reproduction of a slow runner; informational, the ceilings are absolute) |

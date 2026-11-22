@@ -9,6 +9,23 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Typing-latency check judges paired rounds
+
+`performance.spec.ts` failed on clean runs about once in twenty: across 63 CI
+results the toolbar-on/off ratio of the two arms' median p95s had an sd of
+0.051 around 1.02, so the 10% budget sat about 2 sd out. It failed before
+P2.2 as well (1.26 and 1.20 on branches without it); P2.2 did not shift it
+(median ratio 1.00 with it). Test only; no Deploy note.
+
+#### Changed
+
+- **Tests:** the verdict is the median of the per-round on/off ratios (each
+  round types both arms back to back, which cancels the runner's drift: sd
+  0.037 on the same 63 runs). The 10% budget is unchanged.
+- **Tests:** a run over budget after `PERF_ROUNDS` (7) runs
+  `PERF_EXTRA_ROUNDS` more (default 7, `0` disables) and is judged on all of
+  them, so a noisy draw gets a second look and a real regression still fails.
+
 ### Desktop P2.6 decision 5: daily copies never hold up a save or a quit
 
 A daily `VACUUM INTO` on the storage worker blocked every save behind it, for
