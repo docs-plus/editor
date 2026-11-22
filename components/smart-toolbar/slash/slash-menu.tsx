@@ -21,9 +21,13 @@ import { editorActions } from "@/lib/editor-actions";
 import { computeContext } from "@/lib/editor-context/snapshot";
 import { SCROLL_CLEARANCE } from "@/lib/editor-scroll-clearance";
 import { readChoice, TABLE_SIZE_CHOICE } from "@/lib/remembered-choice";
-import { isPlusSlash } from "@/lib/slash-menu/plus-origin";
+import { isPlusSlash, removePlusSlash } from "@/lib/slash-menu/plus-origin";
 import { runSlashPick } from "@/lib/slash-menu/run-slash-pick";
-import { isNewItem, localDay } from "@/lib/slash-menu/slash-badges";
+import {
+  HAS_NEW_BADGES,
+  isNewItem,
+  localDay,
+} from "@/lib/slash-menu/slash-badges";
 import {
   buildSlashItems,
   hintNeedsSpace,
@@ -80,33 +84,39 @@ const isCoarse = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
 
-/** The paragraph holding `pos` (the menu opens only in one). */
-function blockAt(editor: Editor, pos: number): HTMLElement | null {
+/**
+ * The computed style of the paragraph holding `pos` (the menu opens only
+ * in one): its font for the ghost, and the content's direction.
+ */
+function blockStyle(editor: Editor, pos: number): CSSStyleDeclaration | null {
   const { node } = editor.view.domAtPos(pos);
   const element = node instanceof HTMLElement ? node : node.parentElement;
-  return element?.closest("p") ?? element;
+  const block = element?.closest("p") ?? element;
+  return block ? getComputedStyle(block) : null;
 }
-
-/** The block's own direction (the content's, not the interface's). */
-const isRtl = (block: HTMLElement | null) =>
-  block ? getComputedStyle(block).direction === "rtl" : false;
 
 /**
  * Esc and Close: the menu closes and "/query" stays as typed text, except
- * a bare "/" the `+` typed, which goes as it came, outside the history.
+ * a bare "/" the `+` typed, which leaves the text and the history.
  */
 function dismiss(editor: Editor): void {
+  if (isPlusSlash(editor)) removePlusSlash(editor);
+  else closeSlash(editor);
+}
+
+/**
+ * The ghost shows with an empty query, nothing after the caret in its
+ * block and no IME composition (spec §8.5).
+ */
+function ghostFits(editor: Editor): boolean {
   const state = getSlashState(editor);
-  if (state.open && !state.query && isPlusSlash(editor)) {
-    // Without its "/" the trigger closes.
-    editor.view.dispatch(
-      editor.state.tr
-        .delete(state.from, state.from + 1)
-        .setMeta("addToHistory", false),
-    );
-    return;
-  }
-  closeSlash(editor);
+  const { $head } = editor.state.selection;
+  return (
+    state.open &&
+    !state.query &&
+    !editor.view.composing &&
+    $head.parentOffset === $head.parent.content.size
+  );
 }
 
 interface Placement {
@@ -265,7 +275,7 @@ function optionMessage(
   isNew: boolean,
 ) {
   const note = item.note ? `, ${item.note.replace(" × ", " by ")}` : "";
-  const badge = isNew ? ", new" : "";
+  const badge = HAS_NEW_BADGES && isNew ? ", new" : "";
   return `${item.label}${badge}${note}, ${index + 1} of ${count}`;
 }
 
@@ -273,21 +283,17 @@ function optionMessage(
  * The ghost hint, on the caret's line just after the "/" (before it, in
  * an RTL paragraph), in the paragraph's own font. Viewport coordinates.
  */
-function placeGhost(editor: Editor, from: number, ghost: HTMLElement) {
+function placeGhost(
+  editor: Editor,
+  block: CSSStyleDeclaration | null,
+  ghost: HTMLElement,
+) {
   const at = editor.view.coordsAtPos(editor.state.selection.head);
-  const block = blockAt(editor, from);
   const style = ghost.style;
-  if (block) {
-    const font = getComputedStyle(block);
-    style.fontFamily = font.fontFamily;
-    style.fontSize = font.fontSize;
-    style.fontWeight = font.fontWeight;
-    style.fontStyle = font.fontStyle;
-    style.letterSpacing = font.letterSpacing;
-  }
+  if (block) style.font = block.font;
   style.top = `${at.top}px`;
   style.lineHeight = style.height = `${at.bottom - at.top}px`;
-  const rtl = isRtl(block);
+  const rtl = block?.direction === "rtl";
   style.left = rtl ? "" : `${at.left}px`;
   style.right = rtl
     ? `${document.documentElement.clientWidth - at.left}px`
@@ -317,18 +323,18 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       readChoice(TABLE_SIZE_CHOICE).last,
       recent,
     );
-    const today = localDay();
     return {
       items: built,
-      /** Keys of the rows that show "New". */
+      /** Keys of the rows that show "New" (none while none are declared). */
       fresh: new Set(
-        built
-          .filter((item) => isNewItem(item, today, recent))
-          .map((item) => item.key),
+        HAS_NEW_BADGES
+          ? built
+              .filter((item) => isNewItem(item, localDay(), recent))
+              .map((item) => item.key)
+          : [],
       ),
     };
   });
-  const [composing, setComposing] = useState(() => editor.view.composing);
   const [coarse] = useState(isCoarse);
   const matches = useMemo(
     () => matchSlashItems(items, state.query),
@@ -343,13 +349,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
   const active = matches[activeIndex] ?? null;
   const activeOption = active ? optionId(listbox, active) : null;
   const empty = matches.length ? "" : slashEmptyNote(items, state.query);
-  // The ghost: an empty query, nothing after the caret in its block, and
-  // no IME composition (spec §8.5).
-  const { $head } = editor.state.selection;
-  const ghostShown =
-    !state.query &&
-    !composing &&
-    $head.parentOffset === $head.parent.content.size;
+  const [ghostShown, setGhostShown] = useState(() => ghostFits(editor));
   const ghost = useRef<HTMLSpanElement>(null);
 
   // The best match leads each new query.
@@ -403,15 +403,20 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
     };
   }, [editor, listbox]);
 
+  // Re-checked on every change while open (a collaborator typing after
+  // the caret hides it) and on IME composition, which starts with no
+  // transaction. A boolean, so an unchanged answer renders nothing.
   useEffect(() => {
     const dom = editor.view.dom;
-    const start = () => setComposing(true);
-    const end = () => setComposing(false);
-    dom.addEventListener("compositionstart", start);
-    dom.addEventListener("compositionend", end);
+    const check = () => setGhostShown(ghostFits(editor));
+    check();
+    editor.on("transaction", check);
+    dom.addEventListener("compositionstart", check);
+    dom.addEventListener("compositionend", check);
     return () => {
-      dom.removeEventListener("compositionstart", start);
-      dom.removeEventListener("compositionend", end);
+      editor.off("transaction", check);
+      dom.removeEventListener("compositionstart", check);
+      dom.removeEventListener("compositionend", check);
     };
   }, [editor]);
 
@@ -476,12 +481,14 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       frame = 0;
       const from = slash();
       if (from === null || !list.current) return;
+      // Once per frame, for the list's side and the ghost's font.
+      const block = blockStyle(editor, from);
       const next = place(
         editor,
         from,
         list.current,
         side.current,
-        isRtl(blockAt(editor, from)),
+        block?.direction === "rtl",
       );
       if (!next && follow) {
         editor.view.dispatch(editor.state.tr.scrollIntoView());
@@ -492,7 +499,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
       anchor = caretInDocument(from);
       if (popup.current) Object.assign(popup.current.style, styleOf(next));
       if (ghost.current) {
-        placeGhost(editor, from, ghost.current);
+        placeGhost(editor, block, ghost.current);
         ghost.current.style.visibility = next ? "visible" : "hidden";
       }
       setPlacement(next);
@@ -638,7 +645,9 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                     role="option"
                     aria-selected={selected}
                     aria-label={
-                      fresh.has(item.key) ? `${item.label}, new` : undefined
+                      HAS_NEW_BADGES && fresh.has(item.key)
+                        ? `${item.label}, new`
+                        : undefined
                     }
                     data-key={item.key}
                     data-selected={selected ? "true" : undefined}
@@ -662,7 +671,7 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                       <span aria-hidden="true" className="size-4 shrink-0" />
                     )}
                     <span className="truncate">{item.label}</span>
-                    {fresh.has(item.key) ? (
+                    {HAS_NEW_BADGES && fresh.has(item.key) ? (
                       <span
                         aria-hidden="true"
                         data-slash-new=""
@@ -680,9 +689,11 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
                       </span>
                     ) : null}
                     {item.hint ? (
-                      // Typed syntax, as a key cap (sans notes stay plain).
+                      // Typed syntax, as a key cap (sans notes stay plain);
+                      // left to right, so "1." never reads ".1" (spec §8.5).
                       <span
                         aria-hidden="true"
+                        dir="ltr"
                         className={cn(
                           "shrink-0 rounded-sm border px-1 font-mono text-xs leading-4 text-muted-foreground in-data-[selected=true]:text-accent-foreground forced-colors:in-data-[selected=true]:text-[HighlightText]",
                           item.note ? "ms-2" : "ms-auto",
@@ -702,7 +713,8 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
           className="flex shrink-0 items-center gap-2 border-t px-2 py-1 text-xs text-muted-foreground"
         >
           {coarse ? null : (
-            <span data-slash-tip="" className="min-w-0 truncate">
+            // English with typed keys: kept left to right in an RTL UI.
+            <span data-slash-tip="" dir="ltr" className="min-w-0 truncate">
               {tip}
             </span>
           )}
@@ -731,4 +743,4 @@ export function SlashMenu({ editor, state, announce }: SlashMenuProps) {
 }
 
 /** For the `+` on an empty line (bubble chunk), through a dynamic import. */
-export { markPlusSlash } from "@/lib/slash-menu/plus-origin";
+export { typePlusSlash } from "@/lib/slash-menu/plus-origin";

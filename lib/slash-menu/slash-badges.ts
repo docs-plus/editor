@@ -14,6 +14,17 @@ export const NEW_UNTIL: Readonly<Record<string, string>> = {};
 /** At most this many badges at a time. */
 export const MAX_NEW_BADGES = 2;
 
+/**
+ * Set to true together with the first `NEW_UNTIL` entry (a unit test
+ * keeps the two in step). A literal, so while it is false a production
+ * build drops every badge path from the slash chunk; development builds
+ * keep them for the e2e override.
+ */
+export const BADGES_DECLARED = false;
+
+export const HAS_NEW_BADGES =
+  BADGES_DECLARED || process.env.NODE_ENV !== "production";
+
 type BadgeWindow = { __SLASH_NEW_UNTIL?: Readonly<Record<string, string>> };
 
 /** The table, or the e2e override outside production builds. */
@@ -22,11 +33,9 @@ function declared(): Readonly<Record<string, string>> {
   return (globalThis as BadgeWindow).__SLASH_NEW_UNTIL ?? NEW_UNTIL;
 }
 
-/** The local date as "YYYY-MM-DD", the form `NEW_UNTIL` uses. */
-export function localDay(now = new Date()): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
+/** The local date as "YYYY-MM-DD" (Swedish order), as `NEW_UNTIL` has it. */
+export const localDay = (now = new Date()): string =>
+  now.toLocaleDateString("sv-SE");
 
 /**
  * Whether `item` shows "New" on `today`: declared until `today` or later,

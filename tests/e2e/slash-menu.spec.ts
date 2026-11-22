@@ -557,6 +557,50 @@ test.describe("slash menu", () => {
     await expect(footerTip(page)).toHaveText("Type to filter");
   });
 
+  test("the ghost hides as IME composition starts and when text follows the caret", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toBeVisible();
+    await editorDom(page).dispatchEvent("compositionstart", { data: "" });
+    await expect(ghost(page)).toBeHidden();
+    await editorDom(page).dispatchEvent("compositionend", { data: "" });
+    await page.keyboard.press("Escape");
+    // Text arriving after the caret (a collaborator typing there), the
+    // caret and the empty query unchanged: the ghost goes.
+    await typeAtEnd(page, "/");
+    await expect(ghost(page)).toBeVisible();
+    await page.evaluate(() => {
+      type Sel = { from: number; constructor: unknown };
+      const ed = (
+        window as unknown as {
+          __tiptap_editor: {
+            state: {
+              selection: Sel;
+              tr: {
+                doc: unknown;
+                insertText(t: string, at: number): unknown;
+              };
+            };
+            view: { dispatch(tr: unknown): void };
+          };
+        }
+      ).__tiptap_editor;
+      const { from } = ed.state.selection;
+      const Selection = ed.state.selection.constructor as {
+        create(doc: unknown, pos: number): unknown;
+      };
+      const tr = ed.state.tr.insertText(" after", from) as {
+        doc: unknown;
+        setSelection(sel: unknown): unknown;
+      };
+      ed.view.dispatch(tr.setSelection(Selection.create(tr.doc, from)));
+    });
+    await expect(menu(page)).toBeVisible();
+    await expect(ghost(page)).toBeHidden();
+  });
+
   test("the footer tip follows the active row, and Close leaves '/' as text", async ({
     page,
   }) => {
@@ -1215,10 +1259,18 @@ test.describe("the + on an empty line", () => {
     expect(Math.abs(gap ?? 99)).toBeLessThanOrEqual(1);
   });
 
-  test("hides during IME composition", async ({ page }) => {
+  test("hides as IME composition starts, before any text lands", async ({
+    page,
+  }) => {
     await openDoc(page);
     await emptyLine(page);
     await expect(plus(page)).toBeVisible();
+    // compositionstart alone: the line is still empty, so only the
+    // composition can hide it.
+    await editorDom(page).dispatchEvent("compositionstart", { data: "" });
+    await expect(plus(page)).toBeHidden();
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
+    // Then a real composition (CDP) commits text: still hidden.
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Input.imeSetComposition", {
       text: "に",
@@ -1230,6 +1282,45 @@ test.describe("the + on an empty line", () => {
     await cdp.detach();
     await page.keyboard.press("Backspace");
     await expect(plus(page)).toBeVisible();
+  });
+
+  test("after a typed query it is an ordinary '/': a pick undoes to '/h2'", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.type("h2");
+    await expect(options(page).first()).toHaveText(/Heading 2/);
+    await page.keyboard.press("Enter");
+    expect(await caretBlock(page)).toMatchObject({ type: "heading", level: 2 });
+    await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    await expect
+      .poll(() => caretBlock(page))
+      .toMatchObject({ type: "paragraph", text: "/h2" });
+  });
+
+  test("after a typed query Esc leaves '/quo', and undo takes it all back", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await emptyLine(page);
+    await expect(plus(page)).toBeVisible();
+    const depth = await undoDepth(page);
+    await plus(page).click();
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.type("quo");
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    expect(await caretBlock(page)).toMatchObject({ text: "/quo" });
+    // Every step of it is undoable, the "/" too.
+    for (let i = 0; i < 3 && (await undoDepth(page)) > depth; i++) {
+      await page.keyboard.press(`${getPlaywrightModifierKey()}+z`);
+    }
+    await expect.poll(() => undoDepth(page)).toBe(depth);
+    expect(await caretBlock(page)).toMatchObject({ text: "" });
   });
 });
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { TextSelection } from "@tiptap/pm/state";
 import type { Editor, EditorEvents } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -16,11 +15,14 @@ import { PlusIcon } from "@/lib/icons";
  * for the writer, outside the undo history, so the ordinary "/" menu
  * opens: one code path. No plugin: it follows the editor's events and the
  * pointer, positions itself with `coordsAtPos`, and sets no React state
- * per transaction.
+ * per transaction. It is positioned inside the scroll container
+ * (`.document-editor-wrapper`, `position: relative` in
+ * `document-editor.scss`), so it scrolls with the text.
  *
  * It must not import the slash menu statically: `plus-origin`'s record
  * would then have a second copy in this chunk. It loads it with
- * `import("./slash-menu")`, the same module the "/" host loads.
+ * `import("./slash-menu")`, the same module the "/" host loads, and the
+ * "/" is typed there (`typePlusSlash`).
  */
 
 /** The caret's empty line shows it this long after the last keystroke. */
@@ -89,21 +91,14 @@ export function EmptyLinePlus({
   scrollTarget: HTMLElement;
 }) {
   const fine = useFinePointer();
-  const [host, setHost] = useState<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   /** The line the `+` is shown beside, or null. */
   const shown = useRef<Element | null>(null);
 
   useEffect(() => {
-    if (!fine || editor.isDestroyed) return;
-    // Heading drag makes it `position: relative`; the `+` scrolls with it.
-    setHost(editor.view.dom.parentElement);
-    return () => setHost(null);
-  }, [editor, fine]);
-
-  useEffect(() => {
     const el = button.current;
-    if (!host || !el) return;
+    const host = scrollTarget;
+    if (!fine || !el || editor.isDestroyed) return;
     const view = editor.view;
     let settled = true;
     let composing = view.composing;
@@ -116,7 +111,9 @@ export function EmptyLinePlus({
     let pending: Element | null = null;
     let target: EventTarget | null = null;
 
+    /** Writes only when shown: typing with nothing shown writes nothing. */
     const hide = () => {
+      if (!shown.current) return;
       shown.current = null;
       el.style.display = "none";
     };
@@ -162,13 +159,18 @@ export function EmptyLinePlus({
 
     const onKey = () => {
       settled = false;
-      // Typing with nothing shown writes nothing.
-      if (shown.current && !hovered) hide();
+      if (!hovered) hide();
       clearTimeout(typing);
       typing = window.setTimeout(() => {
         settled = true;
-        schedule();
+        // Only when there is something to show: a line of text settles
+        // with no frame and no write.
+        if (hovered || caretLine(editor)) schedule();
       }, TYPING_DELAY_MS);
+    };
+    // `update` follows every edit; only a switch to read-only matters here.
+    const onUpdate = () => {
+      if (!editor.isEditable) hide();
     };
     const onCompositionStart = () => {
       composing = true;
@@ -223,7 +225,7 @@ export function EmptyLinePlus({
     editor.on("transaction", onTransaction);
     editor.on("focus", schedule);
     editor.on("blur", schedule);
-    editor.on("update", schedule);
+    editor.on("update", onUpdate);
     schedule();
     return () => {
       cancelAnimationFrame(frame);
@@ -239,34 +241,24 @@ export function EmptyLinePlus({
       editor.off("transaction", onTransaction);
       editor.off("focus", schedule);
       editor.off("blur", schedule);
-      editor.off("update", schedule);
+      editor.off("update", onUpdate);
     };
-  }, [editor, host, scrollTarget]);
+  }, [editor, fine, scrollTarget]);
 
   /**
-   * Types the "/" into the line, outside the history, so the menu opens;
-   * then marks that "/" as the `+`'s. The slash chunk is loaded on idle,
-   * so the import is normally settled already.
+   * Has the slash chunk type the "/" into the line, so the menu opens.
+   * The slash chunk is loaded on idle, so the import is normally settled
+   * already.
    */
   const insert = async () => {
     const line = shown.current;
     const slash = await import("./slash-menu").catch(() => null);
     const pos = emptyLineAt(editor, line);
     if (!slash || pos === null || editor.isDestroyed) return;
-    const view = editor.view;
-    // The hover path may find the editor blurred; a blur closes the menu.
-    view.focus();
-    const { tr } = view.state;
-    view.dispatch(
-      tr
-        .setSelection(TextSelection.create(tr.doc, pos + 1))
-        .insertText("/")
-        .setMeta("addToHistory", false),
-    );
-    slash.markPlusSlash(editor);
+    slash.typePlusSlash(editor, pos);
   };
 
-  if (!fine || !host) return null;
+  if (!fine) return null;
   return createPortal(
     <button
       ref={button}
@@ -284,6 +276,6 @@ export function EmptyLinePlus({
     >
       <PlusIcon aria-hidden="true" className="size-4" />
     </button>,
-    host,
+    scrollTarget,
   );
 }

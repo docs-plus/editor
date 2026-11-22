@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import {
+  BADGES_DECLARED,
   isNewItem,
   localDay,
   MAX_NEW_BADGES,
@@ -26,6 +27,10 @@ describe("New badges", () => {
   it("ships empty, and never declares more than two", () => {
     expect(NEW_UNTIL).toEqual({});
     expect(Object.keys(NEW_UNTIL).length).toBeLessThanOrEqual(MAX_NEW_BADGES);
+  });
+
+  it("BADGES_DECLARED is true exactly when a badge is declared", () => {
+    expect(BADGES_DECLARED).toBe(Object.keys(NEW_UNTIL).length > 0);
   });
 
   it("shows through its last day, then hides", () => {
