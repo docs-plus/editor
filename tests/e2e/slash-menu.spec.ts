@@ -1596,7 +1596,7 @@ test.describe("slash menu design-review screenshots on touch", () => {
 test.describe("slash budget", () => {
   test.skip(process.env.SLASH_BUDGET !== "1", "production build only");
 
-  test("the slash chunk is at most 6 KB gz", async ({ page }) => {
+  test("the slash chunk is at most 7 KB gz", async ({ page }) => {
     const bodies = new Map<string, Buffer>();
     const pending: Promise<void>[] = [];
     page.on("response", (response) => {
