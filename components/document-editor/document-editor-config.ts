@@ -100,7 +100,8 @@ const SubscriptByTarget = Subscript.extend({
  * OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
  * rules; `LinkPolicyHyperlink` applies the same option to HTML paste and to
  * rendering, so a host that passes its own `isAllowedUri` replaces it at all
- * three. Parse and render call it with the href alone (never null).
+ * three. Parse and render call it with one string and no context (a missing
+ * href arrives as "undefined" or "null"), so a host policy must not need one.
  */
 export const isWebLink = (href: string): boolean =>
   /^(?:https?|mailto):/i.test(href.replace(/\s/g, ""));
@@ -113,35 +114,28 @@ type LinkPolicy = (href: string) => boolean;
  * stored one (Yjs, older documents) renders with no `href` at all, so
  * neither a click nor the browser's own middle-click or "Open link" can
  * follow it. Pasted titles are dropped: a `title` is a tooltip a stranger
- * chose ("Your bank: click to verify").
+ * chose ("Your bank: click to verify"). Kept terse: it is editor-chunk bytes.
  */
 export const LinkPolicyHyperlink = Hyperlink.extend({
   addAttributes() {
-    return {
-      ...this.parent?.(),
-      title: { default: null, parseHTML: () => null },
-    };
+    return { ...this.parent?.(), title: { parseHTML: () => null } };
   },
 
   parseHTML() {
+    // The parent's rules are `.hyperlink-icon` (ignored) then `a[href]`.
+    const rules = this.parent?.() as TagParseRule[];
+    const getAttrs = rules[1].getAttrs as Required<TagParseRule>["getAttrs"];
     const allowed = this.options.isAllowedUri as LinkPolicy;
-    // Both rules are tag rules: `.hyperlink-icon` (no getAttrs) and `a[href]`.
-    return ((this.parent?.() ?? []) as TagParseRule[]).map(
-      ({ getAttrs, ...rule }) =>
-        getAttrs
-          ? {
-              ...rule,
-              getAttrs: (node: HTMLElement) =>
-                allowed(node.getAttribute("href") ?? "") && getAttrs(node),
-            }
-          : rule,
-    );
+    rules[1].getAttrs = (node) =>
+      allowed(`${node.getAttribute("href")}`) && getAttrs(node);
+    return rules;
   },
 
   renderHTML(props) {
+    // The parent blanks an unsafe href to ""; this drops it, and any other
+    // href off the policy, so the anchor is not a link at all.
     const spec = this.parent?.(props) as [string, Record<string, unknown>, 0];
-    const { href } = spec[1];
-    if (!href || !(this.options.isAllowedUri as LinkPolicy)(`${href}`)) {
+    if (!(this.options.isAllowedUri as LinkPolicy)(`${spec[1].href}`)) {
       delete spec[1].href;
     }
     return spec;
