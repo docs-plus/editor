@@ -217,7 +217,7 @@ describe("link row limits (linking re-review)", () => {
     ]);
   });
 
-  it(`caps a document at ${LINK_ROWS_MAX} rows, fast, at 10,000 links`, () => {
+  it(`caps a document at ${LINK_ROWS_MAX} rows at 10,000 links`, () => {
     const keys = Array.from({ length: 10_000 }, (_, i) =>
       i.toString(16).padStart(32, "0"),
     );
@@ -225,22 +225,10 @@ describe("link row limits (linking re-review)", () => {
       heading(T1, 1, text("Title")),
       ...keys.map((key) => paragraph(text("x", `tinydocy:doc/${key}`))),
     );
-    deriveDocument(fragment); // warm-up
-    const runs = [0, 1, 2, 3, 4].map(() => {
-      const started = performance.now();
-      extractLinks(fragment);
-      return performance.now() - started;
-    });
-    const median = runs.sort((a, b) => a - b)[2];
     const rows = extractLinks(fragment);
     expect(rows).toHaveLength(LINK_ROWS_MAX);
     expect(rows[0].key).toBe(keys[0]);
-    // 8 ms is the budget on a developer machine (about 4–5 ms on an
-    // M-series Mac). Shared CI runners measure about twice that (9.2 ms
-    // seen), so CI gets 16 ms; LINKS_PERF_BUDGET_MS overrides both.
-    const budget =
-      Number(process.env.LINKS_PERF_BUDGET_MS) || (process.env.CI ? 16 : 8);
-    expect(median).toBeLessThan(budget);
+    // Its time is a stress probe: tests/unit/stress/links-derive-perf.test.ts.
   });
 
   it("caps heading text like link text", () => {
