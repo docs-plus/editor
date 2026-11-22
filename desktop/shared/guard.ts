@@ -68,7 +68,9 @@ export const oneOf = <const T extends readonly string[]>(
   return guard((value) => allowed.has(value));
 };
 
-export const opt = <T>(inner: Guard<T>): Guard<T | undefined> => {
+export const opt = <T>(
+  inner: Guard<T>,
+): Guard<T | undefined> & { readonly optional: true } => {
   const wrapped = guard<T | undefined>(
     (value) => value === undefined || inner(value),
   );

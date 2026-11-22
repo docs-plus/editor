@@ -5,15 +5,19 @@
  * `local-session` DocSession into context and opens one document. The only
  * module allowed to import `lib/platform/desktop/**` (architecture §3.3).
  *
- * Storage today is the dev bridge only (NEXT_PUBLIC_DESKTOP_BRIDGE=dev, the
- * `local` Playwright project): `local-session` over `createRpcDocStore`
- * over a loopback socket to `desktop/dev/storage-host.ts`. The packaged
- * app's `IpcDocStore` over `window.tinydocy` (P2.5) slots in beside it.
+ * Storage is one of two, both `local-session` over `createRpcDocStore`:
+ * - the packaged app: `IpcDocStore` over the preload's `window.tinydocy`
+ *   (P2.5). The window's document comes from `app.hello`; a window main
+ *   opened with none gets this install's default document. Quit and
+ *   window close flush through `app.flushRequested`, never `beforeunload`.
+ * - the dev bridge (NEXT_PUBLIC_DESKTOP_BRIDGE=dev, the `local` Playwright
+ *   project): a loopback socket to `desktop/dev/storage-host.ts`.
  * The library UI (P2.7) replaces the single document.
  */
 import { useEffect, useState } from "react";
 
 import { DocumentEditor } from "@/components/document-editor/document-editor";
+import type { TinydocyBridge } from "@/desktop/shared/ipc-contract";
 import type { DocSession } from "@/lib/platform/doc-session";
 import { DocSessionProvider } from "@/lib/platform/doc-session-context";
 import { type DocStore, isDocStoreError } from "@/lib/platform/doc-store";
@@ -28,6 +32,8 @@ declare global {
     __TINYDOCY_DEV_BRIDGE?: DevBridgeConfig;
     /** Dev bridge only: saves every open document now (tests, reload). */
     __TINYDOCY_FLUSH?: () => Promise<void>;
+    /** The packaged app's bridge, from the sandboxed preload (P2.5). */
+    tinydocy?: TinydocyBridge;
   }
 }
 
@@ -66,6 +72,45 @@ export function retryWhileReleasing(
       }
     },
   };
+}
+
+/** localStorage: the document a window with none opens, until P2.7. */
+const DEFAULT_DOC_KEY = "tinydocy-desktop-default-doc";
+
+function readDefaultDoc(): string | null {
+  try {
+    return localStorage.getItem(DEFAULT_DOC_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeDefaultDoc(docId: string): void {
+  try {
+    localStorage.setItem(DEFAULT_DOC_KEY, docId);
+  } catch {
+    // Without storage the next window creates another; nothing is lost.
+  }
+}
+
+/**
+ * The document this window shows: the one main opened it for, else this
+ * install's default document, created on first use (or again if it is
+ * gone). The library UI (P2.7) replaces the default.
+ */
+async function shellDocId(bridge: TinydocyBridge): Promise<string> {
+  const hello = await bridge.invoke("app.hello", { build: bridge.build });
+  if (!hello.ok) throw new Error(hello.error.code);
+  if (hello.value.docId) return hello.value.docId;
+  const stored = readDefaultDoc();
+  if (stored) {
+    const opened = await bridge.invoke("doc.open", { docId: stored });
+    if (opened.ok || opened.error.code !== "not_found") return stored;
+  }
+  const created = await bridge.invoke("index.create", {});
+  if (!created.ok) throw new Error(created.error.code);
+  writeDefaultDoc(created.value.id);
+  return created.value.id;
 }
 
 function devBridgeConfig(): DevBridgeConfig | null {
@@ -111,6 +156,31 @@ export function DesktopRoot() {
           (result) => {
             if (cancelled) return close();
             window.__TINYDOCY_FLUSH = result.flush;
+            setOpened(result);
+          },
+          (error: unknown) => {
+            if (!cancelled) setProblem(`Library unavailable: ${String(error)}`);
+          },
+        );
+    } else if (window.tinydocy) {
+      const bridge = window.tinydocy;
+      Promise.all([
+        import("@/lib/platform/desktop/ipc-doc-store"),
+        import("@/lib/platform/local-session"),
+      ])
+        .then(async ([ipc, local]) => {
+          const docId = await shellDocId(bridge);
+          const session = local.createLocalSession({
+            store: ipc.createIpcDocStore(bridge),
+          });
+          // Main asks before a quit or a window close; the preload answers
+          // once this settles (3 s at most).
+          close = bridge.on("app.flushRequested", () => session.flush());
+          return { session, docId, flush: () => session.flush() };
+        })
+        .then(
+          (result) => {
+            if (cancelled) return close();
             setOpened(result);
           },
           (error: unknown) => {

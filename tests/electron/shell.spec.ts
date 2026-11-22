@@ -42,11 +42,6 @@ type Bridge = {
   }>;
   on(channel: string, listener: (payload: unknown) => unknown): () => void;
 };
-declare global {
-  interface Window {
-    tinydocy: Bridge;
-  }
-}
 
 const EDITOR = '.tiptap[contenteditable="true"]';
 const RESULTS = join(ROOT, "test-results-electron");
@@ -112,15 +107,23 @@ test("D-A12: the worker opens node:sqlite with WAL and the protocol serves the e
 
   // A write makes the WAL file appear next to the library.
   const appended = await page.evaluate(async () => {
-    const created = await window.tinydocy.invoke("index.create", {
+    const created = await (
+      window as unknown as { tinydocy: Bridge }
+    ).tinydocy.invoke("index.create", {
       title: "WAL",
     });
     const docId = (created.value as { id: string }).id;
-    await window.tinydocy.invoke("doc.open", { docId });
-    return window.tinydocy.invoke("doc.append", {
-      docId,
-      record: { origin: "local", update: new Uint8Array([0, 0]) },
-    });
+    await (window as unknown as { tinydocy: Bridge }).tinydocy.invoke(
+      "doc.open",
+      { docId },
+    );
+    return (window as unknown as { tinydocy: Bridge }).tinydocy.invoke(
+      "doc.append",
+      {
+        docId,
+        record: { origin: "local", update: new Uint8Array([0, 0]) },
+      },
+    );
   });
   expect(appended.ok).toBe(true);
   expect(existsSync(join(userData, "library", "library.sqlite-wal"))).toBe(
@@ -170,7 +173,9 @@ test("windows are sandboxed, shown on ready-to-show, with no reload, DevTools or
   expect(zoom).toBe(0);
   // The preload exposes the bridge and nothing that reaches ipcRenderer.
   const surface = await page.evaluate(() => ({
-    keys: Object.keys(window.tinydocy).sort(),
+    keys: Object.keys(
+      (window as unknown as { tinydocy: Bridge }).tinydocy,
+    ).sort(),
     require: typeof (window as unknown as { require?: unknown }).require,
     process: typeof (window as unknown as { process?: unknown }).process,
   }));
@@ -185,7 +190,7 @@ test("the typed bridge round-trips a document and enforces the contract", async 
   current = await launch();
   const page = await firstPage(current.app);
   const result = await page.evaluate(async () => {
-    const t = window.tinydocy;
+    const t = (window as unknown as { tinydocy: Bridge }).tinydocy;
     const created = await t.invoke("index.create", { title: "Bridge" });
     const docId = (created.value as { id: string }).id;
     const opened = await t.invoke("doc.open", { docId });
@@ -249,7 +254,9 @@ test("opening a document already open in another window focuses that window", as
   const [docA, docB] = await first.evaluate(async () => {
     const ids: string[] = [];
     for (const title of ["A", "B"]) {
-      const created = await window.tinydocy.invoke("index.create", { title });
+      const created = await (
+        window as unknown as { tinydocy: Bridge }
+      ).tinydocy.invoke("index.create", { title });
       ids.push((created.value as { id: string }).id);
     }
     return ids;
@@ -283,7 +290,10 @@ test("opening a document already open in another window focuses that window", as
   for (const page of pages) {
     await bridgeReady(page);
     const hello = await page.evaluate(() =>
-      window.tinydocy.invoke("app.hello", {}),
+      (window as unknown as { tinydocy: Bridge }).tinydocy.invoke(
+        "app.hello",
+        {},
+      ),
     );
     if ((hello.value as { docId: string | null }).docId === docB) pageB = page;
   }
@@ -292,7 +302,10 @@ test("opening a document already open in another window focuses that window", as
     (e) => e.event === "window_focused",
   ).length;
   const answer = await (pageB as Page).evaluate(
-    (docId) => window.tinydocy.invoke("doc.open", { docId }),
+    (docId) =>
+      (window as unknown as { tinydocy: Bridge }).tinydocy.invoke("doc.open", {
+        docId,
+      }),
     docA,
   );
   expect(answer.error?.code).toBe("already_open");
@@ -402,7 +415,10 @@ test("navigation, window.open and bad argv from a second instance are refused", 
 
   // A refused navigation never commits, so the page's hello still stands.
   const flushed = await page.evaluate(() =>
-    window.tinydocy.invoke("doc.flush", {}),
+    (window as unknown as { tinydocy: Bridge }).tinydocy.invoke(
+      "doc.flush",
+      {},
+    ),
   );
   expect(flushed.ok).toBe(true);
 });
@@ -436,7 +452,7 @@ test("#106: quit with unsynced edits and a vetoing beforeunload exits within bud
 
   // A page that keeps unsaved work answers the flush after its batch is acked.
   await page.evaluate(() => {
-    window.tinydocy.on(
+    (window as unknown as { tinydocy: Bridge }).tinydocy.on(
       "app.flushRequested",
       () => new Promise<void>((resolve) => setTimeout(resolve, 200)),
     );
@@ -505,7 +521,7 @@ test("closing the last window with a vetoing beforeunload flushes it (and quits 
   const page = await firstPage(app);
   await page.locator(EDITOR).first().waitFor({ timeout: 60_000 });
   await page.evaluate(() => {
-    window.tinydocy.on(
+    (window as unknown as { tinydocy: Bridge }).tinydocy.on(
       "app.flushRequested",
       () => new Promise<void>((resolve) => setTimeout(resolve, 100)),
     );
