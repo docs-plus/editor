@@ -9,14 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu-trigger";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import {
-  BlockquoteIcon,
-  ChevronDownIcon,
-  CodeBlockIcon,
-  HeadingIcon,
-  ListIcon,
-  TypeIcon,
-} from "@/lib/icons";
+import { editorActions } from "@/lib/editor-actions";
+import { ChevronDownIcon, TypeIcon } from "@/lib/icons";
 
 import { clearOfSelection } from "../color/clear-of-selection";
 import {
@@ -44,13 +38,24 @@ const FACE_MAX = 96;
 /** …gives way to the type's icon: `padding-inline: 8px 4px`, gap, chevron. */
 const FACE_CHROME = 8 + 4 + 4 + 12;
 
-/** The icon face, for a locale whose longest word would pass 96px. */
+/** The registry action whose icon stands for each face. */
+const FACE_ICON_IDS: Partial<Record<StyleFace, string>> = {
+  List: "list.bullet",
+  Quote: "insert.quote",
+  Code: "insert.codeBlock",
+};
+
+/**
+ * The icon face, for a locale whose longest word would pass 96px: the
+ * registry's own icons (no new icon import, so the editor chunk keeps its
+ * shape), Type for Text, Title and Mixed.
+ */
 function FaceIcon({ face }: { face: StyleFace }) {
-  if (face === "List") return <ListIcon aria-hidden="true" />;
-  if (face === "Quote") return <BlockquoteIcon aria-hidden="true" />;
-  if (face === "Code") return <CodeBlockIcon aria-hidden="true" />;
-  if (face.startsWith("H")) return <HeadingIcon aria-hidden="true" />;
-  return <TypeIcon aria-hidden="true" />;
+  const id =
+    FACE_ICON_IDS[face] ??
+    (face.startsWith("H") ? `style.heading${face.slice(1)}` : "");
+  const Icon = editorActions.get(id)?.icon ?? TypeIcon;
+  return <Icon aria-hidden="true" />;
 }
 
 /**

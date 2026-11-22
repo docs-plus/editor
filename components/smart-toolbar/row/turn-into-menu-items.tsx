@@ -22,7 +22,7 @@ import {
 } from "@/lib/editor-actions/key-combo";
 import type { IconComponent } from "@/lib/editor-actions/types";
 import { getEditorContextStore } from "@/lib/editor-context/store";
-import { HeadingIcon, TypeIcon } from "@/lib/icons";
+import { TypeIcon } from "@/lib/icons";
 import { isMac } from "@/lib/shortcuts";
 
 import { type StyleFace, styleFace } from "../bubble/style-face";
@@ -203,6 +203,15 @@ function TurnIntoItem({
   );
 }
 
+/**
+ * More headings ▸ wears Heading 4's icon, the registry's: a new icon import
+ * would re-export it from the editor chunk.
+ */
+function MoreHeadingsIcon() {
+  const Icon = editorActions.get(MORE_HEADING_IDS[0])?.icon;
+  return Icon ? <Icon aria-hidden="true" /> : null;
+}
+
 /** Your formats (design pass §4): a lazy chunk, fetched on first open. */
 const StyleFormats = lazySurface(() =>
   import("../formats/style-formats").then((module) => module.StyleFormats),
@@ -255,7 +264,7 @@ export function TurnIntoMenuItems({
             disabled={inTitle}
             aria-describedby={titleReasonId}
           >
-            <HeadingIcon aria-hidden="true" />
+            <MoreHeadingsIcon />
             <span>More headings</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent side="inline-end">

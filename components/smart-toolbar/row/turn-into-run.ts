@@ -10,7 +10,7 @@ import { announceLater } from "@/lib/announce-later";
 import { suggestedCodeLanguage } from "@/lib/code-language";
 import { editorActions } from "@/lib/editor-actions";
 import { TITLE_STYLE_REASON } from "@/lib/editor-actions/core/blocks";
-import { canRun, runAction } from "@/lib/editor-actions/registry";
+import { availability, runAction } from "@/lib/editor-actions/registry";
 import { liftWrapped, wrappedBlocks } from "@/lib/editor-actions/style-lift";
 import type { AnyAction } from "@/lib/editor-actions/types";
 import { computeContext } from "@/lib/editor-context/snapshot";
@@ -130,7 +130,7 @@ export function turnInto(editor: Editor, action: AnyAction): boolean {
   let ok: boolean;
   if (found.cells && action.id.startsWith("style.")) {
     ok =
-      canRun(action, computeContext(editor)) &&
+      availability(action, computeContext(editor)) === true &&
       editor
         .chain()
         .focus()
