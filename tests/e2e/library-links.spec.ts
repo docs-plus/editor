@@ -121,6 +121,34 @@ test("a here# link jumps in place; a missing heading says so", async ({
   );
 });
 
+/** Closes a click-opened card the way people do: a click elsewhere. */
+async function dismiss(page: Page) {
+  // The popover arms its outside-click handler once it has entered.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running"),
+  );
+  await page.waitForTimeout(100);
+  await page.locator(".h-main").click({ position: { x: 5, y: 5 } });
+  await expect(page.locator(".doc-link-preview")).toHaveCount(0);
+}
+
+const caretLink = (page: Page) =>
+  page.evaluate(() => {
+    const node = window.getSelection()?.anchorNode ?? null;
+    const element = node instanceof Element ? node : node?.parentElement;
+    return element?.closest("a")?.textContent ?? null;
+  });
+
+/** Puts the caret inside the link, from the keyboard side. */
+async function caretInto(page: Page, text: string) {
+  const box = await linkTo(page, text).first().boundingBox();
+  if (!box) throw new Error(`no link "${text}"`);
+  await page.mouse.click(box.x + box.width + 40, box.y + box.height / 2);
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => caretLink(page)).toContain(text);
+}
+
 test("a link that doesn't open shows its preview, never its key", async ({
   page,
 }) => {
@@ -129,20 +157,16 @@ test("a link that doesn't open shows its preview, never its key", async ({
     await linkTo(page, text).click({ modifiers: ["ControlOrMeta"] });
     await expect(card).toContainText("This document isn't on this device.");
     await expect(card).not.toContainText(/tinydocy:|[0-9a-f]{32}/);
-    // Remove Link is never where focus starts.
-    const first = card.getByRole("button").first();
-    await expect(first).not.toHaveText("Remove Link");
-    await page.keyboard.press("Escape");
-    await expect(card).toHaveCount(0);
+    await dismiss(page);
   }
   // Invalid and later-version links: their preview explains, and nothing
   // opens.
   await linkTo(page, "A broken link").click();
   await expect(card).toContainText("This link isn't valid.");
-  await page.keyboard.press("Escape");
+  await dismiss(page);
   await linkTo(page, "From the future").click();
   await expect(card).toContainText("needs a newer version");
-  await page.keyboard.press("Escape");
+  await dismiss(page);
   await expect(follows(page)).toHaveText("0");
   await expect(lastOpen(page)).toHaveText("");
   await expect(external(page)).toHaveText("");
@@ -151,12 +175,26 @@ test("a link that doesn't open shows its preview, never its key", async ({
   await expect(lastOpen(page)).toHaveText("d-old current");
 });
 
-test("the document preview shows the title and path, and Esc returns to the link", async ({
+test("Mod-K on a link that doesn't open: its card, focus not on Remove Link, Esc back", async ({
   page,
 }) => {
-  const link = linkTo(page, "Q4 budget").first();
-  await link.click();
   const card = page.locator(".doc-link-preview");
+  await caretInto(page, "Someone else's");
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(card).toContainText("This document isn't on this device.");
+  await expect(card).not.toContainText(/tinydocy:|[0-9a-f]{32}/);
+  await expect(page.locator(":focus")).toHaveText("Copy Link");
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect.poll(() => caretLink(page)).toContain("Someone else's");
+});
+
+test("Mod-K on a resolving link: title and path, Open first, Esc back", async ({
+  page,
+}) => {
+  const card = page.locator(".doc-link-preview");
+  await caretInto(page, "Q4 budget");
+  await page.keyboard.press("ControlOrMeta+k");
   await expect(card).toContainText("Q4 budget");
   await expect(card).toContainText("Library › Work");
   await expect(card).not.toContainText(/tinydocy:|[0-9a-f]{32}/);
@@ -165,14 +203,10 @@ test("the document preview shows the title and path, and Esc returns to the link
     "Copy Link",
     "Remove Link",
   ]);
+  await expect(page.locator(":focus")).toHaveText("Open");
   await page.keyboard.press("Escape");
   await expect(card).toHaveCount(0);
-  const inLink = await page.evaluate(() => {
-    const node = window.getSelection()?.anchorNode ?? null;
-    const element = node instanceof Element ? node : node?.parentElement;
-    return element?.closest("a")?.textContent ?? null;
-  });
-  expect(inLink).toContain("Q4 budget");
+  await expect.poll(() => caretLink(page)).toContain("Q4 budget");
 });
 
 /**
@@ -229,8 +263,14 @@ for (const readOnly of [false, true]) {
         if (readOnly) {
           await link.focus();
         } else {
+          // The click opens the preview; its keys act once it has entered
+          // (a caret placed by keyboard alone doesn't follow: LK2).
           await page.mouse.click(x, y);
-          await page.keyboard.press("Escape");
+          await expect(page.locator(".doc-link-preview")).toHaveCount(1);
+          await page.waitForFunction(() =>
+            document.getAnimations().every((a) => a.playState !== "running"),
+          );
+          await page.waitForTimeout(150);
         }
         await page.keyboard.press(key);
       }

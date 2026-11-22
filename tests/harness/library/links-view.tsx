@@ -191,7 +191,8 @@ const MATRIX: JSONContent = {
           text: "highlighted",
           marks: [
             { type: "hyperlink", attrs: { href } },
-            { type: "highlight", attrs: { color: "#fde68a" } },
+            // The app's yellow, its lowest-contrast highlight for links.
+            { type: "highlight", attrs: { color: "var(--h-highlight)" } },
           ],
         },
       ],
