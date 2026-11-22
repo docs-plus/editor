@@ -17,8 +17,10 @@
  */
 export const SERIAL_FILES = [
   "tests/unit/components/bubble-controller.test.ts",
+  "tests/unit/desktop/storage/busy-timeout.test.ts",
   "tests/unit/extensions/find/find-hits.test.ts",
   "tests/unit/helpers/spawn-hocus.test.ts",
+  "tests/unit/lib/links/extract-perf.test.ts",
   "tests/unit/lib/markdown-parse.test.ts",
   "tests/unit/lib/security/hocus-document-guard.test.ts",
 ] as const;
