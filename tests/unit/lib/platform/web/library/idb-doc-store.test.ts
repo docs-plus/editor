@@ -313,7 +313,7 @@ describe("IdbDocStore: the index rev (§4.1)", () => {
   it("bumps meta.rev when an append changes the title or snippet, and only then", async () => {
     const library = await createFakeLibrary();
     await library.createDoc("doc", 1);
-    const afterCreate = await readRev(library);
+    const afterCreate = (await readRev(library)) as number;
     expect(afterCreate).toBe(1);
     const store = library.connect();
     const doc = new Y.Doc();
