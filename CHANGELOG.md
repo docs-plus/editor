@@ -27,12 +27,16 @@ ledger line).
   - `sniff` (magic bytes, plus header-only sizes: refuses SVG renamed as
     PNG, mismatched types, truncated headers and pixel bombs);
   - `hash` (SHA-256);
-  - `prepareImageAsset` (the insert pipeline: GIF passthrough, PNG and WebP
-    metadata stripping, JPEG always re-encoded, a 2 MB / 2560 px cap);
+  - `prepareImageAsset` (the insert pipeline: GIFs pass through without
+    their comments and XMP, within 2560 px a side, 1,000 frames and 160 MP
+    summed over frames; PNG and WebP metadata stripping; JPEG always
+    re-encoded; a 2 MB / 2560 px cap; a format whose size the header doesn't
+    give, such as AVIF, HEIC or BMP, decodes only in the worker);
   - an encode worker (`createImageBitmap` + `OffscreenCanvas`) that falls
-    back to the main-thread canvas. A 12 MP photo encodes with the main
-    thread's longest gap at 11 ms, against 79 ms on the main thread
-    (Chromium);
+    back to the main-thread canvas when it can't load or times out (60 s),
+    but never retries an image that crashed it. A 12 MP photo encodes with
+    the main thread's longest gap at 11 ms, against 75 ms on the main
+    thread (Chromium);
   - the resolver, and a reference-counted object-URL cache released through
     `AbortSignal`.
 - **Platform:** the `BlobStore` port (`lib/platform/blob-store.ts`) over
@@ -44,8 +48,9 @@ ledger line).
   for hosts with an image store (P2.6b, W11). It renders `asset:` images
   through the §6.2 fallback until HyperMultimedia 2.4 (U1), drops pasted
   `asset:` images with a notice when the document has no image store, adds
-  Alt text… to the image toolbar, and keeps `<img alt>` in step with alt
-  changes, including undo and collaborators' edits. Everything but its
+  Alt text… to the image toolbar, copies an image as PNG (so it pastes as a
+  picture anywhere), and keeps `<img alt>` in step with alt changes,
+  including undo and collaborators' edits. Everything but its
   routing is one lazy chunk. The upstream request is written up in
   `docs/research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md`.
 - **Headless:** `extensions/hyper-multimedia/asset-image-parse.ts`, the
