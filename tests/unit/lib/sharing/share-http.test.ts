@@ -188,6 +188,33 @@ describe("POST /api/shares", () => {
     expect(share?.created_ip_hash).not.toContain(IP);
   });
 
+  it("takes a lineage as a dashed UUID or as 32 hex digits, stored as sent (L5)", async () => {
+    const http = createHttp();
+    const create = (lineage: string) =>
+      http.handle(
+        post("/api/shares", createBody(makeShareSecrets(), { lineage })),
+        IP,
+      );
+    const uuid = "0F8FAD5B-D9CB-469F-A165-70867728950E";
+    const hex = "6E2B4C8D9A0F4E1B8C7D6A5B4C3D2E1F";
+    for (const lineage of [uuid, hex]) {
+      const response = await create(lineage);
+      expect(response.status).toBe(201);
+      const { share_id } = (await response.json()) as { share_id: string };
+      // Lowercased, never converted between the two forms.
+      expect(getShare(db, share_id)?.lineage).toBe(lineage.toLowerCase());
+    }
+    for (const lineage of [
+      hex.slice(1),
+      `${hex}0`,
+      `${hex.slice(0, 31)}g`,
+      "0f8fad5b-d9cb-469f-a165-70867728950",
+      "0f8fad5bd9cb-469f-a165-70867728950e",
+    ]) {
+      expect((await create(lineage)).status).toBe(400);
+    }
+  });
+
   it("never receives or stores a raw link secret (seam S1)", async () => {
     const http = createHttp();
     const { shareId, secrets } = await createShare(http);

@@ -60,8 +60,14 @@ const PREFLIGHT_MAX_AGE_S = 600;
 const ALLOWED_METHODS = ["GET", "POST", "DELETE"];
 const ALLOWED_HEADERS = "authorization, content-type";
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * A document lineage: a dashed UUID (what the desktop library mints today,
+ * `crypto.randomUUID()`) or 32 hex digits (`randomHex32`, as the format 2
+ * revision describes). Stored lowercased and never converted between the
+ * two forms, so it matches the library's own value.
+ */
+const LINEAGE_REGEX =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
 
 /** `GET /api/info` (plan §6; seam S3: `apiVersion`, `serverVersion`). */
 export type ServerInfo = {
@@ -424,7 +430,11 @@ export function createShareHttp(options: ShareHttpOptions): ShareHttp {
     if (body instanceof Response) return body;
     const hashes = parseHashes(body, limits);
     const lineage = body.lineage;
-    if (!hashes || typeof lineage !== "string" || !UUID_REGEX.test(lineage)) {
+    if (
+      !hashes ||
+      typeof lineage !== "string" ||
+      !LINEAGE_REGEX.test(lineage)
+    ) {
       return error(request, 400, "invalid_body");
     }
     const refused = creationRefused(request, ip);
