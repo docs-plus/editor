@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import type { Editor, JSONContent } from "@tiptap/core";
-import { AllSelection } from "@tiptap/pm/state";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import { AllSelection, type EditorState } from "@tiptap/pm/state";
 
 import {
   liftsInto,
+  scan,
   turnInto,
 } from "@/components/smart-toolbar/row/turn-into-run";
 import { dismissNotice, getNotice } from "@/lib/announce";
@@ -205,6 +207,42 @@ describe("Turn into (spec §7.2)", () => {
       if (node.type.name === "bulletList") listInCell = true;
     });
     expect(listInCell).toBe(true);
+  });
+
+  it("⌘A stops scanning once marks and cells are both known", () => {
+    const bold = [{ type: "bold" }];
+    const rest = Array.from({ length: 200 }, (_, i) => p(t(`Line ${i}`)));
+    make(
+      h(1, "Title"),
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [{ ...cell("x"), content: [p(t("Cell", bold))] }],
+          },
+        ],
+      },
+      ...rest,
+    );
+    selectAll();
+    const { doc, selection } = editor.state;
+    let visits = 0;
+    const counted = Object.create(doc) as PMNode;
+    counted.nodesBetween = (from, to, f, start) =>
+      doc.nodesBetween(
+        from,
+        to,
+        (...args) => {
+          visits += 1;
+          return f(...args);
+        },
+        start,
+      );
+    const found = scan({ doc: counted, selection } as EditorState);
+    expect(found).toEqual({ marks: true, cells: true });
+    // Each later paragraph once, never its text: well under two per line.
+    expect(visits).toBeLessThan(rest.length + 20);
   });
 
   it("table cells keep their type; the rest converts", async () => {

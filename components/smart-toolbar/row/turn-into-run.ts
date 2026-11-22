@@ -53,12 +53,14 @@ export const isTitleReason = (reason: string | undefined) =>
  * mixes textblocks in table cells with others (the cells path). A caret or
  * range inside one cell is not mixed: the cell converts, as on `main`.
  */
-function scan(state: EditorState): { marks: boolean; cells: boolean } {
+export function scan(state: EditorState): { marks: boolean; cells: boolean } {
   let marks = false;
   let inside = false;
   let outside = false;
   const { from, to } = state.selection;
   state.doc.nodesBetween(from, to, (node, pos) => {
+    // All known: skip the rest (⌘A would otherwise walk the whole document).
+    if (marks && inside && outside) return false;
     if (node.isText && node.marks.length > 0) marks = true;
     if (node.isTextblock) {
       if (inCell(state.doc, pos)) inside = true;
