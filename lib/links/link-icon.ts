@@ -65,22 +65,23 @@ const HASH: IconNode = [
 ];
 
 /**
- * In Trash keeps the file shape (`FileMinus`): a trash can mid-sentence
- * reads as a delete button (linking review, decision 2).
+ * In Trash keeps the file shape (`FileMinus`, Q5): a trash can mid-sentence
+ * reads as a delete button. Not available (Q4), invalid and later forms
+ * share `FileQuestion`; the label and the preview tell them apart.
  */
 const ICONS: Record<LinkPresentation, IconNode> = {
   resolves: FILE_TEXT,
   here: HASH,
   in_trash: FILE_MINUS,
   not_available: FILE_QUESTION,
-  deleted: FILE_QUESTION,
+  invalid: FILE_QUESTION,
   unknown_form: FILE_QUESTION,
 };
 
 /** Presentations drawn with a dashed underline (§4.6). */
 export const DASHED_LINK_STATES: ReadonlySet<LinkPresentation> = new Set([
   "not_available",
-  "deleted",
+  "invalid",
   "unknown_form",
 ]);
 
@@ -151,11 +152,14 @@ function svgFor(presentation: LinkPresentation): SVGSVGElement {
   return template.cloneNode(true) as SVGSVGElement;
 }
 
-/** Ours but unresolved by the host still gets an icon, never a plain link. */
+/**
+ * Ours but unresolved by the host still gets an icon, never a plain link:
+ * it reads as invalid.
+ */
 const presentationFor = (
   getState: GetLinkState,
   href: string,
-): LinkPresentation => presentationOf(getState(href)?.state ?? "unknown_form");
+): LinkPresentation => presentationOf(getState(href)?.state ?? "invalid");
 
 /**
  * `getState` resolves an href (`resolveDocLink` against the current

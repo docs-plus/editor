@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
-import { Hyperlink } from "@docs.plus/extension-hyperlink";
+import {
+  getDefaultController,
+  Hyperlink,
+} from "@docs.plus/extension-hyperlink";
 import { Editor } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { Heading } from "@tiptap/extension-heading";
@@ -9,10 +12,7 @@ import { Text } from "@tiptap/extension-text";
 import { relativePositionToAbsolutePosition } from "@tiptap/y-tiptap";
 
 import { docHref, hereHref } from "@/lib/links/doc-link";
-import {
-  LINK_COPY,
-  MERGE_DELETED_INTO_NOT_AVAILABLE,
-} from "@/lib/links/link-copy";
+import { LINK_COPY } from "@/lib/links/link-copy";
 import {
   createLinkHost,
   isAllowedLinkUri,
@@ -33,6 +33,12 @@ const LIVE: LinkIndexSnapshot = {
 const cleanups: (() => void)[] = [];
 
 afterEach(() => {
+  // The popover controller is a module singleton shared by every test file;
+  // a closed popover leaves the DOM only after its exit transition.
+  getDefaultController().close();
+  for (const popover of document.querySelectorAll(".floating-popover")) {
+    popover.remove();
+  }
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 
@@ -58,8 +64,6 @@ function setup(overrides: Partial<LinkHostDeps> = {}) {
   };
 }
 
-const defaultValidate = (uri: string) => /^https?:/.test(uri);
-
 /** Two frames: `openAtHeading` re-scrolls on the second. */
 const frames = (count: number) =>
   new Promise<void>((resolve) => {
@@ -70,20 +74,18 @@ const frames = (count: number) =>
 
 describe("isAllowedLinkUri (search-linking §4.1)", () => {
   it("writes only document links that parse", () => {
-    const ctx = { defaultValidate: mock(defaultValidate) };
-    expect(isAllowedLinkUri(docHref(KEY), ctx)).toBe(true);
-    expect(isAllowedLinkUri(docHref(KEY, TOC), ctx)).toBe(true);
-    expect(isAllowedLinkUri(hereHref(TOC), ctx)).toBe(true);
-    expect(isAllowedLinkUri("tinydocy:doc/BAD", ctx)).toBe(false);
-    expect(isAllowedLinkUri("tinydocy://local/x", ctx)).toBe(false);
-    expect(isAllowedLinkUri(`TINYDOCY:doc/${KEY}`, ctx)).toBe(false);
-    expect(ctx.defaultValidate).not.toHaveBeenCalled();
+    expect(isAllowedLinkUri(docHref(KEY))).toBe(true);
+    expect(isAllowedLinkUri(docHref(KEY, TOC))).toBe(true);
+    expect(isAllowedLinkUri(hereHref(TOC))).toBe(true);
+    expect(isAllowedLinkUri("tinydocy:doc/BAD")).toBe(false);
+    expect(isAllowedLinkUri("tinydocy://local/x")).toBe(false);
+    expect(isAllowedLinkUri(`TINYDOCY:doc/${KEY}`)).toBe(false);
   });
 
-  it("allows only https, http and mailto otherwise, after the extension's gate", () => {
-    const ctx = { defaultValidate: mock(() => true) };
+  it("allows only https, http and mailto otherwise, reading the URI alone", () => {
+    // The editor's paste and render checks call it with one argument.
     for (const uri of ["https://example.com", "http://x.y", "MAILTO:a@b.c"]) {
-      expect(isAllowedLinkUri(uri, ctx)).toBe(true);
+      expect(isAllowedLinkUri(uri)).toBe(true);
     }
     for (const uri of [
       "ms-msdt:/id x",
@@ -92,17 +94,15 @@ describe("isAllowedLinkUri (search-linking §4.1)", () => {
       "vscode://evil/run",
       "ftp://example.com",
     ]) {
-      expect(isAllowedLinkUri(uri, ctx)).toBe(false);
+      expect(isAllowedLinkUri(uri)).toBe(false);
     }
-    const refuse = { defaultValidate: mock(() => false) };
-    expect(isAllowedLinkUri("https://example.com", refuse)).toBe(false);
   });
 });
 
 describe("createLinkHost (search-linking §4.1)", () => {
   it("registers no linkify protocol (typed tinydocy: never autolinks)", () => {
     const { host } = setup();
-    expect(host.protocols).toBeUndefined();
+    expect("protocols" in host).toBe(false);
   });
 
   it("brings its own popovers: the document preview for document links", () => {
@@ -160,11 +160,7 @@ describe("createLinkHost (search-linking §4.1)", () => {
       purgedKeys: () => new Set(["c".repeat(32)]),
     });
     host.navigate?.(docHref("c".repeat(32)), { newTab: false });
-    expect(deps.announce).toHaveBeenCalledWith(
-      MERGE_DELETED_INTO_NOT_AVAILABLE
-        ? LINK_COPY.notAvailable
-        : LINK_COPY.deleted,
-    );
+    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.notAvailable);
   });
 
   it("stops tracking gestures once disposed", () => {
@@ -466,6 +462,77 @@ describe("the Hyperlink mark with the link host", () => {
     } finally {
       open.mockRestore();
     }
+  });
+
+  /** A Y-bound editor as the open document, with the link at 14..19. */
+  function boundSource(href: string, overrides: Partial<LinkHostDeps> = {}) {
+    let source: { docId: string; editor: Editor } | null = null;
+    const created = setup({ getSource: () => source, ...overrides });
+    const fixture = createCollabEditor({
+      extensions: [Hyperlink.configure({ ...created.host })],
+    });
+    cleanups.push(fixture.destroy);
+    document.body.append(fixture.editor.view.dom);
+    cleanups.push(() => fixture.editor.view.dom.remove());
+    source = { docId: "doc-here", editor: fixture.editor };
+    // "Title" then "hello world": link "world" (14..19).
+    fixture.editor
+      .chain()
+      .setTextSelection({ from: 14, to: 19 })
+      .setHyperlink({ href })
+      .run();
+    const anchor = fixture.editor.view.dom.querySelector("a[href]");
+    if (!anchor) throw new Error("no link");
+    return { ...created, fixture, anchor };
+  }
+
+  it("Mod-click on a not-available link opens its preview card, nothing else", () => {
+    const href = docHref("c".repeat(32));
+    const open = spyOn(window, "open").mockImplementation(() => null);
+    try {
+      const { deps, anchor, fixture } = boundSource(href);
+      expect(anchor.getAttribute("href")).toBe(href);
+      modClick(anchor);
+      const card = document.querySelector<HTMLElement>(".doc-link-preview");
+      expect(card).not.toBeNull();
+      expect(card?.dataset.linkState).toBe("not_available");
+      expect(card?.textContent).toContain(LINK_COPY.notAvailable);
+      expect(fixture.editor.view.dom.contains(card)).toBe(false);
+      expect(deps.announce).not.toHaveBeenCalled();
+      expect(deps.openDocument).not.toHaveBeenCalled();
+      expect(deps.openExternal).not.toHaveBeenCalled();
+      expect(deps.onFollow).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("opens no card for a link outside the open document's editor", () => {
+    let other: Editor | null = null;
+    const { deps, anchor } = boundSource(docHref("c".repeat(32)), {
+      getSource: () => (other ? { docId: "doc-other", editor: other } : null),
+    });
+    other = new Editor({
+      element: document.createElement("div"),
+      extensions: [Document, Paragraph, Text, Hyperlink],
+    });
+    const otherEditor = other;
+    cleanups.push(() => otherEditor.destroy());
+    modClick(anchor);
+    expect(document.querySelector(".doc-link-preview")).toBeNull();
+    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.notAvailable);
+  });
+
+  it("announces instead when there is no open document to anchor the card", () => {
+    const { host, deps } = setup({ getSource: () => null });
+    const editor = createEditor(host);
+    link(editor, docHref("c".repeat(32)));
+    const anchor = editor.view.dom.querySelector("a[href]");
+    if (!anchor) throw new Error("no link");
+    modClick(anchor);
+    expect(document.querySelector(".doc-link-preview")).toBeNull();
+    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.notAvailable);
   });
 
   it("hands onFollow the clicked link as a Yjs relative position", () => {

@@ -5,7 +5,7 @@
  * sets the 1em box, the 0.25em gap and the alignment, so this file only
  * colours it: `currentColor`, the link's own colour, in every state.
  *
- * Links that don't open (not available, deleted, or a form from a newer
+ * Links that don't open (not available, invalid, or a form from a newer
  * version, `DASHED_LINK_STATES`) get a dashed underline, so the state never
  * rests on the icon or colour alone. The rule reaches the link's inner spans
  * too, since coloured or resized text inside the link draws its own
@@ -17,13 +17,13 @@
 }
 
 .ProseMirror a:has(> .doc-link-icon[data-link-state="not_available"]),
-.ProseMirror a:has(> .doc-link-icon[data-link-state="deleted"]),
+.ProseMirror a:has(> .doc-link-icon[data-link-state="invalid"]),
 .ProseMirror a:has(> .doc-link-icon[data-link-state="unknown_form"]),
 .ProseMirror
   a:has(> .doc-link-icon[data-link-state="not_available"])
   span:not(.doc-link-icon),
 .ProseMirror
-  a:has(> .doc-link-icon[data-link-state="deleted"])
+  a:has(> .doc-link-icon[data-link-state="invalid"])
   span:not(.doc-link-icon),
 .ProseMirror
   a:has(> .doc-link-icon[data-link-state="unknown_form"])

@@ -198,7 +198,8 @@ The first version of this document designed full-text search: a renderer text ex
 
 **Parsing:**
 - A strict regex in `lib/links/doc-link.ts`: `^tinydocy:(doc/[0-9a-f]{32}|here)(#[0-9a-f-]{36})?$`. Anything else is not a document link.
-- The Hyperlink extension gets `protocols: [{ scheme: "tinydocy", optionalSlashes: true }]` and an `isAllowedUri` that accepts `tinydocy:` only when it parses.
+- The host passes the Hyperlink extension **no `protocols`**, only an `isAllowedUri` that accepts `tinydocy:` only when it parses (and web links only for `https`, `http` and `mailto`). `protocols` would only teach linkify the scheme, so typed `tinydocy:` text would autolink; it never does.
+- A `tinydocy:` href that doesn't parse is either a **later form** (`classifyDocLink`: lowercase `tinydocy:`, a kind this version doesn't know such as `folder` or `board`, then optionally `/`, `#` or `?` and printable ASCII) or **invalid** (a known kind that doesn't parse, odd case, `tinydocy://…`, stray whitespace or bidi characters). §4.6 shows them differently.
 - `navigate(href)` intercepts every document link. It is **never** passed to `window.open` or `shell.openExternal`.
 - These options come from the host through one prop (`linkHost`), with a no-op default. That is a pass-through in the editor chunk, measured in LK1 against its **60 B gz ledger line** (D23), and its logic is lazy.
 
@@ -245,7 +246,7 @@ The first version of this document designed full-text search: a renderer text ex
 - "/" menu item **Link to Document** (opens the ⌘K picker)
 - Outline context menu **Copy Link to Heading**
 - Document ⋯ and the file tree's context menu **Copy Link to Document**, which copies `tinydocy:doc/<key>` for pasting into another document
-- **Pasting** a `tinydocy:` href autolinks it like any URL
+- **Pasting** document links: they arrive as HTML (copied links, LK2). Pasted or typed `tinydocy:` text never autolinks (§4.1).
 - Dragging a document from the sidebar into the text is **later**
 
 ### 4.3 Following a link
@@ -269,10 +270,10 @@ The first version of this document designed full-text search: a renderer text ex
 | Renamed | Resolves. The text stays. The hovercard shows the current title and **Use Current Title** when the text differs (editable documents only). | Unresolved (§4.6). Sees only the text the author wrote. |
 | Moved to another folder | Resolves. The key is unchanged. | Same |
 | Trashed | Hovercard: "In Trash". Opening shows the In Trash banner with [Restore]. The icon changes. | Same |
-| Purged (deleted forever, or after 30 days) | Broken: "This document was deleted." The text stays. **Remove Link** is offered. | Same |
+| Purged (deleted forever, or after 30 days) | Not available (§4.6): "This document isn't on this device. It may have been deleted." The text stays. **Remove Link** is offered. | Same |
 | Restored from Trash | Resolves again | — |
 | Duplicated | Links still point to the original. The duplicate gets a new key. `here#` links inside the duplicate point into the duplicate. | — |
-| Shared (Live) | Resolves for you. The consent window adds: "This document links to 3 of your documents. People you share with will see the link text but can't open them." | Unresolved, unless Q3 (b) |
+| Shared (Live) | Resolves for you. Links to documents that aren't shared become plain text by default (D-O8, §4.7); the consent window adds: "3 links to your other documents will become plain text." [Keep Links] keeps them. | Plain text; kept links are unresolved, unless Q3 (b) |
 | Heading deleted | Opens the document at the top with the pill "The section this link pointed to was removed." | — |
 | Opened in the public sandbox (never by design, but possible through pasted HTML) | The `tinydocy:` scheme isn't registered there, so the mark is refused, or the text pastes plain | — |
 | Imported into another library | Through Export all, resolves if the target came along (keys carried in `library.json`). A single `.tinydoc` import gets a new key (v7), so links to it don't resolve. Otherwise unresolved. | — |
@@ -301,16 +302,17 @@ The first version of this document designed full-text search: a renderer text ex
 
 ### 4.6 Broken and unresolved states
 
-The `linkIcon` resolver (sync) decides the link's icon from the renderer's index snapshot, which Quick Open already holds:
+The `linkIcon` resolver (sync) decides the link's icon from the renderer's index snapshot, which Quick Open already holds. **Owner decisions Q4–Q7 (2026-11-22, final).** Icons are lucide, drawn in `currentColor` (the link's own colour); the state never rests on colour alone: links that don't open get a dashed underline, and their icon carries the label below, which prefixes the link's accessible name. **Following a link that doesn't open** (click in reading mode, ⌘-click while editing) **shows its preview card** under the link instead of only announcing; a follow with no link to anchor the card (keyboard) announces the copy.
 
-| State | Icon (lucide, via `lib/icons.tsx`) | Style | Hovercard / click copy |
-|---|---|---|---|
-| Resolves | `FileText` | normal link | the card in §4.5 |
-| Heading gone | `FileText` | normal | Opens at the top. Pill: "The section this link pointed to was removed." |
-| In Trash | `Trash2` | normal | "“Q4 budget” is in Trash." [Open] [Restore] |
-| Deleted | `FileX` | dashed underline (never colour alone) | "This document was deleted." [Remove Link] |
-| Not in this library (a collaborator, or a target not imported) | `FileQuestion` | dashed underline | "This links to a document that isn't in your library." No title, no key shown, no action except [Remove Link] when editable. |
-| Unknown future form (`tinydocy:` that doesn't parse) | `FileQuestion` | dashed | "This link needs a newer version of TinyDocy." The node is never modified. |
+| State | Icon (lucide, via `lib/icons.tsx`) | Style | Label (accessible name) | Preview / click copy |
+|---|---|---|---|---|
+| Resolves | `FileText` | normal link | — | the card in §4.5 |
+| Heading here (`tinydocy:here#id`) | `Hash` (Q6) | normal link | — | the heading's text, "A section of this document" |
+| Heading gone | `FileText` | normal | — | Opens at the top. Pill: "The section this link pointed to was removed." |
+| In Trash | `FileMinus` (Q5: a trash can mid-sentence reads as a delete button) | normal | "In Trash" | "“Q4 budget” is in Trash." [Open] [Restore] |
+| Not available: deleted, not in this library, or a collaborator's copy (Q4: one state) | `FileQuestion` | dashed underline | "Not available" | "This document isn't on this device. It may have been deleted." No title, no key shown (Q7). [Copy Link], and [Remove Link] when editable; [Remove Link] is never the default focus. |
+| Invalid link (`tinydocy:` that doesn't parse and isn't a later form, §4.1) | `FileQuestion` | dashed underline | "Not a valid link" | "This link isn't valid." |
+| Later form (a newer TinyDocy's `tinydocy:` form, §4.1) | `FileQuestion` | dashed underline | "Needs a newer version" | "This link needs a newer version of TinyDocy." The node is never modified. |
 
 ### 4.7 Export
 
@@ -321,6 +323,7 @@ The `linkIcon` resolver (sync) decides the link's icon from the renderer's index
 | **`.tinydoc`** (Send a copy, backups) | Unchanged hrefs. *(v7: importing a `.tinydoc` always assigns a new `link_key`, so the header needs no key.)* |
 | **Backup mirror `.md`** | Unchanged `tinydocy:` hrefs. Mirror filenames change with titles, so relative links would go stale between mirror passes. The `.tinydoc` beside them is the real backup. |
 | `tinydocy:here#id` | `#slug` in every Markdown and HTML export |
+| **Sharing** (Live share, D-O8) | Links to documents that aren't shared become **plain text by default**: `stripPrivateDocLinks` removes the link mark (the text stays) in one Yjs transaction before the share. `here#` links, links to shared documents and web links stay. **[Keep Links]** in the consent window keeps them; collaborators then see them as Not available (§4.6). |
 
 ### 4.8 The public sandbox
 
@@ -411,7 +414,7 @@ Grouped by source document. The `here#` count is excluded.
   - Operator chips are buttons with `aria-haspopup="listbox"` (organize review §739).
   - Titles are `<bdi dir="auto">`.
 - **Document links in the editor.**
-  - The icon has `aria-hidden`. The state is in the link's accessible description (`aria-describedby` on a hidden "Deleted document" or "In Trash" span, set by the lazy decorator), so a screen reader says more than "link".
+  - For a link that opens (resolves, `here#`) the icon has `aria-hidden`. For the other states it is `role="img"` with the §4.6 label ("In Trash", "Not available", "Not a valid link", "Needs a newer version") as its `aria-label`, so the state starts the link's accessible name and a screen reader says more than "link".
   - The dashed underline covers the colour-blind case.
 - **Hovercard:** reachable with the extension's keyboard focus path. Esc closes it and returns focus. Actions are buttons.
 - **Linked from:**
@@ -435,11 +438,11 @@ Grouped by source document. The `here#` count is excluded.
 | Linking a document to itself (whole document) | ⌘K picker | (This document isn't listed. Its headings are under In this document.) | — |
 | Heading gone | Pill after opening | The section this link pointed to was removed. | — |
 | Target in Trash | Hovercard | “Q4 budget” is in Trash. | [Open] [Restore] |
-| Target deleted | Hovercard | This document was deleted. | [Remove Link] |
-| Not in your library | Hovercard | This links to a document that isn't in your library. | [Remove Link] (editable only) |
-| Unknown link form | Hovercard | This link needs a newer version of TinyDocy. | — |
+| Not available (deleted or not on this device, Q4) | Preview card, also on follow | This document isn't on this device. It may have been deleted. | [Copy Link] [Remove Link] (editable only, never the default focus) |
+| Invalid link | Preview card, also on follow | This link isn't valid. | [Copy Link] [Remove Link] (editable only) |
+| Later link form | Preview card, also on follow | This link needs a newer version of TinyDocy. | [Copy Link] [Remove Link] (editable only) |
 | Link text differs from the title | Hovercard action | Use Current Title | Replaces the text with the current title, one undo step |
-| Share consent with links | Consent window (P4.4) | This document links to 3 of your documents. People you share with will see the link text but can't open them. | — |
+| Share consent with links | Consent window (P4.4) | 3 links to your other documents will become plain text. (1 link …) | [Keep Links] |
 | Linked from, collapsed | End of document | Linked from 3 documents | Click or Enter expands |
 | Linked from, expanded | End of document | **Board notes** › Decisions: …see the **Q4 budget** for travel… | Enter opens at that section |
 | Import, links kept as text | Import report (onboarding §5.2, shared string) | 52 links between notes were kept as text, like [[Project]]. | [Link Imported Notes] |
@@ -505,7 +508,7 @@ Numbering avoids P*, W*, A*, U*, S-A*, F*: **SR** for search and **LK** for link
 | # | PR | Lens | Depends on | Effort | Exit criteria | Release |
 |---|---|---|---|---|---|---|
 | **SR1** | **Metadata search:** `normalize` (§3.2), the operator compiler (§3.3), matching over titles, tags, folder names and properties in Quick Open and the list filter (⌘F in a list), `index.searchTitles` widened to tags and folders, operator chips, the §8 search states, a11y. **Design review.** | SE + UX | P2.7a, P2.7b | S: 1.5 days, 2 rounds | Every unit table passes. The property test runs 50,000 cases. The §3.5 targets hold at 1,000 and 10,000 documents. The keyboard checklist passes. | v1 |
-| **LK1** | **Document links core:** `doc-link` parser, `linkHost` pass-through (60 B gz ledger line, D23), `protocols`/`isAllowedUri`/`navigate`/`linkIcon`, resolver from the index snapshot, `goToHeading` jumps, the §4.6 states, the links-only pass (`extract-links.ts`), the consent-window line hook for P4.4 | SE + DE | P2.6 (`link_key`), P2.7a | S–M: 3.5 days, 2 rounds | Links follow, Back works, each broken state renders. The chunk script shows the editor delta within the 60 B line. `tinydocy:` never reaches `openExternal`. | v1 |
+| **LK1** | **Document links core:** `doc-link` parser, `linkHost` pass-through (60 B gz ledger line, D23), `isAllowedUri`/`navigate`/`linkIcon`/`popovers` (no `protocols`, §4.1), resolver from the index snapshot, `goToHeading` jumps, the §4.6 states, the links-only pass (`extract-links.ts`), the consent-window line hook for P4.4 and `stripPrivateDocLinks` (D-O8) | SE + DE | P2.6 (`link_key`), P2.7a | S–M: 3.5 days, 2 rounds | Links follow, Back works, each broken state renders. The chunk script shows the editor delta within the 60 B line. `tinydocy:` never reaches `openExternal`. | v1 |
 | **LK2** | **Inserting links:** the ⌘K Documents and In this document sections, the heading step (closed-document source per §4.2, open), Copy Link to Document and Copy Link to Heading, the "/" item, the first-time hint. **Design review.** | UX + DE | LK1, SR1 (matcher) | M: 3 days, 2 rounds | Insert from ⌘K and from paste, one undo step each. Keyboard-only flow passes. Templates never listed. | v1 |
 | **LK3** | **`[[` trigger** folded into `slash-trigger`. Measures `slash-trigger` on `main` first. | DE | LK2 | S: 2 days, 2 rounds | Eager cost within the 120 B gz ledger line. Never fires in code or the title. IME-safe. **Cut first** (D23, D30). | v1 unless cut |
 | **LK4** | **Hovercard and Linked from:** the `links` table (migration hook, §5) and web store, `links.put` IPC, hovercard config and the card, Use Current Title, the Linked from section, Links to This Document, the ⋯ popover row. **Design review.** | UX + DE + SE | LK1 | M: 3.5–4.5 days, 2 rounds | The card opens with no network request (asserted). Linked from updates across windows. a11y checks pass. Hover preview is fourth and backlinks sixth in D30. | v1 unless cut |

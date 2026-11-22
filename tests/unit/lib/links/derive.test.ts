@@ -27,7 +27,6 @@ const KEY = "0123456789abcdef0123456789abcdef";
 const T1 = "11111111-1111-4111-8111-111111111111";
 const T2 = "22222222-2222-4222-8222-222222222222";
 const T3 = "33333333-3333-4333-8333-333333333333";
-const SRC = "doc-src";
 
 const text = (value: string, href?: string): JSONContent =>
   href
@@ -153,9 +152,8 @@ describe("toLinkRows", () => {
       heading(T1, 1, text("Title")),
       paragraph(text("to a heading", `tinydocy:doc/${KEY}#${T2}`)),
     );
-    expect(toLinkRows(SRC, extractLinks(fragment))).toEqual([
+    expect(toLinkRows(extractLinks(fragment))).toEqual([
       {
-        src_doc_id: SRC,
         ord: 0,
         src_toc_id: "",
         target_key: KEY,
@@ -164,7 +162,6 @@ describe("toLinkRows", () => {
         context: "before any heading",
       },
       {
-        src_doc_id: SRC,
         ord: 1,
         src_toc_id: T1,
         target_key: KEY,
@@ -176,7 +173,7 @@ describe("toLinkRows", () => {
   });
 
   it("maps nothing to nothing", () => {
-    expect(toLinkRows(SRC, [])).toEqual([]);
+    expect(toLinkRows([])).toEqual([]);
   });
 });
 
@@ -187,14 +184,14 @@ describe("toHeadingRows", () => {
       heading(null, 2, text("Unnamed")),
       heading(T2, 3, text("Travel")),
     );
-    expect(toHeadingRows(SRC, extractHeadings(fragment))).toEqual([
-      { doc_id: SRC, ord: 0, toc_id: T1, level: 1, text: "Q4 plan" },
-      { doc_id: SRC, ord: 1, toc_id: T2, level: 3, text: "Travel" },
+    expect(toHeadingRows(extractHeadings(fragment))).toEqual([
+      { ord: 0, toc_id: T1, level: 1, text: "Q4 plan" },
+      { ord: 1, toc_id: T2, level: 3, text: "Travel" },
     ]);
   });
 
   it("maps nothing to nothing", () => {
-    expect(toHeadingRows(SRC, [])).toEqual([]);
+    expect(toHeadingRows([])).toEqual([]);
   });
 });
 

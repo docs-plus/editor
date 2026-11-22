@@ -7,10 +7,7 @@ import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
 
 import { docHref, hereHref } from "@/lib/links/doc-link";
-import {
-  LINK_COPY,
-  MERGE_DELETED_INTO_NOT_AVAILABLE,
-} from "@/lib/links/link-copy";
+import { LINK_COPY } from "@/lib/links/link-copy";
 import {
   createLinkNavigator,
   type LinkNavigatorDeps,
@@ -88,9 +85,7 @@ function setup(overrides: Partial<LinkNavigatorDeps> = {}) {
 }
 
 const NOT_AVAILABLE = LINK_COPY.notAvailable;
-const DELETED = MERGE_DELETED_INTO_NOT_AVAILABLE
-  ? LINK_COPY.notAvailable
-  : LINK_COPY.deleted;
+const LATER = "tinydocy:folder/abc";
 
 describe("createLinkNavigator (search-linking §4.3)", () => {
   it("opens a document in this tab on Mod alone", () => {
@@ -160,7 +155,7 @@ describe("createLinkNavigator (search-linking §4.3)", () => {
     const { deps, navigate } = setup({ resolve: mock(() => null) });
     navigate(docHref(KEY), { newTab: true });
     expect(deps.openExternal).not.toHaveBeenCalled();
-    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.unknownForm);
+    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.invalid);
   });
 
   it("never opens anything but https, http and mailto externally", () => {
@@ -207,9 +202,10 @@ describe("one announcement per follow (search-linking §8)", () => {
       hereHref(EMPTY_TOC),
       LINK_COPY.atHeading("Untitled"),
     ],
-    ["a deleted document", docHref(PURGED_KEY), DELETED],
+    ["a deleted document", docHref(PURGED_KEY), NOT_AVAILABLE],
     ["a document not in the library", docHref(UNKNOWN_KEY), NOT_AVAILABLE],
-    ["a newer link form", "tinydocy:doc/BAD", LINK_COPY.unknownForm],
+    ["an invalid link", "tinydocy:doc/BAD", LINK_COPY.invalid],
+    ["a newer link form", LATER, LINK_COPY.unknownForm],
   ];
   for (const [name, href, message] of cases) {
     it(`${name}: ${message ?? "nothing (openAtHeading speaks)"}`, () => {
@@ -238,10 +234,57 @@ describe("one announcement per follow (search-linking §8)", () => {
     expect(deps.goToHeadingHere).toHaveBeenCalledWith(TOC);
     expect(deps.announce).not.toHaveBeenCalled();
   });
+});
 
-  it("deleted and not in your library read the same while merged", () => {
-    expect(MERGE_DELETED_INTO_NOT_AVAILABLE).toBe(true);
-    expect(DELETED).toBe(NOT_AVAILABLE);
+describe("showPreview: a follow that can't open shows the link's card", () => {
+  const cases = [
+    ["not_available (deleted)", docHref(PURGED_KEY)],
+    ["not_available (not in the library)", docHref(UNKNOWN_KEY)],
+    ["invalid", "tinydocy:doc/BAD"],
+    ["unknown_form", LATER],
+  ] as const;
+  for (const [name, href] of cases) {
+    it(`${name}: the card, and no announcement`, () => {
+      const showPreview = mock(() => true);
+      const { deps, navigate } = setup({ showPreview });
+      navigate(href, { newTab: true });
+      expect(showPreview).toHaveBeenCalledTimes(1);
+      expect(showPreview).toHaveBeenCalledWith(href);
+      expect(deps.announce).not.toHaveBeenCalled();
+      expect(deps.openDocument).not.toHaveBeenCalled();
+      expect(deps.openExternal).not.toHaveBeenCalled();
+      expect(deps.onFollow).not.toHaveBeenCalled();
+    });
+
+    it(`${name}: announces when no card can be shown`, () => {
+      const showPreview = mock(() => false);
+      const { deps, navigate } = setup({ showPreview });
+      navigate(href, { newTab: false });
+      expect(showPreview).toHaveBeenCalledTimes(1);
+      expect(deps.announce).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it("never shows a card for links that open", () => {
+    const showPreview = mock(() => true);
+    const { deps, navigate } = setup({ showPreview });
+    navigate(docHref(KEY), { newTab: false });
+    navigate(docHref(TRASHED_KEY), { newTab: false });
+    navigate(hereHref(TOC), { newTab: false });
+    navigate("https://example.com", { newTab: false });
+    expect(showPreview).not.toHaveBeenCalled();
+    expect(deps.openDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows no card for a heading here that is gone (it announces)", () => {
+    const showPreview = mock(() => true);
+    const { deps, navigate } = setup({
+      showPreview,
+      goToHeadingHere: mock(() => false),
+    });
+    navigate(hereHref(TOC), { newTab: false });
+    expect(showPreview).not.toHaveBeenCalled();
+    expect(deps.announce).toHaveBeenCalledWith(LINK_COPY.headingRemoved);
   });
 });
 
@@ -268,7 +311,8 @@ describe("onFollow (search-linking §4.3, Back)", () => {
   const broken = [
     ["deleted", docHref(PURGED_KEY)],
     ["not_in_library", docHref(UNKNOWN_KEY)],
-    ["unknown_form", "tinydocy:doc/BAD"],
+    ["invalid", "tinydocy:doc/BAD"],
+    ["unknown_form", LATER],
   ] as const;
   for (const [state, href] of broken) {
     it(`never fires for ${state}`, () => {

@@ -6,8 +6,9 @@
  *
  * `parseDocLink` is strict: anything else is not a document link. Routing
  * uses `isOurScheme`, which is loose on purpose: a `tinydocy:` href that
- * doesn't parse (a future form, odd case, stray whitespace) is still ours,
- * and must never reach `window.open` or `shell.openExternal`.
+ * doesn't parse (a later form, odd case, stray whitespace) is still ours,
+ * and must never reach `window.open` or `shell.openExternal`;
+ * `classifyDocLink` says whether it is a later form or simply invalid.
  */
 export const DOC_LINK_SCHEME = "tinydocy";
 
@@ -28,6 +29,29 @@ export function parseDocLink(href: string): DocLink | null {
   const [, key, here, tocId] = match;
   if (here) return tocId ? { kind: "here", tocId } : null;
   return { kind: "doc", key, tocId: tocId ?? null };
+}
+
+/**
+ * `later`: exactly lowercase `tinydocy:`, a kind this version doesn't know
+ * (`[a-z][a-z0-9-]*`, not `doc` or `here`), then optionally `/`, `#` or `?`
+ * and printable ASCII with no spaces, e.g. `tinydocy:folder/abc`.
+ */
+const LATER_FORM = /^tinydocy:([a-z][a-z0-9-]*)(?:[/#?][!-~]*)?$/;
+const KNOWN_KINDS: ReadonlySet<string> = new Set(["doc", "here"]);
+
+/**
+ * What an href is to this version (search-linking §4.6): `valid` when it
+ * parses; `later` when it is a form a newer TinyDocy may write ("needs a
+ * newer version"); `invalid` otherwise: a known kind that doesn't parse
+ * (`tinydocy:doc/BAD`), odd case, slashes, stray whitespace or bidi
+ * characters, and any href that isn't ours.
+ */
+export type DocLinkClass = "valid" | "later" | "invalid";
+
+export function classifyDocLink(href: string): DocLinkClass {
+  if (parseDocLink(href)) return "valid";
+  const kind = LATER_FORM.exec(href)?.[1];
+  return kind && !KNOWN_KINDS.has(kind) ? "later" : "invalid";
 }
 
 export function docHref(key: string, tocId?: string | null): string {

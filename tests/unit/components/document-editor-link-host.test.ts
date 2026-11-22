@@ -52,14 +52,20 @@ describe("document editor linkHost", () => {
   });
 
   it("passes the host's link options through", () => {
+    const popovers = {
+      previewHyperlink: () => null,
+      editHyperlink: () => null,
+      createHyperlink: () => null,
+    };
     const host: LinkHost = {
-      protocols: [{ scheme: "tinydocy", optionalSlashes: true }],
+      popovers,
       isAllowedUri: () => true,
       navigate: () => {},
       linkIcon: () => null,
     };
     const options = hyperlinkOptions(host);
-    expect(options.protocols).toBe(host.protocols);
+    // `configure` deep-merges objects: the host's popovers replace all three.
+    expect(options.popovers).toEqual(popovers);
     expect(options.isAllowedUri).toBe(host.isAllowedUri);
     expect(options.navigate).toBe(host.navigate);
     expect(options.linkIcon).toBe(host.linkIcon);

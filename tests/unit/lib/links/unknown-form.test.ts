@@ -19,7 +19,8 @@ import type { LinkIndexSnapshot } from "@/lib/links/resolve";
  * new writes of it, but loading the document and editing around it keep it
  * byte for byte, on the app's real editor with a link host.
  */
-const FUTURE = "tinydocy://local/doc/future-form";
+/** A later form of the grammar (`classifyDocLink` → "later"). */
+const FUTURE = "tinydocy:folder/future-form";
 const KEY = "0123456789abcdef0123456789abcdef";
 
 const extensionsFor = (

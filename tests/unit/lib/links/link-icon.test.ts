@@ -27,16 +27,18 @@ const STATES: Record<LinkStateName, LinkState> = {
   in_trash: { state: "in_trash", docId: "d", title: "T", tocId: null },
   deleted: { state: "deleted" },
   not_in_library: { state: "not_in_library" },
+  invalid: { state: "invalid" },
   unknown_form: { state: "unknown_form" },
 };
 
-/** What each state shows as, with Q1 (B) merging deleted into not available. */
+/** What each state shows as: deleted and not in the library are one (Q4). */
 const PRESENTED: Record<LinkStateName, LinkPresentation> = {
   resolves: "resolves",
   here: "here",
   in_trash: "in_trash",
   deleted: "not_available",
   not_in_library: "not_available",
+  invalid: "invalid",
   unknown_form: "unknown_form",
 };
 
@@ -47,6 +49,7 @@ const SIGNATURE: Record<LinkStateName, string> = {
   in_trash: "path:M9 15h6", // FileMinus
   deleted: "path:M12 17h.01", // FileQuestion
   not_in_library: "path:M12 17h.01",
+  invalid: "path:M12 17h.01",
   unknown_form: "path:M12 17h.01",
 };
 
@@ -82,29 +85,20 @@ function expectedA11y(name: LinkStateName) {
       };
 }
 
-describe("presentationOf (linking review, decision 1)", () => {
-  it("merges deleted into not available by default", () => {
+describe("presentationOf (owner decision Q4)", () => {
+  it("shows deleted and not in the library as one Not available state", () => {
     for (const [name, presentation] of Object.entries(PRESENTED)) {
       expect(presentationOf(name as LinkStateName)).toBe(presentation);
     }
   });
 
-  it("keeps deleted apart when the merge is off", () => {
-    expect(presentationOf("deleted", false)).toBe("deleted");
-    expect(presentationOf("not_in_library", false)).toBe("not_available");
-  });
-
   it("labels every state that doesn't open, and none that do", () => {
-    expect(LINK_STATE_LABEL.resolves).toBeUndefined();
-    expect(LINK_STATE_LABEL.here).toBeUndefined();
-    for (const p of [
-      "in_trash",
-      "deleted",
-      "not_available",
-      "unknown_form",
-    ] as const) {
-      expect(LINK_STATE_LABEL[p]).toBeString();
-    }
+    expect(LINK_STATE_LABEL).toEqual({
+      in_trash: "In Trash",
+      not_available: "Not available",
+      invalid: "Not a valid link",
+      unknown_form: "Needs a newer version",
+    });
   });
 });
 
@@ -154,16 +148,14 @@ describe("createLinkIcon (search-linking §4.6)", () => {
     a?.remove();
   });
 
-  it("reads an our-scheme href the host can't resolve as an unknown form", () => {
+  it("reads an our-scheme href the host can't resolve as invalid", () => {
     const icon = createLinkIcon(() => null);
-    expect(icon({ href: "TINYDOCY:odd" })?.dataset.linkState).toBe(
-      "unknown_form",
-    );
+    expect(icon({ href: "TINYDOCY:odd" })?.dataset.linkState).toBe("invalid");
   });
 
-  it("dashes only the states that don't open", () => {
+  it("dashes only the states that don't open (In Trash opens)", () => {
     expect([...DASHED_LINK_STATES].sort()).toEqual([
-      "deleted",
+      "invalid",
       "not_available",
       "unknown_form",
     ]);
@@ -217,6 +209,15 @@ describe("refreshLinkIcons", () => {
       expect(icon.textContent).toBe("");
     });
   }
+
+  it("relabels between states that share a drawing", () => {
+    const { root, icon } = mount(STATES.unknown_form);
+    expect(refreshLinkIcons(root, () => STATES.invalid)).toBe(1);
+    expect(a11y(icon)).toEqual(expectedA11y("invalid"));
+    expect(refreshLinkIcons(root, () => STATES.not_in_library)).toBe(1);
+    expect(a11y(icon)).toEqual(expectedA11y("not_in_library"));
+    expect(icon.querySelectorAll("svg")).toHaveLength(1);
+  });
 
   it("round-trips resolves → in_trash → resolves", () => {
     const { root, icon } = mount(STATES.resolves);

@@ -43,6 +43,7 @@ const GLYPHS: readonly (readonly [string, LinkState])[] = [
   ["file-minus", { state: "in_trash", docId: "d", title: "T", tocId: null }],
   ["file-question-mark", { state: "not_in_library" }],
   ["file-question-mark", { state: "deleted" }],
+  ["file-question-mark", { state: "invalid" }],
   ["file-question-mark", { state: "unknown_form" }],
 ];
 

@@ -2,9 +2,12 @@
  * The Hyperlink `navigate` option (search-linking §4.3, §4.4, §4.6). Every
  * `tinydocy:` href stops here and is never handed to `openExternal`
  * (`window.open`, `shell.openExternal`), whatever its form; web links pass
- * through unchanged. Each follow of a document link makes one announcement
- * (§8): the state copy when it can't open, where it landed when it can
- * (`openAtHeading` speaks for a heading in another document).
+ * through unchanged. A follow of a document link that can't open (not
+ * available, invalid, a later form) shows that link's preview card
+ * (`showPreview`), in reading mode and editing alike; without one it makes
+ * the follow's one announcement (§8), the state copy. A link that opens
+ * announces where it landed (`openAtHeading` speaks for a heading in
+ * another document).
  */
 import type { Editor } from "@tiptap/core";
 import {
@@ -16,10 +19,7 @@ import type * as Y from "yjs";
 import { findTocAnchor } from "@/extensions/table-of-contents/table-of-contents-items";
 import { UNTITLED } from "@/lib/library/tree-rows";
 import { isOurScheme, isWebLink } from "@/lib/links/doc-link";
-import {
-  LINK_COPY,
-  MERGE_DELETED_INTO_NOT_AVAILABLE,
-} from "@/lib/links/link-copy";
+import { LINK_COPY } from "@/lib/links/link-copy";
 import type { LinkState } from "@/lib/links/resolve";
 
 /** Where a followed link was: Back returns here. */
@@ -51,6 +51,12 @@ export interface LinkNavigatorDeps {
   goToHeadingHere(tocId: string): boolean;
   openExternal(href: string, opts: { newTab: boolean }): void;
   announce(message: string): void;
+  /**
+   * Shows the preview card for a followed link that can't open; true when
+   * it did, and then nothing is announced (the card says it). Absent or
+   * false: the state copy is announced.
+   */
+  showPreview?(href: string): boolean;
   /** From `trackLinkGestures`: Shift held or the middle button. */
   wantsNewTab(): boolean;
   /** From `trackLinkGestures`: the link the gesture landed on. */
@@ -75,11 +81,10 @@ export type LinkNavigator = (href: string, ctx: { newTab: boolean }) => void;
 function brokenMessage(to: LinkState): string | null {
   switch (to.state) {
     case "deleted":
-      return MERGE_DELETED_INTO_NOT_AVAILABLE
-        ? LINK_COPY.notAvailable
-        : LINK_COPY.deleted;
     case "not_in_library":
       return LINK_COPY.notAvailable;
+    case "invalid":
+      return LINK_COPY.invalid;
     case "unknown_form":
       return LINK_COPY.unknownForm;
     default:
@@ -145,11 +150,11 @@ export function createLinkNavigator(deps: LinkNavigatorDeps): LinkNavigator {
       if (isWebLink(href)) deps.openExternal(href, { newTab: ctx.newTab });
       return;
     }
-    // A host that can't resolve one of ours reads it as a future form.
-    const to = deps.resolve(href) ?? { state: "unknown_form" };
+    // A host that can't resolve one of ours reads it as invalid.
+    const to = deps.resolve(href) ?? { state: "invalid" };
     const broken = brokenMessage(to);
     if (broken) {
-      deps.announce(broken);
+      if (!deps.showPreview?.(href)) deps.announce(broken);
       return;
     }
     // Read the source before the follow replaces or moves it.

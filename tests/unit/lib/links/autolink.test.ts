@@ -80,7 +80,7 @@ const tinydocyRegistrations = (state: LinkifyState) =>
 
 describe("document links and linkify", () => {
   it("the host hands the extension no protocols", () => {
-    expect(makeHost().host.protocols).toBeUndefined();
+    expect("protocols" in makeHost().host).toBe(false);
   });
 
   it("registers tinydocy at most once across two editors and a remount", async () => {

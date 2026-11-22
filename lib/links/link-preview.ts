@@ -79,7 +79,7 @@ export function docLinkPreview(
 ): HTMLElement {
   const { editor } = options;
   const href = options.attrs.href ?? "";
-  const state = deps.resolve(href) ?? ({ state: "unknown_form" } as const);
+  const state = deps.resolve(href) ?? ({ state: "invalid" } as const);
   const shown = presentationOf(state.state);
   const card = element("div", "hyperlink-preview-popover doc-link-preview");
   card.dataset.linkState = shown;
@@ -105,11 +105,11 @@ export function docLinkPreview(
       break;
     }
     case "deleted":
-      body.textContent =
-        shown === "deleted" ? LINK_COPY.deleted : LINK_COPY.notAvailable;
-      break;
     case "not_in_library":
       body.textContent = LINK_COPY.notAvailable;
+      break;
+    case "invalid":
+      body.textContent = LINK_COPY.invalid;
       break;
     case "unknown_form":
       body.textContent = LINK_COPY.unknownForm;
@@ -143,6 +143,9 @@ export function docLinkPreview(
       }),
     );
   }
+  // Keyboard focus lands on the first action, Open or Copy Link, never on
+  // Remove Link (Q4): the extension's `focusPreviewFromKeyboard` prefers it.
+  actions.firstElementChild?.setAttribute("data-popover-autofocus", "");
   card.append(actions);
   return card;
 }

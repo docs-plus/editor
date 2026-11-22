@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  classifyDocLink,
   DOC_LINK_SCHEME,
   docHref,
   hereHref,
@@ -46,6 +47,52 @@ describe("parseDocLink (search-linking §4.1)", () => {
     ["", "empty"],
   ])("refuses %s (%s)", (href) => {
     expect(parseDocLink(href)).toBeNull();
+  });
+});
+
+describe("classifyDocLink (search-linking §4.6)", () => {
+  it.each([
+    `tinydocy:doc/${KEY}`,
+    `tinydocy:doc/${KEY}#${TOC}`,
+    `tinydocy:here#${TOC}`,
+  ])("calls %p valid", (href) => {
+    expect(classifyDocLink(href)).toBe("valid");
+  });
+
+  it.each([
+    "tinydocy:folder/abc",
+    "tinydocy:board#x",
+    "tinydocy:board?view=grid&x=1",
+    "tinydocy:docs/abc",
+    "tinydocy:heres#x",
+    "tinydocy:folder",
+    "tinydocy:a-2/b",
+  ])("calls %p a later form", (href) => {
+    expect(classifyDocLink(href)).toBe("later");
+  });
+
+  it.each([
+    ["tinydocy:doc/BAD", "a known kind that doesn't parse"],
+    [`tinydocy:doc/${KEY.toUpperCase()}`, "uppercase key"],
+    ["tinydocy:doc", "doc without a key"],
+    ["tinydocy:here", "here without a heading"],
+    ["tinydocy://local/x", "slashes"],
+    [`TINYDOCY:doc/${KEY}`, "uppercase scheme"],
+    ["TinyDocy:future-form", "uppercase scheme, later-looking"],
+    ["tinydocy:Folder/abc", "uppercase kind"],
+    [`tinydocy:doc/${KEY}#short`, "short heading id"],
+    [` tinydocy:doc/${KEY}`, "leading space"],
+    ["tinydocy:folder/a b", "space in the rest"],
+    ["tinydocy:folder/abc ", "trailing space"],
+    ["tinydocy:folder/\u00e9", "non-ASCII in the rest"],
+    ["\u202etinydocy:folder/abc", "bidi override"],
+    ["tinydocy:fol\u200bder/abc", "zero-width space"],
+    ["tinydocy:folder:x", "a kind with a colon"],
+    ["tinydocy:1folder/x", "a kind that starts with a digit"],
+    ["tinydocy:", "no kind"],
+    ["https://example.com", "not ours"],
+  ])("calls %p invalid (%s)", (href) => {
+    expect(classifyDocLink(href)).toBe("invalid");
   });
 });
 

@@ -7,7 +7,11 @@
  */
 import { folderPath, indexFolders } from "@/lib/library/folder-rules";
 import { entryTitle } from "@/lib/library/tree-rows";
-import { isOurScheme, parseDocLink } from "@/lib/links/doc-link";
+import {
+  classifyDocLink,
+  isOurScheme,
+  parseDocLink,
+} from "@/lib/links/doc-link";
 import type { DocumentEntry, FolderEntry } from "@/lib/platform/document-index";
 
 export type LinkState =
@@ -27,6 +31,9 @@ export type LinkState =
     }
   | { readonly state: "deleted" }
   | { readonly state: "not_in_library" }
+  /** Ours, but neither valid nor a later form (`classifyDocLink`). */
+  | { readonly state: "invalid" }
+  /** A later form of the grammar: needs a newer version. */
   | { readonly state: "unknown_form" }
   | { readonly state: "here"; readonly tocId: string };
 
@@ -84,7 +91,11 @@ export function resolveDocLink(
 ): LinkState | null {
   if (!isOurScheme(href)) return null;
   const link = parseDocLink(href);
-  if (!link) return { state: "unknown_form" };
+  if (!link) {
+    return classifyDocLink(href) === "later"
+      ? { state: "unknown_form" }
+      : { state: "invalid" };
+  }
   if (link.kind === "here") return { state: "here", tocId: link.tocId };
 
   const lookup = lookupFor(source.snapshot);

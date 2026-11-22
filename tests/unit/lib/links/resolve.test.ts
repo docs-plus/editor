@@ -98,16 +98,25 @@ describe("resolveDocLink (search-linking §4.6)", () => {
     expect(resolveDocLink(docHref(KEY_A), source)?.state).toBe("resolves");
   });
 
-  it("reads tinydocy: hrefs that don't parse as an unknown form", () => {
+  it("reads a later form of the grammar as needing a newer version", () => {
+    const source = { snapshot: snapshot() };
+    for (const href of ["tinydocy:folder/abc", "tinydocy:board#x"]) {
+      expect(resolveDocLink(href, source)).toEqual({ state: "unknown_form" });
+    }
+  });
+
+  it("reads any other tinydocy: href that doesn't parse as invalid", () => {
     const source = { snapshot: snapshot() };
     for (const href of [
       "tinydocy://local/x",
       `TINYDOCY:doc/${KEY_A}`,
       ` tinydocy:doc/${KEY_A}`,
+      `\u202etinydocy:doc/${KEY_A}`,
       "tinydocy:doc/BAD",
       "tinydocy:here",
+      "TinyDocy:future-form",
     ]) {
-      expect(resolveDocLink(href, source)).toEqual({ state: "unknown_form" });
+      expect(resolveDocLink(href, source)).toEqual({ state: "invalid" });
     }
   });
 

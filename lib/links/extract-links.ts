@@ -132,9 +132,11 @@ export function extractHeadings(fragment: Y.XmlFragment): HeadingRow[] {
   return deriveDocument(fragment).headings;
 }
 
-/** A row of format 2's `links` table. */
+/**
+ * A row of format 2's `links` table, in its columns. `derive.put(docId, …)`
+ * supplies `src_doc_id`, so rows don't repeat it.
+ */
 export interface LinkTableRow {
-  readonly src_doc_id: string;
   readonly ord: number;
   readonly src_toc_id: string;
   readonly target_key: string;
@@ -144,12 +146,8 @@ export interface LinkTableRow {
 }
 
 /** `extractLinks` rows as `links` columns: `ord` by index, `''` for null. */
-export function toLinkRows(
-  srcDocId: string,
-  rows: readonly LinkRow[],
-): LinkTableRow[] {
+export function toLinkRows(rows: readonly LinkRow[]): LinkTableRow[] {
   return rows.map((row, ord) => ({
-    src_doc_id: srcDocId,
     ord,
     src_toc_id: row.srcTocId ?? "",
     target_key: row.key,
@@ -159,9 +157,11 @@ export function toLinkRows(
   }));
 }
 
-/** A row of format 2's `doc_headings` table, less the worker's `text_key`. */
+/**
+ * A row of format 2's `doc_headings` table, in its columns, less `doc_id`
+ * (`derive.put` supplies it) and the worker's `text_key`.
+ */
 export interface HeadingTableRow {
-  readonly doc_id: string;
   readonly ord: number;
   readonly toc_id: string;
   readonly level: number;
@@ -169,12 +169,8 @@ export interface HeadingTableRow {
 }
 
 /** `extractHeadings` rows as `doc_headings` columns. */
-export function toHeadingRows(
-  docId: string,
-  rows: readonly HeadingRow[],
-): HeadingTableRow[] {
+export function toHeadingRows(rows: readonly HeadingRow[]): HeadingTableRow[] {
   return rows.map((row) => ({
-    doc_id: docId,
     ord: row.ord,
     toc_id: row.tocId,
     level: row.level,

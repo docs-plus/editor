@@ -10,7 +10,10 @@
  * the scheme, so typed `tinydocy:` text would autolink. Document links are
  * made by the picker, and pasted ones arrive as HTML (LK2).
  */
-import type { IsAllowedUriContext } from "@docs.plus/extension-hyperlink";
+import {
+  buildPreviewOptionsFromAnchor,
+  openPreviewHyperlink,
+} from "@docs.plus/extension-hyperlink";
 import type { Editor } from "@tiptap/core";
 
 import { findTocAnchor } from "@/extensions/table-of-contents/table-of-contents-items";
@@ -45,15 +48,38 @@ export interface LinkHostDeps
 
 /**
  * Only valid document links and web links (`isWebLink`: https, http,
- * mailto) can be written or opened; the extension's own safety gate still
- * runs as well.
+ * mailto) can be written, pasted, rendered live or opened.
  */
-export function isAllowedLinkUri(
-  uri: string,
-  ctx: Pick<IsAllowedUriContext, "defaultValidate">,
+export function isAllowedLinkUri(uri: string): boolean {
+  // Called with the URI alone too (the editor's paste and render checks),
+  // so it never reads the extension's context; the extension's own
+  // safety gate still runs first where it applies.
+  return isOurScheme(uri) ? parseDocLink(uri) !== null : isWebLink(uri);
+}
+
+/**
+ * Opens the preview card (our `docLinkPreview`, through the editor's
+ * `popovers`) under the link a follow landed on, so a link that can't open
+ * says why in place (search-linking §4.6). False, so the navigator
+ * announces instead, when there is no clicked link (a keyboard follow), no
+ * live source editor, the link isn't in that editor or isn't this href (a
+ * stale gesture), or the editor has no Hyperlink extension.
+ */
+function showPreviewAt(
+  href: string,
+  anchor: Element | null,
+  editor: Editor | undefined,
 ): boolean {
-  if (isOurScheme(uri)) return parseDocLink(uri) !== null;
-  return isWebLink(uri) && ctx.defaultValidate(uri);
+  if (!(anchor instanceof HTMLAnchorElement) || !editor) return false;
+  if (editor.isDestroyed || !editor.view.dom.contains(anchor)) return false;
+  if (anchor.getAttribute("href") !== href) return false;
+  try {
+    return openPreviewHyperlink(
+      buildPreviewOptionsFromAnchor({ editor, link: anchor }),
+    );
+  } catch {
+    return false; // Hyperlink isn't registered on this editor.
+  }
 }
 
 export interface LinkHostHandle {
@@ -80,6 +106,8 @@ export function createLinkHost(deps: LinkHostDeps): LinkHostHandle {
     goToHeadingHere: (tocId) => deps.goToHeadingHere(tocId),
     openExternal: (href, opts) => deps.openExternal(href, opts),
     announce: (message) => deps.announce(message),
+    showPreview: (href) =>
+      showPreviewAt(href, gestures.lastAnchor(), deps.getSource?.()?.editor),
     wantsNewTab: gestures.wantsNewTab,
     lastAnchor: gestures.lastAnchor,
     getSource: () => deps.getSource?.() ?? null,
