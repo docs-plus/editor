@@ -277,13 +277,17 @@ function render<T>(
       out[last] = (out[last] as string) + part;
     } else out.push(part);
   };
+  // Own properties only, so `{toString}` or `<constructor>` in a message
+  // never reaches Object.prototype. A missing value stays visible as
+  // `{name}` (never "NaN" or today's date).
+  const has = (name: string) => Object.hasOwn(values, name);
   for (const node of nodes) {
     switch (node.type) {
       case "text":
         push(node.value);
         break;
       case "arg": {
-        if (!(node.name in values)) {
+        if (!has(node.name)) {
           push(`{${node.name}}`);
           break;
         }
@@ -293,28 +297,32 @@ function render<T>(
       }
       case "number":
         push(
-          numberFormat(locale, node.style).format(Number(values[node.name])),
+          has(node.name)
+            ? numberFormat(locale, node.style).format(Number(values[node.name]))
+            : `{${node.name}}`,
         );
         break;
       case "date":
       case "time":
         push(
-          dateFormat(locale, node.type, node.style).format(
-            values[node.name] as Date | number,
-          ),
+          has(node.name)
+            ? dateFormat(locale, node.type, node.style).format(
+                values[node.name] as Date | number,
+              )
+            : `{${node.name}}`,
         );
         break;
       case "pound":
         push(count === null ? "#" : numberFormat(locale, null).format(count));
         break;
       case "plural": {
-        const n = Number(values[node.name]);
+        const n = has(node.name) ? Number(values[node.name]) : Number.NaN;
         const exact = node.options[`=${n}`];
         const branch =
           exact ??
           node.options[pluralRules(locale).select(n)] ??
           node.options.other;
-        render(branch, values, locale, options, n, out);
+        render(branch, values, locale, options, has(node.name) ? n : null, out);
         break;
       }
       case "select": {
@@ -328,7 +336,7 @@ function render<T>(
       case "tag": {
         const children: (string | T)[] = [];
         render(node.children, values, locale, options, count, children);
-        const renderer = values[node.name];
+        const renderer = has(node.name) ? values[node.name] : undefined;
         if (typeof renderer !== "function") {
           for (const child of children) push(child);
           break;
@@ -376,15 +384,31 @@ export function formatMessage(
 /**
  * The full-ICU `t()` for lazy chunks: the active catalog's message, else
  * the English source, formatted in the interface locale.
+ *
+ * A translation that fails to parse (a hand-edited catalog that skipped
+ * `bun run i18n:check`) renders the English instead of throwing during a
+ * React render. `parseCached` keeps only successes, so such a message is
+ * parsed again on each call until it is fixed. English itself can't fail:
+ * `check.ts` parses every English message.
  */
 export function t(
   key: string,
   english: string,
   values: MessageValues = {},
 ): string {
-  return formatMessage(lookup(key) ?? english, values, uiLocale(), {
-    isolate: shouldIsolate(),
-  });
+  const options = { isolate: shouldIsolate() };
+  const translated = lookup(key);
+  if (translated !== undefined) {
+    try {
+      return formatMessage(translated, values, uiLocale(), options);
+    } catch (error) {
+      if (!(error instanceof MessageSyntaxError)) throw error;
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`i18n: "${key}" is not valid ICU; showing English`);
+      }
+    }
+  }
+  return formatMessage(english, values, uiLocale(), options);
 }
 
 function walk(

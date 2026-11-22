@@ -3,7 +3,7 @@
  * `plural` (exact `=n`, CLDR categories, `#`), `select`, `number`, `date`,
  * `time` and rich tags. `selectordinal` and nested plurals are rejected.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import {
   formatMessage,
@@ -12,7 +12,9 @@ import {
   messageArguments,
   parseMessage,
   pluralCategoriesUsed,
+  t,
 } from "@/lib/i18n/format";
+import { addMessages, setUiLocale } from "@/lib/i18n/t-core";
 
 const DOCS =
   "{count, plural, =0 {No documents} one {# document} other {# documents}}";
@@ -177,5 +179,47 @@ describe("message analysis (for check.ts)", () => {
     expect(pluralCategoriesUsed(DOCS)).toEqual([
       { name: "count", categories: ["one", "other"] },
     ]);
+  });
+});
+
+describe("formatMessage: values are own properties only", () => {
+  it("never reads Object.prototype for {name} or tags", () => {
+    expect(formatMessage("Hi {toString}", {}, "en")).toBe("Hi {toString}");
+    expect(
+      formatMessageParts("<constructor>x</constructor>", {}, "en"),
+    ).toEqual(["x"]);
+  });
+
+  it("keeps a missing number, date, time or plural count visible", () => {
+    expect(formatMessage("{n, number} left", {}, "en")).toBe("{n} left");
+    expect(formatMessage("On {d, date, short}", {}, "en")).toBe("On {d}");
+    expect(formatMessage("At {d, time}", {}, "en")).toBe("At {d}");
+    expect(
+      formatMessage("{n, plural, one {# doc} other {# docs}}", {}, "en"),
+    ).toBe("# docs");
+  });
+});
+
+describe("t (lazy chunks)", () => {
+  afterEach(() => setUiLocale("en"));
+
+  it("formats a translation in the interface locale, isolating values", () => {
+    setUiLocale("fa");
+    addMessages({ "library.moved": "«{title}» منتقل شد" });
+    expect(t("library.moved", "Moved “{title}”", { title: "Q4" })).toBe(
+      "«⁨Q4⁩» منتقل شد",
+    );
+  });
+
+  it("renders English, not an error, for a malformed translation", () => {
+    setUiLocale("fa");
+    addMessages({ "library.count": "{count, plural, one {# سند}" });
+    expect(t("library.count", DOCS, { count: 2 })).toBe("۲ documents");
+  });
+
+  it("still throws for malformed English (check.ts rejects it first)", () => {
+    expect(() => t("library.bad", "{count, plural, one {x}")).toThrow(
+      MessageSyntaxError,
+    );
   });
 });
