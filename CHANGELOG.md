@@ -9,13 +9,14 @@ since the previous tag.
 
 ## [Unreleased]
 
-### P2.12: print stylesheet, block move and the Markdown paste rule
+### P2.12 part 1: print stylesheet, block move and the Markdown paste rule
 
 Printing (and Save as PDF) now prints only the document. The block move and
 duplicate commands and the Markdown paste rule are built and tested but not
-yet wired to a menu or to paste (details spec §5, "P2.12 status"). The editor
-chunk group is unchanged (393,465 B gz, 0 B against `main` at `ed2a7cd`), and
-an import-boundary test keeps both modules out of it.
+yet wired to a menu or to paste, and word count (E3) is not started, so P2.12
+stays open (details spec §5, "P2.12 status"). The editor chunk group is
+unchanged: 393,820 B gz, 0 B against `main` at `903b5c8` (every editor JS and
+CSS chunk identical). An import-boundary test keeps both modules out of it.
 
 #### Added
 
@@ -25,8 +26,9 @@ an import-boundary test keeps both modules out of it.
   them and lets the document run across pages. Pages without the editor print
   as before.
 - **Print:** the dark theme prints light. `ThemeRuntime` removes the `dark`
-  class for the print and restores it afterwards (`lib/print-theme.ts`). The
-  saved theme is not changed.
+  class for the print and restores it afterwards (`lib/print-theme.ts`),
+  also when `beforeprint` fires twice first (Chromium rebuilds the preview
+  when a setting changes). The saved theme is not changed.
 - **Block move and duplicate** (`extensions/block-move/`, E4): `moveBlock`
   and `duplicateBlock` work on the top-level blocks of the selection.
   - Each run is one Yjs undo step on the live document.
@@ -34,12 +36,21 @@ an import-boundary test keeps both modules out of it.
   - A folded section moves as one unit.
   - A duplicated heading gets new ids.
   - On a concurrent edit, the larger side of a move keeps a collaborator's
-    typing.
+    typing. The smaller side is re-created whole, so typing anywhere in
+    it, a list item or table cell included, is lost.
 - **Markdown paste rule** (`lib/markdown/parse.ts`, E2, shared with IM1):
   `markdownPasteSlice` returns formatted content only for plain text with
   explicit Markdown syntax that parses to formatting. Bare URLs are left to
   the link and embed rules. `parseMarkdownFragment` gives IM1 schema-checked
   blocks from any parser, with no DOM or editor.
+  - It gives nothing an HTML paste of the same content would not: a
+    Markdown image is the image node an `<img>` paste makes, iframes are
+    dropped, and a link whose href the link extension empties
+    (`javascript:`, `data:`) keeps its text without the link.
+  - Markdown with a raw HTML block (`<div>`, `<img>` on its own line) and
+    text over 256 KiB paste as plain text. The parser turned an HTML block
+    into a level-1 heading against the title-first schema.
+  - The syntax check stays linear on long lines (a 200 KB line of `[`).
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
