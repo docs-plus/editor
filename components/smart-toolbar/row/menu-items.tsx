@@ -204,7 +204,7 @@ export function ActionMenuItem({
  * reason line are `order-1`: after the icon and label, in DOM order.
  */
 const CHECK_BEFORE_SHORTCUT =
-  "pr-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ml-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
+  "pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:ms-auto *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-1";
 
 /** One registry action as a radio item of a value menu. */
 export function ActionRadioItem({

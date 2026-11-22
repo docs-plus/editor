@@ -104,7 +104,7 @@ function currentId(editor: Editor): string {
  * (`16px 1fr auto 16px`, spec §7.4); the reason line spans under the label.
  */
 const ROW =
-  "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pr-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-2 *:data-[slot=dropdown-menu-reason]:col-start-2 *:data-[slot=dropdown-menu-reason]:col-span-3";
+  "grid grid-cols-[16px_1fr_auto_16px] items-center gap-x-2 pe-1.5 *:data-[slot=dropdown-menu-radio-item-indicator]:static *:data-[slot=dropdown-menu-radio-item-indicator]:order-1 *:data-[slot=dropdown-menu-radio-item-indicator]:size-4 *:data-[slot=dropdown-menu-reason]:order-2 *:data-[slot=dropdown-menu-reason]:col-start-2 *:data-[slot=dropdown-menu-reason]:col-span-3";
 
 interface TurnIntoItemProps {
   id: string;
