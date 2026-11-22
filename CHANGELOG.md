@@ -49,8 +49,9 @@ of 7,030 B gz fetched when the browser is first idle.
 - **Fast on large documents:** hits are painted with the CSS Custom
   Highlight API (no plugin, no decoration, no change to the editor's DOM),
   so typing, IME composition and a collaborator's edits are never redrawn
-  for Find. This deviates from the details spec's rule 6 (a decoration
-  host) and waits for the owner's sign-off. An edit, local or remote,
+  for Find. Rule 6 of the details spec is amended to allow such
+  paint-only layers when they add no editor bytes (coordinator decision,
+  2026-11-22). An edit, local or remote,
   rescans only the textblocks it touched, and hits whose text did not
   change keep their painted ranges, which the browser moves with the text.
   Chromium's highlight cost grows with the square of the ranges in one
@@ -61,8 +62,10 @@ of 7,030 B gz fetched when the browser is first idle.
   16.9 → 17.5 ms; one at the 10,000-hit cap, 17.2 → 17.7 ms. At most
   10,000 hits are kept ("10,000+"); Replace all replaces every one.
 - **Browsers without the Highlight API** (Firefox before 140, Safari
-  before 17.2) keep their own find bar: Find doesn't take ⌘F there, rather
-  than step through hits it can't show.
+  before 17.2): Find still works. It paints no hits, but the bar shows the
+  count, and each move to a hit (typing, Enter, ⌘G, a replace) selects it
+  in the editor without taking focus, so it shows as the blurred
+  selection. Typing in the document never moves that selection.
 - **Config:** Find lands dark on the web: it is on in the desktop app
   and off in web builds, where ⌘F stays the browser's and the key listener
   is left out of the build. `NEXT_PUBLIC_FIND=1` turns it on for any build

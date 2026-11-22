@@ -352,3 +352,85 @@ describe("FindController", () => {
     expect(painter.destroyed).toBe(true);
   });
 });
+
+/**
+ * Where the CSS Custom Highlight API is missing (Firefox before 140,
+ * Safari before 17.2), Find still works: it counts, and each move to a
+ * hit selects it, without focus, so the blurred selection shows it.
+ */
+describe("FindController without the Highlight API", () => {
+  const cssDescriptor = Object.getOwnPropertyDescriptor(globalThis, "CSS");
+
+  afterEach(() => {
+    if (cssDescriptor) Object.defineProperty(globalThis, "CSS", cssDescriptor);
+    else Reflect.deleteProperty(globalThis, "CSS");
+    Reflect.deleteProperty(globalThis, "Highlight");
+  });
+
+  function setupWithoutHighlights(content: JSONContent[]) {
+    // `Highlight` exists; only the registry is missing.
+    Object.defineProperty(globalThis, "CSS", {
+      configurable: true,
+      value: { highlights: undefined },
+    });
+    Object.assign(globalThis, { Highlight: class {} });
+    editor = createTestEditor({ content: { type: "doc", content } });
+    controller = new FindController(editor);
+    return { editor, controller };
+  }
+
+  const selected = (e: Editor) =>
+    e.state.doc.textBetween(e.state.selection.from, e.state.selection.to);
+
+  it("counts the hits and selects the current one", () => {
+    const { editor: e, controller: c } = setupWithoutHighlights([
+      heading("Notes"),
+      paragraph("one fish"),
+      paragraph("two fish"),
+    ]);
+    c.search("fish", loose);
+    expect(c.getSnapshot()).toMatchObject({ total: 2, current: 0 });
+    expect(selected(e)).toBe("fish");
+    // "Notes" is 1–6; "one fish" starts at 8.
+    expect(e.state.selection.from).toBe(12);
+  });
+
+  it("moves the selection with each step, wrapping around", () => {
+    const { editor: e, controller: c } = setupWithoutHighlights([
+      heading("a b a"),
+    ]);
+    e.commands.setTextSelection(1);
+    c.search("a", loose);
+    expect(e.state.selection.from).toBe(1);
+    c.step(1);
+    expect(c.getSnapshot().current).toBe(1);
+    expect(e.state.selection.from).toBe(5);
+    expect(selected(e)).toBe("a");
+    c.step(1);
+    expect(e.state.selection.from).toBe(1);
+  });
+
+  it("never takes focus from the find field", () => {
+    const field = document.createElement("input");
+    document.body.append(field);
+    const { controller: c } = setupWithoutHighlights([heading("fish fish")]);
+    field.focus();
+    c.search("fish", loose);
+    c.step(1);
+    expect(document.activeElement).toBe(field);
+    field.remove();
+  });
+
+  it("leaves the caret alone when the document changes", () => {
+    const { editor: e, controller: c } = setupWithoutHighlights([
+      heading("fish"),
+      paragraph("typing here"),
+    ]);
+    c.search("fish", loose);
+    const caret = e.state.doc.content.size - 2;
+    e.commands.setTextSelection(caret);
+    e.commands.insertContent("x");
+    expect(e.state.selection.from).toBe(caret + 1);
+    expect(c.getSnapshot().total).toBe(1);
+  });
+});

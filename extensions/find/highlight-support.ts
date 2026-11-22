@@ -6,7 +6,7 @@
 export function supportsHighlights(): boolean {
   return (
     typeof CSS !== "undefined" &&
-    "highlights" in CSS &&
+    CSS.highlights != null &&
     typeof Highlight === "function"
   );
 }

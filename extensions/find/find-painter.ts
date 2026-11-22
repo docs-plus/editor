@@ -1,3 +1,4 @@
+import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { FindHit } from "./find-hits";
@@ -73,6 +74,85 @@ function scrollParent(node: HTMLElement): HTMLElement {
   return (document.scrollingElement as HTMLElement) ?? document.documentElement;
 }
 
+/** A DOM range over `hit`'s text, or null when the view can't map it. */
+function rangeOf(view: EditorView, hit: FindHit): Range | null {
+  try {
+    const start = view.domAtPos(hit.from, 1);
+    const end = view.domAtPos(hit.to, -1);
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scrolls `range` into view a third of the way down the editor's scroll
+ * container, as browsers place a find result, unless it is already in
+ * view. Done here rather than by ProseMirror, which only scrolls to a
+ * selection it owns (focus stays in the find field).
+ */
+function revealRange(
+  view: EditorView,
+  range: Range,
+  stillCurrent: () => boolean,
+): void {
+  const container = scrollParent(view.dom);
+  const align = () => {
+    const rect = range.getBoundingClientRect();
+    const page = container === document.scrollingElement;
+    const box = page
+      ? { top: 0, bottom: window.innerHeight, height: window.innerHeight }
+      : container.getBoundingClientRect();
+    const style = getComputedStyle(container);
+    const top = box.top + (Number.parseFloat(style.scrollPaddingTop) || 0);
+    const bottom =
+      box.bottom - (Number.parseFloat(style.scrollPaddingBottom) || 0);
+    if (rect.top >= top && rect.bottom <= bottom) return;
+    container.scrollTop += rect.top - (top + (bottom - top) / 3);
+  };
+  align();
+  // Off-screen blocks are laid out at an estimated height
+  // (`content-visibility: auto`); align again once they have rendered.
+  requestAnimationFrame(() => {
+    if (stillCurrent()) align();
+  });
+}
+
+/**
+ * Where the CSS Custom Highlight API is missing (Firefox before 140,
+ * Safari before 17.2), Find still works but paints no hits: the bar shows
+ * the count, and each move to a hit (a search, a step, a replace) selects
+ * that hit in the editor without focusing it, so the editor's `Selection`
+ * extension shows it as the blurred selection. Document changes never
+ * move the selection (`paint` draws nothing), so typing elsewhere with
+ * Find open keeps its caret.
+ */
+export class SelectionPainter implements FindPainter {
+  private revealed: FindHit | null = null;
+
+  constructor(private readonly editor: Editor) {}
+
+  paint(): void {}
+
+  reveal(hit: FindHit): void {
+    this.revealed = hit;
+    const { from, to } = this.editor.state.selection;
+    if (from !== hit.from || to !== hit.to) {
+      this.editor.commands.setTextSelection({ from: hit.from, to: hit.to });
+    }
+    const range = rangeOf(this.editor.view, hit);
+    if (range)
+      revealRange(this.editor.view, range, () => this.revealed === hit);
+  }
+
+  destroy(): void {
+    this.revealed = null;
+  }
+}
+
 /**
  * Paints hits with the CSS Custom Highlight API (details spec §1 rule 6,
  * amended for P2.11): the browser draws `Range`s over the text, so Find
@@ -85,8 +165,7 @@ function scrollParent(node: HTMLElement): HTMLElement {
  * hit. In a top-level block whose DOM changed, which a `MutationObserver`
  * reports, only the ranges the change broke are rebuilt: a redrawn text
  * node (a mark change, a collaborator's edit) collapses or detaches them.
- * Find only opens where the API exists (`findAvailable`); without it
- * nothing is painted.
+ * Where the API is missing, `SelectionPainter` stands in.
  */
 export class HighlightPainter implements FindPainter {
   private readonly ranges = new Map<FindHit, Range>();
@@ -136,27 +215,7 @@ export class HighlightPainter implements FindPainter {
   reveal(hit: FindHit): void {
     const range = this.rangeFor(hit);
     if (!range) return;
-    const container = scrollParent(this.view.dom);
-    const align = () => {
-      const rect = range.getBoundingClientRect();
-      const page = container === document.scrollingElement;
-      const box = page
-        ? { top: 0, bottom: window.innerHeight, height: window.innerHeight }
-        : container.getBoundingClientRect();
-      const style = getComputedStyle(container);
-      const top = box.top + (Number.parseFloat(style.scrollPaddingTop) || 0);
-      const bottom =
-        box.bottom - (Number.parseFloat(style.scrollPaddingBottom) || 0);
-      if (rect.top >= top && rect.bottom <= bottom) return;
-      // A third of the way down, as browsers place a find result.
-      container.scrollTop += rect.top - (top + (bottom - top) / 3);
-    };
-    align();
-    // Off-screen blocks are laid out at an estimated height
-    // (`content-visibility: auto`); align again once they have rendered.
-    requestAnimationFrame(() => {
-      if (this.ranges.get(hit) === range) align();
-    });
+    revealRange(this.view, range, () => this.ranges.get(hit) === range);
   }
 
   destroy(): void {
@@ -206,19 +265,12 @@ export class HighlightPainter implements FindPainter {
       this.current?.delete(old);
       this.ranges.delete(hit);
     }
-    try {
-      const start = this.view.domAtPos(hit.from, 1);
-      const end = this.view.domAtPos(hit.to, -1);
-      const range = document.createRange();
-      range.setStart(start.node, start.offset);
-      range.setEnd(end.node, end.offset);
-      this.ranges.set(hit, range);
-      this.all?.add(range);
-      if (hit === this.currentHit) this.current?.add(range);
-      return range;
-    } catch {
-      return null;
-    }
+    const range = rangeOf(this.view, hit);
+    if (!range) return null;
+    this.ranges.set(hit, range);
+    this.all?.add(range);
+    if (hit === this.currentHit) this.current?.add(range);
+    return range;
   }
 
   private schedule(): void {

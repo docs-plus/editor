@@ -29,25 +29,11 @@ const press = (
   ...mods,
 });
 
-const cssDescriptor = Object.getOwnPropertyDescriptor(globalThis, "CSS");
-
-/** Gives happy-dom the CSS Custom Highlight API until the test ends. */
-function withHighlightApi() {
-  Object.defineProperty(globalThis, "CSS", {
-    configurable: true,
-    value: { highlights: new Map() },
-  });
-  Object.assign(globalThis, { Highlight: class {} });
-}
-
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_FIND;
   delete process.env.NEXT_PUBLIC_APP_TARGET;
   resetModules();
   document.body.replaceChildren();
-  if (cssDescriptor) Object.defineProperty(globalThis, "CSS", cssDescriptor);
-  else Reflect.deleteProperty(globalThis, "CSS");
-  Reflect.deleteProperty(globalThis, "Highlight");
 });
 
 describe("matchFindShortcut", () => {
@@ -137,28 +123,6 @@ describe("FIND_ENABLED", () => {
     expect(await load()).toBe(false);
     process.env.NEXT_PUBLIC_APP_TARGET = "desktop";
     expect(await load()).toBe(false);
-  });
-});
-
-describe("findAvailable", () => {
-  it("is off where the CSS Custom Highlight API is missing (the browser's find bar stays)", async () => {
-    process.env.NEXT_PUBLIC_FIND = "1";
-    const { findAvailable } = await importFresh<typeof FindKeys>(
-      "@/components/find/find-keys",
-    );
-    // happy-dom, like Firefox before 140 and Safari before 17.2.
-    expect(findAvailable()).toBe(false);
-    withHighlightApi();
-    expect(findAvailable()).toBe(true);
-  });
-
-  it("is off under NEXT_PUBLIC_FIND=0 even with the API", async () => {
-    process.env.NEXT_PUBLIC_FIND = "0";
-    withHighlightApi();
-    const { findAvailable } = await importFresh<typeof FindKeys>(
-      "@/components/find/find-keys",
-    );
-    expect(findAvailable()).toBe(false);
   });
 });
 

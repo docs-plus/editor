@@ -1,5 +1,3 @@
-import { supportsHighlights } from "@/extensions/find/highlight-support";
-
 /**
  * Find in the document (P2.11, details spec E1). On in the desktop app;
  * off on the web until the owner decides to take ⌘F from the browser there
@@ -13,16 +11,6 @@ export const FIND_ENABLED =
   process.env.NEXT_PUBLIC_FIND === "1" ||
   (process.env.NEXT_PUBLIC_FIND !== "0" &&
     process.env.NEXT_PUBLIC_APP_TARGET === "desktop");
-
-/**
- * Find takes ⌘F only where it can paint its hits (the CSS Custom
- * Highlight API). Elsewhere (Firefox before 140, Safari before 17.2) the
- * browser keeps its own find bar rather than a bar that steps through
- * hits it cannot show.
- */
-export function findAvailable(): boolean {
-  return FIND_ENABLED && supportsHighlights();
-}
 
 /** A field or dialog that owns its keys, even inside the editor (a node view's field). */
 const FIELD_OR_DIALOG =

@@ -9,8 +9,13 @@ import {
   scanHits,
   updateHits,
 } from "./find-hits";
-import { type FindPainter, HighlightPainter } from "./find-painter";
+import {
+  type FindPainter,
+  HighlightPainter,
+  SelectionPainter,
+} from "./find-painter";
 import { buildFindPattern, type FindOptions } from "./find-pattern";
+import { supportsHighlights } from "./highlight-support";
 
 /** What the find bar shows. A new object only when something changed. */
 export interface FindSnapshot extends FindOptions {
@@ -114,6 +119,8 @@ function firstAtOrAfter(hits: readonly FindHit[], pos: number): number {
  *   document.
  * - Stepping never moves the selection or focus (the bubble stays shut and
  *   collaborators see no jump); `selectCurrent` does, when the bar closes.
+ *   Without the Highlight API, `SelectionPainter` selects each hit it moves
+ *   to instead (never focus), so the current hit is still visible.
  */
 export class FindController {
   private hits: FindHit[] = [];
@@ -130,7 +137,11 @@ export class FindController {
     private readonly editor: Editor,
     painter?: FindPainter,
   ) {
-    this.painter = painter ?? new HighlightPainter(editor.view);
+    this.painter =
+      painter ??
+      (supportsHighlights()
+        ? new HighlightPainter(editor.view)
+        : new SelectionPainter(editor));
     editor.on("transaction", this.onTransaction);
   }
 

@@ -386,6 +386,36 @@ test.describe("Find in the document", () => {
     }
   });
 
+  test("without the Highlight API it counts and selects each hit it moves to", async ({
+    page,
+  }) => {
+    // Firefox before 140 and Safari before 17.2.
+    await page.addInitScript(() => {
+      Object.defineProperty(CSS, "highlights", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+    await open(page, sectionsDoc(4));
+    await openFind(page);
+    await page.keyboard.type("needle");
+    await expect(page.locator(STATUS)).toHaveText("1 of 8");
+    const selected = () =>
+      page.evaluate(() => {
+        const editor = window.__tiptap_editor;
+        if (!editor) return null;
+        const { from, to } = editor.state.selection;
+        return editor.state.doc.textBetween(from, to);
+      });
+    await expect.poll(selected).toBe("needle");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(STATUS)).toHaveText("2 of 8");
+    await expect.poll(selected).toBe("needle");
+    // Focus stays in the field; the blurred selection shows the hit.
+    await expect(page.locator(FIND_INPUT)).toBeFocused();
+    await expect(page.locator(".ProseMirror .selection")).toHaveText("needle");
+  });
+
   test("phone width: the bar sits above the phone bar", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await open(page, sectionsDoc(4));

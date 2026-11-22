@@ -11,6 +11,7 @@ export {
   type FindPainter,
   type HighlightApi,
   HighlightPainter,
+  SelectionPainter,
   supportsHighlights,
 } from "./find-painter";
 export { buildFindPattern, type FindOptions } from "./find-pattern";
