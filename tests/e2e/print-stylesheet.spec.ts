@@ -12,6 +12,9 @@ import { EditorPage } from "./helpers/editor-page";
  * for the design review.
  */
 const text = (value: string) => [{ type: "text", text: value }];
+const IMAGE_SVG = encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="80"><rect width="160" height="80" fill="#888"/></svg>',
+);
 
 const PRINT_DOC = {
   type: "doc",
@@ -42,6 +45,29 @@ const PRINT_DOC = {
           content: [{ type: "paragraph", content: text("second") }],
         },
       ],
+    },
+    // Blocks whose own display is not `block` (table wrapper, media and
+    // diagram node views) must print as they show on screen.
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: ["Folded cell", "Other cell"].map((cell) => ({
+            type: "tableCell",
+            content: [{ type: "paragraph", content: text(cell) }],
+          })),
+        },
+      ],
+    },
+    {
+      type: "image",
+      attrs: { src: `data:image/svg+xml,${IMAGE_SVG}`, alt: "Folded image" },
+    },
+    {
+      type: "codeBlock",
+      attrs: { language: "mermaid" },
+      content: text("graph TD; A-->B"),
     },
     { type: "heading", attrs: { level: 2 }, content: text("Open section") },
     {
@@ -90,7 +116,12 @@ const PRINT_DOC = {
   ],
 };
 
-async function foldSection(page: Page, title: string): Promise<void> {
+/** Toggles the section `title` starts, then waits for it to be `folded`. */
+async function foldSection(
+  page: Page,
+  title: string,
+  folded = true,
+): Promise<void> {
   await page.evaluate((heading: string) => {
     const editor = window.__tiptap_editor;
     let id: string | null = null;
@@ -100,9 +131,38 @@ async function foldSection(page: Page, title: string): Promise<void> {
     if (!id) throw new Error(`no id for ${heading}`);
     editor?.commands.toggleFold(id);
   }, title);
-  await expect(page.locator(".tiptap h2", { hasText: title })).toHaveClass(
-    /heading-section-folded/,
-  );
+  const heading = page.locator(".tiptap h2", { hasText: title });
+  if (folded) await expect(heading).toHaveClass(/heading-section-folded/);
+  // Unfolding animates; a toggle before it ends is not a fold.
+  else
+    await expect(heading).not.toHaveClass(/heading-section-(folded|unfolding)/);
+}
+
+/**
+ * Computed `display` of each top-level block in the section `title`
+ * starts, up to the next heading, by node type.
+ */
+async function sectionDisplays(
+  page: Page,
+  title: string,
+): Promise<[string, string][]> {
+  return page.evaluate((heading: string) => {
+    const editor = window.__tiptap_editor;
+    if (!editor) throw new Error("no editor");
+    const out: [string, string][] = [];
+    let inside = false;
+    editor.state.doc.forEach((node, offset) => {
+      if (node.type.name === "heading") {
+        inside = node.textContent === heading;
+        return;
+      }
+      if (!inside) return;
+      const dom = editor.view.nodeDOM(offset);
+      if (!(dom instanceof HTMLElement)) throw new Error("no block DOM");
+      out.push([node.type.name, getComputedStyle(dom).display]);
+    });
+    return out;
+  }, title);
 }
 
 async function savePreview(page: Page, name: string): Promise<void> {
@@ -165,19 +225,49 @@ test.describe("print stylesheet", () => {
     await savePreview(page, "print-light.png");
   });
 
+  test("a folded block prints with the display it has on screen", async ({
+    page,
+  }) => {
+    // Unfold to read each block's own display on screen, fold again, print.
+    const folded = await sectionDisplays(page, "Folded section");
+    expect(folded.map(([, display]) => display)).toEqual(
+      folded.map(() => "none"),
+    );
+    await foldSection(page, "Folded section", false);
+    const screen = await sectionDisplays(page, "Folded section");
+    expect(screen.map(([type]) => type)).toEqual([
+      "paragraph",
+      "bulletList",
+      "table",
+      "image",
+      "codeBlock",
+    ]);
+    await foldSection(page, "Folded section");
+
+    await page.emulateMedia({ media: "print" });
+    expect(await sectionDisplays(page, "Folded section")).toEqual(screen);
+    await expect(page.getByText("Folded cell")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Folded image" })).toBeVisible();
+  });
+
   test("print is light in the dark theme", async ({ page }) => {
     await page.emulateMedia({ media: "print" });
     // Ink of body text, inline code and a code block, as printed.
     const ink = () =>
       page.evaluate(() =>
         [".tiptap p", ".tiptap p code", ".tiptap pre"].map((selector) => {
-          const element = document.querySelector(selector);
+          const element = [...document.querySelectorAll(selector)].at(-1);
           return element ? getComputedStyle(element).color : "";
         }),
       );
     const light = await ink();
 
     await page.evaluate(() => document.documentElement.classList.add("dark"));
+    // Not vacuous: without the swap, the dark theme's ink is different.
+    const dark = await ink();
+    for (const [index, color] of dark.entries()) {
+      expect(color).not.toBe(light[index]);
+    }
     // `emulateMedia` fires no print events; the print dialog does.
     await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
     expect(await ink()).toEqual(light);
