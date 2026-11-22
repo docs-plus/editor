@@ -73,7 +73,7 @@ tests/
 │   │   ├── playwright-modifier-key.ts    # Meta vs Control for keyboard shortcuts
 │   │   ├── perf-observer.ts              # PerformanceObserver injection + latency stats
 │   │   ├── soak-bot.ts                   # Weighted-random action generator (10 action types)
-│   │   └── soak-journeys.ts              # 2 scripted critical-path sequences
+│   │   └── soak-journeys.ts              # 2 scripted journeys, 3 results (typing at 100 ms, commands at 200 ms)
 │   ├── collaboration.spec.ts             # 2-user collaboration (join + real-time sync)
 │   ├── drag.spec.ts                      # Heading drag handle visibility
 │   ├── extensions.spec.ts                # docs.plus extensions: link popovers, inline code, indent, Mermaid, media embeds, image resize gripper
@@ -377,6 +377,30 @@ make test-soak                 # full suite (30 min)
 3. Sustained editing with memory sampling every 30s
 4. Reports: JS heap growth, p50/p95 latency, action counts, error count
 5. Writes JSON report to `test-reports/soak-report-{timestamp}.json`
+
+#### Soak journeys
+
+Each journey records keyboard events through Event Timing, which reports
+only events of 16 ms or more, so a p95 is the p95 of the slow tail and a
+few heavy events decide it. Each event is tagged with the journey step it
+fell in, and the five slowest are logged with their input delay, processing
+and presentation times.
+
+| Result | Events | p95 under |
+|--------|--------|-----------|
+| `typing-and-structural` | Typing, Enter, heading level, undo/redo | 100 ms |
+| `filter-lifecycle typing` | Typing in the document while a filter is active | 100 ms |
+| `filter-lifecycle commands` | Mod+Shift+F (open the bar) and Enter (commit a filter) | 200 ms (INP "good") |
+
+Commands and keystrokes are different interactions, so they are judged
+apart; typing keeps 100 ms. The split comes from the nightly (2026-11-22, PR
+#165): the filter journey's p95 swung between 64 and 168 ms on one commit.
+Its six heaviest events were always the bar shortcut (three keydowns in one
+frame) and the three commits. Each re-renders the whole editor shell (the
+toolbar about half of it, plus all 50 outline rows), costing 90–170 ms under
+`next dev` on a GitHub runner; typing in the same journey stayed at 40–72 ms.
+Moving the filter state out of the shell is the tracked fix for those
+commands. Clear is a click, which the observer does not record.
 
 ### Multi-User Soak (`soak-collab.spec.ts`)
 
