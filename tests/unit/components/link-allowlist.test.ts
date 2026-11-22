@@ -11,7 +11,10 @@ import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
-import { buildDocumentEditorExtensions } from "@/components/document-editor/document-editor-config";
+import {
+  buildDocumentEditorExtensions,
+  isWebLink,
+} from "@/components/document-editor/document-editor-config";
 
 const DOC_KEY = "0123456789abcdef0123456789abcdef";
 
@@ -122,6 +125,21 @@ const forRead = (target: Editor, href: string) =>
       };
     }
   ).hyperlink.context?.urls.forRead(href).navigable;
+
+describe("isWebLink", () => {
+  it("allows the three schemes in any case, after leading whitespace", () => {
+    for (const href of [...ALLOWED, "HTTPS://example.com/", " \thttp://x/"]) {
+      expect(isWebLink(href)).toBe(true);
+    }
+  });
+
+  it("refuses a scheme split by whitespace or led by a control", () => {
+    // Browsers would read these as https; refusing them is the safe side.
+    for (const href of ["ht\ttps://x/", "https\n://x/", "\u0001https://x/"]) {
+      expect(isWebLink(href)).toBe(false);
+    }
+  });
+});
 
 describe("link allowlist: commands", () => {
   it.each(RISKY)("setHyperlink refuses %p", async (href) => {

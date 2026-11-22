@@ -4,6 +4,7 @@ import {
   createHyperlinkPopover,
   editHyperlinkPopover,
   Hyperlink,
+  type HyperlinkOptions,
   previewHyperlinkPopover,
 } from "@docs.plus/extension-hyperlink";
 import { isMediaUrl } from "@docs.plus/extension-hypermultimedia";
@@ -94,19 +95,22 @@ const SubscriptByTarget = Subscript.extend({
 });
 
 /**
- * The web editor's link policy: `https:`, `http:` and `mailto:` only, checked
- * after removing whitespace as browsers do. The extension's own check is a
- * denylist, so an `ms-msdt:` or `search-ms:` link would otherwise reach the
- * OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
+ * The web editor's link policy: `https:`, `http:` and `mailto:` only, after
+ * leading whitespace. A scheme a browser would still read through inner
+ * whitespace or a leading control (`ht\ttps:`) is refused: the safe side.
+ * The extension's own check is a denylist, so an `ms-msdt:` or `search-ms:`
+ * link would otherwise reach the OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
  * rules; `LinkPolicyHyperlink` applies the same option to HTML paste and to
  * rendering, so a host that passes its own `isAllowedUri` replaces it at all
  * three. Parse and render call it with one string and no context (a missing
  * href arrives as "undefined" or "null"), so a host policy must not need one.
  */
 export const isWebLink = (href: string): boolean =>
-  /^(?:https?|mailto):/i.test(href.replace(/\s/g, ""));
+  /^\s*(https?|mailto):/i.test(href);
 
-type LinkPolicy = (href: string) => boolean;
+/** The one protocol check for parse and render: the policy on any value. */
+const allows = (options: HyperlinkOptions, href: unknown) =>
+  (options.isAllowedUri as (href: string) => boolean)(`${href}`);
 
 /**
  * Hyperlink with `isAllowedUri` also applied where the extension skips it:
@@ -123,21 +127,19 @@ export const LinkPolicyHyperlink = Hyperlink.extend({
 
   parseHTML() {
     // The parent's rules are `.hyperlink-icon` (ignored) then `a[href]`.
-    const rules = this.parent?.() as TagParseRule[];
-    const getAttrs = rules[1].getAttrs as Required<TagParseRule>["getAttrs"];
-    const allowed = this.options.isAllowedUri as LinkPolicy;
+    const rules = this.parent?.() as Required<TagParseRule>[];
+    const { getAttrs } = rules[1];
     rules[1].getAttrs = (node) =>
-      allowed(`${node.getAttribute("href")}`) && getAttrs(node);
+      allows(this.options, node.getAttribute("href")) && getAttrs(node);
     return rules;
   },
 
   renderHTML(props) {
-    // The parent blanks an unsafe href to ""; this drops it, and any other
-    // href off the policy, so the anchor is not a link at all.
+    // The parent blanks an unsafe href to ""; a null href off the policy is
+    // not rendered at all (ProseMirror skips null attributes), so the
+    // anchor is not a link.
     const spec = this.parent?.(props) as [string, Record<string, unknown>, 0];
-    if (!(this.options.isAllowedUri as LinkPolicy)(`${spec[1].href}`)) {
-      delete spec[1].href;
-    }
+    if (!allows(this.options, spec[1].href)) spec[1].href = null;
     return spec;
   },
 });
