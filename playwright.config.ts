@@ -24,8 +24,12 @@ export default defineConfig({
         "**/local/**",
         "**/library-sidebar.spec.ts",
         "**/library-links*.spec.ts",
+        "**/library-lists*.spec.ts",
         "**/performance.spec.ts",
         "**/toolbar-perf.spec.ts",
+        "**/page-engine-perf.spec.ts",
+
+        "**/image-asset-encoder-perf.spec.ts",
       ],
       use: {
         browserName: "chromium",
@@ -50,6 +54,7 @@ export default defineConfig({
         "**/collaboration.spec.ts",
         "**/editor-leak.spec.ts",
         "**/image-metadata.spec.ts",
+        "**/image-asset-encoder.spec.ts",
       ],
       testIgnore: ["**/toolbar-perf.spec.ts"],
       use: {
@@ -62,7 +67,13 @@ export default defineConfig({
       // chromium suite (when both are selected), on one worker. Run it by
       // itself with `--project=perf --no-deps`.
       name: "perf",
-      testMatch: ["**/performance.spec.ts", "**/toolbar-perf.spec.ts"],
+      testMatch: [
+        "**/performance.spec.ts",
+        "**/toolbar-perf.spec.ts",
+        "**/page-engine-perf.spec.ts",
+
+        "**/image-asset-encoder-perf.spec.ts",
+      ],
       dependencies: ["chromium"],
       workers: 1,
       use: {
@@ -107,7 +118,11 @@ export default defineConfig({
       // The shared library UI (components/library) on its Bun harness, with
       // no Next.js or Hocus: `bun tests/harness/library/serve.ts` first.
       name: "library",
-      testMatch: ["**/library-sidebar.spec.ts", "**/library-links*.spec.ts"],
+      testMatch: [
+        "**/library-sidebar.spec.ts",
+        "**/library-links*.spec.ts",
+        "**/library-lists*.spec.ts",
+      ],
       use: {
         browserName: "chromium",
         viewport: { width: 1280, height: 800 },

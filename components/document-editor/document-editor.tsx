@@ -96,8 +96,8 @@ interface DocumentEditorProps {
   onPlaygroundRegenerate?: () => void;
   /**
    * View only: no local ProseMirror change reaches the document, plugin
-   * writes on open included (WriteGate, details spec §1). The schema
-   * guard's Yjs repair is not gated yet. The web sandbox never sets it.
+   * writes on open included (WriteGate, details spec §1), and the schema
+   * guard defers its Yjs repair until it clears. Reading mode sets it.
    */
   readOnly?: boolean;
   /**
@@ -105,6 +105,11 @@ interface DocumentEditorProps {
    * object for the editor's life: a new one rebuilds the extensions.
    */
   linkHost?: LinkHost;
+  /**
+   * The outline overlays the page instead of docking beside it. Decided
+   * by the page frame (`PageFrame`, preferences design §5.9).
+   */
+  outlineOverlay?: boolean;
   /**
    * The connection and identity chip, chosen by the composition root (the
    * web sandbox passes `CollabStatusGroup`); shown only with a provider. The
@@ -177,6 +182,7 @@ function DocumentEditorContent({
   onPlaygroundRegenerate,
   readOnly,
   linkHost,
+  outlineOverlay = false,
   statusChip,
   rejectedReason,
   serverSynced,
@@ -190,8 +196,9 @@ function DocumentEditorContent({
 
   // Contract §5.2: D1's `view.outline` intent calls `setOutlineOpen`.
   // M6: remembered locally (`tinydocy-ui`), same name and signature.
-  // Below 950px the outline is a transient overlay (A6).
-  const [outlineOpen, setOutlineOpen, outlineView] = useOutlineOpen();
+  // Too narrow to dock, the outline is a transient overlay (A6).
+  const [outlineOpen, setOutlineOpen, outlineView] =
+    useOutlineOpen(outlineOverlay);
   const [foldedIds, setFoldedIds] = useState<Set<string>>(new Set());
   const [filterState, setFilterState] = useState<HeadingFilterCallbackState>({
     matchedSectionIds: new Set(),
@@ -212,12 +219,13 @@ function DocumentEditorContent({
   );
   const reason = rejectedReason ?? (guardState === "ok" ? null : guardState);
   // The guard reads it when its repair timer fires, not when it binds.
-  const canWriteRef = useRef(rejectedReason === null);
+  const writable = rejectedReason === null && !readOnly;
+  const canWriteRef = useRef(writable);
   useEffect(() => {
-    canWriteRef.current = rejectedReason === null;
-    // A repair deferred while refused (offline budget) runs now.
-    if (rejectedReason === null) schemaGuard.onWritable();
-  }, [rejectedReason, schemaGuard]);
+    canWriteRef.current = writable;
+    // A repair deferred while refused (offline budget) or read-only runs now.
+    if (writable) schemaGuard.onWritable();
+  }, [writable, schemaGuard]);
   // Read by the extensions, never their deps: WriteGate on every
   // transaction (from the first one on), UniqueID when it waits for a sync.
   const liveRef = useRef({ provider, readOnly });

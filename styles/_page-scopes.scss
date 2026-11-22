@@ -1,0 +1,6 @@
+// The two page looks (preferences design §5.6). `classic` is today's exact
+// look for sandbox browsers that used TinyDocy before; every other look is
+// "paged". Both sit inside `:where()`, so a rule moved here keeps the
+// specificity it had in its original file.
+$classic: ':where(:root[data-page-style="classic"])';
+$paged: ':where(:root:not([data-page-style="classic"]))';

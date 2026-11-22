@@ -31,7 +31,7 @@ function hyperlinkOptions(linkHost?: LinkHost) {
 }
 
 describe("document editor linkHost", () => {
-  it("without a host, refuses only document links", () => {
+  it("without a host, allows only web links (isWebLink)", () => {
     const options = hyperlinkOptions();
     expect(options.navigate).toBeUndefined();
     expect(options.linkIcon).toBeUndefined();
@@ -43,10 +43,12 @@ describe("document editor linkHost", () => {
       " \ttinydocy:x",
       "\u00a0tinydocy:x",
       "\u0001tinydocy:x",
+      "#top",
+      "ms-msdt:x",
     ]) {
       expect(allowed(uri)).toBe(false);
     }
-    for (const uri of ["https://example.com", "mailto:a@b.c", "#top"]) {
+    for (const uri of ["https://example.com", "mailto:a@b.c"]) {
       expect(allowed(uri)).toBe(true);
     }
   });

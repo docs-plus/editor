@@ -153,6 +153,10 @@ export function acquireCollabSession(name: string): CollabSession {
     listeners: new Set(),
   };
   provider.on("synced", () => {
+    // Save the first server copy now, not after the debounce: the tab list
+    // may already be on the device, and a reload offline in between would
+    // show this document's tab with nothing to open.
+    if (!entry.hasSynced) void entry.binding?.flush();
     entry.hasSynced = true;
     entry.offlineBytes = 0;
     if (entry.rejectedReason === OFFLINE_BUDGET_REASON) {

@@ -81,6 +81,763 @@ unchanged.
   opener, and a visual matrix (icon colour, 4.5:1 contrast, dashed runs,
   RTL) in light and dark.
 
+### Phones M20: one keyboard measurement, sheets ride the keyboard
+
+The on-screen keyboard is measured once for the whole page (phones and
+tablets design §4.6, §6.4, §6.5, PR M20). Phones only: desktop subscribes to
+nothing and renders the same. The editor chunk group is unchanged (393,820 B
+gz, 0 B against `main` at `903b5c8`, 1,207 B under the fence); everything
+lives in the phone bar's lazy chunk.
+
+#### Added
+
+- **Phones:** `lib/keyboard-inset.ts`, one `visualViewport` listener set
+  shared by every subscriber and removed with the last one. While anything
+  subscribes, `<html>` carries `--keyboard-inset` and
+  `--visual-viewport-height`, written at most once per frame.
+- **Phones:** bottom sheets ride the keyboard by default: they sit on
+  `--keyboard-inset` and never grow past the visual viewport, so a field in
+  a sheet stays above the keyboard (iOS Safari and Android Chrome). A
+  caller caps the height with `[--sheet-max-h:…]`, which keeps that cap. A
+  sheet with no field passes `keyboard={false}`; the Aa sheet does, so it
+  looks and moves exactly as before.
+- **Phones:** after a rotation (or an iPad window resize below 768 px) the
+  caret is scrolled back into view once, if you were writing. No
+  transaction steps, so no Yjs traffic or undo entry.
+- **Tests:** the hidden-page flush starts in the `visibilitychange` task
+  (sandbox device copy) and a library `flush()` appends at once and never
+  compacts; a leak spec checks the listener set leaves with the bar.
+
+#### Changed
+
+- **Phones:** `hooks/use-keyboard-inset.ts` moved into
+  `lib/keyboard-inset.ts`; the phone bar reads the shared store.
+- **Docs:** the awareness rate check (§6.5): carets are sent on every
+  selection change, not at most every 100 ms; the throttle is an open owner
+  decision. Moving the slash menu's own `visualViewport` listener onto the
+  store is follow-up row M20a; the old plans now point at
+  `lib/keyboard-inset.ts`.
+
+#### Fixed (review)
+
+- **Phones:** a rotation and a blur in the same frame no longer cancel each
+  other: the viewport events and the focusout share one task, which applies
+  the reset or measures and then always checks the width, so the caret still
+  comes back into view. A viewport scroll in that frame no longer cancels
+  the iOS drift reset.
+- **Phones:** the Aa sheet no longer mounts on the keyboard and drops a
+  frame later when opened while writing; it stays on the screen bottom.
+- **Phones:** the phone bar scrolls the caret on mount and unmount only when
+  the width moved, once per frame: not twice under StrictMode, not on an
+  editor switch, and still on the first mount, so a page loaded in landscape
+  and rotated to portrait gets its caret back.
+- **Tests:** the leak spec counts `visualViewport` and `document` listeners
+  against a bar-less baseline instead of matching source names, so it works
+  on minified builds and also catches a leaked `focusout`.
+
+### Image store A1: the shared asset core
+
+The shared core of the image store (spec `2026-11-16-image-store-design.md`,
+D4, PR A1). Library documents will store `asset:sha256-<hex>` refs instead of
+data URLs; desktop storage (P2.6b) and the web library (W11) build on this.
+No web code path produces a ref yet, and the public sandbox is unchanged:
+its editor imports none of this. The editor chunk group and first-load JS
+are byte for byte the same as `main` at `84a9458` (+0 B gz; A1 has no D23
+ledger line).
+
+#### Added
+
+- **Image store:** `lib/assets/`:
+  - `asset-ref` (format, parse, `findAssetRefs`, `rewriteAssetRefs` for
+    exports);
+  - `sniff` (magic bytes, plus header-only sizes: refuses SVG renamed as
+    PNG, mismatched types, truncated headers and pixel bombs);
+  - `hash` (SHA-256);
+  - `prepareImageAsset` (the insert pipeline: GIFs pass through without
+    their comments and XMP, within 2560 px a side, 1,000 frames and 160 MP
+    summed over frames; PNG and WebP metadata stripping; JPEG always
+    re-encoded; a 2 MB / 2560 px cap; a format whose size the header doesn't
+    give, such as AVIF, HEIC or BMP, decodes only in the worker);
+  - an encode worker (`createImageBitmap` + `OffscreenCanvas`) that falls
+    back to the main-thread canvas when it can't load or times out (60 s),
+    but never retries an image that crashed it. A 12 MP photo encodes with
+    the main thread's longest gap at 11 ms, against 75 ms on the main
+    thread (Chromium);
+  - the resolver, and a reference-counted object-URL cache released through
+    `AbortSignal`.
+- **Platform:** the `BlobStore` port (`lib/platform/blob-store.ts`) over
+  format 2's `blobs` and `doc_blobs` tables (no new tables), `MemoryBlobStore`,
+  and a framework-free contract suite for P2.6b and W11
+  (`tests/helpers/blob-store-contract.ts`), including the GC property test:
+  no referenced or restorable blob is ever collected.
+- **Editor:** `AssetHyperMultimediaKit` (`extensions/hyper-multimedia/asset-kit.ts`)
+  for hosts with an image store (P2.6b, W11). It renders `asset:` images
+  through the §6.2 fallback until HyperMultimedia 2.4 (U1), drops pasted
+  `asset:` images with a notice when the document has no image store, adds
+  Alt text… to the image toolbar, copies an image as PNG (so it pastes as a
+  picture anywhere), and keeps `<img alt>` in step with alt changes,
+  including undo and collaborators' edits. Everything but its
+  routing is one lazy chunk. The upstream request is written up in
+  `docs/research/2026-11-22-hypermultimedia-2.4-u1-upstream-note.md`.
+- **Headless:** `extensions/hyper-multimedia/asset-image-parse.ts`, the
+  `asset:` image parse rules with no runtime imports, for the headless
+  schema (P2.8a).
+
+#### Changed
+
+- **Schema:** `CLIENT_SCHEMA` is 3 ("knows asset refs"). The server's floor
+  stays 2, so schema-2 bundles still connect and are counted as `low` in the
+  per-minute `client_schema` log line. No deploy step.
+
+### Live sharing P4.1 and P4.2a–d: the share server, dark
+
+The server side of live sharing, in the Hocus process, shipped **dark**:
+`HOCUS_SHARES` and `HOCUS_DELETE_ROUTE` default to off, and with both off
+production behaves as before. The only visible difference is that
+`/api/info`, `/api/shares…` and `/api/documents/…` on the Hocus host answer
+404 instead of the health check's `ok`. No client code changes (editor chunk
++0 B).
+
+#### Added
+
+- **Sharing (P4.2a):** `lib/sharing/`, with these parts:
+  - the `shares` table, created only when shares are on;
+  - the `share:<uuid v4>` name validator, which also refuses the reserved
+    `sync:` prefix (seam S6b);
+  - no auto-create: a share document needs its row;
+  - `MAX_TOTAL_SHARES` (2,000), counted apart from `MAX_TOTAL_DOCUMENTS`;
+  - per-address (IPv4, IPv6 /64, and a larger shared budget per /48) and
+    global hourly creation limits;
+  - a share that stays `pending` for an hour stops counting toward the cap
+    and is ended as `expired` on first contact;
+  - each hash column is unique, so a create or reset that reuses a hash
+    answers `409 hash_in_use`;
+  - `created_ip_hash` (an HMAC), cleared 30 days after creation by an
+    hourly sweep.
+
+  The client generates every secret. The server mints only `share_id` and
+  stores three distinct 32-byte SHA-256 hashes (seam S1). The token wire
+  format is frozen in `lib/sharing/share-token.ts`, with test vectors.
+- **Sharing (P4.2b):** `onAuthenticate` for `share:*`, active only with
+  shares on. It looks up the row by `share_id`, compares with
+  `timingSafeEqual`, and treats a view token as `readOnly`.
+  - An unknown share, a wrong token and a share over its failed-token
+    limit get the same refusal (`share_unavailable`, byte for byte), and an
+    unknown share costs the same digest comparisons. Only token holders
+    learn `sharing_stopped`, `link_reset`, `expired`, `removed` or
+    `view_only`.
+  - Failed tokens are counted per IPv4 address, IPv6 /64 and /48 (past the
+    limit the address gets `busy`) and per existing `share_id` (past the
+    limit its edit and view tokens are refused too, never its owner
+    secret). Both tables evict their least recently used key when full,
+    so neither stops counting nor refuses an address it has not seen.
+    Clients must retry `share_unavailable` with backoff, never treat it as
+    terminal.
+  - A connection that joins while its share is stopped or made view-only
+    is closed once connected.
+  - A share ends 30 days after its last stored edit.
+  - Viewers are marked in awareness (`viewer: true`, no cursor).
+  - Share connections have their own per-IP cap
+    (`SHARE_WS_CONNECTIONS_PER_IP`, 10, refused as `busy`), apart from the
+    sandbox's cap.
+  - Shares never get `document_activity` rows, so the sandbox retention
+    purge never touches them.
+- **Sharing (P4.2c):** owner endpoints, which need the owner secret as
+  `Authorization: Bearer`:
+  - `DELETE /api/shares/:id` (stop sharing)
+  - `POST …/reset` (a new `share_id` from three new hashes; the old link
+    ends as `link_reset`)
+  - `POST …/view-only`
+
+  Each closes the share's live connections. `GET …/status` takes any token
+  of the share. CORS is limited to `HOCUS_SHARE_ORIGINS`. A mutation from
+  any other `Origin` is refused. Bodies are JSON only, small, and unknown
+  keys are refused. The endpoints are rate-limited per address and per
+  IPv6 /48 (owner calls only per address, once the address is under its
+  failed-token limit), before the origin check.
+  `lineage` is a dashed UUID or 32 hex digits.
+- **Sharing (P4.2d):** `GET /api/info` returns `apiVersion` 1,
+  `serverVersion`, the schemas, `maxDocBytes`, `maxFrameBytes`, `yjsFormat`
+  and `features.shares`. Share connections and creates require client
+  schema ≥ 3 (`SHARE_SCHEMA_FLOOR`). `HOCUS_SHARES=on|readonly|off` is the
+  kill switch.
+- **Hocus (P4.1):** `DELETE /api/documents/:id` in the Hocus process
+  (`lib/security/hocus-delete-route.ts`), behind `HOCUS_DELETE_ROUTE=on`.
+  It keeps the Next.js route's contract and also refuses `share:*` and
+  `sync:*` names. The Next.js route stays the live one; a test pins that it
+  refuses those names too.
+- **Tests:** unit tests for the config defaults, the token format, the
+  store, the auth refusal matrix and the HTTP API. Hocus integration tests
+  (`tests/unit/scripts/hocus-shares.test.ts`) cover:
+  - dark by default;
+  - edit and view tokens, guesses and the schema floor;
+  - viewer awareness;
+  - stop and view-only;
+  - the separate share connection cap;
+  - the server never receiving, storing or logging a raw link secret.
+
+#### Changed
+
+- **Security:** `readJsonBody` and `withBusyRetry` moved to
+  `lib/security/json-body.ts`, so Hocus doesn't import `next/server`.
+  `http-route-guards` re-exports them.
+- **Security:** `countNonSystemDocuments` skips `share:*` names.
+
+**Deploy:** nothing to do. Leave `HOCUS_SHARES` and `HOCUS_DELETE_ROUTE`
+unset. Turning P4.1 on later is its own step: route `DELETE
+/api/documents/*` on `tiny.docs.plus` to Hocus in Traefik, set
+`HOCUS_DELETE_ROUTE=on`, restart with `--update-env`, and run the close-tab
+e2e suite on staging. Shares stay off until Gate 4.
+
+### Comments core (P4.9), dark
+
+The data model, anchoring and re-anchoring for comments (spec
+`2026-11-16-comments-design.md` §4–§6, §8–§10), with no visible UI: the
+web sandbox and the Playground never take comments, and
+`canComment()` is off unless `NEXT_PUBLIC_COMMENTS=on`. The editor chunk
+group grows about 140 B gz (P4.9's 150 B line in the D23 ledger, v1
+contract A19); the lazy comments chunk is about 5.3 KB gz and its host
+chunk about 1.2 KB. `mountComments`, which nothing imports yet, is not in
+that figure: it measured +414 B gz with a throwaway import, and P4.10
+needs a ledger decision for it. No schema or protocol change; no Deploy
+note. `NEXT_PUBLIC_COMMENTS` (default off) and the browser's
+`tinydocy-author` device secret are in the README's build-time table.
+
+#### Added
+
+- **Comments:** `lib/comments/` holds the flat `comments` Y.Map model, its
+  client limits, cleaning, live byte measure, the per-entry check the
+  server validator (P4.2f-2) builds on, the store (every write one
+  `transact` outside the editor's undo stack, gated by `canComment()`
+  before it runs), anchors (Yjs relative positions with a previous-pair
+  fallback) and re-anchoring by the editing client.
+- **Comments:** the lazy chunk (`extensions/comments/`) keeps each
+  thread's range, re-anchors after local structural edits, re-resolves
+  after remote ones, draws open threads in the decoration host's new
+  `comments` layer and shows a failing anchor as Detached only after
+  1.5 s. Undo (local or a collaborator's) brings a deleted thread back
+  for every client; the re-anchor runs in a microtask, before any
+  collaborator's update, and one pass is one Yjs update.
+  `mountComments` loads it for a document that takes comments; no page
+  mounts it yet.
+- **Comments:** the author id is per document (SEC-002): HMAC-SHA-256 of
+  the document's lineage under a device secret that never leaves the
+  browser. `listThreads(ydoc)` lists a bare Y.Doc's threads, Detached
+  ones and orphaned keys for repair, without writing.
+- **Actions:** `comment.add`, which the bubble, palette and menus will
+  call. It is offered only in an editor marked with `setCommentGate`, so
+  it never appears on the web.
+- **Editor:** `moveSection` names the moved slice in a `sectionMove` meta,
+  so comments shift the ranges inside it instead of collapsing them.
+- **Tests:** the anchor fuzz (2,000 cases; 50,000 in the stress probe),
+  three-client convergence (headless, and through live editors and their
+  controllers with undo, redo and held-back updates), client-server
+  agreement (including offline catch-up and `comments_full` recovery)
+  and view-only silence. The `perf` Playwright typing case with 300
+  threads is written but skipped unless `PERF_COMMENTS=1`.
+### CI: sharded e2e, a perf job, one gate check, docs-only skip
+
+The Playwright suite runs in parallel, so CI on a pull request or `main`
+takes about 7.5 minutes instead of about 27 (median of the last five green
+`main` runs, 19.7 to 31.6 min). Required check names are unchanged.
+
+#### Changed
+
+- **CI:** the `chromium` and `library` projects run in three shards
+  (`Playwright shard N/3`, `--retries=1`, about 6 min each; every shard
+  starts the library's Bun harness), and the typing budget in its own
+  job on its own runner (`Playwright perf (typing budget)`, `--no-deps`, one
+  worker, about 5 min).
+- **CI:** `Playwright (Chromium)`, the required check, always runs. It merges
+  the shards' and perf's blob reports (failures are annotated at their file
+  and line; the HTML report is uploaded on failure) and passes only if all
+  of them passed.
+- **CI:** a pull request that changes only `docs/**` or Markdown files (none
+  under `desktop/**`) skips the shards, perf and the `desktop` job, and
+  `Playwright (Chromium)` passes with a notice. Pushes, the merge queue and manual runs always run
+  everything.
+- **Tests:** `tests/unit/ci/ci-workflow.test.ts` checks the shards, the
+  gate's `needs` and `if`, and runs the docs-only and verdict scripts.
+
+**Deploy:** none. Each CI run now uses about seven jobs instead of two; the
+merge queue's build concurrency (runbook) is set with that in mind.
+
+### Hover-preview pixel test no longer races the swatch's leave timer
+
+`action-preview.spec.ts`'s "previews exactly what applying renders" cases
+(the table header ones most often) failed about 40% of runs locally and on
+both attempts of some CI runs. Moving the pointer off the swatch schedules the
+preview's clear after the 80 ms dwell; applying had already removed the
+preview, so the test drew its own "applied" render before that clear ran,
+and the clear erased it mid-capture (the blurred selection's tint then showed,
+about 900 pixels). Test only; no app or Deploy change.
+
+#### Fixed
+
+- **Tests:** before drawing the applied render, the test waits for a page
+  timer of the same dwell (`PREVIEW_DWELL_MS`), which fires after the
+  pending clear. 40 repeats: no pixel failures (11 of 24 before).
+
+### Nightly back to green: offline shell, palette budget, soak
+
+The nightly had failed on every run since 2026-11-16. Three independent
+causes: two fixed in the app, and the soak's filter journey now judges
+commands apart from typing (owner's decision).
+
+#### Fixed
+
+- **Offline:** a document is saved on the device at its first server sync,
+  not 750 ms later. The tab list could already be on the device, so a reload
+  offline in that window showed the tab bar over an editor that never
+  loaded, with no message (the nightly's flaky "offline shell" test).
+- **Offline:** files a first visit loads before the service worker controls
+  the page (the editor chunk among them) are now stored in its static cache:
+  the page hands the worker its loaded `/_next/static` URLs once it takes
+  control, and then any that were still in flight then (files that did not
+  pass through the worker, `workerStart` 0). Before, offline reopening relied
+  on the browser's HTTP cache; with that evicted it showed "Something went
+  wrong" instead of the editor.
+- **Palette:** the first Alt+/ loads 13.4 KB gz again (contract A7: 20 KB),
+  down from 24.4 KB. The identity dialog's own chunk (#126/#129) moved the
+  shared `Dialog` out of the first-load bundle, so the palette now fetches
+  it; that tipped a palette already at 20,475 B. The fix removes dead weight
+  instead: cmdk builds its unused `Command.Dialog` from Radix Dialog at module
+  level, so all of Radix Dialog (focus scope, dismissable layer, scroll lock)
+  rode in the palette chunk. `@radix-ui/react-dialog`, which only cmdk
+  depends on, is aliased to a stub (`lib/cmdk-radix-dialog-stub.ts`).
+
+#### Changed
+
+- **Tests:** the `pwa` offline tests clear the browser's HTTP cache before
+  going offline, so only the service worker can serve the app; a new test
+  checks that every static file the first visit loaded ends up in its cache,
+  and the offline shell test waits for the device copy and asserts the
+  editor's title, not any `h1` (the error page has one).
+- **Nightly:** the palette budget step writes to its own output folder, so
+  it no longer deletes the pwa step's traces when both fail.
+- **Soak:** the `filter-lifecycle` journey judges its typing at 100 ms and
+  its commands (Mod+Shift+F to open the filter bar, Enter to commit a
+  filter) apart at 200 ms, INP's "good" bound. Its p95 was decided by those
+  six events, each a full editor-shell re-render costing 90–170 ms under
+  `next dev` on a runner, so it swung between 64 and 168 ms on one commit;
+  typing stayed at 40–72 ms. Moving the filter state out of the shell is a
+  tracked follow-up. Journeys log their slowest events with the step each
+  fell in and its input delay, processing and presentation times
+  (`tests/TESTING.md`, "Soak journeys").
+
+### Languages L0: translation-ready foundation (docs, glossary, i18n groundwork)
+
+PR L0 of the languages design (`2026-11-16-languages-rtl-design.md` §9),
+with the unwired groundwork of L1a. Nothing in the app imports the new
+modules, so the web app, its English copy and the editor chunk are
+unchanged (0 B).
+
+#### Added
+
+- **i18n:** `lib/i18n/` with the eager `t()` (`t-core.ts`: lookup, `{name}`,
+  interface locale and `dir`; client-side state, set once at boot), the
+  eager direction helper (`dir.ts`: `dirOf` from the locale's likely
+  script, so `ku-Arab` is right to left), the lazy ICU MessageFormat 1
+  subset (`format.ts`: plural with CLDR categories, select, number, date,
+  time, rich tags; `selectordinal` and nested plurals refused; its `t()`
+  shows English when a translation fails to parse), BCP 47 matching and
+  native names (`locale.ts`, lazy only), bidi helpers (`isolate.ts`,
+  including `stripBidiControls` for filenames) and the registry render
+  boundary (`registry-labels.ts`; keywords split on `,` `،` `、` `，`).
+  English stays in code and needs no catalog.
+- **i18n:** `bun run i18n:extract` writes `locales/en/<ns>.json` from `t()`
+  calls and the action registry's labels and keywords (88 messages today,
+  in `actions.json`), skips `t(` in comments, and fails on imports of
+  `t-core` or `format` that would hide calls (relative paths, `t as x`,
+  `import *`, re-exports, dynamic imports); `bun run i18n:check` checks
+  freshness, ICU syntax, placeholders, plural categories, banned literals
+  (⌘ ⌥ ⇧ ⌃, `Ctrl+`, straight double quotes), `core` simplicity (no ICU
+  apostrophe escapes either), translations filed under their own
+  namespace and reserved shortcuts (Shift+Space); `bun run i18n:pseudo`
+  builds `en-XA` and `ar-XB` into the git-ignored `locales/pseudo/`.
+- **i18n:** `tests/unit/i18n/catalog-check.test.ts` runs the check in
+  `bun run test`, so **changing an action's label or keywords in
+  `lib/editor-actions` now needs `bun run i18n:extract`** in the same
+  commit. `editor-chunk-imports.test.ts` keeps the formatter, `Intl`
+  helpers, `locale.ts` and catalogs out of the editor chunk, and pins
+  `t-core` and `registry-labels` to `dir.ts` alone.
+- **i18n:** `NEXT_PUBLIC_PSEUDO_LOCALES=1` lists the pseudo-locales; it is
+  off by default, never set in production, and nothing reads it yet.
+- **Docs:** `locales/glossary.md` (fixed terms per language, seeded from UX
+  §9.2) and the L0 amendments: UX §9.4 copy rules, §4.6 RTL keyboard notes,
+  §2.4 casing `select` and `.lproj`, §14 RTL checks for S1; preferences
+  §5.4 RTL letter spacing, §5.13 script fallback faces, §5.15 `firefox`;
+  details E9 Arabic-script and Hebrew folding and §14 `ar-XB` gallery;
+  comments §11.2 sides follow the interface; toolbar contract A19.
+
+### Web library W2: the IndexedDB storage engine (dark)
+
+The storage core of My documents, the personal library stored in the
+browser (spec `2026-11-16-web-library-design.md` §2, PR W2). It lands dark:
+nothing in the web app imports it, `NEXT_PUBLIC_LIBRARY` defaults to off,
+and the web build is unchanged: every JS and CSS file under
+`.next/static` matches a build of `main` at `903b5c8` (apart from the
+build's version string), the editor chunk group measures 393,820 B gz on
+both (+0 B, 1,207 B under the fence), and no built file contains the
+library. W2 is not done: `IdbDocumentIndex` is still open, and the
+contract suite in three browsers and the `perf` comparison are deferred to
+the CI session's Q7 job (spec §2.2, "Still open for W2").
+
+#### Added
+
+- **Web library:** `IdbDocStore`, the `DocStore` port over a new IndexedDB
+  database `tinydocy-library` (schema version 1, every store the library
+  will need, including the image store and Live seams). Every content write
+  is one `durability: "strict"` transaction that settles on commit; a full
+  disk or any other abort rejects with a retryable error and writes
+  nothing, so the batcher keeps the batch and retries it in order.
+- **Web library:** version 1 takes the desktop's format 2 data model
+  (offline data-model revision §3.6): the derived `links` and `headings`
+  stores, `head_seq`, `derived_seq`, `links_hash`, `headings_hash`,
+  `title_key` and a numeric `stale` sentinel (`by_stale`) on documents,
+  folder trash groups, snake_case `doc_blobs`, `''` for every nullable
+  index key part, the `pre-v<n>` copy name, an eviction sentinel with its
+  `localStorage` marker, and the `library.json` field lists
+  (`lib/library-format/fields.ts`).
+- **Web library:** compaction that stays safe with any number of tabs
+  writing the same document (W-D3): it merges into the stored snapshot and
+  deletes only the rows its own session applied, and returns another tab's
+  snapshot as `foreign` for `local-session` to apply.
+- **Web library:** compaction treats `foreign` as apply-then-ack: until a
+  later compaction's state covers it, each compaction merges the stored
+  snapshot again, so a caller that drops `foreign` loses nothing.
+- **Web library:** opening handles an upgrade in another tab (close hooks,
+  close, "Reload"), a blocked upgrade and its clearing
+  (`library_upgrade_unblocked`), a newer database or `format_version`
+  (read-only), and a browser that won't store anything (never a silent
+  fallback to memory). Close hooks get 5 s together and may throw without
+  an unhandled rejection. `IdbDocStore.dispose()` unregisters its close
+  hook and forgets every open document, also one still loading. After an
+  upgrade in another tab, a reload is the only recovery; the contract W4
+  must wire up (register the session drain as a close hook) is tested.
+- **Web library:** `persist()`, `persisted()` and `estimate()` helpers with
+  the §2.6–§2.7 rules (silent requests on Chromium and Safari only, every
+  iOS browser counted as Safari, also in iPadOS desktop mode, the 10 GiB
+  Chromium quota report
+  ignored), and the `NEXT_PUBLIC_LIBRARY` switch, which never deletes the
+  library.
+- **Tests:** the shared `DocStore` contract suite on `IdbDocStore` under
+  `fake-indexeddb` (new dev dependency), a seeded multi-writer compaction
+  property test (2,000 runs from seed 1 on every PR, about 21 s;
+  `LIBRARY_PROPERTY_RUNS`, `LIBRARY_PROPERTY_BASE_SEED`,
+  `LIBRARY_PROPERTY_SEED`, Yjs client ids from the seed), quota fault
+  injection through `local-session`, the exact version 1 schema and an
+  upgrade of a populated library, web library import boundaries, and a
+  check that no import, static or dynamic, from `app/`, `components/`,
+  `hooks/`, `extensions/`, `lib/`, `scripts/` or `types/` resolves into the
+  library.
+- **CI:** the nightly `library-property` job runs the property test at
+  50,000 runs, seeded from the run id.
+
+#### Changed
+
+- **Spec:** a web library append bumps `meta.rev` only when it changes the
+  title or snippet; `modified_at` and `size_bytes` never do, and neither
+  does compaction. `IdbDocumentIndex` also reloads its snapshot on
+  `pageshow` from bfcache and when the tab becomes visible (spec §2.2).
+- **Spec:** the image store's web `doc_blobs` and `blobs` rows are
+  snake_case, as on desktop.
+
+### Test infrastructure: seeded fixtures and the nightly streak tracker
+
+Test strategy Q1 and Q5 (`2026-11-16-test-release-strategy.md` §1.6, §3).
+Scripts and tests only: no app, server or workflow change, and the editor
+chunk is unchanged (0 B).
+
+#### Added
+
+- **Fixtures:** `bun scripts/fixtures/generate.ts --set <name> --seed <n>
+  --out <dir>` builds the §3.2 sets from a seed it prints first
+  (`SEED=<n>` replays): `library-s`, `library-1k`, `library-10k` (written
+  through the storage engine), `doc-large`, `doc-near-cap` (1.9 MiB of Yjs
+  state), `doc-images`, `doc-rtl`, `doc-legacy`, `exif` and `hostile`. Each
+  set writes a `manifest.json`; `--list` names the sets still waiting on
+  unmerged work (comments, preferences, the web library, the asset store,
+  `.tinydoc`), and `--cache-key` prints a hash of every module the
+  generators import (a unit test walks the imports so the list can't fall
+  behind). A set folder that already holds files is refused unless `--force`
+  empties it; bad input prints one line and exits 2. `FIXTURES_FULL_SIZE=1`
+  (off by default) adds the slow full-size replay tests (12 MP photos,
+  `library-1k`, `library-10k`). The `doc-images` photos are PNGs with an
+  `eXIf` block, not JPEGs; each is written to disk as it is drawn.
+- **Nightly streak:** `bun scripts/nightly-streak.ts` reads the scheduled
+  runs of `nightly.yml` (and `nightly-desktop.yml` once it exists) with
+  read-only `gh` calls and prints the §1.6 streak per gate as Markdown for
+  the pinned streak issue: green, red and void days, the one re-run per void
+  run, at most 2 void days per streak, and "not running yet" for a gate
+  whose job sets no nightly job carries. A job set counts only when every
+  job carrying its label finished `success` (a skipped job or matrix leg
+  doesn't), a day missing a run of either gating workflow is void, and the
+  setup steps that void a run are pinned against the workflow files by a
+  unit test.
+
+#### Changed
+
+- **Tests:** `generateLargeDocument` and `generateRandomDocument` take an
+  optional seeded `random`; callers that pass none keep `Math.random`.
+
+### Desktop P2.7b: list views, sort, filter and tags
+
+The library's list views for desktop and the web library (D3), in
+`components/library/`, on top of P2.7a's sidebar. The web sandbox doesn't
+use them: nothing in the web build imports `components/library` or
+`lib/library`.
+
+#### Added
+
+- **Platform:** `LibraryIndex` gains tags (`tags`, `addTag`, `removeTag`,
+  `createTag`, `renameTag`, `mergeTags`; unique by `tagNameKey`, the shared
+  search normalizer, so case, accents and digit shapes don't make a new
+  tag; 40 characters, 20 per document), list choices per place (`listViews`,
+  `setListView`; a folder's map to `folders.sort`, `view` and `"group"`,
+  the rest to `meta`), Manual order inside a folder (`moveInFolder`,
+  `docs.sort_key`), the Trash list (`trash`: documents and folder units,
+  newest first), one `trashGroup` per trashed folder's subtree, and list
+  metadata on entries (`modifiedAt`, `snippet`, `tagIds`, `sortKey`).
+  Modified counts content edits only (D-O5), sibling folders may share a
+  name (D-O6), and `rename` on
+  a `LibraryIndex` is documented as editing the title heading through a
+  session, never the stored title (offline data-model revision §4.2). `MemoryDocumentIndex` implements them and the
+  shared contract suite covers them for P2.6's `IpcDocumentIndex` and W2's
+  `IdbDocumentIndex`.
+- **Library:** list views for Recent, Pinned, the Library root, a folder,
+  a tag and Trash, as an ARIA grid with one tab stop: sort by Title,
+  Modified, Created, Opened or Manual (pin order in Pinned), List or
+  Preview (title plus a 2-line snippet), group by date (Today, Yesterday,
+  This week, This month, Earlier) or by folder, all kept per folder. The
+  tree keeps sorting by title. Lists are windowed (first paint of a
+  folder's list 33 ms at 1,000 documents and 45 ms at 10,000 on a
+  production build; targets 100 and 300 ms). P2.7a's sidebar tree is not
+  windowed yet: expanding a folder of 10,000 documents there takes about
+  2.6 s. Arrow, Home/End and Page keys, Shift to extend, Space,
+  ⌘A, Enter (a folder opens its list), F2, ⌘⌫ / Delete, ⌘Z, Shift+F10,
+  type-to-select, and ⌥⌘↑ / ⌥⌘↓ in a Manual folder.
+- **Library:** the filter bar: ⌘F while a list has focus, matching titles,
+  tags and folder names through the shared normalizer, never body text
+  (D24); a tag filter that combines tags with AND; and a Modified date
+  range. It is per window and not saved.
+- **Library:** the Tags section in the sidebar (collapsed, no counts),
+  each tag opening a list of its documents; F2 renames a tag everywhere,
+  and a name another tag has asks "Merge “plans” into “planning”?" with
+  Cancel focused.
+- **Library:** the Trash list with Restore (row menu, Shift+F10, or the
+  header button), "Restored “Q4 plan” to Drafts." in the pill, and the
+  UX §5.2 empty states. Delete Forever and Empty Trash come with P2.8.
+- **Tests:** `library-lists.spec.ts` (UX §8.3 item 4, list keys, filter,
+  per-folder choices, Manual order, tags, axe in both themes and RTL) and
+  `library-lists-speed.spec.ts` on the harness, which now seeds large
+  libraries (`?seed=10000`), a Trash (`?trash=1`) and builds production
+  React with `LIBRARY_HARNESS_PROD=1`.
+
+### Security: the web editor links only to https, http and mailto
+
+The Hyperlink extension's own check is a denylist (`javascript:`, `data:`,
+`vbscript:`, `file:`, `blob:`), so a pasted or collaborator-delivered (Yjs)
+link to `ms-msdt:`, `search-ms:`, `smb:`, `vscode:` or any other OS protocol
+handler stayed a live `<a href>` that Mod-click, middle-click or the
+browser's "Open link" handed to the OS. The editor now allows only
+`https:`, `http:` and `mailto:` (editor chunk group +145 B gz, CSS
+unchanged).
+
+#### Security
+
+- **Editor:** `isWebLink` is the editor's `isAllowedUri`, so commands,
+  autolink, paste rules and every open the extension makes refuse any other
+  scheme. `LinkPolicyHyperlink` applies the same option where the extension
+  skips it: a pasted `<a href>` off the policy keeps its text and loses the
+  link, and a stored one (Yjs, older documents) renders with no `href`, so
+  it can't be followed at all.
+- **Editor:** the scheme is checked after leading whitespace only; a
+  scheme split by whitespace or led by a control character is refused.
+- **Editor:** pasted link titles are dropped (a tooltip a stranger chose).
+  Titles already in a document still render.
+
+#### Changed
+
+- **Editor:** links that worked before and are now refused (none is used by
+  the app itself): `tel:` (including bare E.164 numbers, which no longer
+  autolink), `sms:`, `ftp:`/`ftps:`, the extension's app-scheme catalog
+  (`whatsapp:`, `tg:`, `zoommtg:`, `msteams:`, `slack:`, `spotify:`,
+  `vscode:`…), relative links (`#anchor`, `/path`, `./x`, `?q`) and
+  protocol-relative `//host` links. The link form shows its error for them;
+  existing ones stay as text that looks like a link but does not open.
+- **Docs:** search-linking spec §4.4 and §4.8 say what the sandbox now does
+  with a `tinydocy:` link; `docs/upstream/extension-hyperlink-allowuri-parse.md`
+  is a ready-to-file issue for the extension.
+- **Build:** the details spec's editor-chunk ledger (§1 rule 5) and the
+  chunk script record "#168 security allowlist: +145 B", a security
+  exemption outside LK1's line (coordinator-approved 2026-11-22). The
+  fence still passes, so it is unchanged.
+
+### Desktop P2.9c-1: the page engine (text size, width, spacing, reading mode)
+
+Pages now take their text size, width and spacing from preferences, through
+`<html>` attributes and CSS variables, on the web and on desktop
+(preferences design §5, owner answers Q1, Q2 and Q4). Browsers that used
+TinyDocy before keep today's exact look (`classic`) until they change a
+setting; a pixel test against `main` proves it. New browsers get the new
+Default page: 16 px text, a 33 em line (a 624 px card) and 1.6 line
+spacing. There are no controls yet: the Page popover, the palette entries
+and Settings arrive with P2.9c-2 and W13. Against `main` at `84a9458`, the editor chunk group grows by 109 B gz
+(394,127 B; the ledger's smart-quotes line is 150 B). The first load grows
+by 537 B gz of JavaScript (`PageFrame`) and 475 B gz of CSS (the Default
+card, the docking threshold and the contrast set). The store and the
+page-text rules load later. The boot script grows from 600 B to 2,445 B
+(352 B to 1,212 B gzipped) per HTML response.
+
+#### Added
+
+- **Page:** `lib/prefs/` holds the schema (text sizes 14–32 px in rem,
+  widths Narrow 30 em, Standard 33 em, Wide 46 em and Full, spacing
+  Compact, Normal and Relaxed), the web store over new `tinydocy-ui`
+  slots (`page`, `a11y`, `spellcheck`, `smartQuotes`, `rememberPlace`)
+  and the attribute applier. They load in a lazy runtime that `PageFrame`
+  starts once the page is idle, which keeps `<html>` in step across tabs
+  and with the OS contrast setting.
+- **Page:** `styles/_page.scss` holds what the first paint needs: the
+  Default card, the skeleton's width and outline column, the docking
+  threshold and increased contrast. `_page-text.scss` holds the knobs, the
+  document text's rules, reading mode and the motion override; it loads
+  next to the editor, which waits for it.
+- **Page:** boot script v2 (`lib/prefs/boot-script.ts`, replacing
+  `lib/theme-boot.ts`) decides the theme and the page look from one
+  storage snapshot before first paint. Its allowlists are generated from
+  the schema, a parity test runs it against `resolveBoot()` over 224
+  payloads, and `BOOT_SCRIPT_SHA256` is its CSP source for the desktop
+  shell; `bun run build:desktop` fails if an exported page inlines any
+  other string.
+- **Page:** `PageFrame` wraps the editor and its skeleton, on the web
+  and in the desktop root. It decides whether the outline docks: when
+  the main area is at least the card plus 302 px wide, which CSS computes
+  from the card's own variables (`--page-dock-min`): 950 px in `classic`,
+  as before; 926 px for Default; Full never docks.
+- **Page:** reading mode, per tab and never stored (`data-reading` on
+  `<html>`): the document is read-only through the editor's `readOnly`
+  prop and the toolbar hides. It emits no Yjs update.
+- **Writing:** a smart-quotes switch (owner Q2). Typography's input rules
+  read `data-smart-quotes`, so turning it off rebuilds nothing; code
+  blocks and inline code never curl. A spellcheck switch through
+  `<html spellcheck="false">`. A Remember my place switch that gates the
+  continue position and forgets stored places when turned off.
+- **Accessibility:** Increase contrast and Reduce motion overrides for the
+  web (owner Q4, `data-contrast`, `data-motion`). The high-contrast token
+  set also follows the OS setting (`prefers-contrast: more`) outside
+  `classic`: the boot script and the runtime set `data-contrast` for it.
+
+#### Changed
+
+- **Page:** every paragraph renders at one size, including table cells,
+  list items and blockquotes (the Default page fixes the old 15/16 px mix).
+  Lists, cells and headings read the page's line spacing.
+- **Headings:** HeadingScale writes `--hd-size` in twelfths of
+  `--hd-unit` (1 em of the page's text size by default), so headings
+  follow Text size; `classic` sets it to 16 px and keeps the old pt sizes
+  at any browser text size.
+- **Outline:** `PageFrame` alone decides docking, before the first paint;
+  the outline panel's fixed 949 px breakpoint is gone.
+- **Skeleton:** the loading card takes the same width as the editor card,
+  so the page doesn't jump when the editor arrives.
+
+No schema or protocol change; no Deploy note.
+
+### Desktop P2.5: the Electron shell
+
+The desktop app now has a shell: an Electron main process, a sandboxed
+preload and an unsigned internal build for macOS, Windows and Linux. It
+serves the desktop export on `app://tinydocy` and stores documents through
+the storage worker. Nothing changes on the web.
+
+#### Added
+
+- **Desktop:** the typed bridge. `desktop/shared/ipc-contract.ts` declares
+  each call (`app.hello`, `app.flushed`, `doc.open`, `doc.append`,
+  `doc.compact`, `doc.close`, `doc.flush`, `index.create`) and event
+  (`app.flushRequested`, `index.changed`) once, with the guard main runs on
+  it. The preload exposes `window.tinydocy` (`build`, `invoke`, `on`) and
+  nothing else. Main refuses calls until a window's preload has said hello
+  with the same build.
+- **Desktop:** the main process (`desktop/main/`):
+  - serves the export through the `app://tinydocy` handler with a CSP built
+    per page (inline-script hashes, Tiptap's stylesheet by hash, no
+    `'unsafe-inline'` scripts, `img-src 'self'`, no X hosts);
+  - shows each window on `ready-to-show` over a background that matches
+    the OS theme, sandboxed, with no page zoom, reload or DevTools;
+  - refuses navigation away from the app origin and `window.open` (an
+    `https` link opens in the system browser) and denies permissions by
+    default;
+  - sets YouTube's Referer to the website's origin;
+  - holds the single-instance lock, and filters `argv` and `open-file` to
+    `tinydocy://`, `tinydocy://local/<uuid>` and existing `.md`, `.html`
+    and `.tinydoc` files (import is P2.8);
+  - keeps the open-document registry: opening a document that another
+    window holds focuses that window;
+  - starts the storage worker beside the first window, restarts it after a
+    crash (at most 3 times a minute, replaying the registry), and is
+    otherwise read-only.
+- **Desktop:** quitting never waits on the page (#106). Main ignores
+  `beforeunload` vetoes and asks each window to flush through the bridge
+  (at most 3 s). It then shuts the worker down (at most 2 s) and exits; a
+  watchdog guarantees the exit.
+- **Desktop:** the unsigned internal build (`desktop/build/`): DMG, NSIS
+  installer, `.deb` and AppImage. Fuses: `RunAsNode` off, `NodeOptions`
+  off, cookie encryption on, ASAR integrity on (Electron enforces it on
+  macOS and Windows only), app only from the ASAR. `check-fuses.ts` reads
+  them back from the installed binary.
+- **Tests:** the `electron` Playwright project runs against the installed
+  app on all three OSes (`desktop-shell.yml`, also nightly). It covers the
+  D-A12 checks, the bridge, the registry, the refusals and the quit. Unit
+  tests cover the guards and the `argv` filter (both fuzzed), the
+  registry, the handlers, the supervisor and the quit coordinator.
+
+- **Desktop:** the packaged renderer opens documents from local storage:
+  `DesktopRoot` puts `local-session` over `IpcDocStore`
+  (`createRpcDocStore` over `window.tinydocy`). A window gets its document
+  from main; one opened with none gets this install's default document
+  until the library UI (P2.7).
+
+#### Security (review of #135)
+
+- **Desktop:** two build flavors. The **release** flavor (installers) has
+  the inspect fuse off and compiles every test hook out (a build check
+  refuses a release bundle that names one). The **test** flavor (unpacked,
+  never shipped) keeps the hooks and the inspector for Playwright.
+- **Desktop:** Windows registers `tinydocy://` as `… -- "%1"`; a link with
+  `--inspect=9229` after it opens no inspector (checked on the installed
+  release app on all three OSes).
+- **Desktop:** only the app's own top frame can send an `https` link to
+  the system browser, at most 3 per window per 10 s; embed frames and an
+  unknown focused frame are refused. Downloads and device choosers
+  (Bluetooth, HID, serial, USB) are refused.
+- **Desktop:** every response from `app://tinydocy` carries a CSP (a
+  minimal one for non-HTML, SVG sandboxed); symlinks are never served,
+  and a renderer export containing one fails the build.
+- **Desktop:** a `tinydocy://local/<uuid>` link opens a window only for a
+  document that exists, at most 5 new windows per 10 s; CSP reports from
+  a page are capped per window; a renderer may append only `local` and
+  `migration` updates, and `schemaTo` only with `migration`.
+- **Desktop:** the sync URL baked into `connect-src` must be a bare
+  `ws:`/`wss:` origin (`wss:` for release). On Windows the library lives
+  under `%LOCALAPPDATA%\TinyDocy`.
+- **Desktop:** the Linux spellcheck guard is installed on every session as
+  it is created. An offline spec reads Chromium's net-log for a whole
+  session and finds nothing leaving the machine; the only entry besides
+  loopback is Chromium's IPv6 reachability probe, which sends no packet.
+
+#### Changed
+
+- **Desktop:** the D-A12 smoke serves its fixture on `app://tinydocy` with
+  the shell's path rules. A test keeps every Electron pin at 45.3.2.
+- **Desktop:** Linux spellcheck stays off until dictionaries can be
+  delivered without a network download (#100). Turning it off alone still
+  let Chromium download a dictionary from Google, so Linux also sets no
+  spellcheck languages and a closed loopback download URL; a spec fails
+  on any spellcheck event. macOS and Windows use the OS spellchecker.
+
 ### Desktop P2.8a: headless schema, Markdown export and safe file names
 
 The first part of plan P2.8: the parts that need no Electron shell. Nothing in the web app imports them yet. The web build is unchanged against `main` at `903b5c8`: the editor chunk group is identical (393,820 B gz), and so are 98 of the 99 chunk files. The 99th is the Hocuspocus provider chunk, which embeds the build's commit SHA. Its raw size is equal, and the gzipped size moves by about 1 B on every commit.
@@ -202,6 +959,55 @@ Hocus. The web build is unchanged: its route table, client chunks, pages and
   builds drop the bridge's branch.
 - The `desktop` project no longer needs Hocus. The X link card test moved to
   `local`, because a release export has no storage until P2.5.
+
+### Docs: offline data model revision (format 2)
+
+Design only; nothing changes for users and there is no deploy step.
+
+#### Added
+
+- **Specs:** `docs/superpowers/specs/2026-11-22-offline-data-model-revision.md`.
+  It contains:
+  - the verdict on the offline goal;
+  - library format 2 as one forward migration: FKs, CHECKs, `links`,
+    `doc_headings`, `blobs`, `doc_blobs`, and `head_seq`/`derived_seq`
+    staleness;
+  - the relationship invariants and the repair job;
+  - the long-document policy and benchmarks T20–T25;
+  - the offline feature matrix;
+  - new plan rows: P2.6d–f, LK4a, LJ1, P2.5b, B0, OF1, OF2;
+  - instructions for the work in progress;
+  - owner decisions D-O1–D-O8.
+
+#### Changed
+
+- **Specs:** the desktop local-first plan §3 points to the revision.
+
+### Design: document links UX review (LK1)
+
+A review of the linking UX for LK1 (document links core) by the Head of
+Engineering, senior staff, UI and accessibility lenses, with a clickable
+prototype for the owner's design review. Documentation only; no app or server
+change.
+
+#### Added
+
+- **Docs:**
+  - `docs/design/2026-11-22-document-links-prototype.html`: document, web and
+    broken links in text; the link states; the preview popover; following,
+    arrival and Back; the first-time hint and the consent-window line; and,
+    as LK2 and LK4 previews, the ⌘K picker with heading links, the hovercard
+    and Linked from. Switches for each owner decision, theme, direction,
+    width, mode and reduced motion.
+  - 41 headless screenshots in `docs/design/2026-11-22-document-links/`.
+  - `docs/superpowers/specs/2026-11-16-search-linking-design.md`: amendments
+    to §4.2, §4.3, §4.5, §4.6, §5, §7, §8 and §10–§12 and owner questions
+    Q4–Q10, marked
+    "Proposed, pending owner approval (2026-11-22)".
+- **Finding:** with the link icon as `display: inline-block` (the hyperlink
+  package's default), a line can break between the icon and the link's first
+  word (18–28% of widths in headless Chromium, LTR and RTL). An inline,
+  `nowrap` icon span with a word joiner after the svg never split.
 
 ### Desktop P2.1c: the editor opens documents through `DocSession`
 
@@ -2174,7 +2980,6 @@ its 20,480 B budget.
   a larger document only, more rounds, or another measure of the
   toolbar's per-keystroke cost) change the gate and are the owner's call.
 
-
 #### Added
 - **Diagram ▸ templates in the Insert menu (M17b, design pass §9):**
   Diagram is one standard submenu row (hover, click, Enter or →) with the
@@ -2436,7 +3241,6 @@ was added, so this fix can ship to `main` on its own.
   without a leak (it levels off near 10%), so the 5% bound in
   `editor-leak.spec.ts` failed most local runs. It is now 10%; the leak
   added about 17%, and the live-editor count stays the main check.
-
 
 ### Smart toolbar v1 integration (PR C + D1 + D2, r2 surfaces)
 

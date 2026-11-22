@@ -52,6 +52,24 @@ const stored = () => JSON.parse(raw() ?? "null");
 beforeEach(() => localStorage.clear());
 
 describe("continue store", () => {
+  it("reads and writes nothing while Remember my place is off", () => {
+    writeContinueEntry("doc-a", "id-1", NOW);
+    const ui = (value: boolean) =>
+      localStorage.setItem(
+        "tinydocy-ui",
+        JSON.stringify({
+          v: 1,
+          slots: { rememberPlace: { last: value, recent: [] } },
+        }),
+      );
+    ui(false);
+    expect(readContinueEntry("doc-a", NOW)).toBeNull();
+    writeContinueEntry("doc-b", "id-2", NOW);
+    expect(stored().docs["doc-b"]).toBeUndefined();
+    ui(true);
+    expect(readContinueEntry("doc-a", NOW)).toEqual({ id: "id-1", at: NOW });
+  });
+
   it("round-trips a heading id per document", () => {
     writeContinueEntry("doc-a", "id-1", NOW);
     writeContinueEntry("doc-b", "id-2", NOW);

@@ -4,6 +4,7 @@ import {
   createHyperlinkPopover,
   editHyperlinkPopover,
   Hyperlink,
+  type HyperlinkOptions,
   previewHyperlinkPopover,
 } from "@docs.plus/extension-hyperlink";
 import { isMediaUrl } from "@docs.plus/extension-hypermultimedia";
@@ -23,10 +24,10 @@ import { Superscript } from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import type { TableOfContentData } from "@tiptap/extension-table-of-contents";
 import { TextAlign } from "@tiptap/extension-text-align";
-import { Typography } from "@tiptap/extension-typography";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
+import type { TagParseRule } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { StarterKit } from "@tiptap/starter-kit";
 import DOMPurify from "dompurify";
@@ -63,6 +64,7 @@ import {
 } from "@/extensions/render-once";
 import { RepeatFormatting } from "@/extensions/repeat-formatting";
 import { SlashTrigger } from "@/extensions/slash-trigger/slash-trigger";
+import { SmartTypography } from "@/extensions/smart-typography/smart-typography";
 import { FastTableOfContents } from "@/extensions/table-of-contents";
 import { FontSize, TextColor } from "@/extensions/text-style-marks";
 import { TitleDocument } from "@/extensions/title-document";
@@ -90,6 +92,56 @@ const SubscriptByTarget = Subscript.extend({
     return {
       [SUBSCRIPT_SHORTCUT]: () => this.editor.commands.toggleSubscript(),
     };
+  },
+});
+
+/**
+ * The web editor's link policy: `https:`, `http:` and `mailto:` only, after
+ * leading whitespace. A scheme a browser would still read through inner
+ * whitespace or a leading control (`ht\ttps:`) is refused: the safe side.
+ * The extension's own check is a denylist, so an `ms-msdt:` or `search-ms:`
+ * link would otherwise reach the OS. It is `isAllowedUri`, the one policy for commands, autolink and paste
+ * rules; `LinkPolicyHyperlink` applies the same option to HTML paste and to
+ * rendering, so a host that passes its own `isAllowedUri` replaces it at all
+ * three. Parse and render call it with one string and no context (a missing
+ * href arrives as "undefined" or "null"), so a host policy must not need one.
+ */
+export const isWebLink = (href: string): boolean =>
+  /^\s*(https?|mailto):/i.test(href);
+
+/** The one protocol check for parse and render: the policy on any value. */
+const allows = (options: HyperlinkOptions, href: unknown) =>
+  (options.isAllowedUri as (href: string) => boolean)(`${href}`);
+
+/**
+ * Hyperlink with `isAllowedUri` also applied where the extension skips it:
+ * pasted `<a href>` off the policy loses its mark (the text stays), and a
+ * stored one (Yjs, older documents) renders with no `href` at all, so
+ * neither a click nor the browser's own middle-click or "Open link" can
+ * follow it. Pasted titles are dropped: a `title` is a tooltip a stranger
+ * chose ("Your bank: click to verify"). Kept terse: it is editor-chunk bytes.
+ */
+export const LinkPolicyHyperlink = Hyperlink.extend({
+  addAttributes() {
+    return { ...this.parent?.(), title: { parseHTML: () => null } };
+  },
+
+  parseHTML() {
+    // The parent's rules are `.hyperlink-icon` (ignored) then `a[href]`.
+    const rules = this.parent?.() as Required<TagParseRule>[];
+    const { getAttrs } = rules[1];
+    rules[1].getAttrs = (node) =>
+      allows(this.options, node.getAttribute("href")) && getAttrs(node);
+    return rules;
+  },
+
+  renderHTML(props) {
+    // The parent blanks an unsafe href to ""; a null href off the policy is
+    // not rendered at all (ProseMirror skips null attributes), so the
+    // anchor is not a link.
+    const spec = this.parent?.(props) as [string, Record<string, unknown>, 0];
+    if (!allows(this.options, spec[1].href)) spec[1].href = null;
+    return spec;
   },
 });
 
@@ -217,7 +269,7 @@ export function buildDocumentEditorExtensions({
       // top-level type is `heading`; pin the trailing node to a paragraph.
       trailingNode: { node: "paragraph" },
     }),
-    Hyperlink.configure({
+    LinkPolicyHyperlink.configure({
       popovers: {
         previewHyperlink: previewHyperlinkPopover,
         editHyperlink: editHyperlinkPopover,
@@ -225,17 +277,13 @@ export function buildDocumentEditorExtensions({
       },
       // Let pasted media URLs become embeds instead of plain links.
       shouldAutoLink: (url) => !isMediaUrl(url),
+      isAllowedUri: isWebLink,
       // Public sandbox: links are user-generated content.
       HTMLAttributes: {
         target: null,
         rel: "noopener noreferrer nofollow ugc",
         class: null,
       },
-      // With no link host (the web sandbox), a `tinydocy:` link is never
-      // written or opened: the default would hand it to `window.open` and
-      // the OS (search-linking §4.4). Whitespace goes as browsers drop it;
-      // a host's own `isAllowedUri` replaces this.
-      isAllowedUri: (uri) => !/^\W*tinydocy:/i.test(uri.replace(/\s/g, "")),
       ...linkHost,
     }),
     InlineCode,
@@ -276,14 +324,15 @@ export function buildDocumentEditorExtensions({
     }),
     WriteGate.configure({ canWrite }),
     // Comment highlights and Find hits declare their layers here (rule 6).
-    DecorationHost,
+    // Comments map their set through edits (comments design §8).
+    DecorationHost.configure({ layers: [{ name: "comments", map: true }] }),
     HorizontalRule,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     TaskList,
     TaskItem.configure({ nested: true }),
     TokenHighlight.configure({ multicolor: true }),
     HyperMultimediaKit,
-    Typography,
+    SmartTypography,
     Superscript,
     SubscriptByTarget,
     Selection,

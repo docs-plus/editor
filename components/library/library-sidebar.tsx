@@ -3,7 +3,8 @@
 /**
  * The files sidebar (plan §5.1, UX §4.5 and §8.1): Search (Quick Open),
  * an optional host row such as the Playground, Recent (5 inline), Pinned
- * (after the first pin), the Library tree, and Trash in the footer. It is
+ * (after the first pin), the Library tree, Tags (collapsed, after the
+ * first tag), and Trash in the footer. It is
  * the `Files` navigation region for F6. Shared by desktop and the web
  * library (D3); the host wraps it in a `LibraryProvider`.
  */
@@ -45,6 +46,7 @@ import {
   useLibraryRowDnd,
 } from "./library-dnd";
 import { LibraryTree } from "./library-tree";
+import { TagsSection } from "./tags-section";
 
 export const SIDEBAR_RECENT = 5;
 
@@ -307,6 +309,7 @@ export function LibrarySidebar({
           </Button>
         </div>
         <LibraryTree />
+        <TagsSection currentPlace={currentPlace} />
       </div>
       <div className="lib-foot">
         <SectionRow

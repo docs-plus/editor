@@ -75,7 +75,7 @@ test.describe("System theme", () => {
     page,
   }) => {
     const source = await (await page.request.get("/about")).text();
-    const boot = source.indexOf('var k="tinydocy-theme"');
+    const boot = source.indexOf('K="tinydocy-theme"');
     expect(boot).toBeGreaterThan(-1);
     expect(boot).toBeLessThan(source.indexOf("</head>"));
   });

@@ -34,6 +34,17 @@ export const EDITOR_CHUNK_MAIN_GROWTH_BYTES = 15_284;
  * DocSession line, K14, and #134's 198 B status-chip boundary line); if
  * spike M18 confirms it, this becomes 2,133 B with no further approval.
  *
+ * Lines (gz): P2.2 no-provider + `WriteGate` + decoration host 300 (294
+ * measured), P2.1c sandbox `DocSession` 275, #134 status-chip boundary
+ * 198, P4.9 comments hook 150, P2.9c-1 smart-quotes gate 150, L1a i18n
+ * core 400 (`t()`, registry labels, `lang`/`dir`; languages design
+ * §3.7.1), P2.13 `dir` + direction commands + Enter + « » 350, LK1 60,
+ * LK3 120, OB2 10, M19 phone keyboards 40 (+80 conditional).
+ *
+ * #168 security allowlist: +145 B (84a9458 → +16,130 B; #168 → +16,275 B).
+ * A security exemption, coordinator-approved 2026-11-22, outside the
+ * total above; the fence still passes, so it was not raised.
+ *
  * Spent so far, as measured in each PR (gzipped, against `main` then):
  * - LK1 `linkHost` pass-through and the no-host `tinydocy:` deny: +32 B of
  *   its 60 B line (84a9458 → +16,130 B; LK1 → +16,162 B).

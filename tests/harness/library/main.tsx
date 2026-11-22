@@ -1,10 +1,13 @@
 /**
- * The library harness page: the shared files sidebar, Quick Open and
- * Move to… on a `MemoryDocumentIndex`, with a stand-in tab row and
+ * The library harness page: the shared files sidebar, list views, Quick
+ * Open and Move to… on a `MemoryDocumentIndex`, with a stand-in tab row and
  * document so F6 has regions to cycle. Query parameters:
  * - `dir=rtl`: a right-to-left interface;
  * - `theme=dark`;
- * - `seed=empty`: a library with no documents.
+ * - `seed=empty`: a library with no documents;
+ * - `seed=1000` (any number): that many generated documents in `f-big`,
+ *   with tags, snippets and dates, for the list speed targets;
+ * - `trash=1`: start with a few documents and a folder in Trash.
  * Below 720 px the sidebar is an overlay, as UX §4.5 asks of the shell.
  * `window.__library` exposes the index to the Playwright spec.
  */
@@ -18,6 +21,7 @@ import {
   LibraryProvider,
   useLibrary,
 } from "@/components/library/library-context";
+import { LibraryList, placeTitle } from "@/components/library/library-list";
 import { LibrarySidebar } from "@/components/library/library-sidebar";
 import {
   announce,
@@ -28,7 +32,11 @@ import {
 import { FlaskConicalIcon, PanelLeftIcon } from "@/lib/icons";
 import { isQuickOpenKey, type OpenTarget } from "@/lib/library/library-keys";
 import { entryTitle } from "@/lib/library/tree-rows";
-import type { DocumentEntry, FolderEntry } from "@/lib/platform/document-index";
+import type {
+  DocumentEntry,
+  FolderEntry,
+  TagEntry,
+} from "@/lib/platform/document-index";
 import { cycleRegion, trackRegionFocus } from "@/lib/region-focus";
 import { isMac } from "@/lib/shortcuts";
 import { MemoryDocumentIndex } from "@/tests/helpers/memory-document-index";
@@ -38,6 +46,7 @@ import { LinksHarness } from "./links-view";
 const params = new URLSearchParams(location.search);
 const NARROW = 720;
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 const now = Date.now();
 
 const FOLDERS: FolderEntry[] = [
@@ -49,6 +58,13 @@ const FOLDERS: FolderEntry[] = [
   { id: "f-archive", name: "Archive", parentId: null, createdAt: 1 },
 ];
 
+const TAGS: TagEntry[] = [
+  { id: "t-finance", name: "finance", color: null },
+  { id: "t-planning", name: "planning", color: null },
+  { id: "t-plans", name: "plans", color: null },
+  { id: "t-travel", name: "سفر", color: null },
+];
+
 const DOCS: DocumentEntry[] = [
   {
     id: "d-plan",
@@ -57,6 +73,10 @@ const DOCS: DocumentEntry[] = [
     folderId: "f-q4",
     pinKey: "p000001",
     openedAt: now - HOUR,
+    modifiedAt: now - HOUR,
+    tagIds: ["t-planning", "t-finance"],
+    snippet:
+      "Goals for the quarter: ship the desktop beta, hire two engineers and close the books by the 20th.",
   },
   {
     id: "d-retro",
@@ -64,38 +84,138 @@ const DOCS: DocumentEntry[] = [
     createdAt: 2,
     folderId: "f-q4",
     openedAt: now - 3 * HOUR,
+    modifiedAt: now - DAY - HOUR,
+    tagIds: ["t-plans"],
+    snippet: "What went well, what didn't, and what we try next time.",
   },
-  { id: "d-hiring", title: "Hiring plan", createdAt: 3, folderId: "f-work" },
+  {
+    id: "d-hiring",
+    title: "Hiring plan",
+    createdAt: 3,
+    folderId: "f-work",
+    modifiedAt: now - 3 * DAY,
+    tagIds: ["t-plans"],
+    snippet: "Two engineers and a designer before March.",
+  },
   {
     id: "d-budget",
     title: "Budget 2026",
     createdAt: 4,
     pinKey: "p000002",
     openedAt: now - 5 * HOUR,
+    modifiedAt: now - 2 * HOUR,
+    tagIds: ["t-finance"],
+    snippet: "Spending by team, with the travel line split out.",
   },
-  { id: "d-cafe", title: "Café menu", createdAt: 5, folderId: "f-personal" },
-  { id: "d-fa", title: "گزارش سالانه ۱۴۰۳", createdAt: 6 },
+  {
+    id: "d-cafe",
+    title: "Café menu",
+    createdAt: 5,
+    folderId: "f-personal",
+    modifiedAt: now - 20 * DAY,
+  },
+  {
+    id: "d-fa",
+    title: "گزارش سالانه ۱۴۰۳",
+    createdAt: 6,
+    modifiedAt: now - 40 * DAY,
+    tagIds: ["t-travel"],
+    snippet: "خلاصهٔ کارهای سال و برنامهٔ سفرهای کاری.",
+  },
   {
     id: "d-ar",
     title: "كتاب الطبخ",
     createdAt: 7,
     folderId: "f-personal",
+    modifiedAt: now - 90 * DAY,
   },
   {
     id: "d-meeting",
     title: "Meeting notes",
     createdAt: 8,
     openedAt: now - 2 * HOUR,
+    modifiedAt: now - 2 * HOUR,
+    snippet: "Agenda, decisions and owners from Monday's sync.",
   },
-  { id: "d-untitled", title: "", createdAt: 9 },
-  { id: "d-ideas", title: "Draft ideas", createdAt: 10, folderId: "f-drafts" },
-  { id: "d-outline", title: "Old outline", createdAt: 11, folderId: "f-old" },
+  { id: "d-untitled", title: "", createdAt: 9, modifiedAt: now - 5 * DAY },
+  {
+    id: "d-ideas",
+    title: "Draft ideas",
+    createdAt: 10,
+    folderId: "f-drafts",
+    modifiedAt: now - 8 * DAY,
+  },
+  {
+    id: "d-outline",
+    title: "Old outline",
+    createdAt: 11,
+    folderId: "f-old",
+    modifiedAt: now - 400 * DAY,
+  },
 ];
 
-const index = new MemoryDocumentIndex(
-  params.get("seed") === "empty" ? {} : { items: DOCS, folders: FOLDERS },
-);
+const WORDS = [
+  "plan",
+  "notes",
+  "budget",
+  "draft",
+  "review",
+  "report",
+  "ideas",
+  "meeting",
+  "roadmap",
+  "summary",
+  "گزارش",
+  "Café",
+];
+
+/** `count` generated documents in folder `f-big` (the speed targets). */
+function generated(count: number): DocumentEntry[] {
+  const docs: DocumentEntry[] = [];
+  for (let n = 0; n < count; n++) {
+    const word = WORDS[n % WORDS.length];
+    const modifiedAt = now - ((n * 7919) % (400 * 24)) * HOUR;
+    docs.push({
+      id: `g-${n}`,
+      title: `${word} ${n}`,
+      createdAt: modifiedAt - DAY,
+      folderId: "f-big",
+      modifiedAt,
+      openedAt: n % 3 === 0 ? modifiedAt + HOUR : undefined,
+      tagIds: n % 4 === 0 ? [TAGS[n % TAGS.length].id] : undefined,
+      snippet: `Generated document ${n}: ${WORDS.join(" ")}.`,
+    });
+  }
+  return docs;
+}
+
+function seedOptions() {
+  const seed = params.get("seed");
+  if (seed === "empty") return {};
+  const big = Number(seed);
+  if (Number.isFinite(big) && big > 0) {
+    return {
+      items: [...DOCS, ...generated(big)],
+      folders: [
+        ...FOLDERS,
+        { id: "f-big", name: "Big", parentId: null, createdAt: 1 },
+      ],
+      tags: TAGS,
+    };
+  }
+  return { items: DOCS, folders: FOLDERS, tags: TAGS };
+}
+
+const index = new MemoryDocumentIndex(seedOptions());
+if (params.get("trash") === "1") {
+  void index.trash(["d-untitled", "d-cafe"]).then(() => {
+    void index.trashFolder("f-old");
+  });
+}
 (window as unknown as { __library: MemoryDocumentIndex }).__library = index;
+/** The speed spec asserts the targets only on a production build. */
+(window as unknown as { __harnessProd: boolean }).__harnessProd =
+  process.env.NODE_ENV === "production";
 
 document.documentElement.dir = params.get("dir") === "rtl" ? "rtl" : "ltr";
 document.documentElement.classList.toggle(
@@ -105,21 +225,8 @@ document.documentElement.classList.toggle(
 
 type View =
   | { kind: "doc"; id: string }
-  | { kind: "place"; place: LibraryPlace }
+  | { kind: "place"; place: LibraryPlace; focus: boolean }
   | { kind: "none" };
-
-function placeTitle(place: LibraryPlace): string {
-  if (place.kind === "folder") {
-    const folder = index.snapshot().folders.find((f) => f.id === place.id);
-    return folder?.name ?? "Folder";
-  }
-  return {
-    recent: "Recent",
-    pinned: "Pinned",
-    library: "Library",
-    trash: "Trash",
-  }[place.kind];
-}
 
 function useNarrow(): boolean {
   return useSyncExternalStore(
@@ -199,14 +306,13 @@ function Main({ view }: { view: View }) {
   }
   if (view.kind === "place") {
     return (
-      <section className="h-doc">
-        <h1 className="h-place" tabIndex={-1} data-testid="place">
-          {placeTitle(view.place)}
-        </h1>
-        <p className="h-muted" dir="auto">
-          List views come with P2.7b.
-        </p>
-      </section>
+      <div
+        className="h-list"
+        data-testid="place"
+        data-title={placeTitle(view.place, snapshot)}
+      >
+        <LibraryList place={view.place} autoFocus={view.focus} />
+      </div>
     );
   }
   return (
@@ -342,12 +448,20 @@ function Harness() {
     },
     [narrow],
   );
-  const onOpenPlace = useCallback((place: LibraryPlace, target: OpenTarget) => {
-    setLastOpen(
-      `${place.kind}${"id" in place ? `:${place.id}` : ""} ${target}`,
-    );
-    if (target === "current") setView({ kind: "place", place });
-  }, []);
+  const onOpenPlace = useCallback(
+    (place: LibraryPlace, target: OpenTarget) => {
+      setLastOpen(
+        `${place.kind}${"id" in place ? `:${place.id}` : ""} ${target}`,
+      );
+      if (target !== "current") return;
+      // The host decides focus: a list opened from the keyboard takes it.
+      const focus = document.activeElement?.matches(":focus-visible") ?? false;
+      setView({ kind: "place", place, focus });
+      // The overlay closes after an open (UX §4.5).
+      if (narrow) setSidebarOpen(false);
+    },
+    [narrow],
+  );
 
   return (
     <LibraryProvider

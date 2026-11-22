@@ -165,3 +165,10 @@ body {
   --h-link: #93c5fd;
   --h-highlight: #574f12;
 }
+.h-main:has(> .h-list) {
+  padding: 0;
+  overflow: hidden;
+}
+.h-list {
+  height: 100%;
+}

@@ -45,7 +45,8 @@
   li {
     p {
       margin-top: 0;
-      line-height: 1.15;
+      // The page's spacing (`styles/_page.scss`); 1.15 in `classic`.
+      line-height: var(--page-leading, 1.15);
     }
   }
 
