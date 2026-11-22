@@ -604,6 +604,7 @@ const TEST_STEPS = [
   "Mixed-version soak (300 rounds per phase)",
   "Smoke",
   "Soak",
+  "Property test",
 ];
 
 /** GitHub adds these to every job; no workflow file names them. */
