@@ -8,8 +8,9 @@
  *
  * The same walk lists the headings (`extractHeadings`), and
  * `deriveDocument` returns both for the derive layer (offline data-model
- * revision §4: `links` and `doc_headings`; `toLinkRows` maps to the
- * `links` columns). Pure: no DOM, no storage; works on a bare Y.Doc.
+ * revision §4: `links` and `doc_headings`; `toLinkRows` and `toHeadingRows`
+ * map to their columns). Pure: no DOM, no storage; works on a bare Y.Doc.
+ * `trackLinkChanges` (`link-dirty.ts`) says when a walk is needed at all.
  *
  * `linksHash` is for tests; the storage worker computes the stored hash.
  */
@@ -22,6 +23,7 @@ export interface LinkRow {
   readonly srcTocId: string | null;
   readonly key: string;
   readonly tocId: string | null;
+  /** The link's text, up to `TEXT_MAX` characters. */
   readonly text: string;
   /** Up to `CONTEXT_MAX` characters of the block around the link. */
   readonly context: string;
@@ -31,6 +33,11 @@ export interface LinkRow {
 const LINK_MARK = "hyperlink";
 const TOC_ID_ATTR = "data-toc-id";
 const CONTEXT_MAX = 160;
+/**
+ * Longest stored link text: a whole linked paragraph would otherwise land
+ * in the row (and in the hash input) on every pass.
+ */
+export const TEXT_MAX = 200;
 /** How far a cut may move back to the previous word boundary. */
 const WORD_TRIM_MAX = 20;
 const ELLIPSIS = "…";
@@ -105,8 +112,9 @@ export function extractHeadings(fragment: Y.XmlFragment): HeadingRow[] {
   return deriveDocument(fragment).headings;
 }
 
-/** A row of format 2's `links` table, less `src_doc_id` (the caller's). */
+/** A row of format 2's `links` table. */
 export interface LinkTableRow {
+  readonly src_doc_id: string;
   readonly ord: number;
   readonly src_toc_id: string;
   readonly target_key: string;
@@ -116,14 +124,41 @@ export interface LinkTableRow {
 }
 
 /** `extractLinks` rows as `links` columns: `ord` by index, `''` for null. */
-export function toLinkRows(rows: readonly LinkRow[]): LinkTableRow[] {
+export function toLinkRows(
+  srcDocId: string,
+  rows: readonly LinkRow[],
+): LinkTableRow[] {
   return rows.map((row, ord) => ({
+    src_doc_id: srcDocId,
     ord,
     src_toc_id: row.srcTocId ?? "",
     target_key: row.key,
     target_toc_id: row.tocId ?? "",
     text: row.text,
     context: row.context,
+  }));
+}
+
+/** A row of format 2's `doc_headings` table, less the worker's `text_key`. */
+export interface HeadingTableRow {
+  readonly doc_id: string;
+  readonly ord: number;
+  readonly toc_id: string;
+  readonly level: number;
+  readonly text: string;
+}
+
+/** `extractHeadings` rows as `doc_headings` columns. */
+export function toHeadingRows(
+  docId: string,
+  rows: readonly HeadingRow[],
+): HeadingTableRow[] {
+  return rows.map((row) => ({
+    doc_id: docId,
+    ord: row.ord,
+    toc_id: row.tocId,
+    level: row.level,
+    text: row.text,
   }));
 }
 
@@ -193,6 +228,10 @@ function collectTextBlock(
   }
   if (!segments.some((segment) => segment.href !== null)) return;
 
+  // Adjacent segments with the same href are one run, so two links to the
+  // same target written back to back become ONE row: the reader sees one
+  // link, and the merge also rejoins a link split by bold or italic.
+  // Different hrefs (even to one document) stay separate rows.
   const runs: Run[] = [];
   let text = "";
   for (const segment of segments) {
@@ -214,7 +253,7 @@ function collectTextBlock(
       srcTocId,
       key: link.key,
       tocId: link.tocId,
-      text: text.slice(run.start, run.end),
+      text: capText(text.slice(run.start, run.end)),
       context: contextAround(text, run.start, run.end),
     });
   }
@@ -237,9 +276,28 @@ function docLinkHref(item: DeltaItem): string | null {
 }
 
 /**
+ * The link's text when it fits in `TEXT_MAX`; otherwise its start, cut
+ * back to a word boundary near the end when one is close (never through a
+ * surrogate pair), with `…` inside the cap.
+ */
+function capText(text: string): string {
+  if (text.length <= TEXT_MAX) return text;
+  let to = TEXT_MAX - ELLIPSIS.length;
+  if (text[to] !== " ") {
+    const space = text.lastIndexOf(" ", to - 1);
+    if (space > 0 && to - space <= WORD_TRIM_MAX) to = space;
+  }
+  if (isLowSurrogate(text, to)) to -= 1;
+  return `${text.slice(0, to).trimEnd()}${ELLIPSIS}`;
+}
+
+/**
  * The block's text when it fits in `CONTEXT_MAX`; otherwise a window
  * centred on the link, cut back to word boundaries near the edges (never
- * into the link or a surrogate pair), with `…` marking each cut.
+ * through a surrogate pair), with `…` marking each cut. A word-boundary
+ * cut never moves into the link; but when the link run alone is longer
+ * than the window, the window starts at the link and its end cut falls
+ * inside the link.
  */
 function contextAround(text: string, start: number, end: number): string {
   if (text.length <= CONTEXT_MAX) return text;
@@ -276,6 +334,9 @@ function isLowSurrogate(text: string, index: number): boolean {
 /**
  * FNV-1a (32-bit) over the rows as JSON: cheap, stable, and unambiguous
  * (null stays distinct from "", and no separator can collide with text).
+ * At 32 bits two different row sets collide about once in 4 billion
+ * changes; a collision only skips that one write, and the next change
+ * writes the rows.
  */
 export function linksHash(rows: readonly LinkRow[]): string {
   const canonical = JSON.stringify(

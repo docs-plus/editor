@@ -8,6 +8,7 @@ import {
   extractLinks,
   type LinkRow,
   linksHash,
+  TEXT_MAX,
 } from "@/lib/links/extract-links";
 import { DEFAULT_EXTENSIONS } from "@/tests/helpers/create-test-editor";
 
@@ -313,6 +314,42 @@ describe("extractLinks", () => {
     ]);
   });
 
+  it("merges two adjacent links with the same href into one row", () => {
+    // Written separately (a different title keeps them two delta items),
+    // but one href: the reader sees one link, so Linked from shows one row.
+    const href = `tinydocy:doc/${KEY_A}#${TOC_1}`;
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(
+        text("Q4 ", [link(href, { title: "first" })]),
+        text("budget", [link(href, { title: "second" })]),
+      ),
+    );
+    expect(extractLinks(fragment)).toEqual([
+      {
+        srcTocId: TOC_T,
+        key: KEY_A,
+        tocId: TOC_1,
+        text: "Q4 budget",
+        context: "Q4 budget",
+      },
+    ]);
+  });
+
+  it("keeps two adjacent links to different documents as two rows", () => {
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(
+        text("one", [link(`tinydocy:doc/${KEY_A}`)]),
+        text("two", [link(`tinydocy:doc/${KEY_B}`)]),
+      ),
+    );
+    expect(extractLinks(fragment).map((row) => [row.key, row.text])).toEqual([
+      [KEY_A, "one"],
+      [KEY_B, "two"],
+    ]);
+  });
+
   it("ends a link at a hard break and reads the break as a space", () => {
     const href = `tinydocy:doc/${KEY_A}`;
     const fragment = fragmentOf(
@@ -403,6 +440,61 @@ describe("extractLinks", () => {
     expect(row.context).toContain("x");
     expect(row.context).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
     expect(row.context).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+
+  it("caps text at TEXT_MAX with an ellipsis, for a 200 KB linked paragraph", () => {
+    expect(TEXT_MAX).toBe(200);
+    const words = Array.from({ length: 40_000 }, (_, i) => `w${i}`).join(" ");
+    expect(words.length).toBeGreaterThan(200_000);
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(text(words, [link(`tinydocy:doc/${KEY_A}`)])),
+    );
+    const rows = extractLinks(fragment);
+    expect(rows).toHaveLength(1);
+    const [row] = rows;
+    expect(row.text.length).toBeLessThanOrEqual(TEXT_MAX);
+    expect(row.text.length).toBeGreaterThan(TEXT_MAX - 30);
+    expect(row.text.endsWith("…")).toBe(true);
+    // Cut back to a word boundary: the last word is whole.
+    const kept = row.text.slice(0, -1).trimEnd().split(" ");
+    expect(words.split(" ").slice(0, kept.length)).toEqual(kept);
+    expect(row.context.length).toBeLessThanOrEqual(160);
+    // The hash input is the rows as JSON: it stays small.
+    expect(JSON.stringify(rows).length).toBeLessThan(600);
+  });
+
+  it("keeps link text of exactly TEXT_MAX characters whole", () => {
+    const exact = "a".repeat(TEXT_MAX);
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(text(exact, [link(`tinydocy:doc/${KEY_A}`)])),
+    );
+    expect(extractLinks(fragment)[0].text).toBe(exact);
+  });
+
+  it("caps link text of TEXT_MAX + 1 characters, mid-word when it must", () => {
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(
+        text("a".repeat(TEXT_MAX + 1), [link(`tinydocy:doc/${KEY_A}`)]),
+      ),
+    );
+    const [row] = extractLinks(fragment);
+    expect(row.text).toBe(`${"a".repeat(TEXT_MAX - 1)}…`);
+    expect(row.text.length).toBe(TEXT_MAX);
+  });
+
+  it("never splits a surrogate pair when capping text", () => {
+    // 199 is odd, so a plain slice would end on a high surrogate.
+    const fragment = fragmentOf(
+      heading(TOC_T, [text("Title")]),
+      paragraph(text("😀".repeat(150), [link(`tinydocy:doc/${KEY_A}`)])),
+    );
+    const [row] = extractLinks(fragment);
+    expect(row.text.length).toBeLessThanOrEqual(TEXT_MAX);
+    expect(row.text.endsWith("…")).toBe(true);
+    expect(row.text.slice(0, -1)).toBe("😀".repeat(99));
   });
 
   it("reads only document-link text and its own block, nothing else", () => {

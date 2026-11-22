@@ -9,20 +9,23 @@ import {
   deriveDocument,
   extractHeadings,
   extractLinks,
+  toHeadingRows,
   toLinkRows,
 } from "@/lib/links/extract-links";
 import { DEFAULT_EXTENSIONS } from "@/tests/helpers/create-test-editor";
 
 /**
  * The derive layer's contract with format 2 (offline data-model revision
- * §4: `links` and `doc_headings`): one walk gives both, `toLinkRows` maps
- * to the `links` columns, and `DERIVE_VERSION` versions the output.
+ * §4: `links` and `doc_headings`): one walk gives both, `toLinkRows` and
+ * `toHeadingRows` map to the table columns, and `DERIVE_VERSION` versions
+ * the output.
  */
 const schema = getSchema(DEFAULT_EXTENSIONS);
 const KEY = "0123456789abcdef0123456789abcdef";
 const T1 = "11111111-1111-4111-8111-111111111111";
 const T2 = "22222222-2222-4222-8222-222222222222";
 const T3 = "33333333-3333-4333-8333-333333333333";
+const SRC = "doc-src";
 
 const text = (value: string, href?: string): JSONContent =>
   href
@@ -142,14 +145,15 @@ describe("deriveDocument", () => {
 });
 
 describe("toLinkRows", () => {
-  it("maps to the links columns: ord is the index, nulls become ''", () => {
+  it("maps to the links columns: the source doc, ord by index, nulls as ''", () => {
     const fragment = fragmentOf(
       paragraph(text("before any heading", `tinydocy:doc/${KEY}`)),
       heading(T1, 1, text("Title")),
       paragraph(text("to a heading", `tinydocy:doc/${KEY}#${T2}`)),
     );
-    expect(toLinkRows(extractLinks(fragment))).toEqual([
+    expect(toLinkRows(SRC, extractLinks(fragment))).toEqual([
       {
+        src_doc_id: SRC,
         ord: 0,
         src_toc_id: "",
         target_key: KEY,
@@ -158,6 +162,7 @@ describe("toLinkRows", () => {
         context: "before any heading",
       },
       {
+        src_doc_id: SRC,
         ord: 1,
         src_toc_id: T1,
         target_key: KEY,
@@ -169,6 +174,24 @@ describe("toLinkRows", () => {
   });
 
   it("maps nothing to nothing", () => {
-    expect(toLinkRows([])).toEqual([]);
+    expect(toLinkRows(SRC, [])).toEqual([]);
+  });
+});
+
+describe("toHeadingRows", () => {
+  it("maps to the doc_headings columns, less the worker's text_key", () => {
+    const fragment = fragmentOf(
+      heading(T1, 1, text("Q4 plan")),
+      heading(null, 2, text("Unnamed")),
+      heading(T2, 3, text("Travel")),
+    );
+    expect(toHeadingRows(SRC, extractHeadings(fragment))).toEqual([
+      { doc_id: SRC, ord: 0, toc_id: T1, level: 1, text: "Q4 plan" },
+      { doc_id: SRC, ord: 1, toc_id: T2, level: 3, text: "Travel" },
+    ]);
+  });
+
+  it("maps nothing to nothing", () => {
+    expect(toHeadingRows(SRC, [])).toEqual([]);
   });
 });
