@@ -22,7 +22,7 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
 /**
  * The web `PrefsStore` (preferences design §5.1, §5.2): the prefs slots of
  * `tinydocy-ui`, resolved exactly as the boot script resolves them. Loaded
- * by the root layout's `PrefsRuntime` and by lazy UI; never by the editor
+ * by the lazy preferences runtime and by lazy UI; never by the editor
  * chunk, which reads the `<html>` attributes instead.
  *
  * - A choice that storage can't keep (the kill switch, blocked or full

@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 
 import { GoogleAnalytics } from "@/components/analytics";
 import { ServiceWorkerRegistration } from "@/components/pwa";
-import { PrefsRuntime } from "@/components/prefs/prefs-runtime";
 import { ThemeRuntime } from "@/components/theme/theme-runtime";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -86,7 +85,6 @@ export default function RootLayout({
         <GoogleAnalytics />
         <ServiceWorkerRegistration />
         <ThemeRuntime />
-        <PrefsRuntime />
       </body>
     </html>
   );

@@ -112,6 +112,13 @@ describe("attributes", () => {
     });
   });
 
+  it("the OS contrast setting applies outside classic only", () => {
+    const attributes = (marker: "new" | "classic") =>
+      prefsAttributes(parsePrefs({}, marker), { systemContrast: true });
+    expect(attributes("new")["data-contrast"]).toBe("more");
+    expect(attributes("classic")["data-contrast"]).toBeUndefined();
+  });
+
   it("classic writes only the style", () => {
     expect(prefsAttributes(parsePrefs({}, "classic"))).toEqual({
       "data-page-style": "classic",

@@ -1,49 +1,56 @@
 "use client";
 
-import {
-  type ReactNode,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
-import { isReadingMode, subscribeReadingMode } from "@/lib/prefs/reading-mode";
-import {
-  outlineDockMinPx,
-  type PageState,
-  type PageWidth,
-} from "@/lib/prefs/schema";
-import { getPrefs, subscribePrefs } from "@/lib/prefs/store-web";
+import type { PageWidth } from "@/lib/prefs/page-metrics";
 
 export interface PageFrameState {
-  /** Reading mode: the editor takes it as its `readOnly` prop. */
+  /** Reading mode (`data-reading`): the editor takes it as `readOnly`. */
   readOnly: boolean;
   /** Too narrow to dock the outline beside the page (§5.9). */
   outlineOverlay: boolean;
 }
 
-const notReading = () => false;
-
-/** A document's own width wins over the default (library hosts only). */
-function pageFor(docWidth: PageWidth | undefined): PageState {
-  const page = getPrefs().page;
-  if (!docWidth || page.style === "classic") return page;
-  return { ...page, width: docWidth };
-}
+const INITIAL: PageFrameState = { readOnly: false, outlineOverlay: false };
 
 /**
- * The page container (preferences design §5.1, §5.9). It owns
- * `data-doc-width` and `data-reading`, and decides whether the outline
- * docks, outside the editor shell, which then re-renders only when one of
- * those two booleans flips:
+ * Loads the preferences runtime (`lib/prefs/runtime.ts`) once, when the
+ * page is idle: until a preference changes, the boot script's attributes
+ * are already right, so the first load carries none of the store. Started
+ * from the frame, so pages without a document never load it.
+ */
+let runtimeStarted = false;
+function startRuntime(): void {
+  if (runtimeStarted) return;
+  runtimeStarted = true;
+  const load = () =>
+    import("@/lib/prefs/runtime").then((module) => module.startPrefsRuntime());
+  if ("requestIdleCallback" in window) requestIdleCallback(load);
+  else setTimeout(load, 200);
+}
+
+/** The `<html>` attributes that move the threshold or reading mode. */
+const WATCHED = [
+  "data-page-style",
+  "data-text-size",
+  "data-page-width",
+  "data-reading",
+];
+
+/**
+ * The page container (preferences design §5.1, §5.9). It decides, outside
+ * the editor shell, whether the outline docks and whether the document is
+ * read-only, and passes both down; the shell re-renders only when one of
+ * them flips.
  * - Docking: the frame (the main area beside any files sidebar) docks the
- *   outline when it is at least the card plus 302 px wide. The card is
- *   computed from the preferences, never measured; a ResizeObserver on the
- *   frame flips the boolean only when the threshold is crossed.
- * - Reading mode: per tab, never stored; the editor becomes read-only and
- *   CSS hides the toolbar.
- * Width and text size changes reach the page through CSS variables only.
+ *   outline when it is at least the card plus 302 px wide. CSS computes
+ *   that from the same variables as the card (`--page-dock-min`), never
+ *   from a measured card. A ResizeObserver on the frame and a
+ *   MutationObserver on `<html>` re-check it; it runs before paint, so a
+ *   narrow frame never shows a docked outline.
+ * - Reading mode: `data-reading` on `<html>`, per tab, never stored.
+ * It reads CSS and attributes only, so the first load carries none of the
+ * preferences store; it starts the lazy runtime once the page is idle.
  */
 export function PageFrame({
   docWidth,
@@ -54,46 +61,47 @@ export function PageFrame({
   children: (state: PageFrameState) => ReactNode;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
-  const reading = useSyncExternalStore(
-    subscribeReadingMode,
-    isReadingMode,
-    notReading,
-  );
-  const [outlineOverlay, setOutlineOverlay] = useState(false);
+  const [state, setState] = useState(INITIAL);
 
-  // Before paint, so a narrow frame never shows a docked outline first.
   useLayoutEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
+    const root = document.documentElement;
     let width = frame.getBoundingClientRect().width;
     const update = () => {
-      const rootPx =
+      const readOnly = root.hasAttribute("data-reading");
+      // `--page-dock-min` (`_page.scss`), computed to px; a browser
+      // without `@property` keeps today's 950 px.
+      const dockMin =
         Number.parseFloat(
-          getComputedStyle(document.documentElement).fontSize,
-        ) || 16;
-      setOutlineOverlay(width < outlineDockMinPx(pageFor(docWidth), rootPx));
+          getComputedStyle(frame).getPropertyValue("--page-dock-min"),
+        ) || 950;
+      const outlineOverlay = width < dockMin;
+      setState((current) =>
+        current.readOnly === readOnly &&
+        current.outlineOverlay === outlineOverlay
+          ? current
+          : { readOnly, outlineOverlay },
+      );
     };
-    const observer = new ResizeObserver(([entry]) => {
+    const resize = new ResizeObserver(([entry]) => {
       width = entry.borderBoxSize?.[0]?.inlineSize ?? entry.contentRect.width;
       update();
     });
-    observer.observe(frame);
+    const attributes = new MutationObserver(update);
+    resize.observe(frame);
+    attributes.observe(root, { attributeFilter: WATCHED });
     update();
-    const unsubscribe = subscribePrefs(update);
+    startRuntime();
     return () => {
-      observer.disconnect();
-      unsubscribe();
+      resize.disconnect();
+      attributes.disconnect();
     };
   }, [docWidth]);
 
   return (
-    <div
-      ref={frameRef}
-      className="page-frame"
-      data-doc-width={docWidth}
-      data-reading={reading || undefined}
-    >
-      {children({ readOnly: reading, outlineOverlay })}
+    <div ref={frameRef} className="page-frame" data-doc-width={docWidth}>
+      {children(state)}
     </div>
   );
 }

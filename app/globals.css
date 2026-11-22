@@ -8,15 +8,6 @@
 @source not "../tests/harness";
 
 @custom-variant dark (&:is(.dark *));
-/* The OS setting, or the web's "Reduce motion: Always" (`data-motion`). */
-@custom-variant motion-reduce {
-  @media (prefers-reduced-motion: reduce) {
-    @slot;
-  }
-  &:where([data-motion="reduce"] *) {
-    @slot;
-  }
-}
 
 :root {
   /* @docs.plus extension skins resolve light-dark() from color-scheme. */

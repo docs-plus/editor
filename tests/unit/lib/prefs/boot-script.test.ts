@@ -10,6 +10,7 @@ import {
   type BootStorage,
   PREF_ATTRIBUTES,
   resolveBoot,
+  SYSTEM_CONTRAST_QUERY,
 } from "@/lib/prefs/schema";
 import { THEME_COLOR_DARK } from "@/lib/site-config";
 
@@ -88,10 +89,12 @@ const STORAGE_STATES: Record<string, Record<string, string>> = {
   "only the marker": { "tinydocy-look": "new" },
 };
 
-function stubMatchMedia(dark: boolean) {
+function stubMatchMedia(dark: boolean, contrast = false) {
   const original = window.matchMedia;
   window.matchMedia = ((query: string) => ({
-    matches: dark && query === "(prefers-color-scheme: dark)",
+    matches:
+      (dark && query === "(prefers-color-scheme: dark)") ||
+      (contrast && query === SYSTEM_CONTRAST_QUERY),
     media: query,
     addEventListener() {},
     removeEventListener() {},
@@ -164,8 +167,9 @@ describe("boot script parity with resolveBoot()", () => {
   for (const [storageName, seed] of Object.entries(STORAGE_STATES)) {
     for (const [uiName, payload] of Object.entries(UI_PAYLOADS)) {
       for (const remember of [true, false]) {
-        const systemDark = row++ % 3 === 0;
-        it(`${storageName} · ${uiName} · R=${remember ? 1 : 0}${systemDark ? " · OS dark" : ""}`, () => {
+        const systemDark = row % 3 === 0;
+        const systemContrast = row++ % 4 === 1;
+        it(`${storageName} · ${uiName} · R=${remember ? 1 : 0}${systemDark ? " · OS dark" : ""}${systemContrast ? " · OS contrast" : ""}`, () => {
           for (const [key, value] of Object.entries(seed)) {
             localStorage.setItem(key, value);
           }
@@ -175,8 +179,9 @@ describe("boot script parity with resolveBoot()", () => {
             storage: snapshot(),
             remember,
             systemDark,
+            systemContrast,
           });
-          restoreMedia = stubMatchMedia(systemDark);
+          restoreMedia = stubMatchMedia(systemDark, systemContrast);
 
           new Function(buildBootScript(remember))();
 

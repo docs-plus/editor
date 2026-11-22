@@ -1,24 +1,16 @@
 /**
  * Reading mode (preferences design §2.1 row 13): per window or tab, never
- * stored, so it resets when the tab closes. `PageFrame` reads it and makes
- * the document read-only through the editor's `readOnly` prop (WriteGate
- * and `setEditable`), so reading never writes to the document.
+ * stored, so it resets when the tab closes. It is `data-reading` on
+ * `<html>`: `PageFrame` watches the attribute and makes the document
+ * read-only through the editor's `readOnly` prop (WriteGate and
+ * `setEditable`), and CSS hides the toolbar, so reading writes nothing.
  */
 
-let reading = false;
-const listeners = new Set<() => void>();
+const ATTRIBUTE = "data-reading";
 
-export const isReadingMode = (): boolean => reading;
+export const isReadingMode = (): boolean =>
+  document.documentElement.hasAttribute(ATTRIBUTE);
 
 export function setReadingMode(on: boolean): void {
-  if (on === reading) return;
-  reading = on;
-  for (const listener of [...listeners]) listener();
-}
-
-export function subscribeReadingMode(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  document.documentElement.toggleAttribute(ATTRIBUTE, on);
 }

@@ -14,6 +14,16 @@ import {
   UI_STORAGE_KEY,
 } from "@/lib/prefs/keys";
 import {
+  CARD_PADDING_REM,
+  CLASSIC_CARD_PX,
+  cardWidthFor,
+  dockMinPxFor,
+  FULL_TEXT_MEASURE,
+  OUTLINE_DOCK_EXTRA_PX,
+  PAGE_MEASURES,
+  type PageWidth,
+} from "@/lib/prefs/page-metrics";
+import {
   LEGACY_KEY_PREFIX,
   THEME_PREFERENCES,
   THEME_STORAGE_KEY,
@@ -38,15 +48,9 @@ export type TextSize = (typeof TEXT_SIZES)[number];
 export const CLASSIC_TEXT_SIZE = 15;
 
 /** Line lengths in em of the text size; Full keeps text to 46 em. */
-export const PAGE_WIDTHS = ["narrow", "standard", "wide", "full"] as const;
-export type PageWidth = (typeof PAGE_WIDTHS)[number];
-export const PAGE_MEASURES: Readonly<Record<PageWidth, number | null>> = {
-  narrow: 30,
-  standard: 33,
-  wide: 46,
-  full: null,
-};
-export const FULL_TEXT_MEASURE = 46;
+export const PAGE_WIDTHS = Object.keys(PAGE_MEASURES) as PageWidth[];
+export type { PageWidth };
+export { FULL_TEXT_MEASURE, PAGE_MEASURES };
 
 export const SPACINGS = ["compact", "normal", "relaxed"] as const;
 export type Spacing = (typeof SPACINGS)[number];
@@ -131,12 +135,7 @@ export type PrefAttributes = Partial<
   Record<(typeof PREF_ATTRIBUTES)[number], string>
 >;
 
-/** The docked outline (270 px) plus its 32 px gutter, from `toc-sidebar.scss`. */
-export const OUTLINE_DOCK_EXTRA_PX = 302;
-/** The card's 3 rem padding on each side. */
-export const CARD_PADDING_REM = 6;
-/** Today's card, kept by `classic`: 648 + 302 docks at 950 px, as before. */
-export const CLASSIC_CARD_PX = 648;
+export { CARD_PADDING_REM, CLASSIC_CARD_PX, OUTLINE_DOCK_EXTRA_PX };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -245,8 +244,19 @@ export function stepTextSize(page: PageState, direction: 1 | -1): TextSize {
   );
 }
 
-/** The `<html>` attributes for these preferences (absent = not set). */
-export function prefsAttributes(prefs: WebPrefs): PrefAttributes {
+/** The OS asks for more contrast (forced colours replace colours anyway). */
+export const SYSTEM_CONTRAST_QUERY =
+  "(prefers-contrast: more) and (forced-colors: none)";
+
+/**
+ * The `<html>` attributes for these preferences (absent = not set).
+ * `data-contrast="more"` is the effective setting: the web override, or
+ * the OS setting outside `classic` (which keeps today's exact look).
+ */
+export function prefsAttributes(
+  prefs: WebPrefs,
+  { systemContrast = false }: { systemContrast?: boolean } = {},
+): PrefAttributes {
   const { page } = prefs;
   const attributes: PrefAttributes = { "data-page-style": page.style };
   if (page.style !== "classic") {
@@ -255,7 +265,12 @@ export function prefsAttributes(prefs: WebPrefs): PrefAttributes {
     if (page.width !== undefined) attributes["data-page-width"] = page.width;
     if (page.spacing !== undefined) attributes["data-spacing"] = page.spacing;
   }
-  if (prefs.a11y.contrast === "more") attributes["data-contrast"] = "more";
+  if (
+    prefs.a11y.contrast === "more" ||
+    (systemContrast && page.style !== "classic")
+  ) {
+    attributes["data-contrast"] = "more";
+  }
   if (prefs.a11y.motion === "reduce") attributes["data-motion"] = "reduce";
   if (!prefs.smartQuotes) attributes["data-smart-quotes"] = "off";
   if (!prefs.spellcheck) attributes.spellcheck = "false";
@@ -263,25 +278,14 @@ export function prefsAttributes(prefs: WebPrefs): PrefAttributes {
   return attributes;
 }
 
-/**
- * The page card's width in CSS px, computed from preferences, never
- * measured, so nothing changes on its own (§5.9). Null for Full.
- * `rootPx` is the root font size (the browser's default text size).
- */
+/** The page card's width in CSS px (`page-metrics.ts`); null for Full. */
 export function cardWidthPx(page: PageState, rootPx = 16): number | null {
-  const knobs = effectivePage(page);
-  if (!knobs) return CLASSIC_CARD_PX;
-  const measure = PAGE_MEASURES[knobs.width];
-  if (measure === null) return null;
-  return (measure * knobs.size * rootPx) / 16 + CARD_PADDING_REM * rootPx;
+  return cardWidthFor(effectivePage(page), rootPx);
 }
 
 /** The narrowest main area that docks the outline; Full never docks. */
 export function outlineDockMinPx(page: PageState, rootPx = 16): number {
-  const card = cardWidthPx(page, rootPx);
-  return card === null
-    ? Number.POSITIVE_INFINITY
-    : card + OUTLINE_DOCK_EXTRA_PX;
+  return dockMinPxFor(effectivePage(page), rootPx);
 }
 
 /** What the boot script reads, taken in one snapshot before any write. */
@@ -299,6 +303,8 @@ export interface BootInput {
   remember: boolean;
   /** `(prefers-color-scheme: dark)` matches. */
   systemDark: boolean;
+  /** `SYSTEM_CONTRAST_QUERY` matches. */
+  systemContrast?: boolean;
 }
 
 export interface BootResult {
@@ -323,6 +329,7 @@ export function resolveBoot({
   storage,
   remember,
   systemDark,
+  systemContrast = false,
 }: BootInput): BootResult {
   const writes: BootResult["writes"] = {};
   let theme: ThemePreference = "system";
@@ -352,7 +359,7 @@ export function resolveBoot({
     theme,
     dark: theme === "dark" || (theme === "system" && systemDark),
     prefs,
-    attributes: prefsAttributes(prefs),
+    attributes: prefsAttributes(prefs, { systemContrast }),
     writes,
   };
 }

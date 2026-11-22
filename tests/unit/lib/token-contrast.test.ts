@@ -36,7 +36,7 @@ function contrastTokens(theme: Theme): Record<string, string> {
   const css = sass.compile(join(ROOT, "styles/_page.scss")).css;
   const selector =
     theme === "dark"
-      ? ":root.dark[data-contrast=more] {"
+      ? ":root[data-contrast=more].dark {"
       : ":root[data-contrast=more] {";
   const start = css.indexOf(selector);
   if (start < 0) throw new Error(`no ${selector} block`);
