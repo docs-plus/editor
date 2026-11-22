@@ -355,6 +355,9 @@ test("the sheet leads with Style: the current one pressed, More headings, lists 
   // More headings discloses H4–H6 in place.
   const more = style.getByRole("button", { name: "More headings" });
   await expect(more).toHaveAttribute("aria-expanded", "false");
+  const moreBox = await more.boundingBox();
+  expect(moreBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(moreBox?.width ?? 0).toBeGreaterThanOrEqual(44);
   await more.tap();
   await expect(more).toHaveAttribute("aria-expanded", "true");
   await style.getByRole("button", { name: "Heading 5" }).tap();
@@ -1686,11 +1689,17 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
       "Blocks",
       "Insert",
     ]);
+    const suggested = insertSheet(page)
+      .getByRole("region", { name: "Suggested" })
+      .getByRole("button", { name: "Code block" });
+    await expect(suggested).toBeVisible();
+    // The Suggested copy is told apart from the Insert section's cell.
+    await expect(suggested).toHaveAttribute("data-suggested", "");
     await expect(
-      insertSheet(page)
-        .getByRole("region", { name: "Suggested" })
-        .getByRole("button", { name: "Code block" }),
-    ).toBeVisible();
+      insertSheet(page).locator(
+        '[data-action-id="insert.codeBlock"]:not([data-suggested])',
+      ),
+    ).toHaveCount(1);
   });
 
   test("Table opens its grid inside the sheet; a pick puts the caret in the table", async ({
@@ -1724,6 +1733,63 @@ test.describe("the Insert sheet (spec §8.3, O6)", () => {
     await expect(
       insertSheet(page).getByRole("textbox", { name: "Media URL" }),
     ).toBeVisible();
+  });
+
+  test("the embed step rides above the keyboard, its field in view", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page);
+    await openInsertSheet(page);
+    await insertSheet(page).getByRole("button", { name: "Embed" }).tap();
+    const field = insertSheet(page).getByRole("textbox", { name: "Media URL" });
+    await expect(field).toBeFocused();
+    // Chromium has no on-screen keyboard: stand in a shrunken visualViewport.
+    const KEYBOARD = 360;
+    await page.evaluate((keyboard) => {
+      const vv = window.visualViewport;
+      if (!vv) throw new Error("no visualViewport");
+      Object.defineProperty(vv, "height", {
+        configurable: true,
+        get: () => window.innerHeight - keyboard,
+      });
+      vv.dispatchEvent(new Event("resize"));
+    }, KEYBOARD);
+    const visibleBottom = PHONE.height - KEYBOARD;
+    await expect
+      .poll(async () => {
+        const box = await insertSheet(page).boundingBox();
+        return box ? Math.round(box.y + box.height) : null;
+      })
+      .toBe(visibleBottom);
+    const sheetBox = await insertSheet(page).boundingBox();
+    expect(sheetBox?.y ?? -1).toBeGreaterThanOrEqual(0);
+    const fieldBox = await field.boundingBox();
+    expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+      visibleBottom,
+    );
+    expect(fieldBox?.y ?? -1).toBeGreaterThanOrEqual(sheetBox?.y ?? 0);
+  });
+
+  test("a pick refused since the sheet opened says why in the sheet", async ({
+    page,
+  }) => {
+    await openDoc(page);
+    await caretInNewParagraph(page, "quoted later");
+    await openInsertSheet(page);
+    // A collaborator's edit meanwhile: the block is now in a quote.
+    await page.evaluate(() => {
+      window.__tiptap_editor?.commands.setBlockquote();
+    });
+    const quote = insertSheet(page).getByRole("button", { name: "Quote" });
+    await quote.tap();
+    await expect(insertSheet(page)).toBeVisible();
+    await expect(insertSheet(page).getByRole("status")).toHaveText(
+      "Quote: Already in a quote.",
+    );
+    // Its cell now shows the reason, and stays where it was.
+    await expect(quote).toHaveAttribute("aria-disabled", "true");
+    await expect(quote).toContainText("Already in a quote.");
   });
 
   for (const theme of ["light", "dark"] as const) {

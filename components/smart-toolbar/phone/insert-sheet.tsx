@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import {
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
@@ -23,7 +24,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ToolbarButton } from "@/components/ui/toolbar-button";
-import { announce } from "@/lib/announce";
 import { editorActions } from "@/lib/editor-actions";
 import { availability, runAction } from "@/lib/editor-actions/registry";
 import { onUiIntent } from "@/lib/editor-actions/ui-intents";
@@ -86,11 +86,14 @@ function buildModel(editor: Editor) {
 function InsertCell({
   item,
   steps,
+  suggested,
   onPick,
 }: {
   item: SlashItem;
   /** Opens a step (▸), so the cell shows a chevron. */
   steps?: boolean;
+  /** The Suggested copy of a kind that also has its own section's cell. */
+  suggested?: boolean;
   onPick: (item: SlashItem) => void;
 }) {
   const Icon = item.icon;
@@ -100,6 +103,7 @@ function InsertCell({
       size="sm"
       className="st-insert-cell"
       data-action-id={item.actionId}
+      data-suggested={suggested ? "" : undefined}
       disabled={item.reason !== undefined}
       disabledReason={item.reason}
       onClick={() => onPick(item)}
@@ -133,10 +137,12 @@ function InsertCell({
 /** The cells of one section, two columns of 44px. */
 function CellGrid({
   items,
+  suggested,
   onPick,
   children,
 }: {
   items: readonly SlashItem[];
+  suggested?: boolean;
   onPick: (item: SlashItem) => void;
   children?: ReactNode;
 }) {
@@ -147,6 +153,7 @@ function CellGrid({
           key={item.key}
           item={item}
           steps={item.actionId in STEP_OF}
+          suggested={suggested}
           onPick={onPick}
         />
       ))}
@@ -181,8 +188,10 @@ function InsertSheetBody({
   /** Closes the sheet after a pick: focus goes back to the document. */
   onDone: () => void;
 }) {
-  // Once per open: the body unmounts when the sheet closes.
-  const [{ groups, diagrams }] = useState(() => buildModel(editor));
+  // Once per open (the body unmounts when the sheet closes), and again
+  // after a refusal, so the refused cell shows its reason.
+  const [{ groups, diagrams }, setModel] = useState(() => buildModel(editor));
+  const [refused, setRefused] = useState<string | null>(null);
   const diagram = diagramCell(diagrams);
 
   const pick = (item: SlashItem) => {
@@ -193,11 +202,14 @@ function InsertSheetBody({
     if (!action) return;
     // The page is inert while the sheet is open, so the action's own
     // focus stays put; the close hands focus back to the editor.
-    if (!runAction(editor, action, item.arg)) {
-      const enabled = availability(action, computeContext(editor));
-      if (enabled !== true) announce(`${item.label}: ${enabled.reason}`);
-    }
-    onDone();
+    if (runAction(editor, action, item.arg)) return onDone();
+    // Cells are what could run when the sheet opened: the document changed
+    // since (a collaborator's edit). The sheet stays, says why on its own
+    // status line (the bar's pill is under it) and redraws its cells.
+    const enabled = availability(action, computeContext(editor));
+    if (enabled === true) return onDone();
+    setRefused(`${item.label}: ${enabled.reason}`);
+    setModel(buildModel(editor));
   };
 
   if (step) {
@@ -231,9 +243,16 @@ function InsertSheetBody({
 
   return (
     <div className="st-sheet-body">
+      <p role="status" className="st-insert-refused">
+        {refused}
+      </p>
       {groups.map((group) => (
         <Section key={group.key} title={group.title}>
-          <CellGrid items={group.items} onPick={pick}>
+          <CellGrid
+            items={group.items}
+            suggested={group.key === "suggested"}
+            onPick={pick}
+          >
             {group.key === "insert" && diagram ? (
               <InsertCell item={diagram} steps onPick={pick} />
             ) : null}
@@ -251,6 +270,11 @@ export interface InsertSheetProps {
   onOpenChange: (open: boolean) => void;
   /** Render the bar's Insert cell (not while the selection cells show). */
   cell: boolean;
+  /**
+   * The on-screen keyboard's height (the bar's `useKeyboardInset`): the
+   * embed step's link field raises it, and the sheet rides above it.
+   */
+  keyboardInset: number;
 }
 
 /**
@@ -269,29 +293,48 @@ export function InsertSheet({
   open,
   onOpenChange,
   cell,
+  keyboardInset,
 }: InsertSheetProps) {
   const [step, setStep] = useState<Step | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   /** Set by a pick: focus goes to the editor, not back to the cell. */
   const pickedRef = useRef(false);
 
-  useEffect(
-    () =>
-      onUiIntent(editor, (intent) => {
-        if (intent.type !== "insert.open") return false;
-        if (intent.kind !== "table" && intent.kind !== "embed") return false;
-        if (!editor.isEditable) return false;
-        const kind = intent.kind;
-        // Let the "/" menu or the palette close first.
-        requestAnimationFrame(() => {
-          setStep(kind);
-          pickedRef.current = false;
-          onOpenChange(true);
-        });
-        return true;
-      }),
-    [editor, onOpenChange],
-  );
+  useEffect(() => {
+    let frame = 0;
+    const off = onUiIntent(editor, (intent) => {
+      if (intent.type !== "insert.open") return false;
+      if (intent.kind !== "table" && intent.kind !== "embed") return false;
+      if (!editor.isEditable) return false;
+      const kind = intent.kind;
+      // Let the "/" menu or the palette close first. Cancelled on unmount,
+      // so it never makes the page inert after the bar has gone.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setStep(kind);
+        pickedRef.current = false;
+        onOpenChange(true);
+      });
+      return true;
+    });
+    return () => {
+      off();
+      cancelAnimationFrame(frame);
+    };
+  }, [editor, onOpenChange]);
+
+  // The keyboard came up (or moved): keep the focused field in view in
+  // the shortened sheet.
+  useEffect(() => {
+    if (!open || !keyboardInset) return;
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active.closest("[data-insert-sheet]")
+    ) {
+      active.scrollIntoView({ block: "nearest" });
+    }
+  }, [open, keyboardInset]);
 
   /**
    * After a pick: closes (which lifts the page's `inert`) and focuses the
@@ -345,8 +388,14 @@ export function InsertSheet({
       <SheetContent
         data-insert-sheet=""
         data-toolbar-popup=""
+        data-keyboard={keyboardInset ? "" : undefined}
         finalFocus={finalFocus}
         className="st-insert-sheet max-h-[75dvh]"
+        style={
+          keyboardInset
+            ? ({ "--keyboard-inset": `${keyboardInset}px` } as CSSProperties)
+            : undefined
+        }
       >
         <SheetHeader>
           <SheetTitle className="flex-1">Insert</SheetTitle>

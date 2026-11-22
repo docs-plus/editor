@@ -379,6 +379,7 @@ export function MobileToolbarContent({
         open={insertOpen}
         onOpenChange={onInsertOpenChange}
         cell={mode !== "selection"}
+        keyboardInset={inset}
       />
       {sheetOpen ? null : <StatusPill placement="phone" />}
     </Toolbar>

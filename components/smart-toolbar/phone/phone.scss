@@ -432,6 +432,28 @@ ul.st-sheet-list {
   opacity: 0.6;
 }
 
+// With the keyboard up (the embed step's link field), the sheet rides on
+// it like the bar, no taller than what the keyboard leaves, and has no
+// home indicator to clear.
+.st-insert-sheet[data-keyboard] {
+  bottom: var(--keyboard-inset);
+  max-height: calc(100dvh - var(--keyboard-inset) - 0.5rem);
+  padding-bottom: 0;
+}
+
+// Why a pick was refused (the document changed since the sheet opened).
+// Always rendered, so the live region exists before it speaks; empty, it
+// cancels the gap after it and takes no room.
+.st-insert-refused {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--foreground);
+
+  &:empty {
+    margin-block-end: -0.75rem;
+  }
+}
+
 .st-insert-step-head {
   display: flex;
   align-items: center;
