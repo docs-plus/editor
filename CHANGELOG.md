@@ -9,6 +9,56 @@ since the previous tag.
 
 ## [Unreleased]
 
+### Desktop P2.6f: repair and rebuild the library
+
+Repair and rebuild for the format-2 library (offline data-model revision
+§4.5), in `desktop/storage/engine/repair.ts`. Every entry point is
+idempotent: a second run changes nothing.
+
+#### Added
+
+- **Desktop:** check mode (`checkLibrary`, `Library.repairCheck`), in one
+  transaction:
+  - raises `head_seq` to the newest row or snapshot, never lowering it (I6);
+  - recomputes `size_bytes` as the snapshot plus the remaining rows (I9),
+    moving `rev` only when it fixes something;
+  - reports I1–I4 violations as lines (`foreign_key_check`, folder depth
+    and cycles, trash columns without `trashed_at`, live items under a
+    trashed folder) and fixes none of them;
+  - counts `doc_blobs` rows of purged documents with no `dropped_at`, and
+    never deletes them.
+- **Desktop:** Rebuild index (`resetDerivedChunk`, `Library.resetDerived`)
+  clears `derived_seq` and both derived hashes on up to 500 documents per
+  transaction, so appends interleave. It clears the hashes because
+  `derive.put` skips a side whose hash is unchanged, and damaged rows would
+  otherwise stay.
+- **Desktop:** after a failed `quick_check` (SEC-009), `rebuildIntoNewFile`
+  reads the damaged file read-only and builds a new format-2 file next to
+  it. The damaged file is never changed.
+  - The schema comes from `SCHEMA_V1` and the same format steps a new
+    library runs.
+  - Rows are copied table by table in the explicit format-2 order, in
+    batches. A damaged page is stepped over: rowid tables find the first
+    readable rowid after it, keyed tables resume at the next document.
+  - `meta` is copied except `format_version`.
+  - The `updates` sequence is carried, so a seq is never reused.
+  - Rows whose parent was lost are settled: a lost folder sends its items to
+    the root, and other orphans are dropped and counted as skipped.
+  - Derivation is reset, and `foreign_key_check` and `integrity_check` are
+    reported on the new file.
+- **Tests:** a seeded property test (P1, 6 seeds × 220 operations) runs
+  create, append, compact, Trash, restore, purge, folder Trash, restore and
+  purge, duplicate, tags, moves, image rows and `derive.put` with a stub
+  deriver. It checks I1–I9 with an independent checker and asserts that
+  check mode is a no-op throughout. P2 damages `links`, `doc_headings` and
+  `derived_seq`, rebuilds, drains, and gets the same rows back. The rebuild
+  tests corrupt a page of `updates` or `links` in a copy of a library.
+  - The engine half of T22 drains 1,000 stale documents with the stub
+    deriver (about 0.45 s on an Apple silicon Mac). The real T22 waits for LK4a's queue.
+  - A known engine gap is kept as a failing test: `restoreFolder` can nest
+    a folder deeper than 4 when its old parent moved deeper while it was in
+    the Trash.
+
 ### Desktop P2.7b: list views, sort, filter and tags
 
 The library's list views for desktop and the web library (D3), in
