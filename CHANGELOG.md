@@ -15,10 +15,10 @@ since the previous tag.
 desktop app (spec `2026-11-15-desktop-local-first-design.md` §8.4 row P2.11,
 details spec E1). P2.11 has no ledger line, and the editor chunk group does
 not grow (393,776 B gz, −44 B against `main` at `903b5c8`). The keys add
-about 800 B gz to first-load JS (602 B against `main`, then 200 B for the
-field and dialog check and the Highlight API gate: 319,880 → 320,080 B,
-summed over the JS chunks `index.html` loads), and the bar is a lazy chunk
-of 7,030 B gz fetched when the browser is first idle.
+766 B gz to first-load JS (320,081 → 320,847 B, summed over the JS chunks
+`index.html` loads, the same tree built with Find off and on, on `main` at
+`7b9fdc7`), and the bar is a lazy chunk of about 7 KB gz fetched when the
+browser is first idle.
 
 #### Added
 
@@ -68,11 +68,19 @@ of 7,030 B gz fetched when the browser is first idle.
   count, and each move to a hit (typing, Enter, ⌘G, a replace) selects it
   in the editor without taking focus, so it shows as the blurred
   selection. Typing in the document never moves that selection.
-- **Config:** Find lands dark on the web: it is on in the desktop app
-  and off in web builds, where ⌘F stays the browser's and the key listener
-  is left out of the build. `NEXT_PUBLIC_FIND=1` turns it on for any build
-  and `0` turns it off for any build. `make dev` (and so CI's e2e) runs
-  with `NEXT_PUBLIC_FIND=1`. A unit test pins the defaults.
+- **Config:** Find is on for the web and the desktop app (owner decision,
+  2026-11-22): ⌘F / Ctrl+F, ⌘G and F3 open and step Find on the document
+  page instead of the browser's find bar. `NEXT_PUBLIC_FIND=0` turns it off
+  for any build and leaves the key listener out. A unit test pins the
+  default.
+
+#### Deploy
+
+- Find turns on at tiny.docs.plus with the next deploy. `NEXT_PUBLIC_FIND`
+  is a build-time value and Find is now on by default, so there is nothing
+  to change on the host. To keep the browser's own find bar instead, add
+  `NEXT_PUBLIC_FIND=0` to the host's `.env.production` before that deploy
+  (or later, then redeploy).
 
 ### CI: draft pull requests run the checks job only
 

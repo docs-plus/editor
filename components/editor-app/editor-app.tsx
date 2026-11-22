@@ -189,11 +189,7 @@ export function EditorApp({ intro }: EditorAppProps) {
       {/* P2.11: ⌘F and the lazy find bar, outside the editor chunk. The
           check is `FIND_ENABLED` inlined here, so a build with Find off
           leaves the loader out (an imported constant would not). */}
-      {process.env.NEXT_PUBLIC_FIND === "1" ||
-      (process.env.NEXT_PUBLIC_FIND !== "0" &&
-        process.env.NEXT_PUBLIC_APP_TARGET === "desktop") ? (
-        <FindLoader />
-      ) : null}
+      {process.env.NEXT_PUBLIC_FIND !== "0" ? <FindLoader /> : null}
     </div>
   );
 }

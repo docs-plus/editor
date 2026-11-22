@@ -104,17 +104,9 @@ describe("FIND_ENABLED", () => {
     (await importFresh<typeof FindKeys>("@/components/find/find-keys"))
       .FIND_ENABLED;
 
-  it("is off on the web by default (the browser keeps ⌘F until the owner decides)", async () => {
-    expect(await load()).toBe(false);
-  });
-
-  it("is on in the desktop app by default", async () => {
-    process.env.NEXT_PUBLIC_APP_TARGET = "desktop";
+  it("is on by default, on the web and in the desktop app (owner, 2026-11-22)", async () => {
     expect(await load()).toBe(true);
-  });
-
-  it("is on on the web under NEXT_PUBLIC_FIND=1", async () => {
-    process.env.NEXT_PUBLIC_FIND = "1";
+    process.env.NEXT_PUBLIC_APP_TARGET = "desktop";
     expect(await load()).toBe(true);
   });
 

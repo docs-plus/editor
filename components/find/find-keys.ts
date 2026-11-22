@@ -1,16 +1,12 @@
 /**
- * Find in the document (P2.11, details spec E1). On in the desktop app;
- * off on the web until the owner decides to take ⌘F from the browser there
- * (#158). `NEXT_PUBLIC_FIND=1` turns it on for any build and `0` turns it
- * off for any build, when ⌘F / Ctrl+F opens the browser's own find bar.
- * Both are inlined at build time (`next.config.ts` always defines them);
- * `editor-app.tsx` repeats the check inline so a build with Find off
- * leaves the key listener out, which an imported constant does not.
+ * Find in the document (P2.11, details spec E1). On for the web and the
+ * desktop app (owner decision, 2026-11-22). `NEXT_PUBLIC_FIND=0` turns it
+ * off, when ⌘F / Ctrl+F opens the browser's own find bar again. Inlined at
+ * build time (`next.config.ts` always defines it); `editor-app.tsx`
+ * repeats the check inline so a build with Find off leaves the key
+ * listener out, which an imported constant does not.
  */
-export const FIND_ENABLED =
-  process.env.NEXT_PUBLIC_FIND === "1" ||
-  (process.env.NEXT_PUBLIC_FIND !== "0" &&
-    process.env.NEXT_PUBLIC_APP_TARGET === "desktop");
+export const FIND_ENABLED = process.env.NEXT_PUBLIC_FIND !== "0";
 
 /** A field or dialog that owns its keys, even inside the editor (a node view's field). */
 const FIELD_OR_DIALOG =
