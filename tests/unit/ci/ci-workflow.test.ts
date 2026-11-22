@@ -9,6 +9,7 @@ import { parse } from "yaml";
 // Deploy workflow depend on (docs/operations/deploy-runbook.md).
 
 interface Step {
+  env?: Record<string, string>;
   id?: string;
   name?: string;
   if?: string;
@@ -17,6 +18,8 @@ interface Step {
 
 interface Job {
   name?: string;
+  outputs?: Record<string, string>;
+  permissions?: Record<string, string>;
   if?: string;
   needs?: string | string[];
   strategy?: { "fail-fast"?: boolean; matrix?: { shard?: number[] } };
@@ -80,9 +83,50 @@ describe("CI workflow", () => {
     const run = runOf(e2e, "Run Playwright");
     expect(run).toContain("--project=chromium");
     expect(run).toContain("--project=library");
-    expect(run).toContain(`--shard=\${{ matrix.shard }}/3`);
+    expect(run).toContain('"$SHARD_ARGS"');
     expect(run).toContain("--retries=1");
     expect(run).toContain("blob");
+  });
+
+  it("packs every shard from the one set of timings the changes job read", () => {
+    const plan = jobs.e2e.steps?.find((step) => step.name === "Plan shard");
+    expect(plan?.run).toContain("scripts/e2e-shards.ts plan");
+    expect(plan?.run).toContain('"$SHARD/3"');
+    expect(plan?.env?.TIMINGS).toBe(`\${{ needs.changes.outputs.timings }}`);
+    expect(plan?.env?.SHARD).toBe(`\${{ matrix.shard }}`);
+    const shardArgs = jobs.e2e.steps?.find(
+      (step) => step.name === "Run Playwright",
+    )?.env?.SHARD_ARGS;
+    expect(shardArgs).toBe(`\${{ steps.plan.outputs.args }}`);
+    expect(jobs.changes.outputs?.timings).toBe(
+      `\${{ steps.timings.outputs.timings }}`,
+    );
+    const find = runOf(jobs.changes, "Find shard timings");
+    expect(find).toContain("--branch main --event push");
+    expect(find).toContain("--status success");
+    expect(jobs.changes.permissions?.actions).toBe("read");
+  });
+
+  it("publishes shard timings only from a green push to main", () => {
+    const gate = Object.values(jobs).find(
+      (job) => job.name === "Playwright (Chromium)",
+    ) as Job;
+    const MAIN_ONLY =
+      "success() && github.event_name == 'push' && github.ref == 'refs/heads/main'";
+    const writers = (gate.steps ?? []).filter((step) =>
+      ["Write shard timings", "Publish shard timings"].includes(
+        step.name ?? "",
+      ),
+    );
+    expect(writers).toHaveLength(2);
+    for (const step of writers) expect(step.if).toBe(MAIN_ONLY);
+    // No other job uploads the timings artifact.
+    const uploads = Object.values(jobs).flatMap((job) =>
+      (job.steps ?? []).filter((step) =>
+        JSON.stringify(step).includes('"name":"e2e-timings"'),
+      ),
+    );
+    expect(uploads).toHaveLength(1);
   });
 
   it("runs perf alone, without re-running chromium as its dependency", () => {
