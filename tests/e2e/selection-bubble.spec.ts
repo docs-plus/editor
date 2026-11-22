@@ -1134,12 +1134,16 @@ test.describe("selection bubble", () => {
       (window as Window & { __COMMENTS_PERF?: boolean }).__COMMENTS_PERF = true;
     });
     await openDoc(page);
+    // The hook mounts from an async import, and its gate does not notify
+    // the toolbar: select only once it has landed.
+    await page.waitForFunction(() => window.__comments !== undefined);
     await selectText(page, "some words");
     await expectBubbleOpen(page);
     const comment = bubbleToolbar(page).locator(
       '[data-action-id="comment.add"]',
     );
     await expect(comment).toBeVisible();
+    await expect(comment).toBeEnabled();
     expect(
       await comment.evaluate((el) => {
         const items = [
