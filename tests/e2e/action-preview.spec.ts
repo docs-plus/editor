@@ -469,10 +469,15 @@ test.describe("hover preview", () => {
           expect(box && !intersects(box, clip)).toBe(true);
           const previewed = await page.screenshot({ clip });
 
-          // A pick closes the menu, which clears the preview.
+          // A pick closes the menu, which clears the preview, and focuses
+          // the editor; blur it again so the selection paints as it did
+          // while the menu had focus.
           await button.click();
           await expect(dialog).toBeHidden();
           await expect(previews(page)).toHaveCount(0);
+          await page.evaluate(() =>
+            (document.activeElement as HTMLElement | null)?.blur(),
+          );
           // The applied result under the same wrapper the preview used (it
           // inherits every colour and only drops the blurred selection's
           // tint, skipping the same inline code), so the two renders differ

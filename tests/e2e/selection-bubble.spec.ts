@@ -404,9 +404,9 @@ test.describe("selection bubble", () => {
     // Past the plugin's 250 ms update debounce: still attached.
     await page.waitForTimeout(400);
     await expect(bubble(page)).toHaveAttribute("data-state", "open");
-    if (await dialog.isVisible()) await page.keyboard.press("Escape");
+    // Enter picked and closed the menu; focus is back in the text (§7.10).
     await expect(dialog).toBeHidden();
-    await expect(chevron).toBeFocused();
+    await expect(page.locator(".tiptap")).toBeFocused();
     await expectBubbleOpen(page);
   });
 
