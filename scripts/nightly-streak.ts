@@ -67,6 +67,11 @@ export const SETUP_STEPS: readonly string[] = [
   // Moving the exported renderer between jobs of the desktop shell workflow.
   "Upload out/",
   "Download out/",
+  // The desktop shell's path check and its gate: the gate's verdict only
+  // mirrors the build jobs, which carry the red or green themselves.
+  "List changed files",
+  "Decide",
+  "Verdict",
 ];
 
 /** GitHub's cleanup steps (`Post Checkout`, `Post Set up Bun`, …). */
