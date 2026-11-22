@@ -119,6 +119,32 @@ describe("RpcLibraryIndex", () => {
     expect(types).toEqual(["change", "load"]);
   });
 
+  it("rolls back a create whose link key storage refuses (UNIQUE)", async () => {
+    const lib = setup();
+    const taken = lib.library.createDoc({ title: "Taken" });
+    // A colliding key, as 2^-128 odds would give one: the engine refuses it.
+    const collide: LibraryCall = (op, args) =>
+      lib
+        .transport()
+        .call(
+          op,
+          op === "createDoc" ? { ...args, linkKey: taken.linkKey } : args,
+        );
+    const index = lib.indexOn(lib.transport(), collide);
+    const doc = index.create({ title: "Clash" });
+    expect(doc?.linkKey).toMatch(/^[0-9a-f]{32}$/);
+    expect(index.snapshot().items.map((d) => d.title)).toEqual([
+      "Taken",
+      "Clash",
+    ]);
+    await index.settle();
+    expect(lib.errors).toEqual(["createDoc"]);
+    expect(index.snapshot().items.map((d) => [d.id, d.linkKey])).toEqual([
+      [taken.id, taken.linkKey],
+    ]);
+    expect(lib.library.sidebar().docs.map((d) => d.id)).toEqual([taken.id]);
+  });
+
   it("keeps later optimistic changes across a reload", async () => {
     const lib = setup();
     let release: () => void = () => {};

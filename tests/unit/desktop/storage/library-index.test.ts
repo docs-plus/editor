@@ -69,11 +69,14 @@ describe("creating documents", () => {
       );
   });
 
-  test("the sidebar and the Trash list carry each document's link key", async () => {
+  test("the sidebar and the Trash list carry each document's link key, in trashed subfolders too", async () => {
     const folder = mustFolder(library, { name: "f" });
+    const sub = mustFolder(library, { name: "s", parentId: folder.id });
     const kept = library.createDoc({ title: "Kept" });
     const alone = library.createDoc({ title: "Alone" });
     const inside = library.createDoc({ title: "Inside", folderId: folder.id });
+    const deep = library.createDoc({ title: "Deep", folderId: sub.id });
+    library.createDoc({ kind: "template", title: "T", folderId: sub.id });
     expect(library.sidebar().docs.find((d) => d.id === kept.id)?.linkKey).toBe(
       kept.linkKey,
     );
@@ -84,6 +87,7 @@ describe("creating documents", () => {
       [
         [alone.id, "Alone", alone.linkKey],
         [inside.id, "Inside", inside.linkKey],
+        [deep.id, "Deep", deep.linkKey],
       ].sort(),
     );
     expect(trashed.every((d) => d.createdAt > 0 && d.modifiedAt > 0)).toBe(
